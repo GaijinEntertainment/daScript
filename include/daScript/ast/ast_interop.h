@@ -56,7 +56,7 @@ namespace das
         defaultTempFn() = default;
         defaultTempFn ( bool args, bool impl, bool result, bool econst )
             : tempArgs(args), implicitArgs(impl), tempResult(result), explicitConstArgs(econst) {}
-        __noinline bool operator () ( Function * fn ) {
+        ___noinline bool operator () ( Function * fn ) {
             if ( tempArgs || implicitArgs ) {
                 for ( auto & arg : fn->arguments ) {
                     if ( arg->type->isTempType() ) {
@@ -91,6 +91,41 @@ namespace das
         explicitConstArgFn() : defaultTempFn(false,true,false,true) {}
     };
 
+    template  <typename CType, typename ...Args>
+    class BuiltIn_PlacementNew : public BuiltInFunction {
+    public:
+        __forceinline BuiltIn_PlacementNew(const char * fn, const ModuleLibrary & lib, const char * cna = nullptr)
+        : BuiltInFunction(fn,cna), fnName(fn) {
+            this->modifyExternal = true;
+            this->isTypeConstructor = true;
+            this->copyOnReturn = true;
+            this->moveOnReturn = true;
+            construct(makeBuiltinArgs<CType,Args...>(lib));
+        }
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
+            return context.code->makeNode<SimNode_PlacementNew<CType,Args...>>(at,fnName);
+        }
+        const char * fnName = nullptr;
+    };
+
+    template  <typename CType, typename ...Args>
+    class BuiltIn_Using : public BuiltInFunction {
+    public:
+        __forceinline BuiltIn_Using(const ModuleLibrary & lib)
+        : BuiltInFunction("using","das_using") {
+            this->cppName = string("das_using<") + typeName<CType>::name() + ">::use";
+            this->aotTemplate = true;
+            this->modifyExternal = true;
+            this->invoke = true;
+            vector<TypeDeclPtr> args = makeBuiltinArgs<CType,Args...>(lib);
+            args.emplace_back(makeType<const TBlock<void,TTemporary<TExplicit<CType>>>>(lib));
+            construct(args);
+        }
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
+            return context.code->makeNode<SimNode_Using<CType,Args...>>(at);
+        }
+    };
+
     void addExternFunc(Module& mod, const FunctionPtr & fx, bool isCmres, SideEffects seFlags);
 
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
@@ -117,5 +152,22 @@ namespace das
         addExternFunc(mod, fnX, true, seFlags);
         return fnX;
     }
+
+    template <typename CType, typename ...Args>
+    inline auto addCtor ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr ) {
+        mod.addFunction(make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName));
+    }
+
+    template <typename CType, typename ...Args>
+    inline auto addUsing ( Module & mod, const ModuleLibrary & lib ) {
+        mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib));
+    }
+
+    template <typename CType, typename ...Args>
+    inline auto addCtorAndUsing ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr ) {
+        mod.addFunction(make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName));
+        mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib));
+    }
+
 }
 

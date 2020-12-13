@@ -712,7 +712,7 @@ namespace das {
         }
     protected:
         vector<ExprBlock *> scopes;
-        das_map<string,string> rename;
+        das_hash_map<string,string> rename;
     };
 
     void giveBlockVariablesUniqueNames  ( const ExpressionPtr & expr ) {

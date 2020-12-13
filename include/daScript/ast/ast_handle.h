@@ -63,8 +63,10 @@ namespace das
     template <typename OT>
     struct ManagedStructureAlignofAuto<OT, true> {static constexpr size_t alignment = sizeof(void*); } ;//we use due to MSVC inability to work with abstarct classes
 
-    template <typename OT, bool canNew = true, bool canDelete = canNew>
-    struct ManagedStructureAnnotation ;
+    template <typename OT,
+        bool canNew = is_default_constructible<OT>::value,
+        bool canDelete = canNew && is_destructible<OT>::value
+    > struct ManagedStructureAnnotation ;
 
     struct BasicStructureAnnotation : TypeAnnotation {
         enum class FactoryNodeType {
@@ -114,6 +116,26 @@ namespace das
         vector<TypeAnnotation*> parents;
     };
 
+    template <typename TT, bool canCopy = isCloneable<TT>::value>
+    struct GenCloneNode;
+
+    template <typename TT>
+    struct GenCloneNode<TT,true> {
+        static __forceinline SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) {
+            return context.code->makeNode<SimNode_CloneRefValueT<TT>>(at, l, r);
+        }
+    };
+
+    template <typename TT>
+    struct GenCloneNode<TT,false> {
+        static __forceinline SimNode * simulateClone ( Context &, const LineInfo &, SimNode *, SimNode * ) {
+            return nullptr;
+        }
+    };
+
+    template <typename OT>
+    struct ManagedStructureAnnotation<OT,false,false>;
+
     template <typename OT>
     struct ManagedStructureAnnotation<OT,false,false> : BasicStructureAnnotation {
         typedef OT ManagedType;
@@ -122,10 +144,25 @@ namespace das
         virtual size_t getSizeOf() const override { return sizeof(ManagedType); }
         virtual size_t getAlignOf() const override { return ManagedStructureAlignofAuto<ManagedType, is_abstract<ManagedType>::value>::alignment; }
         virtual bool isSmart() const override { return is_base_of<ptr_ref_count,OT>::value; }
-        virtual bool canMove() const override { return false; }
-        virtual bool canCopy() const override { return false; }
-        virtual bool isLocal() const override { return false; }
-        virtual bool hasNonTrivialCtor() const override { return !is_trivially_constructible<OT>::value; }
+        virtual bool hasNonTrivialCtor() const override {
+            return !is_trivially_constructible<OT>::value;
+        }
+        virtual bool hasNonTrivialDtor() const override {
+            return !is_trivially_destructible<OT>::value;
+        }
+        virtual bool hasNonTrivialCopy() const override {
+            return  !is_trivially_copyable<OT>::value
+                ||  !is_trivially_copy_constructible<OT>::value;
+        }
+        virtual bool isPod() const {
+            return is_pod<OT>::value;
+        }
+        virtual bool isRawPod() const {
+            return false;   // can we detect this?
+        }
+        virtual bool canClone() const {
+            return isCloneable<OT>::value;
+        }
         template <typename FunT, FunT PROP>
         void addProperty ( const string & na, const string & cppNa="" ) {
             auto & field = fields[na];
@@ -213,6 +250,12 @@ namespace das
         template <typename TT, off_t off>
         __forceinline void addField ( const string & na, const string & cppNa = "" ) {
             addFieldEx ( na, cppNa.empty() ? na : cppNa, off, makeType<TT>(*mlib) );
+        }
+        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
+            return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(OT)));
+        }
+        virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
+            return GenCloneNode<OT>::simulateClone(context,at,l,r);
         }
     };
 
@@ -302,7 +345,7 @@ namespace das
                 V_ARG_THIS(range);
                 V_END();
             }
-            __noinline char * compute ( Context & context ) {
+            ___noinline char * compute ( Context & context ) {
                 DAS_PROFILE_NODE
                 auto pValue = (VectorType *) value->evalPtr(context);
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));

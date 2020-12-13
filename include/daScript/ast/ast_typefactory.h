@@ -3,13 +3,17 @@
 namespace das {
     template <typename TT>
     struct TTemporary {};
+
+
+    template <typename TT>
+    struct TExplicit {};
 }
 
 #define MAKE_TYPE_FACTORY(TYPE,CTYPE) \
 namespace das { \
   template <> \
   struct typeFactory<CTYPE> { \
-      static __noinline TypeDeclPtr make(const ModuleLibrary & library ) { \
+      static ___noinline TypeDeclPtr make(const ModuleLibrary & library ) { \
           return makeHandleType(library,#TYPE); \
       } \
   }; \
@@ -27,7 +31,7 @@ namespace das { \
   template <typename TT> struct typeFactory; \
   template <> \
   struct typeFactory<CTYPE> { \
-      static __noinline TypeDeclPtr make(const ModuleLibrary & library ); \
+      static ___noinline TypeDeclPtr make(const ModuleLibrary & library ); \
   }; \
   template <typename TT> struct typeName; \
   template <> \

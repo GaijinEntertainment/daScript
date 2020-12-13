@@ -157,7 +157,9 @@ namespace das
     struct ImplCallStaticFunctionAndCopy < R (*)(Args...) > {
         static __forceinline void call ( R (*fn)(Args...), Context & ctx, void * res, SimNode ** args ) {
             using result = typename remove_const<R>::type;
-            *((result *)res) = CallStaticFunction<R,Args...>(fn,ctx,args);
+            // note: copy is closer to AOT, but placement new is correct behavior under simulation
+            // *((result *)res) = CallStaticFunction<R,Args...>(fn,ctx,args);
+            new (res) result ( CallStaticFunction<R,Args...>(fn,ctx,args) );
         }
     };
 
@@ -215,6 +217,59 @@ namespace das
         }
     };
 
+    template <typename FuncT> struct result_of_func_ptr;
+    template <typename R, typename ...Args>
+    struct result_of_func_ptr<R (*)(Args...)> {
+        using type = R;
+    };
+
+    template <typename FuncT, FuncT fn>
+    struct SimNode_ExtFuncCallCtor : SimNode_ExtFuncCallBase {
+        enum { IS_CMRES = true };
+        SimNode_ExtFuncCallCtor ( const LineInfo & at, const char * fnName )
+            : SimNode_ExtFuncCallBase(at,fnName) { }
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            void * cmres = cmresEval->evalPtr(context);
+            using CtorType = typename result_of_func_ptr<FuncT>::type;
+            new (cmres) CtorType();
+            return cast<void *>::from(cmres);
+        }
+    };
+
+    template <typename CType, typename ...Args>
+    struct SimNode_PlacementNew : SimNode_ExtFuncCallBase {
+        SimNode_PlacementNew(const LineInfo & at, const char * fnName)
+            : SimNode_ExtFuncCallBase(at,fnName) {}
+        template <size_t ...I>
+        static __forceinline void CallPlacementNew ( void * cmres, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            new (cmres) CType(cast_arg<Args>::to(ctx,args[I])...);
+        }
+        virtual vec4f eval(Context & context) override {
+            auto cmres = cmresEval->evalPtr(context);
+            CallPlacementNew(cmres,context,arguments,make_index_sequence<sizeof...(Args)>());
+            return cast<void *>::from(cmres);
+        }
+    };
+
+    template <typename CType, typename ...Args>
+    struct SimNode_Using : SimNode_ExtFuncCallBase {
+        SimNode_Using(const LineInfo & at)
+            : SimNode_ExtFuncCallBase(at,"using") {}
+        template <size_t ...I>
+        __forceinline void CallUsing ( const Block & blk, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            CType value( (cast_arg<Args>::to(ctx,args[I]))...);
+            vec4f bargs[1];
+            bargs[0] = cast<CType *>::from(&value);
+            ctx.invoke(blk,bargs,nullptr,&debugInfo);
+        }
+        virtual vec4f eval(Context & context) override {
+            DAS_ASSERT(nArguments == (sizeof...(Args) + 1) );
+            auto pblock = cast_arg<const Block *>::to(context,arguments[nArguments-1]);
+            CallUsing(*pblock,context,arguments,make_index_sequence<sizeof...(Args)>());
+            return v_zero();
+        }
+    };
 
     template <typename FunctionType>
     struct ImplCallStaticFunctionRef;
@@ -248,8 +303,7 @@ namespace das
             DAS_PROFILE_NODE
             vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
             evalArgs(context, args);
-            auto res = fn(context,this,args);
-            return res;
+            return fn(context,this,args);
         }
     };
 }

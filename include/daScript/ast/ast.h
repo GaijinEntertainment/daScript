@@ -181,6 +181,8 @@ namespace das
         bool isShareable ( das_set<Structure *> & dep ) const;
         bool hasClasses( das_set<Structure *> & dep ) const;
         bool hasNonTrivialCtor ( das_set<Structure *> & dep ) const;
+        bool hasNonTrivialDtor ( das_set<Structure *> & dep ) const;
+        bool hasNonTrivialCopy ( das_set<Structure *> & dep ) const;
         bool canBePlacedInContainer ( das_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
@@ -212,6 +214,7 @@ namespace das
         string getMangledName() const;
         uint32_t getMangledNameHash() const;
         bool isAccessUnused() const;
+        bool isCtorInitialized() const;
         string          name;
         TypeDeclPtr     type;
         ExpressionPtr   init;
@@ -317,15 +320,25 @@ namespace das
             return p;
         }
         virtual bool canAot(das_set<Structure *> &) const { return true; }
-        virtual bool canMove() const { return false; }
-        virtual bool canCopy() const { return false; }
+        virtual bool canMove() const {
+            return !hasNonTrivialCopy();
+        }
+        virtual bool canCopy() const {
+            return !hasNonTrivialCopy();
+        }
         virtual bool canClone() const { return false; }
         virtual bool isPod() const { return false; }
         virtual bool isRawPod() const { return false; }
         virtual bool isRefType() const { return false; }
-        virtual bool isLocal() const { return false; }
         virtual bool hasNonTrivialCtor() const { return true; }
-        virtual bool canBePlacedInContainer() const { return false; }
+        virtual bool hasNonTrivialDtor() const { return true; }
+        virtual bool hasNonTrivialCopy() const { return true; }
+        virtual bool canBePlacedInContainer() const {
+            return !hasNonTrivialCtor() && !hasNonTrivialDtor() && !hasNonTrivialCopy();
+        }
+        virtual bool isLocal() const {
+            return isPod() && !hasNonTrivialCtor() && !hasNonTrivialDtor() && !hasNonTrivialCopy();
+        }
         virtual bool canNew() const { return false; }
         virtual bool canDelete() const { return false; }
         virtual bool needDelete() const { return canDelete(); }
@@ -617,6 +630,7 @@ namespace das
                 bool    firstArgReturnType : 1;
                 bool    noPointerCast : 1;
                 bool    isClassMethod : 1;
+                bool    isTypeConstructor : 1;
             };
             uint32_t flags = 0;
         };
@@ -676,7 +690,7 @@ namespace das
     };
 
     template <typename RetT, typename ...Args>
-    __noinline vector<TypeDeclPtr> makeBuiltinArgs ( const ModuleLibrary & lib ) {
+    ___noinline vector<TypeDeclPtr> makeBuiltinArgs ( const ModuleLibrary & lib ) {
         return { makeType<RetT>(lib), makeArgumentType<Args>(lib)... };
     }
 
@@ -893,7 +907,7 @@ namespace das
     protected:
         das_map<string,ModuleGroupUserDataPtr>  userData;
     };
-
+    template <> struct isCloneable<ModuleGroup> : false_type {};
 
     struct PassMacro : ptr_ref_count {
         PassMacro ( const string na = "" ) : name(na) {}
@@ -1007,7 +1021,7 @@ namespace das
         Module * addModule ( const string & name );
         void finalizeAnnotations();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
-        void inferTypesDirty(TextWriter & logs);
+        void inferTypesDirty(TextWriter & logs, bool verbose);
         void lint ( ModuleGroup & libGroup );
         void checkSideEffects();
         void foldUnsafe();

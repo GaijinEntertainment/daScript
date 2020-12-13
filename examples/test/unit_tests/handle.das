@@ -68,7 +68,22 @@ def test_handled
         delete b
 
 [export]
+def test_fancy_container(var a : array<FancyClass>)
+    print("a = {a}\n")
+
+def test_fancy
+    var fc0 = FancyClass()
+    assert(fc0.value==13)
+    var fc = FancyClass(1,2)
+    assert(fc.value==3)
+    using() <| $( var f : FancyClass# )
+        assert(f.value==13)
+    using(1,3) <| $( var f : FancyClass# )
+        assert(f.value==4)
+
+[export]
 def test:bool
     test_native()
     test_handled()
+    test_fancy()
     return true

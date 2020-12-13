@@ -529,6 +529,30 @@ namespace das
         }
     }
 
+    bool TypeDecl::canDeletePtr() const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->canDeletePtr();
+        } else if ( baseType==Type::tStructure ) {
+            return true;
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    bool TypeDecl::canNew() const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->canNew();
+        } else if ( baseType==Type::tStructure ) {
+            return true;
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     bool TypeDecl::needDelete() const {
         if ( baseType==Type::tHandle ) {
             return annotation->needDelete();
@@ -784,7 +808,7 @@ namespace das
 
     bool TypeDecl::canBePlacedInContainer(das_set<Structure *> & dep) const {
         if ( baseType==Type::tHandle ) {
-            return annotation->isLocal() && !annotation->hasNonTrivialCtor();
+            return annotation->canBePlacedInContainer();
         } else if ( baseType==Type::tStructure ) {
             if (structType) {
                 if (dep.find(structType) != dep.end()) return true;
@@ -830,6 +854,60 @@ namespace das
         } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
             if ( firstType && firstType->hasNonTrivialCtor(dep) ) return true;
             if ( secondType && secondType->hasNonTrivialCtor(dep) ) return true;
+        }
+        return false;
+    }
+
+    bool TypeDecl::hasNonTrivialDtor() const {
+        das_set<Structure *> dep;
+        return hasNonTrivialDtor(dep);
+    }
+
+    bool TypeDecl::hasNonTrivialDtor(das_set<Structure *> & dep) const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->hasNonTrivialDtor();
+        } else if ( baseType==Type::tStructure ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                return structType->hasNonTrivialDtor(dep);
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( const auto & arg : argTypes ) {
+                if ( arg->hasNonTrivialDtor(dep) ) {
+                    return true;
+                }
+            }
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            if ( firstType && firstType->hasNonTrivialDtor(dep) ) return true;
+            if ( secondType && secondType->hasNonTrivialDtor(dep) ) return true;
+        }
+        return false;
+    }
+
+    bool TypeDecl::hasNonTrivialCopy() const {
+        das_set<Structure *> dep;
+        return hasNonTrivialCopy(dep);
+    }
+
+    bool TypeDecl::hasNonTrivialCopy(das_set<Structure *> & dep) const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->hasNonTrivialCopy();
+        } else if ( baseType==Type::tStructure ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                return structType->hasNonTrivialCopy(dep);
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( const auto & arg : argTypes ) {
+                if ( arg->hasNonTrivialCopy(dep) ) {
+                    return true;
+                }
+            }
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            if ( firstType && firstType->hasNonTrivialCopy(dep) ) return true;
+            if ( secondType && secondType->hasNonTrivialCopy(dep) ) return true;
         }
         return false;
     }

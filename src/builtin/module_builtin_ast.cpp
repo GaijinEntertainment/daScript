@@ -916,7 +916,7 @@ namespace das {
 
     void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context ) {
         AstContext astc = generateAstContext(prog,expr.get());
-        __m128 args[2];
+        vec4f args[2];
         args[0] = cast<bool>::from ( astc.valid );
         args[1] = astc.valid ? cast<AstContext&>::from(astc) : v_zero();
         context->invoke(block, args, nullptr );
@@ -1067,12 +1067,11 @@ namespace das {
     TypeDeclPtr makeFunctionFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "FunctionFlags";
-        ft->argNames = { "builtIn", "policyBased", "callBased", "interopFn",
-            "hasReturn", "copyOnReturn", "moveOnReturn", "exports", "init",
-            "addr", "used", "fastCall", "knownSideEffects", "hasToRunAtCompileTime",
-            "unsafeOperation", "unsafeDeref", "hasMakeBlock", "aotNeedPrologue",
-            "noAot", "aotHybrid", "aotTemplate", "generated", "privateFunction",
-            "_generator", "_lambda", "firstArgReturnType", "isClassMethod", "safe"
+        ft->argNames = {
+            "builtIn", "policyBased", "callBased", "interopFn", "hasReturn", "copyOnReturn", "moveOnReturn", "exports",
+            "init", "addr", "used", "fastCall", "knownSideEffects", "hasToRunAtCompileTime", "unsafeOperation", "unsafeDeref",
+            "hasMakeBlock", "aotNeedPrologue", "noAot", "aotHybrid", "aotTemplate", "generated", "privateFunction", "_generator",
+            "_lambda", "firstArgReturnType", "noPointerCast", "isClassMethod", "isTypeConstructor"
         };
         return ft;
     }

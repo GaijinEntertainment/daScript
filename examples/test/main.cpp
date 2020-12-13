@@ -29,6 +29,8 @@ bool g_reportCompilationFailErrors = false;
 
 TextPrinter tout;
 
+unique_ptr<AotLibrary> g_aotLib = nullptr;
+
 bool compilation_fail_test ( const string & fn, bool ) {
     uint64_t timeStamp = ref_time_ticks();
     tout << fn << " ";
@@ -119,9 +121,7 @@ bool unit_test ( const string & fn, bool useAot ) {
             }
             if ( useAot ) {
                 // now, what we get to do is to link AOT
-                AotLibrary aotLib;
-                AotListBase::registerAot(aotLib);
-                program->linkCppAot(ctx, aotLib, tout);
+                program->linkCppAot(ctx, *g_aotLib, tout);
                 if ( program->failed() ) {
                     tout << "failed to link AOT\n";
                     for ( auto & err : program->errors ) {
@@ -181,9 +181,7 @@ bool exception_test ( const string & fn, bool useAot ) {
             }
             if ( useAot ) {
                 // now, what we get to do is to link AOT
-                AotLibrary aotLib;
-                AotListBase::registerAot(aotLib);
-                program->linkCppAot(ctx, aotLib, tout);
+                program->linkCppAot(ctx, *g_aotLib, tout);
             }
             if ( auto fnTest = ctx.findFunction("test") ) {
                 if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {
@@ -207,6 +205,50 @@ bool exception_test ( const string & fn, bool useAot ) {
         return false;
     }
 }
+
+bool performance_test ( const string & fn, bool useAot ) {
+    // tout << fn << "\n";
+    auto fAccess = make_smart<FsFileAccess>();
+    ModuleGroup dummyLibGroup;
+    CodeOfPolicies policies;
+    policies.fail_on_no_aot = true;
+    // policies.intern_strings = true;
+    // policies.intern_const_strings = true;
+    // policies.no_unsafe = true;
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, false, policies) ) {
+        if ( program->failed() ) {
+            tout << fn << " failed to compile\n";
+            for ( auto & err : program->errors ) {
+                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+            }
+            return false;
+        } else {
+            Context ctx(program->getContextStackSize());
+            if ( !program->simulate(ctx, tout) ) {
+                tout << fn << " failed to simulate\n";
+                for ( auto & err : program->errors ) {
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+                }
+                return false;
+            }
+            if ( useAot ) {
+                // now, what we get to do is to link AOT
+                program->linkCppAot(ctx, *g_aotLib, tout);
+                if ( program->failed() ) {
+                    tout << fn << " failed to link AOT\n";
+                    for ( auto & err : program->errors ) {
+                        tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+                    }
+                    return false;
+                }
+            }
+            return true;
+        }
+    } else {
+        return false;
+    }
+}
+
 
 bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot), bool useAot ) {
 #ifdef _MSC_VER
@@ -337,6 +379,8 @@ int main( int argc, char * argv[] ) {
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);
+    g_aotLib = make_unique<AotLibrary>();
+    AotListBase::registerAot(*g_aotLib);
 #if 0 // Debug this one test
     compilation_fail_test(getDasRoot() + "/examples/test/compilation_fail_tests/smart_ptr.das",true);
     Module::Shutdown();
@@ -360,6 +404,7 @@ int main( int argc, char * argv[] ) {
     // #define TEST_NAME   "/examples/test/unit_tests/aonce.das"
     unit_test(getDasRoot() +  TEST_NAME,false);
     // unit_test(getDasRoot() +  TEST_NAME,true);
+    
     Module::Shutdown();
 #if DAS_ENABLE_SMART_PTR_TRACKING
     dumpTrackingLeaks();
@@ -369,8 +414,26 @@ int main( int argc, char * argv[] ) {
 #endif
 #if 0 // Module test
     run_module_test(getDasRoot() +  "/examples/test/module", "main_inc.das", true);
+    g_aotLib.reset();
     Module::Shutdown();
     getchar();
+    return 0;
+#endif
+#if 0 // COMPILER PERFORMANCE TESTS
+    {
+        uint64_t timeStamp = ref_time_ticks();
+        for ( int passes=0; passes!=5; ++passes ) {
+            if ( !run_tests(getDasRoot() +  "/examples/test/unit_tests", performance_test, true) ) {
+                tout << "TESTS FAILED\n";
+                break;
+            }
+        }
+        // shutdown
+        int usec = get_time_usec(timeStamp);
+        tout << "tests took " << ((usec/1000)/1000.0) << "\n";
+        g_aotLib.reset();
+        Module::Shutdown();
+    }
     return 0;
 #endif
     uint64_t timeStamp = ref_time_ticks();
@@ -387,6 +450,7 @@ int main( int argc, char * argv[] ) {
     int usec = get_time_usec(timeStamp);
     tout << "TESTS " << (ok ? "PASSED " : "FAILED!!! ") << ((usec/1000)/1000.0) << "\n";
     // shutdown
+    g_aotLib.reset();
     Module::Shutdown();
     return ok ? 0 : -1;
 }

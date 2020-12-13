@@ -230,3 +230,10 @@ namespace das {
 __forceinline EntityId make_invalid_id() {
     return EntityId(-1);
 }
+
+struct FancyClass {
+    int32_t value;
+    das::string hidden; // hidden property which makes it non-trivial
+    FancyClass () : value(13) {}
+    FancyClass ( int32_t a, int32_t b ) : value(a+b) {}
+};

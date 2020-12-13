@@ -304,7 +304,7 @@ ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${S
     ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC}
 	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC})
 SETUP_CPP11(libDaScript)
-target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
+#target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
 
 IF(DAS_GEN_FOR_EACH_INCLUDED)
     DAS_GEN_FOR_EACH(include/daScript/simulate/for_each.h ${MAX_DAS_FOR_EACH_ARGS})
@@ -339,19 +339,55 @@ MACRO(DAS_AOT input genList mainTarget dasAotTool)
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
         COMMAND ${dasAotTool} ${input_src} ${out_src}
     )
+    list(APPEND ${genList} ${out_src})
     set(custom_name ${mainTarget}_${input_name}_aot)
-    ADD_CUSTOM_TARGET(${custom_name}
-        ALL DEPENDS ${out_src}
-    )
+    ADD_CUSTOM_TARGET(${custom_name} ALL DEPENDS ${out_src})
     SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
     ADD_DEPENDENCIES(${mainTarget} ${custom_name})
+ENDMACRO()
+
+MACRO(DAS_AOT_D input genList mainTarget dasAotTool)
+    get_filename_component(input_src ${input} ABSOLUTE)
+    get_filename_component(input_dir ${input_src} DIRECTORY)
+    get_filename_component(input_name ${input} NAME)
+    set(out_dir ${input_dir}/_aot_generated)
+    set(out_src ${out_dir}/${input_name}.cpp)
+    file(MAKE_DIRECTORY ${out_dir})
+	ADD_CUSTOM_COMMAND(
+		DEPENDS ${input_src}
+        DEPENDS ${dasAotTool}
+        OUTPUT  ${out_src}
+        COMMENT "AOT precompiling ${input_src} -> ${out_src}"
+        COMMAND ${dasAotTool} ${input_src} ${out_src}
+    )
     list(APPEND ${genList} ${out_src})
 ENDMACRO()
 
+SET(AOT_BATCH_SIZE 10)
+
 MACRO(DAS_AOT_DIR inFiles genList mainTarget dasAotTool)
+    set(file_index 0)
+    set(batch_index 0)
+    set(batch_list)
     FOREACH(inF ${inFiles})
-        DAS_AOT(${inF} ${genList} ${mainTarget} ${dasAotTool})
+        DAS_AOT_D(${inF} batch_list ${mainTarget} ${dasAotTool})
+        math(EXPR file_index "${file_index} + 1")
+        if(file_index EQUAL ${AOT_BATCH_SIZE})
+            set(custom_name ${mainTarget}_${batch_index}_aot)
+            ADD_CUSTOM_TARGET(${custom_name} ALL DEPENDS ${batch_list})
+            ADD_DEPENDENCIES(${mainTarget} ${custom_name})
+            list(APPEND ${genList} ${batch_list})
+            set(file_index 0)
+            math(EXPR batch_index "${batch_index} + 1")
+            set(batch_list)
+        endif()
     ENDFOREACH()
+    if(NOT(file_index EQUAL "0"))
+        set(custom_name ${mainTarget}_${batch_index}_aot)
+        ADD_CUSTOM_TARGET(${custom_name} ALL DEPENDS ${batch_list})
+        ADD_DEPENDENCIES(${mainTarget} ${custom_name})
+        list(APPEND ${genList} ${batch_list})
+    endif()
 ENDMACRO()
 
 SET(UNITZE_BUILD_BATCH_SIZE 10)
@@ -481,7 +517,7 @@ ADD_DEPENDENCIES(pathTracer libDaScript libPathTracerHelper)
 TARGET_INCLUDE_DIRECTORIES(pathTracer PUBLIC examples/pathTracer)
 SETUP_CPP11(pathTracer)
 add_dependencies(pathTracer pathTracerAot dasAotStub)
-target_precompile_headers(pathTracer PUBLIC include/daScript/misc/platform.h)
+#target_precompile_headers(pathTracer PUBLIC include/daScript/misc/platform.h)
 
 # Stand alone command line compiler
 
@@ -574,7 +610,7 @@ TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
 SETUP_CPP11(daScriptTest)
 add_dependencies(daScriptTest daScriptTestAot dasAotStub)
 SETUP_LTO(daScriptTest)
-target_precompile_headers(daScriptTest PUBLIC include/daScript/misc/platform.h)
+#target_precompile_headers(daScriptTest PUBLIC include/daScript/misc/platform.h)
 
 # Profile module
 
@@ -614,7 +650,7 @@ TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptProfile)
 ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot libDaScriptProfile)
 SETUP_CPP11(daScriptProfile)
 add_dependencies(daScriptProfile daScriptProfileAot dasAotStub)
-target_precompile_headers(daScriptProfile PUBLIC include/daScript/misc/platform.h)
+#target_precompile_headers(daScriptProfile PUBLIC include/daScript/misc/platform.h)
 
 MACRO(DAS_TUTORIAL tutorial_name tutorial_src)
     add_executable(${tutorial_name} ${tutorial_src})

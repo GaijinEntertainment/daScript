@@ -148,16 +148,15 @@ namespace das {
                 collect(depV);
             }
         }
-        vector<const Function *> getStableDependencies() {
-            vector<const Function *> vec;
+        using FunAndName = pair<const Function *,string>;
+        vector<FunAndName> getStableDependencies() {
+            vector<FunAndName> vec;
             vec.reserve(functions.size());
             for ( const auto & it : functions ) {
-                vec.push_back(it);
+                vec.emplace_back(make_pair(it,it->getMangledName()));
             }
-            stable_sort(vec.begin(), vec.end(), [&](const Function * a, const Function * b){
-                auto aNa = a->getMangledName();
-                auto bNa = b->getMangledName();
-                return aNa < bNa;
+            stable_sort(vec.begin(), vec.end(), [&](const FunAndName & a, const FunAndName & b){
+                return a.second < b.second;
             });
             return vec;
         }
@@ -174,9 +173,9 @@ namespace das {
         debug_aot_hash("HASH %s %llx\n", fun->getMangledName().c_str(), fun->hash);
         uvec.push_back(fun->hash);
         for ( const auto & fn : vec ) {
-            if ( !fn->noAot ) {
-                uvec.push_back(fn->hash);
-                debug_aot_hash("\t%s %llx\n", fn->getMangledName().c_str(), fn->hash);
+            if ( !fn.first->noAot ) {
+                uvec.push_back(fn.first->hash);
+                debug_aot_hash("\t%s %llx\n", fn.second.c_str(), fn.first->hash);
             }
         }
         uint64_t res = hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));
@@ -194,8 +193,8 @@ namespace das {
         uvec.reserve(vec.size() + 1);
         uvec.push_back(initHash);
         for ( const auto & fn : vec ) {
-            if ( !fn->noAot ) {
-                uvec.push_back(fn->hash);
+            if ( !fn.first->noAot ) {
+                uvec.push_back(fn.first->hash);
             }
         }
         return hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));

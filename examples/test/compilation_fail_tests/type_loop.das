@@ -1,3 +1,5 @@
+options max_infer_passes=5
+
 expect 41000
 
 def infinite(a:auto(ptrt)?)

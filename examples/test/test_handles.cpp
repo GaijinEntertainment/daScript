@@ -4,6 +4,7 @@
 #include "module_unitTest.h"
 
 #include "daScript/simulate/simulate_visit_op.h"
+#include "daScript/ast/ast_policy_types.h"
 
  int32_t TestObjectSmart::total = 0;
 
@@ -31,6 +32,7 @@ MAKE_TYPE_FACTORY(TestObjectSmart,TestObjectSmart)
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
 MAKE_TYPE_FACTORY(TestObjectNotLocal, TestObjectNotLocal)
+MAKE_TYPE_FACTORY(FancyClass, FancyClass)
 
 MAKE_TYPE_FACTORY(SomeDummyType, SomeDummyType)
 MAKE_TYPE_FACTORY(Point3Array, Point3Array)
@@ -60,7 +62,8 @@ struct TestObjectNotLocalAnnotation : ManagedStructureAnnotation <TestObjectNotL
     TestObjectNotLocalAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectNotLocal", ml) {
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
     }
-    virtual bool isLocal() const { return false; }
+    virtual bool isLocal() const { return false; }                  // this is here so that the class is not local
+    virtual bool canBePlacedInContainer() const { return false; }   // this can't be in the container either
 };
 
 struct TestObjectSmartAnnotation : ManagedStructureAnnotation <TestObjectSmart> {
@@ -72,9 +75,6 @@ struct TestObjectSmartAnnotation : ManagedStructureAnnotation <TestObjectSmart> 
         // reason: recursive type
         addField<DAS_BIND_MANAGED_FIELD(first)>("first");
     }
-    virtual bool isLocal() const override { return false; }
-    virtual bool canMove() const override { return false; }
-    virtual bool canCopy() const override { return false; }
 };
 
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
@@ -98,15 +98,6 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
             const TestObjectFoo * (TestObjectFoo::*)() const, &TestObjectFoo::getLoop
         >("getLoop","getLoop");
     }
-    virtual bool isLocal() const override { return true; }
-    virtual bool canMove() const override { return true; }
-    virtual bool canCopy() const override { return true; }
-    virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-        return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(TestObjectFoo)));
-    }
-    virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-        return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(TestObjectFoo)));
-    }
 };
 
 struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
@@ -116,7 +107,6 @@ struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
         addProperty<DAS_BIND_MANAGED_PROP(getFoo)>("getFoo");
         addProperty<DAS_BIND_MANAGED_PROP(getFooPtr)>("getFooPtr");
     }
-    virtual bool isLocal() const { return true; }
 };
 
 void testFoo ( TestObjectFoo & foo ) {
@@ -556,6 +546,14 @@ void tempArrayAliasExample(const das::TArray<Point3> & arr,
     context->invoke(blk, args, nullptr);
 }
 
+struct FancyClassAnnotation : ManagedStructureAnnotation <FancyClass> {
+    FancyClassAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FancyClass", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(value)>("value");
+    }
+    virtual bool isLocal() const override { return true; }                  // this is here so that we can make local variable and init with special c-tor
+    virtual bool canBePlacedInContainer() const override { return true; }   // this is here so that we can make array<FancyClass>
+};
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib;
     lib.addModule(this);
@@ -689,6 +687,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_smart<EntityIdAnnotation>());
     addExtern<DAS_BIND_FUN(make_invalid_id)>(*this, lib, "make_invalid_id",
         SideEffects::none, "make_invalid_id");
+    // FancyClass
+    addAnnotation(make_smart<FancyClassAnnotation>(lib));
+    addCtorAndUsing<FancyClass>(*this,lib,"FancyClass","FancyClass");
+    addCtorAndUsing<FancyClass,int32_t,int32_t>(*this,lib,"FancyClass","FancyClass");
     // and verify
     verifyAotReady();
 }
