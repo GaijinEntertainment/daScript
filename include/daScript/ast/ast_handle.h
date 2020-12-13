@@ -574,7 +574,16 @@ namespace das
         virtual bool canMove() const override { return true; }
         virtual bool canCopy() const override { return true; }
         virtual bool isLocal() const override { return true; }
-        virtual bool hasNonTrivialCtor() const override { return !is_trivially_constructible<OT>::value; }
+        virtual bool hasNonTrivialCtor() const override {
+            return !is_trivially_constructible<OT>::value;
+        }
+        virtual bool hasNonTrivialDtor() const override {
+            return !is_trivially_destructible<OT>::value;
+        }
+        virtual bool hasNonTrivialCopy() const override {
+            return  !is_trivially_copyable<OT>::value
+                ||  !is_trivially_copy_constructible<OT>::value;
+        }
         virtual bool isPod() const override { return true; }
         virtual bool isRawPod() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(OT); }
