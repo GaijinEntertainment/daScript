@@ -134,9 +134,6 @@ namespace das
     };
 
     template <typename OT>
-    struct ManagedStructureAnnotation<OT,false,false>;
-
-    template <typename OT>
     struct ManagedStructureAnnotation<OT,false,false> : BasicStructureAnnotation {
         typedef OT ManagedType;
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml, const string & cpn = "" )
