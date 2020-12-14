@@ -48,6 +48,16 @@ namespace das {
     };
 
     template <typename TT>
+    struct das_auto_cast_move {
+        template <typename QQ>
+        __forceinline static TT cast ( QQ && expr ) {
+            TT res = expr;
+            memset(&expr, 0, sizeof(QQ));
+            return res;
+        }
+    };
+
+    template <typename TT>
     __forceinline void das_zero ( TT & a ) {
         using TTNC = typename remove_const<TT>::type;
         memset(const_cast<TTNC *>(&a), 0, sizeof(TT));

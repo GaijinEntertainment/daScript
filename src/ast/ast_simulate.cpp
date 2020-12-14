@@ -2177,7 +2177,12 @@ namespace das
             }
         }
         DAS_ASSERTF(simSubE, "internal error. can't be zero");
-        return context.code->makeNode<SimNode_Return>(at, simSubE);
+        if ( moveSemantics ) {
+            // TODO: support by-value annotations?
+            return context.code->makeValueNode<SimNode_ReturnAndMoveR2V>(subexpr->type->baseType, at, simSubE);
+        } else {
+            return context.code->makeNode<SimNode_Return>(at, simSubE);
+        }
     }
 
     SimNode * ExprBreak::simulate (Context & context) const {

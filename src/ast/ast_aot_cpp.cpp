@@ -1576,7 +1576,14 @@ namespace das {
             ss << "return ";
             if ( expr->moveSemantics ) ss << "/* <- */ ";
             auto retT = expr->returnFunc ? expr->returnFunc->result : expr->block->returnType;
-            if ( !retT->isVoid() ) ss << "das_auto_cast<" << describeCppType(retT, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
+            if ( !retT->isVoid() ) {
+                if ( expr->moveSemantics ) {
+                    ss << "das_auto_cast_move<";
+                } else {
+                    ss << "das_auto_cast<";
+                }
+                ss << describeCppType(retT, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
+            }
         }
         virtual ExpressionPtr visit(ExprReturn* expr) override {
             auto retT = expr->returnFunc ? expr->returnFunc->result : expr->block->returnType;
