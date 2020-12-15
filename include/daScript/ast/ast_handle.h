@@ -299,11 +299,8 @@ namespace das
         }
     };
 
-    template <typename OT, bool r2v=has_cast<typename OT::value_type>::value>
-    struct ManagedVectorAnnotation;
-
     template <typename VectorType>
-    struct ManagedVectorAnnotation<VectorType,false> : TypeAnnotation {
+    struct ManagedVectorAnnotation : TypeAnnotation {
         using OT = typename VectorType::value_type;
         struct SimNode_VectorLength : SimNode {
             using TT = OT;
@@ -326,15 +323,11 @@ namespace das
         struct SimNode_AtStdVector : SimNode_At {
             using TT = OT;
             DAS_PTR_NODE;
-            SimNode_AtStdVector ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs, bool isR2V = false )
-                : SimNode_At(at, rv, idx, 0, ofs, 0), r2v(isR2V) {}
+            SimNode_AtStdVector ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
+                : SimNode_At(at, rv, idx, 0, ofs, 0) {}
             virtual SimNode * visit ( SimVisitor & vis ) override {
                 V_BEGIN();
-                if ( r2v ) {
-                    V_OP_TT(AtStdVectorR2V);
-                } else {
-                    V_OP_TT(AtStdVector);
-                }
+                V_OP_TT(AtStdVector);
                 V_SUB_THIS(value);
                 V_SUB_THIS(index);
                 V_ARG_THIS(stride);
@@ -353,13 +346,22 @@ namespace das
                     return ((char *)(pValue->data() + idx)) + offset;
                 }
             }
-            bool r2v = false;
         };
         template <typename OOT>
         struct SimNode_AtStdVectorR2V : SimNode_AtStdVector {
             using TT = OOT;
             SimNode_AtStdVectorR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
-                : SimNode_AtStdVector(at, rv, idx, ofs, true) {}
+                : SimNode_AtStdVector(at, rv, idx, ofs) {}
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP_TT(AtStdVectorR2V);
+                V_SUB_THIS(value);
+                V_SUB_THIS(index);
+                V_ARG_THIS(stride);
+                V_ARG_THIS(offset);
+                V_ARG_THIS(range);
+                V_END();
+            }
             virtual vec4f eval ( Context & context ) override {
                 OOT * pR = (OOT *) SimNode_AtStdVector::compute(context);
                 DAS_ASSERT(pR);
@@ -457,23 +459,6 @@ namespace das
         TypeDeclPtr                vecType;
         DebugInfoHelper            helpA;
         TypeInfo *                 ati = nullptr;
-    };
-
-    template <typename VectorType>
-    struct ManagedVectorAnnotation<VectorType,true> : ManagedVectorAnnotation<VectorType,false> {
-        using OT = typename VectorType::value_type;
-        using BT = ManagedVectorAnnotation<VectorType, false>;
-        using BTT = typename BT::template SimNode_AtStdVectorR2V<OT>;
-        ManagedVectorAnnotation(const string & n, ModuleLibrary & lib) :
-            ManagedVectorAnnotation<VectorType, false>(n, lib) {
-        }
-        virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                            const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
-            return context.code->makeNode<BTT>(at,
-                                               rv->simulate(context),
-                                               idx->simulate(context),
-                                               ofs);
-        }
     };
 
     template <typename TT>

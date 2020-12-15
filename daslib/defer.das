@@ -39,7 +39,7 @@ class DeferMacro : AstFunctionAnnotation
 // convert defer_delete() expression
 // into {}, and add delete expression to the finally section of the current block
 [call_macro(name="defer_delete")]
-class TrivialValueMacro : AstCallMacro
+class DeferDeleteMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if call.arguments.length!=1
             prog |> macro_error(call.at,"expecting defer_delete(expr)")

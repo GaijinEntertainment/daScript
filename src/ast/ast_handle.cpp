@@ -115,11 +115,11 @@ namespace das {
         field.cppName = cppNa;
         field.decl = pT;
         field.offset = offset;
-        auto baseType = field.decl->baseType;
+        auto baseType = make_smart<TypeDecl>(*field.decl);
         field.factory = [offset,baseType](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
             if ( !value->type->isPointer() ) {
                 if ( nt==FactoryNodeType::getField || nt==FactoryNodeType::getFieldR2V ) {
-                    auto r2vType = (nt==FactoryNodeType::getField) ? Type::none : baseType;
+                    auto r2vType = (nt==FactoryNodeType::getField) ? make_smart<TypeDecl>(Type::none) : baseType;
                     auto tnode = value->trySimulate(context, offset, r2vType);
                     if ( tnode ) {
                         return tnode;
@@ -131,11 +131,11 @@ namespace das {
             case FactoryNodeType::getField:
                 return context.code->makeNode<SimNode_FieldDeref>(at,simV,offset);
             case FactoryNodeType::getFieldR2V:
-                return context.code->makeValueNode<SimNode_FieldDerefR2V>(baseType,at,simV,offset);
+                return context.code->makeValueNode<SimNode_FieldDerefR2V>(baseType->baseType,at,simV,offset);
             case FactoryNodeType::getFieldPtr:
                 return context.code->makeNode<SimNode_PtrFieldDeref>(at,simV,offset);
             case FactoryNodeType::getFieldPtrR2V:
-                return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(baseType,at,simV,offset);
+                return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(baseType->baseType,at,simV,offset);
             case FactoryNodeType::safeGetField:
                 return context.code->makeNode<SimNode_SafeFieldDeref>(at,simV,offset);
             case FactoryNodeType::safeGetFieldPtr:
