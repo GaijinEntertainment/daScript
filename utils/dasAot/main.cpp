@@ -135,12 +135,11 @@ bool compile ( const string & fn, const string & cppFn ) {
                 tw << "namespace " << program->thisNamespace << " {\n"; // anonymous
                 program->aotCpp(ctx, tw);
                 // list STUFF
-                tw << "struct AotList_impl : AotListBase {\n";
-                tw << "\tvirtual void registerAotFunctions ( AotLibrary & aotLib ) override {\n";
+                tw << "\tstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
                 program->registerAotCpp(tw, ctx, false);
                 tw << "\t};\n";
-                tw << "};\n";
-                tw << "AotList_impl impl;\n";
+                tw << "\n";
+                tw << "AotListBase impl(registerAotFunctions);\n";
                 tw << "}\n";
                 tw << "}\n";
                 tw << "#if defined(_MSC_VER)\n";
