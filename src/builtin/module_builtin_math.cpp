@@ -208,6 +208,7 @@ namespace das {
         }
         virtual bool isRefType() const override { return true; }
         virtual bool isLocal() const override { return true; }
+        virtual bool canBePlacedInContainer() const override { return true; }
         virtual bool hasNonTrivialCtor() const override { return false; }
         virtual bool hasNonTrivialDtor() const override { return false; }
         virtual bool canMove() const override { return true; }
