@@ -24,7 +24,7 @@ MAKE_TYPE_FACTORY(EnumEntry,Enumeration::EnumEntry)
 MAKE_TYPE_FACTORY(Enumeration,Enumeration)
 MAKE_TYPE_FACTORY(Expression,Expression)
 MAKE_TYPE_FACTORY(Function,Function)
-MAKE_TYPE_FACTORY(InferHistory, Function::InferHistory)
+MAKE_TYPE_FACTORY(InferHistory, InferHistory)
 MAKE_TYPE_FACTORY(Variable,Variable)
 MAKE_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
 MAKE_TYPE_FACTORY(FunctionAnnotation,FunctionAnnotation)
@@ -907,10 +907,10 @@ namespace das {
         AstContextAnnotation(ModuleLibrary & ml)
             :  ManagedStructureAnnotation ("AstContext", ml) {
             addField<DAS_BIND_MANAGED_FIELD(func)>("func");
-            addField<DAS_BIND_MANAGED_FIELD(loop)>("loops");
+            addField<DAS_BIND_MANAGED_FIELD(loop)>("_loop","loop");
             addField<DAS_BIND_MANAGED_FIELD(blocks)>("blocks");
             addField<DAS_BIND_MANAGED_FIELD(scopes)>("scopes");
-            addField<DAS_BIND_MANAGED_FIELD(with)>("withs");
+            addField<DAS_BIND_MANAGED_FIELD(with)>("_with","with");
         }
     };
 
@@ -1085,7 +1085,7 @@ namespace das {
         return ft;
     }
 
-    struct AstInferHistoryAnnotation : ManagedStructureAnnotation<Function::InferHistory> {
+    struct AstInferHistoryAnnotation : ManagedStructureAnnotation<InferHistory> {
         AstInferHistoryAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("InferHistory", ml) {
         }

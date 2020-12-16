@@ -185,4 +185,33 @@ namespace das {
             parents.push_back(pp);
         }
     }
+
+    void Program::validateAotCpp ( TextWriter & logs, Context & ) {
+        library.foreach([&](Module * mod) -> bool {
+            if ( mod->builtIn ) {
+                logs << "// validating " << mod->name << "\n";
+                for ( const auto & ht : mod->handleTypes ) {
+                    const auto & tp = ht.second;
+                    if ( tp->rtti_isBasicStructureAnnotation() ) {
+                        auto bs = static_pointer_cast<BasicStructureAnnotation>(tp);
+                        if ( !bs->validationNeverFails ) {
+                            auto cppt = make_smart<TypeDecl>(Type::tHandle);
+                            cppt->annotation = bs.get();
+                            auto cppn = describeCppType(cppt);
+                            logs << "//\t" << cppn << " // " << tp->name << "\n";
+                            for ( const auto & flp : bs->fields ) {
+                                const auto & fld = flp.second;
+                                if ( fld.offset != -1 ) {
+                                    if ( fld.cppName.find('(')==std::string::npos ) {   // sometimes we bind ref member function as if field
+                                        logs << "\t\tstatic_assert(offsetof(" << cppn << "," << fld.cppName << ")==" << fld.offset << ",\"mismatching offset\");\n";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return true;
+        },"*");
+    }
 }

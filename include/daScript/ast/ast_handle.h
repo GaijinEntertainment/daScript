@@ -114,6 +114,7 @@ namespace das
         StructInfo *               sti = nullptr;
         ModuleLibrary *            mlib = nullptr;
         vector<TypeAnnotation*> parents;
+        bool validationNeverFails = false;
     };
 
     template <typename TT, bool canCopy = isCloneable<TT>::value>

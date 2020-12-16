@@ -125,6 +125,7 @@ namespace das {
 
     struct FStatAnnotation : ManagedStructureAnnotation <FStat,true> {
         FStatAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FStat", ml) {
+            validationNeverFails = true;
             addField<DAS_BIND_MANAGED_FIELD(is_valid)>("is_valid");
             addProperty<DAS_BIND_MANAGED_PROP(size)>("size");
             addProperty<DAS_BIND_MANAGED_PROP(atime)>("atime");

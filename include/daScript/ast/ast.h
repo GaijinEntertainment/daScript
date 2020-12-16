@@ -562,6 +562,12 @@ namespace das
     ,   inferedSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invoke)
     };
 
+    struct InferHistory {
+        LineInfo    at;
+        Function *  func = nullptr;
+        InferHistory() = default;
+        InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
+    };
     class Function : public ptr_ref_count {
     public:
         enum class DescribeExtra     { no, yes };
@@ -644,12 +650,6 @@ namespace das
                 bool invoke : 1;
             };
             uint32_t    sideEffectFlags = 0;
-        };
-        struct InferHistory {
-            LineInfo    at;
-            Function *  func = nullptr;
-            InferHistory() = default;
-            InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
         };
         vector<InferHistory> inferStack;
         Function * fromGeneric = nullptr;
@@ -1052,6 +1052,7 @@ namespace das
         void setPrintFlags();
         void aotCpp ( Context & context, TextWriter & logs );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
+        void validateAotCpp ( TextWriter & logs, Context & context );
         void buildMNLookup ( Context & context, TextWriter & logs );
         void buildGMNLookup ( Context & context, TextWriter & logs );
         void buildADLookup ( Context & context, TextWriter & logs );
