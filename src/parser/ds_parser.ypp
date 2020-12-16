@@ -462,7 +462,9 @@ module_declaration
             das_yyerror("this module already has a name, and its " + g_Program->thisModule->name,tokAt(@name),
                 CompilationError::module_already_has_a_name);
         }
-        g_Program->promoteToBuiltin = $mtype;
+        if ( !g_Program->policies.ignore_shared_modules ) {
+            g_Program->promoteToBuiltin = $mtype;
+        }
         delete $name;
     }
     ;
