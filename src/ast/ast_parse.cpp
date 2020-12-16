@@ -156,32 +156,41 @@ namespace das {
                         mod = info.moduleName;
                         log << string(tab,'\t') << " resolved as " << mod << "\n";
                     }
-                    auto it_r = find_if(req.begin(), req.end(), [&] ( const ModuleInfo & reqM ) {
-                        return reqM.moduleName == mod;
-                    });
-                    if ( it_r==req.end() ) {
-                        if ( dependencies.find(mod) != dependencies.end() ) {
-                            // circular dependency
-                            log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CIRCULAR DEPENDENCY\n";
-                            circular.push_back(mod);
-                            return false;
+                    module = Module::require(mod); // try native with that name AGAIN (promoted?)
+                    if ( !module ) {
+                        auto it_r = find_if(req.begin(), req.end(), [&] ( const ModuleInfo & reqM ) {
+                            return reqM.moduleName == mod;
+                        });
+                        if ( it_r==req.end() ) {
+                            if ( dependencies.find(mod) != dependencies.end() ) {
+                                // circular dependency
+                                log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CIRCULAR DEPENDENCY\n";
+                                circular.push_back(mod);
+                                return false;
+                            }
+                            dependencies.insert(mod);
+                            // module file name
+                            if ( info.moduleName.empty() ) {
+                                // request can't be translated to module name
+                                log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
+                                missing.push_back(mod);
+                                return false;
+                            }
+                            if ( !getPrerequisits(info.fileName, access, req, missing, circular, dependencies, libGroup, log, tab + 1) ) {
+                                return false;
+                            }
+                            log << string(tab,'\t') << "from " << fileName << " require " << mod
+                                << " - ok, new module " << info.moduleName << " at " << info.fileName << "\n";
+                            req.push_back(info);
+                        } else {
+                            log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
                         }
-                        dependencies.insert(mod);
-                        // module file name
-                        if ( info.moduleName.empty() ) {
-                            // request can't be translated to module name
-                            log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
-                            missing.push_back(mod);
-                            return false;
-                        }
-                        if ( !getPrerequisits(info.fileName, access, req, missing, circular, dependencies, libGroup, log, tab + 1) ) {
-                            return false;
-                        }
-                        log << string(tab,'\t') << "from " << fileName << " require " << mod
-                            << " - ok, new module " << info.moduleName << " at " << info.fileName << "\n";
-                        req.push_back(info);
                     } else {
-                        log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
+                        log << string(tab,'\t') << "from " << fileName << " require " << mod << " - shared, ok\n";
+                        libGroup.addModule(module);
+                        for ( const auto & dep : module->requireModule ) {
+                            libGroup.addModule(dep.first);
+                        }
                     }
                 } else {
                     log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok\n";
@@ -216,6 +225,7 @@ namespace das {
         auto time0 = ref_time_ticks();
         int err;
         auto program = g_Program = make_smart<Program>();
+        program->promoteToBuiltin = false;
         program->isCompiling = true;
         g_Program->policies = policies;
         g_Access = access;
@@ -325,6 +335,9 @@ namespace das {
                     if ( program->thisModule->name.empty() ) {
                         program->thisModule->name = mod.moduleName;
                     }
+                    if ( program->promoteToBuiltin ) {
+                        program->thisModule->promoteToBuiltin();
+                    }
                     libGroup.addModule(program->thisModule.release());
                     program->library.foreach([&](Module * pm) -> bool {
                         if ( !pm->name.empty() && pm->name!="$" ) {
@@ -337,6 +350,9 @@ namespace das {
                 }
             }
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, policies);
+            if ( res->promoteToBuiltin ) {
+                res->thisModule->promoteToBuiltin();
+            }
             if ( res->options.getBoolOption("log_require",false) ) {
                 logs << "module dependency graph:\n" << tw.str();
             }

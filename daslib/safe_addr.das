@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module safe_addr
+module safe_addr shared
 
 require ast
 require rtti

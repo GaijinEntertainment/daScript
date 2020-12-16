@@ -133,6 +133,13 @@ namespace das {
         }
     }
 
+    void Module::promoteToBuiltin() {
+        DAS_ASSERTF(!builtIn, "failed to promote. already builtin");
+        next = modules;
+        modules = this;
+        builtIn = true;
+    }
+
     Module::~Module() {
         if ( builtIn ) {
             Module ** p = &modules;

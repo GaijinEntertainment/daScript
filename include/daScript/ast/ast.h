@@ -762,6 +762,7 @@ namespace das
     class Module {
     public:
         Module ( const string & n = "" );
+        void promoteToBuiltin();
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::no_aot; }
@@ -1093,6 +1094,7 @@ namespace das
                 bool    isSimulating : 1;
                 bool    isCompilingMacros : 1;
                 bool    needMacroModule : 1;
+                bool    promoteToBuiltin : 1;
             };
             uint32_t    flags = 0;
         };
