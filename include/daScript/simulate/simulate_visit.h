@@ -252,4 +252,12 @@ namespace das {
         V_SUB_OPT(subexpr);
         V_END();
     }
+
+    template <typename TT>
+    SimNode * SimNode_ReturnAndMoveR2V<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(ReturnAndMoveR2V);
+        V_SUB(subexpr);
+        V_END();
+    }
 }

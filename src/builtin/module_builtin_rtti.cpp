@@ -206,7 +206,7 @@ namespace das {
         }
     };
 
-    struct FileAccessAnnotation : ManagedStructureAnnotation<FileAccess,false> {
+    struct FileAccessAnnotation : ManagedStructureAnnotation<FileAccess,false,true> {
         FileAccessAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FileAccess", ml) {
         }
     };

@@ -1,7 +1,7 @@
 options indenting = 4
 options remove_unused_symbols = false
 
-module json_boost
+module json_boost shared
 
 require rtti
 require ast

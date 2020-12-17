@@ -1,7 +1,7 @@
 options indenting = 4
 options remove_unused_symbols = false
 
-module json
+module json shared
 
 require strings
 

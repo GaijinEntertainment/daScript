@@ -1,6 +1,6 @@
 options indenting = 4
 
-module apply
+module apply shared
 
 require ast
 require daslib/ast_boost

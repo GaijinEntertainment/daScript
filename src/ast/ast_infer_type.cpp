@@ -4782,7 +4782,9 @@ namespace das {
                 if ( expr->subexpr ) {
                     if ( !expr->subexpr->type ) return Visitor::visit(expr);
                     if ( !func->result->ref ) {
-                        expr->subexpr = Expression::autoDereference(expr->subexpr);
+                        if ( !expr->moveSemantics ) {
+                            expr->subexpr = Expression::autoDereference(expr->subexpr);
+                        }
                     } else {
                         expr->returnReference = true;
                     }

@@ -21,6 +21,8 @@ void operator delete(void * p) throw()
 
 static bool quiet = false;
 
+static bool paranoid_offset_validation = false;
+
 TextPrinter tout;
 
 bool saveToFile ( const string & fname, const string & str ) {
@@ -135,13 +137,18 @@ bool compile ( const string & fn, const string & cppFn ) {
                 tw << "namespace " << program->thisNamespace << " {\n"; // anonymous
                 program->aotCpp(ctx, tw);
                 // list STUFF
-                tw << "struct AotList_impl : AotListBase {\n";
-                tw << "\tvirtual void registerAotFunctions ( AotLibrary & aotLib ) override {\n";
+                tw << "\tstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
                 program->registerAotCpp(tw, ctx, false);
                 tw << "\t};\n";
-                tw << "};\n";
-                tw << "AotList_impl impl;\n";
+                tw << "\n";
+                tw << "AotListBase impl(registerAotFunctions);\n";
                 tw << "}\n";
+                // validation stuff
+                if ( paranoid_offset_validation ) {
+                    program->validateAotCpp(tw,ctx);
+                    tw << "\n";
+                }
+                // footter
                 tw << "}\n";
                 tw << "#if defined(_MSC_VER)\n";
                 tw << "#pragma warning(pop)\n";
@@ -180,6 +187,8 @@ int MAIN_FUNC_NAME(int argc, char * argv[]) {
         for (int ai = 3; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
                 quiet = true;
+            } else if ( strcmp(argv[ai],"-p")==0 ) {
+                paranoid_offset_validation = true;
             } else if ( strcmp(argv[ai],"--")==0 ) {
                 scriptArgs = true;
             } else if ( !scriptArgs ) {

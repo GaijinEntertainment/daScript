@@ -423,7 +423,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
         virtual SimNode * simulate (Context & /*context*/ ) const { DAS_ASSERT(0); return nullptr; };
-        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, Type r2vType ) const;
+        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const;
         virtual bool rtti_isSequence() const { return false; }
         virtual bool rtti_isConstant() const { return false; }
         virtual bool rtti_isStringConstant() const { return false; }
@@ -562,6 +562,12 @@ namespace das
     ,   inferedSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invoke)
     };
 
+    struct InferHistory {
+        LineInfo    at;
+        Function *  func = nullptr;
+        InferHistory() = default;
+        InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
+    };
     class Function : public ptr_ref_count {
     public:
         enum class DescribeExtra     { no, yes };
@@ -644,12 +650,6 @@ namespace das
                 bool invoke : 1;
             };
             uint32_t    sideEffectFlags = 0;
-        };
-        struct InferHistory {
-            LineInfo    at;
-            Function *  func = nullptr;
-            InferHistory() = default;
-            InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
         };
         vector<InferHistory> inferStack;
         Function * fromGeneric = nullptr;
@@ -762,6 +762,7 @@ namespace das
     class Module {
     public:
         Module ( const string & n = "" );
+        void promoteToBuiltin();
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::no_aot; }
@@ -989,6 +990,7 @@ namespace das
         bool smart_pointer_by_value_unsafe = false;     // is passing smart_ptr by value unsafe?
         bool allow_block_variable_shadowing = false;
         bool allow_shared_lambda = false;
+        bool ignore_shared_modules = false;
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
@@ -1052,6 +1054,7 @@ namespace das
         void setPrintFlags();
         void aotCpp ( Context & context, TextWriter & logs );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
+        void validateAotCpp ( TextWriter & logs, Context & context );
         void buildMNLookup ( Context & context, TextWriter & logs );
         void buildGMNLookup ( Context & context, TextWriter & logs );
         void buildADLookup ( Context & context, TextWriter & logs );
@@ -1092,6 +1095,7 @@ namespace das
                 bool    isSimulating : 1;
                 bool    isCompilingMacros : 1;
                 bool    needMacroModule : 1;
+                bool    promoteToBuiltin : 1;
             };
             uint32_t    flags = 0;
         };

@@ -404,7 +404,9 @@ int main( int argc, char * argv[] ) {
     // #define TEST_NAME   "/examples/test/unit_tests/aonce.das"
     unit_test(getDasRoot() +  TEST_NAME,false);
     // unit_test(getDasRoot() +  TEST_NAME,true);
-    
+    // extra
+    //  #define TEST_NAME   "/examples/test/unit_tests/apply_macro_example.das"
+    //  unit_test(getDasRoot() +  TEST_NAME,false);
     Module::Shutdown();
 #if DAS_ENABLE_SMART_PTR_TRACKING
     dumpTrackingLeaks();
@@ -433,6 +435,25 @@ int main( int argc, char * argv[] ) {
         tout << "tests took " << ((usec/1000)/1000.0) << "\n";
         g_aotLib.reset();
         Module::Shutdown();
+    }
+    return 0;
+#endif
+#if 0 // COMPILER PERFORMANCE SINGLE TEST
+    #define TEST_NAME   "/examples/test/unit_tests/check_defer.das"
+    {
+        uint64_t timeStamp = ref_time_ticks();
+        for ( int passes=0; passes!=5; ++passes ) {
+            if ( !unit_test(getDasRoot() +  TEST_NAME,false) ) {
+                tout << "TESTS FAILED\n";
+                break;
+            }
+        }
+        // shutdown
+        int usec = get_time_usec(timeStamp);
+        tout << "tests took " << ((usec/1000)/1000.0) << "\n";
+        g_aotLib.reset();
+        Module::Shutdown();
+        getchar();
     }
     return 0;
 #endif

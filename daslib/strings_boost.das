@@ -1,7 +1,7 @@
 options indenting = 4
 options remove_unused_symbols = false
 
-module strings_boost
+module strings_boost shared
 
 require strings public
 

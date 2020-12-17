@@ -1576,7 +1576,14 @@ namespace das {
             ss << "return ";
             if ( expr->moveSemantics ) ss << "/* <- */ ";
             auto retT = expr->returnFunc ? expr->returnFunc->result : expr->block->returnType;
-            if ( !retT->isVoid() ) ss << "das_auto_cast<" << describeCppType(retT, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
+            if ( !retT->isVoid() ) {
+                if ( expr->moveSemantics ) {
+                    ss << "das_auto_cast_move<";
+                } else {
+                    ss << "das_auto_cast<";
+                }
+                ss << describeCppType(retT, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
+            }
         }
         virtual ExpressionPtr visit(ExprReturn* expr) override {
             auto retT = expr->returnFunc ? expr->returnFunc->result : expr->block->returnType;
@@ -3121,8 +3128,8 @@ namespace das {
                 continue;
             // SimFunction * fn = context.getFunction(i);
             uint64_t semH = fnn[i]->aotHash;
-            logs << "\t\t// " << aotFuncName(fnn[i]) << "\n";
-            logs << "\t\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
+            logs << "\t// " << aotFuncName(fnn[i]) << "\n";
+            logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
             if ( fnn[i]->copyOnReturn || fnn[i]->moveOnReturn ) {
                 logs << "CMRES";
@@ -3133,11 +3140,11 @@ namespace das {
         if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
             semH = getInitSemanticHashWithDep(semH);
-            logs << "\t\t// [[ init script ]]\n";
-            logs << "\t\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
+            logs << "\t// [[ init script ]]\n";
+            logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
             logs << "<void (*)(Context *, bool),";
-            logs << "&__init_script>>();\n\t\t};\n";
+            logs << "&__init_script>>();\n\t};\n";
         }
         if ( headers ) {
             logs << "}\n";

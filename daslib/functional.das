@@ -1,7 +1,7 @@
 options indenting = 4
 options remove_unused_symbols = false
 
-module functional
+module functional shared
 
 [private]
 def filter_any(var src:iterator<auto(TT)>; var blk )

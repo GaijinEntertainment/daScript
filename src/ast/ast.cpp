@@ -9,15 +9,16 @@ namespace das {
 
     AotListBase * AotListBase::head = nullptr;
 
-    AotListBase::AotListBase() {
+    AotListBase::AotListBase( RegisterAotFunctions prfn ) {
         tail = head;
         head = this;
+        regFn = prfn;
     }
 
     void AotListBase::registerAot ( AotLibrary & lib ) {
         auto it = head;
         while ( it ) {
-            it->registerAotFunctions(lib);
+            (*it->regFn)(lib);
             it = it->tail;
         }
     }

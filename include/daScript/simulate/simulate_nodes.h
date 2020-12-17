@@ -2231,6 +2231,22 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * subexpr;
     };
 
+    // DEREFERENCE
+    template <typename TT>
+    struct SimNode_ReturnAndMoveR2V : SimNode_Return {
+        SimNode_ReturnAndMoveR2V ( const LineInfo & at, SimNode * s )
+            : SimNode_Return(at,s) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            TT * pR = (TT *) subexpr->evalPtr(context);
+            context.abiResult() = cast<TT>::from(*pR);
+            memset(pR, 0, sizeof(TT));
+            context.stopFlags |= EvalFlags::stopForReturn;
+            return v_zero();
+        }
+    };
+
     struct SimNode_ReturnNothing : SimNode {
         SimNode_ReturnNothing ( const LineInfo & at )
             : SimNode(at) {}

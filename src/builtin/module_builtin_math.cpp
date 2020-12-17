@@ -208,6 +208,7 @@ namespace das {
         }
         virtual bool isRefType() const override { return true; }
         virtual bool isLocal() const override { return true; }
+        virtual bool canBePlacedInContainer() const override { return true; }
         virtual bool hasNonTrivialCtor() const override { return false; }
         virtual bool hasNonTrivialDtor() const override { return false; }
         virtual bool canMove() const override { return true; }
@@ -267,7 +268,7 @@ namespace das {
             int field = GetField(na);
             if ( field!=-1 ) {
                 if ( !value->type->isPointer() ) {
-                    auto tnode = value->trySimulate(context, field*sizeof(VecT), Type::none);
+                    auto tnode = value->trySimulate(context, field*sizeof(VecT), make_smart<TypeDecl>(Type::none));
                     if ( tnode ) {
                         return tnode;
                     }
@@ -285,7 +286,7 @@ namespace das {
             if ( field!=-1 ) {
                 auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
                 if ( !value->type->isPointer() ) {
-                    auto tnode = value->trySimulate(context, field*sizeof(VecT), bt);
+                    auto tnode = value->trySimulate(context, field*sizeof(VecT), make_smart<TypeDecl>(bt));
                     if ( tnode ) {
                         return tnode;
                     }
@@ -328,7 +329,7 @@ namespace das {
             }
         };
         SimNode * trySimulate ( Context & context, const ExpressionPtr & subexpr, const ExpressionPtr & index,
-                               Type r2vType, uint32_t ofs ) const {
+                               const TypeDeclPtr & r2vType, uint32_t ofs ) const {
             if ( index->rtti_isConstant() ) {
                 // if its constant index, like a[3]..., we try to let node bellow simulate
                 auto idxCE = static_pointer_cast<ExprConst>(index);
@@ -348,7 +349,7 @@ namespace das {
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
-            if ( auto tnode = trySimulate(context, rv, idx, Type::none, ofs) ) {
+            if ( auto tnode = trySimulate(context, rv, idx, make_smart<TypeDecl>(Type::none), ofs) ) {
                 return tnode;
             } else {
                 return context.code->makeNode<SimNode_At>(at,
@@ -360,7 +361,7 @@ namespace das {
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                             const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
             Type r2vType = (Type) ToBasicType<VecT>::type;
-            if ( auto tnode = trySimulate(context, rv, idx, r2vType, ofs) ) {
+            if ( auto tnode = trySimulate(context, rv, idx, make_smart<TypeDecl>(r2vType), ofs) ) {
                 return tnode;
             } else {
                 return context.code->makeValueNode<SimNode_AtR2V>(  r2vType, at,

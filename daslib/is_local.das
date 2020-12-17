@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module is_local
+module is_local shared
 
 require ast public
 require rtti

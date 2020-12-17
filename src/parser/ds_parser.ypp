@@ -455,12 +455,15 @@ program
     ;
 
 module_declaration
-    :   DAS_MODULE  NAME[name] {
+    :   DAS_MODULE  NAME[name] optional_shared[mtype] {
         if ( g_Program->thisModule->name.empty() ) {
             g_Program->thisModule->name = *$name;
         } else if ( g_Program->thisModule->name != *$name ){
             das_yyerror("this module already has a name, and its " + g_Program->thisModule->name,tokAt(@name),
                 CompilationError::module_already_has_a_name);
+        }
+        if ( !g_Program->policies.ignore_shared_modules ) {
+            g_Program->promoteToBuiltin = $mtype;
         }
         delete $name;
     }

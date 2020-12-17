@@ -1,7 +1,7 @@
 options indenting = 4
 options remove_unused_symbols = false
 
-module regex_boost
+module regex_boost shared
 
 require ast
 require strings

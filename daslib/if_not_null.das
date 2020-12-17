@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module if_not_null
+module if_not_null shared
 
 require ast
 require rtti
