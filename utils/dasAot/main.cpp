@@ -21,7 +21,7 @@ void operator delete(void * p) throw()
 
 static bool quiet = false;
 
-static bool paranoid_offset_validation = false;
+static bool paranoid_validation = false;
 
 TextPrinter tout;
 
@@ -142,13 +142,13 @@ bool compile ( const string & fn, const string & cppFn ) {
                 tw << "\t};\n";
                 tw << "\n";
                 tw << "AotListBase impl(registerAotFunctions);\n";
-                tw << "}\n";
                 // validation stuff
-                if ( paranoid_offset_validation ) {
+                if ( paranoid_validation ) {
                     program->validateAotCpp(tw,ctx);
                     tw << "\n";
                 }
                 // footter
+                tw << "}\n";
                 tw << "}\n";
                 tw << "#if defined(_MSC_VER)\n";
                 tw << "#pragma warning(pop)\n";
@@ -188,7 +188,7 @@ int MAIN_FUNC_NAME(int argc, char * argv[]) {
             if ( strcmp(argv[ai],"-q")==0 ) {
                 quiet = true;
             } else if ( strcmp(argv[ai],"-p")==0 ) {
-                paranoid_offset_validation = true;
+                paranoid_validation = true;
             } else if ( strcmp(argv[ai],"--")==0 ) {
                 scriptArgs = true;
             } else if ( !scriptArgs ) {
