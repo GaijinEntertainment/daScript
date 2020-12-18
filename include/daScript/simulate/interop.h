@@ -243,6 +243,8 @@ namespace das
             : SimNode_ExtFuncCallBase(at,fnName) {}
         template <size_t ...I>
         static __forceinline void CallPlacementNew ( void * cmres, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            (void)ctx;      // to avoid compiler warning when no arguments
+            (void)args;     // to avoid compiler warning when no arguments
             new (cmres) CType(cast_arg<Args>::to(ctx,args[I])...);
         }
         virtual vec4f eval(Context & context) override {
@@ -258,6 +260,7 @@ namespace das
             : SimNode_ExtFuncCallBase(at,"using") {}
         template <size_t ...I>
         __forceinline void CallUsing ( const Block & blk, Context & ctx, SimNode ** args, index_sequence<I...> ) {
+            (void)args;     // to avoid compiler warning when no arguments
             CType value( (cast_arg<Args>::to(ctx,args[I]))...);
             vec4f bargs[1];
             bargs[0] = cast<CType *>::from(&value);
