@@ -52,17 +52,28 @@ def emplace(var Arr:array<auto(numT)>;var value:numT)
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
-def push_clone(var Arr:array<auto(numT)>;value:numT;at:int)
+def push_clone(var Arr:array<auto(numT)>;value:numT implicit;at:int)
     static_if typeinfo(can_clone value)
         Arr[__builtin_array_push_zero(Arr,at,typeinfo(sizeof type<numT>))] := value
     else
         concept_assert(false,"can't push-clone value, which can't be moved")
 
-def push_clone(var Arr:array<auto(numT)>;value:numT)
+def push_clone(var Arr:array<auto(numT)>;value:numT implicit)
     static_if typeinfo(can_clone value)
         Arr[__builtin_array_push_back_zero(Arr,typeinfo(sizeof type<numT>))] := value
     else
         concept_assert(false,"can't push-clone value, which can't be moved")
+
+def push_clone ( var A : auto(CT) -# -const; b : auto(TT) implicit )
+    static_if !typeinfo(can_clone type<TT>)
+        concept_assert(false,"can't push_clone type which can't be cloned")
+    static_elif !typeinfo(can_be_placed_in_container type<TT>)
+        concept_assert(false,"can't push_clone type which can't be placed in a container")
+    static_elif !typeinfo(builtin_function_exists @@ <(var a:CT -# -const;var b:TT -# -const):void> _::emplace)
+        concept_assert(false,"can't push_clone, missing emplace")
+    else
+        var cb : TT -# -const := b
+        _::emplace(A, cb)
 
 def erase(var Arr:array<auto(numT)>;at:int)
     __builtin_array_erase(Arr,at,typeinfo(sizeof type<numT>))

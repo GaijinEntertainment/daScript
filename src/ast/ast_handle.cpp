@@ -202,7 +202,7 @@ namespace das {
                             for ( const auto & flp : bs->fields ) {
                                 const auto & fld = flp.second;
                                 if ( fld.offset != -1 ) {
-                                    if ( fld.cppName.find('(')==std::string::npos ) {   // sometimes we bind ref member function as if field
+                                    if ( fld.cppName.find('(')==string::npos ) {   // sometimes we bind ref member function as if field
                                         logs << "\t\tstatic_assert(offsetof(" << cppn << ","
                                             << fld.cppName << ")==" << fld.offset << ",\"mismatching offset\");\n";
                                     }

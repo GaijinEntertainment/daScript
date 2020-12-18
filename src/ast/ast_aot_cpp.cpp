@@ -1335,7 +1335,10 @@ namespace das {
     // clone
         virtual void preVisit ( ExprClone * that ) override {
             Visitor::preVisit(that);
-            ss << "das_clone(";
+            ss << "das_clone<"
+                << describeCppType(that->left->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ","
+                << describeCppType(that->right->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                << ">::clone(";
         }
         virtual void preVisitRight ( ExprClone * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);

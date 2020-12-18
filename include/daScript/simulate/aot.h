@@ -2255,7 +2255,12 @@ namespace das {
 
     char * builtin_string_clone ( const char *str, Context * context );
 
-    __forceinline void das_clone ( string & dst, const string & src ) { dst = src; }
+    template <typename TT, typename QQ>
+    struct das_clone {
+        static __forceinline void clone ( TT & dst, const QQ & src ) {
+            dst = src;
+        }
+    };
 
     char * to_das_string(const string & str, Context * ctx);
     void set_das_string(string & str, const char * bs);
