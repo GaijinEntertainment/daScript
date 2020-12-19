@@ -121,6 +121,8 @@ VECMATH_FINLINE vec4f VECTORCALL v_cvt_vec4f(vec4i a);
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_ush_vec4i(vec4i a);
 //! unpacks 4 signed shorts (in low 64 bits of vector, .xy) to 4 ints
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_ssh_vec4i(vec4i a);
+//! unpacks 8 unsigned bytes (in low 64 bits of vector, .xy) to 4 shorts
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_byte_vec4i(vec4i a);
 
 //! converts float vector to 4 halfs and stores(unaligned)
 VECMATH_FINLINE void VECTORCALL v_float_to_half(uint16_t* __restrict m, const vec4f v);
@@ -295,6 +297,10 @@ VECMATH_FINLINE vec4i VECTORCALL v_packs(vec4i a);
 VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a, vec4i b);
 //! pack 8x 32-bit ints (value being duplicated) into 8x unsigned 16-bit ints
 VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a);
+//! pack 16x 16-bit ints into 16x unsigned 8-bit ints
+VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a, vec4i b);
+//! pack 16x 16-bit ints into 16x unsigned 8-bit ints
+VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a);
 
 //! compute sine and cosine for all components: for C={xyzw}  s.C = sin(a.C); c.C = cos(a.C);
 VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f a, vec4f& s, vec4f& c);
