@@ -1,4 +1,5 @@
 // options log = true // , log_infer_passes=true
+require UnitTest
 
 struct Foo
     a : int
@@ -77,3 +78,6 @@ def test
     test_clone_complex()
     return true
 
+[export]
+def test_if_compiles ( var a : dasvector`TestObjectFoo; b : TestObjectFoo# )
+    push_clone(a,b)

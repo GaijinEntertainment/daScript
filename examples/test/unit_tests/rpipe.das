@@ -6,5 +6,8 @@ def addX(a,b)
 def test
     let t = 12 |> addX(2) |> addX(3)
     assert(t==17)
+    var c = 1 |> addX <| 2   // no () pipe
+    c ++
+    assert(c==4)
     return true
 

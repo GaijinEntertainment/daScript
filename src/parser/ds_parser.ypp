@@ -1056,6 +1056,17 @@ expr_pipe
         if ( pipeCall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) pipeCall;
             pCall->arguments.push_back(ExpressionPtr($arg));
+            $$ = $fncall;
+        } else if ( pipeCall->rtti_isVar() ) {
+            auto pVar = (ExprVar *) pipeCall;
+            auto pCall = g_Program->makeCall(pVar->at,pVar->name);
+            pCall->arguments.push_back(ExpressionPtr($arg));
+            if ( !pipeCall->swap_tail(pCall) ) {
+                delete pVar;
+                $$ = pCall;
+            } else {
+                $$ = $fncall;
+            }
         } else if ( pipeCall->rtti_isMakeStruct() ) {
             auto pMS = (ExprMakeStruct *) pipeCall;
             if ( pMS->block ) {
@@ -1065,12 +1076,13 @@ expr_pipe
             } else {
                 pMS->block = $arg;
             }
+            $$ = $fncall;
         } else {
             das_yyerror("can only pipe into function call or [[ make structure ]]",
                 tokAt(@loc),CompilationError::cant_pipe);
             delete $arg;
+            $$ = $fncall;
         }
-        $$ = $fncall;
     }
     |   LAPIPE expr_block[arg] {
         $$ = $arg;
@@ -1598,8 +1610,14 @@ expr
             auto pCall = (ExprLooksLikeCall *) $fncall;
             pCall->arguments.push_back(ExpressionPtr($arg));
             $$ = $fncall;
+        } else if ( $fncall->rtti_isVar() ) {
+            auto pVar = (ExprVar *) $fncall;
+            auto pCall = g_Program->makeCall(pVar->at,pVar->name);
+            delete pVar;
+            pCall->arguments.push_back(ExpressionPtr($arg));
+            $$ = pCall;
         } else {
-            das_yyerror("can only pipe into a function call",tokAt(@loc),CompilationError::cant_pipe);
+            das_yyerror("can only lpipe into a function call",tokAt(@loc),CompilationError::cant_pipe);
             $$ = $fncall;
         }
     }
@@ -1608,8 +1626,14 @@ expr
             auto pCall = (ExprLooksLikeCall *) $fncall;
             pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr($arg));
             $$ = $fncall;
+        } else if ( $fncall->rtti_isVar() ) {
+            auto pVar = (ExprVar *) $fncall;
+            auto pCall = g_Program->makeCall(pVar->at,pVar->name);
+            delete pVar;
+            pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr($arg));
+            $$ = pCall;
         } else {
-            das_yyerror("can only pipe into a function call",tokAt(@loc),CompilationError::cant_pipe);
+            das_yyerror("can only lpipe into a function call",tokAt(@loc),CompilationError::cant_pipe);
             $$ = $fncall;
         }
     }

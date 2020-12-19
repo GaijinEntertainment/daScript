@@ -198,17 +198,28 @@ namespace das {
                             auto cppt = make_smart<TypeDecl>(Type::tHandle);
                             cppt->annotation = bs.get();
                             auto cppn = describeCppType(cppt);
-                            logs << "//\t" << cppn << " // " << tp->name << "\n";
+                            logs << "//\t" << cppn << " aka " << tp->name << "\n";
                             for ( const auto & flp : bs->fields ) {
                                 const auto & fld = flp.second;
                                 if ( fld.offset != -1 ) {
-                                    if ( fld.cppName.find('(')==std::string::npos ) {   // sometimes we bind ref member function as if field
-                                        logs << "\t\tstatic_assert(offsetof(" << cppn << "," << fld.cppName << ")==" << fld.offset << ",\"mismatching offset\");\n";
+                                    if ( fld.cppName.find('(')==string::npos ) {   // sometimes we bind ref member function as if field
+                                        logs << "\t\tstatic_assert(offsetof(" << cppn << ","
+                                            << fld.cppName << ")==" << fld.offset << ",\"mismatching offset\");\n";
                                     }
                                 }
                             }
                         }
                     }
+                }
+                for ( const auto & et : mod->enumerations ) {
+                    const auto & tp = et.second;
+                    auto cppt = make_smart<TypeDecl>(tp);
+                    auto cppn = describeCppType(cppt);
+                    auto baset = tp->makeBaseType();
+                    logs << "//\t" << cppn << " aka " << tp->name << "\n";
+                    logs << "\t\tstatic_assert( is_same < underlying_type< " << cppn << " >::type, "
+                        << describeCppType(baset) << ">::value,\"mismatching underlying type, expecting "
+                            << das_to_string(tp->baseType) << "\");\n";
                 }
             }
             return true;

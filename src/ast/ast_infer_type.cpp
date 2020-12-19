@@ -553,35 +553,16 @@ namespace das {
         }
 
         vector<FunctionPtr> findTypedFuncAddr ( const string & name, const vector<TypeDeclPtr> & arguments, const TypeDeclPtr & resType ) const {
-            string moduleName, funcName;
-            splitTypeName(name, moduleName, funcName);
-            vector<FunctionPtr> result;
-            auto inWhichModule = getSearchModule(moduleName);
-            TextWriter ss;
-            for ( auto & arg : arguments ) {
-                ss << " " << arg->getMangledName();
+            vector<FunctionPtr> funcs =  findMatchingFunctions(name, arguments, false, false);
+            for ( auto it = funcs.begin(); it != funcs.end();  ) {
+                const auto & mf = *it;
+                if ( !mf->result->isSameType(*resType,RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes) ) {
+                    it = funcs.erase(it);
+                } else {
+                    ++ it;
+                }
             }
-            string mangledNamePostfix = ss.str();
-            program->library.foreach([&](Module * mod) -> bool {
-                string mangledName;
-                if ( !mod->name.empty() ) {
-                    mangledName = "@" + mod->name + "::";
-                }
-                mangledName = mangledName + funcName + mangledNamePostfix;
-                auto itFn = mod->functions.find(mangledName);
-                if ( itFn != mod->functions.end() ) {
-                    const auto & pFn = itFn->second;
-                    if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
-                        if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
-                            if ( pFn->result->isSameType(*resType, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
-                                result.push_back(pFn);
-                            }
-                        }
-                    }
-                }
-                return true;
-            },moduleName);
-            return result;
+            return funcs;
         }
 
         vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
@@ -885,7 +866,7 @@ namespace das {
             return result;
         }
 
-        vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false ) const {
+        vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false, bool visCheck = true ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             vector<FunctionPtr> result;
@@ -895,7 +876,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
+                        if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                     result.push_back(pFn);
