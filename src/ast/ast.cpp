@@ -1629,6 +1629,15 @@ namespace das {
 
     // ExprOp1
 
+    bool ExprOp1::swap_tail ( Expression * expr ) {
+        if ( subexpr.get()==expr ) {
+            subexpr = expr;
+            return true;
+        } else {
+            return subexpr->swap_tail(expr);
+        }
+    }
+
     ExpressionPtr ExprOp1::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
@@ -1655,6 +1664,15 @@ namespace das {
     }
 
     // ExprOp2
+
+    bool ExprOp2::swap_tail ( Expression * expr ) {
+        if ( right.get()==expr ) {
+            right = expr;
+            return true;
+        } else {
+            return right->swap_tail(expr);
+        }
+    }
 
     ExpressionPtr ExprOp2::visit(Visitor & vis) {
         vis.preVisit(this);
@@ -1691,6 +1709,15 @@ namespace das {
     }
 
     // ExprOp3
+
+    bool ExprOp3::swap_tail ( Expression * expr ) {
+        if ( right.get()==expr ) {
+            right = expr;
+            return true;
+        } else {
+            return right->swap_tail(expr);
+        }
+    }
 
     ExpressionPtr ExprOp3::visit(Visitor & vis) {
         vis.preVisit(this);
