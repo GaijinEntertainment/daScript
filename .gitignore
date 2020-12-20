@@ -5,6 +5,7 @@ cmake_temp/
 tmtags
 
 *.output
+*.temp
 **/_aot_generated
 
 build/
@@ -13,3 +14,5 @@ bin/
 
 
 test.bin
+include/modules/external_need.inc
+include/modules/external_resolve.inc
