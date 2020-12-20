@@ -2378,6 +2378,19 @@ VECMATH_FINLINE vec4f VECTORCALL v_half_to_float(const uint16_t* __restrict m)
   return v_cast_vec4f(fltInt32);
 }
 
+VECMATH_FINLINE uint32_t v_float_to_byte ( vec4f x ) {
+    vec4i y = v_cvt_roundi(x);
+    y = v_packs(y);
+    y = v_packus16(y, y);
+    return v_extract_xi(y);
+}
+
+VECMATH_FINLINE vec4f v_byte_to_float ( uint32_t x ) {
+    vec4i y = v_splatsi(x);
+    y = v_cvt_byte_vec4i(y);
+    y = v_cvt_ush_vec4i(y);
+    return v_cvt_vec4f(y);
+}
 
 VECMATH_INLINE vec3f VECTORCALL v_triangle_bounding_sphere_center( const vec3f& p1, const vec3f& p2, const vec3f& p3 )
 {

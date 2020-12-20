@@ -592,6 +592,11 @@ namespace das {
                 "inverse", SideEffects::none, "float3x4_inverse")->arg("x");
             addExtern<DAS_BIND_FUN(rotate)>(*this, lib, "rotate",
                 SideEffects::none, "rotate")->args({"x","y"});
+            // packing
+            addExtern<DAS_BIND_FUN(pack_float_to_byte)>(*this, lib, "pack_float_to_byte",
+                SideEffects::none,"pack_float_to_byte")->arg("x");
+            addExtern<DAS_BIND_FUN(unpack_byte_to_float)>(*this, lib, "unpack_byte_to_float",
+                SideEffects::none,"unpack_byte_to_float")->arg("x");
             // lets make sure its all aot ready
             verifyAotReady();
         }

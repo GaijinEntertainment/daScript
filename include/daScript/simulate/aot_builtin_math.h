@@ -112,5 +112,14 @@ namespace das {
             return false;
         }
     }
+
+    __forceinline uint32_t pack_float_to_byte ( float4 value ) {
+        return v_float_to_byte(value);
+    }
+
+    __forceinline float4 unpack_byte_to_float ( uint32_t value ) {
+        return v_byte_to_float(value);
+    }
+
 }
 
