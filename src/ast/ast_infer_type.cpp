@@ -5185,8 +5185,8 @@ namespace das {
             if ( var->type->isVoid() )
                 error("local variable can't be declared void", "", "",
                       var->at, CompilationError::invalid_variable_type);
-            if ( !var->type->isLocal() && !var->type->ref )
-                error("can't have local variable of type " + describeType(var->type), "", "",
+            if ( !var->type->isLocal() && !var->type->ref && !safeExpression(expr) )
+                error("local variable of type " + describeType(var->type) + " requires unsafe", "", "",
                       var->at, CompilationError::invalid_variable_type);
             if ( var->type->hasClasses() && !safeExpression(expr) ) {
                 error("local class requires unsafe " + describeType(var->type), "", "",

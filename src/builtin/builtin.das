@@ -72,8 +72,9 @@ def push_clone ( var A : auto(CT) -# -const; b : auto(TT) implicit )
     static_elif !typeinfo(builtin_function_exists @@ <(var a:CT -# -const;var b:TT -# -const):void> _::emplace)
         concept_assert(false,"can't push_clone, missing emplace")
     else
-        var cb : TT -# -const := b
-        _::emplace(A, cb)
+        unsafe
+            var cb : TT -# -const := b
+            _::emplace(A, cb)
 
 def erase(var Arr:array<auto(numT)>;at:int)
     __builtin_array_erase(Arr,at,typeinfo(sizeof type<numT>))
