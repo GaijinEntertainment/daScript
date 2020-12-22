@@ -10,10 +10,10 @@
 #pragma once
 
 #if !defined(_TARGET_PC_LINUX) && !defined(_TARGET_PC_MACOSX) && !defined(_TARGET_PC_WIN)\
- && !defined(_TARGET_PS4)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC)
+ && !defined(_TARGET_PS4) && !defined(_TARGET_PS5)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC)
   #if __linux__ || __unix__
     #define _TARGET_PC_LINUX 1
-  #elif __APPLE_
+  #elif __APPLE__
     #define _TARGET_PC_MACOSX 1
   #elif _WIN32
     #define _TARGET_PC_WIN 1
@@ -84,6 +84,8 @@ VECMATH_FINLINE vec4f VECTORCALL v_ldu_half(const void *m) { return v_cast_vec4f
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_ush_vec4i(vec4i a) { return _mm_unpacklo_epi16(a, _mm_setzero_si128()); }
 VECMATH_FINLINE vec4i VECTORCALL
   v_cvt_ssh_vec4i(vec4i a) { vec4i sx = _mm_cmplt_epi16(a, _mm_setzero_si128()); return _mm_unpacklo_epi16(a, sx); }
+
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_byte_vec4i(vec4i a) { return _mm_unpacklo_epi8(a, _mm_setzero_si128()); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_make_vec4f(float x, float y, float z, float w)
 { return _mm_setr_ps(x, y, z, w); }
@@ -257,6 +259,9 @@ VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a) { return sse4_packus(a); }
 VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a, vec4i b) { return sse2_packus(a, b); }
 VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a) { return sse2_packus(a); }
 #endif
+
+VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a, vec4i b) { return _mm_packus_epi16(a,b); }
+VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a) { return _mm_packus_epi16(a,a); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_rcp_est(vec4f a) { return _mm_rcp_ps(a); }
 VECMATH_FINLINE vec4f VECTORCALL v_rcp(vec4f a)
@@ -519,7 +524,6 @@ VECMATH_FINLINE vec4f VECTORCALL v_dot3(vec4f a, vec4f b) { return sse2_dot3(a,b
 VECMATH_FINLINE vec4f VECTORCALL v_dot3_x(vec4f a, vec4f b) { return sse2_dot3_x(a,b); }
 VECMATH_FINLINE vec4f VECTORCALL v_distance3p_x(plane3f a, vec3f b) { return sse2_distance3p_x(a,b); }
 #endif
-
 
 VECMATH_FINLINE vec4f VECTORCALL v_norm4(vec4f a) { return v_div(a, v_splat_x(v_sqrt_x(v_dot4_x(a,a)))); }
 VECMATH_FINLINE vec4f VECTORCALL v_norm3(vec4f a) { return v_div(a, v_splat_x(v_sqrt_x(v_dot3_x(a,a)))); }
