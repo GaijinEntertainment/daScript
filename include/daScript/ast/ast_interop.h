@@ -117,7 +117,7 @@ namespace das
             this->aotTemplate = true;
             this->modifyExternal = true;
             this->invoke = true;
-            vector<TypeDeclPtr> args = makeBuiltinArgs<CType,Args...>(lib);
+            vector<TypeDeclPtr> args = makeBuiltinArgs<void,Args...>(lib);
             args.emplace_back(makeType<const TBlock<void,TTemporary<TExplicit<CType>>>>(lib));
             construct(args);
         }
