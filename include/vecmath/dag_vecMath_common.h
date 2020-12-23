@@ -246,7 +246,16 @@ VECMATH_FINLINE void VECTORCALL v_mat44_transpose_to_mat33(mat33f &dest, vec3f c
 }
 #endif
 
+#if defined(__FINITE_MATH_ONLY__) && __FINITE_MATH_ONLY__ > 0 // Clang/GCC
+VECMATH_FINLINE vec4f VECTORCALL v_remove_nan(vec4f a)
+{
+  static vec4i_const nanMask = { 0x7FC00000, 0x7FC00000, 0x7FC00000, 0x7FC00000 };
+  vec4i ai = v_cast_vec4i(a);
+  return v_cast_vec4f(v_andi(ai, v_cmp_lti(v_andi(ai, nanMask), nanMask)));
+}
+#else
 VECMATH_FINLINE vec4f VECTORCALL v_remove_nan(vec4f a) {return v_and(a, v_cmp_eq(a,a)); }
+#endif
 VECMATH_FINLINE vec4f VECTORCALL v_norm4_safe(vec4f a) {return v_remove_nan(v_norm4(a));}
 VECMATH_FINLINE vec4f VECTORCALL v_norm3_safe(vec4f a) {return v_remove_nan(v_norm3(a));}
 
@@ -629,6 +638,13 @@ VECMATH_FINLINE int VECTORCALL v_bbox3_test_sph_intersect(bbox3f_cref box, vec4f
 
 VECMATH_FINLINE vec4f VECTORCALL v_bbox3_outer_rad(bbox3f_cref b) { return v_bbox3_outer_rad(b.bmin, b.bmax); }
 VECMATH_FINLINE vec4f VECTORCALL v_bbox3_inner_rad(bbox3f_cref b) { return v_bbox3_inner_rad(b.bmin, b.bmax); }
+
+VECMATH_FINLINE bool VECTORCALL v_bbox3_is_empty(bbox3f_cref bbox)
+{
+  vec3f boxSize = v_bbox3_size(bbox);
+  vec3f boxValid = v_min(boxSize, v_min(v_rot_1(boxSize), v_rot_2(boxSize)));
+  return v_test_vec_x_le_0(boxValid);
+}
 
 VECMATH_FINLINE quat4f VECTORCALL v_quat_lerp(vec4f tttt, quat4f a, quat4f b)
 {
@@ -1013,8 +1029,9 @@ VECMATH_FINLINE plane3f VECTORCALL v_norm_plane(plane3f in) { return v_norm3(in)
 VECMATH_FINLINE vec3f VECTORCALL v_ray_intersect_plane(vec3f A, vec3f B, plane3f P, vec4f &behind, vec4f &t)
 {
   vec3f dir = v_sub(B, A);
-  t = v_div(v_sub(v_neg(v_splat_w(P)),v_dot3(A, P)), v_dot3(dir, P));
-  behind = v_cmp_gt(v_zero(), t);
+  vec4f dot = v_dot3(dir, P);
+  t = v_div(v_sub(v_neg(v_splat_w(P)),v_dot3(A, P)), dot);
+  behind = v_or(v_cmp_gt(v_zero(), t), v_cmp_eq(dot, v_zero()));
   return v_madd(t, dir, A);
 }
 
@@ -1985,6 +2002,11 @@ alignas(16)static const float _ps_atan_s2[4] = REPLICATE4(0.68193064729268275701
 alignas(16)static const float _ps_atan_s3[4] = REPLICATE4(0.28205206687035841409e2f);
 alignas(16)static const float _ps_am_pi_o_2[4] = REPLICATE4(1.570796326794895f);
 
+static const vec4f_const _pi          = v_cast_vec4f(v_splatsi(0x40490fdb)); // 3.141593f
+static const vec4f_const _half_pi     = v_cast_vec4f(v_splatsi(0x3fc90fdb));
+static const vec4f_const _neg_pi      = v_neg(_pi);
+static const vec4f_const _neg_half_pi = v_neg(_half_pi);
+
 #undef REPLICATE4
 //approximate atan |error| is < 0.00045
 VECMATH_INLINE vec4f VECTORCALL v_atan_est(vec4f x)  // any x
@@ -2112,28 +2134,32 @@ VECMATH_INLINE vec4f VECTORCALL v_atan2_est(vec4f y, vec4f x)
 
 VECMATH_INLINE vec4f VECTORCALL v_asin(vec4f a)
 {
-  return v_atan(v_div(a, v_sqrt4(v_sub(V_C_ONE, v_mul(a,a)))));
+  vec4f divisor = v_sqrt4(v_sub(V_C_ONE, v_mul(a,a)));
+  return v_sel(v_atan(v_div(a, divisor)), _neg_half_pi, v_cmp_eq(divisor, v_zero()));
 }
 
 VECMATH_INLINE vec4f VECTORCALL v_acos(vec4f a)
 {
   vec4f one = V_C_ONE;
-  a = v_sqrt4(v_div(v_sub(one, a), v_add(one, a)));
+  vec4f divisor = v_add(one, a);
+  a = v_sqrt4(v_div(v_sub(one, a), divisor));
   a = v_atan(a);
-  return v_add(a, a);
+  return v_sel(v_add(a, a), _neg_pi, v_cmp_ge(v_zero(), divisor));
 }
 
 VECMATH_INLINE vec4f VECTORCALL v_asin_x(vec4f a)
 {
-  return v_atan(v_div_x(a, v_sqrt_x(v_sub_x(V_C_ONE, v_mul_x(a,a)))));
+  vec4f divisor = v_sqrt_x(v_sub_x(V_C_ONE, v_mul_x(a,a)));
+  return v_sel(v_atan(v_div_x(a, divisor)), _neg_half_pi, v_cmp_eq(divisor, v_zero()));
 }
 
 VECMATH_INLINE vec4f VECTORCALL v_acos_x(vec4f a)
 {
   vec4f one = V_C_ONE;
-  a = v_sqrt_x(v_div_x(v_sub_x(one, a), v_add_x(one, a)));
+  vec4f divisor = v_add_x(one, a);
+  a = v_sqrt_x(v_div_x(v_sub_x(one, a), divisor));
   a = v_atan(a);
-  return v_add_x(a, a);
+  return v_sel(v_add_x(a, a), _neg_pi, v_cmp_ge(v_zero(), divisor));
 }
 
 
@@ -2378,14 +2404,16 @@ VECMATH_FINLINE vec4f VECTORCALL v_half_to_float(const uint16_t* __restrict m)
   return v_cast_vec4f(fltInt32);
 }
 
-VECMATH_FINLINE uint32_t v_float_to_byte ( vec4f x ) {
+VECMATH_FINLINE uint32_t v_float_to_byte ( vec4f x )
+{
     vec4i y = v_cvt_roundi(x);
     y = v_packs(y);
     y = v_packus16(y, y);
     return v_extract_xi(y);
 }
 
-VECMATH_FINLINE vec4f v_byte_to_float ( uint32_t x ) {
+VECMATH_FINLINE vec4f v_byte_to_float ( uint32_t x )
+{
     vec4i y = v_splatsi(x);
     y = v_cvt_byte_vec4i(y);
     y = v_cvt_ush_vec4i(y);
