@@ -1042,7 +1042,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_ldu_half(const void *m)
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_ush_vec4i(vec4i a) { return (int32x4_t)vmovl_u16(vget_low_u16(vreinterpretq_u16_s32(a))); }
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_ssh_vec4i(vec4i a) { return vmovl_s16(vget_low_s16(vreinterpretq_s16_s32(a))); }
 
-VECMATH_FINLINE vec4i v_cvt_byte_vec4i(vec4i a, vec4i b)
+VECMATH_FINLINE vec4i v_cvt_byte_vec4i(vec4i a)
 {
   int8x8_t a1 = vreinterpret_s8_s16(vget_low_s16(vreinterpretq_s16_s32(a)));
   int8x8_t b1 = vdup_n_s8(0);
