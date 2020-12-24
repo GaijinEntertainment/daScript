@@ -201,7 +201,7 @@ namespace das {
                             logs << "//\t" << cppn << " aka " << tp->name << "\n";
                             for ( const auto & flp : bs->fields ) {
                                 const auto & fld = flp.second;
-                                if ( fld.offset != -1 ) {
+                                if ( fld.offset != -1u ) {
                                     if ( fld.cppName.find('(')==string::npos ) {   // sometimes we bind ref member function as if field
                                         logs << "\t\tstatic_assert(offsetof(" << cppn << ","
                                             << fld.cppName << ")==" << fld.offset << ",\"mismatching offset\");\n";

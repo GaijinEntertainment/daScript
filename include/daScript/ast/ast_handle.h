@@ -152,13 +152,13 @@ namespace das
             return  !is_trivially_copyable<OT>::value
                 ||  !is_trivially_copy_constructible<OT>::value;
         }
-        virtual bool isPod() const {
+        virtual bool isPod() const override {
             return is_pod<OT>::value;
         }
-        virtual bool isRawPod() const {
+        virtual bool isRawPod() const override {
             return false;   // can we detect this?
         }
-        virtual bool canClone() const {
+        virtual bool canClone() const override {
             return isCloneable<OT>::value;
         }
         template <typename FunT, FunT PROP>
