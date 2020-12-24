@@ -790,6 +790,7 @@ namespace das
         bool isVisibleDirectly ( Module * objModule ) const;
         bool compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
+        static Module * requireEx ( const string & name, bool allowPromoted );
         static void Shutdown();
         static TypeAnnotation * resolveAnnotation ( const TypeInfo * info );
         static Type findOption ( const string & name );
@@ -847,7 +848,13 @@ namespace das
         vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         string  name;
-        bool    builtIn = false;
+        union {
+            struct {
+                bool    builtIn : 1;
+                bool    promoted : 1;
+            };
+            uint32_t        moduleFlags = 0;
+        };
     private:
         Module * next = nullptr;
         static Module * modules;

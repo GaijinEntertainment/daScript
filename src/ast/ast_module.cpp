@@ -108,6 +108,17 @@ namespace das {
         return nullptr;
     }
 
+    Module * Module::requireEx ( const string & name, bool allowPromoted ) {
+        for ( auto m = modules; m != nullptr; m = m->next ) {
+            if ( allowPromoted || !m->promoted ) {
+                if ( m->name == name ) {
+                    return m;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     Type Module::findOption ( const string & name ) {
         Type optT = Type::none;
         for ( auto m = modules; m != nullptr; m = m->next ) {
@@ -138,6 +149,7 @@ namespace das {
         next = modules;
         modules = this;
         builtIn = true;
+        promoted = true;
     }
 
     Module::~Module() {

@@ -143,20 +143,21 @@ namespace das {
                           das_set<string> & dependencies,
                           ModuleGroup & libGroup,
                           TextWriter & log,
-                          int tab ) {
+                          int tab,
+                          bool allowPromoted ) {
         if ( auto fi = access->getFileInfo(fileName) ) {
             log << string(tab,'\t') << "in " << fileName << "\n";
             vector<string> ownReq = getAllRequire(fi, access);
             for ( auto & mod : ownReq ) {
                 log << string(tab,'\t') << "require " << mod << "\n";
-                auto module = Module::require(mod); // try native with that name
+                auto module = Module::requireEx(mod, allowPromoted); // try native with that name
                 if ( !module ) {
                     auto info = access->getModuleInfo(mod, fileName);
                     if ( !info.moduleName.empty() ) {
                         mod = info.moduleName;
                         log << string(tab,'\t') << " resolved as " << mod << "\n";
                     }
-                    module = Module::require(mod); // try native with that name AGAIN (promoted?)
+                    module = Module::requireEx(mod, allowPromoted); // try native with that name AGAIN (promoted?)
                     if ( !module ) {
                         auto it_r = find_if(req.begin(), req.end(), [&] ( const ModuleInfo & reqM ) {
                             return reqM.moduleName == mod;
@@ -176,7 +177,7 @@ namespace das {
                                 missing.push_back(mod);
                                 return false;
                             }
-                            if ( !getPrerequisits(info.fileName, access, req, missing, circular, dependencies, libGroup, log, tab + 1) ) {
+                            if ( !getPrerequisits(info.fileName, access, req, missing, circular, dependencies, libGroup, log, tab + 1, allowPromoted) ) {
                                 return false;
                             }
                             log << string(tab,'\t') << "from " << fileName << " require " << mod
@@ -309,7 +310,7 @@ namespace das {
         vector<string> missing, circular;
         das_set<string> dependencies;
         TextWriter tw;
-        if ( getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, tw, 1) ) {
+        if ( getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, tw, 1, !policies.ignore_shared_modules) ) {
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod.moduleName) ) {
                     auto program = parseDaScript(mod.fileName, access, logs, libGroup, true, policies);
