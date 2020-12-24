@@ -72,8 +72,9 @@ def push_clone ( var A : auto(CT) -# -const; b : auto(TT) implicit )
     static_elif !typeinfo(builtin_function_exists @@ <(var a:CT -# -const;var b:TT -# -const):void> _::emplace)
         concept_assert(false,"can't push_clone, missing emplace")
     else
-        var cb : TT -# -const := b
-        _::emplace(A, cb)
+        unsafe
+            var cb : TT -# -const := b
+            _::emplace(A, cb)
 
 def erase(var Arr:array<auto(numT)>;at:int)
     __builtin_array_erase(Arr,at,typeinfo(sizeof type<numT>))
@@ -140,9 +141,10 @@ def binary_load(var obj; data:array<uint8>)
     _builtin_binary_load(obj,data)
 
 def clone_to_move(clone_src:auto(TT) implicit) : TT -const -#
-    var clone_dest : TT - #
-    clone_dest := clone_src
-    return <- clone_dest
+    unsafe
+        var clone_dest : TT - #
+        clone_dest := clone_src
+        return <- clone_dest
 
 def clone_dim(var a;b:auto implicit)
     static_if typeinfo(is_dim a) && typeinfo(is_dim b) && typeinfo(dim a)==typeinfo(dim b)
