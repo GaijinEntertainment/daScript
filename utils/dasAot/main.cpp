@@ -197,16 +197,19 @@ int MAIN_FUNC_NAME(int argc, char * argv[]) {
             }
         }
     }
+    // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Strings);
+    NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_Ast);
     NEED_MODULE(Module_Debugger);
-    NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);
+    NEED_MODULE(Module_FIO);
     require_project_specific_modules();
+    #include "modules/external_need.inc"
     bool compiled = compile(argv[1], argv[2]);
     Module::Shutdown();
     return compiled ? 0 : -1;

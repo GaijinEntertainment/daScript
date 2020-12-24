@@ -350,6 +350,7 @@ ENDIF()
 
 SET(DASAOT_MAIN_SRC
 utils/dasAot/main.cpp
+${DAS_MODULES_NEED_INC}
 )
 SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
 
@@ -508,12 +509,13 @@ ADD_DEPENDENCIES(libDasModuleUriparser libDaScript libUriParser)
 
 SET(DASCONTDEV_MAIN_SRC
 utils/dasContDev/main.cpp
+${DAS_MODULES_NEED_INC}
 )
 SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
 
 add_executable(dasContDev ${DASCONTDEV_MAIN_SRC})
-TARGET_LINK_LIBRARIES(dasContDev libDaScript libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(dasContDev libDaScript libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(dasContDev libDaScript libDasModuleUriparser libUriParser libPathTracerHelper libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(dasContDev libDaScript libDasModuleUriparser libUriParser libPathTracerHelper libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
 SETUP_CPP11(dasContDev)
 SETUP_LTO(dasContDev)
 
@@ -562,8 +564,8 @@ ${DAS_MODULES_NEED_INC}
 SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
 add_executable(daScript ${DASCRIPT_MAIN_SRC})
-TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser libPathTracerHelper libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser libPathTracerHelper libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
 SETUP_CPP11(daScript)
 SETUP_LTO(daScript)
 

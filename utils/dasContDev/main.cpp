@@ -90,6 +90,7 @@ int main(int argc, char * argv[]) {
         return -1;
     }
     main_das = argv[1];
+    // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Strings);
@@ -100,6 +101,8 @@ int main(int argc, char * argv[]) {
     NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);
     NEED_MODULE(Module_FIO);
+    require_project_specific_modules();
+    #include "modules/external_need.inc"
     for ( ;; ) {
         if ( !compile_and_run(main_das) ) {
             wait_for_file_to_change(main_das);
