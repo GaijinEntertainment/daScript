@@ -100,7 +100,7 @@ typedef const struct bsph3f& bsph3f_cref;
 
   typedef const vec4f vec4f_const;
 
-  typedef const union alignas(16) vec4i_const_name
+  typedef const union alignas(16) _vec4i_const_name
   {
     unsigned m128_u32[4];
     vec4i m128;

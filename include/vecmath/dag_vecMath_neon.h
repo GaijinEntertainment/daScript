@@ -1042,12 +1042,12 @@ VECMATH_FINLINE vec4f VECTORCALL v_ldu_half(const void *m)
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_ush_vec4i(vec4i a) { return (int32x4_t)vmovl_u16(vget_low_u16(vreinterpretq_u16_s32(a))); }
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_ssh_vec4i(vec4i a) { return vmovl_s16(vget_low_s16(vreinterpretq_s16_s32(a))); }
 
-VECMATH_FINLINE vec4i v_cvt_byte_vec4i(vec4i a, vec4i b)
+VECMATH_FINLINE vec4i v_cvt_byte_vec4i(vec4i a)
 {
-  int8x8_t a1 = vreinterpret_s8_s16(vget_low_s16(vreinterpretq_s16_m128i(a)));
-  int8x8_t b1 = vdupq_n_s8(0);
+  int8x8_t a1 = vreinterpret_s8_s16(vget_low_s16(vreinterpretq_s16_s32(a)));
+  int8x8_t b1 = vdup_n_s8(0);
   int8x8x2_t result = vzip_s8(a1, b1);
-  return vreinterpretq_m128i_s8(vcombine_s8(result.val[0], result.val[1]));
+  return vreinterpretq_s32_s8(vcombine_s8(result.val[0], result.val[1]));
 }
 
 #if __APPLE__ || defined(__clang__)
@@ -1081,14 +1081,16 @@ VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a)
   uint16x4_t w = vqmovun_s32(a);
   return vreinterpretq_s32_u16(vcombine_u16(w, w));
 }
-VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a, vec4i b) {
-  return vreinterpretq_m128i_u8(
-    vcombine_u8(vqmovun_s16(vreinterpretq_s16_m128i(a)),
-      vqmovun_s16(vreinterpretq_s16_m128i(b))));
+VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a, vec4i b)
+{
+  return vreinterpretq_s32_u8(
+    vcombine_u8(vqmovun_s16(vreinterpretq_s16_s32(a)),
+      vqmovun_s16(vreinterpretq_s16_s32(b))));
 }
-VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a) {
-  vec4i t = vqmovun_s16(vreinterpretq_s16_m128i(a));
-  return vreinterpretq_m128i_u8(vcombine_u8(t,t));
+VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a)
+{
+  uint8x8_t t = vqmovun_s16(vreinterpretq_s16_s32(a));
+  return vreinterpretq_s32_u8(vcombine_u8(t,t));
 }
 
 #endif

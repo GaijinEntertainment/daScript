@@ -111,13 +111,13 @@ namespace das
     template  <typename CType, typename ...Args>
     class BuiltIn_Using : public BuiltInFunction {
     public:
-        __forceinline BuiltIn_Using(const ModuleLibrary & lib)
+        __forceinline BuiltIn_Using(const ModuleLibrary & lib, const char * cppName)
         : BuiltInFunction("using","das_using") {
-            this->cppName = string("das_using<") + typeName<CType>::name() + ">::use";
+            this->cppName = string("das_using<") + cppName + ">::use";
             this->aotTemplate = true;
             this->modifyExternal = true;
             this->invoke = true;
-            vector<TypeDeclPtr> args = makeBuiltinArgs<CType,Args...>(lib);
+            vector<TypeDeclPtr> args = makeBuiltinArgs<void,Args...>(lib);
             args.emplace_back(makeType<const TBlock<void,TTemporary<TExplicit<CType>>>>(lib));
             construct(args);
         }
@@ -159,14 +159,14 @@ namespace das
     }
 
     template <typename CType, typename ...Args>
-    inline auto addUsing ( Module & mod, const ModuleLibrary & lib ) {
-        mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib));
+    inline auto addUsing ( Module & mod, const ModuleLibrary & lib, const char * cppName ) {
+        mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib,cppName));
     }
 
     template <typename CType, typename ...Args>
-    inline auto addCtorAndUsing ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr ) {
+    inline auto addCtorAndUsing ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName ) {
         mod.addFunction(make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName));
-        mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib));
+        mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib,cppName));
     }
 
 }

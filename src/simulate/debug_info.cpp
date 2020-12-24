@@ -102,12 +102,15 @@ namespace das
             case tURange:       return sizeof(urange);
             case tArray:        return sizeof(Array);
             case tTable:        return sizeof(Table);
-            case tStructure:    return 0;
             case tVoid:         return 0;
             case tBlock:        return sizeof(Block);
             case tFunction:     return sizeof(Func);
             case tLambda:       return sizeof(Lambda);
+            case tStructure:    return 0;
             case tTuple:        return 0;
+            case tVariant:      return 0;
+            case fakeContext:   return 0;
+            case fakeLineInfo:  return 0;
             default:
                 DAS_ASSERTF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
                 return 0;
@@ -150,15 +153,18 @@ namespace das
             case tURange:       return alignof(urange);
             case tArray:        return alignof(Array);
             case tTable:        return alignof(Table);
-            case tStructure:    return 1;
             case tVoid:         return 1;
             case tBlock:        return alignof(Block);
             case tFunction:     return alignof(Func);
             case tLambda:       return alignof(Lambda);
+            case tStructure:    return 1;
             case tTuple:        return 1;
+            case tVariant:      return 1;
+            case fakeContext:   return 1;
+            case fakeLineInfo:  return 1;
             default:
                 DAS_ASSERTF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
-                return 0;
+                return 1;
         }
     }
 

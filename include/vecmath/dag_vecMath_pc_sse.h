@@ -10,10 +10,10 @@
 #pragma once
 
 #if !defined(_TARGET_PC_LINUX) && !defined(_TARGET_PC_MACOSX) && !defined(_TARGET_PC_WIN)\
- && !defined(_TARGET_PS4)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC)
+ && !defined(_TARGET_PS4) && !defined(_TARGET_PS5)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC)
   #if __linux__ || __unix__
     #define _TARGET_PC_LINUX 1
-  #elif __APPLE_
+  #elif __APPLE__
     #define _TARGET_PC_MACOSX 1
   #elif _WIN32
     #define _TARGET_PC_WIN 1
@@ -31,11 +31,7 @@
 #else
 #include <emmintrin.h>
 #if _TARGET_PC_MACOSX
-#include <pmmintrin.h>
-#else
-#ifdef __GNUC__
-#include <x86intrin.h> // MAC GCC
-#endif
+  #include <pmmintrin.h>
 #endif
 #endif
 
@@ -528,7 +524,6 @@ VECMATH_FINLINE vec4f VECTORCALL v_dot3(vec4f a, vec4f b) { return sse2_dot3(a,b
 VECMATH_FINLINE vec4f VECTORCALL v_dot3_x(vec4f a, vec4f b) { return sse2_dot3_x(a,b); }
 VECMATH_FINLINE vec4f VECTORCALL v_distance3p_x(plane3f a, vec3f b) { return sse2_distance3p_x(a,b); }
 #endif
-
 
 VECMATH_FINLINE vec4f VECTORCALL v_norm4(vec4f a) { return v_div(a, v_splat_x(v_sqrt_x(v_dot4_x(a,a)))); }
 VECMATH_FINLINE vec4f VECTORCALL v_norm3(vec4f a) { return v_div(a, v_splat_x(v_sqrt_x(v_dot3_x(a,a)))); }
