@@ -20,7 +20,7 @@ namespace das {
     inline float4 float4x4_mul_vec4(const float4x4 &a, float4 b) {
         mat44f va;
         memcpy(&va,&a,sizeof(float4x4));
-        return v_mat44_mul_vec4(va, vec_load(&b.x));
+        return v_mat44_mul_vec4(va, b);
     }
 
     inline float3 rotate(const float3x4 &a, float3 b) {
