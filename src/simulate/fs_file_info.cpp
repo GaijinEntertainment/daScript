@@ -18,9 +18,9 @@ namespace das {
         }
     }
 
-    unique_ptr<FileInfo> getNewFsFileInfo(const das::string & fileName) {
+    FileInfoPtr getNewFsFileInfo(const das::string & fileName) {
         if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
-            auto info = das::make_unique<FsFileInfo>();
+            auto info = das::make_smart<FsFileInfo>();
             fseek(ff,0,SEEK_END);
             info->sourceLength = uint32_t(ftell(ff));
             fseek(ff,0,SEEK_SET);

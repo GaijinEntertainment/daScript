@@ -763,7 +763,7 @@ namespace das
     class Module {
     public:
         Module ( const string & n = "" );
-        void promoteToBuiltin();
+        void promoteToBuiltin(const ProgramPtr & prog);
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::no_aot; }
@@ -858,7 +858,8 @@ namespace das
     private:
         Module * next = nullptr;
         static Module * modules;
-        unique_ptr<FileInfo>    ownFileInfo;
+        FileInfoPtr             ownFileInfo;
+        vector<FileInfoPtr>     promotedFileInfo;
     };
 
     #define REGISTER_MODULE(ClassName) \
