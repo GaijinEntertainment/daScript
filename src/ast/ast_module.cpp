@@ -716,9 +716,12 @@ namespace das {
 
     // collect used file info
 
-    class FileInfoCollector : public Visitor {
+    class PromotedInfoCollector : public Visitor {
     public:
-        das_safe_set<FileInfo *>    allFileInfo;
+        PromotedInfoCollector() {
+            allFileInfo.clear();
+        }
+        das_set<FileInfo *>    allFileInfo;
     protected:
         void collect ( LineInfo & at ) {
             if ( at.fileInfo ) {
@@ -802,7 +805,7 @@ namespace das {
         builtIn = true;
         promoted = true;
         // collect info
-        FileInfoCollector col;
+        PromotedInfoCollector col;
         prog->visit(col);
         promotedFileInfo.reserve(col.allFileInfo.size());
         for ( auto & fi : col.allFileInfo ) {
