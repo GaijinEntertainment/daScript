@@ -16,6 +16,13 @@ namespace das {
         v_mat44_make_from_43cu(va, &a.m[0].x);
         return v_mat44_mul_vec3p(va, v_ldu(&b.x));
     }
+
+    inline float4 float4x4_mul_vec4(const float4x4 &a, float4 b) {
+        mat44f va;
+        memcpy(&va,&a,sizeof(float4x4));
+        return v_mat44_mul_vec4(va, vec_load(&b.x));
+    }
+
     inline float3 rotate(const float3x4 &a, float3 b) {
         mat44f va;
         v_mat44_make_from_43cu(va, &a.m[0].x);

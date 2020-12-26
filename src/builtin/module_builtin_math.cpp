@@ -455,6 +455,55 @@ namespace das {
         return ret;
     }
 
+    float4x4 float4x4_inverse( const float4x4 & src) {
+        mat44f mat, invMat;
+        memcpy(&mat, &src, sizeof(float4x4));
+        v_mat44_inverse(invMat, mat);
+        return reinterpret_cast<float4x4&>(invMat);;
+    }
+
+    float4x4 float4x4_persp_forward(float wk, float hk, float zn, float zf) {
+        mat44f mat;
+        v_mat44_make_persp_forward(mat, wk, hk, zn, zf);
+        return reinterpret_cast<float4x4&>(mat);;
+    }
+
+    float4x4 float4x4_persp_reverse(float wk, float hk, float zn, float zf) {
+        mat44f mat;
+        v_mat44_make_persp_reverse(mat, wk, hk, zn, zf);
+        return reinterpret_cast<float4x4&>(mat);;
+    }
+
+    float4x4 float4x4_look_at(float4 eye, float4 at, float4 up) {
+        mat44f mat;
+        v_mat44_make_look_at(mat, vec_load(&eye.x), vec_load(&at.x), vec_load(&up.x));
+        return reinterpret_cast<float4x4&>(mat);;
+    }
+
+    float4x4 float4x4_compose(float4 pos, float4 rot, float4 scale) {
+        mat44f mat;
+        v_mat44_compose(mat, vec_load(&pos.x), vec_load(&rot.x), vec_load(&scale.x));
+        return reinterpret_cast<float4x4&>(mat);;
+    }
+
+    float4 un_quat_from_unit_arc(float3 v0, float3 v1) {
+        return v_un_quat_from_unit_arc(v_ldu(&v0.x), v_ldu(&v1.x));
+    }
+
+    float4 un_quat_from_unit_vec_ang(float3 v, float ang) {
+        return v_un_quat_from_unit_vec_ang(v_ldu(&v.x), v_splats(ang));
+    }
+
+    float4 un_quat(const float4x4 & m) {
+        mat44f vm;
+        memcpy(&vm, &m, sizeof(float4x4));
+        return v_un_quat_from_mat4(vm);
+    }
+
+    float4 quat_mul(float4 q1, float4 q2) {
+        return v_quat_mul_quat(vec_load(&q1.x), vec_load(&q2.x));
+    }
+
     class Module_Math : public Module {
     public:
         Module_Math() : Module("math") {
@@ -575,6 +624,14 @@ namespace das {
                  SideEffects::none, "float_4x4_translation")->arg("xyz");
             addExtern<DAS_BIND_FUN(float4x4_transpose), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "transpose",
                 SideEffects::none, "float4x4_transpose")->arg("x");
+            addExtern<DAS_BIND_FUN(float4x4_persp_forward), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "persp_forward",
+                SideEffects::none, "float4x4_persp_forward")->args({"wk", "hk", "zn", "zf"});
+            addExtern<DAS_BIND_FUN(float4x4_persp_reverse), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "persp_reverse",
+                SideEffects::none, "float4x4_persp_reverse")->args({"wk", "hk", "zn", "zf"});
+            addExtern<DAS_BIND_FUN(float4x4_look_at), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "look_at",
+                SideEffects::none, "float4x4_look_at")->args({"eye", "at", "up"});
+            addExtern<DAS_BIND_FUN(float4x4_compose), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "compose",
+                SideEffects::none, "float4x4_compose")->args({"pos", "rot", "scale"});
             addExtern<DAS_BIND_FUN(float4x4_mul), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "*",
                 SideEffects::none,"float4x4_mul")->args({"x", "y"});
             addExtern<DAS_BIND_FUN(float4x4_equ)>(*this, lib, "==",
@@ -588,10 +645,22 @@ namespace das {
                 SideEffects::none,"float3x4_mul")->args({"x","y"});
             addExtern<DAS_BIND_FUN(float3x4_mul_vec3p), SimNode_ExtFuncCall>(*this, lib, "*",
                 SideEffects::none,"float3x4_mul_vec3p")->args({"x","y"});
+            addExtern<DAS_BIND_FUN(float4x4_mul_vec4), SimNode_ExtFuncCall>(*this, lib, "*",
+                SideEffects::none,"float4x4_mul_vec4")->args({"x","y"});
             addExtern<DAS_BIND_FUN(float3x4_inverse), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "inverse", SideEffects::none, "float3x4_inverse")->arg("x");
+            addExtern<DAS_BIND_FUN(float4x4_inverse), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
+                "inverse", SideEffects::none, "float4x4_inverse")->arg("x");
             addExtern<DAS_BIND_FUN(rotate)>(*this, lib, "rotate",
                 SideEffects::none, "rotate")->args({"x","y"});
+            addExtern<DAS_BIND_FUN(un_quat_from_unit_arc)>(*this, lib, "un_quat_from_unit_arc",
+                SideEffects::none, "un_quat_from_unit_arc")->args({"v0","v1"});
+            addExtern<DAS_BIND_FUN(un_quat_from_unit_vec_ang)>(*this, lib, "un_quat_from_unit_vec_ang",
+                SideEffects::none, "un_quat_from_unit_vec_ang")->args({"v","ang"});
+            addExtern<DAS_BIND_FUN(un_quat)>(*this, lib, "un_quat",
+                SideEffects::none, "un_quat")->arg("m");
+            addExtern<DAS_BIND_FUN(quat_mul)>(*this, lib, "quat_mul",
+                SideEffects::none, "quat_mul")->args({"q1","q2"});
             // packing
             addExtern<DAS_BIND_FUN(pack_float_to_byte)>(*this, lib, "pack_float_to_byte",
                 SideEffects::none,"pack_float_to_byte")->arg("x");
