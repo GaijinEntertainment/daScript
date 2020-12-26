@@ -728,10 +728,25 @@ namespace das {
                 allFileInfo.insert(at.fileInfo);
             }
         }
+        void collectType ( TypeDecl * td, das_set<Structure *> & dep ) {
+            collect(td->at);
+            if ( td->firstType ) collectType(td->firstType.get(),dep);
+            if ( td->secondType ) collectType(td->secondType.get(),dep);
+            for ( auto & argT : td->argTypes ) {
+                collectType(argT.get(),dep);
+            }
+            if ( td->baseType==Type::tStructure ) {
+                if ( dep.find(td->structType)!=dep.end() ) return;
+                dep.insert(td->structType);
+                for ( auto & fd : td->structType->fields ) {
+                    collectType(fd.type.get(), dep);
+                }
+            }
+        }
         virtual void preVisit ( TypeDecl * td ) override {
             Visitor::preVisit(td);
-            // TODO: collect type
-            collect(td->at);
+            das_set<Structure *> dep;
+            collectType(td,dep);
         }
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
