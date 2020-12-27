@@ -337,7 +337,7 @@ namespace das {
                         program->thisModule->name = mod.moduleName;
                     }
                     if ( program->promoteToBuiltin ) {
-                        program->thisModule->promoteToBuiltin();
+                        program->thisModule->promoteToBuiltin(access);
                     }
                     libGroup.addModule(program->thisModule.release());
                     program->library.foreach([&](Module * pm) -> bool {
@@ -352,7 +352,7 @@ namespace das {
             }
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, policies);
             if ( res->promoteToBuiltin ) {
-                res->thisModule->promoteToBuiltin();
+                res->thisModule->promoteToBuiltin(access);
             }
             if ( res->options.getBoolOption("log_require",false) ) {
                 logs << "module dependency graph:\n" << tw.str();
