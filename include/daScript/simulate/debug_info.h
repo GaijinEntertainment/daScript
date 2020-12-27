@@ -95,7 +95,7 @@ namespace das
         string      cppName;
     };
 
-    struct FileInfo : ptr_ref_count {
+    struct FileInfo {
         FileInfo() = default;
         FileInfo(const char * s, uint32_t l) : source(s), sourceLength(l) {}
         virtual void freeSourceData() { }
@@ -110,7 +110,7 @@ namespace das
         vector<uint64_t>      profileData;
 #endif
     };
-    typedef smart_ptr<FileInfo> FileInfoPtr;
+    typedef unique_ptr<FileInfo> FileInfoPtr;
 
     struct ModuleInfo {
         string  moduleName;

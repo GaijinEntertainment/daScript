@@ -144,6 +144,14 @@ namespace das {
         }
     }
 
+    void Module::promoteToBuiltin() {
+        DAS_ASSERTF(!builtIn, "failed to promote. already builtin");
+        next = modules;
+        modules = this;
+        builtIn = true;
+        promoted = true;
+    }
+
     Module::~Module() {
         if ( builtIn ) {
             Module ** p = &modules;
@@ -358,7 +366,7 @@ namespace das {
         TextWriter issues;
         str[str_len-1] = 0;//replace last symbol with null terminating. fixme: This is sloppy, and assumes there is something to replace!
         auto access = make_smart<FileAccess>();
-        auto fileInfo = make_smart<FileInfo>((char *) str, uint32_t(str_len));
+        auto fileInfo = make_unique<FileInfo>((char *) str, uint32_t(str_len));
         access->setFileInfo(modName, move(fileInfo));
         ModuleGroup dummyLibGroup;
         auto program = parseDaScript(modName, access, issues, dummyLibGroup, true);
@@ -713,102 +721,5 @@ namespace das {
         if ( objModule==this ) return true;
         return requireModule.find(objModule) != requireModule.end();
     }
-
-    // collect used file info
-
-    class FileInfoCollector : public Visitor {
-    public:
-        das_safe_set<FileInfo *>    allFileInfo;
-    protected:
-        void collect ( LineInfo & at ) {
-            if ( at.fileInfo ) {
-                allFileInfo.insert(at.fileInfo);
-            }
-        }
-        virtual void preVisit ( TypeDecl * td ) override {
-            Visitor::preVisit(td);
-            // TODO: collect type
-            collect(td->at);
-        }
-        virtual void preVisit ( Enumeration * enu ) override {
-            Visitor::preVisit(enu);
-            collect(enu->at);
-            for ( auto & en : enu->list ) {
-                collect(en.at);
-            }
-        }
-        virtual void preVisit ( Structure * var ) override {
-            Visitor::preVisit(var);
-            collect(var->at);
-        }
-        virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override {
-            Visitor::preVisitStructureField(var, decl, last);
-            collect(decl.at);
-        }
-        virtual void preVisit ( Function * fun ) override {
-            Visitor::preVisit(fun);
-            collect(fun->at);
-            collect(fun->atDecl);
-            for ( auto & is : fun->inferStack ) {
-                collect(is.at);
-            }
-        }
-        virtual void preVisitExpression ( Expression * expr ) override {
-            Visitor::preVisitExpression(expr);
-            collect(expr->at);
-        }
-        virtual void preVisit ( ExprField * expr ) override {
-            Visitor::preVisit(expr);
-            collect(expr->atField);
-        }
-        virtual void preVisit ( ExprLet * expr ) override {
-            Visitor::preVisit(expr);
-            collect(expr->atInit);
-            collect(expr->visibility);
-        }
-        virtual void preVisit ( ExprFor * expr ) override {
-            Visitor::preVisit(expr);
-            collect(expr->visibility);
-            for ( auto & itAt : expr->iteratorsAt ) {
-                collect(itAt);
-            }
-        }
-        virtual void preVisit ( ExprMakeVariant * expr ) override {
-            Visitor::preVisit(expr);
-            for ( auto & mfd : expr->variants ) {
-                collect(mfd->at);
-            }
-        }
-        virtual void preVisit ( ExprNamedCall * expr ) override {
-            Visitor::preVisit(expr);
-            for ( auto & arg : expr->arguments ) {
-                collect(arg->at);
-            }
-        }
-        virtual void preVisit ( ExprMakeStruct * expr ) override {
-            Visitor::preVisit(expr);
-            for ( auto & mfd : expr->structs ) {
-                for ( auto & fld : *mfd ) {
-                    collect(fld->at);
-                }
-            }
-        }
-    };
-
-    void Module::promoteToBuiltin(const ProgramPtr & prog) {
-        DAS_ASSERTF(!builtIn, "failed to promote. already builtin");
-        next = modules;
-        modules = this;
-        builtIn = true;
-        promoted = true;
-        // collect info
-        FileInfoCollector col;
-        prog->visit(col);
-        promotedFileInfo.reserve(col.allFileInfo.size());
-        for ( auto & fi : col.allFileInfo ) {
-            promotedFileInfo.push_back(fi);
-        }
-    }
-
 }
 
