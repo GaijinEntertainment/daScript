@@ -142,20 +142,26 @@ namespace das {
                           vector<string> & circular,
                           das_set<string> & dependencies,
                           ModuleGroup & libGroup,
-                          TextWriter & log,
+                          TextWriter * log,
                           int tab,
                           bool allowPromoted ) {
         if ( auto fi = access->getFileInfo(fileName) ) {
-            log << string(tab,'\t') << "in " << fileName << "\n";
+            if ( log ) {
+                *log << string(tab,'\t') << "in " << fileName << "\n";
+            }
             vector<string> ownReq = getAllRequire(fi, access);
             for ( auto & mod : ownReq ) {
-                log << string(tab,'\t') << "require " << mod << "\n";
+                if ( log ) {
+                    *log << string(tab,'\t') << "require " << mod << "\n";
+                }
                 auto module = Module::requireEx(mod, allowPromoted); // try native with that name
                 if ( !module ) {
                     auto info = access->getModuleInfo(mod, fileName);
                     if ( !info.moduleName.empty() ) {
                         mod = info.moduleName;
-                        log << string(tab,'\t') << " resolved as " << mod << "\n";
+                        if ( log ) {
+                            *log << string(tab,'\t') << " resolved as " << mod << "\n";
+                        }
                     }
                     module = Module::requireEx(mod, allowPromoted); // try native with that name AGAIN (promoted?)
                     if ( !module ) {
@@ -165,7 +171,9 @@ namespace das {
                         if ( it_r==req.end() ) {
                             if ( dependencies.find(mod) != dependencies.end() ) {
                                 // circular dependency
-                                log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CIRCULAR DEPENDENCY\n";
+                                if ( log ) {
+                                    *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CIRCULAR DEPENDENCY\n";
+                                }
                                 circular.push_back(mod);
                                 return false;
                             }
@@ -173,34 +181,46 @@ namespace das {
                             // module file name
                             if ( info.moduleName.empty() ) {
                                 // request can't be translated to module name
-                                log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
+                                if ( log ) {
+                                    *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
+                                }
                                 missing.push_back(mod);
                                 return false;
                             }
                             if ( !getPrerequisits(info.fileName, access, req, missing, circular, dependencies, libGroup, log, tab + 1, allowPromoted) ) {
                                 return false;
                             }
-                            log << string(tab,'\t') << "from " << fileName << " require " << mod
-                                << " - ok, new module " << info.moduleName << " at " << info.fileName << "\n";
+                            if ( log ) {
+                                *log << string(tab,'\t') << "from " << fileName << " require " << mod
+                                    << " - ok, new module " << info.moduleName << " at " << info.fileName << "\n";
+                            }
                             req.push_back(info);
                         } else {
-                            log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
+                            if ( log ) {
+                                *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
+                            }
                         }
                     } else {
-                        log << string(tab,'\t') << "from " << fileName << " require " << mod << " - shared, ok\n";
+                        if ( log ) {
+                            *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - shared, ok\n";
+                        }
                         libGroup.addModule(module);
                         for ( const auto & dep : module->requireModule ) {
                             libGroup.addModule(dep.first);
                         }
                     }
                 } else {
-                    log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok\n";
+                    if ( log ) {
+                        *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok\n";
+                    }
                     libGroup.addModule(module);
                 }
             }
             return true;
         } else {
-            log << string(tab,'\t') << "in " << fileName << " - NOT FOUND\n";
+            if ( log ) {
+                *log << string(tab,'\t') << "in " << fileName << " - NOT FOUND\n";
+            }
             missing.push_back(fileName);
             return false;
         }
@@ -309,8 +329,7 @@ namespace das {
         vector<ModuleInfo> req;
         vector<string> missing, circular;
         das_set<string> dependencies;
-        TextWriter tw;
-        if ( getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, tw, 1, !policies.ignore_shared_modules) ) {
+        if ( getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod.moduleName) ) {
                     auto program = parseDaScript(mod.fileName, access, logs, libGroup, true, policies);
@@ -355,6 +374,12 @@ namespace das {
                 res->thisModule->promoteToBuiltin(access);
             }
             if ( res->options.getBoolOption("log_require",false) ) {
+                TextWriter tw;
+                req.clear();
+                missing.clear();
+                circular.clear();
+                dependencies.clear();
+                getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, &tw, 1, false);
                 logs << "module dependency graph:\n" << tw.str();
             }
             if ( !res->failed() ) {
@@ -363,6 +388,12 @@ namespace das {
             }
             return res;
         } else {
+            TextWriter tw;
+            req.clear();
+            missing.clear();
+            circular.clear();
+            dependencies.clear();
+            getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, &tw, 1, false);
             auto program = make_smart<Program>();
             program->policies = policies;
             program->thisModuleGroup = &libGroup;
