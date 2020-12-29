@@ -83,6 +83,7 @@ namespace das {
     void resetFusionEngine();
 
     void Module::Shutdown() {
+        ReuseGuard rguard;
         shutdownDebugAgent();
         auto m = modules;
         while ( m ) {

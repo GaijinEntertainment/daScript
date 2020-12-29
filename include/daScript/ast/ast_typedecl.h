@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/ast/ast_typefactory.h"
+#include "daScript/misc/free_list.h"
 
 namespace das {
 
@@ -30,7 +31,7 @@ namespace das {
     class ModuleLibrary;
     class ModuleGroup;
 
-    struct TypeDecl : ptr_ref_count {
+    struct TypeDecl : ptr_ref_count, ReuseAllocator<TypeDecl> {
         enum {
             dimAuto = -1,
             dimConst = -2,
