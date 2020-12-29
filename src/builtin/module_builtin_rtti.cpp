@@ -846,7 +846,8 @@ namespace das {
         return nullptr;
     }
 
-    void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context) {
+    void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, const CodeOfPolicies & cop,
+            const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context) {
         context->throw_error("not supported with DAS_NO_FILEIO");
     }
 
