@@ -105,8 +105,10 @@ namespace das {
 
     smart_ptr<FileAccess> makeFileAccess( char * pak, Context * context );
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context );
-    void rtti_builtin_compile(char * modName, char * str, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
-    void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
+
+    struct CodeOfPolicies;
+    void rtti_builtin_compile(char * modName, char * str, const CodeOfPolicies & cop, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
+    void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, const CodeOfPolicies & cop, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
 
     void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, Module *> & block, Context * context);
     void rtti_builtin_program_for_each_registered_module(const TBlock<void, Module *> & block, Context * context);

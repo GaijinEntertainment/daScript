@@ -156,7 +156,7 @@ def main
         describeModule(mod)
     describeModule(get_module("$"))
     // sample program
-    compile("sample",sample) <| $ ( ok; prog; errors )
+    compile("sample",sample, CodeOfPolicies()) <| $ ( ok; prog; errors )
         if ok
             print("compiled\n")
             let thisMod = get_this_module(prog)
