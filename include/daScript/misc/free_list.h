@@ -63,10 +63,9 @@ namespace das {
     };
 
     template <typename TT>
-    class ReuseAllocator {
-    protected:
+    struct ReuseAllocator {
         static ReuseChunk * hold;
-    public:
+        static bool canHold;
         void * operator new ( size_t size ) {
             DAS_ASSERT(size == sizeof(TT));
             if ( hold ) {
@@ -78,11 +77,14 @@ namespace das {
             }
         }
         void operator delete ( void * data ) {
-            auto next = hold;
-            hold = (ReuseChunk *) data;
-            hold->next = next;
+            if ( canHold ) {
+                auto next = hold;
+                hold = (ReuseChunk *) data;
+                hold->next = next;
+            } else {
+                das_aligned_free16(data);
+            }
         }
-    public:
         static void Cleanup() {
             while ( hold ) {
                 auto ptr = hold;
@@ -94,4 +96,13 @@ namespace das {
 
     template <typename TT>
     ReuseChunk * ReuseAllocator<TT>::hold = nullptr;
+    template <typename TT>
+    bool ReuseAllocator<TT>::canHold = true;
+
+    template <typename TT>
+    struct ReuseGuard {
+        ~ReuseGuard() {
+            ReuseAllocator<TT>::Cleanup();
+        }
+    };
 }

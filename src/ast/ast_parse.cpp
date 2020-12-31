@@ -326,7 +326,7 @@ namespace das {
                                 ModuleGroup & libGroup,
                                 bool exportAll,
                                 CodeOfPolicies policies ) {
-        ReuseGuard rguard;
+        ReuseGuard<TypeDecl> rguard;
         vector<ModuleInfo> req;
         vector<string> missing, circular;
         das_set<string> dependencies;

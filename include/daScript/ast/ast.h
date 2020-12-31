@@ -1171,13 +1171,6 @@ namespace das
         }
         return true;
     }
-
-
-    struct ReuseGuard {
-        ~ReuseGuard() {
-            ReuseAllocator<TypeDecl>::Cleanup();
-        }
-    };
 }
 
 

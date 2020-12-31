@@ -424,15 +424,19 @@ int main( int argc, char * argv[] ) {
 #if 0 // COMPILER PERFORMANCE TESTS
     {
         uint64_t timeStamp = ref_time_ticks();
-        for ( int passes=0; passes!=5; ++passes ) {
+        int tmin = INT_MAX;
+        for ( int passes=0; passes!=20; ++passes ) {
+            uint64_t timeStampM = ref_time_ticks();
             if ( !run_tests(getDasRoot() +  "/examples/test/unit_tests", performance_test, true) ) {
                 tout << "TESTS FAILED\n";
                 break;
             }
+            int usecM = get_time_usec(timeStampM);
+            tmin = min(tmin, usecM);
         }
         // shutdown
         int usec = get_time_usec(timeStamp);
-        tout << "tests took " << ((usec/1000)/1000.0) << "\n";
+        tout << "tests took " << ((usec/1000)/1000.0) << ", min pass " << ((tmin / 1000) / 1000.0) << "\n";
         g_aotLib.reset();
         Module::Shutdown();
     }
