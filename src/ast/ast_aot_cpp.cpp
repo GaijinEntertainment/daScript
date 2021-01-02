@@ -3190,6 +3190,7 @@ namespace das {
         visit(collector);
         CppAot aotVisitor(this,collector);
         // pre visit all enumerations and structures for each dependency
+        bool remUS = options.getBoolOption("remove_unused_symbols",true);
         UseTypeMarker utm;
         visit(utm);
         for ( auto & pm : library.modules ) {
@@ -3198,7 +3199,7 @@ namespace das {
             }
             for ( auto & ite : pm->enumerations ) {
                 auto pe = ite.second.get();
-                if ( utm.useEnums.find(pe)!=utm.useEnums.end() ) {
+                if ( !remUS || utm.useEnums.find(pe)!=utm.useEnums.end() ) {
                     visitEnumeration(aotVisitor, pe);
                 } else {
                     aotVisitor.ss << "// unused enumeration " << pe->name << "\n";
@@ -3207,7 +3208,7 @@ namespace das {
             // aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
             for ( auto & its : pm->structures ) {
                 auto ps = its.second.get();
-                if ( utm.useStructs.find(ps)!=utm.useStructs.end() ) {
+                if ( !remUS || utm.useStructs.find(ps)!=utm.useStructs.end() ) {
                     visitStructure(aotVisitor, ps);
                 } else {
                     aotVisitor.ss << "// unused structure " << ps->name << "\n";
