@@ -3206,10 +3206,9 @@ namespace das {
                 }
             }
             // aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
-            for ( auto & its : pm->structures ) {
-                auto ps = its.second.get();
-                if ( !remUS || utm.useStructs.find(ps)!=utm.useStructs.end() ) {
-                    visitStructure(aotVisitor, ps);
+            for ( const auto & ps : pm->structuresInOrder ) {
+                if ( !remUS || utm.useStructs.find(ps.get())!=utm.useStructs.end() ) {
+                    visitStructure(aotVisitor, ps.get());
                 } else {
                     aotVisitor.ss << "// unused structure " << ps->name << "\n";
                 }
