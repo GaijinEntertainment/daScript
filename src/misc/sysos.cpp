@@ -3,6 +3,7 @@
 #include "daScript/misc/sysos.h"
 
 #if defined(_WIN32)
+    #define WIN32_LEAN_AND_MEAN
     #include <windows.h>
     namespace das {
         size_t getExecutablePathName(char* pathName, size_t pathNameCapacity) {

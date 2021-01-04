@@ -17,6 +17,7 @@ namespace das {
 
 #ifdef _MSC_VER
 
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 extern "C" int64_t ref_time_ticks () {

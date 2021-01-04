@@ -443,6 +443,7 @@ REGISTER_MODULE_IN_NAMESPACE(Module_FIO,das);
 
 #if _WIN32
 
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 void * mmap (void* start, size_t length, int /*prot*/, int /*flags*/, int fd, off_t offset) {
