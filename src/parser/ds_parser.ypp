@@ -1058,10 +1058,11 @@ expr_pipe
             pCall->arguments.push_back(ExpressionPtr($arg));
             $$ = $fncall;
         } else if ( pipeCall->rtti_isVar() ) {
+            // a += b <| c
             auto pVar = (ExprVar *) pipeCall;
             auto pCall = g_Program->makeCall(pVar->at,pVar->name);
             pCall->arguments.push_back(ExpressionPtr($arg));
-            if ( !pipeCall->swap_tail(pCall) ) {
+            if ( !$fncall->swap_tail(pVar,pCall) ) {
                 delete pVar;
                 $$ = pCall;
             } else {

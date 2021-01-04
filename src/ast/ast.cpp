@@ -1629,12 +1629,12 @@ namespace das {
 
     // ExprOp1
 
-    bool ExprOp1::swap_tail ( Expression * expr ) {
+    bool ExprOp1::swap_tail ( Expression * expr, Expression * swapExpr ) {
         if ( subexpr.get()==expr ) {
-            subexpr = expr;
+            subexpr = swapExpr;
             return true;
         } else {
-            return subexpr->swap_tail(expr);
+            return subexpr->swap_tail(expr,swapExpr);
         }
     }
 
@@ -1665,12 +1665,12 @@ namespace das {
 
     // ExprOp2
 
-    bool ExprOp2::swap_tail ( Expression * expr ) {
+    bool ExprOp2::swap_tail ( Expression * expr, Expression * swapExpr ) {
         if ( right.get()==expr ) {
-            right = expr;
+            right = swapExpr;
             return true;
         } else {
-            return right->swap_tail(expr);
+            return right->swap_tail(expr,swapExpr);
         }
     }
 
@@ -1710,12 +1710,12 @@ namespace das {
 
     // ExprOp3
 
-    bool ExprOp3::swap_tail ( Expression * expr ) {
+    bool ExprOp3::swap_tail ( Expression * expr, Expression * swapExpr ) {
         if ( right.get()==expr ) {
-            right = expr;
+            right = swapExpr;
             return true;
         } else {
-            return right->swap_tail(expr);
+            return right->swap_tail(expr,swapExpr);
         }
     }
 

@@ -381,7 +381,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual Expression * tail() override { return subexpr->tail(); }
-        virtual bool swap_tail ( Expression * expr ) override;
+        virtual bool swap_tail ( Expression * expr, Expression * swapExpr ) override;
         virtual bool rtti_isOp1() const override { return true; }
         virtual string describe() const override;
         ExpressionPtr   subexpr;
@@ -396,7 +396,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual Expression * tail() override { return right->tail(); }
-        virtual bool swap_tail ( Expression * expr ) override;
+        virtual bool swap_tail ( Expression * expr, Expression * swapExpr ) override;
         virtual bool rtti_isOp2() const override { return true; }
         virtual string describe() const override;
         ExpressionPtr   left, right;
@@ -450,7 +450,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual Expression * tail() override { return right->tail(); }
-        virtual bool swap_tail ( Expression * expr ) override;
+        virtual bool swap_tail ( Expression * expr, Expression * swapExpr ) override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isOp3() const override { return true; }
         virtual string describe() const override;
