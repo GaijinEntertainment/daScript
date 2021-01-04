@@ -64,6 +64,11 @@ namespace das {
         addFunctionOrdered<Time>(*this,lib);
         addFunction( make_smart<BuiltInFn<Sim_Sub<Time>,float,Time,Time>>("-",lib,"Sub"));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
+        // TODO: move to upstream das
+        addExtern<DAS_BIND_FUN(ref_time_ticks)>(*this, lib, "ref_time_ticks",
+            SideEffects::accessExternal, "ref_time_ticks");
+        addExtern<DAS_BIND_FUN(get_time_usec)>(*this, lib, "get_time_usec",
+            SideEffects::accessExternal, "get_time_usec");
     }
 }
 
