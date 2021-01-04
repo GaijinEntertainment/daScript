@@ -3260,7 +3260,7 @@ namespace das {
         }
         virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) override {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
-            if ( arg->type && arg->type->isAlias() ) call->argumentsFailedToInfer = true;
+            if ( arg->type && arg->type->isAliasOrExpr() ) call->argumentsFailedToInfer = true;
             return Visitor::visitNewArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
@@ -5340,7 +5340,7 @@ namespace das {
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) override {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
-            if ( arg->type && arg->type->isAlias() ) call->argumentsFailedToInfer = true;
+            if ( arg->type && arg->type->isAliasOrExpr() ) call->argumentsFailedToInfer = true;
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
     // ExprNamedCall
@@ -5377,7 +5377,7 @@ namespace das {
         virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg , bool last ) override {
             if (!arg->value->type) {
                 call->argumentsFailedToInfer = true;
-            } else if (arg->value->type && arg->value->type->isAlias()) {
+            } else if (arg->value->type && arg->value->type->isAliasOrExpr()) {
                 call->argumentsFailedToInfer = true;
             }
             return Visitor::visitNamedCallArg(call, arg, last);
@@ -5450,7 +5450,7 @@ namespace das {
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) override {
             if (!arg->type) {
                 call->argumentsFailedToInfer = true;
-            } else if (arg->type && arg->type->isAlias()) {
+            } else if (arg->type && arg->type->isAliasOrExpr()) {
                 call->argumentsFailedToInfer = true;
             }
             return Visitor::visitCallArg(call, arg, last);
@@ -5639,6 +5639,8 @@ namespace das {
                 if ( !ar->type ) {
                     return nullptr;
                 }
+                DAS_ASSERT(!ar->type->isExprType()
+                    && "if this happens, we are calling infer function call without checking for '[expr]'. do that from where we call up the stack.");
                 // if its an auto or an alias
                 // we only allow it, if its a block or lambda
                 if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda && ar->type->baseType!=Type::tFunction ) {

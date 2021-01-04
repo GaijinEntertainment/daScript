@@ -1427,6 +1427,45 @@ namespace das
         return false;
     }
 
+    bool TypeDecl::isAliasOrExpr() const {
+        // if its dim[expr]
+        for ( auto di : dim ) {
+            if ( di==TypeDecl::dimConst ) {
+                return true;
+            }
+        }
+        // auto is auto.... or auto....?
+        if ( baseType==Type::alias ) {
+            return true;
+        } else  if ( baseType==Type::tPointer ) {
+            if ( firstType )
+                return firstType->isAliasOrExpr();
+        } else  if ( baseType==Type::tIterator ) {
+            if ( firstType )
+                return firstType->isAliasOrExpr();
+        } else if ( baseType==Type::tArray ) {
+            if ( firstType )
+                return firstType->isAliasOrExpr();
+        } else if ( baseType==Type::tTable ) {
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAliasOrExpr();
+            if ( secondType )
+                any |= secondType->isAliasOrExpr();
+            return any;
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
+                   baseType==Type::tLambda || baseType==Type::tTuple ||
+                   baseType==Type::tVariant ) {
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAliasOrExpr();
+            for ( auto & arg : argTypes )
+                any |= arg->isAliasOrExpr();
+            return any;
+        }
+        return false;
+    }
+
     bool TypeDecl::isAutoArrayResolved() const {
         for ( auto di : dim ) {
             if ( di==TypeDecl::dimAuto ) {
