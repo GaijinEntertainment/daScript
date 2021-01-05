@@ -8,7 +8,7 @@ namespace das {
 		: mShutdown(false)
         , mThreadCount( 0 )
 		, mJobsRunning(0)
-		, mSleepMs(1000) {
+		, mSleepMs(0) {
 		mThreadCount = max(1,(static_cast<int>(thread::hardware_concurrency())));
 		SetCurrentThreadPriority(JobPriority::High);
 		for (int j = 0; j < mThreadCount; j++) {
