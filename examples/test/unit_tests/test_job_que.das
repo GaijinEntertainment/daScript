@@ -9,7 +9,9 @@ def test
             for x in range(5)
                 var y <- [{for t in range(3); t+x}]
                 pfork <| @ [[<-y]]
-                    print("x = {x}, y = {y}, context = {this_context()}\n")
+                    assert(length(y)==3)
+                    for t,c in range(3),y
+                        assert(t+x==c)
                     status |> notify
             status |> join
     return true

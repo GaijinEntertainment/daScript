@@ -3,7 +3,7 @@ options no_aot = true
 
 module jobque_boost shared
 
-require jobque
+require jobque public
 
 require daslib/rtti
 require daslib/ast

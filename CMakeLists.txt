@@ -307,6 +307,7 @@ include/daScript/simulate/aot_builtin_fio.h
 include/daScript/simulate/aot_builtin_rtti.h
 include/daScript/simulate/aot_builtin_ast.h
 include/daScript/simulate/aot_builtin_debugger.h
+include/daScript/simulate/aot_builtin_jobque.h
 include/daScript/simulate/fs_file_info.h
 src/simulate/fs_file_info.cpp
 ${DAS_MODULES_RESOLVE_INC}

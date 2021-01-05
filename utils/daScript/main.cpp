@@ -84,6 +84,7 @@ int main(int argc, char * argv[]) {
     NEED_MODULE(Module_Debugger);
     NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);
+    NEED_MODULE(Module_JobQue);
     NEED_MODULE(Module_FIO);
     require_project_specific_modules();
     #include "modules/external_need.inc"
