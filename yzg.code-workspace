@@ -51,7 +51,8 @@
 			"algorithm": "cpp",
 			"cmath": "cpp",
 			"string": "cpp",
-			"*.inc": "cpp"
+			"*.inc": "cpp",
+			"mutex": "cpp"
 		}
 	}
 }
