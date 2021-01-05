@@ -3,6 +3,8 @@
 #include <condition_variable>
 #include <mutex>
 #include <deque>
+#include <thread>
+#include <atomic>
 
 namespace das {
 	// single job
@@ -11,7 +13,7 @@ namespace das {
 
 	typedef uint32_t JobCategory;
 
-    enum class JobPriority {
+    enum class JobPriority : int32_t {
         Inactive = 0x66,                    // just some high number to indicate the thread is inactive
         Minimum = -2,
         Low = -1,

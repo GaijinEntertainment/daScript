@@ -16,6 +16,8 @@ FIND_FLEX_AND_BISON()
 
 SETUP_COMPILER()
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
 
 SET(DAS_MODULES_RESOLVE_INC ${PROJECT_SOURCE_DIR}/include/modules/external_resolve.inc)
 SET(DAS_MODULES_NEED_INC ${PROJECT_SOURCE_DIR}/include/modules/external_need.inc)
@@ -361,7 +363,7 @@ ${DAS_MODULES_NEED_INC}
 SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
 
 add_executable(dasAot ${DASAOT_MAIN_SRC} )
-TARGET_LINK_LIBRARIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(dasAot libDaScript libPathTracerHelper libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
 SETUP_CPP11(dasAot)
 SETUP_LTO(dasAot)
@@ -520,7 +522,7 @@ ${DAS_MODULES_NEED_INC}
 SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
 
 add_executable(dasContDev ${DASCONTDEV_MAIN_SRC})
-TARGET_LINK_LIBRARIES(dasContDev libDaScript libDasModuleUriparser libUriParser libPathTracerHelper libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(dasContDev libDaScript libDasModuleUriparser libUriParser libPathTracerHelper libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(dasContDev libDaScript libDasModuleUriparser libUriParser libPathTracerHelper libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
 SETUP_CPP11(dasContDev)
 SETUP_LTO(dasContDev)
@@ -551,10 +553,7 @@ DAS_AOT(examples/pathTracer/toy_path_tracer.das PATH_TRACER_GEN_SRC pathTracerAo
 SOURCE_GROUP_FILES("generated" PATH_TRACER_GEN_SRC)
 
 add_executable(pathTracer ${PATH_TRACER_MAIN_SRC} ${PATH_TRACER_GEN_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(pathTracer libDaScript libPathTracerHelper)
-IF (UNIX)
-  TARGET_LINK_LIBRARIES(pathTracer pthread)
-ENDIF()
+TARGET_LINK_LIBRARIES(pathTracer libDaScript libPathTracerHelper Threads::Threads)
 ADD_DEPENDENCIES(pathTracer libDaScript libPathTracerHelper)
 TARGET_INCLUDE_DIRECTORIES(pathTracer PUBLIC examples/pathTracer)
 SETUP_CPP11(pathTracer)
@@ -570,7 +569,7 @@ ${DAS_MODULES_NEED_INC}
 SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
 add_executable(daScript ${DASCRIPT_MAIN_SRC})
-TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser libPathTracerHelper libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser libPathTracerHelper libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser libPathTracerHelper libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
 SETUP_CPP11(daScript)
 SETUP_LTO(daScript)
@@ -647,7 +646,7 @@ SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
 TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
 SETUP_CPP11(daScriptTest)
@@ -689,7 +688,7 @@ SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
 
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC} ${AOT_GENERATED_SRC})
 TARGET_INCLUDE_DIRECTORIES(daScriptProfile PUBLIC examples/profile)
-TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptProfile)
+TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptProfile Threads::Threads)
 ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot libDaScriptProfile)
 SETUP_CPP11(daScriptProfile)
 add_dependencies(daScriptProfile daScriptProfileAot dasAotStub)
@@ -697,7 +696,7 @@ add_dependencies(daScriptProfile daScriptProfileAot dasAotStub)
 
 MACRO(DAS_TUTORIAL tutorial_name tutorial_src)
     add_executable(${tutorial_name} ${tutorial_src})
-    TARGET_LINK_LIBRARIES(${tutorial_name} libDaScript)
+    TARGET_LINK_LIBRARIES(${tutorial_name} libDaScript Threads::Threads)
     ADD_DEPENDENCIES(${tutorial_name} libDaScript)
     SETUP_CPP11(${tutorial_name})
 ENDMACRO()

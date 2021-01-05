@@ -251,7 +251,7 @@ namespace das {
 		float maxPlatformPriority = sched_get_priority_max(SCHED_OTHER);
 		struct sched_param sched_param;
 		int platformPriority = (int)(minPlatformPriority + (maxPlatformPriority - minPlatformPriority)
-			* ((float)(priority - JobPriority_Minimum) / (float)(JobPriority_Maximum - JobPriority_Minimum)));
+			* ((float)(priority - int(JobPriority::Minimum)) / (float)(int(JobPriority::Maximum) - int(JobPriority::Minimum))));
 		sched_param.sched_priority = platformPriority;
 		pthread_setschedparam(pthread_self(), SCHED_OTHER, &sched_param);
     }
@@ -317,7 +317,7 @@ namespace das
 		float maxPlatformPriority = sched_get_priority_max(SCHED_OTHER);
 		struct sched_param sched_param;
 		int platformPriority = (int)( minPlatformPriority + (maxPlatformPriority - minPlatformPriority)
-			* ((float)(priority - JobPriority_Minimum) / (float)(JobPriority_Maximum - JobPriority_Minimum)) );
+			* ((float)(priority - int(JobPriority::Minimum)) / (float)(int(JobPriority::Maximum) - int(JobPriority::Minimum))));
 		sched_param.sched_priority = platformPriority;
 		pthread_setschedparam(pthread_self(), SCHED_OTHER, &sched_param);
 	}
