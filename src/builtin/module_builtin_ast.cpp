@@ -2207,6 +2207,11 @@ namespace das {
         return module->addVariable(move(var), false);
     }
 
+    bool addModuleStructure ( Module * module, StructurePtr & _struct, Context * ) {
+        StructurePtr stru = move(_struct);
+        return module->addStructure(stru, true);
+    }
+
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & _ann, Context * context ) {
         FunctionAnnotationPtr ann = move(_ann);
         if ( !module->addAnnotation(ann, true) ) {
@@ -2639,6 +2644,10 @@ namespace das {
                 SideEffects::modifyExternal, "addModuleStructureAnnotation");
             addExtern<DAS_BIND_FUN(addStructureStructureAnnotation)>(*this, lib,  "add_structure_annotation",
                 SideEffects::modifyExternal, "addStructureStructureAnnotation");
+            addExtern<DAS_BIND_FUN(addModuleStructure)>(*this, lib, "add_structure",
+                SideEffects::modifyExternal, "addModuleStructure");
+            addExtern<DAS_BIND_FUN(clone_structure)>(*this, lib,  "clone_structure",
+                SideEffects::none, "clone_structure");
             // pass macro
             addAnnotation(make_smart<AstPassMacroAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makePassMacro)>(*this, lib,  "make_pass_macro",

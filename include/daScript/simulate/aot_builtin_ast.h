@@ -441,6 +441,7 @@ namespace das {
     void forEachGenericFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
     bool addModuleFunction ( Module * module, FunctionPtr & func, Context * context );
     bool addModuleVariable ( Module * module, VariablePtr & var, Context * );
+    bool addModuleStructure ( Module * module, StructurePtr & stru, Context * );
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
     void addModuleReaderMacro ( Module * module, ReaderMacroPtr & newM, Context * context );
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
@@ -450,6 +451,7 @@ namespace das {
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value->clone(); }
     __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value->clone(); }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }
+    __forceinline StructurePtr clone_structure ( const Structure * value ) { return value->clone(); }
     void forceAtRaw ( const smart_ptr_raw<Expression> & expr, const LineInfo & at );
     void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context );
 
