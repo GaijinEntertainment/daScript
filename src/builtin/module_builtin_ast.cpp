@@ -2716,6 +2716,9 @@ namespace das {
             addAnnotation(make_smart<AstContextAnnotation>(lib));
             addExtern<DAS_BIND_FUN(getAstContext)>(*this, lib,  "get_ast_context",
                 SideEffects::modifyExternal, "get_ast_context");
+            // code generation
+            addExtern<DAS_BIND_FUN(makeClone)>(*this, lib,  "make_clone_structure",
+                SideEffects::none, "makeClone");
             // errors
             addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
                 SideEffects::modifyArgumentAndExternal, "ast_error");

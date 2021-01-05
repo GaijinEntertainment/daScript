@@ -154,6 +154,7 @@ src/builtin/ast_gen.inc
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_network.cpp
 src/builtin/module_builtin_debugger.cpp
+src/builtin/module_builtin_jobque.cpp
 src/builtin/debugapi_gen.inc
 src/builtin/module_file_access.cpp
 src/builtin/builtin.das.inc
@@ -198,9 +199,11 @@ include/daScript/misc/sysos.h
 include/daScript/misc/callable.h
 include/daScript/misc/debug_break.h
 include/daScript/misc/instance_debugger.h
-src/misc//sysos.cpp
+include/daScript/misc/job_que.h
+src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
+src/misc/job_que.cpp
 )
 list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)

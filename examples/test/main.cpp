@@ -379,6 +379,9 @@ int main( int argc, char * argv[] ) {
     NEED_MODULE(Module_Random);
     NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);
+
+    NEED_MODULE(Module_JobQue);
+
     g_aotLib = make_unique<AotLibrary>();
     AotListBase::registerAot(*g_aotLib);
 #if 0 // Debug this one test

@@ -1,26 +1,12 @@
-require UnitTest
+// options log
 
-require rtti
-require ast
-
-def log_type ( t : auto(TT)? )
-    print("
-        {typeinfo(typename type<TT>)}:
-            isLocal = {typeinfo(is_local type<TT>)}
-            canBePlacedInContainer = {typeinfo(can_be_placed_in_container type<TT>)}
-            canCopy = {typeinfo(can_copy type<TT>)}
-            canMove = {typeinfo(can_move type<TT>)}
-            canClone = {typeinfo(can_clone type<TT>)}
-            canDelete = {typeinfo(can_delete type<TT>)}
-            canNew = {typeinfo(can_new type<TT>)}
-            canDeletePtr = {typeinfo(can_delete_ptr type<TT>)}
-            hasNonTrivialCtor = {typeinfo(has_nontrivial_ctor type<TT>)}
-            hasNonTrivialDtor = {typeinfo(has_nontrivial_dtor type<TT>)}
-            hasNonTrivialCopy = {typeinfo(has_nontrivial_copy type<TT>)}
-    ")
+require jobque
+require daslib/jobque_boost
 
 [export]
 def test
-    var m : LineInfo?
-    log_type(m)
+    for x in range(5)
+        var y <- [{for t in range(3); t+x}]
+        pfork <| @ [[<-y]]
+            print("x = {x}, y = {y}, context = {this_context()}\n")
     return true
