@@ -9,13 +9,7 @@ namespace das {
     typedef function<void()> Job;
     typedef function<void(int,int)> JobChunk;
 
-    enum class JobCategory {
-        None,
-        Generic,
-        Realtime,
-        Streaming,
-        Cache,
-    };
+	typedef uint32_t JobCategory;
 
     enum class JobPriority {
         Inactive = 0x66,                    // just some high number to indicate the thread is inactive
@@ -54,17 +48,14 @@ namespace das {
         JobQue & operator = ( const JobQue & ) = delete;
         JobQue & operator = ( JobQue && ) = delete;
         ~JobQue ();
-		void PostInit();
-        bool	isEmpty (bool includingMainThreadJobs = false);
-		bool	areJobsPending(JobCategory category);
-		int		getNumberOfQueuedJobs();
-		void	push(Job && job, JobCategory category, JobPriority priority);
+        bool isEmpty (bool includingMainThreadJobs = false);
+		bool areJobsPending(JobCategory category);
+		int getNumberOfQueuedJobs();
+		void push(Job && job, JobCategory category, JobPriority priority);
         void parallel_for ( JobStatus & status, int from, int to, const JobChunk & chunk, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1 );
         void parallel_for ( int from, int to, const JobChunk & chunk, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1 );
 		void parallel_for_with_consume (int from, int to, const JobChunk & chunk, const JobChunk & consume, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1);
-		static void set_the_main_thread();
-		static bool is_the_main_thread();
-		static int get_num_threads() { return   max(1,static_cast<int>(thread::hardware_concurrency())); }
+		static int get_num_threads() { return max(1,static_cast<int>(thread::hardware_concurrency())); }
 		void EvalOnMainThread(Job && expr);
 		void EvalMainThreadJobs();
 		void wait();
@@ -78,7 +69,7 @@ namespace das {
 			}
 			Job				function = nullptr;
 			JobPriority		priority = JobPriority::Inactive;
-			JobCategory		category = JobCategory::None;
+			JobCategory		category = 0;
 		};
 		struct ThreadEntry {
 			ThreadEntry( thread* thread) {
@@ -86,28 +77,23 @@ namespace das {
 			};
 			unique_ptr<thread>	threadPointer;
 			JobPriority			currentPriority = JobPriority::Inactive;
-			JobCategory			currentCategory = JobCategory::None;
+			JobCategory			currentCategory = 0;
 		};
-
-		void	join();
-		void	job(int threadIndex);
-		void	jobOverflow(int threadIndex);
-		bool	pushInternal(Job && job, JobCategory category, JobPriority priority);
+	protected:
+		void join();
+		void job(int threadIndex);
+		void submit(Job && job, JobCategory category, JobPriority priority);
+	protected:
 		condition_variable mCond;
-		condition_variable mCondOverflow;
 		int mSleepMs;
 		atomic<bool>	mShutdown;
 		atomic<int>		mThreadCount;
-		atomic<int>		mThreadCountOverflow;
 		static thread::id mTheMainThread;
 		mutex mFifoMutex;
     protected:
         deque<JobEntry>	mFifo;
-        deque<JobEntry>	mFifoOverflow;
         vector<ThreadEntry>		mThreads;
-        vector<ThreadEntry >	mThreadsOverflow;
         atomic<int> mJobsRunning;
-        atomic<int> mJobsRunningOverflow;
 	protected:
 		mutex mEvalMainThreadMutex;
 		vector<Job> mEvalMainThread;
