@@ -1,12 +1,16 @@
-// options log=true
-// options logCpp=true
-// options log_nodes=true
+// options log
+// options logCpp
+// options log_nodes
 
 module tpt
 
 require math
 require daslib/tga
 require random
+require daslib/jobque_boost
+
+let
+    USE_JOB_QUE = true
 
 let
     DO_SAMPLES_PER_PIXEL : int const = 4
@@ -252,16 +256,7 @@ def prepare
         sph.iRadius = 1. / sph.radius
 
 [export]
-def job(var backbuffer:array<float3>;frameCount,width,height,ymin,ymax:int)
-    prepare()
-    var totalRayCount = 0
-    draw(frameCount, width, height, ymin, ymax, backbuffer, totalRayCount)
-    return totalRayCount
-
-
-[export]
-def test
-    prepare()
+def main
     let width = 320
     let height = 240
     let kFrameCount = 16
@@ -269,10 +264,29 @@ def test
     resize(backbuffer,width*height)
     print("\ntracing...\n")
     var i = 0
-    profile(kFrameCount,"ray-trace frame") <|
-        var rayCount = 0
-        draw(i, width, height, 0, height, backbuffer, rayCount)
-        i ++
+    if USE_JOB_QUE
+        with_job_que <|
+            profile(kFrameCount,"ray-trace frame") <|
+                var pbb : array<float3>?
+                unsafe
+                    pbb = addr(backbuffer)                  // NOTE: we actually share data here
+                let hwJobs = get_total_hw_jobs()
+                with_job_status(hwJobs) <| $ ( status )
+                    let chunk = (height+hwJobs-1) / hwJobs
+                    for c in range(hwJobs)
+                        let yMin = c * chunk
+                        let yMax = min((c + 1)*chunk, height)
+                        new_job <| @
+                            prepare()
+                            var rayCount = 0
+                            draw(i, width, height, yMin, yMax, *pbb, rayCount)
+                            status |> notify
+                    status |> join
+                    i ++
+    else
+        prepare()
+        profile(kFrameCount,"ray-trace frame") <|
+            var rayCount = 0
+            draw(i, width, height, 0, height, backbuffer, rayCount)
+            i ++
     save_TGA("path_tracer.tga",width,height,backbuffer)
-    return true
-

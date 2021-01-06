@@ -527,27 +527,6 @@ ADD_DEPENDENCIES(dasContDev libDaScript libDasModuleUriparser libUriParser libDa
 SETUP_CPP11(dasContDev)
 SETUP_LTO(dasContDev)
 
-# PathTracer
-
-SET(PATH_TRACER_MAIN_SRC
-examples/pathTracer/main.cpp
-examples/pathTracer/toy_path_tracer.das
-)
-SOURCE_GROUP_FILES("source" PATH_TRACER_MAIN_SRC)
-
-add_custom_target(pathTracerAot)
-SET(PATH_TRACER_GEN_SRC)
-DAS_AOT(examples/pathTracer/toy_path_tracer.das PATH_TRACER_GEN_SRC pathTracerAot dasAot)
-SOURCE_GROUP_FILES("generated" PATH_TRACER_GEN_SRC)
-
-add_executable(pathTracer ${PATH_TRACER_MAIN_SRC} ${PATH_TRACER_GEN_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(pathTracer libDaScript libUriParser libDasModuleUriparser Threads::Threads)
-ADD_DEPENDENCIES(pathTracer libDaScript libUriParser libDasModuleUriparser)
-TARGET_INCLUDE_DIRECTORIES(pathTracer PUBLIC examples/pathTracer)
-SETUP_CPP11(pathTracer)
-add_dependencies(pathTracer pathTracerAot dasAotStub)
-#target_precompile_headers(pathTracer PUBLIC include/daScript/misc/platform.h)
-
 # Stand alone command line compiler
 
 SET(DASCRIPT_MAIN_SRC

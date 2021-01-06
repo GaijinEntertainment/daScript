@@ -8,7 +8,7 @@ def test
         with_job_status(5) <| $ ( status )
             for x in range(5)
                 var y <- [{for t in range(3); t+x}]
-                pfork <| @ [[<-y]]
+                new_job <| @ [[<-y]]
                     assert(length(y)==3)
                     for t,c in range(3),y
                         assert(t+x==c)

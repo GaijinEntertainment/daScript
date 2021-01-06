@@ -26,11 +26,11 @@ namespace das {
         }, 0, JobPriority::Default);
     }
 
-    void pfork_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
+    void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         if ( !g_jobQue ) context->throw_error_at(*lineinfo, "need to be in 'with_job_que' block");
         Context * forkContext = new Context(*context);
         auto ptr = forkContext->heap->allocate(lambdaSize);
-        forkContext->heap->mark_comment(ptr, "new [[ ]] in pfork");
+        forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
         memset ( ptr, 0, lambdaSize );
         das_invoke_function<void>::invoke(forkContext, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
@@ -74,6 +74,11 @@ namespace das {
         status->Notify();
     }
 
+    int getTotalHwJobs( Context * context, LineInfoArg * at ) {
+        if ( !g_jobQue ) context->throw_error_at(*at, "need to be in 'with_job_que' block");
+        return g_jobQue->getTotalHwJobs();
+    }
+
     class Module_JobQue : public Module {
     public:
         Module_JobQue() : Module("jobque") {
@@ -95,10 +100,12 @@ namespace das {
             // fork \ invoke \ etc
             addExtern<DAS_BIND_FUN(pinvoke)>(*this, lib,  "pinvoke",
                 SideEffects::modifyExternal, "pinvoke");
-            addExtern<DAS_BIND_FUN(pfork_invoke)>(*this, lib,  "pfork_invoke",
-                SideEffects::modifyExternal, "pfork_invoke");
+            addExtern<DAS_BIND_FUN(new_job_invoke)>(*this, lib,  "new_job_invoke",
+                SideEffects::modifyExternal, "new_job_invoke");
             addExtern<DAS_BIND_FUN(withJobQue)>(*this, lib,  "with_job_que",
                 SideEffects::modifyExternal, "withJobQue");
+            addExtern<DAS_BIND_FUN(getTotalHwJobs)>(*this, lib,  "get_total_hw_jobs",
+                SideEffects::accessExternal, "getTotalHwJobs");
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_jobque.h\"\n";

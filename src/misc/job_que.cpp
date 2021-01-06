@@ -83,6 +83,10 @@ namespace das {
 		return false;
 	}
 
+	int JobQue::getTotalHwJobs() {
+		return mThreadCount;
+	}
+
 	int JobQue::getNumberOfQueuedJobs() {
 		lock_guard<mutex> lock(mFifoMutex);
 		return int(mFifo.size());

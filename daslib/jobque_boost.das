@@ -9,12 +9,12 @@ require daslib/rtti
 require daslib/ast
 require daslib/ast_boost
 
-[tag_function(pfork_tag)]
-def pfork ( var l : lambda )
+[tag_function(new_job_tag)]
+def new_job ( var l : lambda )
     invoke(l)   // note, this is never called if job-que is there
 
-[tag_function_macro(tag="pfork_tag")]
-class PforkMacro : AstFunctionAnnotation
+[tag_function_macro(tag="new_job_tag")]
+class NewJobMacro : AstFunctionAnnotation
     once_index : int = 0
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if !call.arguments[0] is ExprAscend
@@ -34,7 +34,7 @@ class PforkMacro : AstFunctionAnnotation
             return [[ExpressionPtr]]
         // clone structure type. make fields non-constant, so that they can be cloned
         var stype <- clone_structure(mks._type.structType)
-        stype.name := "{stype.name}_pfork_clone"
+        stype.name := "{stype.name}_new_job_clone"
         var stype_ptr = get_ptr(stype)
         var sttype <- new [[TypeDecl() at=call.at, baseType=Type tStructure, structType = stype_ptr]]
         for fld in stype.fields // TODO: verify field type here
@@ -49,8 +49,8 @@ class PforkMacro : AstFunctionAnnotation
         ftype.argTypes |> emplace_new <| clone_type(sttype)
         ftype.argTypes |> emplace <| sttype
         ftype.argTypes[1].flags |= TypeDeclFlags constant
-        // make a pfork_invoke call
-        var ncall <- new [[ExprCall() at=call.at, name:="pfork_invoke"]]
+        // make a new_job_invoke call
+        var ncall <- new [[ExprCall() at=call.at, name:="new_job_invoke"]]
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
         ncall.arguments |> emplace_new <| new [[ExprAddr() at=call.at, target:="clone", funcType <- ftype]]
         ncall.arguments |> emplace_new <| new [[ExprConstInt() at=call.at, value=int(mks._type.sizeOf)]]

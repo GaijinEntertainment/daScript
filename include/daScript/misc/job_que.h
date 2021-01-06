@@ -53,6 +53,7 @@ namespace das {
         bool isEmpty (bool includingMainThreadJobs = false);
 		bool areJobsPending(JobCategory category);
 		int getNumberOfQueuedJobs();
+		int getTotalHwJobs();
 		void push(Job && job, JobCategory category, JobPriority priority);
         void parallel_for ( JobStatus & status, int from, int to, const JobChunk & chunk, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1 );
         void parallel_for ( int from, int to, const JobChunk & chunk, JobCategory category, JobPriority priority, int chunk_count = -1, int step = 1 );
