@@ -235,9 +235,9 @@ namespace das {
 #pragma warning(disable:4100)
 #endif
 
-    vec4f builtin_read ( Context & context, SimNode_CallBase * call, vec4f * args )
-    {
-        DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType() || call->types[1]->type==Type::tString);
+    vec4f builtin_read ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType()
+            || call->types[1]->type==Type::tString || call->types[1]->type==Type::tPointer);
         auto fp = cast<FILE *>::to(args[0]);
         if ( !fp ) context.throw_error("can't read NULL");
         auto buf = cast<void *>::to(args[1]);
@@ -246,9 +246,9 @@ namespace das {
         return cast<int32_t>::from(res);
     }
 
-    vec4f builtin_write ( Context & context, SimNode_CallBase * call, vec4f * args )
-    {
-        DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType() || call->types[1]->type==Type::tString);
+    vec4f builtin_write ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType()
+            || call->types[1]->type==Type::tString || call->types[1]->type==Type::tPointer);
         auto fp = cast<FILE *>::to(args[0]);
         if ( !fp ) context.throw_error("can't write NULL");
         auto buf = cast<void *>::to(args[1]);

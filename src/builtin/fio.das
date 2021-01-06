@@ -64,3 +64,12 @@ def fsave(f:file;buf:auto(BufType)const)
         return r2
     return (r1+r2)
 
+def fwrite(f:file;buf:auto(BufType) const implicit )
+    concept_assert(typeinfo(is_raw buf),"can only save raw pod")
+    _builtin_write(f, buf, typeinfo(sizeof buf))
+
+def fwrite(f:file;buf:array<auto(BufType)> const implicit )
+    concept_assert(typeinfo(is_raw type<BufType>),"can only save raw pod array")
+    unsafe
+        _builtin_write(f, addr(buf[0]), length(buf) *( typeinfo(sizeof type<BufType>)))
+

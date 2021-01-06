@@ -5,8 +5,7 @@
 module tpt
 
 require math
-require PathTracerHelper
-
+require daslib/tga
 require random
 
 let
@@ -274,6 +273,6 @@ def test
         var rayCount = 0
         draw(i, width, height, 0, height, backbuffer, rayCount)
         i ++
-    saveTga("path_tracer.tga",backbuffer,width,height)
+    save_TGA("path_tracer.tga",width,height,backbuffer)
     return true
 

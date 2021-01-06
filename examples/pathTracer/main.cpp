@@ -1,8 +1,6 @@
 #include "daScript/daScript.h"
 #include "daScript/simulate/fs_file_info.h"
 
-#include "path_tracer_helper.h"
-
 #include <thread>
 #include <atomic>
 
@@ -153,18 +151,20 @@ bool unit_test ( const string & fn ) {
 
 int main() {
   _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
-#ifdef _MSC_VER
-#define    TEST_PATH "../"
-#else
-#define TEST_PATH "../../"
-#endif
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Strings);
     NEED_MODULE(Module_Random);
-    NEED_MODULE(Module_PathTracerHelper);
-    unit_test(TEST_PATH "examples/pathTracer/toy_path_tracer.das");
+    NEED_MODULE(Module_Rtti);
+    NEED_MODULE(Module_Ast);
+    NEED_MODULE(Module_Debugger);
+    NEED_MODULE(Module_Network);
+    NEED_MODULE(Module_UriParser);
+    NEED_MODULE(Module_JobQue);
+    NEED_MODULE(Module_FIO);
+    unit_test(getDasRoot() +  "/examples/pathTracer/toy_path_tracer.das");
     Module::Shutdown();
+    getchar();
     return 0;
 }
