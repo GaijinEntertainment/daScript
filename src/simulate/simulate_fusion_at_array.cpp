@@ -85,7 +85,7 @@ namespace das {
             auto pl = (Array *) l.compute##COMPUTEL(context); \
             auto rr = uint32_t(r.subexpr->evalInt(context)); \
             if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %u", rr, pl->size); \
-            return v_ldu((const float *)(pl + rr*stride + offset)); \
+            return v_ldu((const float *)(pl->data + rr*stride + offset)); \
         } \
     };
 
