@@ -577,6 +577,7 @@ namespace das
         virtual ~Function() {}
         friend TextWriter& operator<< (TextWriter& stream, const Function & func);
         string getMangledName() const;
+        uint32_t getMangledNameHash() const;
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & arguments );

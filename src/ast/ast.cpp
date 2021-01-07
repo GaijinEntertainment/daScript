@@ -523,6 +523,11 @@ namespace das {
         return ss.str();
     }
 
+    uint32_t Function::getMangledNameHash() const {
+        auto mangledName = getMangledName();
+        return hash_blockz32((uint8_t *)mangledName.c_str());
+    }
+
     VariablePtr Function::findArgument(const string & na) {
         for ( auto & arg : arguments ) {
             if ( arg->name==na ) {

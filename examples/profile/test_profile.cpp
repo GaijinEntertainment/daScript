@@ -11,6 +11,7 @@
 
 #define FAST_PATH_ANNOTATION    1
 #define FUNC_TO_QUERY           1
+#define MULTIPLE_REQUIRE_ES     1
 
 using namespace das;
 
@@ -199,6 +200,12 @@ struct EsFunctionAnnotation : FunctionAnnotation {
     };
     virtual bool finalize ( const FunctionPtr & func, ModuleGroup & group, const AnnotationArgumentList & args,
                            const AnnotationArgumentList &, string & err ) override {
+#if MULTIPLE_REQUIRE_ES
+        if ( func->module->name.empty() ) {
+            err = "es function needs to have explicit module name, i.e. 'module YOU_MODULE_NAME' on top of the file.";
+            return false;
+        }
+#endif
         auto esData = getGroupData(group);
         auto tab = make_unique<EsPassAttributeTable>();
         if ( auto pp = args.find("es_pass", Type::tString) ) {
@@ -207,26 +214,48 @@ struct EsFunctionAnnotation : FunctionAnnotation {
             err = "pass is not specified";
             return false;
         }
-        tab->functionIndex = (int32_t) func->index;
+#if MULTIPLE_REQUIRE_ES
+        tab->mangledNameHash = func->getMangledNameHash();
+#else
+        tab->functionIndex = func->index;
         if ( tab->functionIndex<0 ) {
             err = "function is not there";
             return false;
         }
+#endif
         buildAttributeTable(*tab, func->arguments, err);
         esData->g_esPassTable.emplace_back(move(tab));
+
         return err.empty();
     }
 };
 
+void * getComponentData ( const string & name ) {
+    if (name == "pos") return g_pos.data();
+    else if (name == "vel") return g_vel.data();
+    else if (name == "velBoxed") return g_velBoxed.data();
+    else return nullptr;
+}
+
 #if FUNC_TO_QUERY
 bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<EsComponent> &, uint32_t ) {
+#if MULTIPLE_REQUIRE_ES
+    auto fnIdx = context.fnIdxByMangledName(table.mangledNameHash);
+    auto functionPtr = context.getFunction(fnIdx-1);
+#else
     auto functionPtr = context.getFunction(table.functionIndex);
+#endif
     context.call(functionPtr, nullptr, 0);
     return true;
 }
 #else
 bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<EsComponent> & components, uint32_t totalComponents ) {
+#if MULTIPLE_REQUIRE_ES
+    auto fnIdx = context.fnIdxByMangledName(table.mangledNameHash);
+    auto functionPtr = context.getFunction(fnIdx-1);
+#else
     auto functionPtr = context.getFunction(table.functionIndex);
+#endif
     vec4f * _args = (vec4f *)(alloca(table.attributes.size() * sizeof(vec4f)));
     context.callEx(functionPtr, _args, nullptr, 0, [&](SimNode * code){
         uint32_t nAttr = (uint32_t) table.attributes.size();
@@ -241,7 +270,7 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
                 return esc.name == table.attributes[a].name;
             });
             if ( it != components.end() ) {
-                data[a]   = (char *) it->data;
+                data[a]   = (char *) getComponentData(it->name);
                 stride[a] = it->stride;
                 boxed[a]  = it->boxed;
             } else {
@@ -274,13 +303,6 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
     return true;
 }
 #endif
-
-void * getComponentData ( const string & name ) {
-    if (name == "pos") return g_pos.data();
-    else if (name == "vel") return g_vel.data();
-    else if (name == "velBoxed") return g_velBoxed.data();
-    else return nullptr;
-}
 
 uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsComponent> & components, uint32_t totalComponents ) {
     auto * closure = (SimNode_ClosureBlock *) block.body;

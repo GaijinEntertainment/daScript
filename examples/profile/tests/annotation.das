@@ -2,6 +2,8 @@
 // options log_cpp=true
 // options log_nodes = true
 
+module annotation
+
 require testProfile
 
 [es (es_pass="ks")]
