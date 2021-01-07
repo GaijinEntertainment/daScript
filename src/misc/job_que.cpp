@@ -5,10 +5,10 @@
 namespace das {
 
 	JobQue::JobQue()
-		: mShutdown(false)
-        , mThreadCount( 0 )
-		, mJobsRunning(0)
-		, mSleepMs(0) {
+		: mSleepMs(0)
+		, mShutdown(false)
+		, mThreadCount( 0 )
+		, mJobsRunning(0) {
 		mThreadCount = max(1,(static_cast<int>(thread::hardware_concurrency())));
 		SetCurrentThreadPriority(JobPriority::High);
 		for (int j = 0; j < mThreadCount; j++) {
