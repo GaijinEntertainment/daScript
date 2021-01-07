@@ -26,6 +26,11 @@ namespace das {
         return str ? hash_blockz32((uint8_t *)str) : 16777619;
     }
 
+    template <>
+    __forceinline uint32_t hash_function ( Context &, const char * str ) {
+        return str ? hash_blockz32((uint8_t *)str) : 16777619;
+    }
+
     uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info );
     uint32_t hash_value ( Context & ctx, vec4f value, TypeInfo * info );
 }

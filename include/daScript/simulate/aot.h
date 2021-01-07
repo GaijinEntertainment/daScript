@@ -746,8 +746,32 @@ namespace das {
         }
     };
 
+    template <typename TT>
+    struct is_workhorse_type {
+        enum {
+            value =
+                    is_enum<TT>::value
+                ||  is_pointer<TT>::value
+                ||  is_arithmetic<TT>::value
+                ||  is_same<TT,bool>::value
+                ||  is_same<TT,Bitfield>::value
+                ||  is_same<TT,range>::value
+                ||  is_same<TT,urange>::value
+                ||  is_same<TT,int2>::value
+                ||  is_same<TT,int3>::value
+                ||  is_same<TT,int4>::value
+                ||  is_same<TT,uint2>::value
+                ||  is_same<TT,uint3>::value
+                ||  is_same<TT,uint4>::value
+                ||  is_same<TT,float2>::value
+                ||  is_same<TT,float3>::value
+                ||  is_same<TT,float4>::value
+        };
+    };
+
     template <typename TK, typename TV>
     struct TTable : Table {
+        static_assert(is_workhorse_type<TK>::value,"only supported for `workhorse` types");
         using THIS_TYPE = TTable<TK, TV>;
         TTable()  {}
         TTable(TTable & arr) { moveT(arr); }
