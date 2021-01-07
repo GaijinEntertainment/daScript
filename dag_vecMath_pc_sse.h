@@ -1,6 +1,6 @@
 /*
  * Dagor Engine 5
- * Copyright (C) 2003-2020  Gaijin Entertainment Corp.  All rights reserved
+ * Copyright (C) 2003-2021  Gaijin Entertainment.  All rights reserved
  *
  * (for conditions of distribution and use, see License)
 */
@@ -32,6 +32,7 @@
 #include <emmintrin.h>
 #if _TARGET_PC_MACOSX
   #include <pmmintrin.h>
+  #include <tmmintrin.h>
 #endif
 #endif
 
