@@ -56,6 +56,8 @@ ADD_CUSTOM_COMMAND(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DAS_MODULES_RESOLVE_INC}.temp  ${DAS_MODULES_RESOLVE_INC}
 )
 
+ADD_CUSTOM_TARGET(need_and_resolve ALL DEPENDS ${DAS_MODULES_NEED_INC} {DAS_MODULES_RESOLVE_INC})
+
 FLEX(src/parser/ds_lexer.lpp)
 BISON(src/parser/ds_parser.ypp)
 
@@ -364,7 +366,7 @@ SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
 
 add_executable(dasAot ${DASAOT_MAIN_SRC} )
 TARGET_LINK_LIBRARIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser  need_and_resolve ${DAS_MODULES_LIBS})
 SETUP_CPP11(dasAot)
 SETUP_LTO(dasAot)
 
@@ -523,7 +525,7 @@ SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
 
 add_executable(dasContDev ${DASCONTDEV_MAIN_SRC})
 TARGET_LINK_LIBRARIES(dasContDev libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(dasContDev libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(dasContDev libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
 SETUP_CPP11(dasContDev)
 SETUP_LTO(dasContDev)
 
@@ -537,7 +539,7 @@ SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
 add_executable(daScript ${DASCRIPT_MAIN_SRC})
 TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
 SETUP_CPP11(daScript)
 SETUP_LTO(daScript)
 

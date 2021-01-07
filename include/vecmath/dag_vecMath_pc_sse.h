@@ -32,6 +32,7 @@
 #include <emmintrin.h>
 #if _TARGET_PC_MACOSX
   #include <pmmintrin.h>
+  #include <tmmintrin.h>
 #endif
 #endif
 
