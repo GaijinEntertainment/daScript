@@ -2623,6 +2623,19 @@ namespace das {
                 } else if ( expr->trait=="fulltypename" ) {
                     reportAstChanged();
                     return make_smart<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes));
+                } else if ( expr->trait=="modulename" ) {
+                    reportAstChanged();
+                    auto modd = expr->typeexpr->module;
+                    return make_smart<ExprConstString>(expr->at, modd ? modd->name : "");
+                } else if ( expr->trait=="struct_modulename" ) {
+                    if ( expr->typeexpr->isStructure() ) {
+                        reportAstChanged();
+                        auto modd = expr->typeexpr->structType->module;
+                        return make_smart<ExprConstString>(expr->at, modd ? modd->name : "");
+                    } else {
+                        error("can't get struct_modulename of " + expr->typeexpr->describe(), "", "",
+                            expr->at,CompilationError::typeinfo_undefined);
+                    }
                 } else if ( expr->trait=="is_pod" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isPod());
