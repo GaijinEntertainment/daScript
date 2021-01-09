@@ -2002,14 +2002,30 @@ global_let
         }
         deleteVariableDeclarationList($list);
     }
-    | kwd_let optional_shared[glob_shar] {
-            das_force_oxford_comma = true;
-            das_supress_errors = true;
-        } error[loc] ';' {
-        das_yyerror("global variable declaration requires new line", tokAt(@loc),
-            CompilationError::syntax_error);
-        das_supress_errors = false;
-        yyerrok;
+    |   kwd_let optional_shared[glob_shar] { das_force_oxford_comma=true; } let_variable_declaration[decl] {
+        auto pDecl = $decl;
+        if ( pDecl->pTypeDecl ) {
+            for ( const auto & name_at : *pDecl->pNameList ) {
+                VariablePtr pVar = make_smart<Variable>();
+                pVar->name = name_at.first;
+                pVar->at = name_at.second;
+                pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                if ( pDecl->pInit ) {
+                    pVar->init = pDecl->pInit->clone();
+                    pVar->init_via_move = pDecl->init_via_move;
+                    pVar->init_via_clone = pDecl->init_via_clone;
+                }
+                if ( $kwd_let ) {
+                    pVar->type->constant = true;
+                } else {
+                    pVar->type->removeConstant = true;
+                }
+                pVar->global_shared = $glob_shar;
+                if ( !g_Program->addVariable(pVar) )
+                    das_yyerror("global variable is already declared " + name_at.first,name_at.second,
+                        CompilationError::global_variable_already_declared);
+            }
+        }
     }
     ;
 
