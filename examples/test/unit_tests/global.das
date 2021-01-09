@@ -8,8 +8,11 @@ struct Foo
 var
     g : Foo? = new Foo()
 
+var pg = new Foo()
+
 [export]
 def test
     push(g.a, 10)
     assert(g.i==5)
+    assert(pg.i==5)
     return true
