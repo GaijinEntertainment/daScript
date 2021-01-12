@@ -12,6 +12,7 @@ require daslib/jobque_boost
 
 let
     USE_JOB_QUE = true
+    USE_THREADS = false
 
 let
     DO_SAMPLES_PER_PIXEL = 4
@@ -271,22 +272,18 @@ def main
         with_job_que <|
             var t0 = ref_time_ticks()
             var totalRays = 0
-            profile(kFrameCount,"ray-trace frame") <|
+            profile(kFrameCount,"ray-trace frame (with JOB-QUE)") <|
                 var pbb : array<float3>?
                 var ptr : int?
                 unsafe
                     pbb = addr(backbuffer)                  // NOTE: we actually share data here
                     ptr = addr(totalRays)
-                let hwJobs = get_total_hw_jobs()
-                with_job_status(hwJobs) <| $ ( status )
-                    let chunk = (height+hwJobs-1) / hwJobs
-                    for c in range(hwJobs)
-                        let yMin = c * chunk
-                        let yMax = min((c + 1)*chunk, height)
+                with_job_status(height) <| $ ( status )
+                    for y in range(height)
                         new_job <| @
                             prepare()
                             var rayCount = 0
-                            draw(i, width, height, yMin, yMax, *pbb, rayCount)
+                            draw(i, width, height, y, y+1, *pbb, rayCount)
                             *ptr += rayCount
                             status |> notify
                     status |> join
@@ -294,6 +291,32 @@ def main
             var dt = get_time_usec(t0)
             var sec = double(dt)/1000000.0lf
             print("{totalRays} in {sec} sec, {format("%.3f",double(totalRays)/double(dt))} mrays/sec\n")
+    elif USE_THREADS
+        var t0 = ref_time_ticks()
+        var totalRays = 0
+        profile(kFrameCount,"ray-trace frame (with THREADS)") <|
+            var pbb : array<float3>?
+            var ptr : int?
+            unsafe
+                pbb = addr(backbuffer)                  // NOTE: we actually share data here
+                ptr = addr(totalRays)
+            let hwThreads = get_total_hw_threads()
+            with_job_status(hwThreads) <| $ ( status )
+                let chunk = (height+hwThreads-1) / hwThreads
+                for c in range(hwThreads)
+                    let yMin = c * chunk
+                    let yMax = min((c + 1)*chunk, height)
+                    new_thread <| @
+                        prepare()
+                        var rayCount = 0
+                        draw(i, width, height, yMin, yMax, *pbb, rayCount)
+                        *ptr += rayCount
+                        status |> notify
+                status |> join
+                i ++
+        var dt = get_time_usec(t0)
+        var sec = double(dt)/1000000.0lf
+        print("{totalRays} in {sec} sec, {format("%.3f",double(totalRays)/double(dt))} mrays/sec\n")
     else
         prepare()
         profile(kFrameCount,"ray-trace frame") <|
@@ -301,3 +324,5 @@ def main
             draw(i, width, height, 0, height, backbuffer, rayCount)
             i ++
     save_TGA("path_tracer.tga",width,height,backbuffer)
+    // while true
+    //    pass

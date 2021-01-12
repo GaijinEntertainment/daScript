@@ -13,6 +13,10 @@ require daslib/ast_boost
 def new_job ( var l : lambda )
     invoke(l)   // note, this is never called if job-que is there
 
+[tag_function(new_job_tag)]
+def new_thread ( var l : lambda )
+    invoke(l)   // note, this is never called if job-que is there
+
 [tag_function_macro(tag="new_job_tag")]
 class NewJobMacro : AstFunctionAnnotation
     once_index : int = 0
@@ -50,7 +54,7 @@ class NewJobMacro : AstFunctionAnnotation
         ftype.argTypes |> emplace <| sttype
         ftype.argTypes[1].flags |= TypeDeclFlags constant
         // make a new_job_invoke call
-        var ncall <- new [[ExprCall() at=call.at, name:="new_job_invoke"]]
+        var ncall <- new [[ExprCall() at=call.at, name:="{call.name}_invoke"]]
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
         ncall.arguments |> emplace_new <| new [[ExprAddr() at=call.at, target:="clone", funcType <- ftype]]
         ncall.arguments |> emplace_new <| new [[ExprConstInt() at=call.at, value=int(mks._type.sizeOf)]]

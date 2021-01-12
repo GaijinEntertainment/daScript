@@ -17,29 +17,33 @@ namespace das {
     mutex              g_jobQueMutex;
     shared_ptr<JobQue> g_jobQue;
 
-    void pinvoke ( Func fn, Context * context, LineInfoArg * lineinfo ) {
-        if ( !g_jobQue ) context->throw_error_at(*lineinfo, "need to be in 'with_job_que' block");
-        Context * forkContext = new Context(*context);
-        g_jobQue->push([=]() mutable {
-            das_invoke_function<void>::invoke(forkContext, fn);
-            delete forkContext;
-        }, 0, JobPriority::Default);
-    }
-
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         if ( !g_jobQue ) context->throw_error_at(*lineinfo, "need to be in 'with_job_que' block");
-        Context * forkContext = new Context(*context);
+        auto forkContext = make_shared<Context>(*context);
         auto ptr = forkContext->heap->allocate(lambdaSize);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
         memset ( ptr, 0, lambdaSize );
-        das_invoke_function<void>::invoke(forkContext, fn, ptr, lambda.capture);
+        das_invoke_function<void>::invoke(forkContext.get(), fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
         g_jobQue->push([=]() mutable {
             Lambda flambda(ptr);
-            das_invoke_lambda<void>::invoke(forkContext, flambda);
-            das_delete<Lambda>::clear(forkContext, flambda);
-            delete forkContext;
+            das_invoke_lambda<void>::invoke(forkContext.get(), flambda);
+            das_delete<Lambda>::clear(forkContext.get(), flambda);
         }, 0, JobPriority::Default);
+    }
+
+    void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context ) {
+        auto forkContext = make_shared<Context>(*context);
+        auto ptr = forkContext->heap->allocate(lambdaSize);
+        forkContext->heap->mark_comment(ptr, "new [[ ]] in new_thread");
+        memset ( ptr, 0, lambdaSize );
+        das_invoke_function<void>::invoke(forkContext.get(), fn, ptr, lambda.capture);
+        das_delete<Lambda>::clear(context, lambda);
+        thread([=]() mutable {
+            Lambda flambda(ptr);
+            das_invoke_lambda<void>::invoke(forkContext.get(), flambda);
+            das_delete<Lambda>::clear(forkContext.get(), flambda);
+        }).detach();
     }
 
     void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
@@ -79,6 +83,10 @@ namespace das {
         return g_jobQue->getTotalHwJobs();
     }
 
+    int getTotalHwThreads () {
+        return thread::hardware_concurrency();
+    }
+
     class Module_JobQue : public Module {
     public:
         Module_JobQue() : Module("jobque") {
@@ -98,14 +106,16 @@ namespace das {
             addExtern<DAS_BIND_FUN(thisContext)>(*this, lib,  "this_context",
                 SideEffects::accessExternal, "thisContext");
             // fork \ invoke \ etc
-            addExtern<DAS_BIND_FUN(pinvoke)>(*this, lib,  "pinvoke",
-                SideEffects::modifyExternal, "pinvoke");
             addExtern<DAS_BIND_FUN(new_job_invoke)>(*this, lib,  "new_job_invoke",
                 SideEffects::modifyExternal, "new_job_invoke");
             addExtern<DAS_BIND_FUN(withJobQue)>(*this, lib,  "with_job_que",
                 SideEffects::modifyExternal, "withJobQue");
             addExtern<DAS_BIND_FUN(getTotalHwJobs)>(*this, lib,  "get_total_hw_jobs",
                 SideEffects::accessExternal, "getTotalHwJobs");
+            addExtern<DAS_BIND_FUN(getTotalHwThreads)>(*this, lib,  "get_total_hw_threads",
+                SideEffects::accessExternal, "getTotalHwThreads");
+            addExtern<DAS_BIND_FUN(new_thread_invoke)>(*this, lib,  "new_thread_invoke",
+                SideEffects::modifyExternal, "new_thread_invoke");
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_jobque.h\"\n";
