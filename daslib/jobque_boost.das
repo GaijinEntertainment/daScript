@@ -59,3 +59,17 @@ class NewJobMacro : AstFunctionAnnotation
         ncall.arguments |> emplace_new <| new [[ExprAddr() at=call.at, target:="clone", funcType <- ftype]]
         ncall.arguments |> emplace_new <| new [[ExprConstInt() at=call.at, value=int(mks._type.sizeOf)]]
         return <- ncall
+
+def for_each ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
+    while true
+        let void_data = _builtin_channel_pop(channel)
+        if void_data==null
+            break
+        unsafe
+            let typed_data = reinterpret<TT?#> void_data
+            invoke ( blk, *typed_data )
+
+def push_clone ( channel:Channel?; data : auto(TT) )
+    var heap_data = new TT
+    *heap_data := data
+    _builtin_channel_push(channel, heap_data)

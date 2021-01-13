@@ -52,7 +52,9 @@
 			"cmath": "cpp",
 			"string": "cpp",
 			"*.inc": "cpp",
-			"mutex": "cpp"
+			"mutex": "cpp",
+			"queue": "cpp",
+			"deque": "cpp"
 		}
 	}
 }

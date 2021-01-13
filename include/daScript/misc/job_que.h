@@ -33,7 +33,7 @@ namespace das {
         JobStatus & operator = ( JobStatus && ) = delete;
         JobStatus & operator = ( const JobStatus & ) = delete;
         void Notify();
-        bool IsReady();
+        bool isReady();
         void Wait();
         void Clear(uint32_t count = 1);
     protected:
@@ -75,8 +75,8 @@ namespace das {
             JobCategory		category = 0;
         };
         struct ThreadEntry {
-            ThreadEntry( thread* thread) {
-                threadPointer.reset(thread);
+            ThreadEntry( unique_ptr<thread> && thread) {
+                threadPointer = move(thread);
             };
             unique_ptr<thread>	threadPointer;
             JobPriority			currentPriority = JobPriority::Inactive;

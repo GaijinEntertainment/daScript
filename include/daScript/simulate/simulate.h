@@ -215,7 +215,9 @@ namespace das
 
     void dumpTrackingLeaks();
 
-    class Context {
+    typedef shared_ptr<Context> ContextPtr;
+
+    class Context : public enable_shared_from_this<Context> {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;
         template <typename TT> friend struct SimNode_GetSharedR2V;
