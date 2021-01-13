@@ -71,6 +71,7 @@ MAKE_TYPE_FACTORY(ExprMakeTuple,ExprMakeTuple)
 MAKE_TYPE_FACTORY(ExprArrayComprehension,ExprArrayComprehension)
 MAKE_TYPE_FACTORY(TypeInfoMacro,TypeInfoMacro);
 MAKE_TYPE_FACTORY(ExprTypeInfo,ExprTypeInfo)
+MAKE_TYPE_FACTORY(ExprTypeDecl,ExprTypeDecl)
 MAKE_TYPE_FACTORY(ExprLabel,ExprLabel);
 MAKE_TYPE_FACTORY(ExprGoto,ExprGoto);
 MAKE_TYPE_FACTORY(ExprRef2Value,ExprRef2Value);
@@ -539,6 +540,13 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(subtrait)>("subtrait");
             addField<DAS_BIND_MANAGED_FIELD(extratrait)>("extratrait");
             addField<DAS_BIND_MANAGED_FIELD(macro)>("macro");
+        }
+    };
+
+    struct AstExprTypeDeclAnnotation : AstExpressionAnnotation<ExprTypeDecl> {
+        AstExprTypeDeclAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprTypeDecl> ("ExprTypeDecl", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(typeexpr)>("typeexpr");
         }
     };
 
@@ -1871,6 +1879,7 @@ namespace das {
     IMPL_BIND_EXPR(ExprReader);
     IMPL_BIND_EXPR(ExprCallMacro);
     IMPL_BIND_EXPR(ExprUnsafe);
+    IMPL_BIND_EXPR(ExprTypeDecl);
 
 #include "ast_gen.inc"
 
@@ -2525,6 +2534,7 @@ namespace das {
             addExpressionAnnotation(make_smart<AstExprArrayComprehensionAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstTypeInfoMacroAnnotation>(lib));
             addExpressionAnnotation(make_smart<AstExprTypeInfoAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprTypeDeclAnnotation>(lib))->from("Expression");
             // expressions with no extra syntax
             addExpressionAnnotation(make_smart<AstExprLabelAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprGotoAnnotation>(lib))->from("Expression");

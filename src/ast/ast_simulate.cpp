@@ -1225,6 +1225,10 @@ namespace das
         return nullptr;
     }
 
+    SimNode * ExprTypeDecl::simulate (Context & context) const {
+        return context.code->makeNode<SimNode_ConstValue>(at,v_zero());
+    }
+
     SimNode * ExprTypeInfo::simulate (Context & context) const {
         if ( !macro ) {
             DAS_ASSERTF(0, "we should not even be here. typeinfo should resolve to const during infer pass.");

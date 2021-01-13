@@ -847,6 +847,7 @@ namespace das {
                 cfr->alwaysSafe = true;
             }
             auto cpy = make_smart<ExprCopy>(expr->at, cto, cfr);
+            cpy->allowCopyTemp = true;  // this is for generators which return temp# values
             blk->list.push_back(cpy);
         }
         // yield = X

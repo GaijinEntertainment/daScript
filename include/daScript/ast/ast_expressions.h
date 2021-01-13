@@ -411,6 +411,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         bool        takeOverRightStack = false;
+        bool        allowCopyTemp = false;
     };
 
     // this moves one object to the other
@@ -1251,6 +1252,17 @@ namespace das
         ExpressionPtr   exprWhere;
         ExpressionPtr   subexpr;
         bool            generatorSyntax = false;
+    };
+
+    struct ExprTypeDecl : Expression {
+        ExprTypeDecl () { __rtti = "ExprTypeDecl"; };
+        ExprTypeDecl ( const LineInfo & a, const TypeDeclPtr & d )
+            : Expression(a), typeexpr(d) { __rtti = "ExprTypeDecl"; }
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual bool rtti_isTypeDecl() const override { return true; }
+        TypeDeclPtr         typeexpr;
     };
 }
 

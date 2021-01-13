@@ -104,6 +104,7 @@ namespace das {
         Func FN_PREVISIT(ExprArrayComprehensionSubexpr);
         Func FN_PREVISIT(ExprArrayComprehensionWhere);
         DECL_VISIT(ExprTypeInfo);
+        DECL_VISIT(ExprTypeDecl);
         DECL_VISIT(ExprLabel);
         DECL_VISIT(ExprGoto);
         DECL_VISIT(ExprRef2Value);
@@ -384,6 +385,7 @@ namespace das {
         IMPL_BIND_EXPR(ExprReader);
         IMPL_BIND_EXPR(ExprUnsafe);
         IMPL_BIND_EXPR(ExprCallMacro);
+        IMPL_BIND_EXPR(ExprTypeDecl);
     };
 
 #undef FN_PREVISIT

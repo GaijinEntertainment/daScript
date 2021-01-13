@@ -1135,6 +1135,25 @@ namespace das {
         return cexpr;
     }
 
+    // ExprTypeDecl
+
+    ExpressionPtr ExprTypeDecl::visit(Visitor & vis) {
+        vis.preVisit(this);
+        if ( typeexpr ) {
+            vis.preVisit(typeexpr.get());
+            typeexpr = typeexpr->visit(vis);
+            typeexpr = vis.visit(typeexpr.get());
+        }
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprTypeDecl::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprTypeDecl>(expr);
+        Expression::clone(cexpr);
+        cexpr->typeexpr = typeexpr;
+        return cexpr;
+    }
+
     // ExprTypeInfo
 
     ExpressionPtr ExprTypeInfo::visit(Visitor & vis) {
@@ -1814,6 +1833,7 @@ namespace das {
     ExpressionPtr ExprCopy::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprCopy>(expr);
         ExprOp2::clone(cexpr);
+        cexpr->allowCopyTemp = allowCopyTemp;
         return cexpr;
     }
 

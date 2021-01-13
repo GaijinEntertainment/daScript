@@ -2189,6 +2189,10 @@ namespace das {
             ss << "))";
             return Visitor::visit(expr);
         }
+    // typedecl
+        virtual void preVisit ( ExprTypeDecl * expr ) override {
+            ss << "das_typedecl_value<" << describeCppType(expr->typeexpr) << ">()()";
+        }
     // type-info
         virtual void preVisit ( ExprTypeInfo * expr ) override {
             Visitor::preVisit(expr);

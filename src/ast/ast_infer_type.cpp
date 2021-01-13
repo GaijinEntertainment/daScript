@@ -2508,6 +2508,33 @@ namespace das {
             return Visitor::visit(expr);
         }
 
+
+    // ExprTypeDecl
+    virtual ExpressionPtr visit ( ExprTypeDecl * expr ) override {
+        if ( expr->typeexpr->isExprType() ) {
+            return Visitor::visit(expr);
+        }
+        if ( expr->typeexpr->isAlias() ) {
+            if ( auto eT = inferAlias(expr->typeexpr) ) {
+                expr->typeexpr = eT;
+                reportAstChanged();
+                return Visitor::visit(expr);
+            } else {
+                error("undefined type<" + describeType(expr->typeexpr)+">", "", "",
+                    expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
+        }
+        if ( expr->typeexpr->isAutoOrAlias() ) {
+            error("type<" +  describeType(expr->typeexpr) + "> can't be fully infered",  "", "",
+                expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
+        verifyType(expr->typeexpr,true);
+        expr->type = make_smart<TypeDecl>(*expr->typeexpr);
+        return Visitor::visit(expr);
+    }
+
     // ExprTypeInfo
         virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
             expr->macro = nullptr;
@@ -4524,9 +4551,9 @@ namespace das {
             } else if ( expr->left->type->constant ) {
                 error("can't write to a constant value"+copyErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_write_to_const);
-            } else if ( expr->right->type->isTemp(true,false) ) {
-                    error("can't copy temporary value"+copyErrorInfo(expr), "", "",
-                        expr->at, CompilationError::cant_pass_temporary);
+            } else if ( !expr->allowCopyTemp && expr->right->type->isTemp(true,false) ) {
+                error("can't copy temporary value"+copyErrorInfo(expr), "", "",
+                    expr->at, CompilationError::cant_pass_temporary);
             } else if ( expr->left->type->hasClasses() && !safeExpression(expr) ) {
                 error("copying classes requires unsafe"+copyErrorInfo(expr), "", "",
                     expr->at, CompilationError::unsafe);
@@ -4767,7 +4794,7 @@ namespace das {
                         func->result->at,CompilationError::invalid_return_type);
                 }
                 if ( block->returnType && block->returnType->isTemp() && !safeExpression(expr) ) {
-                    error("returning temporary value requires unsafe", "", "",
+                    error("returning temporary value from block requires unsafe", "", "",
                         func->result->at,CompilationError::invalid_return_type);
                 }
             } else {
@@ -4793,7 +4820,7 @@ namespace das {
                         func->result->at,CompilationError::invalid_return_type);
                 }
                 if ( func->result->isTemp() && !safeExpression(expr) ) {
-                    error("returning temporary value requires unsafe", "", "",
+                    error("returning temporary value from function requires unsafe", "", "",
                         func->result->at,CompilationError::invalid_return_type);
                 }
             }

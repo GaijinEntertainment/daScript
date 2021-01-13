@@ -942,6 +942,11 @@ namespace das {
             Visitor::preVisit(that);
             ss << "continue";
         }
+    // typedecl
+        virtual void preVisit ( ExprTypeDecl * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "type<" << *expr->typeexpr << ">";
+        }
     // typeinfo
         virtual void preVisit ( ExprTypeInfo * expr ) override {
             Visitor::preVisit(expr);

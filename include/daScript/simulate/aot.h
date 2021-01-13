@@ -195,6 +195,13 @@ namespace das {
     template <>
     struct das_reinterpret<const vec4f>;
 
+    template <typename TT>
+    struct das_typedecl_value {
+        TT operator () () const {
+            return TT();
+        };
+    };
+
     template <typename ResT,typename VecT, int index>
     struct das_swizzle_ref {
         static __forceinline ResT & swizzle ( VecT & val ) {

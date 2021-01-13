@@ -470,6 +470,7 @@ namespace das
         virtual bool rtti_isFakeContext() const { return false; }
         virtual bool rtti_isFakeLineInfo() const { return false; }
         virtual bool rtti_isAscend() const { return false; }
+        virtual bool rtti_isTypeDecl() const { return false; }
         virtual Expression * tail() { return this; }
         virtual bool swap_tail ( Expression *, Expression * ) { return false; }
         virtual uint32_t getEvalFlags() const { return 0; }

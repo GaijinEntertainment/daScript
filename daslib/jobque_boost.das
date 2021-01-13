@@ -73,3 +73,15 @@ def push_clone ( channel:Channel?; data : auto(TT) )
     var heap_data = new TT
     *heap_data := data
     _builtin_channel_push(channel, heap_data)
+
+def each ( channel:Channel?; tinfo : auto(TT) )
+    unsafe
+        return <- generator<TT&#> () <| $ ()
+            while true
+                let void_data = _builtin_channel_pop(channel)
+                if void_data==null
+                    return false
+                unsafe
+                    yield * reinterpret<TT?#> void_data
+            return false
+

@@ -1840,8 +1840,8 @@ namespace das
             } else if ( secondType && secondType->isTemp(false, true, dep) ) {
                 return true;
             }
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
-                   baseType==Type::tLambda || baseType==Type::tTuple ||
+        } else if ( /* baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || */
+                   baseType==Type::tTuple ||
                    baseType==Type::tVariant ) {
             if ( firstType && firstType->isTemp(true, true, dep) ) {
                 return true;
