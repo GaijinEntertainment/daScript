@@ -1158,7 +1158,9 @@ namespace das
 #endif
 
     vec4f Context::evalWithCatch ( SimNode * node ) {
-        auto aa = abiArg; auto acm = abiCMRES;
+        auto aa = abiArg;
+        auto acm = abiCMRES;
+        auto atba = abiThisBlockArg;
         char * EP, * SP;
         stack.watermark(EP,SP);
 #if DAS_ENABLE_EXCEPTIONS
@@ -1173,7 +1175,9 @@ namespace das
              }
              stackWalk(nullptr, false, false);
              */
-            abiArg = aa; abiCMRES = acm;
+            abiArg = aa;
+            abiCMRES = acm;
+            abiThisBlockArg = atba;
             stack.pop(EP,SP);
             return v_zero();
         }
@@ -1186,6 +1190,7 @@ namespace das
         } else {
             abiArg = aa;
             abiCMRES = acm;
+            abiThisBlockArg = atba;
             stack.pop(EP,SP);
             throwBuf = JB;
             return v_zero();
@@ -1194,7 +1199,9 @@ namespace das
     }
 
     bool Context::runWithCatch ( const callable<void()> & subexpr ) {
-        auto aa = abiArg; auto acm = abiCMRES;
+        auto aa = abiArg;
+        auto acm = abiCMRES;
+        auto atba = abiThisBlockArg;
         char * EP, * SP;
         stack.watermark(EP,SP);
 #if DAS_ENABLE_EXCEPTIONS
@@ -1210,7 +1217,9 @@ namespace das
              }
              stackWalk(nullptr, false, false);
              */
-            abiArg = aa; abiCMRES = acm;
+            abiArg = aa;
+            abiCMRES = acm;
+            abiThisBlockArg = atba;
             stack.pop(EP,SP);
             return false;
         }
@@ -1223,6 +1232,7 @@ namespace das
         } else {
             abiArg = aa;
             abiCMRES = acm;
+            abiThisBlockArg = atba;
             stack.pop(EP,SP);
             throwBuf = JB;
             return false;
@@ -1233,7 +1243,9 @@ namespace das
     }
 
     vec4f Context::evalWithCatch ( SimFunction * fnPtr, vec4f * args, void * res ) {
-        auto aa = abiArg; auto acm = abiCMRES;
+        auto aa = abiArg;
+        auto acm = abiCMRES;
+        auto atba = abiThisBlockArg;
         char * EP, * SP;
         stack.watermark(EP,SP);
 #if DAS_ENABLE_EXCEPTIONS
@@ -1248,7 +1260,9 @@ namespace das
             }
             stackWalk(nullptr, false, false);
             */
-            abiArg = aa; abiCMRES = acm;
+            abiArg = aa;
+            abiCMRES = acm;
+            abiThisBlockArg = atba;
             stack.pop(EP,SP);
             return v_zero();
         }
@@ -1261,6 +1275,7 @@ namespace das
         } else {
             abiArg = aa;
             abiCMRES = acm;
+            abiThisBlockArg = atba;
             stack.pop(EP,SP);
             throwBuf = JB;
             return v_zero();
