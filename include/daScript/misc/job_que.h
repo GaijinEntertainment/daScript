@@ -76,7 +76,7 @@ namespace das {
         };
         struct ThreadEntry {
             ThreadEntry( unique_ptr<thread> && thread) {
-                threadPointer = move(thread);
+                threadPointer = das::move(thread);
             };
             unique_ptr<thread>	threadPointer;
             JobPriority			currentPriority = JobPriority::Inactive;

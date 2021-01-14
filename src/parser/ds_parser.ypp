@@ -2710,7 +2710,6 @@ make_dim_decl
     |   BRACBRB [loc] type_declaration[mkt] make_dim[mka] '}' ']' {
        ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
        $mka->at = tokAt(@loc);
-       $$ = $mka;
        auto tam = g_Program->makeCall(tokAt(@loc),"to_array_move");
        tam->arguments.push_back(ExpressionPtr($mka));
        $$ = tam;

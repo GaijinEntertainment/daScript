@@ -306,12 +306,13 @@ namespace das {
     }
 }
 
-#else
+#elif defined(__linux__)
 
 #include <pthread.h>
 
 namespace das
-{    void SetCurrentThreadName ( const string & str ) {
+{
+    void SetCurrentThreadName ( const string & str ) {
         pthread_setname_np(pthread_self(), str.c_str());
     }
 
@@ -325,6 +326,14 @@ namespace das
         sched_param.sched_priority = platformPriority;
         pthread_setschedparam(pthread_self(), SCHED_OTHER, &sched_param);
     }
+}
+
+#else
+
+namespace das
+{
+    void SetCurrentThreadName ( const string & ) {}
+    void SetCurrentThreadPriority ( JobPriority ) {}
 }
 
 #endif
