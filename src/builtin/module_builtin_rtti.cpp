@@ -1015,6 +1015,8 @@ namespace das {
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo");
+            // extras
+            registerVectorFunctions<AnnotationDeclarationPtr>::init(this,lib,false,false);
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready

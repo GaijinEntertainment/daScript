@@ -1374,7 +1374,7 @@ namespace das {
 #define IMPL_VISIT1(WHAT,WHATTYPE,RETTYPE,RETVALUE) \
     if ( FN_VISIT(WHAT) ) { \
         return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>> \
-            (context,FN_VISIT(WHAT),classPtr,expr).marshal(); \
+            (context,FN_VISIT(WHAT),classPtr,expr).marshal(RETVALUE); \
     } else { \
         return RETVALUE; \
     }
@@ -1382,7 +1382,7 @@ namespace das {
 #define IMPL_VISIT2(WHAT,WHATTYPE,RETTYPE,RETVALUE,ARG1T,ARG1) \
     if ( FN_VISIT(WHAT) ) { \
         return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1).marshal(); \
+            (context,FN_VISIT(WHAT),classPtr,expr,ARG1).marshal(RETVALUE); \
     } else { \
         return RETVALUE; \
     }
@@ -1390,7 +1390,7 @@ namespace das {
 #define IMPL_VISIT3(WHAT,WHATTYPE,RETTYPE,RETVALUE,ARG1T,ARG1,ARG2T,ARG2) \
     if ( FN_VISIT(WHAT) ) { \
         return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2).marshal(); \
+            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2).marshal(RETVALUE); \
     } else { \
         return RETVALUE; \
     }
@@ -1398,7 +1398,7 @@ namespace das {
 #define IMPL_VISIT4(WHAT,WHATTYPE,RETTYPE,RETVALUE,ARG1T,ARG1,ARG2T,ARG2,ARG3T,ARG3) \
     if ( FN_VISIT(WHAT) ) { \
         return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3).marshal(); \
+            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3).marshal(RETVALUE); \
     } else { \
         return RETVALUE; \
     }
@@ -1619,7 +1619,7 @@ namespace das {
     void VisitorAdapter::preVisitArgumentInit ( Function * expr, const VariablePtr & var, Expression * init )
         { IMPL_PREVISIT3(FunctionArgument,Function,VariablePtr,var,ExpressionPtr,init); }
     ExpressionPtr VisitorAdapter::visitArgumentInit ( Function * expr, const VariablePtr & var, Expression * init )
-        { IMPL_VISIT3(FunctionArgument,Function,Expression,init,VariablePtr,var,ExpressionPtr,init); }
+        { IMPL_VISIT3(FunctionArgumentInit,Function,Expression,init,VariablePtr,var,ExpressionPtr,init); }
     void VisitorAdapter::preVisitFunctionBody ( Function * expr, Expression * that )
         { IMPL_PREVISIT2(FunctionBody,Function,ExpressionPtr,that); }
     ExpressionPtr VisitorAdapter::visitFunctionBody ( Function * expr, Expression * that )
@@ -1654,7 +1654,7 @@ namespace das {
     void VisitorAdapter::preVisitBlockFinalExpression ( ExprBlock * expr, Expression * bexpr )
         { IMPL_PREVISIT2(ExprBlockFinalExpression,ExprBlock,ExpressionPtr,bexpr); }
     ExpressionPtr VisitorAdapter::visitBlockFinalExpression (  ExprBlock * expr, Expression * bexpr )
-        { IMPL_VISIT2(ExprBlockFinalExpression,ExprBlock,Expression,expr,ExpressionPtr,bexpr); }
+        { IMPL_VISIT2(ExprBlockFinalExpression,ExprBlock,Expression,bexpr,ExpressionPtr,bexpr); }
 // let
     IMPL_BIND_EXPR(ExprLet);
     void VisitorAdapter::preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last )

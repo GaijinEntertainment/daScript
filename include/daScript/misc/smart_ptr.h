@@ -49,6 +49,17 @@ namespace das {
                 return ptr;
             }
         }
+        __forceinline smart_ptr<T, smart_ptr_policy<T>> marshal( const smart_ptr<T, smart_ptr_policy<T>> & expr ) const {
+            if ( !ptr  ) {
+                return nullptr;
+            } else if ( ptr!=expr.get() ) {
+                smart_ptr<T, smart_ptr_policy<T>> res = ptr;
+                DAS_VERIFY ( !smart_ptr_policy<T>::delRef(ptr) );
+                return res;
+            } else {
+                return expr;
+            }
+        }
         __forceinline operator smart_ptr<T, smart_ptr_policy<T>> & () {
             using SPT = smart_ptr<T, smart_ptr_policy<T>>;
             return *(SPT *)this;

@@ -8,6 +8,7 @@ require jobque public
 require daslib/rtti
 require daslib/ast
 require daslib/ast_boost
+require daslib/template
 
 [tag_function(new_job_tag)]
 def new_job ( var l : lambda )
@@ -74,6 +75,7 @@ def push_clone ( channel:Channel?; data : auto(TT) )
     *heap_data := data
     _builtin_channel_push(channel, heap_data)
 
+[template (tinfo)]
 def each ( channel:Channel?; tinfo : auto(TT) )
     unsafe
         return <- generator<TT&#> () <| $ ()

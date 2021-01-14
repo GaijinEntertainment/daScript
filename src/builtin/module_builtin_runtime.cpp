@@ -1002,6 +1002,8 @@ namespace das
         addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
             SideEffects::modifyExternal,"peek_das_string_T")->setAotTemplate();
         addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string", SideEffects::none, "builtin_string_clone");
+        addExtern<DAS_BIND_FUN(das_str_equ)>(*this, lib, "==", SideEffects::none, "das_str_equ");
+        addExtern<DAS_BIND_FUN(das_str_nequ)>(*this, lib, "!=", SideEffects::none, "das_str_nequ");
         // temp array out of mem
         auto bta = addExtern<DAS_BIND_FUN(builtin_temp_array)>(*this, lib, "_builtin_temp_array", SideEffects::invoke, "builtin_temp_array");
         bta->unsafeOperation = true;

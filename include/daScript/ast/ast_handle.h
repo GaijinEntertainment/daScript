@@ -494,6 +494,8 @@ namespace das
                 SideEffects::modifyArgument, "das_vector_clear")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_resize<TT>)>(*mod, lib, "resize",
                 SideEffects::modifyArgument, "das_vector_resize")->generated = true;
+            addExtern<DAS_BIND_FUN(das_vector_erase<TT>)>(*mod, lib, "erase",
+                SideEffects::modifyArgument, "das_vector_erase")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
                 SideEffects::none, "das_vector_each")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each_const<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
@@ -522,6 +524,8 @@ namespace das
                 SideEffects::modifyArgument, "das_vector_clear")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_resize<TT>)>(*mod, lib, "resize",
                 SideEffects::modifyArgument, "das_vector_resize")->generated = true;
+            addExtern<DAS_BIND_FUN(das_vector_erase<TT>)>(*mod, lib, "erase",
+                SideEffects::modifyArgument, "das_vector_erase")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
                 SideEffects::none, "das_vector_each")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each_const<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",

@@ -384,7 +384,7 @@ class PrintVisitor : AstVisitor
     def override visitExprMakeArrayIndex(expr:smart_ptr<ExprMakeArray>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
         if !last
             print("; ")
-        return expr
+        return init
 // make tuple
     def override preVisitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>)
         print("[[")
@@ -396,7 +396,7 @@ class PrintVisitor : AstVisitor
     def override visitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
         if !last
             print(", ")
-        return expr
+        return init
 // array comprehension
     def override preVisitExprArrayComprehension(expr:smart_ptr<ExprArrayComprehension>)
         print("{expr.generatorSyntax ? "[[" : "[\{"}")

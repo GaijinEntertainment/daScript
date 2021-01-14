@@ -532,6 +532,12 @@ def add_new_call_macro ( name:string; someClassPtr )
     unsafe
         delete ann
 
+def add_new_pass_macro ( name:string; someClassPtr )
+    var ann <- make_pass_macro(name, someClassPtr)
+    this_module() |> add_dirty_infer_macro(ann)
+    unsafe
+        delete ann
+
 [generic]
 def find_module(name:string) : Module?
     var rm : Module?

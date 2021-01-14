@@ -2278,6 +2278,14 @@ namespace das {
     }
 
     template <typename TT>
+    __forceinline void das_vector_erase ( vector<TT> & vec, int32_t index, Context * context ) {
+        if ( uint32_t(index)>vec.size() ) {
+            context->throw_error_ex("erasing vector index out of range %i of %i", index, int32_t(vec.size()));
+        }
+        vec.erase(vec.begin() + index);
+    }
+
+    template <typename TT>
     void peek_das_string_T(const string & str, TT && block, Context *) {
         block((char *)str.c_str());
     }
@@ -2295,6 +2303,9 @@ namespace das {
 
     char * to_das_string(const string & str, Context * ctx);
     void set_das_string(string & str, const char * bs);
+
+    __forceinline bool das_str_equ ( const string & a, const string & b ) { return a==b; }
+    __forceinline bool das_str_nequ ( const string & a, const string & b ) { return a!=b; }
 
     __forceinline int32_t enum_to_int   ( EnumStub stub )   { return stub.value; }
     __forceinline int32_t enum8_to_int  ( EnumStub8 stub )  { return stub.value; }
