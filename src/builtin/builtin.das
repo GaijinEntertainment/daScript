@@ -277,19 +277,22 @@ def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT -&>
     concept_assert(typeinfo(is_ref type<argT>),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
     var it : iterator<argT -&>
     _builtin_make_lambda_iterator(it,lam)
-    return <- it
+    unsafe
+        return <- it
 
 def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
     var it : iterator<argT &>
     _builtin_make_lambda_iterator(it, lam)
-    return <- it
+    unsafe
+        return <- it
 
 [unused_argument(tt)]
 def each_enum(tt:auto(TT)) : iterator<TT -const -&>
     concept_assert(typeinfo(is_enum tt),"expecting each_enum(any enum value)")
     var iter : iterator<TT -const -&>
     _builtin_make_enum_iterator(iter)
-    return <- iter
+    unsafe
+        return <- iter
 
 def nothing( var it : iterator<auto(TT)> ) : iterator<TT>
     _builtin_make_nil_iterator(it)
