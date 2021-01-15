@@ -26,6 +26,7 @@ class DecltypeMacro : AstCallMacro
 class TemplateMacro : AstFunctionAnnotation {}
 
 class GenericTemplateVisitor : AstVisitor
+    anyChanges : bool
     def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
         if expr.func==null
             compiling_program() |> macro_error(expr.at,"expecting infered function")
@@ -73,15 +74,17 @@ class GenericTemplateVisitor : AstVisitor
         newcall.name := fclone.name
         // result
         compiling_module() |> add_function(fclone)
+        self.anyChanges = true
         return newcall
 
 class TemplatePass : AstPassMacro
     astVisitor = new GenericTemplateVisitor()
     def override apply ( prog:ProgramPtr; mod:Module? ) : bool
+        astVisitor.anyChanges = false
         var astVisitorAdapter <- make_visitor(*astVisitor)
         visit(prog, astVisitorAdapter)
         astVisitorAdapter := [[smart_ptr<VisitorAdapter>]]
-        return false
+        return astVisitor.anyChanges
 
 [macro,private]
 def init
