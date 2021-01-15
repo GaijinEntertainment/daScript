@@ -20,8 +20,8 @@ namespace das {
 
     class Channel {
     public:
-        Channel() {}
-        Channel(int count) : remaining(count) {}
+        Channel( Context * ctx ) : owner(ctx) {}
+        Channel( Context * ctx, int count) : remaining(count), owner(ctx) {}
         ~Channel();
         Channel ( Channel && ) = delete;
         Channel ( const Channel & ) = delete;
@@ -39,6 +39,7 @@ namespace das {
         Feature             tail;
         uint32_t			remaining = 0;
         condition_variable	cond;
+        Context *           owner = nullptr;
     };
 
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
