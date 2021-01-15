@@ -21,13 +21,8 @@ class DecltypeMacro : AstCallMacro
         ]]
         return <- mkt
 
-// dummy, for tag purposes only
-// todo: should we verify arguments here?
-class TemplateMacro : AstFunctionAnnotation {}
-
-class GenericTemplateVisitor : AstVisitor
-    anyChanges : bool
-    def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
+class TemplateMacro : AstFunctionAnnotation
+    def override transform ( var expr : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if expr.func==null
             compiling_program() |> macro_error(expr.at,"expecting infered function")
             return expr
@@ -55,12 +50,12 @@ class GenericTemplateVisitor : AstVisitor
             var argidx = find_index_if(each(fclone.arguments)) <| $ ( farg )
                 return farg.name == t.name
             if argidx==-1
-                compiling_program() |> macro_error(expr.at,"can't find template argument {t.name} (or duplicate)")
+                errors := "can't find template argument {t.name} (or duplicate)"
                 fclone := [[FunctionPtr]]
                 newcall := [[smart_ptr<ExprCallFunc>]]
                 return expr
             if !(newcall.arguments[argidx] is ExprTypeDecl)
-                compiling_program() |> macro_error(expr.at,"template argument must be type<...>")
+                errors := "template argument must be type<...>"
                 fclone := [[FunctionPtr]]
                 newcall := [[smart_ptr<ExprCallFunc>]]
                 return expr
@@ -74,19 +69,8 @@ class GenericTemplateVisitor : AstVisitor
         newcall.name := fclone.name
         // result
         compiling_module() |> add_function(fclone)
-        self.anyChanges = true
         return newcall
-
-class TemplatePass : AstPassMacro
-    astVisitor = new GenericTemplateVisitor()
-    def override apply ( prog:ProgramPtr; mod:Module? ) : bool
-        astVisitor.anyChanges = false
-        var astVisitorAdapter <- make_visitor(*astVisitor)
-        visit(prog, astVisitorAdapter)
-        astVisitorAdapter := [[smart_ptr<VisitorAdapter>]]
-        return astVisitor.anyChanges
 
 [macro,private]
 def init
     add_new_function_annotation("template", new TemplateMacro())
-    add_new_pass_macro("template_pass", new TemplatePass())
