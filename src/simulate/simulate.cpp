@@ -1152,6 +1152,27 @@ namespace das
 #endif
     }
 
+    void Context::rethrow () {
+#if DAS_ENABLE_EXCEPTIONS
+        throw dasException(message ? message : "");
+#else
+        if ( throwBuf ) {
+            longjmp(*throwBuf,1);
+        } else {
+            to_err("\nunhandled exception\n");
+            if ( exception ) {
+                to_err(exception);
+                to_err("\n");
+            }
+            stackWalk(nullptr, false, false);
+            os_debug_break();
+        }
+#endif
+#if !defined(_MSC_VER) || (_MSC_VER>1900)
+        exit(0);
+#endif
+    }
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4611)
