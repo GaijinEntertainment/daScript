@@ -562,14 +562,6 @@ namespace das {
             logs << "FUNCTION TABLE:\n";
         }
         for (auto & pm : library.modules) {
-            for (auto & var : pm->globalsInOrder) {
-                if (var->used) {
-                    var->index = totalVariables++;
-                }
-                else {
-                    var->index = -2;
-                }
-            }
             for (auto & pf : pm->functions) {
                 auto & func = pf.second;
                 if (func->used) {
@@ -583,6 +575,24 @@ namespace das {
                 }
             }
         }
+        if ( log ) {
+            logs << "VARIABLE TABLE:\n";
+        }
+        library.foreach_in_order([&](Module * pm){
+            for (auto & var : pm->globalsInOrder) {
+                if (var->used) {
+                    var->index = totalVariables++;
+                    if ( log ) {
+                        logs << "\t" << var->index << "\t"  << var->stackTop << "\t"
+                            << var->type->getSizeOf() << "\t" << var->getMangledName() << "\n";
+                    }
+                }
+                else {
+                    var->index = -2;
+                }
+            }
+            return true;
+        }, thisModule.get());
     }
 }
 

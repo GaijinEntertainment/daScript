@@ -895,6 +895,7 @@ namespace das
         void addBuiltInModule ();
         void addModule ( Module * module );
         void foreach ( const callable<bool (Module * module)> & func, const string & name ) const;
+        void foreach_in_order ( const callable<bool (Module * module)> & func, Module * thisM ) const;
         vector<TypeDeclPtr> findAlias ( const string & name, Module * inWhichModule ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name, Module * inWhichModule ) const;
         vector<TypeInfoMacroPtr> findTypeInfoMacro ( const string & name, Module * inWhichModule ) const;
