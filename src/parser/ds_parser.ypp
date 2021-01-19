@@ -2048,6 +2048,7 @@ global_let
                         CompilationError::global_variable_already_declared);
             }
         }
+        delete pDecl;
     }
     ;
 
