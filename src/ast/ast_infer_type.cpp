@@ -3717,6 +3717,11 @@ namespace das {
             verifyType(var->type,true);
         }
         virtual ExpressionPtr visitBlockArgumentInit (ExprBlock * block, const VariablePtr & arg, Expression * that ) override {
+            if ( !arg->init->type ) {
+                error("block argument initialization with undefined expression", "", "",
+                        arg->at, CompilationError::invalid_type );
+                return Visitor::visitBlockArgumentInit(block, arg, that);
+            }
             if ( arg->type->isAuto() ) {
                 auto argT = TypeDecl::inferGenericType(arg->type, arg->init->type);
                 if ( !argT ) {
