@@ -398,6 +398,14 @@ struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
         }
         return nullptr;
     }
+    // note:
+    //  the hints will appear only on the non-transformed function!!!
+    string aotArgumentPrefix(ExprCallFunc * /*call*/, int argIndex) override {
+        return "/*arg-" + to_string(argIndex) + "-prefix*/ ";
+    }
+    string aotArgumentSuffix(ExprCallFunc * /*call*/, int argIndex) override {
+        return " /*arg-" + to_string(argIndex) + "-suffix*/";
+    }
 };
 
 struct TestFunctionAnnotation : FunctionAnnotation {

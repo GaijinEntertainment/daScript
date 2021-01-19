@@ -2919,10 +2919,15 @@ namespace das {
             return argType->isVoidPointer() ^ passType->isVoidPointer();
         }
         void CallFunc_preVisitCallArg ( ExprCallFunc * call, Expression * arg, bool ) {
-            auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
-                return a.get() == arg;
-            });
+            vector<ExpressionPtr>::iterator it;
+            int argIndex = 0;
+            for ( it = call->arguments.begin(); it!=call->arguments.end(); ++it, ++argIndex ) {
+                if ( it->get()==arg ) {
+                    break;
+                }
+            }
             DAS_ASSERT(it != call->arguments.end());
+            ss << call->func->getAotArgumentPrefix(call, argIndex);
             auto argType = (*it)->type;
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
             if ( funArgType->isAotAlias() ) {
@@ -2956,9 +2961,13 @@ namespace das {
             }
         }
         void CallFunc_visitCallArg ( ExprCallFunc * call, Expression * arg, bool last ) {
-            auto it = find_if(call->arguments.begin(), call->arguments.end(), [&](const ExpressionPtr & a) {
-                return a.get() == arg;
-            });
+            vector<ExpressionPtr>::iterator it;
+            int argIndex = 0;
+            for ( it = call->arguments.begin(); it!=call->arguments.end(); ++it, ++argIndex ) {
+                if ( it->get()==arg ) {
+                    break;
+                }
+            }
             DAS_ASSERT(it != call->arguments.end());
             auto argType = (*it)->type;
             if ( isPolicyBasedCall(call) && policyArgNeedCast(call->func->result, argType) ) {
@@ -2976,6 +2985,7 @@ namespace das {
             }
             if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) ss << ")";
             if ( funArgType->isAotAlias() ) ss << ")";
+            ss << call->func->getAotArgumentSuffix(call, argIndex);
             if ( !last ) ss << ",";
         }
         void CallFunc_visit ( ExprCallFunc * call ) {

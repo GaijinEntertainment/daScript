@@ -238,6 +238,7 @@ namespace das
                 bool    generated : 1;
                 bool    capture_as_ref : 1;
                 bool    can_shadow : 1;             // can shadow block or function arguments, as block argument
+                bool    private_variable : 1;
             };
             uint32_t flags = 0;
         };
@@ -290,6 +291,8 @@ namespace das
         virtual bool verifyCall ( ExprCallFunc * /*call*/, const AnnotationArgumentList & /*args*/, string & /*err*/ ) { return true; }
         virtual ExpressionPtr transformCall ( ExprCallFunc * /*call*/, string & /*err*/ ) { return nullptr; }
         virtual string aotName ( ExprCallFunc * call );
+        virtual string aotArgumentPrefix ( ExprCallFunc * /*call*/, int /*argIndex*/ ) { return ""; }
+        virtual string aotArgumentSuffix ( ExprCallFunc * /*call*/, int /*argIndex*/ ) { return ""; }
         virtual void aotPrefix ( TextWriter &, ExprCallFunc * ) { }
         virtual bool isGeneric() const { return false; }
     };
@@ -592,6 +595,8 @@ namespace das
         LineInfo getConceptLocation(const LineInfo & at) const;
         virtual string getAotBasicName() const { return name; }
         string getAotName(ExprCallFunc * call) const;
+        string getAotArgumentPrefix(ExprCallFunc * call, int index) const;
+        string getAotArgumentSuffix(ExprCallFunc * call, int index) const;
         FunctionPtr setAotTemplate();
     public:
         AnnotationList      annotations;

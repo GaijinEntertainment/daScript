@@ -19,10 +19,9 @@ def assert_once ( expr:bool; message:string="" ) {}
 //      assert(false,message)
 [tag_function_macro(tag="asset_once_tag")]
 class AssertOnceMacro : AstFunctionAnnotation
-    once_index : int = 0
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
-        var once_name = "__assert_once_{once_index++}"
-        compiling_module() |> add_global_var(once_name, call.at) <| quote(true)
+        var once_name = make_unique_private_name("__assert_once",call.at)
+        compiling_module() |> add_global_private_var(once_name, call.at) <| quote(true)
         // if ..
         var qblock <- quote() <|
             if __assert_once_I && !expr

@@ -515,6 +515,16 @@ namespace das {
             }
         }
 
+        bool canAccessGlobal ( const VariablePtr & pVar, Module * mod, Module * thisMod ) const {
+            if ( !pVar->private_variable ) {
+                return true;
+            } else if ( pVar->module==mod || pVar->module==thisMod ) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
         // b <- a <- this
         //  a(x)    b
         //  this`a(x)   __::b
@@ -4107,7 +4117,7 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprVar
-        vector<VariablePtr> findMatchingVar ( const string & name ) const {
+        vector<VariablePtr> findMatchingVar ( const string & name, bool seePrivate ) const {
             string moduleName, varName;
             splitTypeName(name, moduleName, varName);
             vector<VariablePtr> result;
@@ -4115,7 +4125,9 @@ namespace das {
             program->library.foreach([&](Module * mod) -> bool {
                 if ( auto var = mod->findVariable(varName) ) {
                     if ( inWhichModule->isVisibleDirectly(var->module) ) {
-                        result.push_back(var);
+                        if ( seePrivate || canAccessGlobal(var,inWhichModule,program->thisModule.get()) ) {
+                            result.push_back(var);
+                        }
                     }
                 }
                 return true;
@@ -4188,7 +4200,7 @@ namespace das {
                 }
             }
             // global
-            auto vars = findMatchingVar(expr->name);
+            auto vars = findMatchingVar(expr->name, false);
             if ( vars.size()==1 ) {
                 auto var = vars.back();
                 expr->variable = var;
@@ -4197,19 +4209,43 @@ namespace das {
                 return Visitor::visit(expr);
 
             } else if ( vars.size()==0 ) {
-                error("can't locate variable " + expr->name, "", "",
-                    expr->at, CompilationError::variable_not_found);
-            } else {
-                TextWriter errs;
-                for ( auto & var : vars ) {
-                    errs << "\t" << var->module->name << "::" << var->name << " : " << describeType(var->type);
-                    if ( var->at.line ) {
-                        errs << " at " << var->at.describe();
+                if ( verbose ) {
+                    vars = findMatchingVar(expr->name, true);
+                    if ( vars.size() ) {
+                        TextWriter errs;
+                        for ( auto & var : vars ) {
+                            errs << "\t" << var->module->name << "::" << var->name << " : " << describeType(var->type);
+                            if ( var->at.line ) {
+                                errs << " at " << var->at.describe();
+                            }
+                            errs << "\n";
+                        }
+                        error("can't access private variable " + expr->name, "not visible due to privacy:\n" + errs.str(), "",
+                            expr->at, CompilationError::variable_not_found);
+                    } else {
+                        error("can't locate variable " + expr->name, "", "",
+                            expr->at, CompilationError::variable_not_found);
                     }
-                    errs << "\n";
+                } else {
+                    error("can't locate variable " + expr->name, "", "",
+                        expr->at, CompilationError::variable_not_found);
                 }
-                error("too many matching variables " + expr->name, "candidates are:\n" + errs.str(), "",
-                    expr->at, CompilationError::variable_not_found);
+            } else {
+                if ( verbose ) {
+                    TextWriter errs;
+                    for ( auto & var : vars ) {
+                        errs << "\t" << var->module->name << "::" << var->name << " : " << describeType(var->type);
+                        if ( var->at.line ) {
+                            errs << " at " << var->at.describe();
+                        }
+                        errs << "\n";
+                    }
+                    error("too many matching variables " + expr->name, "candidates are:\n" + errs.str(), "",
+                        expr->at, CompilationError::variable_not_found);
+                } else {
+                    error("too many matching variables " + expr->name, "", "",
+                        expr->at, CompilationError::variable_not_found);
+                }
             }
             return Visitor::visit(expr);
         }

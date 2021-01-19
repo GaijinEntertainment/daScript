@@ -204,7 +204,10 @@ namespace das {
     // global
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
-            ss << (var->type->constant ? "let" : "var") << (var->global_shared ? " shared" : "") << "\n\t";
+            ss  << (var->type->constant ? "let" : "var")
+                << (var->global_shared ? " shared" : "")
+                << (var->private_variable ? " private" : "")
+                << "\n\t";
             if ( var->isAccessUnused() ) ss << " /*unused*/ ";
             if ( printVarAccess && !var->access_ref ) ss << "$";
             if ( printVarAccess && !var->access_pass ) ss << "%";

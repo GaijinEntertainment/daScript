@@ -54,7 +54,7 @@ def move_unquote_block ( var expr:ExpressionPtr& ) : smart_ptr<ExprBlock>
         return res
 
 [private]
-def add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDeclFlags; var value:ExpressionPtr )
+def add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDeclFlags; var value:ExpressionPtr; priv:bool )
     var vvar <- new [[Variable() at=vat,
         name:=vname,
         _type <- new [[TypeDecl() at=vat,
@@ -63,12 +63,22 @@ def add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDecl
         ]],
         init <- value
     ]]
+    if priv
+        vvar.flags |= VariableFlags private_variable
     if !add_variable(mod, vvar)
         panic("can't add global variable {vname}")
 
 def add_global_var ( mod:Module?; vname:string; vat:LineInfo; var value:ExpressionPtr )
-    add_global_var_any(mod, vname, vat, TypeDeclFlags removeConstant, value)
+    add_global_var_any(mod, vname, vat, TypeDeclFlags removeConstant, value, false)
 
 def add_global_let ( mod:Module?; vname:string; vat:LineInfo; var value:ExpressionPtr )
-    add_global_var_any(mod, vname, vat, TypeDeclFlags constant, value)
+    add_global_var_any(mod, vname, vat, TypeDeclFlags constant, value, false)
 
+def add_global_private_var ( mod:Module?; vname:string; vat:LineInfo; var value:ExpressionPtr )
+    add_global_var_any(mod, vname, vat, TypeDeclFlags removeConstant, value, true)
+
+def add_global_private_let ( mod:Module?; vname:string; vat:LineInfo; var value:ExpressionPtr )
+    add_global_var_any(mod, vname, vat, TypeDeclFlags constant, value, true)
+
+def make_unique_private_name ( prefix:string; vat:LineInfo )
+    return "{prefix}_{vat.line}_{vat.column}"

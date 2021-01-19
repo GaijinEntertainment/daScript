@@ -585,6 +585,26 @@ namespace das {
         return false;
     }
 
+    string Function::getAotArgumentPrefix(ExprCallFunc * call, int argIndex) const {
+        for ( auto & ann : annotations ) {
+            if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                auto pAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                return pAnn->aotArgumentPrefix(call, argIndex);
+            }
+        }
+        return "";
+    }
+
+    string Function::getAotArgumentSuffix(ExprCallFunc * call, int argIndex) const {
+        for ( auto & ann : annotations ) {
+            if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                auto pAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                return pAnn->aotArgumentSuffix(call, argIndex);
+            }
+        }
+        return "";
+    }
+
     string Function::getAotName(ExprCallFunc * call) const {
         for ( auto & ann : annotations ) {
             if ( ann->annotation->rtti_isFunctionAnnotation() ) {

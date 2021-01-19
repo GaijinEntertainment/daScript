@@ -194,6 +194,7 @@
 %token  DAS_IMPLICIT        "implicit"
 %token  DAS_EXPLICIT        "explicit"
 %token  DAS_SHARED          "shared"
+%token  DAS_PRIVATE         "private"
 %token  DAS_SMART_PTR       "smart_ptr"
 %token  DAS_UNSAFE          "unsafe"
 
@@ -339,6 +340,7 @@
 %type <b>               kwd_let
 %type <b>               is_public_module
 %type <b>               optional_shared
+%type <i>               optional_shared_or_private
 %type <i>               block_or_lambda
 %type <b>               optional_ref
 
@@ -826,6 +828,7 @@ annotation_argument_list
 annotation_declaration_name
     :   name_in_namespace[name]     { $$ = $name; }
     |   DAS_REQUIRE                 { $$ = new string("require"); }
+    |   DAS_PRIVATE                 { $$ = new string("private"); }
     ;
 
 annotation_declaration
@@ -1985,8 +1988,14 @@ optional_shared
     |   DAS_SHARED  { $$ = true; }
     ;
 
+optional_shared_or_private
+    :   { $$ = 0; }
+    |   DAS_SHARED  { $$ = 1; }
+    |   DAS_PRIVATE  { $$ = 2; }
+    ;
+
 global_let
-    :   kwd_let optional_shared[glob_shar] '{' global_variable_declaration_list[list] '}' {
+    :   kwd_let optional_shared_or_private[glob_shar] '{' global_variable_declaration_list[list] '}' {
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
@@ -2004,7 +2013,8 @@ global_let
                     } else {
                         pVar->type->removeConstant = true;
                     }
-                    pVar->global_shared = $glob_shar;
+                    pVar->global_shared = ($glob_shar==1);
+                    pVar->private_variable = ($glob_shar==2);
                     if ( !g_Program->addVariable(pVar) )
                         das_yyerror("global variable is already declared " + name_at.first,name_at.second,
                             CompilationError::global_variable_already_declared);
@@ -2013,7 +2023,7 @@ global_let
         }
         deleteVariableDeclarationList($list);
     }
-    |   kwd_let optional_shared[glob_shar] { das_force_oxford_comma=true; } let_variable_declaration[decl] {
+    |   kwd_let optional_shared_or_private[glob_shar] { das_force_oxford_comma=true; } let_variable_declaration[decl] {
         auto pDecl = $decl;
         if ( pDecl->pTypeDecl ) {
             for ( const auto & name_at : *pDecl->pNameList ) {
@@ -2031,7 +2041,8 @@ global_let
                 } else {
                     pVar->type->removeConstant = true;
                 }
-                pVar->global_shared = $glob_shar;
+                pVar->global_shared = ($glob_shar==1);
+                pVar->private_variable = ($glob_shar==2);
                 if ( !g_Program->addVariable(pVar) )
                     das_yyerror("global variable is already declared " + name_at.first,name_at.second,
                         CompilationError::global_variable_already_declared);

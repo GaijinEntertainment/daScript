@@ -20,7 +20,6 @@ def new_thread ( var l : lambda )
 
 [tag_function_macro(tag="new_job_tag")]
 class NewJobMacro : AstFunctionAnnotation
-    once_index : int = 0
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if !call.arguments[0] is ExprAscend
             compiling_program() |>macro_error(call.at,"expecting lambda declaration, ExprAscend")
