@@ -76,12 +76,11 @@ namespace das {
         }
         void RemoveUnusedSymbols ( Module & mod ) {
             das_safe_map<string,FunctionPtr> functions;
-            das_safe_map<string,VariablePtr> globals;
             vector<VariablePtr> globalsInOrder;
             swap(functions,mod.functions);
-            swap(globals,mod.globals);
             swap(globalsInOrder, mod.globalsInOrder);
             mod.functionsByName.clear();
+            mod.globals.clear();
             for ( auto & fn : functions ) {
                 if ( fn.second->used ) {
                     if ( !mod.addFunction(fn.second, true) ) {

@@ -577,6 +577,16 @@ namespace das {
         }
     }
 
+    void ModuleLibrary::foreach_in_order ( const callable<bool (Module * module)> & func, Module * thisM ) const {
+        DAS_ASSERT(modules.size());
+        // {builtin} {THIS_MODULE} {require1} {require2} ...
+        for ( auto m = modules.begin(); m!=modules.end(); ++m ) {
+            if ( *m==thisM ) continue;
+            if ( !func(*m) ) return;
+        }
+        func(thisM);
+    }
+
     Module * ModuleLibrary::findModule ( const string & mn ) const {
         auto it = find_if(modules.begin(), modules.end(), [&](Module * mod){
             return mod->name == mn;
