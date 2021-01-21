@@ -1113,6 +1113,7 @@ namespace das
                 bool    isCompilingMacros : 1;
                 bool    needMacroModule : 1;
                 bool    promoteToBuiltin : 1;
+                bool    isDependency : 1;
             };
             uint32_t    flags = 0;
         };
@@ -1134,10 +1135,12 @@ namespace das
     Func adapt ( const char * funcName, char * pClass, const StructInfo * info );
 
     // this one works for single module only
-    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, CodeOfPolicies policies = CodeOfPolicies() );
+    ProgramPtr parseDaScript ( const string & fileName, const FileAccessPtr & access,
+        TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, bool isDep = false, CodeOfPolicies policies = CodeOfPolicies() );
 
     // this one collectes dependencies and compiles with modules
-    ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, CodeOfPolicies policies = CodeOfPolicies() );
+    ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
+        TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, CodeOfPolicies policies = CodeOfPolicies() );
 
     // collect script prerequisits
     bool getPrerequisits ( const string & fileName,
