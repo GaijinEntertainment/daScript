@@ -357,6 +357,18 @@ namespace das {
                         program->thisModule->name = mod.moduleName;
                     }
                     if ( program->promoteToBuiltin ) {
+                        bool regFromShar = false;
+                        for ( auto & reqM : program->thisModule->requireModule ) {
+                            if ( !reqM.first->builtIn ) {
+                                program->error("Shared module " + program->thisModule->name + " has incorrect dependency type.",
+                                    "Can't require " + reqM.first->name + " because its not shared", "", LineInfo(),
+                                        CompilationError::module_required_from_shared);
+                                regFromShar = true;
+                            }
+                        }
+                        if (  regFromShar ) {
+                            return program;
+                        }
                         program->thisModule->promoteToBuiltin(access);
                     }
                     libGroup.addModule(program->thisModule.release());
@@ -371,9 +383,11 @@ namespace das {
                 }
             }
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, policies);
+            /*
             if ( res->promoteToBuiltin ) {
                 res->thisModule->promoteToBuiltin(access);
             }
+            */
             if ( res->options.getBoolOption("log_require",false) ) {
                 TextWriter tw;
                 req.clear();
