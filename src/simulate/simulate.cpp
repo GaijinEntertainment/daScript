@@ -1154,7 +1154,7 @@ namespace das
 
     void Context::rethrow () {
 #if DAS_ENABLE_EXCEPTIONS
-        throw dasException(message ? message : "");
+        throw dasException(exception ? exception : "");
 #else
         if ( throwBuf ) {
             longjmp(*throwBuf,1);
