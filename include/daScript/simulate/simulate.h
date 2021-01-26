@@ -13,9 +13,11 @@
 namespace das
 {
     #define DAS_BIND_FUN(a)                     decltype(&a), a
+    #define DAS_BIND_MEMBER_FUN(a)              decltype(&a), &a
     #define DAS_BIND_PROP(BIGTYPE,FIELDNAME)    decltype(&BIGTYPE::FIELDNAME), &BIGTYPE::FIELDNAME
-
     #define DAS_BIND_FIELD(BIGTYPE,FIELDNAME)   decltype(das::declval<BIGTYPE>().FIELDNAME), offsetof(BIGTYPE,FIELDNAME)
+
+    #define DAS_CALL_METHOD(mname)              DAS_BIND_FUN(mname::invoke)
 
     #ifndef DAS_ENABLE_SMART_PTR_TRACKING
     #define DAS_ENABLE_SMART_PTR_TRACKING   0

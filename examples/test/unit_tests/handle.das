@@ -63,6 +63,9 @@ def test_handled
     assert(deref(b.getFooPtr).fooData==7)
     assert(deref(a)==deref(b.fooPtr))
     assert(!(deref(a)!=deref(b.fooPtr)))
+    // call member
+    hit_me(*a,1,2)
+    assert(a.fooData==3)
     unsafe
         delete a
         delete b

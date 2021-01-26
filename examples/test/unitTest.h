@@ -86,6 +86,7 @@ struct TestObjectFoo {
     __forceinline bool isReadOnly() const { return true; }
     __forceinline TestObjectFoo * getLoop() { return foo_loop; }
     __forceinline const TestObjectFoo * getLoop() const { return foo_loop; }
+    void hitMe ( int a, int b ) { fooData = a + b; }
 };
 static_assert ( std::is_trivially_constructible<TestObjectFoo>::value, "this one needs to remain trivially constructable" );
 

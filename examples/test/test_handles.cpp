@@ -699,6 +699,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_smart<FancyClassAnnotation>(lib));
     addCtorAndUsing<FancyClass>(*this,lib,"FancyClass","FancyClass");
     addCtorAndUsing<FancyClass,int32_t,int32_t>(*this,lib,"FancyClass","FancyClass");
+    // member function
+    using method_hitMe = DAS_CALL_MEMBER(TestObjectFoo::hitMe);
+    addExtern< DAS_CALL_METHOD(method_hitMe) >(*this, lib, "hit_me", SideEffects::modifyArgument,
+       DAS_CALL_MEMBER_CPP(TestObjectFoo::hitMe));
     // and verify
     verifyAotReady();
 }

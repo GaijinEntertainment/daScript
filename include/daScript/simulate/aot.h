@@ -2354,6 +2354,30 @@ namespace das {
             block ( value );
         }
     };
+
+#define DAS_CALL_MEMBER(type_and_fun)    \
+    das_call_member< DAS_BIND_MEMBER_FUN(type_and_fun) >
+
+
+#define DAS_CALL_MEMBER_CPP(type_and_fun) \
+    "das_call_member< DAS_BIND_MEMBER_FUN(" #type_and_fun ")>::invoke"
+
+    template <typename FuncT, FuncT fun>
+    struct das_call_member;
+
+    template <typename R, typename CC, typename ...Args, R (CC::*func)(Args...) >
+    struct das_call_member < R (CC::*)(Args...),  func> {
+        static R invoke ( CC & THIS, Args... args ) {
+            return ((THIS).*(func)) ( args... );
+        }
+    };
+
+    template <typename R, typename CC, typename ...Args, R (CC::*func)(Args...) const >
+    struct das_call_member < R (CC::*)(Args...) const,  func> {
+        static R invoke ( const CC & THIS, Args... args ) {
+            return ((THIS).*(func)) ( args... );
+        }
+    };
 }
 
 #if defined(_MSC_VER)
