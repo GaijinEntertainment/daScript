@@ -83,7 +83,7 @@ namespace das {
         if ( g_dasRoot.empty() ) {
             string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
             auto np = efp.find_last_of("\\/");
-            if ( np != string::npos ) {
+            if ( np != string::npos && efp.find("/bin/") != string::npos) {
                 auto ep = get_prefix(efp);          // remove file name
                 auto suffix = get_suffix(ep);
                 if ( suffix != "bin" ) {
