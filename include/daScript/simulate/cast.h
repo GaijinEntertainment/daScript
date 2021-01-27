@@ -205,7 +205,7 @@ namespace das
 
 
 #if defined(__APPLE__)
-    #if #ifdef __LP64__
+    #if __LP64__
         template <>
         struct cast <size_t> {
             static __forceinline size_t to ( vec4f x )           { return v_extract_xi64(v_cast_vec4i(x)); }
