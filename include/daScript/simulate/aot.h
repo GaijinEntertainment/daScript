@@ -2356,7 +2356,7 @@ namespace das {
     };
 
 #define DAS_CALL_MEMBER(type_and_fun)    \
-    das_call_member< DAS_BIND_MEMBER_FUN(type_and_fun) >
+    das::das_call_member< DAS_BIND_MEMBER_FUN(type_and_fun) >
 
 
 #define DAS_CALL_MEMBER_CPP(type_and_fun) \

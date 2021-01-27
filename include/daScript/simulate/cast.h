@@ -203,22 +203,20 @@ namespace das
         static __forceinline vec4f from ( int64_t x )          { return v_cast_vec4f(v_splatsi64(x)); }
     };
 
-    
+
 #if defined(__APPLE__)
-    #if SIZE_OF_VOID_P == 8
+    #if #ifdef __LP64__
         template <>
         struct cast <size_t> {
             static __forceinline size_t to ( vec4f x )           { return v_extract_xi64(v_cast_vec4i(x)); }
             static __forceinline vec4f from ( size_t x )         { return v_cast_vec4f(v_splatsi64(x)); }
         };
-    #elif SIZE_OF_VOID_P == 4
+    #else
         template <>
         struct cast <size_t> {
             static __forceinline size_t to ( vec4f x )           { return v_extract_xi(v_cast_vec4i(x)); }
             static __forceinline vec4f from ( size_t x )         { return v_cast_vec4f(v_splatsi(x)); }
         };
-    #else
-        #error unsupported size of size_t
     #endif
 #endif
 
