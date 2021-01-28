@@ -88,6 +88,7 @@ int main(int argc, char * argv[]) {
     NEED_MODULE(Module_FIO);
     require_project_specific_modules();
     #include "modules/external_need.inc"
+    Module::Initialize();
     // compile and run
     for ( const auto & fn : files ) {
         compile_and_run(fn, mainName, outputProgramCode);

@@ -104,6 +104,7 @@ int main(int argc, char * argv[]) {
     NEED_MODULE(Module_FIO);
     require_project_specific_modules();
     #include "modules/external_need.inc"
+    Module::Initialize();
     for ( ;; ) {
         if ( !compile_and_run(main_das) ) {
             wait_for_file_to_change(main_das);

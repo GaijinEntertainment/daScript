@@ -211,6 +211,7 @@ int MAIN_FUNC_NAME(int argc, char * argv[]) {
     NEED_MODULE(Module_FIO);
     require_project_specific_modules();
     #include "modules/external_need.inc"
+    Module::Initialize();
     bool compiled = compile(argv[1], argv[2]);
     Module::Shutdown();
     return compiled ? 0 : -1;

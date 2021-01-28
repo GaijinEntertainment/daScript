@@ -378,6 +378,8 @@ int main( int argc, char * argv[] ) {
     NEED_MODULE(Module_UriParser);
     NEED_MODULE(Module_JobQue);
     NEED_MODULE(Module_FIO);
+    Module::Initialize();
+    // aot library
     g_aotLib = make_unique<AotLibrary>();
     AotListBase::registerAot(*g_aotLib);
 #if 0 // Debug this one test

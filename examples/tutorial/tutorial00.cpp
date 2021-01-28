@@ -12,6 +12,8 @@ def test
 int main( int, char * [] ) {
     // request all da-script built in modules
     NEED_ALL_DEFAULT_MODULES;
+    // Initialize modules
+    Module::Initialize();
     // make file access, introduce string as if it was a file
     auto fAccess = make_smart<FsFileAccess>();
     auto fileInfo = make_unique<FileInfo>(tutorial_text, uint32_t(strlen(tutorial_text)));

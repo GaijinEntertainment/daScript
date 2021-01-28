@@ -82,6 +82,16 @@ namespace das {
 
     void resetFusionEngine();
 
+    void Module::Initialize() {
+        bool all = false;
+        while ( !all ) {
+            all = true;
+            for ( auto m = modules; m ; m = m->next ) {
+                all &= m->initDependencies();
+            }
+        }
+    }
+
     void Module::Shutdown() {
         ReuseGuard<TypeDecl> rguard;
         shutdownDebugAgent();

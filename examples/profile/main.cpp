@@ -153,6 +153,7 @@ int main( int argc, char * argv[] ) {
     NEED_MODULE(Module_Strings);
     NEED_MODULE(Module_TestProfile);
     NEED_MODULE(Module_Random);
+    Module::Initialize();
 #if 0
     auto TEST_NAME = getDasRoot() +  "/examples/profile/tests/nbodies.das";
     tout << "\nINTERPRETED:\n";

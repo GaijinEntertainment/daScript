@@ -110,6 +110,8 @@ int main( int, char * [] ) {
     NEED_ALL_DEFAULT_MODULES;
     // request our custom module
     NEED_MODULE(Module_Tutorial04);
+    // Initialize modules
+    Module::Initialize();
     // run the tutorial
     tutorial();
     // shut-down daScript, free all memory

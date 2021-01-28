@@ -52,6 +52,8 @@ void tutorial () {
 int main( int, char * [] ) {
     // request all da-script built in modules
     NEED_ALL_DEFAULT_MODULES;
+    // Initialize modules
+    Module::Initialize();
     // run the tutorial
     tutorial();
     // shut-down daScript, free all memory
