@@ -36,12 +36,12 @@ void tutorial () {
         return;
     }
     // evaluate 'test' function in the context
-    vec4f res = ctx.eval(fnTest, nullptr);
+    Sequence it;
+    vec4f res = ctx.eval(fnTest, nullptr, &it);
     if ( auto ex = ctx.getException() ) {       // if function cased panic, report it
         tout << "exception: " << ex << "\n";
         return;
     }
-    Sequence it = * cast<Sequence *>::to(res);
     // call coroutine until its done
     bool dummy = false;
     while ( builtin_iterator_iterate(it, &dummy, &ctx) ) {}
