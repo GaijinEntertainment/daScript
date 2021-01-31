@@ -505,7 +505,7 @@ def re_assign_match_functions ( var re:Regex )
 [private,unsafe_deref]
 def re_match2_single_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match single char `{node.text}` {offset}\n")
+        print("match single char `{node.text}` {str}\n")
     unsafe
         if character_uat(node.text,0) != int(*str)
             return null
@@ -520,7 +520,7 @@ def re_match2_single_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : ui
 [private,unsafe_deref]
 def re_match2_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match char `{node.text}` {offset}\n")
+        print("match char `{node.text}` {str}\n")
     unsafe
         if memcmp(reinterpret<uint8?> node.text,str,node.textLen) != 0
             return null
@@ -528,6 +528,7 @@ def re_match2_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         node.tail = tail
         var node2 = node.next
         if node2!=null
+            print("NOP invoke\n")
             return invoke(node2.fun2,regex,node2,tail)
         else
             return tail
@@ -535,7 +536,7 @@ def re_match2_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
 [private,unsafe_deref]
 def re_match2_union ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match union {offset}\n")
+        print("match union {str}\n")
     for sub in node.all
         let osub = invoke(sub.fun2,regex,sub,str)
         if osub != null
@@ -546,7 +547,7 @@ def re_match2_union ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
 [private,unsafe_deref]
 def re_match2_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match2 set {offset}\n")
+        print("match2 set {str}\n")
     if !is_char_in_set(int(*str),node.cset)
         return null
     unsafe
@@ -561,7 +562,7 @@ def re_match2_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
 [private,unsafe_deref]
 def re_match2_any ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match2 any {offset}\n")
+        print("match2 any {str}\n")
     if int(*str)==0
         return null
     unsafe
@@ -576,7 +577,7 @@ def re_match2_any ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
 [private,unsafe_deref]
 def re_match2_concat ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match2 concat {offset}\n")
+        print("match2 concat {str}\n")
     var left = node.left
     let oleft = invoke(left.fun2, regex, left, str)
     if oleft == null
@@ -587,7 +588,7 @@ def re_match2_concat ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
 [private,unsafe_deref]
 def re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match eos {offset}\n")
+        print("match eos {str}\n")
     if int(*str)!=0
         return null
     node.tail = str
@@ -600,7 +601,7 @@ def re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
 [private,unsafe_deref]
 def re_match2_question ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match question {offset}\n")
+        print("match question {str}\n")
     var nsub = node.subexpr
     var tail = invoke(nsub.fun2,regex,nsub,str)
     if tail == null
@@ -615,7 +616,7 @@ def re_match2_question ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8
 [private,unsafe_deref]
 def re_match2_plus ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match2 plus {offset}\n")
+        print("match2 plus {str}\n")
     var nsub = node.subexpr
     var osym = invoke(nsub.fun2,regex,nsub,str)
     if osym == null
@@ -640,7 +641,7 @@ def re_match2_plus ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
 [private,unsafe_deref]
 def re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match2 plus {offset}\n")
+        print("match2 plus {str}\n")
     panic("oi")
     var nsub = node.subexpr
     if !is_char_in_set(int(*str),node.cset)
@@ -671,7 +672,7 @@ def re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8
 [private,unsafe_deref]
 def re_match2_star ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match2 plus {offset}\n")
+        print("match2 plus {str}\n")
     var ofs = str
     var node2 = node.next
     var nsub = node.subexpr
@@ -694,7 +695,7 @@ def re_match2_star ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
 [private,unsafe_deref]
 def re_match2_group ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
-        print("match2 group {offset}\n")
+        print("match2 group {str}\n")
     var nsub = node.subexpr
     let osub = invoke(nsub.fun2,regex,nsub,str)
     if osub==null
