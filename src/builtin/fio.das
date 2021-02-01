@@ -37,6 +37,9 @@ struct df_header
     magic:uint
     size:int
 
+def fload(file:file; size: int; blk: block<(data: array<uint8>): void>): void
+    _builtin_load(file, size, blk)
+
 def fload(f:file;buf:auto(BufType) -const)
     var dfh:df_header
     let r1 = _builtin_read(f,dfh,typeinfo(sizeof type<df_header>))
@@ -66,7 +69,8 @@ def fsave(f:file;buf:auto(BufType)const)
 
 def fwrite(f:file;buf:auto(BufType) const implicit )
     concept_assert(typeinfo(is_raw buf),"can only save raw pod")
-    _builtin_write(f, buf, typeinfo(sizeof buf))
+    unsafe
+        _builtin_write(f, addr(buf), typeinfo(sizeof buf))
 
 def fwrite(f:file;buf:array<auto(BufType)> const implicit )
     concept_assert(typeinfo(is_raw type<BufType>),"can only save raw pod array")

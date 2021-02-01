@@ -277,7 +277,12 @@ namespace das {
             context.invoke(*block, bargs, nullptr);
         }  else {
             buf[rlen] = 0;
-            bargs[0] = cast<char *>::from(buf);
+            das::Array arr;
+            arr.data = buf;
+            arr.size = rlen;
+            arr.capacity = rlen;
+            arr.lock = 1;
+            bargs[0] = cast<das::Array*>::from(&arr);
             context.invoke(*block, bargs, nullptr);
         }
         free(buf);
