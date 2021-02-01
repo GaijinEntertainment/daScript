@@ -335,7 +335,8 @@ namespace das {
         }
     }
 
-    bool builtin_fstat ( const FILE * f, FStat & fs ) {
+    bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(*at, "fstat of null");
         return fstat(fileno((FILE *)f), &fs.stats) == 0;
     }
 
