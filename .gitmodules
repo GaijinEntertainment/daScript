@@ -7,3 +7,9 @@
 [submodule "modules/dasVulkan"]
 	path = modules/dasVulkan
 	url = git@github.com:olegus8/dasVulkan.git
+[submodule "modules/dasGlfw"]
+	path = modules/dasGlfw
+	url = https://github.com/borisbat/dasGlfw.git
+[submodule "modules/dasImgui"]
+	path = modules/dasImgui
+	url = https://github.com/borisbat/dasImgui.git

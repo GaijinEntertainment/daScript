@@ -111,6 +111,33 @@ MACRO(UNITIZE_BUILD input_dir genList)
     list(APPEND ${genList} ${unitList})
 ENDMACRO()
 
+FIND_PROGRAM(CLANG_BIN_EXE clang)
+IF(CLANG_BIN_EXE)
+    MACRO(CPP_BIND_AST tgt generate_das header_from prefix src_dir inc_dirs extras)
+        MESSAGE(STATUS "Generating C++ bindings target ${tgt} from ${header_from}")
+        ADD_CUSTOM_TARGET(${tgt})
+        ADD_DEPENDENCIES(${tgt} daScript)
+        ADD_CUSTOM_COMMAND(
+            TARGET ${tgt}
+            WORKING_DIRECTORY ${src_dir}
+            VERBATIM
+            COMMAND ${CLANG_BIN_EXE} -Xclang -ast-dump=json -x c++ -c ${header_from} -I${inc_dirs} > ${header_from}.json || cmd /c exit /b 0
+            COMMENT "Generating JSON AST for ${header_from} to ${header_from}.json\ninclude directoryes are ${inc_dir}\n"
+        )
+        ADD_CUSTOM_COMMAND(
+            TARGET ${tgt}
+            WORKING_DIRECTORY ${src_dir}
+            VERBATIM
+            COMMAND daScript ${generate_das} -args ${header_from}.json ${prefix} ${extras}
+            COMMENT "Generating C++ bindings from ${header_from}.json\n"
+        )
+    ENDMACRO()
+ELSE()
+    MACRO(CPP_BIND_AST tgt generate_das header_from prefix src_dir inc_dirs)
+        MESSAGE(STATUS "Skipping C++ bindings from ${header_from}")
+    ENDMACRO()
+ENDIF()
+
 SET(DAS_MODULES_RESOLVE_INC ${PROJECT_SOURCE_DIR}/include/modules/external_resolve.inc)
 SET(DAS_MODULES_NEED_INC ${PROJECT_SOURCE_DIR}/include/modules/external_need.inc)
 FILE(WRITE ${DAS_MODULES_RESOLVE_INC}.temp "")

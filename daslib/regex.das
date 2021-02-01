@@ -163,12 +163,25 @@ def set_meta(var cset:CharSet; che:int)
         var eset:CharSet
         set_meta(eset,'w')
         set_or_set(cset,eset)
+    elif che=='s'
+        set_or_char(cset,' ')
+        set_or_char(cset,'\t')
+    elif che=='S'
+        var eset:CharSet
+        set_meta(eset,'s')
+        set_or_set(cset,eset)
+    elif che=='d'
+        set_or_range(cset,range('0','9'))
+    elif che=='D'
+        var eset:CharSet
+        set_meta(eset,'d')
+        set_or_set(cset,eset)
     else
         set_or_char(cset,che)
 
 let
     meta = "\\+-*.()[]|^"
-    meta_set = "wW"
+    meta_set = "wWsSdD"
 
 [private]
 def is_meta_character(ch:int) : bool
@@ -528,7 +541,8 @@ def re_match2_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         node.tail = tail
         var node2 = node.next
         if node2!=null
-            print("NOP invoke\n")
+            if log_match_enabled
+                print("NOP invoke\n")
             return invoke(node2.fun2,regex,node2,tail)
         else
             return tail
@@ -792,6 +806,7 @@ def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
     if empty(str)
         return
     unsafe
+        regex.match = reinterpret<uint8?> str
         var root = regex.root
         var pstr = reinterpret<uint8?> str
         var cstr = pstr

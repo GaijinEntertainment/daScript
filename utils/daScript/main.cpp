@@ -60,7 +60,9 @@ int main(int argc, char * argv[]) {
                 i += 1;
             } else if ( cmd=="log" ) {
                 outputProgramCode = true;
-            } else if ( !scriptArgs) {
+            } else if ( cmd=="args" ) {
+                break;
+            }else if ( !scriptArgs) {
                 print_help();
                 return -1;
             }

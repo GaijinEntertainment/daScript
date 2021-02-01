@@ -5,12 +5,23 @@
 
 namespace das
 {
-    template <typename TT>
-    struct cast_arg {
+    template <typename TT, bool hasCast, bool isClass>
+    struct cast_any_arg {
         static __forceinline TT to ( Context & ctx, SimNode * x ) {
             return EvalTT<TT>::eval(ctx,x);
         }
     };
+
+    template <typename TT>
+    struct cast_any_arg<TT,false,true> {
+        static __forceinline TT to ( Context & ctx, SimNode * x ) {
+            TT * ptr = (TT *) x->evalPtr(ctx);
+            return * ptr;
+        }
+    };
+
+    template <typename TT>
+    struct cast_arg : cast_any_arg<TT,has_cast<TT>::value,is_class<TT>::value> {};
 
     template <>
     struct cast_arg<Context *> {

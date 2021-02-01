@@ -19,7 +19,7 @@ namespace das {
     void builtin_map_file(const FILE* _f, const TBlock<void, TTemporary<const char*>>& blk, Context* context);
     char * builtin_dirname ( const char * name, Context * context );
     char * builtin_basename ( const char * name, Context * context );
-    bool builtin_fstat ( const FILE * f, FStat & fs );
+    bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at );
     bool builtin_stat ( const char * filename, FStat & fs );
     void builtin_dir ( const char * path, const Block & fblk, Context * context );
     bool builtin_mkdir ( const char * path );
