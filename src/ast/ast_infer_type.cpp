@@ -808,11 +808,22 @@ namespace das {
                     }
                     fnArgIndex ++;
                 }
-                if (!isMatchingArgument(pFn, pFn->arguments[fnArgIndex]->type, arg->value->type,inferAuto,inferBlock)) {
+                auto & passType = arg->value->type;
+                auto & argType = pFn->arguments[fnArgIndex]->type;
+                if (!isMatchingArgument(pFn, pFn->arguments[fnArgIndex]->type, passType,inferAuto,inferBlock)) {
                     ss << "\t\tinvalid argument " << arg->name << ". expecting "
-                        << describeType(pFn->arguments[fnArgIndex]->type) << ", passing " << describeType(arg->value->type) << "\n";
-                    if (arg->value->type->isAlias()) {
-                        ss << "\t\t" << reportAliasError(arg->value->type) << "\n";
+                        << describeType(pFn->arguments[fnArgIndex]->type) << ", passing " << describeType(passType) << "\n";
+                    if (passType->isAlias()) {
+                        ss << "\t\t" << reportAliasError(passType) << "\n";
+                    }
+                    if ( argType->isRef() && !passType->isRef() ) {
+                        ss << "\t\tcan't pass non-ref to ref\n";
+                    }
+                    if ( argType->isRef() && !argType->constant && passType->constant ) {
+                        ss << "\t\tcan't ref types can only add constness\n";
+                    }
+                    if ( argType->isPointer() && !argType->constant && passType->constant) {
+                        ss << "\t\tpointer types can only add constness\n";
                     }
                     return ss.str();
                 }
@@ -840,6 +851,15 @@ namespace das {
                         << describeType(arg->type) << ", passing " << describeType(passType) << "\n";
                     if ( passType->isAlias() ) {
                         ss << "\t\t" << reportAliasError(passType) << "\n";
+                    }
+                    if ( arg->type->isRef() && !passType->isRef() ) {
+                        ss << "\t\tcan't pass non-ref to ref\n";
+                    }
+                    if ( arg->type->isRef() && !arg->type->constant && passType->constant ) {
+                        ss << "\t\tcan't ref types can only add constness\n";
+                    }
+                    if ( arg->type->isPointer() && !arg->type->constant && passType->constant) {
+                        ss << "\t\tpointer types can only add constness\n";
                     }
                 }
             }

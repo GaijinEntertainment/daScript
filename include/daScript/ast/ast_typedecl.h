@@ -356,6 +356,16 @@ namespace das {
         }
     };
 
+    template <typename ResultType, typename ...Args>
+    struct typeFactory<TLambda<ResultType,Args...>> {
+        static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
+            auto t = make_smart<TypeDecl>(Type::tLambda);
+            t->firstType = typeFactory<ResultType>::make(lib);
+            t->argTypes = { typeFactory<Args>::make(lib)... };
+            return t;
+        }
+    };
+
     template <typename TT>
     struct typeFactory<TTemporary<TT>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {

@@ -69,6 +69,13 @@ namespace das
     };
     static_assert(sizeof(Lambda)==sizeof(void *), "has to be castable");
 
+    template <typename Result, typename ...Args>
+    struct TLambda : Lambda {
+        TLambda()  {}
+        TLambda( const TLambda & ) = default;
+        TLambda( const Lambda & that ) { *(Lambda *)this = that; }
+    };
+
     struct Tuple {
         Tuple() {}
     };

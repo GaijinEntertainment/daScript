@@ -244,8 +244,20 @@ namespace das
         static __forceinline vec4f from ( const Func x )     { return cast<int32_t>::from(x.index); }
     };
 
+    template <typename Result, typename ...Args>
+    struct cast <TFunc<Result,Args...>> {
+        static __forceinline Func to ( vec4f x )             { return Func(cast<int32_t>::to(x)); }
+        static __forceinline vec4f from ( const Func x )     { return cast<int32_t>::from(x.index); }
+    };
+
     template <>
     struct cast <Lambda> {
+        static __forceinline Lambda to ( vec4f x )           { return Lambda(cast<void *>::to(x)); }
+        static __forceinline vec4f from ( const Lambda x )   { return cast<void *>::from(x.capture); }
+    };
+
+    template <typename Result, typename ...Args>
+    struct cast <TLambda<Result,Args...>> {
         static __forceinline Lambda to ( vec4f x )           { return Lambda(cast<void *>::to(x)); }
         static __forceinline vec4f from ( const Lambda x )   { return cast<void *>::from(x.capture); }
     };

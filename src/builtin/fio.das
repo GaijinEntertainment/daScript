@@ -60,7 +60,8 @@ def fsave(f:file;buf:auto(BufType)const)
         let len = length(data)
         let dfh = [[df_header magic=df_magic, size=len]]
         r1 = _builtin_write(f,dfh,typeinfo(sizeof type<df_header>))
-        r2 = _builtin_write(f,data,len)
+        unsafe
+            r2 = _builtin_write(f,addr(data[0]),len)
     if r1<0
         return r1
     if r2<0
