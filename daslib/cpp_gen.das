@@ -19,7 +19,12 @@ let verbose = false
 
 var blocked_type_names : array<string>
 
-var blocked_functions : array<string> <-  [{string [] "operator delete"; "operator new"}];
+var blocked_functions : array<string> <-  [{string []
+    "operator delete";
+    "operator new";
+    "__security_init_cookie";
+    "__security_check_cookie"
+}];
 
 var cmres_functions : array<string>
 
@@ -65,6 +70,7 @@ struct ClangStructField : ClangAstDecl
 
 struct ClangFuncArg : ClangAstDecl
     atype   : string
+    value   : string
 
 struct ClangFunc : ClangAstDecl
     mangledName : string
@@ -212,6 +218,22 @@ def onVar(var root)
         gtype = qualType
     ]]
 
+def onInitArg(var root)
+    var value = ""
+    if root |> key_exists("inner")
+        root |> with_array("inner") <| $ ( inner )
+            var inner_obj & = inner[0] as _object
+            let kind = inner_obj["kind"] as _string
+            if kind=="ImplicitCastExpr"
+                let castKind = inner_obj["castKind"] as _string
+                if castKind=="NullToPointer"
+                    value = "nullptr"
+            elif kind=="IntegerLiteral"
+                let valueCategory = inner_obj["valueCategory"] as _string
+                if valueCategory=="rvalue"
+                    value = inner_obj["value"] as _string
+    return value
+
 def onFunctionBody(var root) : ClangFunc
     let name = root["name"] as _string
     let fullName = getCppName(name)
@@ -236,12 +258,16 @@ def onFunctionBody(var root) : ClangFunc
                     let fieldName = key_exists(ad,"name") ? (ad["name"] as _string) : ""
                     var fftype & = ad["type"] as _object
                     var fqualType = fftype["qualType"] as _string
+                    var fieldInit = ""
+                    if key_exists(ad,"init")
+                        fieldInit = onInitArg(ad)
                     ffunc.args |> emplace([[ClangFuncArg
                         name=fieldName,
-                        atype=fqualType
+                        atype=fqualType,
+                        value=fieldInit
                     ]])
                     if verbose
-                        print("\t{fqualType} {fieldName}\n")
+                        print("\t{fqualType} {fieldName} = {fieldInit}\n")
     return <- ffunc
 
 def onMethod(var root)
@@ -386,21 +412,17 @@ def genStructs(hf,mf,df:FILE const?)
         fprint(df,"auto ann_{st.name} = make_smart<{st.name}_GeneratedAnnotation>(lib);\n")
         fprint(df,"addAnnotation(ann_{st.name});\n")
         fprint(hf,"MAKE_EXTERNAL_TYPE_FACTORY({st.name},{st.cppName})\n")
-        fprint(mf,"
-    struct {st.name}_GeneratedAnnotation : ManagedStructureAnnotation<{st.cppName}> \{
-        {st.name}_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation (\"{st.name}\", ml) \{
-        \}
-        void init () \{
-")
+        fprint(mf,"struct {st.name}_GeneratedAnnotation : ManagedStructureAnnotation<{st.cppName}> \{\n")
+        fprint(mf,"\t{st.name}_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation (\"{st.name}\", ml) \{\n")
+        fprint(mf,"\t\}\n")
+        fprint(mf,"\tvoid init () \{\n")
         for fld in st.fields
             if !needToGenField(fld)
                 continue
             if fld.isBitfield           // TODO: support bitfields
                 continue
-            fprint(mf,"\t\t\taddField<DAS_BIND_MANAGED_FIELD({fld.cppName})>(\"{fld.name}\",\"{fld.cppName}\");\n")
-        fprint(mf,"        \}
-    \};
-")
+            fprint(mf,"\t\taddField<DAS_BIND_MANAGED_FIELD({fld.cppName})>(\"{fld.name}\",\"{fld.cppName}\");\n")
+        fprint(mf,"\t\}\n\};\n")
     for st in values(ast.structs)
         if !needToGenStruct(st)
             continue
@@ -485,7 +507,14 @@ def getFunctions(hf,mf,df:FILE const?)
                 fprint(df,"\"arg{argi}\"")
             else
                 fprint(df,"\"{arg.name}\"")
-        fprint(df,"\});\n")
+        fprint(df,"\})\n")
+        for arg,argi in fn.args,range(100500)
+            if !empty(arg.value)
+                if arg.value=="nullptr"
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstPtr>())\n")
+                else
+                    fprint(df,"\t\t// {arg.name} : {arg.atype} = {arg.value}\n")
+        fprint(df,";\n")
 
 def genBindings(hf,mf,df:FILE const?)
     genEnums(hf,mf,df)
