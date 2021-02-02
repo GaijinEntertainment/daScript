@@ -2,12 +2,13 @@
 
 require network
 require fio
+require strings
 
 var
     isContDev = false
 
 class TelnetServer : Server
-    current_string : string
+    current_string : array<uint8>
     done : bool = false
     def TelnetServer
         Server`Server(cast<Server> self)
@@ -16,39 +17,46 @@ class TelnetServer : Server
     def override onConnect
         print("connected\n")
     def override onDisconnect
-        if !empty(current_string)
-            print(current_string)
-            current_string = ""
+        if length(current_string) > 0
+            print(string(current_string))
+            current_string |> clear()
         print("disconnected\n")
-    [unsafe] def restart
+    def restart
         if _server != null
             var session : smart_ptr<NetworkServer>
             self->save(session)
             gc0_save_smart_ptr("telnet-session", session)
-    [unsafe] def override onData(msg:uint8?; size:int)
+    def override onData(msg:uint8?; size:int)
         for i in range(size)
-            let ch = int(msg[i])
-            if ch=='\r'
+            var ch: uint8
+            unsafe
+                ch = msg[i]
+            let ich = int(ch)
+            if ich=='\r'
                 continue
-            elif ch=='\n'
-                print("`{current_string}` length={length(current_string)}\n")
+            elif ich=='\n'
+                print("`{string(current_string)}` length={length(current_string)}\n")
                 var new_msg = "length = {length(current_string)}\n"
-                self->send(reinterpret<uint8?> new_msg, length(new_msg))
-                if current_string=="quit"
+                unsafe
+                    self->send(reinterpret<uint8?> new_msg, length(new_msg))
+                var str = string(current_string)
+                if str=="quit"
                     done = true
-                elif current_string=="restart"
+                elif str=="restart"
                     if isContDev
                         print("restarting via telnet command")
                         done = true
                         self->restart()
                     else
                         print("restart request ignored, not running from dasContDev\n")
-                delete_string(current_string)
-                delete_string(new_msg)
+                current_string |> clear()
+                unsafe
+                    delete_string(str)
+                    delete_string(new_msg)
             else
-                current_string = append(current_string,ch)
+                current_string |> push(ch)
 
-[export,unsafe]
+[export]
 def main (fn:string)
     isContDev = true
     let main_time = stat(fn).mtime
@@ -71,10 +79,11 @@ def main (fn:string)
             print("restarting via source change {new_time}\n")
             telnet->restart()
             break
-    delete telnet
+    unsafe
+        delete telnet
     return true
 
-[export, unsafe]
+[export]
 def test
     let port = 9000
     print("sever at port {port}\n")
@@ -83,5 +92,7 @@ def test
         return false
     while !telnet.done
         telnet->tick()
-    delete telnet
+        sleep(0u)
+    unsafe
+        delete telnet
     return true
