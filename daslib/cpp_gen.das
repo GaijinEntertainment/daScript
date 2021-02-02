@@ -476,7 +476,16 @@ def getFunctions(hf,mf,df:FILE const?)
             extra_enchantation = ", SimNode_ExtFuncCallRef"
         elif fn |> isCmresFun
             extra_enchantation = ", SimNode_ExtFuncCallAndCopyOrMove"
-        fprint(df,"addExtern<{bind_enchantation}{extra_enchantation}>(*this, lib, \"{fn.name}\",SideEffects::worstDefault, \"{fn.cppName}\");\n")
+        fprint(df,"addExtern<{bind_enchantation}{extra_enchantation}>(*this, lib, \"{fn.name}\",SideEffects::worstDefault, \"{fn.cppName}\")\n")
+        fprint(df,"\t->args(\{")
+        for arg,argi in fn.args,range(100500)
+            if argi!=0
+                fprint(df,",")
+            if empty(arg.name)
+                fprint(df,"\"arg{argi}\"")
+            else
+                fprint(df,"\"{arg.name}\"")
+        fprint(df,"\});\n")
 
 def genBindings(hf,mf,df:FILE const?)
     genEnums(hf,mf,df)

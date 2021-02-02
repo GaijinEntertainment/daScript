@@ -682,6 +682,7 @@ namespace das
             return this;
         }
         FunctionPtr args ( std::initializer_list<const char *> argList ) {
+            if ( argList.size()==0 ) return this;
             DAS_ASSERT(argList.size()==arguments.size());
             int argIndex = 0;
             for ( const char * arg : argList ) {
