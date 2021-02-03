@@ -5918,6 +5918,8 @@ namespace das {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
                             expr->name = das_to_string(aliasT->baseType);
+                            if ( aliasT->baseType==Type::tBitfield )
+                            expr->aliasSubstitution = aliasT;
                             reportAstChanged();
                         } else {
                             reportMissing(expr, types, "no matching functions or generics ", true);
@@ -5932,6 +5934,18 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
             expr->func = inferFunctionCall(expr).get();
+            if ( expr->aliasSubstitution  ) {
+                if ( expr->arguments.size()!=1 ) {
+                    error("casting to bitfield requires one argument", "", "",
+                        expr->at, CompilationError::invalid_cast);
+                    return Visitor::visit(expr);
+                }
+                auto ecast = make_smart<ExprCast>(expr->at, expr->arguments[0]->clone(), expr->aliasSubstitution );
+                ecast->reinterpret = true;
+                ecast->alwaysSafe = true;
+                expr->aliasSubstitution.reset();
+                return ecast;
+            }
             /*
             // NOTE: this should not be necessary, since infer function call suppose to report every time
             if ( !expr->func ) {
