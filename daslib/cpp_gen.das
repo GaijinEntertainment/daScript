@@ -17,6 +17,8 @@ let verbose = false
     config
 */
 
+var local_type_names : array<string>
+
 var blocked_type_names : array<string>
 
 var blocked_functions : array<string> <-  [{string []
@@ -221,6 +223,15 @@ def getQualType(var root; field:string="type")
     var qto & = root[field] as _object
     return qto["qualType"] as _string
 
+def onNumericLiteral(var inner_obj)
+    var value = ""
+    var valueType =""
+    let valueCategory = inner_obj["valueCategory"] as _string
+    if valueCategory=="rvalue"
+        value = inner_obj["value"] as _string
+    valueType = getQualType(inner_obj)
+    return [[auto value, valueType]]
+
 def onInitArg(var root)
     var value = ""
     var valueType = ""
@@ -245,10 +256,18 @@ def onInitArg(var root)
                 else
                     print("warning: unsupproted cast kind {castKind}\n")
             elif kind=="IntegerLiteral" || kind=="FloatingLiteral"
-                let valueCategory = inner_obj["valueCategory"] as _string
-                if valueCategory=="rvalue"
-                    value = inner_obj["value"] as _string
-                valueType = getQualType(inner_obj)
+                let literal = onNumericLiteral(inner_obj)
+                value = literal._0
+                valueType = literal._1
+            elif kind=="UnaryOperator"
+                let opCode = inner_obj["opcode"] as _string
+                inner_obj |> with_array("inner") <| $ (iinner)
+                    var iinner_obj & = iinner[0] as _object
+                    let ikind = iinner_obj["kind"] as _string
+                    if ikind=="IntegerLiteral" || ikind=="FloatingLiteral"
+                        let literal = onNumericLiteral(iinner_obj)
+                        value = opCode + literal._0
+                        valueType = literal._1
             elif kind=="CXXBoolLiteralExpr"
                 let valueCategory = inner_obj["valueCategory"] as _string
                 if valueCategory=="rvalue"
@@ -388,6 +407,13 @@ def isBlockedType(qtype:string)
             return true
     return false
 
+def isLocalType(qtype:string)
+    for btn in local_type_names
+        if qtype |> find(btn) != -1
+            return true
+    return false
+
+
 def genEnums(hf,mf,df:FILE const?)
     fprint(hf,"// ------------\n// enumerations\n// ------------\n\n")
     fprint(mf,"// ------------\n// enumerations\n// ------------\n\n")
@@ -437,6 +463,8 @@ def genStructs(hf,mf,df:FILE const?)
         fprint(df,"addAnnotation(ann_{st.name});\n")
         fprint(hf,"MAKE_EXTERNAL_TYPE_FACTORY({st.name},{st.cppName})\n")
         fprint(mf,"struct {st.name}_GeneratedAnnotation : ManagedStructureAnnotation<{st.cppName}> \{\n")
+        if isLocalType(st.name)
+            fprint(mf,"\tvirtual bool isLocal() const override \{ return true; \}\n")
         fprint(mf,"\t{st.name}_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation (\"{st.name}\", ml) \{\n")
         fprint(mf,"\t\}\n")
         fprint(mf,"\tvoid init () \{\n")
@@ -456,6 +484,7 @@ def genStructs(hf,mf,df:FILE const?)
 
 def isBlockedFun(fn)
     if fn.ftype |> find("...") != -1
+        print("warning: variadic function {fn.name} aka {fn.cppName}\n")
         return true
     for fa in fn.args
         if fa.atype |> isBlockedType
@@ -499,8 +528,6 @@ def isCmresFun(fn)
     return false
 
 def getFunctions(hf,mf,df:FILE const?)
-    fprint(hf,"// ------------\n// functions\n// ------------\n\n")
-    fprint(mf,"// ------------\n// functions\n// ------------\n\n")
     fprint(df,"// ------------\n// functions\n// ------------\n\n")
     var all_fn : table<string; int>
     for fn in values(ast.funcs)
@@ -535,7 +562,10 @@ def getFunctions(hf,mf,df:FILE const?)
         for arg,argi in fn.args,range(100500)
             if !empty(arg.value)
                 if arg.value=="nullptr"
-                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstPtr>())\n")
+                    if arg.atype=="const char *"
+                        fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstString>(\"\"))\n")
+                    else
+                        fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstPtr>())\n")
                 elif arg.vtype=="int"
                     fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstInt>({arg.value}))\n")
                 elif arg.vtype=="float"
