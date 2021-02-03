@@ -71,6 +71,7 @@ struct ClangStructField : ClangAstDecl
 struct ClangFuncArg : ClangAstDecl
     atype   : string
     value   : string
+    vtype   : string
 
 struct ClangFunc : ClangAstDecl
     mangledName : string
@@ -177,8 +178,7 @@ def onEnum(var root)
     let fullName = getCppName(name)
     if root |> key_exists("scopedEnumTag")
         let tag = root["scopedEnumTag"] as _string
-        var fut & = root["fixedUnderlyingType"] as _object
-        let qtype = fut["qualType"] as _string
+        let qtype = getQualType(root,"fixedUnderlyingType")
         if verbose
             print("enum {tag} {name} : {qtype} // {fullName}\n")
         ast.enums[fullName] <- [[ClangEnum
@@ -207,8 +207,7 @@ def onVar(var root)
     let name = root["name"] as _string
     let fullName = getCppName(name)
     let mangledName = root["mangledName"] as _string // todo: undecorate mangled name
-    var ftype & = root["type"] as _object
-    var qualType = ftype["qualType"] as _string
+    var qualType = getQualType(root)
     if verbose
         print("global variable {name} // {fullName}\n// {mangledName}\n// {qualType}\n")
     ast.globals[fullName] <- [[ClangGlobalVar
@@ -218,8 +217,13 @@ def onVar(var root)
         gtype = qualType
     ]]
 
+def getQualType(var root; field:string="type")
+    var qto & = root[field] as _object
+    return qto["qualType"] as _string
+
 def onInitArg(var root)
     var value = ""
+    var valueType = ""
     if root |> key_exists("inner")
         root |> with_array("inner") <| $ ( inner )
             var inner_obj & = inner[0] as _object
@@ -228,18 +232,37 @@ def onInitArg(var root)
                 let castKind = inner_obj["castKind"] as _string
                 if castKind=="NullToPointer"
                     value = "nullptr"
-            elif kind=="IntegerLiteral"
+                elif castKind=="ArrayToPointerDecay"
+                    let valueCategory = inner_obj["valueCategory"] as _string
+                    valueType = getQualType(inner_obj)
+                    if valueCategory=="rvalue"
+                        if valueType=="const char *"
+                            inner_obj |> with_array("inner") <| $ ( iarr )
+                                var iobj & = iarr[0] as _object
+                                value = iobj["value"] as _string
+                        else
+                            print("warning: unsupported decay type {valueType}")
+                else
+                    print("warning: unsupproted cast kind {castKind}\n")
+            elif kind=="IntegerLiteral" || kind=="FloatingLiteral"
                 let valueCategory = inner_obj["valueCategory"] as _string
                 if valueCategory=="rvalue"
                     value = inner_obj["value"] as _string
-    return value
+                valueType = getQualType(inner_obj)
+            elif kind=="CXXBoolLiteralExpr"
+                let valueCategory = inner_obj["valueCategory"] as _string
+                if valueCategory=="rvalue"
+                    value = (inner_obj["value"] as _bool) ? "true" : "false"
+                valueType = getQualType(inner_obj)
+            else
+                print("warning: unsupproted init kind {kind}\n")
+    return [[auto value, valueType]]
 
 def onFunctionBody(var root) : ClangFunc
     let name = root["name"] as _string
     let fullName = getCppName(name)
     let mangledName = root["mangledName"] as _string // todo: undecorate mangled name
-    var ftype & = root["type"] as _object
-    var qualType = ftype["qualType"] as _string
+    var qualType = getQualType(root)
     if verbose
         print("function {name} // {fullName}\n// {mangledName}\n// {qualType}\n")
     var ffunc <- [[ClangFunc
@@ -256,15 +279,18 @@ def onFunctionBody(var root) : ClangFunc
                 var ad & = fad as _object
                 if ad["kind"] as _string == "ParmVarDecl"
                     let fieldName = key_exists(ad,"name") ? (ad["name"] as _string) : ""
-                    var fftype & = ad["type"] as _object
-                    var fqualType = fftype["qualType"] as _string
+                    var fqualType = getQualType(ad)
                     var fieldInit = ""
+                    var fieldInitType = ""
                     if key_exists(ad,"init")
-                        fieldInit = onInitArg(ad)
+                        let arg = onInitArg(ad)
+                        fieldInit  = arg._0
+                        fieldInitType = arg._1
                     ffunc.args |> emplace([[ClangFuncArg
                         name=fieldName,
                         atype=fqualType,
-                        value=fieldInit
+                        value=fieldInit,
+                        vtype=fieldInitType
                     ]])
                     if verbose
                         print("\t{fqualType} {fieldName} = {fieldInit}\n")
@@ -312,7 +338,7 @@ def onAccess(var root)
     elif access=="protected"
         kind = AccessKind Protected
     else
-        panic("unsupported access kind {access}")
+        panic("unsupported access kind {access}\n")
     access_stack[length(access_stack)-1] = kind
 
 def isBitfield(var root)
@@ -323,8 +349,7 @@ def isBitfield(var root)
 
 def onField(var root)
     let name = key_exists(root,"name") ? (root["name"] as _string) : ""
-    var ftype & = root["type"] as _object
-    var qualType = ftype["qualType"] as _string
+    var qualType = getQualType(root)
     var access = access_stack[length(access_stack)-1]
     if verbose
         print("\t{qualType} {name} // {access}\n")
@@ -348,8 +373,7 @@ def getCppName(baseName)
 def onTypeDecl(var root)
     let name = root["name"] as _string
     let fullName = getCppName(name)
-    var ftype & = root["type"] as _object
-    var qualType = ftype["qualType"] as _string
+    var qualType = getQualType(root)
     if verbose
         print("typedecl {name} = {qualType} // {fullName}\n")
     ast.typedefs[fullName] = [[ClangTypedef
@@ -512,8 +536,17 @@ def getFunctions(hf,mf,df:FILE const?)
             if !empty(arg.value)
                 if arg.value=="nullptr"
                     fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstPtr>())\n")
+                elif arg.vtype=="int"
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstInt>({arg.value}))\n")
+                elif arg.vtype=="float"
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstFloat>({arg.value}))\n")
+                elif arg.vtype=="bool"
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstBool>({arg.value}))\n")
+                elif arg.vtype=="const char *"
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstString>({arg.value}))\n")
                 else
                     fprint(df,"\t\t// {arg.name} : {arg.atype} = {arg.value}\n")
+                    print("warning: unsupported init {arg.atype} of {arg.vtype}\n")
         fprint(df,";\n")
 
 def genBindings(hf,mf,df:FILE const?)
