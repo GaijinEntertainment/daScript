@@ -1069,8 +1069,8 @@ namespace das
         if ( g_DebugAgent ) g_DebugAgent->onInstall(g_DebugAgent.get());
     }
 
-    Context * getDebugAgentContext ( ) {
-        return g_DebugAgentContext.get();
+    Context & getDebugAgentContext ( ) {
+        return *g_DebugAgentContext;
     }
 
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo ) {
