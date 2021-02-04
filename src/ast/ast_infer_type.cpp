@@ -4518,7 +4518,8 @@ namespace das {
                 error("cond operator condition must be boolean", "", "",
                     expr->at, CompilationError::condition_must_be_bool);
             } else if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                error("cond operator must return the same types on both sides","", "",
+                error("cond operator must return the same types on both sides",
+                    "\t" + (verbose ? (expr->left->type->describe() + " vs " + expr->right->type->describe()) :""), "",
                       expr->at, CompilationError::operator_not_found);
             } else {
                 if ( expr->left->type->ref ^ expr->right->type->ref ) { // if either one is not ref
