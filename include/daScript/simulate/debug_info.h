@@ -167,6 +167,7 @@ namespace das
         FileInfo *  fileInfo = nullptr;
         uint32_t    column = 0, line = 0;
         uint32_t    last_column = 0, last_line = 0;
+        static LineInfo g_LineInfoNULL;
     };
 
     struct LineInfoArg : LineInfo {};

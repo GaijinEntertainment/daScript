@@ -1891,7 +1891,7 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit(ExprFakeLineInfo * c) override {
-            ss << "nullptr";
+            ss << "((LineInfoArg *)(&LineInfo::g_LineInfoNULL))";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstPtr * c ) override {
