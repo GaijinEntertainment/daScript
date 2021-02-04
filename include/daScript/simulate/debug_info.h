@@ -279,6 +279,7 @@ namespace das
         enum {
             flag_init = (1<<0)
         ,   flag_builtin = (1<<1)
+        ,   flag_private = (1<<2)
         };
         char *      name;
         char *      cppName;

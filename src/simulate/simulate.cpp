@@ -1069,6 +1069,10 @@ namespace das
         if ( g_DebugAgent ) g_DebugAgent->onInstall(g_DebugAgent.get());
     }
 
+    Context * getDebugAgentContext ( ) {
+        return g_DebugAgentContext.get();
+    }
+
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo ) {
         unique_ptr<Context> forkContext = make_unique<Context>(*context);
         vec4f args[1];

@@ -5767,18 +5767,19 @@ namespace das {
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
                     if ( arg->type->isAuto() && (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType() || arg->type->isGoodFunctionType()) ) {
-                        DAS_ASSERTF ( arg->rtti_isMakeBlock(), "it's always MakeBlock. this is how we construct new [[ ]]" );
-                        auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
-                        auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                        auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type);
-                        DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
-                        TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
-                        block->returnType = make_smart<TypeDecl>(*retT->firstType);
-                        for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
-                            block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
+                        if ( arg->rtti_isMakeBlock() ) { // "it's always MakeBlock. unless its function and @@funcName
+                            auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
+                            auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
+                            auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type);
+                            DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
+                            TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
+                            block->returnType = make_smart<TypeDecl>(*retT->firstType);
+                            for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
+                                block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
+                            }
+                            setBlockCopyMoveFlags(block.get());
+                            reportAstChanged();
                         }
-                        setBlockCopyMoveFlags(block.get());
-                        reportAstChanged();
                     }
                 }
                 // append default arguments

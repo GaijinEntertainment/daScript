@@ -214,9 +214,6 @@ namespace das {
                 SideEffects::modifyExternal, "waitForJob");
             addExtern<DAS_BIND_FUN(notifyJob)>(*this, lib,  "notify",
                 SideEffects::modifyExternal, "notifyJob");
-            // context
-            addExtern<DAS_BIND_FUN(thisContext)>(*this, lib,  "this_context",
-                SideEffects::accessExternal, "thisContext");
             // fork \ invoke \ etc
             addExtern<DAS_BIND_FUN(new_job_invoke)>(*this, lib,  "new_job_invoke",
                 SideEffects::modifyExternal, "new_job_invoke");
