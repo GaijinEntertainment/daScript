@@ -427,6 +427,8 @@ namespace das
         return stream.str();
     }
 
+    LineInfo LineInfo::g_LineInfoNULL;
+
     string LineInfo::describe(bool fully) const {
         if ( fileInfo ) {
             TextWriter ss;
