@@ -646,7 +646,7 @@ namespace debugapi {
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
             context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
         }
-        return context.callOrFastcall(simFn, args+2, &call->debugInfo);
+        return invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
     }
 
     vec4f pinvoke_impl2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
@@ -658,7 +658,7 @@ namespace debugapi {
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
             context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
         }
-        return context.callOrFastcall(simFn, args+2, &call->debugInfo);
+        return invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
     }
 
     class Module_Debugger : public Module {
@@ -681,7 +681,7 @@ namespace debugapi {
                 SideEffects::modifyExternal, "tickDebugAgent");
             addExtern<DAS_BIND_FUN(installDebugAgent)>(*this, lib,  "install_debug_agent",
                 SideEffects::modifyExternal, "installDebugAgent");
-            addExtern<DAS_BIND_FUN(getDebugAgentContext)>(*this, lib,  "get_debug_agent_context",
+            addExtern<DAS_BIND_FUN(getDebugAgentContext), SimNode_ExtFuncCallRef>(*this, lib,  "get_debug_agent_context",
                 SideEffects::modifyExternal, "getDebugAgentContext");
             addExtern<DAS_BIND_FUN(forkDebugAgentContext)>(*this, lib,  "fork_debug_agent_context",
                 SideEffects::modifyExternal, "forkDebugAgentContext");
@@ -724,7 +724,7 @@ namespace debugapi {
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
             // this context
-            addExtern<DAS_BIND_FUN(thisContext)>(*this, lib,  "this_context",
+            addExtern<DAS_BIND_FUN(thisContext), SimNode_ExtFuncCallRef>(*this, lib,  "this_context",
                 SideEffects::accessExternal, "thisContext");
             // add builtin module
             compileBuiltinModule("debugger.das",debugger_das,sizeof(debugger_das));
