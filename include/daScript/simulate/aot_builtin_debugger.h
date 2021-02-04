@@ -12,5 +12,5 @@ namespace das {
 
     StackWalkerPtr makeStackWalker ( const void * pClass, const StructInfo * info, Context * context );
 
-    __forceinline Context  * thisContext ( Context * context ) { return context; }
+    __forceinline Context  & thisContext ( Context * context ) { return *context; }
 }
