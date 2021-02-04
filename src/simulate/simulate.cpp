@@ -670,6 +670,7 @@ namespace das
     static std::mutex g_DebugAgentMutex;
     static DebugAgentPtr g_DebugAgent;
     static unique_ptr<Context>   g_DebugAgentContext;
+    static bool                  g_isInDebugAgentCreation;
 
     Context::Context(uint32_t stackSize, bool ph) : stack(stackSize) {
         code = make_smart<NodeAllocator>();
@@ -1074,12 +1075,19 @@ namespace das
     }
 
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo ) {
+        g_isInDebugAgentCreation = true;
         unique_ptr<Context> forkContext = make_unique<Context>(*context);
+        g_isInDebugAgentCreation = false;
         vec4f args[1];
         args[0] = cast<Context *>::from(context);
         SimFunction * fun = forkContext->getFunction(exFn.index-1);
         forkContext->callOrFastcall(fun, args, lineinfo);
         swap ( g_DebugAgentContext, forkContext );
+    }
+
+    bool isInDebugAgentCreation()
+    {
+        return g_isInDebugAgentCreation;
     }
 
     void shutdownDebugAgent() {
