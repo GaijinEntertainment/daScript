@@ -49,6 +49,7 @@ int main(int argc, char * argv[]) {
     string mainName = "main";
     bool scriptArgs = false;
     bool outputProgramCode = false;
+    bool pauseAfterDone = false;
     for ( int i=1; i < argc; ++i ) {
         if ( argv[i][0]=='-' ) {
             string cmd(argv[i]+1);
@@ -69,6 +70,7 @@ int main(int argc, char * argv[]) {
                 break;
             } else if ( cmd=="pause" ) {
                 pauseAfterErrors = true;
+                pauseAfterDone = true;
             } else if ( !scriptArgs) {
                 print_help();
                 return -1;
@@ -103,6 +105,7 @@ int main(int argc, char * argv[]) {
         compile_and_run(fn, mainName, outputProgramCode);
     }
     // and done
+    if ( pauseAfterDone ) getchar();
     Module::Shutdown();
     return 0;
 }

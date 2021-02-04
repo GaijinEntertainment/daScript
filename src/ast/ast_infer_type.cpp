@@ -777,6 +777,25 @@ namespace das {
             return ss.str();
         }
 
+        string describeMismatchingArgument( const string & argName, const TypeDeclPtr & passType, const TypeDeclPtr & argType ) const {
+            TextWriter ss;
+            ss << "\t\tinvalid argument " << argName << ". expecting "
+                << describeType(argType) << ", passing " << describeType(passType) << "\n";
+            if (passType->isAlias()) {
+                ss << "\t\t" << reportAliasError(passType) << "\n";
+            }
+            if ( argType->isRef() && !passType->isRef() ) {
+                ss << "\t\tcan't pass non-ref to ref\n";
+            }
+            if ( argType->isRef() && !argType->constant && passType->constant ) {
+                ss << "\t\tcan't ref types can only add constness\n";
+            }
+            if ( argType->isPointer() && !argType->constant && passType->constant) {
+                ss << "\t\tpointer types can only add constness\n";
+            }
+            return ss.str();
+        }
+
         string describeMismatchingFunction(const FunctionPtr & pFn, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock) const {
             if ( pFn->arguments.size() < arguments.size() ) {
                 return "\t\ttoo many arguments\n";
@@ -811,21 +830,7 @@ namespace das {
                 auto & passType = arg->value->type;
                 auto & argType = pFn->arguments[fnArgIndex]->type;
                 if (!isMatchingArgument(pFn, pFn->arguments[fnArgIndex]->type, passType,inferAuto,inferBlock)) {
-                    ss << "\t\tinvalid argument " << arg->name << ". expecting "
-                        << describeType(pFn->arguments[fnArgIndex]->type) << ", passing " << describeType(passType) << "\n";
-                    if (passType->isAlias()) {
-                        ss << "\t\t" << reportAliasError(passType) << "\n";
-                    }
-                    if ( argType->isRef() && !passType->isRef() ) {
-                        ss << "\t\tcan't pass non-ref to ref\n";
-                    }
-                    if ( argType->isRef() && !argType->constant && passType->constant ) {
-                        ss << "\t\tcan't ref types can only add constness\n";
-                    }
-                    if ( argType->isPointer() && !argType->constant && passType->constant) {
-                        ss << "\t\tpointer types can only add constness\n";
-                    }
-                    return ss.str();
+                    ss << describeMismatchingArgument(arg->name, passType, argType);
                 }
                 fnArgIndex ++;
             }
@@ -847,20 +852,7 @@ namespace das {
                 auto & arg = pFn->arguments[ai];
                 auto & passType = types[ai];
                 if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
-                    ss << "\t\tinvalid argument " << arg->name << ". expecting "
-                        << describeType(arg->type) << ", passing " << describeType(passType) << "\n";
-                    if ( passType->isAlias() ) {
-                        ss << "\t\t" << reportAliasError(passType) << "\n";
-                    }
-                    if ( arg->type->isRef() && !passType->isRef() ) {
-                        ss << "\t\tcan't pass non-ref to ref\n";
-                    }
-                    if ( arg->type->isRef() && !arg->type->constant && passType->constant ) {
-                        ss << "\t\tcan't ref types can only add constness\n";
-                    }
-                    if ( arg->type->isPointer() && !arg->type->constant && passType->constant) {
-                        ss << "\t\tpointer types can only add constness\n";
-                    }
+                    ss << describeMismatchingArgument(arg->name, passType, arg->type);
                 }
             }
             for ( ; ai!= pFn->arguments.size(); ++ai ) {
@@ -2378,31 +2370,12 @@ namespace das {
             for ( size_t i=0; i != blockT->argTypes.size(); ++i ) {
                 auto & passType = expr->arguments[i+1]->type;
                 auto & argType = blockT->argTypes[i];
-                // same type only
-                if ( !argType->implicit && !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, TemporaryMatters::yes) ) {
-                    error("incomaptible argument " + to_string(i+1) + " " + describeType(passType) + " vs "
-                          + describeType(argType) + ", temporary matters",  "", "",
+                if ( !isMatchingArgument(nullptr, argType, passType, false,false) ) {
+                    auto extras = verbose ? ("\n" + describeMismatchingArgument(to_string(i+1), passType, argType)) : "";
+                    error("incompatible argument " + to_string(i+1),
+                        "\t" + describeType(passType) + " vs " + describeType(argType) + extras, "",
                         expr->at, CompilationError::invalid_argument_type);
-                }
-                // can't pass non-ref to ref
-                if ( argType->isRef() && !passType->isRef() ) {
-                    error("incomaptible argument. can't pass non-ref to ref " + to_string(i+1) + " "
-                        + describeType(passType) + " vs " + describeType(argType), "", "",
-                        expr->at, CompilationError::invalid_argument_type);
-                }
-                // ref types can only add constness
-                if ( argType->isRef() && !argType->constant && passType->constant ) {
-                    error("incomaptible argument " + to_string(i+1) + " "
-                        + describeType(passType) + " vs " + describeType(argType)
-                        + ", passing const to non-const argument", "", "",
-                            expr->at, CompilationError::invalid_argument_type);
-                }
-                // pointer types can only add constant
-                if ( argType->isPointer() && !argType->constant && passType->constant ) {
-                    error("incomaptible argument " + to_string(i+1)
-                        + " " + describeType(passType) + " vs " + describeType(argType)
-                        + ", passing const pointer to non-const pointer argument", "", "",
-                          expr->at, CompilationError::invalid_argument_type);
+                    return Visitor::visit(expr);
                 }
                 // TODO: invoke with TEMP types
                 if ( !argType->isRef() )
