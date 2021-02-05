@@ -1074,9 +1074,17 @@ namespace das
         return *g_DebugAgentContext;
     }
 
+}
+
+das::Context* get_clone_context( das::Context * ctx );//link time resolved dependencies
+
+namespace das
+{
+
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo ) {
         g_isInDebugAgentCreation = true;
-        unique_ptr<Context> forkContext = make_unique<Context>(*context);
+        unique_ptr<Context> forkContext;
+        forkContext.reset(get_clone_context(context));
         g_isInDebugAgentCreation = false;
         vec4f args[1];
         args[0] = cast<Context *>::from(context);
