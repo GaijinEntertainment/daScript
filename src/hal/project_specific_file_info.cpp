@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 #include "daScript/daScriptModule.h"
 #include "daScript/simulate/fs_file_info.h"
+#include "daScript/simulate/simulate.h"
 
 using namespace das;
 
