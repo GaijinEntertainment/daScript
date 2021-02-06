@@ -37,7 +37,8 @@ def test_delete_struct
     let w0 = heap_bytes_allocated()
     a = new SomethingSmall
     let w1 = heap_bytes_allocated()
-    delete a
+    unsafe
+        delete a
     let w2 = heap_bytes_allocated()
     assert(w1>w0 && w0==w2)
     assert(a==null)
@@ -46,7 +47,8 @@ def test_delete_struct_array
     let w0 = heap_bytes_allocated()
     var a = new SomethingSmall[10]
     let w1 = heap_bytes_allocated()
-    delete a
+    unsafe
+        delete a
     let w2 = heap_bytes_allocated()
     assert(w1>w0 && w0==w2)
     for pA in a
@@ -74,8 +76,9 @@ def da_inscope(x)
     for pA in a
         pA.a = x
 finally
-    delete a
-    delete b
+    unsafe
+        delete a
+        delete b
 
 def test_delete_struct_array_in_scope
     let w0 = heap_bytes_allocated()

@@ -3027,6 +3027,7 @@ namespace das {
                 error("can't delete constant expression " + describeType(expr->subexpr->type), "", "",
                       expr->at, CompilationError::bad_delete);
             } else if ( expr->subexpr->type->isPointer() ) {
+                TextPrinter tp;
                 if ( !safeExpression(expr) ) {
                     error("delete of pointer requires unsafe",  "", "",
                         expr->at, CompilationError::unsafe);
@@ -3039,6 +3040,7 @@ namespace das {
                         auto ptrf = getFinalizeFunc(expr->subexpr->type);
                         if ( ptrf.size()==0 ) {
                             auto fnDel = generatePointerFinalizer(expr->subexpr->type, expr->at);
+                            if ( !expr->alwaysSafe ) fnDel->unsafeOperation = true;
                             if ( !program->addFunction(fnDel) ) {
                                 reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                                 return Visitor::visit(expr);
