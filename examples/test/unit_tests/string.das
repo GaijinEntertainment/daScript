@@ -4,6 +4,37 @@
 
 require strings
 
+def failUint(val: string)
+    try
+        debug(uint(val), "=")
+        assert(false, "can't convert non uint string without exception")
+    recover {}
+
+def failInt(val: string)
+    try
+        debug(int(val), "=")
+        assert(false, "can't convert non int string without exception")
+    recover {}
+
+
+def failFloat(val: string)
+    try
+        debug(float(val), "=")
+        assert(false, "can't convert non float string without exception")
+    recover {}
+
+def failDouble(val: string)
+    try
+        debug(double(val), "=")
+        assert(false, "can't convert non double string without exception")
+    recover {}
+
+def failAll(val: string)
+    failUint(val)
+    failInt(val)
+    failFloat(val)
+    failDouble(val)
+
 [export]
 def test:bool
     let s:string = "hello, world!"
@@ -34,13 +65,21 @@ def test:bool
     assert(slice(s, 6, 7) == " ")
     assert(int("11") == 11)
     assert(int("-12") == -12)
+    assert(int("-12  ") == -12)
+    assert(int("  -12") == -12)
+    assert(int("  -12  ") == -12)
     assert(uint("11") == 11U)
+    assert(uint("  12  ") == 12U)
+    assert(uint("  12") == 12U)
     assert(float("-12") == -12.)
     assert(float("1e1") == 10.)
-    try
-        debug(int("11abc"), "=")
-        assert(false, "can't convert non int string without exception")
-    recover {}
+    assert(float("  12") == 12.)
+    assert(float("12   ") == 12.)
+    assert(float("  12   ") == 12.)
+    failAll("")
+    failAll("abc")
+    assert(to_int("") == 0)
+    assert(to_float("") == 0f)
     assert(to_int("11abc") == 11)
     assert(to_float("11.1abc") == 11.1)
     let a_slash_slash = "ab\\xy"
