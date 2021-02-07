@@ -236,12 +236,11 @@ namespace das {
         }
     virtual void walk ( das::DataWalker & walker, void * data ) override {
         if ( !walker.reading ) {
-            Context ** t = (Context **) data;
             if ( sizeof(intptr_t)==4 ) {
-                uint32_t T = intptr_t(*t);
+                uint32_t T = uint32_t(intptr_t(data));
                 walker.UInt(T);
             } else {
-                uint64_t T = intptr_t(*t);
+                uint64_t T = uint64_t(intptr_t(data));
                 walker.UInt64(T);
             }
         }

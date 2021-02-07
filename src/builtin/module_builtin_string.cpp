@@ -471,8 +471,22 @@ namespace das
     int32_t builtin_ext_string_length(string & str) {
         return int32_t(str.size());
     }
+
     void builtin_resize_string(string & str, int32_t newLength) {
         str.resize(newLength);
+    }
+
+    // TODO: do we need a coresponding delete?
+    char * builtin_reserve_string_buffer ( const char * str, int32_t length, Context * context ) {
+        auto buf = context->heap->allocate(length);
+        if ( str ) {
+            auto slen = min ( int32_t(strlen(str)), length-1 );
+            memcpy ( buf, str, slen );
+            buf[slen] = 0;
+        } else {
+            buf[0] = 0;
+        }
+        return buf;
     }
 
     class Module_Strings : public Module {
@@ -595,6 +609,9 @@ namespace das
             // bitset helpers
             addExtern<DAS_BIND_FUN(is_char_in_set)>(*this, lib, "is_char_in_set",
                 SideEffects::none,"is_char_in_set");
+            // string buffer
+            addExtern<DAS_BIND_FUN(builtin_reserve_string_buffer)>(*this, lib, "reserve_string_buffer",
+                SideEffects::none,"builtin_reserve_string_buffer");
             // lets make sure its all aot ready
             verifyAotReady();
         }
