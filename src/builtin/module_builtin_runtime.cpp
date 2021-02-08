@@ -803,6 +803,60 @@ namespace das
         return context->stringHeap->allocateString(str, strLen);
     }
 
+    struct MigrateStringWalker : DataWalker {
+        Context * context = nullptr;
+        using loop_point = pair<void *,uint32_t>;
+        vector<loop_point> visited;
+        vector<loop_point> visited_handles;
+        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
+            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+                    return t.first==ps && t.second==info->hash;
+                }) == visited.end();
+        }
+        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
+            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+                    return t.first==ps && t.second==info->hash;
+                }) == visited.end();
+        }
+        virtual void beforeStructure ( char * ps, StructInfo * info ) override {
+            visited.emplace_back(make_pair(ps,info->hash));
+        }
+        virtual void afterStructure ( char *, StructInfo * ) override {
+            visited.pop_back();
+        }
+        virtual void beforeHandle ( char * ps, TypeInfo * ti ) override {
+            visited_handles.emplace_back(make_pair(ps,ti->hash));
+        }
+        virtual void afterHandle ( char *, TypeInfo * ) override {
+            visited_handles.pop_back();
+        }
+        virtual void String ( char * & st ) override {
+            DataWalker::String(st);
+            if ( !st ) {
+                return;
+            }
+            if ( context->constStringHeap->isOwnPtr(st) ) {     // its already in this context
+                return;
+            }
+            uint32_t slen = uint32_t(strlen(st));
+            uint32_t len = slen + 1;
+            len = (len + 15) & ~15;
+            if ( context->stringHeap->isOwnPtr(st,len) ) {      // its already in this context
+                return;
+            }
+            st = context->stringHeap->allocateString(st,slen);
+        }
+    };
+
+    vec4f builtin_migrate_data ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        if ( call->nArguments!=1 ) context.throw_error("expecting one argument");
+        if ( !call->types ) context.throw_error("missing type info");
+        MigrateStringWalker walker;
+        walker.context = &context;
+        walker.walk(args[0], call->types[0]);
+        return v_zero();
+    }
+
     void builtin_temp_array ( void * data, int size, const Block & block, Context * context ) {
         Array arr;
         arr.data = (char *) data;
@@ -1008,5 +1062,8 @@ namespace das
         auto bta = addExtern<DAS_BIND_FUN(builtin_temp_array)>(*this, lib, "_builtin_temp_array", SideEffects::invoke, "builtin_temp_array");
         bta->unsafeOperation = true;
         bta->privateFunction = true;
+        // migrate data
+        addInterop<builtin_migrate_data,void,vec4f>(*this, lib, "builtin_migrate_data",
+            SideEffects::modifyArgumentAndExternal, "builtin_migrate_data");
     }
 }
