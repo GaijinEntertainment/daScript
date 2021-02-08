@@ -48,37 +48,51 @@ namespace debugapi {
        }
         virtual void onInstall ( DebugAgent * agent ) override {
             if ( auto fnOnInstall = get_onInstall(classPtr) ) {
+                context->lock();
                 invoke_onInstall(context,fnOnInstall,classPtr,agent);
+                context->unlock();
             }
         }
         virtual void onUninstall ( DebugAgent * agent ) override {
             if ( auto fnOnUninstall = get_onUninstall(classPtr) ) {
+                context->lock();
                 invoke_onUninstall(context,fnOnUninstall,classPtr,agent);
+                context->unlock();
             }
         }
         virtual void onCreateContext ( Context * ctx ) override {
             if ( auto fnOnCreateContext = get_onCreateContext(classPtr)) {
+                context->lock();
                 invoke_onCreateContext(context,fnOnCreateContext,classPtr,*ctx);
+                context->unlock();
             }
         }
         virtual void onDestroyContext ( Context * ctx ) override {
             if ( auto fnOnDestroyContext = get_onDestroyContext(classPtr) ) {
+                context->lock();
                 invoke_onDestroyContext(context,fnOnDestroyContext,classPtr,*ctx);
+                context->unlock();
             }
         }
         virtual void onSingleStep ( Context * ctx, const LineInfo & at ) override {
             if ( auto fnOnSingleStep = get_onSingleStep(classPtr) ) {
+                context->lock();
                 invoke_onSingleStep(context,fnOnSingleStep,classPtr,*ctx,at);
+                context->unlock();
             }
         }
         virtual void onBreakpoint ( Context * ctx, const LineInfo & at ) override {
             if ( auto fnOnBreakpoint = get_onBreakpoint(classPtr) ) {
+                context->lock();
                 invoke_onBreakpoint(context,fnOnBreakpoint,classPtr,*ctx,at);
+                context->unlock();
             }
         }
         virtual void onTick () override {
             if ( auto fnOnTick = get_onTick(classPtr) ) {
+                context->lock();
                 invoke_onTick(context,fnOnTick,classPtr);
+                context->unlock();
             }
         }
     protected:
@@ -646,7 +660,10 @@ namespace debugapi {
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
             context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
         }
-        return invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        invCtx->lock();
+        vec4f res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        invCtx->unlock();
+        return res;
     }
 
     vec4f pinvoke_impl2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
@@ -654,11 +671,14 @@ namespace debugapi {
         auto fn = cast<Func>::to(args[1]);
         if ( fn.index==0 ) context.throw_error("pnvoke can't invoke null function");
         auto simFn = invCtx->getFunction(fn.index-1);
-        if ( !simFn ) context.throw_error_ex("pinvoke can't find %s function", fn);
+        if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%d", fn.index-1);
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
             context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
         }
-        return invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        invCtx->lock();
+        vec4f res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        invCtx->unlock();
+        return res;
     }
 
     class Module_Debugger : public Module {
