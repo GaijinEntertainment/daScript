@@ -868,6 +868,11 @@ namespace das
         context->invoke(block, args, nullptr);
     }
 
+    bool g_isInAot = false;
+    bool is_in_aot ( ) {
+        return g_isInAot;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1065,5 +1070,6 @@ namespace das
         // migrate data
         addInterop<builtin_migrate_data,void,vec4f>(*this, lib, "builtin_migrate_data",
             SideEffects::modifyArgumentAndExternal, "builtin_migrate_data");
+        addExtern<DAS_BIND_FUN(is_in_aot)>(*this, lib, "is_in_aot", SideEffects::worstDefault, "is_in_aot");
     }
 }
