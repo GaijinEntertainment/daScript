@@ -1962,7 +1962,10 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
-            ss << "((char *) \"" << escapeString(c->text,false) << "\")";
+            if (c->text.empty())
+                ss << "nullptr";
+            else
+                ss << "((char *) \"" << escapeString(c->text,false) << "\")";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt2 * c ) override {
