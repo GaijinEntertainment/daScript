@@ -424,7 +424,7 @@ def lock_data ( var a : array<auto(TT)> = const; blk : block<(var p:TT?# implici
         var nullT : TT?
         invoke(blk, nullT, 0)
 
-def lock_data ( a : array<auto(TT)> = const; blk : block<(p:TT?# implicit;s:int)> )
+def lock_data ( a : array<auto(TT)> = const; blk : block<(p:TT const?# implicit;s:int)> )
     let len = length(a)
     if len != 0
         __builtin_array_lock(a)

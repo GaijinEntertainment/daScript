@@ -11,4 +11,6 @@ namespace das {
     void dapiWalkDataV ( DataWalkerPtr walker, float4 data, const TypeInfo & info );
 
     StackWalkerPtr makeStackWalker ( const void * pClass, const StructInfo * info, Context * context );
+
+    __forceinline Context  & thisContext ( Context * context ) { return *context; }
 }

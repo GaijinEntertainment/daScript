@@ -598,6 +598,10 @@ namespace das
         string getAotArgumentPrefix(ExprCallFunc * call, int index) const;
         string getAotArgumentSuffix(ExprCallFunc * call, int index) const;
         FunctionPtr setAotTemplate();
+        FunctionPtr arg_init ( int argIndex, const ExpressionPtr & initValue ) {
+            arguments[argIndex]->init = initValue;
+            return this;
+        }
     public:
         AnnotationList      annotations;
         string              name;

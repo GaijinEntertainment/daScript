@@ -343,6 +343,7 @@ namespace das
         string                  name;
         vector<ExpressionPtr>   arguments;
         bool                    argumentsFailedToInfer = false;
+        TypeDeclPtr             aliasSubstitution;  // only used during infer
     };
 
     struct ExprCallMacro : ExprLooksLikeCall {

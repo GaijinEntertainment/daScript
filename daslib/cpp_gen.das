@@ -17,9 +17,16 @@ let verbose = false
     config
 */
 
+var local_type_names : array<string>
+
 var blocked_type_names : array<string>
 
-var blocked_functions : array<string> <-  [{string [] "operator delete"; "operator new"}];
+var blocked_functions : array<string> <-  [{string []
+    "operator delete";
+    "operator new";
+    "__security_init_cookie";
+    "__security_check_cookie"
+}];
 
 var cmres_functions : array<string>
 
@@ -65,6 +72,8 @@ struct ClangStructField : ClangAstDecl
 
 struct ClangFuncArg : ClangAstDecl
     atype   : string
+    value   : string
+    vtype   : string
 
 struct ClangFunc : ClangAstDecl
     mangledName : string
@@ -171,8 +180,7 @@ def onEnum(var root)
     let fullName = getCppName(name)
     if root |> key_exists("scopedEnumTag")
         let tag = root["scopedEnumTag"] as _string
-        var fut & = root["fixedUnderlyingType"] as _object
-        let qtype = fut["qualType"] as _string
+        let qtype = getQualType(root,"fixedUnderlyingType")
         if verbose
             print("enum {tag} {name} : {qtype} // {fullName}\n")
         ast.enums[fullName] <- [[ClangEnum
@@ -201,8 +209,7 @@ def onVar(var root)
     let name = root["name"] as _string
     let fullName = getCppName(name)
     let mangledName = root["mangledName"] as _string // todo: undecorate mangled name
-    var ftype & = root["type"] as _object
-    var qualType = ftype["qualType"] as _string
+    var qualType = getQualType(root)
     if verbose
         print("global variable {name} // {fullName}\n// {mangledName}\n// {qualType}\n")
     ast.globals[fullName] <- [[ClangGlobalVar
@@ -212,12 +219,69 @@ def onVar(var root)
         gtype = qualType
     ]]
 
+def getQualType(var root; field:string="type")
+    var qto & = root[field] as _object
+    return qto["qualType"] as _string
+
+def onNumericLiteral(var inner_obj)
+    var value = ""
+    var valueType =""
+    let valueCategory = inner_obj["valueCategory"] as _string
+    if valueCategory=="rvalue"
+        value = inner_obj["value"] as _string
+    valueType = getQualType(inner_obj)
+    return [[auto value, valueType]]
+
+def onInitArg(var root)
+    var value = ""
+    var valueType = ""
+    if root |> key_exists("inner")
+        root |> with_array("inner") <| $ ( inner )
+            var inner_obj & = inner[0] as _object
+            let kind = inner_obj["kind"] as _string
+            if kind=="ImplicitCastExpr"
+                let castKind = inner_obj["castKind"] as _string
+                if castKind=="NullToPointer"
+                    value = "nullptr"
+                elif castKind=="ArrayToPointerDecay"
+                    let valueCategory = inner_obj["valueCategory"] as _string
+                    valueType = getQualType(inner_obj)
+                    if valueCategory=="rvalue"
+                        if valueType=="const char *"
+                            inner_obj |> with_array("inner") <| $ ( iarr )
+                                var iobj & = iarr[0] as _object
+                                value = iobj["value"] as _string
+                        else
+                            print("warning: unsupported decay type {valueType}")
+                else
+                    print("warning: unsupproted cast kind {castKind}\n")
+            elif kind=="IntegerLiteral" || kind=="FloatingLiteral"
+                let literal = onNumericLiteral(inner_obj)
+                value = literal._0
+                valueType = literal._1
+            elif kind=="UnaryOperator"
+                let opCode = inner_obj["opcode"] as _string
+                inner_obj |> with_array("inner") <| $ (iinner)
+                    var iinner_obj & = iinner[0] as _object
+                    let ikind = iinner_obj["kind"] as _string
+                    if ikind=="IntegerLiteral" || ikind=="FloatingLiteral"
+                        let literal = onNumericLiteral(iinner_obj)
+                        value = opCode + literal._0
+                        valueType = literal._1
+            elif kind=="CXXBoolLiteralExpr"
+                let valueCategory = inner_obj["valueCategory"] as _string
+                if valueCategory=="rvalue"
+                    value = (inner_obj["value"] as _bool) ? "true" : "false"
+                valueType = getQualType(inner_obj)
+            else
+                print("warning: unsupproted init kind {kind}\n")
+    return [[auto value, valueType]]
+
 def onFunctionBody(var root) : ClangFunc
     let name = root["name"] as _string
     let fullName = getCppName(name)
     let mangledName = root["mangledName"] as _string // todo: undecorate mangled name
-    var ftype & = root["type"] as _object
-    var qualType = ftype["qualType"] as _string
+    var qualType = getQualType(root)
     if verbose
         print("function {name} // {fullName}\n// {mangledName}\n// {qualType}\n")
     var ffunc <- [[ClangFunc
@@ -234,14 +298,21 @@ def onFunctionBody(var root) : ClangFunc
                 var ad & = fad as _object
                 if ad["kind"] as _string == "ParmVarDecl"
                     let fieldName = key_exists(ad,"name") ? (ad["name"] as _string) : ""
-                    var fftype & = ad["type"] as _object
-                    var fqualType = fftype["qualType"] as _string
+                    var fqualType = getQualType(ad)
+                    var fieldInit = ""
+                    var fieldInitType = ""
+                    if key_exists(ad,"init")
+                        let arg = onInitArg(ad)
+                        fieldInit  = arg._0
+                        fieldInitType = arg._1
                     ffunc.args |> emplace([[ClangFuncArg
                         name=fieldName,
-                        atype=fqualType
+                        atype=fqualType,
+                        value=fieldInit,
+                        vtype=fieldInitType
                     ]])
                     if verbose
-                        print("\t{fqualType} {fieldName}\n")
+                        print("\t{fqualType} {fieldName} = {fieldInit}\n")
     return <- ffunc
 
 def onMethod(var root)
@@ -286,7 +357,7 @@ def onAccess(var root)
     elif access=="protected"
         kind = AccessKind Protected
     else
-        panic("unsupported access kind {access}")
+        panic("unsupported access kind {access}\n")
     access_stack[length(access_stack)-1] = kind
 
 def isBitfield(var root)
@@ -297,8 +368,7 @@ def isBitfield(var root)
 
 def onField(var root)
     let name = key_exists(root,"name") ? (root["name"] as _string) : ""
-    var ftype & = root["type"] as _object
-    var qualType = ftype["qualType"] as _string
+    var qualType = getQualType(root)
     var access = access_stack[length(access_stack)-1]
     if verbose
         print("\t{qualType} {name} // {access}\n")
@@ -322,8 +392,7 @@ def getCppName(baseName)
 def onTypeDecl(var root)
     let name = root["name"] as _string
     let fullName = getCppName(name)
-    var ftype & = root["type"] as _object
-    var qualType = ftype["qualType"] as _string
+    var qualType = getQualType(root)
     if verbose
         print("typedecl {name} = {qualType} // {fullName}\n")
     ast.typedefs[fullName] = [[ClangTypedef
@@ -337,6 +406,13 @@ def isBlockedType(qtype:string)
         if qtype |> find(btn) != -1
             return true
     return false
+
+def isLocalType(qtype:string)
+    for btn in local_type_names
+        if qtype |> find(btn) != -1
+            return true
+    return false
+
 
 def genEnums(hf,mf,df:FILE const?)
     fprint(hf,"// ------------\n// enumerations\n// ------------\n\n")
@@ -386,21 +462,19 @@ def genStructs(hf,mf,df:FILE const?)
         fprint(df,"auto ann_{st.name} = make_smart<{st.name}_GeneratedAnnotation>(lib);\n")
         fprint(df,"addAnnotation(ann_{st.name});\n")
         fprint(hf,"MAKE_EXTERNAL_TYPE_FACTORY({st.name},{st.cppName})\n")
-        fprint(mf,"
-    struct {st.name}_GeneratedAnnotation : ManagedStructureAnnotation<{st.cppName}> \{
-        {st.name}_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation (\"{st.name}\", ml) \{
-        \}
-        void init () \{
-")
+        fprint(mf,"struct {st.name}_GeneratedAnnotation : ManagedStructureAnnotation<{st.cppName}> \{\n")
+        if isLocalType(st.name)
+            fprint(mf,"\tvirtual bool isLocal() const override \{ return true; \}\n")
+        fprint(mf,"\t{st.name}_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation (\"{st.name}\", ml) \{\n")
+        fprint(mf,"\t\}\n")
+        fprint(mf,"\tvoid init () \{\n")
         for fld in st.fields
             if !needToGenField(fld)
                 continue
             if fld.isBitfield           // TODO: support bitfields
                 continue
-            fprint(mf,"\t\t\taddField<DAS_BIND_MANAGED_FIELD({fld.cppName})>(\"{fld.name}\",\"{fld.cppName}\");\n")
-        fprint(mf,"        \}
-    \};
-")
+            fprint(mf,"\t\taddField<DAS_BIND_MANAGED_FIELD({fld.cppName})>(\"{fld.name}\",\"{fld.cppName}\");\n")
+        fprint(mf,"\t\}\n\};\n")
     for st in values(ast.structs)
         if !needToGenStruct(st)
             continue
@@ -410,6 +484,7 @@ def genStructs(hf,mf,df:FILE const?)
 
 def isBlockedFun(fn)
     if fn.ftype |> find("...") != -1
+        print("warning: variadic function {fn.name} aka {fn.cppName}\n")
         return true
     for fa in fn.args
         if fa.atype |> isBlockedType
@@ -453,8 +528,6 @@ def isCmresFun(fn)
     return false
 
 def getFunctions(hf,mf,df:FILE const?)
-    fprint(hf,"// ------------\n// functions\n// ------------\n\n")
-    fprint(mf,"// ------------\n// functions\n// ------------\n\n")
     fprint(df,"// ------------\n// functions\n// ------------\n\n")
     var all_fn : table<string; int>
     for fn in values(ast.funcs)
@@ -485,7 +558,26 @@ def getFunctions(hf,mf,df:FILE const?)
                 fprint(df,"\"arg{argi}\"")
             else
                 fprint(df,"\"{arg.name}\"")
-        fprint(df,"\});\n")
+        fprint(df,"\})\n")
+        for arg,argi in fn.args,range(100500)
+            if !empty(arg.value)
+                if arg.value=="nullptr"
+                    if arg.atype=="const char *"
+                        fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstString>(\"\"))\n")
+                    else
+                        fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstPtr>())\n")
+                elif arg.vtype=="int"
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstInt>({arg.value}))\n")
+                elif arg.vtype=="float"
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstFloat>({arg.value}))\n")
+                elif arg.vtype=="bool"
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstBool>({arg.value}))\n")
+                elif arg.vtype=="const char *"
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstString>({arg.value}))\n")
+                else
+                    fprint(df,"\t\t// {arg.name} : {arg.atype} = {arg.value}\n")
+                    print("warning: unsupported init {arg.atype} of {arg.vtype}\n")
+        fprint(df,";\n")
 
 def genBindings(hf,mf,df:FILE const?)
     genEnums(hf,mf,df)

@@ -349,7 +349,8 @@ def mk_concat(var left,right:ReNode?)
         left.at.y = right.at.y
         left.text += right.text
         left.textLen += right.textLen
-        delete right
+        unsafe
+            delete right
         return left
     elif left.op==ReOp Concat && left.right.op==ReOp Char && right.op==ReOp Char
         // mk_concat(concat(z,char(x)),char(y)) = concat(z,char(xy))
@@ -358,7 +359,8 @@ def mk_concat(var left,right:ReNode?)
         lor.at.y = right.at.y
         lor.text += right.text
         lor.textLen += right.textLen
-        delete right
+        unsafe
+            delete right
         return left
     else
         return new [[ReNode op=ReOp Concat, left = left, right = right, at=range(left.at.x,right.at.y)]]
@@ -370,7 +372,8 @@ def mk_union(var left,right:ReNode?) : ReNode?
         if right.op==ReOp Union                    // union(union(x),union(y)) = union(xy)
             for x in right.all
                 push(left.all,x)
-            delete right
+            unsafe
+                delete right
         else                                       // union(union(x),y) = union(xy)
             push(left.all,right)
         return left

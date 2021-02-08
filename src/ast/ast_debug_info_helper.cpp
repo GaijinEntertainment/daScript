@@ -82,6 +82,7 @@ namespace das {
         fni->flags = 0;
         if ( fn.init ) fni->flags |= FuncInfo::flag_init;
         if ( fn.builtIn ) fni->flags |= FuncInfo::flag_builtin;
+        if ( fn.privateFunction ) fni->flags |= FuncInfo::flag_private;
         fni->result = makeTypeInfo(nullptr, fn.result);
         fni->locals = nullptr;
         fni->localCount = 0;

@@ -599,6 +599,22 @@ namespace das
             DAS_FATAL_ERROR;
         }
     }
+    __forceinline void addConstant ( Module & mod, const string & name, const string & value ) {
+        VariablePtr pVar = make_smart<Variable>();
+        pVar->name = name;
+        pVar->type = make_smart<TypeDecl>(Type::tString);
+        pVar->type->constant = true;
+        pVar->init = make_smart<ExprConstString>(LineInfo(),value);
+        pVar->init->type = make_smart<TypeDecl>(*pVar->type);
+        pVar->init->constexpression = true;
+        pVar->initStackSize = sizeof(Prologue);
+        if ( !mod.addVariable(pVar) ) {
+            DAS_FATAL_LOG("addVariable(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
+            DAS_FATAL_ERROR;
+        }
+    }
+    __forceinline void addConstant ( Module & mod, const string & name, const char * value ) { addConstant(mod, name, string(value)); }
+    __forceinline void addConstant ( Module & mod, const string & name, char * value ) { addConstant(mod, name, string(value)); }
 
     template <typename TT>
     void addEquNeq(Module & mod, const ModuleLibrary & lib) {

@@ -777,6 +777,25 @@ namespace das {
             return ss.str();
         }
 
+        string describeMismatchingArgument( const string & argName, const TypeDeclPtr & passType, const TypeDeclPtr & argType ) const {
+            TextWriter ss;
+            ss << "\t\tinvalid argument " << argName << ". expecting "
+                << describeType(argType) << ", passing " << describeType(passType) << "\n";
+            if (passType->isAlias()) {
+                ss << "\t\t" << reportAliasError(passType) << "\n";
+            }
+            if ( argType->isRef() && !passType->isRef() ) {
+                ss << "\t\tcan't pass non-ref to ref\n";
+            }
+            if ( argType->isRef() && !argType->constant && passType->constant ) {
+                ss << "\t\tcan't ref types can only add constness\n";
+            }
+            if ( argType->isPointer() && !argType->constant && passType->constant) {
+                ss << "\t\tpointer types can only add constness\n";
+            }
+            return ss.str();
+        }
+
         string describeMismatchingFunction(const FunctionPtr & pFn, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock) const {
             if ( pFn->arguments.size() < arguments.size() ) {
                 return "\t\ttoo many arguments\n";
@@ -811,21 +830,7 @@ namespace das {
                 auto & passType = arg->value->type;
                 auto & argType = pFn->arguments[fnArgIndex]->type;
                 if (!isMatchingArgument(pFn, pFn->arguments[fnArgIndex]->type, passType,inferAuto,inferBlock)) {
-                    ss << "\t\tinvalid argument " << arg->name << ". expecting "
-                        << describeType(pFn->arguments[fnArgIndex]->type) << ", passing " << describeType(passType) << "\n";
-                    if (passType->isAlias()) {
-                        ss << "\t\t" << reportAliasError(passType) << "\n";
-                    }
-                    if ( argType->isRef() && !passType->isRef() ) {
-                        ss << "\t\tcan't pass non-ref to ref\n";
-                    }
-                    if ( argType->isRef() && !argType->constant && passType->constant ) {
-                        ss << "\t\tcan't ref types can only add constness\n";
-                    }
-                    if ( argType->isPointer() && !argType->constant && passType->constant) {
-                        ss << "\t\tpointer types can only add constness\n";
-                    }
-                    return ss.str();
+                    ss << describeMismatchingArgument(arg->name, passType, argType);
                 }
                 fnArgIndex ++;
             }
@@ -847,20 +852,7 @@ namespace das {
                 auto & arg = pFn->arguments[ai];
                 auto & passType = types[ai];
                 if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
-                    ss << "\t\tinvalid argument " << arg->name << ". expecting "
-                        << describeType(arg->type) << ", passing " << describeType(passType) << "\n";
-                    if ( passType->isAlias() ) {
-                        ss << "\t\t" << reportAliasError(passType) << "\n";
-                    }
-                    if ( arg->type->isRef() && !passType->isRef() ) {
-                        ss << "\t\tcan't pass non-ref to ref\n";
-                    }
-                    if ( arg->type->isRef() && !arg->type->constant && passType->constant ) {
-                        ss << "\t\tcan't ref types can only add constness\n";
-                    }
-                    if ( arg->type->isPointer() && !arg->type->constant && passType->constant) {
-                        ss << "\t\tpointer types can only add constness\n";
-                    }
+                    ss << describeMismatchingArgument(arg->name, passType, arg->type);
                 }
             }
             for ( ; ai!= pFn->arguments.size(); ++ai ) {
@@ -2378,31 +2370,12 @@ namespace das {
             for ( size_t i=0; i != blockT->argTypes.size(); ++i ) {
                 auto & passType = expr->arguments[i+1]->type;
                 auto & argType = blockT->argTypes[i];
-                // same type only
-                if ( !argType->implicit && !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, TemporaryMatters::yes) ) {
-                    error("incomaptible argument " + to_string(i+1) + " " + describeType(passType) + " vs "
-                          + describeType(argType) + ", temporary matters",  "", "",
+                if ( !isMatchingArgument(nullptr, argType, passType, false,false) ) {
+                    auto extras = verbose ? ("\n" + describeMismatchingArgument(to_string(i+1), passType, argType)) : "";
+                    error("incompatible argument " + to_string(i+1),
+                        "\t" + describeType(passType) + " vs " + describeType(argType) + extras, "",
                         expr->at, CompilationError::invalid_argument_type);
-                }
-                // can't pass non-ref to ref
-                if ( argType->isRef() && !passType->isRef() ) {
-                    error("incomaptible argument. can't pass non-ref to ref " + to_string(i+1) + " "
-                        + describeType(passType) + " vs " + describeType(argType), "", "",
-                        expr->at, CompilationError::invalid_argument_type);
-                }
-                // ref types can only add constness
-                if ( argType->isRef() && !argType->constant && passType->constant ) {
-                    error("incomaptible argument " + to_string(i+1) + " "
-                        + describeType(passType) + " vs " + describeType(argType)
-                        + ", passing const to non-const argument", "", "",
-                            expr->at, CompilationError::invalid_argument_type);
-                }
-                // pointer types can only add constant
-                if ( argType->isPointer() && !argType->constant && passType->constant ) {
-                    error("incomaptible argument " + to_string(i+1)
-                        + " " + describeType(passType) + " vs " + describeType(argType)
-                        + ", passing const pointer to non-const pointer argument", "", "",
-                          expr->at, CompilationError::invalid_argument_type);
+                    return Visitor::visit(expr);
                 }
                 // TODO: invoke with TEMP types
                 if ( !argType->isRef() )
@@ -3054,6 +3027,7 @@ namespace das {
                 error("can't delete constant expression " + describeType(expr->subexpr->type), "", "",
                       expr->at, CompilationError::bad_delete);
             } else if ( expr->subexpr->type->isPointer() ) {
+                TextPrinter tp;
                 if ( !safeExpression(expr) ) {
                     error("delete of pointer requires unsafe",  "", "",
                         expr->at, CompilationError::unsafe);
@@ -3066,6 +3040,7 @@ namespace das {
                         auto ptrf = getFinalizeFunc(expr->subexpr->type);
                         if ( ptrf.size()==0 ) {
                             auto fnDel = generatePointerFinalizer(expr->subexpr->type, expr->at);
+                            if ( !expr->alwaysSafe ) fnDel->unsafeOperation = true;
                             if ( !program->addFunction(fnDel) ) {
                                 reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                                 return Visitor::visit(expr);
@@ -4518,7 +4493,8 @@ namespace das {
                 error("cond operator condition must be boolean", "", "",
                     expr->at, CompilationError::condition_must_be_bool);
             } else if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
-                error("cond operator must return the same types on both sides","", "",
+                error("cond operator must return the same types on both sides",
+                    "\t" + (verbose ? (expr->left->type->describe() + " vs " + expr->right->type->describe()) :""), "",
                       expr->at, CompilationError::operator_not_found);
             } else {
                 if ( expr->left->type->ref ^ expr->right->type->ref ) { // if either one is not ref
@@ -5766,18 +5742,19 @@ namespace das {
                 for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
                     auto & arg = expr->arguments[iF];
                     if ( arg->type->isAuto() && (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType() || arg->type->isGoodFunctionType()) ) {
-                        DAS_ASSERTF ( arg->rtti_isMakeBlock(), "it's always MakeBlock. this is how we construct new [[ ]]" );
-                        auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
-                        auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                        auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type);
-                        DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
-                        TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
-                        block->returnType = make_smart<TypeDecl>(*retT->firstType);
-                        for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
-                            block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
+                        if ( arg->rtti_isMakeBlock() ) { // "it's always MakeBlock. unless its function and @@funcName
+                            auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
+                            auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
+                            auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type);
+                            DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
+                            TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
+                            block->returnType = make_smart<TypeDecl>(*retT->firstType);
+                            for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
+                                block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
+                            }
+                            setBlockCopyMoveFlags(block.get());
+                            reportAstChanged();
                         }
-                        setBlockCopyMoveFlags(block.get());
-                        reportAstChanged();
                     }
                 }
                 // append default arguments
@@ -5918,6 +5895,8 @@ namespace das {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
                             expr->name = das_to_string(aliasT->baseType);
+                            if ( aliasT->baseType==Type::tBitfield )
+                            expr->aliasSubstitution = aliasT;
                             reportAstChanged();
                         } else {
                             reportMissing(expr, types, "no matching functions or generics ", true);
@@ -5932,6 +5911,18 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
             expr->func = inferFunctionCall(expr).get();
+            if ( expr->aliasSubstitution  ) {
+                if ( expr->arguments.size()!=1 ) {
+                    error("casting to bitfield requires one argument", "", "",
+                        expr->at, CompilationError::invalid_cast);
+                    return Visitor::visit(expr);
+                }
+                auto ecast = make_smart<ExprCast>(expr->at, expr->arguments[0]->clone(), expr->aliasSubstitution );
+                ecast->reinterpret = true;
+                ecast->alwaysSafe = true;
+                expr->aliasSubstitution.reset();
+                return ecast;
+            }
             /*
             // NOTE: this should not be necessary, since infer function call suppose to report every time
             if ( !expr->func ) {

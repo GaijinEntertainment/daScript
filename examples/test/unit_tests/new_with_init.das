@@ -23,8 +23,9 @@ def test
         assert(b.center==float3(3,2,1) && b.radius==0.5f)
     return true
 finally
-    delete b0
-    delete b1
-    delete b2
-    delete b3
+    unsafe
+        delete b0
+        delete b1
+        delete b2
+        delete b3
 

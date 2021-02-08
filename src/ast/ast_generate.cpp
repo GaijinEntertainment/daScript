@@ -319,6 +319,7 @@ namespace das {
 
     FunctionPtr generatePointerFinalizer ( const TypeDeclPtr & ptrType, const LineInfo & at ) {
         auto pFunc = make_smart<Function>();
+        pFunc->privateFunction = true;
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = at;
         pFunc->name = "finalize";
@@ -377,6 +378,7 @@ namespace das {
 
     FunctionPtr generateStructureFinalizer ( const StructurePtr & ls ) {
         auto pFunc = make_smart<Function>();
+        pFunc->privateFunction = true;
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = ls->at;
         pFunc->name = "finalize";
@@ -421,6 +423,7 @@ namespace das {
                                         const StructurePtr & ls ) {
         auto lfn = lambdaName + "`finazlier";
         auto pFunc = make_smart<Function>();
+        pFunc->privateFunction = true;
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
@@ -1242,6 +1245,7 @@ namespace das {
     FunctionPtr generateTupleFinalizer ( const LineInfo & at, const TypeDeclPtr & tupleType ) {
         DAS_ASSERT(tupleType->isTuple() && "can only finalize tuple");
         auto fn = make_smart<Function>();
+        fn->privateFunction = true;
         fn->generated = true;
         fn->name = "finalize";
         fn->at = fn->atDecl = at;
@@ -1345,6 +1349,7 @@ namespace das {
     FunctionPtr generateVariantFinalizer ( const LineInfo & at, const TypeDeclPtr & variantType ) {
         DAS_ASSERT(variantType->isVariant() && "can only finalize variant");
         auto fn = make_smart<Function>();
+        fn->privateFunction = true;
         fn->generated = true;
         fn->name = "finalize";
         fn->at = fn->atDecl = at;

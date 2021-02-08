@@ -635,6 +635,32 @@ namespace debugapi {
     #endif
     }
 
+    // pinvoke(context,"function",....)
+
+    vec4f pinvoke_impl ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        auto invCtx = cast<Context *>::to(args[0]);
+        auto fn = cast<const char *>::to(args[1]);
+        if ( !fn ) context.throw_error("can't pinvoke empty string");
+        auto simFn = invCtx->findFunction(fn);
+        if ( !simFn ) context.throw_error_ex("pinvoke can't find %s function", fn);
+        if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
+            context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
+        }
+        return invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+    }
+
+    vec4f pinvoke_impl2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        auto invCtx = cast<Context *>::to(args[0]);
+        auto fn = cast<Func>::to(args[1]);
+        if ( fn.index==0 ) context.throw_error("pnvoke can't invoke null function");
+        auto simFn = invCtx->getFunction(fn.index-1);
+        if ( !simFn ) context.throw_error_ex("pinvoke can't find %s function", fn);
+        if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
+            context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
+        }
+        return invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+    }
+
     class Module_Debugger : public Module {
     public:
         Module_Debugger() : Module("debugapi") {
@@ -655,8 +681,12 @@ namespace debugapi {
                 SideEffects::modifyExternal, "tickDebugAgent");
             addExtern<DAS_BIND_FUN(installDebugAgent)>(*this, lib,  "install_debug_agent",
                 SideEffects::modifyExternal, "installDebugAgent");
+            addExtern<DAS_BIND_FUN(getDebugAgentContext), SimNode_ExtFuncCallRef>(*this, lib,  "get_debug_agent_context",
+                SideEffects::modifyExternal, "getDebugAgentContext");
             addExtern<DAS_BIND_FUN(forkDebugAgentContext)>(*this, lib,  "fork_debug_agent_context",
                 SideEffects::modifyExternal, "forkDebugAgentContext");
+            addExtern<DAS_BIND_FUN(isInDebugAgentCreation)>(*this, lib, "is_in_debug_agent_creation",
+                SideEffects::accessExternal, "isInDebugAgentCreation");
             addExtern<DAS_BIND_FUN(debuggerSetContextSingleStep)>(*this, lib,  "set_single_step",
                 SideEffects::modifyExternal, "debuggerSetContextSingleStep");
             addExtern<DAS_BIND_FUN(debuggerStackWalk)>(*this, lib, "stackwalk",
@@ -673,6 +703,31 @@ namespace debugapi {
                 SideEffects::modifyExternal, "makeStackWalker");
             addExtern<DAS_BIND_FUN(dapiStackWalk)>(*this, lib,  "walk_stack",
                 SideEffects::modifyExternal, "dapiStackWalk");
+            // pinvoke
+            addInterop<pinvoke_impl,void,vec4f,const char *>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+            addInterop<pinvoke_impl,void,vec4f,const char *,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+            addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+            addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+            addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+            // pinvoke2
+            addInterop<pinvoke_impl2,void,vec4f,Func>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+            addInterop<pinvoke_impl2,void,vec4f,Func,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+            addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+            addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+            addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+            // this context
+            addExtern<DAS_BIND_FUN(thisContext), SimNode_ExtFuncCallRef>(*this, lib,  "this_context",
+                SideEffects::accessExternal, "thisContext");
             // add builtin module
             compileBuiltinModule("debugger.das",debugger_das,sizeof(debugger_das));
             // lets make sure its all aot ready

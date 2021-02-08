@@ -167,6 +167,7 @@ namespace das
         FileInfo *  fileInfo = nullptr;
         uint32_t    column = 0, line = 0;
         uint32_t    last_column = 0, last_line = 0;
+        static LineInfo g_LineInfoNULL;
     };
 
     struct LineInfoArg : LineInfo {};
@@ -278,6 +279,7 @@ namespace das
         enum {
             flag_init = (1<<0)
         ,   flag_builtin = (1<<1)
+        ,   flag_private = (1<<2)
         };
         char *      name;
         char *      cppName;

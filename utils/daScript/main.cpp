@@ -5,6 +5,8 @@ using namespace das;
 
 TextPrinter tout;
 
+bool pauseAfterErrors = false;
+
 void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
     auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
@@ -12,6 +14,9 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
                 tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+            }
+            if ( pauseAfterErrors ) {
+                getchar();
             }
         } else {
             if ( outputProgramCode )
@@ -44,6 +49,7 @@ int main(int argc, char * argv[]) {
     string mainName = "main";
     bool scriptArgs = false;
     bool outputProgramCode = false;
+    bool pauseAfterDone = false;
     for ( int i=1; i < argc; ++i ) {
         if ( argv[i][0]=='-' ) {
             string cmd(argv[i]+1);
@@ -62,7 +68,10 @@ int main(int argc, char * argv[]) {
                 outputProgramCode = true;
             } else if ( cmd=="args" ) {
                 break;
-            }else if ( !scriptArgs) {
+            } else if ( cmd=="pause" ) {
+                pauseAfterErrors = true;
+                pauseAfterDone = true;
+            } else if ( !scriptArgs) {
                 print_help();
                 return -1;
             }
@@ -96,6 +105,7 @@ int main(int argc, char * argv[]) {
         compile_and_run(fn, mainName, outputProgramCode);
     }
     // and done
+    if ( pauseAfterDone ) getchar();
     Module::Shutdown();
     return 0;
 }

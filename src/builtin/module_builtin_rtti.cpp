@@ -234,6 +234,17 @@ namespace das {
     struct ContextAnnotation : ManagedStructureAnnotation<Context,false> {
         ContextAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Context", ml) {
         }
+    virtual void walk ( das::DataWalker & walker, void * data ) override {
+        if ( !walker.reading ) {
+            if ( sizeof(intptr_t)==4 ) {
+                uint32_t T = uint32_t(intptr_t(data));
+                walker.UInt(T);
+            } else {
+                uint64_t T = uint64_t(intptr_t(data));
+                walker.UInt64(T);
+            }
+        }
+    }
     };
 
     struct LineInfoAnnotation : ManagedStructureAnnotation<LineInfo,false> {
@@ -953,6 +964,7 @@ namespace das {
             // func info flags
             addConstant<uint32_t>(*this, "FUNCINFO_INIT", uint32_t(FuncInfo::flag_init));
             addConstant<uint32_t>(*this, "FUNCINFO_BUILTIN", uint32_t(FuncInfo::flag_builtin));
+            addConstant<uint32_t>(*this, "FUNCINFO_PRIVATE", uint32_t(FuncInfo::flag_private));
             // macros
             addTypeInfoMacro(make_smart<RttiTypeInfoMacro>());
             // functions

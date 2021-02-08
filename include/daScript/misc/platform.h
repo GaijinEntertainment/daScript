@@ -100,11 +100,13 @@
 #endif
 
 #if defined(_MSC_VER) && !defined(__clang__)
+#if !defined(_MSVC_LANG) || _MSVC_LANG < 201703L
 __forceinline uint32_t __builtin_clz(uint32_t x) {
     unsigned long r = 0;
     _BitScanReverse(&r, x);
     return uint32_t(31 - r);
 }
+#endif
 #endif
 
 #ifdef _MSC_VER

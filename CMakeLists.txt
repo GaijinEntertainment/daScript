@@ -122,7 +122,7 @@ IF(CLANG_BIN_EXE)
             WORKING_DIRECTORY ${src_dir}
             VERBATIM
             COMMAND ${CLANG_BIN_EXE} -Xclang -ast-dump=json -x c++ -c ${header_from} -I${inc_dirs} > ${header_from}.json || cmd /c exit /b 0
-            COMMENT "Generating JSON AST for ${header_from} to ${header_from}.json\ninclude directoryes are ${inc_dir}\n"
+            COMMENT "Generating JSON AST for ${header_from} to ${header_from}.json\ninclude directoryes are ${inc_dirs}\n"
         )
         ADD_CUSTOM_COMMAND(
             TARGET ${tgt}

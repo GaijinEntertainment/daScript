@@ -12,4 +12,22 @@ namespace das {
             return typeFactory<void *>::make(library);
         };
     };
+
+    // note:
+    //  this is here to pass strings safely
+    template <>
+    struct cast_arg<char *> {
+        static __forceinline char * to ( Context & ctx, SimNode * node ) {
+            char * res = node->evalPtr(ctx);
+            return res ? res : "";
+        }
+    };
+
+    template <>
+    struct cast_arg<const char *> {
+        static __forceinline char * to ( Context & ctx, SimNode * node ) {
+            char * res = node->evalPtr(ctx);
+            return res ? res : "";
+        }
+    };
 }
