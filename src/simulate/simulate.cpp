@@ -1084,7 +1084,10 @@ namespace das
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo ) {
         g_isInDebugAgentCreation = true;
         unique_ptr<Context> forkContext;
+        bool realPersistent = context->persistent;
+        context->persistent = true;
         forkContext.reset(get_clone_context(context));
+        context->persistent = realPersistent;
         g_isInDebugAgentCreation = false;
         vec4f args[1];
         args[0] = cast<Context *>::from(context);
