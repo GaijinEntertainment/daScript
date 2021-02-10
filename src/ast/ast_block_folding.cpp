@@ -253,12 +253,18 @@ namespace das {
                     auto tb = static_pointer_cast<ExprBlock>(expr->if_true);
                     if (tb->list.size() == 1 && tb->list.back()->rtti_isReturn()) {
                         lr = static_pointer_cast<ExprReturn>(tb->list.back());
+                        if ( lr->subexpr && lr->subexpr->rtti_isMakeLocal() ) {
+                            lr.reset();   // we don't touch CMRES stuff
+                        }
                     }
                 }
                 if (expr->if_false->rtti_isBlock()) {
                     auto fb = static_pointer_cast<ExprBlock>(expr->if_false);
                     if (fb->list.size() == 1 && fb->list.back()->rtti_isReturn()) {
                         rr = static_pointer_cast<ExprReturn>(fb->list.back());
+                        if ( rr->subexpr && rr->subexpr->rtti_isMakeLocal() ) {
+                            rr.reset();   // we don't touch CMRES stuff
+                        }
                     }
                 }
                 if (lr && rr) {
