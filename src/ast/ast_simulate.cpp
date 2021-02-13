@@ -2919,6 +2919,15 @@ namespace das
         }
         context.debugger = getDebugger();
         isSimulating = false;
+        for ( int i=0; i!=context.totalFunctions; ++i ) {
+            Function *func = indexToFunction[i];
+            for (auto &ann : func->annotations) {
+                if (ann->annotation->rtti_isFunctionAnnotation()) {
+                    auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                    fann->complete(&context);
+                }
+            }
+        }
         return errors.size() == 0;
     }
 
