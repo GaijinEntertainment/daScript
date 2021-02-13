@@ -1230,7 +1230,7 @@ namespace das {
                         lastEnuValue = nextValue.get();
                         return nextValue;
                     } else {
-                        error("enumeration value " + name + " can't be infered yet",  "", "",
+                        error("enumeration value " + name + " can't be inferred yet",  "", "",
                             enu->at);
                     }
                 } else {
@@ -1242,7 +1242,7 @@ namespace das {
                 }
             } else {
                 if ( !value->type ) {
-                    error("enumeration value " + name + " can't be infered yet",  "", "",
+                    error("enumeration value " + name + " can't be inferred yet",  "", "",
                         value->at);
                 } else if ( !value->type || !value->type->isInteger() ) {
                     error("enumeration value " + name + " has to be signed or unsigned integer of any size", "", "",
@@ -1286,7 +1286,7 @@ namespace das {
             Visitor::preVisitStructureField(that, decl, last);
             that->fieldLookup[decl.name] = fieldIndex++;
             if ( decl.type->isAuto() && !decl.init) {
-                error("structure field type can't be infered, it needs an initializer", "", "",
+                error("structure field type can't be inferred, it needs an initializer", "", "",
                       decl.at, CompilationError::cant_infer_missing_initializer );
             }
         }
@@ -1319,7 +1319,7 @@ namespace das {
             if ( decl.type->isAuto() && decl.init && decl.init->type ) {
                 auto varT = TypeDecl::inferGenericType(decl.type, decl.init->type);
                 if ( !varT ) {
-                    error("structure field initialization type can't be infered, "
+                    error("structure field initialization type can't be inferred, "
                           + describeType(decl.type) + " = " + describeType(decl.init->type), "", "",
                           decl.at, CompilationError::invalid_structure_field_type );
                 } else {
@@ -1368,8 +1368,8 @@ namespace das {
             }
             // TODO: verify. correct test is in fact the one bellow
             //  if ( isFullySealedType(decl.type) ) {
-            // but the auto \ alias test may be sufficient
-            if ( !decl.type->isAutoOrAlias() ) {
+            // isFullyInferred may be sufficient
+            if ( decl.type->isFullyInferred() ) {
                 int fieldAlignemnt = decl.type->getAlignOf();
                 int fa = fieldAlignemnt - 1;
                 if ( cppLayout ) {
@@ -1412,7 +1412,7 @@ namespace das {
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
             if ( var->type->isAuto() && !var->init) {
-                error("global variable type can't be infered, it needs an initializer", "", "",
+                error("global variable type can't be inferred, it needs an initializer", "", "",
                       var->at, CompilationError::cant_infer_missing_initializer );
             }
             if ( var->type->isAlias() ) {
@@ -1430,7 +1430,7 @@ namespace das {
             if ( var->type->isAuto() ) {
                 auto varT = TypeDecl::inferGenericInitType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
-                    error("global variable " + var->name + " initialization type can't be infered, "
+                    error("global variable " + var->name + " initialization type can't be inferred, "
                           + describeType(var->type) + " = " + describeType(var->init->type), "", "",
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
@@ -1543,7 +1543,7 @@ namespace das {
             if (arg->type->isAuto() && arg->init->type) {
                 auto varT = TypeDecl::inferGenericType(arg->type, arg->init->type);
                 if ( !varT ) {
-                    error("generic argument type can't be infered, "
+                    error("generic argument type can't be inferred, "
                         + describeType(arg->type) + " = " + describeType(arg->init->type), "", "",
                         arg->at, CompilationError::cant_infer_generic );
                 } else {
@@ -1634,8 +1634,8 @@ namespace das {
             expr->type.reset();
         }
     // const
-        vec4f getEnumerationValue( ExprConstEnumeration * expr, bool & infered ) const {
-            infered = false;
+        vec4f getEnumerationValue( ExprConstEnumeration * expr, bool & inferred ) const {
+            inferred = false;
             auto cfa = expr->enumType->find(expr->text);
             if ( !cfa.second ) {
                 return v_zero();
@@ -1658,7 +1658,7 @@ namespace das {
             default:
                 DAS_ASSERTF( 0, "we should not even be here. unsupported enumeration type." );
             }
-            infered = true;
+            inferred = true;
             return envalue;
         }
         virtual ExpressionPtr visit ( ExprConst * c ) override {
@@ -1671,7 +1671,7 @@ namespace das {
                     c->type = cE->enumType->makeEnumType();
                     c->type->constant = true;
                 } else {
-                    error("enumeration value not infered yet",  "", "",
+                    error("enumeration value not inferred yet",  "", "",
                         c->at, CompilationError::invalid_enumeration);
                     c->type.reset();
                 }
@@ -2287,7 +2287,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
-            // can only infer block type, if all argument types are infered
+            // can only infer block type, if all argument types are inferred
             for ( auto & arg : block->arguments ) {
                 if ( arg->type->isAlias() ) {
                     error(reportAliasError(arg->type),  "", "",
@@ -2350,7 +2350,7 @@ namespace das {
             expr->arguments[0] = Expression::autoDereference(expr->arguments[0]);
             auto blockT = expr->arguments[0]->type;
             if ( blockT->isAutoOrAlias() ) {
-                error("invoke argument not fully infered " + describeType(blockT),  "", "",
+                error("invoke argument not fully inferred " + describeType(blockT),  "", "",
                     expr->at, CompilationError::invalid_argument_type);
                 return Visitor::visit(expr);
             }
@@ -2473,7 +2473,7 @@ namespace das {
             }
             // TODO: verify
             if ( expr->typeexpr->isAutoOrAlias() ) {
-                error("is " + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + " can't be infered", "", "",
+                error("is " + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + " can't be inferred", "", "",
                       expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
@@ -2497,7 +2497,7 @@ namespace das {
             // TODO: verify, is this even necessary now that we have tests above?
             // if ( !isFullySealedType(expr->typeexpr) ) {
             if ( expr->typeexpr->isAutoOrAlias() ) {
-                error("is " + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + " can't be fully infered", "", "",
+                error("is " + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + " can't be fully inferred", "", "",
                       expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
@@ -2529,7 +2529,7 @@ namespace das {
             }
         }
         if ( expr->typeexpr->isAutoOrAlias() ) {
-            error("type<" +  describeType(expr->typeexpr) + "> can't be fully infered",  "", "",
+            error("type<" +  describeType(expr->typeexpr) + "> can't be fully inferred",  "", "",
                 expr->at, CompilationError::type_not_found);
             return Visitor::visit(expr);
         }
@@ -2559,7 +2559,7 @@ namespace das {
             }
             //
             if ( !expr->typeexpr && !allowMissingTypeExpr ) {
-                error("typeinfo(" + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + ") can't be infered",  "", "",
+                error("typeinfo(" + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + ") can't be inferred",  "", "",
                     expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
@@ -2582,7 +2582,7 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 if ( allowMissingType ? expr->typeexpr->isAuto() : expr->typeexpr->isAutoOrAlias() ) {
-                    error("typeinfo(" + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + ") can't be fully infered",  "", "",
+                    error("typeinfo(" + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + ") can't be fully inferred",  "", "",
                         expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
@@ -3702,7 +3702,7 @@ namespace das {
                 }
             }
             if ( var->type->isAuto() && !var->init) {
-                error("block argument type can't be infered, it needs an "
+                error("block argument type can't be inferred, it needs an "
                     "initializer or to be passed to the function with the explicit block definition", "", "",
                       var->at, CompilationError::cant_infer_missing_initializer );
             }
@@ -3720,7 +3720,7 @@ namespace das {
             if ( arg->type->isAuto() ) {
                 auto argT = TypeDecl::inferGenericType(arg->type, arg->init->type);
                 if ( !argT ) {
-                    error("block argument initialization type can't be infered, "
+                    error("block argument initialization type can't be inferred, "
                           + describeType(arg->type) + " = " + describeType(arg->init->type), "", "",
                           arg->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
@@ -4745,7 +4745,7 @@ namespace das {
                     }
                     auto resT = TypeDecl::inferGenericType(resType, expr->subexpr->type);
                     if ( !resT ) {
-                        error("type can't be infered, "
+                        error("type can't be inferred, "
                               + describeType(resType) + ", returns " + describeType(expr->subexpr->type),"", "",
                               expr->at, CompilationError::cant_infer_mismatching_restrictions );
                     } else {
@@ -5212,7 +5212,7 @@ namespace das {
                 }
             }
             if ( var->type->isAuto() && !var->init) {
-                error("local variable type can't be infered, it needs an initializer", "", "",
+                error("local variable type can't be inferred, it needs an initializer", "", "",
                       var->at, CompilationError::cant_infer_missing_initializer );
             }
             if ( func ) {
@@ -5302,7 +5302,7 @@ namespace das {
             if ( var->type->isAuto() ) {
                 auto varT = TypeDecl::inferGenericInitType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
-                    error("local variable " + var->name + " initialization type can't be infered, "
+                    error("local variable " + var->name + " initialization type can't be inferred, "
                           + describeType(var->type) + " = " + describeType(var->init->type), "", "",
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
@@ -5835,7 +5835,7 @@ namespace das {
                                 break;
                             }
                         }
-                        // now, we resolve types given infered aliases
+                        // now, we resolve types given inferred aliases
                         for (size_t sz = 0; sz != types.size(); ++sz) {
                             auto & argT = clone->arguments[sz]->type;
                             if (argT->isAlias()) {
@@ -5874,7 +5874,7 @@ namespace das {
                                 return nullptr;
                             }
                         }
-                        // now we verify if tail end can indeed be fully infered
+                        // now we verify if tail end can indeed be fully inferred
                         if (!program->addFunction(clone)) {
                             auto exf = program->thisModule->functions[clone->getMangledName()];
                             DAS_ASSERTF(exf, "if we can't add, this means there is function with exactly this mangled name");
@@ -6461,7 +6461,7 @@ namespace das {
                             mkt = TypeDecl::inferGenericType(expr->makeType, init->type);
                         }
                         if ( !mkt ) {
-                            error("array type can't be infered, "
+                            error("array type can't be inferred, "
                                   + describeType(expr->makeType) + " = " + describeType(init->type), "", "",
                                   init->at, CompilationError::invalid_array_type );
                         } else {

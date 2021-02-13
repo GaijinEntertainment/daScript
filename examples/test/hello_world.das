@@ -1,23 +1,31 @@
-// options log
+options indenting = 2
 
-require daslib/jobque_boost
+options log_cpp
 
-struct Work
-    x, t : int
+require daslib/json
+
+struct JsonRpcReq
+
+  js: JsonValue?
+  id: double = 0lf
+  reqType: JsonRpcReqType
+  params: JsonValue?
+
+class JsonRpcMatch
+  requests: array<JsonRpcReq>
+
+variant JsonRpcReqType
+  none: void?
+  method: string
+  result: void?
+  error: void?
+
+def clean(var match:JsonRpcMatch)
+  for it in match.requests
+    it.params = null // it.js point to same json data
+    delete it
+  match.requests |> clear()
 
 [export]
-def test
-    with_job_que() <|
-        with_channel(5) <| $ ( channel )
-            for x in range(5)
-                new_job <| @
-                    for t in range(3)
-                        channel |> push_clone ( [[Work x=x, t=t]] )
-                    channel |> notify                               // at this point we are done with the channel on this job
-            var summ = 0
-            for w in each(channel,type<Work>)
-                summ += w.x * w.t
-            assert(summ==30)
-            assert(channel.isEmpty)
-            assert(channel.isReady)
-    return true
+def main
+  print("hello, world\n")

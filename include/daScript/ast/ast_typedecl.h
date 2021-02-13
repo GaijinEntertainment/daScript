@@ -73,7 +73,8 @@ namespace das {
         bool isTemp( bool topLevel = true, bool refMatters = true) const;
         bool isTemp(bool topLevel, bool refMatters, das_set<Structure*> & dep) const;
         bool isTempType(bool refMatters = true) const;
-        bool isAotAlias () const;
+        bool isFullyInferred(das_set<Structure*> & dep) const;
+        bool isFullyInferred() const;
         bool isShareable(das_set<Structure*> & dep) const;
         bool isShareable() const;
         bool isIndex() const;
@@ -123,12 +124,13 @@ namespace das {
         bool isString() const;
         bool isConst() const;
         bool isFoldable() const;
-        bool isAlias() const;
-        bool isAliasOrExpr() const;
         void collectAliasList(vector<string> & aliases) const;
         bool isAutoArrayResolved() const;
         bool isAuto() const;
         bool isAutoOrAlias() const;
+        bool isAotAlias () const;
+        bool isAlias() const;
+        bool isAliasOrExpr() const;
         bool isVectorType() const;
         bool isBitfield() const;
         bool isLocal() const;

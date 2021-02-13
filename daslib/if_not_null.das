@@ -26,7 +26,7 @@ class ApplyMacro : AstCallMacro
         if !(expr.arguments[1] is ExprCall)
             macro_error(prog,expr.at,"2nd argument must be call(), expecting ptr |> if_not_null() <| call()")
             return [[ExpressionPtr]]
-        if expr.arguments[0]._type!=null    // need value infered
+        if expr.arguments[0]._type!=null    // need value inferred
             if !expr.arguments[0]._type.isPointer
                 macro_error(prog,expr.at,"first argument must be pointer , expecting ptr |> if_not_null() <| call()")
                 return [[ExpressionPtr]]

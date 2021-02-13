@@ -145,14 +145,14 @@ namespace das {
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
             expr->noSideEffects = expr->subexpr->noSideEffects && (expr->func->sideEffectFlags==0);
             expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects
-                && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferedSideEffects))==0);
+                && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0);
             return Visitor::visit(expr);
         }
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
             expr->noSideEffects = expr->left->noSideEffects && expr->right->noSideEffects && (expr->func->sideEffectFlags==0);
             expr->noNativeSideEffects = expr->left->noNativeSideEffects && expr->right->noNativeSideEffects
-                && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferedSideEffects))==0);
+                && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0);
             return Visitor::visit(expr);
         }
     // op3
@@ -165,7 +165,7 @@ namespace das {
     // call
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             expr->noSideEffects = (expr->func->sideEffectFlags==0);
-            expr->noNativeSideEffects = (expr->func->sideEffectFlags & uint32_t(SideEffects::inferedSideEffects))==0;
+            expr->noNativeSideEffects = (expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0;
             if ( expr->noSideEffects ) {
                 for ( auto & arg : expr->arguments ) {
                     expr->noSideEffects &= arg->noSideEffects;

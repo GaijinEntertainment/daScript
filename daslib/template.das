@@ -24,7 +24,7 @@ class DecltypeMacro : AstCallMacro
 class TemplateMacro : AstFunctionAnnotation
     def override transform ( var expr : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if expr.func==null
-            compiling_program() |> macro_error(expr.at,"expecting infered function")
+            compiling_program() |> macro_error(expr.at,"expecting inferred function")
             return expr
         let taidx = find_index_if(each(expr.func.annotations)) <| $ ( ann )
             var same = false

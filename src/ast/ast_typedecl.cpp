@@ -159,10 +159,10 @@ namespace das
                 return nullptr;
             }
         }
-        // auto & can't be infered from non-ref
+        // auto & can't be inferred from non-ref
         if ( autoT->ref && !initT->isRef() )
             return nullptr;
-        // auto[][][] can't be infered from non-array
+        // auto[][][] can't be inferred from non-array
         if ( autoT->dim.size() ) {
             if ( autoT->dim.size()!=initT->dim.size() )
                 return nullptr;
@@ -174,12 +174,12 @@ namespace das
                 }
             }
         }
-        // non-implicit temp can't be infered from non-temp, and non-temp from temp
+        // non-implicit temp can't be inferred from non-temp, and non-temp from temp
         if ( autoT->baseType!=autoinfer && !autoT->implicit && !initT->implicit ) {
             if ( autoT->temporary != initT->temporary )
                 return nullptr;
         }
-        // auto? can't be infered from non-pointer
+        // auto? can't be inferred from non-pointer
         if ( autoT->isPointer() && (!initT->isPointer() || !initT->firstType) )
             return nullptr;
         // array has to match array
@@ -463,7 +463,7 @@ namespace das
         if (baseType == Type::alias) {
             return nullptr; // if it is another alias, can't find it
         } else if (baseType == Type::autoinfer && !allowAuto) {
-            return nullptr; // if it has not been infered yet, can't find it
+            return nullptr; // if it has not been inferred yet, can't find it
         }
         else if (alias == name) {
             return this;
@@ -1853,6 +1853,27 @@ namespace das
             }
         }
         return false;
+    }
+
+    bool TypeDecl::isFullyInferred() const {
+        das_set<Structure *> dep;
+        return isFullyInferred(dep);
+    }
+
+    bool TypeDecl::isFullyInferred( das_set<Structure *> & dep ) const {
+        if ( isAutoOrAlias() ) {
+            return false;
+        } else if ( baseType==Type::tStructure ) {
+            if ( structType ) {
+                if (dep.find(structType) != dep.end()) return true;
+                dep.insert(structType);
+                for ( auto & fd : structType->fields ) {
+                    if ( !fd.type ) return false;
+                    if ( !fd.type->isFullyInferred(dep) ) return false;
+                }
+            }
+        }
+        return true;
     }
 
     bool TypeDecl::isShareable() const {

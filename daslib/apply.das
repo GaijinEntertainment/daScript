@@ -53,7 +53,7 @@ class ApplyMacro : AstCallMacro
         if expr.arguments.length != 2
             macro_error(prog,expr.at,"expecting apply(value, block)")
             return [[ExpressionPtr]]
-        if expr.arguments[0]._type!=null    // need value infered
+        if expr.arguments[0]._type!=null    // need value inferred
             if expr.arguments[0]._type.dim.length != 0
                 macro_error(prog,expr.at,"can't apply to dim")
                 return [[ExpressionPtr]]

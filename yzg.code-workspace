@@ -54,7 +54,8 @@
 			"*.inc": "cpp",
 			"mutex": "cpp",
 			"queue": "cpp",
-			"deque": "cpp"
+			"deque": "cpp",
+			"*.cpp_inc": "cpp"
 		}
 	}
 }

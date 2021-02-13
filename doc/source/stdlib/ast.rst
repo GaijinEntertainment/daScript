@@ -684,7 +684,7 @@ Enumerations
 +-------------------------+--+
 +invoke                   +32+
 +-------------------------+--+
-+inferedSideEffects       +56+
++inferredSideEffects      +56+
 +-------------------------+--+
 
 
@@ -3948,7 +3948,7 @@ it defines as follows
 
 .. das:function:: AstCallMacro.visit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
 
-visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -3977,7 +3977,7 @@ it defines as follows
 
 .. das:function:: AstFunctionAnnotation.transform(self: AstFunctionAnnotation; call: smart_ptr<ast::ExprCall>; errors: das_string)
 
-transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+----------------------------------------------------------------------+
 +argument+argument type                                                         +
@@ -4098,7 +4098,7 @@ accept returns bool
 
 .. das:function:: AstReaderMacro.visit(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprReader> const)
 
-visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -4179,7 +4179,7 @@ it defines as follows
 
 .. das:function:: AstVariantMacro.visitExprIsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprIsVariant> const)
 
-visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -4198,7 +4198,7 @@ visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVariantMacro.visitExprAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprAsVariant> const)
 
-visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -4217,7 +4217,7 @@ visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVariantMacro.visitExprSafeAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprSafeAsVariant> const)
 
-visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -4298,7 +4298,7 @@ it defines as follows
 
 .. das:function:: AstVisitor.visitTypeDecl(self: AstVisitor; typ: TypeDeclPtr)
 
-visitTypeDecl returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+visitTypeDecl returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -4328,7 +4328,7 @@ visitTypeDecl returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 .. das:function:: AstVisitor.visitAlias(self: AstVisitor; typ: TypeDeclPtr; name: das_string const)
 
-visitAlias returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+visitAlias returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 +--------+--------------------------------------------------------------+
 +argument+argument type                                                 +
@@ -4377,7 +4377,7 @@ visitAlias returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 .. das:function:: AstVisitor.visitEnumerationValue(self: AstVisitor; enu: EnumerationPtr; name: das_string const; value: ExpressionPtr; last: bool const)
 
-visitEnumerationValue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitEnumerationValue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+--------------------------------------------------------------+
 +argument+argument type                                                 +
@@ -4398,7 +4398,7 @@ visitEnumerationValue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitEnumeration(self: AstVisitor; enu: EnumerationPtr)
 
-visitEnumeration returns  :ref:`EnumerationPtr <alias-EnumerationPtr>` 
+visitEnumeration returns  :ref:`EnumerationPtr <alias-EnumerationPtr>`
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -4460,7 +4460,7 @@ visitEnumeration returns  :ref:`EnumerationPtr <alias-EnumerationPtr>`
 
 .. das:function:: AstVisitor.visitStructure(self: AstVisitor; str: StructurePtr)
 
-visitStructure returns  :ref:`StructurePtr <alias-StructurePtr>` 
+visitStructure returns  :ref:`StructurePtr <alias-StructurePtr>`
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -4488,7 +4488,7 @@ visitStructure returns  :ref:`StructurePtr <alias-StructurePtr>`
 
 .. das:function:: AstVisitor.visitFunction(self: AstVisitor; fun: FunctionPtr)
 
-visitFunction returns  :ref:`FunctionPtr <alias-FunctionPtr>` 
+visitFunction returns  :ref:`FunctionPtr <alias-FunctionPtr>`
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -4520,7 +4520,7 @@ visitFunction returns  :ref:`FunctionPtr <alias-FunctionPtr>`
 
 .. das:function:: AstVisitor.visitFunctionArgument(self: AstVisitor; fun: FunctionPtr; arg: VariablePtr; lastArg: bool const)
 
-visitFunctionArgument returns  :ref:`VariablePtr <alias-VariablePtr>` 
+visitFunctionArgument returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -4556,7 +4556,7 @@ visitFunctionArgument returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 .. das:function:: AstVisitor.visitFunctionArgumentInit(self: AstVisitor; fun: FunctionPtr; arg: VariablePtr; value: ExpressionPtr)
 
-visitFunctionArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitFunctionArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -4614,7 +4614,7 @@ visitFunctionArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExpression(self: AstVisitor; expr: ExpressionPtr)
 
-visitExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -4642,7 +4642,7 @@ visitExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprBlock(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const)
 
-visitExprBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -4674,7 +4674,7 @@ visitExprBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprBlockArgument(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; arg: VariablePtr; lastArg: bool const)
 
-visitExprBlockArgument returns  :ref:`VariablePtr <alias-VariablePtr>` 
+visitExprBlockArgument returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -4710,7 +4710,7 @@ visitExprBlockArgument returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 .. das:function:: AstVisitor.visitExprBlockArgumentInit(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; arg: VariablePtr; expr: ExpressionPtr)
 
-visitExprBlockArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprBlockArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -4744,7 +4744,7 @@ visitExprBlockArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprBlockExpression(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; expr: ExpressionPtr)
 
-visitExprBlockExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprBlockExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -4802,7 +4802,7 @@ visitExprBlockExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprBlockFinalExpression(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; expr: ExpressionPtr)
 
-visitExprBlockFinalExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprBlockFinalExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -4832,7 +4832,7 @@ visitExprBlockFinalExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>
 
 .. das:function:: AstVisitor.visitExprLet(self: AstVisitor; expr: smart_ptr<ast::ExprLet> const)
 
-visitExprLet returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprLet returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -4864,7 +4864,7 @@ visitExprLet returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprLetVariable(self: AstVisitor; expr: smart_ptr<ast::ExprLet> const; arg: VariablePtr; lastArg: bool const)
 
-visitExprLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>` 
+visitExprLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -4900,7 +4900,7 @@ visitExprLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 .. das:function:: AstVisitor.visitExprLetVariableInit(self: AstVisitor; blk: smart_ptr<ast::ExprLet> const; arg: VariablePtr; expr: ExpressionPtr)
 
-visitExprLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -4960,7 +4960,7 @@ visitExprLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitGlobalLetVariable(self: AstVisitor; arg: VariablePtr; lastArg: bool const)
 
-visitGlobalLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>` 
+visitGlobalLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -4992,7 +4992,7 @@ visitGlobalLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 .. das:function:: AstVisitor.visitGlobalLetVariableInit(self: AstVisitor; arg: VariablePtr; expr: ExpressionPtr)
 
-visitGlobalLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitGlobalLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -5022,7 +5022,7 @@ visitGlobalLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprStringBuilder(self: AstVisitor; expr: smart_ptr<ast::ExprStringBuilder> const)
 
-visitExprStringBuilder returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprStringBuilder returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -5054,7 +5054,7 @@ visitExprStringBuilder returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprStringBuilderElement(self: AstVisitor; expr: smart_ptr<ast::ExprStringBuilder> const; elem: ExpressionPtr; last: bool const)
 
-visitExprStringBuilderElement returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprStringBuilderElement returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -5086,7 +5086,7 @@ visitExprStringBuilderElement returns  :ref:`ExpressionPtr <alias-ExpressionPtr>
 
 .. das:function:: AstVisitor.visitExprNew(self: AstVisitor; expr: smart_ptr<ast::ExprNew> const)
 
-visitExprNew returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprNew returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -5118,7 +5118,7 @@ visitExprNew returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprNewArgument(self: AstVisitor; expr: smart_ptr<ast::ExprNew> const; arg: ExpressionPtr; last: bool const)
 
-visitExprNewArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprNewArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -5150,7 +5150,7 @@ visitExprNewArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprNamedCall(self: AstVisitor; expr: smart_ptr<ast::ExprNamedCall> const)
 
-visitExprNamedCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprNamedCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -5182,7 +5182,7 @@ visitExprNamedCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprNamedCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprNamedCall> const; arg: MakeFieldDeclPtr; last: bool const)
 
-visitExprNamedCallArgument returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>` 
+visitExprNamedCallArgument returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -5214,7 +5214,7 @@ visitExprNamedCallArgument returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclP
 
 .. das:function:: AstVisitor.visitExprLooksLikeCall(self: AstVisitor; expr: smart_ptr<ast::ExprLooksLikeCall> const)
 
-visitExprLooksLikeCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprLooksLikeCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -5246,7 +5246,7 @@ visitExprLooksLikeCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprLooksLikeCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprLooksLikeCall> const; arg: ExpressionPtr; last: bool const)
 
-visitExprLooksLikeCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprLooksLikeCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -5278,7 +5278,7 @@ visitExprLooksLikeCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr
 
 .. das:function:: AstVisitor.visitExprCall(self: AstVisitor; expr: smart_ptr<ast::ExprCall> const)
 
-visitExprCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5310,7 +5310,7 @@ visitExprCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprCall> const; arg: ExpressionPtr; last: bool const)
 
-visitExprCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5342,7 +5342,7 @@ visitExprCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprNullCoalescing(self: AstVisitor; expr: smart_ptr<ast::ExprNullCoalescing> const)
 
-visitExprNullCoalescing returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprNullCoalescing returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------------+
 +argument+argument type                                                                    +
@@ -5385,7 +5385,7 @@ visitExprNullCoalescing returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprAt(self: AstVisitor; expr: smart_ptr<ast::ExprAt> const)
 
-visitExprAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------+
 +argument+argument type                                            +
@@ -5428,7 +5428,7 @@ visitExprAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprSafeAt(self: AstVisitor; expr: smart_ptr<ast::ExprSafeAt> const)
 
-visitExprSafeAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprSafeAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -5471,7 +5471,7 @@ visitExprSafeAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprIs(self: AstVisitor; expr: smart_ptr<ast::ExprIs> const)
 
-visitExprIs returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprIs returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------+
 +argument+argument type                                            +
@@ -5514,7 +5514,7 @@ visitExprIs returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprOp2(self: AstVisitor; expr: smart_ptr<ast::ExprOp2> const)
 
-visitExprOp2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprOp2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -5557,7 +5557,7 @@ visitExprOp2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprOp3(self: AstVisitor; expr: smart_ptr<ast::ExprOp3> const)
 
-visitExprOp3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprOp3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -5615,7 +5615,7 @@ visitExprOp3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprCopy(self: AstVisitor; expr: smart_ptr<ast::ExprCopy> const)
 
-visitExprCopy returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprCopy returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5658,7 +5658,7 @@ visitExprCopy returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprMove(self: AstVisitor; expr: smart_ptr<ast::ExprMove> const)
 
-visitExprMove returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprMove returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5701,7 +5701,7 @@ visitExprMove returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprClone(self: AstVisitor; expr: smart_ptr<ast::ExprClone> const)
 
-visitExprClone returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprClone returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -5744,7 +5744,7 @@ visitExprClone returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprWith(self: AstVisitor; expr: smart_ptr<ast::ExprWith> const)
 
-visitExprWith returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprWith returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5787,7 +5787,7 @@ visitExprWith returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprWhile(self: AstVisitor; expr: smart_ptr<ast::ExprWhile> const)
 
-visitExprWhile returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprWhile returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -5830,7 +5830,7 @@ visitExprWhile returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprTryCatch(self: AstVisitor; expr: smart_ptr<ast::ExprTryCatch> const)
 
-visitExprTryCatch returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprTryCatch returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -5873,7 +5873,7 @@ visitExprTryCatch returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprIfThenElse(self: AstVisitor; expr: smart_ptr<ast::ExprIfThenElse> const)
 
-visitExprIfThenElse returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprIfThenElse returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -5931,7 +5931,7 @@ visitExprIfThenElse returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprFor(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const)
 
-visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -5963,7 +5963,7 @@ visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprForVariable(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const; svar: VariablePtr; last: bool const)
 
-visitExprForVariable returns  :ref:`VariablePtr <alias-VariablePtr>` 
+visitExprForVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -5999,7 +5999,7 @@ visitExprForVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 .. das:function:: AstVisitor.visitExprForSource(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const; source: ExpressionPtr; last: bool const)
 
-visitExprForSource returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprForSource returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6057,7 +6057,7 @@ visitExprForSource returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprMakeVariant(self: AstVisitor; expr: smart_ptr<ast::ExprMakeVariant> const)
 
-visitExprMakeVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprMakeVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -6091,7 +6091,7 @@ visitExprMakeVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprMakeVariantField(self: AstVisitor; expr: smart_ptr<ast::ExprMakeVariant> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
 
-visitExprMakeVariantField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>` 
+visitExprMakeVariantField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -6125,7 +6125,7 @@ visitExprMakeVariantField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPt
 
 .. das:function:: AstVisitor.visitExprMakeStruct(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const)
 
-visitExprMakeStruct returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprMakeStruct returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -6193,7 +6193,7 @@ visitExprMakeStruct returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprMakeStructField(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
 
-visitExprMakeStructField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>` 
+visitExprMakeStructField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -6227,7 +6227,7 @@ visitExprMakeStructField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr
 
 .. das:function:: AstVisitor.visitExprMakeArray(self: AstVisitor; expr: smart_ptr<ast::ExprMakeArray> const)
 
-visitExprMakeArray returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprMakeArray returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6261,7 +6261,7 @@ visitExprMakeArray returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprMakeArrayIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeArray> const; index: int const; init: ExpressionPtr; last: bool const)
 
-visitExprMakeArrayIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprMakeArrayIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6295,7 +6295,7 @@ visitExprMakeArrayIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprMakeTuple(self: AstVisitor; expr: smart_ptr<ast::ExprMakeTuple> const)
 
-visitExprMakeTuple returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprMakeTuple returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6329,7 +6329,7 @@ visitExprMakeTuple returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprMakeTupleIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeTuple> const; index: int const; init: ExpressionPtr; last: bool const)
 
-visitExprMakeTupleIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprMakeTupleIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6363,7 +6363,7 @@ visitExprMakeTupleIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprArrayComprehension(self: AstVisitor; expr: smart_ptr<ast::ExprArrayComprehension> const)
 
-visitExprArrayComprehension returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprArrayComprehension returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------------------------+
 +argument+argument type                                                                            +
@@ -6421,7 +6421,7 @@ visitExprArrayComprehension returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprTypeInfo(self: AstVisitor; expr: smart_ptr<ast::ExprTypeInfo> const)
 
-visitExprTypeInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprTypeInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -6449,7 +6449,7 @@ visitExprTypeInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprPtr2Ref(self: AstVisitor; expr: smart_ptr<ast::ExprPtr2Ref> const)
 
-visitExprPtr2Ref returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprPtr2Ref returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -6477,7 +6477,7 @@ visitExprPtr2Ref returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprLabel(self: AstVisitor; expr: smart_ptr<ast::ExprLabel> const)
 
-visitExprLabel returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprLabel returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6505,7 +6505,7 @@ visitExprLabel returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprGoto(self: AstVisitor; expr: smart_ptr<ast::ExprGoto> const)
 
-visitExprGoto returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprGoto returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -6533,7 +6533,7 @@ visitExprGoto returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprRef2Value(self: AstVisitor; expr: smart_ptr<ast::ExprRef2Value> const)
 
-visitExprRef2Value returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprRef2Value returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6561,7 +6561,7 @@ visitExprRef2Value returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprRef2Ptr(self: AstVisitor; expr: smart_ptr<ast::ExprRef2Ptr> const)
 
-visitExprRef2Ptr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprRef2Ptr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -6589,7 +6589,7 @@ visitExprRef2Ptr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprAddr(self: AstVisitor; expr: smart_ptr<ast::ExprAddr> const)
 
-visitExprAddr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprAddr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -6617,7 +6617,7 @@ visitExprAddr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprAssert(self: AstVisitor; expr: smart_ptr<ast::ExprAssert> const)
 
-visitExprAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -6645,7 +6645,7 @@ visitExprAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprStaticAssert(self: AstVisitor; expr: smart_ptr<ast::ExprStaticAssert> const)
 
-visitExprStaticAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprStaticAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------------+
 +argument+argument type                                                                +
@@ -6673,7 +6673,7 @@ visitExprStaticAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprDebug(self: AstVisitor; expr: smart_ptr<ast::ExprDebug> const)
 
-visitExprDebug returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprDebug returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6701,7 +6701,7 @@ visitExprDebug returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprInvoke(self: AstVisitor; expr: smart_ptr<ast::ExprInvoke> const)
 
-visitExprInvoke returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprInvoke returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -6729,7 +6729,7 @@ visitExprInvoke returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprErase(self: AstVisitor; expr: smart_ptr<ast::ExprErase> const)
 
-visitExprErase returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprErase returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6757,7 +6757,7 @@ visitExprErase returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprFind(self: AstVisitor; expr: smart_ptr<ast::ExprFind> const)
 
-visitExprFind returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprFind returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -6785,7 +6785,7 @@ visitExprFind returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprKeyExists(self: AstVisitor; expr: smart_ptr<ast::ExprKeyExists> const)
 
-visitExprKeyExists returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprKeyExists returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6813,7 +6813,7 @@ visitExprKeyExists returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprAscend(self: AstVisitor; expr: smart_ptr<ast::ExprAscend> const)
 
-visitExprAscend returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprAscend returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -6841,7 +6841,7 @@ visitExprAscend returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprCast(self: AstVisitor; expr: smart_ptr<ast::ExprCast> const)
 
-visitExprCast returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprCast returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -6869,7 +6869,7 @@ visitExprCast returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprDelete(self: AstVisitor; expr: smart_ptr<ast::ExprDelete> const)
 
-visitExprDelete returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprDelete returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -6897,7 +6897,7 @@ visitExprDelete returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprVar(self: AstVisitor; expr: smart_ptr<ast::ExprVar> const)
 
-visitExprVar returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprVar returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6925,7 +6925,7 @@ visitExprVar returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprField(self: AstVisitor; expr: smart_ptr<ast::ExprField> const)
 
-visitExprField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6953,7 +6953,7 @@ visitExprField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprSafeField(self: AstVisitor; expr: smart_ptr<ast::ExprSafeField> const)
 
-visitExprSafeField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprSafeField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6981,7 +6981,7 @@ visitExprSafeField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprSwizzle(self: AstVisitor; expr: smart_ptr<ast::ExprSwizzle> const)
 
-visitExprSwizzle returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprSwizzle returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -7009,7 +7009,7 @@ visitExprSwizzle returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprIsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprIsVariant> const)
 
-visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -7037,7 +7037,7 @@ visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprAsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprAsVariant> const)
 
-visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -7065,7 +7065,7 @@ visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprSafeAsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprSafeAsVariant> const)
 
-visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -7093,7 +7093,7 @@ visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprOp1(self: AstVisitor; expr: smart_ptr<ast::ExprOp1> const)
 
-visitExprOp1 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprOp1 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7121,7 +7121,7 @@ visitExprOp1 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprReturn(self: AstVisitor; expr: smart_ptr<ast::ExprReturn> const)
 
-visitExprReturn returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprReturn returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -7149,7 +7149,7 @@ visitExprReturn returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprYield(self: AstVisitor; expr: smart_ptr<ast::ExprYield> const)
 
-visitExprYield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprYield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -7177,7 +7177,7 @@ visitExprYield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprBreak(self: AstVisitor; expr: smart_ptr<ast::ExprBreak> const)
 
-visitExprBreak returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprBreak returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -7205,7 +7205,7 @@ visitExprBreak returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprContinue(self: AstVisitor; expr: smart_ptr<ast::ExprContinue> const)
 
-visitExprContinue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprContinue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -7233,7 +7233,7 @@ visitExprContinue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprMakeBlock(self: AstVisitor; expr: smart_ptr<ast::ExprMakeBlock> const)
 
-visitExprMakeBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprMakeBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -7261,7 +7261,7 @@ visitExprMakeBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprMakeGenerator(self: AstVisitor; expr: smart_ptr<ast::ExprMakeGenerator> const)
 
-visitExprMakeGenerator returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprMakeGenerator returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -7289,7 +7289,7 @@ visitExprMakeGenerator returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprMemZero(self: AstVisitor; expr: smart_ptr<ast::ExprMemZero> const)
 
-visitExprMemZero returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprMemZero returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -7317,7 +7317,7 @@ visitExprMemZero returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConst(self: AstVisitor; expr: smart_ptr<ast::ExprConst> const)
 
-visitExprConst returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConst returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -7345,7 +7345,7 @@ visitExprConst returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstPtr(self: AstVisitor; expr: smart_ptr<ast::ExprConstPtr> const)
 
-visitExprConstPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -7373,7 +7373,7 @@ visitExprConstPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstEnumeration(self: AstVisitor; expr: smart_ptr<ast::ExprConstEnumeration> const)
 
-visitExprConstEnumeration returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstEnumeration returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------------------+
 +argument+argument type                                                                        +
@@ -7401,7 +7401,7 @@ visitExprConstEnumeration returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstBitfield(self: AstVisitor; expr: smart_ptr<ast::ExprConstBitfield> const)
 
-visitExprConstBitfield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstBitfield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -7429,7 +7429,7 @@ visitExprConstBitfield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstInt8(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt8> const)
 
-visitExprConstInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -7457,7 +7457,7 @@ visitExprConstInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstInt16(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt16> const)
 
-visitExprConstInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7485,7 +7485,7 @@ visitExprConstInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstInt64(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt64> const)
 
-visitExprConstInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7513,7 +7513,7 @@ visitExprConstInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstInt(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt> const)
 
-visitExprConstInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -7541,7 +7541,7 @@ visitExprConstInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstInt2(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt2> const)
 
-visitExprConstInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -7569,7 +7569,7 @@ visitExprConstInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstInt3(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt3> const)
 
-visitExprConstInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -7597,7 +7597,7 @@ visitExprConstInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstInt4(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt4> const)
 
-visitExprConstInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -7625,7 +7625,7 @@ visitExprConstInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstUInt8(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt8> const)
 
-visitExprConstUInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstUInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7653,7 +7653,7 @@ visitExprConstUInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstUInt16(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt16> const)
 
-visitExprConstUInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstUInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -7681,7 +7681,7 @@ visitExprConstUInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstUInt64(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt64> const)
 
-visitExprConstUInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstUInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -7709,7 +7709,7 @@ visitExprConstUInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstUInt(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt> const)
 
-visitExprConstUInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstUInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -7737,7 +7737,7 @@ visitExprConstUInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstUInt2(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt2> const)
 
-visitExprConstUInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstUInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7765,7 +7765,7 @@ visitExprConstUInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstUInt3(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt3> const)
 
-visitExprConstUInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstUInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7793,7 +7793,7 @@ visitExprConstUInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstUInt4(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt4> const)
 
-visitExprConstUInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstUInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7821,7 +7821,7 @@ visitExprConstUInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstRange(self: AstVisitor; expr: smart_ptr<ast::ExprConstRange> const)
 
-visitExprConstRange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstRange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7849,7 +7849,7 @@ visitExprConstRange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstURange(self: AstVisitor; expr: smart_ptr<ast::ExprConstURange> const)
 
-visitExprConstURange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstURange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -7877,7 +7877,7 @@ visitExprConstURange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstBool(self: AstVisitor; expr: smart_ptr<ast::ExprConstBool> const)
 
-visitExprConstBool returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstBool returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -7905,7 +7905,7 @@ visitExprConstBool returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstFloat(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat> const)
 
-visitExprConstFloat returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstFloat returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7933,7 +7933,7 @@ visitExprConstFloat returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstFloat2(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat2> const)
 
-visitExprConstFloat2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstFloat2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -7961,7 +7961,7 @@ visitExprConstFloat2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstFloat3(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat3> const)
 
-visitExprConstFloat3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstFloat3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -7989,7 +7989,7 @@ visitExprConstFloat3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstFloat4(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat4> const)
 
-visitExprConstFloat4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstFloat4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -8017,7 +8017,7 @@ visitExprConstFloat4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstString(self: AstVisitor; expr: smart_ptr<ast::ExprConstString> const)
 
-visitExprConstString returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstString returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -8045,7 +8045,7 @@ visitExprConstString returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprConstDouble(self: AstVisitor; expr: smart_ptr<ast::ExprConstDouble> const)
 
-visitExprConstDouble returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprConstDouble returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -8073,7 +8073,7 @@ visitExprConstDouble returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprFakeContext(self: AstVisitor; expr: smart_ptr<ast::ExprFakeContext> const)
 
-visitExprFakeContext returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprFakeContext returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -8101,7 +8101,7 @@ visitExprFakeContext returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprFakeLineInfo(self: AstVisitor; expr: smart_ptr<ast::ExprFakeLineInfo> const)
 
-visitExprFakeLineInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprFakeLineInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------------+
 +argument+argument type                                                                +
@@ -8129,7 +8129,7 @@ visitExprFakeLineInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprReader(self: AstVisitor; expr: smart_ptr<ast::ExprReader> const)
 
-visitExprReader returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprReader returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -8157,7 +8157,7 @@ visitExprReader returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprUnsafe(self: AstVisitor; expr: smart_ptr<ast::ExprUnsafe> const)
 
-visitExprUnsafe returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprUnsafe returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -8185,7 +8185,7 @@ visitExprUnsafe returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExprCallMacro(self: AstVisitor; expr: smart_ptr<ast::ExprCallMacro> const)
 
-visitExprCallMacro returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+visitExprCallMacro returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8206,7 +8206,7 @@ Uncategorized
 
 .. das:function:: FunctionPtr(fun: ast::Function? const)
 
-FunctionPtr returns  :ref:`FunctionPtr <alias-FunctionPtr>` 
+FunctionPtr returns  :ref:`FunctionPtr <alias-FunctionPtr>`
 
 +--------+---------------------------------------------------+
 +argument+argument type                                      +
@@ -8973,7 +8973,7 @@ this_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >
 
 .. das:function:: ExpressionPtr(expr: smart_ptr<auto(TT)> const)
 
-ExpressionPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+ExpressionPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 +--------+-------------------------+
 +argument+argument type            +
@@ -9124,7 +9124,7 @@ describe returns auto
 
 .. das:function:: make_call_macro(name: string const; someClassPtr: auto const)
 
-make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>` 
+make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>`
 
 +------------+-------------+
 +argument    +argument type+
@@ -9141,7 +9141,7 @@ make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>`
 
 .. das:function:: make_function_annotation(name: string const; someClassPtr: auto const)
 
-make_function_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnotationPtr>` 
+make_function_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnotationPtr>`
 
 +------------+-------------+
 +argument    +argument type+
@@ -9158,7 +9158,7 @@ make_function_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnn
 
 .. das:function:: make_pass_macro(name: string const; someClassPtr: auto const)
 
-make_pass_macro returns  :ref:`PassMacroPtr <alias-PassMacroPtr>` 
+make_pass_macro returns  :ref:`PassMacroPtr <alias-PassMacroPtr>`
 
 +------------+-------------+
 +argument    +argument type+
@@ -9175,7 +9175,7 @@ make_pass_macro returns  :ref:`PassMacroPtr <alias-PassMacroPtr>`
 
 .. das:function:: make_reader_macro(name: string const; someClassPtr: auto const)
 
-make_reader_macro returns  :ref:`ReaderMacroPtr <alias-ReaderMacroPtr>` 
+make_reader_macro returns  :ref:`ReaderMacroPtr <alias-ReaderMacroPtr>`
 
 +------------+-------------+
 +argument    +argument type+
@@ -9192,7 +9192,7 @@ make_reader_macro returns  :ref:`ReaderMacroPtr <alias-ReaderMacroPtr>`
 
 .. das:function:: make_structure_annotation(name: string const; someClassPtr: auto const)
 
-make_structure_annotation returns  :ref:`StructureAnnotationPtr <alias-StructureAnnotationPtr>` 
+make_structure_annotation returns  :ref:`StructureAnnotationPtr <alias-StructureAnnotationPtr>`
 
 +------------+-------------+
 +argument    +argument type+
@@ -9209,7 +9209,7 @@ make_structure_annotation returns  :ref:`StructureAnnotationPtr <alias-Structure
 
 .. das:function:: make_variant_macro(name: string const; someClassPtr: auto const)
 
-make_variant_macro returns  :ref:`VariantMacroPtr <alias-VariantMacroPtr>` 
+make_variant_macro returns  :ref:`VariantMacroPtr <alias-VariantMacroPtr>`
 
 +------------+-------------+
 +argument    +argument type+

@@ -98,7 +98,7 @@ namespace das {
                 auto & fn = fnI.second;
                 if (!fn->builtIn) {
                     fn->knownSideEffects = false;
-                    fn->sideEffectFlags &= ~uint32_t(SideEffects::inferedSideEffects);
+                    fn->sideEffectFlags &= ~uint32_t(SideEffects::inferredSideEffects);
                 }
             }
             for (auto & fnI : mod.functions) {
