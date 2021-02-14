@@ -2265,15 +2265,27 @@ namespace das {
         return g_Program;
     }
 
-    void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter ) {
+    void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(*line_info, "adapter is required");
+        if (!program)
+            context->throw_error_at(*line_info, "program is required");
         program->visit(*adapter);
     }
 
-    void astVisitFunction ( smart_ptr_raw<Function> func, smart_ptr_raw<VisitorAdapter> adapter ) {
+    void astVisitFunction ( smart_ptr_raw<Function> func, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(*line_info, "adapter is required");
+        if (!func)
+            context->throw_error_at(*line_info, "func is required");
         func->visit(*adapter);
     }
 
-    void astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter ) {
+    void astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(*line_info, "adapter is required");
+        if (!expr)
+            context->throw_error_at(*line_info, "expr is required");
         expr->visit(*adapter);
     }
 
