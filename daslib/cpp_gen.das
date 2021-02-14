@@ -79,6 +79,7 @@ struct ClangFunc : ClangAstDecl
     mangledName : string
     ftype       : string
     isMethod    : bool
+    isStatic    : bool
     ofClass     : string
     args        : array<ClangFuncArg>
 
@@ -277,19 +278,24 @@ def onInitArg(var root)
                 print("warning: unsupproted init kind {kind}\n")
     return [[auto value, valueType]]
 
-def onFunctionBody(var root) : ClangFunc
+def onFunctionBody(var root; isMethod:bool) : ClangFunc
     let name = root["name"] as _string
     let fullName = getCppName(name)
     let mangledName = root["mangledName"] as _string // todo: undecorate mangled name
     var qualType = getQualType(root)
     if verbose
         print("function {name} // {fullName}\n// {mangledName}\n// {qualType}\n")
+    var isStatic = false
+    if isMethod && root |> key_exists("storageClass")
+        if root["storageClass"] as _string == "static"
+            isStatic = true
     var ffunc <- [[ClangFunc
         name=name,
         cppName=fullName,
         mangledName=mangledName,
         ftype=qualType,
-        isMethod=false
+        isMethod=isMethod,
+        isStatic=isStatic
     ]]
     if root |> key_exists("inner")
         root |> with_array("inner") <| $ ( inner )
@@ -317,10 +323,10 @@ def onFunctionBody(var root) : ClangFunc
 
 def onMethod(var root)
     var in_class = struct_stack[length(struct_stack)-1]
-    ast.structs[in_class].methods |> emplace <| onFunctionBody(root)
+    ast.structs[in_class].methods |> emplace <| onFunctionBody(root,true)
 
 def onFunction(var root)
-    var fdecl <- onFunctionBody(root)
+    var fdecl <- onFunctionBody(root,false)
     ast.funcs[fdecl.mangledName] <- fdecl
 
 def onStruct(var root)
@@ -482,7 +488,15 @@ def genStructs(hf,mf,df:FILE const?)
     fprint(hf,"\n")
     fprint(df,"\n")
 
+var op_regex <- %regex~operator[^a-zA-Z_]%%
+
 def isBlockedFun(fn)
+    if fn.isMethod && fn.isStatic
+        print("warning: skipping static method {fn.name} in {fn.cppName}\n")
+        return true
+    if regex_match(op_regex, fn.name) != -1
+        print("warning: skipping {fn.name} in {fn.cppName}\n")
+        return true
     if fn.ftype |> find("...") != -1
         print("warning: variadic function {fn.name} aka {fn.cppName}\n")
         return true
@@ -527,57 +541,91 @@ def isCmresFun(fn)
             return true
     return false
 
+var g_method_name = 0
+
+def methodName(name:string)
+    g_method_name ++
+    return "_{name}_method_{g_method_name}"
+
 def getFunctions(hf,mf,df:FILE const?)
     fprint(df,"// ------------\n// functions\n// ------------\n\n")
     var all_fn : table<string; int>
     for fn in values(ast.funcs)
         all_fn[fn.cppName] ++
     for fn in values(ast.funcs)
-        if fn.isMethod
-            continue
         if fn |> isBlockedFun
             continue
-        var bind_enchantation = ""
-        if all_fn[fn.cppName] > 1
+        let castbind = all_fn[fn.cppName] > 1
+        genFunction(fn, castbind, df)
+    fprint(df,"// ------------\n// methods \n// ------------\n\n")
+    for st in values(ast.structs)
+        var all_met : table<string; int>
+        for fn in st.methods
+            all_met[fn.name] ++
+        for fn in st.methods
+            if fn |> isBlockedFun
+                continue
+            let castbind = all_met[fn.name] > 1
+            genFunction(fn, castbind, df)
+
+def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
+    var bind_enchantation = ""
+    var cpp_enchantation = ""
+    if fn.isMethod
+        if castbind
+            print("warning: skipping methods {fn.cppName}, multiple definitions will requre clang ast bindging\n")
+            return
+        else
+            let mname = methodName(fn.name)
+            fprint(df,"using {mname} = DAS_CALL_MEMBER({fn.cppName});\n");
+            bind_enchantation = "DAS_CALL_METHOD({mname})"
+            cpp_enchantation = "DAS_CALL_MEMBER_CPP({fn.cppName})"
+    else
+        if castbind
             let fType = qType2FnType(fn.ftype)
             bind_enchantation = "{fType},{fn.cppName}"
+            cpp_enchantation = "\"{fn.cppName}\""
             print("warning: {fn.cppName} using clang-ast binding of {fType}\n")
         else
             bind_enchantation = "DAS_BIND_FUN({fn.cppName})"
-        var extra_enchantation = ""
-        if fn |> isRefFun
-            extra_enchantation = ", SimNode_ExtFuncCallRef"
-        elif fn |> isCmresFun
-            extra_enchantation = ", SimNode_ExtFuncCallAndCopyOrMove"
-        fprint(df,"addExtern<{bind_enchantation}{extra_enchantation}>(*this, lib, \"{fn.name}\",SideEffects::worstDefault, \"{fn.cppName}\")\n")
-        fprint(df,"\t->args(\{")
-        for arg,argi in fn.args,range(100500)
-            if argi!=0
-                fprint(df,",")
-            if empty(arg.name)
-                fprint(df,"\"arg{argi}\"")
-            else
-                fprint(df,"\"{arg.name}\"")
-        fprint(df,"\})\n")
-        for arg,argi in fn.args,range(100500)
-            if !empty(arg.value)
-                if arg.value=="nullptr"
-                    if arg.atype=="const char *"
-                        fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstString>(\"\"))\n")
-                    else
-                        fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstPtr>())\n")
-                elif arg.vtype=="int"
-                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstInt>({arg.value}))\n")
-                elif arg.vtype=="float"
-                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstFloat>({arg.value}))\n")
-                elif arg.vtype=="bool"
-                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstBool>({arg.value}))\n")
-                elif arg.vtype=="const char *"
-                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstString>({arg.value}))\n")
+            cpp_enchantation = "\"{fn.cppName}\""
+    var extra_enchantation = ""
+    if fn |> isRefFun
+        extra_enchantation = ", SimNode_ExtFuncCallRef"
+    elif fn |> isCmresFun
+        extra_enchantation = ", SimNode_ExtFuncCallAndCopyOrMove"
+    fprint(df,"addExtern<{bind_enchantation}{extra_enchantation}>(*this, lib, \"{fn.name}\",SideEffects::worstDefault, {cpp_enchantation})\n")
+    fprint(df,"\t->args(\{")
+    if fn.isMethod
+        fprint(df,"\"self\",")
+    for arg,argi in fn.args,range(100500)
+        if argi!=0
+            fprint(df,",")
+        if empty(arg.name)
+            fprint(df,"\"arg{fn.isMethod ? argi+1 : argi}\"")
+        else
+            fprint(df,"\"{arg.name}\"")
+    fprint(df,"\})\n")
+    for arg,_argi in fn.args,range(100500)
+        let argi = fn.isMethod ? _argi+1 : _argi
+        if !empty(arg.value)
+            if arg.value=="nullptr"
+                if arg.atype=="const char *"
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstString>(\"\"))\n")
                 else
-                    fprint(df,"\t\t// {arg.name} : {arg.atype} = {arg.value}\n")
-                    print("warning: unsupported init {arg.atype} of {arg.vtype}\n")
-        fprint(df,";\n")
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstPtr>())\n")
+            elif arg.vtype=="int"
+                fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstInt>({arg.value}))\n")
+            elif arg.vtype=="float"
+                fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstFloat>({arg.value}))\n")
+            elif arg.vtype=="bool"
+                fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstBool>({arg.value}))\n")
+            elif arg.vtype=="const char *"
+                fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstString>({arg.value}))\n")
+            else
+                fprint(df,"\t\t// {arg.name} : {arg.atype} = {arg.value}\n")
+                print("warning: unsupported init {arg.atype} of {arg.vtype}\n")
+    fprint(df,";\n")
 
 def genBindings(hf,mf,df:FILE const?)
     genEnums(hf,mf,df)
