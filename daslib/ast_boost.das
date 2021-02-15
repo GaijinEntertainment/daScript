@@ -118,13 +118,13 @@ class TagStructureAnnotation : AstStructureAnnotation
 def for_each_tag_function(mod:Module?; tag:string; blk : block<(var func:FunctionPtr):void> )
     for_each_function(mod, "") <| $ ( func )
         for ann in func.annotations
-            if "{ann.annotation.name}" == "tag_function"
+            if ann!=null && "{ann.annotation.name}" == "tag_function"
                 for t in ann.arguments
                     if "{t.name}" == tag
                         invoke(blk, func)
     for_each_generic(mod, "") <| $ ( func )
         for ann in func.annotations
-            if "{ann.annotation.name}" == "tag_function"
+            if ann!=null && "{ann.annotation.name}" == "tag_function"
                 for t in ann.arguments
                     if "{t.name}" == tag
                         invoke(blk, func)
