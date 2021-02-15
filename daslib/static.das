@@ -21,6 +21,8 @@ class StaticLetMacro : AstFunctionAnnotation
             if blk.finalList.length != 0
                 errors := "not expecting finally section in the static_let"
                 return [[ExpressionPtr]]
+            var prefix = "`static`{call.at.line}`"
+            var rules : Template
             for ex in blk.list
                 if !(ex is ExprLet)
                     errors := "expecting let ... expressions in the static_let"
@@ -29,8 +31,22 @@ class StaticLetMacro : AstFunctionAnnotation
                 for vvar in lexpr.variables
                     var vclone <- clone_variable(vvar)
                     vclone.flags |= VariableFlags private_variable
+                    let old_name = "{vclone.name}"
+                    let new_name = "{prefix}{vclone.name}"
+                    vclone.name := new_name
+                    rules |> renameVariable(old_name) <| new_name
                     if !(compiling_module() |> add_variable(vclone))
                         panic("can't add global variable {vclone.name}")
+            var success = true
+            compiling_program() |> get_ast_context(call) <| $(valid, astc)
+                if !valid
+                    errors := "can't get valid program context"
+                    success = false
+                else
+                    apply_template(rules, call.at, astc.scopes[astc.scopes.length-1])
+            if !success
+                return [[ExpressionPtr]]
+            delete rules
         return quote <|
             pass
 
