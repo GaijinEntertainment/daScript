@@ -547,7 +547,7 @@ def methodName(name:string)
     g_method_name ++
     return "_{name}_method_{g_method_name}"
 
-def getFunctions(hf,mf,df:FILE const?)
+def getFunctions(df,df_method:FILE const?)
     fprint(df,"// ------------\n// functions\n// ------------\n\n")
     var all_fn : table<string; int>
     for fn in values(ast.funcs)
@@ -557,7 +557,7 @@ def getFunctions(hf,mf,df:FILE const?)
             continue
         let castbind = all_fn[fn.cppName] > 1
         genFunction(fn, castbind, df)
-    fprint(df,"// ------------\n// methods \n// ------------\n\n")
+    fprint(df_method,"// ------------\n// methods \n// ------------\n\n")
     for st in values(ast.structs)
         var all_met : table<string; int>
         for fn in st.methods
@@ -566,7 +566,7 @@ def getFunctions(hf,mf,df:FILE const?)
             if fn |> isBlockedFun
                 continue
             let castbind = all_met[fn.name] > 1
-            genFunction(fn, castbind, df)
+            genFunction(fn, castbind, df_method)
 
 def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
     var bind_enchantation = ""
@@ -627,10 +627,10 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
                 print("warning: unsupported init {arg.atype} of {arg.vtype}\n")
     fprint(df,";\n")
 
-def genBindings(hf,mf,df:FILE const?)
-    genEnums(hf,mf,df)
-    genStructs(hf,mf,df)
-    getFunctions(hf,mf,df)
+def genBindings(hf,df,mf_enum,df_enum,mf_ann,df_ann,df_method:FILE const?)
+    genEnums(hf,mf_enum,df_enum)
+    genStructs(hf,mf_ann,df_ann)
+    getFunctions(df,df_method)
 
 def bindHeaders ( fname, outprefix:string )
     fopen(fname, "r") <| $ ( f )
@@ -651,9 +651,13 @@ def bindHeaders ( fname, outprefix:string )
                     // debug(ast,"AST =")
                     fopen("{outprefix}.h","wb") <| $(hf)
                         fwrite(hf,"#pragma once\n\n")
-                        fopen("{outprefix}.cpp_inc","wb") <| $(mf)
-                            fopen("{outprefix}.inc","wb") <| $(df)
-                                genBindings(hf,mf,df)
+                        fopen("{outprefix}.inc","wb") <| $(df)
+                            fopen("{outprefix}.enum.cpp_inc","wb") <| $(mf_enum)
+                                fopen("{outprefix}.enum.inc","wb") <| $(df_enum)
+                                    fopen("{outprefix}.ann.cpp_inc","wb") <| $(mf_ann)
+                                        fopen("{outprefix}.ann.inc","wb") <| $(df_ann)
+                                            fopen("{outprefix}.method.inc","wb") <| $(df_method)
+                                                genBindings(hf,df,mf_enum,df_enum,mf_ann,df_ann,df_method)
 
 
 def genDefineConstants(fname,prefix:string)
