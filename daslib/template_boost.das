@@ -22,17 +22,20 @@ class TemplateVisitor : AstVisitor
     def override visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
         let vn = "{expr.name}"
         if key_exists(rules.var2expr,vn)
-            return <- clone_expression(rules.var2expr[vn])
+            var rexpr <- clone_expression(rules.var2expr[vn])
+            rexpr.at = expr.at
+            return rexpr
         return expr
 
-def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Expression> )
+def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Expression>; forceAt:bool = true )
     var prules : Template?
     unsafe
         prules = addr(rules)
     var astVisitor = new TemplateVisitor(prules)
     var astVisitorAdapter <- make_visitor(*astVisitor)
     expr |> visit(astVisitorAdapter)
-    expr |> force_at(at)
+    if forceAt
+        expr |> force_at(at)
     unsafe
         delete astVisitor
     astVisitorAdapter := null

@@ -43,10 +43,10 @@ class StaticLetMacro : AstFunctionAnnotation
                     errors := "can't get valid program context"
                     success = false
                 else
-                    apply_template(rules, call.at, astc.scopes[astc.scopes.length-1])
+                    apply_template(rules, call.at, astc.scopes[astc.scopes.length-1],false)
+            delete rules
             if !success
                 return [[ExpressionPtr]]
-            delete rules
         return quote <|
             pass
 
