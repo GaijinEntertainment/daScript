@@ -454,6 +454,7 @@ namespace das {
     __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value->clone(); }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }
     __forceinline StructurePtr clone_structure ( const Structure * value ) { return value->clone(); }
+    __forceinline VariablePtr clone_variable ( VariablePtr value ) { return value->clone(); }
     void forceAtRaw ( const smart_ptr_raw<Expression> & expr, const LineInfo & at );
     void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context );
 

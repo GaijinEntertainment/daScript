@@ -2713,6 +2713,8 @@ namespace das {
                 SideEffects::none, "clone_expression");
             addExtern<DAS_BIND_FUN(clone_function)>(*this, lib,  "clone_function",
                 SideEffects::none, "clone_function");
+            addExtern<DAS_BIND_FUN(clone_variable)>(*this, lib,  "clone_variable",
+                SideEffects::none, "clone_variable");
             // type
             addExtern<DAS_BIND_FUN(isSameAstType)>(*this, lib,  "is_same_type",
                 SideEffects::none, "isSameAstType");
