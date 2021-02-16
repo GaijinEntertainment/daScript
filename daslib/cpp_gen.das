@@ -5,6 +5,7 @@ module cpp_gen
 
 
 require fio
+require daslib/defer
 require daslib/json
 require daslib/json_boost
 require daslib/strings_boost
@@ -661,26 +662,32 @@ def bindHeaders ( fname, outprefix:string )
 
 
 def genDefineConstants(fname,prefix:string)
+    var fnames <- [{ auto[] fname }]
+    defer <| { delete fnames; }
+    fnames |> genDefineConstants <| prefix
+
+
+def genDefineConstants(fnames:array<string>; prefix:string)
     var reg_def_hex <- %regex~#define\s+(\w+)\s+(0x[0-9A-Za-z]+)%%
     var reg_def_dec <- %regex~#define\s+(\w+)\s+(\d+)%%
-    fopen(fname,"rb") <| $( f )
-        if f == null
-            panic("can't open {fname}")
-        fopen("{prefix}.const_inc","wb") <| $(hf)
-            if hf==null
-                panic("can't write {prefix}.const_inc")
-            var dict : table<string; int>
-            var ofs : table<int; bool>
-            let data = fread(f)
-            regex_foreach(reg_def_hex,data) <| $ ( r )
-                ofs[r.x] = true
-                let DEF = regex_group(reg_def_hex,1,data)
-                let VAL = regex_group(reg_def_hex,2,data)
-                fprint(hf,"addConstant(*this,\"{DEF}\",uint32_t({VAL}));\n")
-                return true
-            regex_foreach(reg_def_dec,data) <| $ ( r )
-                if ! ofs |> key_exists(r.x)
-                    let DEF = regex_group(reg_def_dec,1,data)
-                    let VAL = regex_group(reg_def_dec,2,data)
-                    fprint(hf,"addConstant(*this,\"{DEF}\",int32_t({VAL}));\n")
-                return true
+    fopen("{prefix}.const_inc","wb") <| $(hf)
+        if hf==null
+            panic("can't write {prefix}.const_inc")
+        for fname in fnames
+            fopen(fname,"rb") <| $( f )
+                if f == null
+                    panic("can't open {fname}")
+                var ofs : table<int; bool>
+                let data = fread(f)
+                regex_foreach(reg_def_hex,data) <| $ ( r )
+                    ofs[r.x] = true
+                    let DEF = regex_group(reg_def_hex,1,data)
+                    let VAL = regex_group(reg_def_hex,2,data)
+                    fprint(hf,"addConstant(*this,\"{DEF}\",uint32_t({VAL}));\n")
+                    return true
+                regex_foreach(reg_def_dec,data) <| $ ( r )
+                    if ! ofs |> key_exists(r.x)
+                        let DEF = regex_group(reg_def_dec,1,data)
+                        let VAL = regex_group(reg_def_dec,2,data)
+                        fprint(hf,"addConstant(*this,\"{DEF}\",int32_t({VAL}));\n")
+                    return true
