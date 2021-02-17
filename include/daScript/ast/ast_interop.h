@@ -174,6 +174,9 @@ namespace das
         using method_or = das_operator_enum_OR<ET>;
         addExtern<DAS_CALL_METHOD(method_or)>(mod, lib, "|", SideEffects::none,
             ("das_operator_enum_OR<" + cppName + ">::compute").c_str());
+        using method_and_and = das_operator_enum_AND_AND<ET>;
+        addExtern<DAS_CALL_METHOD(method_and_and)>(mod, lib, "&&", SideEffects::none,
+            ("das_operator_enum_AND_AND<" + cppName + ">::compute").c_str());
         using method_or_equ = das_operator_enum_OR_EQU<ET>;
         addExtern<DAS_CALL_METHOD(method_or_equ)>(mod, lib, "|=", SideEffects::modifyArgument,
             ("das_operator_enum_OR_EQU<" + cppName + ">::compute").c_str());

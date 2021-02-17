@@ -2392,6 +2392,13 @@ namespace das {
             a = ET ( uint64_t(a) | uint64_t(b) );
         }
     };
+
+    template <typename ET>
+    struct das_operator_enum_AND_AND {
+        static bool invoke ( ET a, ET b ) {
+            return (uint64_t(a) & uint64_t(b))!=0;
+        }
+    };
 }
 
 #if defined(_MSC_VER)
