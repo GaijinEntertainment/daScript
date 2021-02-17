@@ -350,6 +350,13 @@ namespace das {
         return it != functions.end() ? it->second : FunctionPtr();
     }
 
+    FunctionPtr Module::findUniqueFunction ( const string & mangledName ) const {
+        auto it = functionsByName.find(mangledName);
+        if ( it==functionsByName.end() ) return nullptr;
+        if ( it->second.size()!=1 ) return nullptr;
+        return it->second[0];
+    }
+
     StructurePtr Module::findStructure ( const string & na ) const {
         auto it = structures.find(na);
         return it != structures.end() ? it->second : StructurePtr();
