@@ -169,5 +169,14 @@ namespace das
         mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib,cppName));
     }
 
+    template <typename ET>
+    inline void addEnumFlagOps ( Module & mod, ModuleLibrary & lib, const string & cppName ) {
+        using method_or = das_operator_enum_OR<ET>;
+        addExtern<DAS_CALL_METHOD(method_or)>(mod, lib, "|", SideEffects::none,
+            ("das_operator_enum_OR<" + cppName + ">::compute").c_str());
+        using method_or_equ = das_operator_enum_OR_EQU<ET>;
+        addExtern<DAS_CALL_METHOD(method_or_equ)>(mod, lib, "|=", SideEffects::modifyArgument,
+            ("das_operator_enum_OR_EQU<" + cppName + ">::compute").c_str());
+    }
 }
 
