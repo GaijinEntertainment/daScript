@@ -1,6 +1,6 @@
 /*
  * Dagor Engine 5
- * Copyright (C) 2003-2020  Gaijin Entertainment Corp.  All rights reserved
+ * Copyright (C) 2003-2021  Gaijin Entertainment.  All rights reserved
  *
  * (for conditions of distribution and use, see License)
 */
@@ -56,15 +56,15 @@ VECMATH_FINLINE vec4i VECTORCALL v_splatsi(int a) {return _mm_set1_epi32(a);}
 #if defined(DAGOR_ASAN_ENABLED) && defined(__GNUC__) && __GNUC__ >= 7
 NO_ASAN_INLINE vec4f v_ld(const float *m) { return  *(__m128 *)m; }
 NO_ASAN_INLINE vec4f v_ldu(const float *m) { return *(__m128_u *)m; }
-NO_ASAN_INLINE vec4i v_ld_w(const int *m) { return  *(__m128i *)m; }
-NO_ASAN_INLINE vec4i v_ldu_w(const int *m) { return *(__m128i_u *)m; }
-NO_ASAN_INLINE vec4f v_ld_x(const float *m) { union { float x; vec4f vec; } mm{}; mm.x = *m; return mm.vec; } // load x, zero others
+NO_ASAN_INLINE vec4i v_ldi(const int *m) { return  *(__m128i *)m; }
+NO_ASAN_INLINE vec4i v_ldui(const int *m) { return *(__m128i_u *)m; }
+NO_ASAN_INLINE vec4f v_ldu_x(const float *m) { union { float x; vec4f vec; } mm{}; mm.x = *m; return mm.vec; } // load x, zero others
 #else
 NO_ASAN_INLINE vec4f v_ld(const float *m) { return _mm_load_ps(m); }
 NO_ASAN_INLINE vec4f v_ldu(const float *m) { return _mm_loadu_ps(m); }
-NO_ASAN_INLINE vec4i v_ld_w(const int *m) { return  _mm_load_si128((const vec4i*)m); }
-NO_ASAN_INLINE vec4i v_ldu_w(const int *m) { return _mm_loadu_si128((const vec4i*)m); }
-NO_ASAN_INLINE vec4f v_ld_x(const float *m) { return _mm_load_ss(m); } // load x, zero others
+NO_ASAN_INLINE vec4i v_ldi(const int *m) { return  _mm_load_si128((const vec4i*)m); }
+NO_ASAN_INLINE vec4i v_ldui(const int *m) { return _mm_loadu_si128((const vec4i*)m); }
+NO_ASAN_INLINE vec4f v_ldu_x(const float *m) { return _mm_load_ss(m); } // load x, zero others
 #endif
 
 VECMATH_FINLINE vec4i VECTORCALL v_ldush(const signed short *m)

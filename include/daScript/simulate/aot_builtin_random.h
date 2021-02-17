@@ -20,7 +20,7 @@ namespace das {
     }
 
     __forceinline vec4i _randomInt4 ( int4 & seed ) {
-        vec4i newSeed = v_addi(v_muli(v_ldu_w(&seed.x),v_splatsi(214013)),v_splatsi(2531011));
+        vec4i newSeed = v_addi(v_muli(v_ldui(&seed.x),v_splatsi(214013)),v_splatsi(2531011));
         v_stu_w(&seed, newSeed);
         vec4i ns16 = v_srli(newSeed, 16);
         vec4i mask =  v_splatsi(LCG_RAND_MAX);

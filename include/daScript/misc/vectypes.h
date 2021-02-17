@@ -32,10 +32,10 @@ namespace das
     __forceinline vec4f vec_splats(const int v) {return v_cast_vec4f(v_splatsi(v));}
     __forceinline vec4f vec_splats(const unsigned int v) {return v_cast_vec4f(v_splatsi(v));}
     __forceinline vec4f vec_load(const float *v) {return v_ld(v);}
-    __forceinline vec4f vec_load(const int *v) {return v_cast_vec4f(v_ld_w(v));}
+    __forceinline vec4f vec_load(const int *v) {return v_cast_vec4f(v_ldi(v));}
     __forceinline vec4f vec_load(const unsigned int *v) {return vec_load((const int *)v);}
     __forceinline vec4f vec_loadu(const float *v) {return v_ldu(v);}
-    __forceinline vec4f vec_loadu(const int *v) {return v_cast_vec4f(v_ldu_w(v));}
+    __forceinline vec4f vec_loadu(const int *v) {return v_cast_vec4f(v_ldui(v));}
     __forceinline vec4f vec_loadu(const unsigned int *v) {return vec_loadu((const int *)v);}
     __forceinline vec4f vec_loadu_half(const float *v) {return v_ldu_half(v);}
     __forceinline vec4f vec_loadu_half(const int *v) {return v_cast_vec4f(v_ldu_half_w(v));}

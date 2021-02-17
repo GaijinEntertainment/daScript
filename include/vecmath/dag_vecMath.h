@@ -1,6 +1,6 @@
 /*
  * Dagor Engine 5
- * Copyright (C) 2003-2020  Gaijin Entertainment Corp.  All rights reserved
+ * Copyright (C) 2003-2021  Gaijin Entertainment.  All rights reserved
  *
  * (for conditions of distribution and use, see License)
 */
@@ -24,12 +24,12 @@ VECMATH_FINLINE vec4f VECTORCALL v_msbit();
 VECMATH_FINLINE vec4f VECTORCALL v_splat4(const float *a);
 //! load vector from 16-byte aligned memory
 NO_ASAN_INLINE vec4f v_ld(const float *m);
-NO_ASAN_INLINE vec4i v_ld_w(const int *m);
+NO_ASAN_INLINE vec4i v_ldi(const int *m);
 //! load vector from unaligned memory
 NO_ASAN_INLINE vec4f v_ldu(const float *m);
-NO_ASAN_INLINE vec4i v_ldu_w(const int *m);
+NO_ASAN_INLINE vec4i v_ldui(const int *m);
 //! load one 32 bit element, zero others
-NO_ASAN_INLINE vec4f v_ld_x(const float *m);
+NO_ASAN_INLINE vec4f v_ldu_x(const float *m);
 //! load unaligned memory and unpacks vector from 4 signed short ints
 VECMATH_FINLINE vec4i VECTORCALL v_ldush(const signed short *m);
 //! load unaligned memory and unpacks vector from 4 unsigned short ints
@@ -323,7 +323,7 @@ VECMATH_FINLINE void VECTORCALL v_sincos_x(vec4f a, vec4f& s, vec4f& c);
 VECMATH_FINLINE vec4f VECTORCALL v_dot3(vec4f a, vec4f b);
 //! dot product: .xyzw = (a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w)
 VECMATH_FINLINE vec4f VECTORCALL v_dot4(vec4f a, vec4f b);
-//! dot product: .x = (a.x * b.x + a.y * b.y + a.z * b.z); a.w,b.w could not be NAN
+//! dot product: .x = (a.x * b.x + a.y * b.y + a.z * b.z); a.w, b.w could be anything (even NAN)
 VECMATH_FINLINE vec4f VECTORCALL v_dot3_x(vec4f a, vec4f b);
 //! dot product: .x = (a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w)
 VECMATH_FINLINE vec4f VECTORCALL v_dot4_x(vec4f a, vec4f b);
