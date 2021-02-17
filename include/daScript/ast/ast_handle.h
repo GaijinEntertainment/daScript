@@ -340,7 +340,7 @@ namespace das
                 DAS_PROFILE_NODE
                 auto pValue = (VectorType *) value->evalPtr(context);
                 uint32_t idx = cast<uint32_t>::to(index->eval(context));
-                if ( idx >= pValue->size() ) {
+                if ( idx >= uint32_t(pValue->size()) ) {
                     context.throw_error_at(debugInfo,"std::vector index out of range, %u of %u", idx, uint32_t(pValue->size()));
                     return nullptr;
                 } else {
