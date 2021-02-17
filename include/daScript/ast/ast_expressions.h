@@ -554,6 +554,12 @@ namespace das
     };
 
     struct ExprConstEnumeration : ExprConst {
+        ExprConstEnumeration(int val, const TypeDeclPtr & td)
+            : ExprConst(Type::tEnumeration) {
+            __rtti = "ExprConstEnumeration";
+            enumType = td->enumType;
+            text = td->enumType->find(int64_t(val),"");
+        }
         ExprConstEnumeration(const string & name = string(), const TypeDeclPtr & td = nullptr)
             : ExprConst(Type::tEnumeration), text(name) {
             __rtti = "ExprConstEnumeration";

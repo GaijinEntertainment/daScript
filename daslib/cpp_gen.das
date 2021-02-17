@@ -18,6 +18,11 @@ let verbose = false
     config
 */
 
+struct ExEnum
+    name : string
+    removePrefix : bool = true
+    isFlags : bool = false
+
 var local_type_names : array<string>
 
 var blocked_type_names : array<string>
@@ -32,6 +37,8 @@ var blocked_functions : array<string> <-  [{string []
 var cmres_functions : array<string>
 
 var allow_extern_c = false
+
+var ex_enums : table<string; ExEnum>
 
 /*
     end of configuration
@@ -100,6 +107,7 @@ var name_stack : array<Scope>
 var access_stack : array<AccessKind>
 var struct_stack : array<string>
 var ast : ClangAst
+var rev_enums : table<string; string>
 
 def is_str(jso,str)
     return (jso is _string) && ((jso as _string)==str)
@@ -426,16 +434,40 @@ def genEnums(hf,mf,df:FILE const?)
     fprint(mf,"// ------------\n// enumerations\n// ------------\n\n")
     fprint(df,"// ------------\n// enumerations\n// ------------\n\n")
     for en in values(ast.enums)
-        fprint(df,"addEnumeration(make_smart<Enumeration{en.name}>());\n");
+        var enName = en.name
+        var removePrefix = false
+        var isFlags = false
+        find_if_exists(ex_enums, en.name) <| $ ( val )
+            enName = val.name
+            removePrefix = val.removePrefix
+            isFlags = val.isFlags
+        fprint(df,"addEnumeration(make_smart<Enumeration{enName}>());\n");
+        if isFlags
+            fprint(df,"addEnumFlagOps<{en.cppName}>(*this,lib,\"{en.cppName}\");\n");
         if en.eclass
             fprint(hf,"BIND_ENUM_CAST({en.cppName})\n")
-            fprint(mf,"DAS_BASE_BIND_ENUM({en.cppName},{en.name}\n")
+            fprint(hf,"DAS_BASE_BIND_ENUM_GEN({en.cppName},{enName})\n")
         else
             fprint(hf,"DAS_BIND_ENUM_CAST_98({en.cppName})\n")
-            fprint(mf,"DAS_BASE_BIND_ENUM_98({en.cppName},{en.name}\n")
+            fprint(hf,"DAS_BASE_BIND_ENUM_98_GEN({en.cppName},{enName})\n")
+
+        fprint(mf,"
+class Enumeration{enName} : public das::Enumeration \{
+public:
+    Enumeration{enName}() : das::Enumeration(\"{enName}\") \{
+        external = true;
+        cppName = \"{en.cppName}\";
+        baseType = (das::Type) das::ToBasicType< das::underlying_type< {en.cppName} >::type >::type;
+")
         for ene in en.edecl
-            fprint(mf,"\t,{ene}\n")
-        fprint(mf,")\n\n")
+            var entryName = ene
+            if removePrefix
+                if starts_with(ene,en.name)
+                    entryName = slice(ene,length(en.name))
+                else
+                    print("warning: {ene} does not start with {en.name}\n")
+            fprint(mf,"\t\taddI(\"{entryName}\", int64_t({en.cppName}::{ene}), das::LineInfo());\n")
+        fprint(mf,"\t\}\n\};\n")
     fprint(hf,"\n")
     fprint(df,"\n")
 
@@ -569,6 +601,15 @@ def getFunctions(df,df_method:FILE const?)
             let castbind = all_met[fn.name] > 1
             genFunction(fn, castbind, df_method)
 
+var
+    reg_args <- %regex~.+\((.+)\)%%
+
+def parseQualArgs ( qname:string )
+    if regex_match(reg_args, qname)!=-1
+        let qargs = regex_group(reg_args, 1, qname)
+        return <-  split(qargs, ", ")
+    return <- [[array<string>]]
+
 def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
     var bind_enchantation = ""
     var cpp_enchantation = ""
@@ -607,8 +648,21 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
         else
             fprint(df,"\"{arg.name}\"")
     fprint(df,"\})\n")
+
+    var qargs <- parseQualArgs(fn.ftype)
+    var revArgs = true
+    if length(qargs) != length(fn.args)
+        print("warning: args did not parse `{fn.ftype}` to {qargs}\n")
+        delete qargs
+        revArgs = false
+
     for arg,_argi in fn.args,range(100500)
         let argi = fn.isMethod ? _argi+1 : _argi
+        var thisArgEnum = ""
+        if revArgs
+            find_if_exists(rev_enums, qargs[_argi]) <| $ ( en )
+                thisArgEnum = *en
+                fprint(df,"\t\t->arg_type({argi},makeType<{thisArgEnum}>(lib))\n")
         if !empty(arg.value)
             if arg.value=="nullptr"
                 if arg.atype=="const char *"
@@ -616,7 +670,10 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
                 else
                     fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstPtr>())\n")
             elif arg.vtype=="int"
-                fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstInt>({arg.value}))\n")
+                if empty(thisArgEnum)
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstInt>({arg.value}))\n")
+                else
+                    fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstEnumeration>({arg.value},makeType<{thisArgEnum}>(lib)))\n")
             elif arg.vtype=="float"
                 fprint(df,"\t\t->arg_init({argi},make_smart<ExprConstFloat>({arg.value}))\n")
             elif arg.vtype=="bool"
@@ -634,6 +691,8 @@ def genBindings(hf,df,mf_enum,df_enum,mf_ann,df_ann,df_method:FILE const?)
     getFunctions(df,df_method)
 
 def bindHeaders ( fname, outprefix:string )
+    for enk,env in keys(ex_enums),values(ex_enums)
+        rev_enums[env.name] = enk
     fopen(fname, "r") <| $ ( f )
         if f==null
             print("can't open {fname}")

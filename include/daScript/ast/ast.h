@@ -603,6 +603,10 @@ namespace das
             arguments[argIndex]->init = initValue;
             return this;
         }
+        FunctionPtr arg_type ( int argIndex, const TypeDeclPtr & td ) {
+            arguments[argIndex]->type = td;
+            return this;
+        }
     public:
         AnnotationList      annotations;
         string              name;

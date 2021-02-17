@@ -52,6 +52,13 @@ public:\
     }\
 };
 
+#define DAS_BASE_BIND_ENUM_GEN(enum_name, das_enum_name) \
+    DAS_BASE_BIND_ENUM_FACTORY(enum_name, #das_enum_name)
+
+#define DAS_BASE_BIND_ENUM_98_GEN(enum_name, das_enum_name) \
+    DAS_BASE_BIND_ENUM_FACTORY(enum_name, #das_enum_name)\
+    DAS_BASE_BIND_ENUM_FACTORY(enum_name##_DasProxy, #das_enum_name)
+
 #define DAS_BASE_BIND_ENUM(enum_name, das_enum_name, ...) \
     DAS_BASE_BIND_ENUM_BOTH(DAS_BIND_ENUM_QUALIFIED_HELPER, enum_name, das_enum_name, __VA_ARGS__)\
     DAS_BASE_BIND_ENUM_FACTORY(enum_name, #das_enum_name)
