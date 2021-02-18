@@ -54,6 +54,7 @@ namespace das {
     void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context );
     char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context );
     char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context );
+    char * builtin_string_rtrim ( char* s, Context * context );
 
     __forceinline bool builtin_empty(const char* str) { return !str || str[0] == 0; }
     __forceinline bool builtin_empty_das_string(const string & str) { return str.empty(); }

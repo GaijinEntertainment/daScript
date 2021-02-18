@@ -126,6 +126,10 @@ namespace das {
         return memcmp(left, right, size);
     }
 
+    __forceinline void das_memcpy ( void * left, void * right, int size ) {
+        memcpy(left, right, size);
+    }
+
     template <typename TT>
     __forceinline void das_ptr_inc ( TT * & ptr, int ) {
         ++ ptr;

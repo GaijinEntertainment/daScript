@@ -489,6 +489,23 @@ namespace das
         return buf;
     }
 
+    char * builtin_string_rtrim ( char* s, Context * context ) {
+        if ( !s ) return nullptr;
+        char * str_end_o = s + strlen(s);
+        char * str_end = str_end_o;
+        while ( str_end > s && is_white_space(str_end[-1]) ) str_end--;
+        if ( str_end==s ) {
+            return nullptr;
+        } else if ( str_end!=str_end_o ) {
+            auto len = str_end - s;
+            char * res = context->stringHeap->allocateString(nullptr, int32_t(len));
+            memcpy ( res, s, len );
+            res[len] = 0;
+            return res;
+        } else {
+            return s;
+        }
+    }
     class Module_Strings : public Module {
     public:
         Module_Strings() : Module("strings") {
@@ -594,6 +611,7 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape", SideEffects::none, "builtin_string_escape");
             addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape", SideEffects::none, "builtin_string_unescape");
             addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace", SideEffects::none, "builtin_string_replace");
+            addExtern<DAS_BIND_FUN(builtin_string_rtrim)>(*this, lib, "rtrim", SideEffects::none, "builtin_string_rtrim");
             // format
             addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format", SideEffects::none, "format<int32_t>");
             addExtern<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format", SideEffects::none, "format<uint32_t>");
