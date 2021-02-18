@@ -23,7 +23,7 @@
 namespace das {
 
 #undef FUSION_OP_PTR_VALUE_RIGHT
-#define FUSION_OP_PTR_VALUE_RIGHT(CTYPE,expr)   (v_ld_x((const float *)(expr)))
+#define FUSION_OP_PTR_VALUE_RIGHT(CTYPE,expr)   (v_ldu_x((const float *)(expr)))
 
     IMPLEMENT_OP2_NUMERIC_VEC(MulVecScal);
     IMPLEMENT_OP2_NUMERIC_VEC(DivVecScal);
@@ -32,7 +32,7 @@ namespace das {
 #define FUSION_OP_PTR_VALUE_RIGHT(CTYPE,expr)   (v_ldu((const float *)(expr)))
 
 #undef FUSION_OP_PTR_VALUE_LEFT
-#define FUSION_OP_PTR_VALUE_LEFT(CTYPE,expr)    (v_ld_x((const float *)(expr)))
+#define FUSION_OP_PTR_VALUE_LEFT(CTYPE,expr)    (v_ldu_x((const float *)(expr)))
 
     IMPLEMENT_OP2_NUMERIC_VEC(MulScalVec);
     IMPLEMENT_OP2_NUMERIC_VEC(DivScalVec);
