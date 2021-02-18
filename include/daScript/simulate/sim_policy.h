@@ -236,7 +236,7 @@ namespace  das {
             return v_make_vec4f(x, y, z, w);
         }
         static __forceinline vec4f setAligned ( const float *__restrict x ) { return v_ld(x); }
-        static __forceinline vec4f setAligned ( const int32_t  *__restrict x ) { return v_cvt_vec4f(v_ld_w(x)); }
+        static __forceinline vec4f setAligned ( const int32_t  *__restrict x ) { return v_cvt_vec4f(v_ldi(x)); }
         static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return setAligned((const int32_t*)x); }
         static __forceinline vec4f setXY ( const float *__restrict x ) { return v_ldu_half(x); }
         static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cvt_vec4f(v_ldu_half_w(x)); }
@@ -327,7 +327,7 @@ namespace  das {
             return v_cast_vec4f(v_make_vec4i(x, y, z, w));
         }
         static __forceinline vec4f setAligned ( const float *__restrict x ) { return v_cast_vec4f(v_cvt_vec4i(v_ld(x))); }
-        static __forceinline vec4f setAligned ( const int32_t *__restrict x ) { return v_cast_vec4f(v_ld_w(x)); }
+        static __forceinline vec4f setAligned ( const int32_t *__restrict x ) { return v_cast_vec4f(v_ldi(x)); }
         static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return setAligned((const int32_t*)x); }
         static __forceinline vec4f setXY ( const float *__restrict x ) { return v_cast_vec4f(v_cvt_vec4i(v_ldu_half(x))); }
         static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cast_vec4f(v_ldu_half_w(x)); }

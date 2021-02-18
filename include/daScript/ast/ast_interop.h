@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/simulate/interop.h"
+#include "daScript/simulate/aot.h"
 
 namespace das
 {

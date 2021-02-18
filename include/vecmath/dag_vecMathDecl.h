@@ -1,6 +1,6 @@
 /*
  * Dagor Engine 5
- * Copyright (C) 2003-2020  Gaijin Entertainment Corp.  All rights reserved
+ * Copyright (C) 2003-2021  Gaijin Entertainment.  All rights reserved
  *
  * (for conditions of distribution and use, see License)
 */
@@ -124,23 +124,12 @@ typedef const struct bsph3f& bsph3f_cref;
 struct mat33f
 {
   vec3f col0, col1, col2;
-
-  mat33f &operator =(mat33f_cref m) { col0 = m.col0; col1 = m.col1; col2 = m.col2; return *this;}
 };
 
 //! Matrix 4x4, column major, 4x4 floats
 struct mat44f
 {
   vec4f col0, col1, col2, col3;
-
-  VECMATH_FINLINE mat44f VECTORCALL &operator =(mat44f_cref m)
-  {
-    col0 = m.col0;
-    col1 = m.col1;
-    col2 = m.col2;
-    col3 = m.col3;
-    return *this;
-  }
 
   VECMATH_FINLINE void VECTORCALL set33(mat33f_cref m) { col0 = m.col0; col1 = m.col1; col2 = m.col2; }
   VECMATH_FINLINE void VECTORCALL set33(mat33f_cref m, vec4f c3)
@@ -158,25 +147,18 @@ union mat44f_const
 struct mat43f
 {
   vec4f row0, row1, row2;
-
-  VECMATH_FINLINE mat43f VECTORCALL &operator =(mat43f_cref m)
-    { row0 = m.row0; row1 = m.row1; row2 = m.row2; return *this;}
 };
 
 //! 3D bounding box
 struct bbox3f
 {
   vec4f bmin, bmax;
-
-  VECMATH_FINLINE bbox3f VECTORCALL &operator =(bbox3f_cref b) { bmin = b.bmin; bmax = b.bmax; return *this; }
 };
 
 //! 3D bounding sphere (coded as .xyz=center, .w=radius)
 struct bsph3f
 {
   vec4f c_r;
-
-  VECMATH_FINLINE bsph3f VECTORCALL &operator =(const bsph3f &b) { c_r = b.c_r; return *this; }
 };
 
 //! quaternion as 4D vector
