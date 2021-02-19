@@ -83,6 +83,9 @@ def erase(var Arr:array<auto(numT)>;at:int)
 def length(a:auto[]):int
     return typeinfo(dim a)
 
+def empty(a:array<auto>) : bool
+    return length(a)==0
+
 // table
 
 def find(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):void>)
