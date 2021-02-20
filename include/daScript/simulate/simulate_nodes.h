@@ -2814,8 +2814,8 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // COPY REFERENCE VALUE
     struct SimNode_CopyRefValue : SimNode {
-        SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
-            : SimNode(at), l(ll), r(rr), size(sz) {};
+        SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, size_t sz)
+            : SimNode(at), l(ll), r(rr), size(uint32_t(sz)) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
         SimNode * l, * r;
