@@ -2386,14 +2386,35 @@ namespace das {
     template <typename ET>
     struct das_operator_enum_OR {
         static ET invoke ( ET a, ET b ) {
-            return ET ( uint64_t(a) | uint64_t(b) );
+            return ET(uint64_t(a) | uint64_t(b));
+        }
+    };
+
+    template <typename ET>
+    struct das_operator_enum_XOR {
+        static ET invoke ( ET a, ET b ) {
+            return ET(uint64_t(a) ^ uint64_t(b));
         }
     };
 
     template <typename ET>
     struct das_operator_enum_OR_EQU {
         static void invoke ( ET & a, ET b ) {
-            a = ET ( uint64_t(a) | uint64_t(b) );
+            a = ET(uint64_t(a) | uint64_t(b));
+        }
+    };
+
+    template <typename ET>
+    struct das_operator_enum_XOR_EQU {
+        static void invoke ( ET & a, ET b ) {
+            a = ET(uint64_t(a) ^ uint64_t(b));
+        }
+    };
+
+    template <typename ET>
+    struct das_operator_enum_AND_EQU {
+        static void invoke ( ET & a, ET b ) {
+            a = ET(uint64_t(a) & uint64_t(b));
         }
     };
 
@@ -2401,6 +2422,20 @@ namespace das {
     struct das_operator_enum_AND_AND {
         static bool invoke ( ET a, ET b ) {
             return (uint64_t(a) & uint64_t(b))!=0;
+        }
+    };
+
+    template <typename ET>
+    struct das_operator_enum_NOT {
+        static ET invoke ( ET a ) {
+            return ET(~uint64_t(a));
+        }
+    };
+
+    template <typename ET>
+    struct das_operator_enum_AND {
+        static ET invoke ( ET a, ET b ) {
+            return ET(uint64_t(a) & uint64_t(b));
         }
     };
 }
