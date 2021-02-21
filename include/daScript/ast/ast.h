@@ -607,6 +607,10 @@ namespace das
             arguments[argIndex]->type = td;
             return this;
         }
+        FunctionPtr res_type ( const TypeDeclPtr & td ) {
+            result = td;
+            return this;
+        }
     public:
         AnnotationList      annotations;
         string              name;

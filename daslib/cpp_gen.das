@@ -612,11 +612,12 @@ def getFunctions(df,df_method:FILE const?)
             genFunction(fn, castbind, df_method)
 
 var
-    reg_args <- %regex~.+\((.+)\)%%
+    reg_args <- %regex~(.+)\s*\((.+)\)%%
 
-def parseQualArgs ( qname:string )
+def parseQualArgs ( qname:string; var rtype:string& )
     if regex_match(reg_args, qname)!=-1
-        let qargs = regex_group(reg_args, 1, qname)
+        let qargs = regex_group(reg_args, 2, qname)
+        rtype = regex_group(reg_args, 1, qname)
         return <-  split(qargs, ", ")
     return <- [[array<string>]]
 
@@ -659,12 +660,17 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
             fprint(df,"\"{arg.name}\"")
     fprint(df,"\})\n")
 
-    var qargs <- parseQualArgs(fn.ftype)
+    var rtype : string
+    var qargs <- parseQualArgs(fn.ftype, rtype)
     var revArgs = true
     if length(qargs) != length(fn.args)
         print("warning: args did not parse `{fn.ftype}` to {qargs}\n")
         delete qargs
         revArgs = false
+
+    if revArgs
+        find_if_exists(rev_enums, rtype) <| $ ( rt )
+            fprint(df,"\t\t->res_type(makeType<{*rt}>(lib))\n")
 
     for arg,_argi in fn.args,range(100500)
         let argi = fn.isMethod ? _argi+1 : _argi
