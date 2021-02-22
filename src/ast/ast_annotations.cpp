@@ -15,6 +15,10 @@ namespace das
     protected:
         ProgramPtr              program;
     protected:
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+
         virtual void preVisit ( Structure * var ) override {
             Visitor::preVisit(var);
             for ( const auto & pA : var->annotations ) {
