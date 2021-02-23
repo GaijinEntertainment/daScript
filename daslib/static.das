@@ -21,7 +21,7 @@ class StaticLetMacro : AstFunctionAnnotation
             if blk.finalList.length != 0
                 errors := "not expecting finally section in the static_let"
                 return [[ExpressionPtr]]
-            var prefix = "`static`{call.at.line}`"
+            var prefix = "`static`at_line_{int(call.at.line)}`"
             var rules : Template
             for ex in blk.list
                 if !(ex is ExprLet)
@@ -36,7 +36,8 @@ class StaticLetMacro : AstFunctionAnnotation
                     vclone.name := new_name
                     rules |> renameVariable(old_name) <| new_name
                     if !(compiling_module() |> add_variable(vclone))
-                        panic("can't add global variable {vclone.name}")
+                        errors := "can't add global variable {new_name}"
+                        return [[ExpressionPtr]]
             var success = true
             compiling_program() |> get_ast_context(call) <| $(valid, astc)
                 if !valid

@@ -2213,7 +2213,7 @@ namespace das {
 
     bool addModuleVariable ( Module * module, VariablePtr & _var, Context * ) {
         VariablePtr var = move(_var);
-        return module->addVariable(move(var), false);
+        return module->addVariable(move(var), true);
     }
 
     bool addModuleStructure ( Module * module, StructurePtr & _struct, Context * ) {
