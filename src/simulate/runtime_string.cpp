@@ -54,6 +54,18 @@ namespace das
 
     const char * rts_null = "";
 
+    int hexChar ( char ch ) {
+        if ( ch>='a' && ch<='f' ) {
+            return ch - 'a' + 10;
+        } else if ( ch>='A' && ch<='F' ) {
+            return ch - 'A' + 10;
+        } else if ( ch>='0' && ch<='9' ) {
+            return ch - '0';
+        } else {
+            return -1;
+        }
+    }
+
     string unescapeString ( const string & input, bool * error, bool ) {
         if ( error ) *error = false;
         const char* str = input.c_str();
@@ -81,6 +93,21 @@ namespace das
                     case '{':   result += '{';    break;
                     case '}':   result += '}';    break;
                     case '\r':  if ( str+1!=strEnd && str[1]=='\n' ) str++; break;  // skip CR LF or just CR
+                    case 'x':   // \xA1 -> hex(A1)
+                        if ( str+1!=strEnd && str+2!=strEnd ) {
+                            int c0 = hexChar(str[1]);
+                            int c1 = hexChar(str[2]);
+                            if ( c0<0 || c1<0 && error ) {
+                                *error = true;
+                                break;
+                            }
+                            result += (char)(c0*16 + c1);
+                            str += 2;
+                        } else {
+                            if ( error ) *error = true;    // expecting \x12
+                            break;
+                        }
+                        break;
                     default:    result += *str; if ( error ) *error = true; break;  // invalid escape character
                 }
             } else
