@@ -830,7 +830,7 @@ namespace das {
                 auto & passType = arg->value->type;
                 auto & argType = pFn->arguments[fnArgIndex]->type;
                 if (!isMatchingArgument(pFn, pFn->arguments[fnArgIndex]->type, passType,inferAuto,inferBlock)) {
-                    ss << describeMismatchingArgument(arg->name, passType, argType, ai);
+                    ss << describeMismatchingArgument(arg->name, passType, argType, (int)ai);
                 }
                 fnArgIndex ++;
             }
@@ -852,7 +852,7 @@ namespace das {
                 auto & arg = pFn->arguments[ai];
                 auto & passType = types[ai];
                 if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
-                    ss << describeMismatchingArgument(arg->name, passType, arg->type, ai);
+                    ss << describeMismatchingArgument(arg->name, passType, arg->type, (int)ai);
                 }
             }
             for ( ; ai!= pFn->arguments.size(); ++ai ) {
@@ -2371,7 +2371,7 @@ namespace das {
                 auto & passType = expr->arguments[i+1]->type;
                 auto & argType = blockT->argTypes[i];
                 if ( !isMatchingArgument(nullptr, argType, passType, false,false) ) {
-                    auto extras = verbose ? ("\n" + describeMismatchingArgument(to_string(i+1), passType, argType, i)) : "";
+                    auto extras = verbose ? ("\n" + describeMismatchingArgument(to_string(i+1), passType, argType, (int)i)) : "";
                     error("incompatible argument " + to_string(i+1),
                         "\t" + describeType(passType) + " vs " + describeType(argType) + extras, "",
                         expr->at, CompilationError::invalid_argument_type);

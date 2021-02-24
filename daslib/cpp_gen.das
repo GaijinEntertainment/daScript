@@ -42,6 +42,8 @@ var ex_enums : table<string; ExEnum>
 
 var substitute_field_types : table<string; string>
 
+var alias_types : table<string; string>
+
 /*
     end of configuration
 */
@@ -495,10 +497,26 @@ def genStructs(hf,mf,df:FILE const?)
     for st in values(ast.structs)
         if !needToGenStruct(st)
             continue
-        fprint(mf,"\tIMPLEMENT_EXTERNAL_TYPE_FACTORY({st.name},{st.cppName})\n")
+        if !(alias_types |> key_exists(st.cppName))
+            fprint(mf,"\tIMPLEMENT_EXTERNAL_TYPE_FACTORY({st.name},{st.cppName})\n")
     fprint(mf,"\n")
     for st in values(ast.structs)
         if !needToGenStruct(st)
+            continue
+        if alias_types |> key_exists(st.cppName)
+            /*
+            let alias_value = alias_types[st.cppName]
+            fprint(mf,"template <> struct typeFactory<{st.cppName}> \{\n")
+            fprint(mf,"\tstatic TypeDeclPtr make(const ModuleLibrary &) \{\n")
+            fprint(mf,"\t\tauto t = make_smart<TypeDecl>({alias_value});\n")
+            fprint(mf,"\t\tt->alias = \"{st.name}\";\n")
+            fprint(mf,"\t\tt->aotAlias = true;\n")
+            fprint(mf,"\t\treturn t;\n")
+            fprint(mf,"\t\}\n");
+            fprint(mf,"\};\n");
+            fprint(mf,"template <> struct typeName<{st.cppName}> \{ constexpr static const char * name() \{ return \"{st.name}\"; \} \};\n")
+            fprint(df,"addAlias(typeFactory<{st.cppName}>::make(lib));\n")
+            */
             continue
         fprint(df,"auto ann_{st.name} = make_smart<{st.name}_GeneratedAnnotation>(lib);\n")
         fprint(df,"addAnnotation(ann_{st.name});\n")
@@ -526,6 +544,8 @@ def genStructs(hf,mf,df:FILE const?)
         fprint(mf,"\t\}\n\};\n")
     for st in values(ast.structs)
         if !needToGenStruct(st)
+            continue
+        if alias_types |> key_exists(st.cppName)
             continue
         fprint(df,"initRecAnnotation(ann_{st.name},lib);\n")
     fprint(hf,"\n")
@@ -577,6 +597,9 @@ def isCmresFun(fn)
         cppResType = slice(cppResType, 6)
     if cppResType |> ends_with(" ")
         cppResType = slice(cppResType, 0, -1)
+    for atype in keys(alias_types)
+        if cppResType == atype
+            return false
     if ast.structs |> key_exists(cppResType)
         return true
     for bf in cmres_functions

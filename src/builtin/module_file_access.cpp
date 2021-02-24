@@ -79,7 +79,7 @@ namespace das {
         } res;
         memset(&res, 0, sizeof(res));
         context->evalWithCatch(modGet, args, &res);
-        auto exc = context->getException();
+        auto exc = context->getException(); exc;
         DAS_ASSERTF(!exc, "exception failed in `module_get`: %s", exc);
         ModuleInfo info;
         info.moduleName = res.modName ? res.modName : "";
@@ -94,7 +94,7 @@ namespace das {
         args[0] = cast<const char *>::from(incFileName.c_str());
         args[1] = cast<const char *>::from(fileName.c_str());
         vec4f res = context->evalWithCatch(includeGet, args, nullptr);
-        auto exc = context->getException();
+        auto exc = context->getException(); exc;
         DAS_ASSERTF(!exc, "exception failed in `include_get`: %s", exc);
         auto fname = cast<const char *>::to(res);
         return fname ? fname : "";

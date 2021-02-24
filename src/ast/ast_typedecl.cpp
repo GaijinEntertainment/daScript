@@ -2015,6 +2015,7 @@ namespace das
     }
 
     int TypeDecl::getVariantFieldOffset ( int index ) const {
+        index;
         DAS_ASSERT(baseType==Type::tVariant);
         DAS_ASSERT(index>=0 && index<int(argTypes.size()));
         int al = getVariantAlign() - 1;
