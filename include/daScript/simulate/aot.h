@@ -305,8 +305,8 @@ namespace das {
             return nullptr;
         }
         template <typename QQ>
-        static __forceinline const TT * cast ( const QQ * expr ) {
-            return reinterpret_cast<const TT *>(expr);
+        static __forceinline TT * cast ( const QQ * expr ) {
+            return const_cast<TT *>(reinterpret_cast<const TT *>(expr));
         }
         template <typename QQ>
         static __forceinline TT * cast ( const smart_ptr_raw<QQ> & expr ) {
