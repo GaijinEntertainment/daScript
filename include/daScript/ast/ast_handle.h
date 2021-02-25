@@ -80,10 +80,13 @@ namespace das
         struct StructureField {
             string      name;
             string      cppName;
+            string      aotPrefix;
+            string      aotPostfix;
             TypeDeclPtr decl;
             TypeDeclPtr constDecl;
             uint32_t    offset;
             function<SimNode * (FactoryNodeType,Context &,const LineInfo &, const ExpressionPtr &)>   factory;
+            __forceinline void adjustAot ( const char * pref, const char * postf ) { aotPrefix=pref; aotPostfix=postf; }
         };
         BasicStructureAnnotation(const string & n, const string & cpn, ModuleLibrary * l)
             : TypeAnnotation(n,cpn), mlib(l) {
@@ -102,9 +105,11 @@ namespace das
             const LineInfo & at, const ExpressionPtr & value) const override;
         virtual SimNode * simulateSafeGetFieldPtr(const string & na, Context & context,
             const LineInfo & at, const ExpressionPtr & value) const override;
+        virtual void aotPreVisitGetField ( TextWriter &, const string & ) override;
+        virtual void aotPreVisitGetFieldPtr ( TextWriter &, const string & ) override;
         virtual void aotVisitGetField(TextWriter & ss, const string & fieldName) override;
         virtual void aotVisitGetFieldPtr(TextWriter & ss, const string & fieldName) override;
-        void addFieldEx(const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT);
+        StructureField & addFieldEx(const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT);
         virtual void walk(DataWalker & walker, void * data) override;
         int32_t fieldCount() const { return int32_t(fields.size()); }
         void from(const char* parentName);
@@ -246,8 +251,8 @@ namespace das
             };
         }
         template <typename TT, off_t off>
-        __forceinline void addField ( const string & na, const string & cppNa = "" ) {
-            addFieldEx ( na, cppNa.empty() ? na : cppNa, off, makeType<TT>(*mlib) );
+        __forceinline StructureField & addField ( const string & na, const string & cppNa = "" ) {
+            return addFieldEx ( na, cppNa.empty() ? na : cppNa, off, makeType<TT>(*mlib) );
         }
         virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
             return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(OT)));

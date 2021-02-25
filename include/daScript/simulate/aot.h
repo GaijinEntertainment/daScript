@@ -318,7 +318,7 @@ namespace das {
         }
         template <typename QQ>
         static __forceinline TT * cast ( const QQ & expr ) {
-            return reinterpret_cast<TT *>(&expr);
+            return const_cast<TT *>(reinterpret_cast<const TT *>(&expr));
         }
     };
 

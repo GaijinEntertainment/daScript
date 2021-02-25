@@ -87,10 +87,24 @@ namespace das {
         }
     }
 
+    void BasicStructureAnnotation::aotPreVisitGetField ( TextWriter & ss, const string & fieldName ) {
+        auto it = fields.find(fieldName);
+        if (it != fields.end()) {
+            ss << it->second.aotPrefix;
+        }
+    }
+
+    void BasicStructureAnnotation::aotPreVisitGetFieldPtr ( TextWriter & ss, const string & fieldName ) {
+        auto it = fields.find(fieldName);
+        if (it != fields.end()) {
+            ss << it->second.aotPrefix;
+        }
+    }
+
     void BasicStructureAnnotation::aotVisitGetField ( TextWriter & ss, const string & fieldName ) {
         auto it = fields.find(fieldName);
         if (it != fields.end()) {
-            ss << "." << it->second.cppName;
+            ss << "." << it->second.cppName << it->second.aotPostfix;
         } else {
             ss << "." << fieldName << " /*undefined */";
         }
@@ -99,13 +113,13 @@ namespace das {
     void BasicStructureAnnotation::aotVisitGetFieldPtr ( TextWriter & ss, const string & fieldName ) {
         auto it = fields.find(fieldName);
         if (it != fields.end()) {
-            ss << "->" << it->second.cppName;
+            ss << "->" << it->second.cppName << it->second.aotPostfix;
         } else {
             ss << "->" << fieldName << " /*undefined */";
         }
     }
 
-    void BasicStructureAnnotation::addFieldEx ( const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT ) {
+    BasicStructureAnnotation::StructureField & BasicStructureAnnotation::addFieldEx ( const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT ) {
         auto & field = fields[na];
         if ( field.decl ) {
             DAS_FATAL_LOG("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
@@ -144,6 +158,7 @@ namespace das {
                 return nullptr;
             }
         };
+        return field;
     }
 
     void BasicStructureAnnotation::walk ( DataWalker & walker, void * data ) {
