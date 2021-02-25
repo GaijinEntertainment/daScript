@@ -173,29 +173,29 @@ namespace das
     template <typename ET>
     inline void addEnumFlagOps ( Module & mod, ModuleLibrary & lib, const string & cppName ) {
         using method_not = das_operator_enum_NOT<ET>;
-        addExtern<DAS_CALL_METHOD(method_not)>(mod, lib, "~", SideEffects::none,
-            ("das_operator_enum_NOT<" + cppName + ">::compute").c_str());
+        addExtern<ET (*)(ET a),method_not::invoke>(mod, lib, "~", SideEffects::none,
+            ("das_operator_enum_NOT<" + cppName + ">::invoke").c_str());
         using method_or = das_operator_enum_OR<ET>;
-        addExtern<DAS_CALL_METHOD(method_or)>(mod, lib, "|", SideEffects::none,
-            ("das_operator_enum_OR<" + cppName + ">::compute").c_str());
+        addExtern<ET (*)(ET,ET),method_or::invoke>(mod, lib, "|", SideEffects::none,
+            ("das_operator_enum_OR<" + cppName + ">::invoke").c_str());
         using method_xor = das_operator_enum_XOR<ET>;
-        addExtern<DAS_CALL_METHOD(method_xor)>(mod, lib, "^", SideEffects::none,
-            ("das_operator_enum_XOR<" + cppName + ">::compute").c_str());
+        addExtern<ET (*)(ET,ET),method_xor::invoke>(mod, lib, "^", SideEffects::none,
+            ("das_operator_enum_XOR<" + cppName + ">::invoke").c_str());
         using method_and = das_operator_enum_AND<ET>;
-        addExtern<DAS_CALL_METHOD(method_and)>(mod, lib, "&", SideEffects::none,
-            ("das_operator_enum_AND<" + cppName + ">::compute").c_str());
+        addExtern<ET (*)(ET,ET),method_and::invoke>(mod, lib, "&", SideEffects::none,
+            ("das_operator_enum_AND<" + cppName + ">::invoke").c_str());
         using method_and_and = das_operator_enum_AND_AND<ET>;
-        addExtern<DAS_CALL_METHOD(method_and_and)>(mod, lib, "&&", SideEffects::none,
-            ("das_operator_enum_AND_AND<" + cppName + ">::compute").c_str());
+        addExtern<bool (*)(ET,ET),method_and_and::invoke>(mod, lib, "&&", SideEffects::none,
+            ("das_operator_enum_AND_AND<" + cppName + ">::invoke").c_str());
         using method_or_equ = das_operator_enum_OR_EQU<ET>;
-        addExtern<DAS_CALL_METHOD(method_or_equ)>(mod, lib, "|=", SideEffects::modifyArgument,
-            ("das_operator_enum_OR_EQU<" + cppName + ">::compute").c_str());
+        addExtern<void (*)(ET&,ET),method_or_equ::invoke>(mod, lib, "|=", SideEffects::modifyArgument,
+            ("das_operator_enum_OR_EQU<" + cppName + ">::invoke").c_str());
         using method_xor_equ = das_operator_enum_XOR_EQU<ET>;
-        addExtern<DAS_CALL_METHOD(method_xor_equ)>(mod, lib, "^=", SideEffects::modifyArgument,
-            ("das_operator_enum_XOR_EQU<" + cppName + ">::compute").c_str());
+        addExtern<void (*)(ET&,ET),method_xor_equ::invoke>(mod, lib, "^=", SideEffects::modifyArgument,
+            ("das_operator_enum_XOR_EQU<" + cppName + ">::invoke").c_str());
         using method_and_equ = das_operator_enum_AND_EQU<ET>;
-        addExtern<DAS_CALL_METHOD(method_and_equ)>(mod, lib, "&=", SideEffects::modifyArgument,
-            ("das_operator_enum_AND_EQU<" + cppName + ">::compute").c_str());
+        addExtern<void (*)(ET&,ET),method_and_equ::invoke>(mod, lib, "&=", SideEffects::modifyArgument,
+            ("das_operator_enum_AND_EQU<" + cppName + ">::invoke").c_str());
     }
 }
 

@@ -465,12 +465,13 @@ public:
 ")
         for ene in en.edecl
             var entryName = ene
+            var entryCppName = ene
             if removePrefix
                 if starts_with(ene,en.name)
                     entryName = slice(ene,length(en.name))
                 else
                     print("warning: {ene} does not start with {en.name}\n")
-            fprint(mf,"\t\taddI(\"{entryName}\", int64_t({en.cppName}::{ene}), das::LineInfo());\n")
+            fprint(mf,"\t\taddIEx(\"{entryName}\", \"{entryCppName}\", int64_t({en.cppName}::{ene}), das::LineInfo());\n")
         fprint(mf,"\t\}\n\};\n")
     fprint(hf,"\n")
     fprint(df,"\n")

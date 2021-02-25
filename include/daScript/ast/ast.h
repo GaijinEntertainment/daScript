@@ -105,6 +105,7 @@ namespace das
     public:
         struct EnumEntry {
             string          name;
+            string          cppName;
             LineInfo        at;
             ExpressionPtr   value;
         };
@@ -113,7 +114,9 @@ namespace das
         Enumeration( const string & na ) : name(na) {}
         bool add ( const string & f, const LineInfo & at );
         bool add ( const string & f, const ExpressionPtr & expr, const LineInfo & at );
+        bool addEx ( const string & f, const string & fcpp, const ExpressionPtr & expr, const LineInfo & at );
         bool addI ( const string & f, int64_t value, const LineInfo & at );
+        bool addIEx ( const string & f, const string & fcpp, int64_t value, const LineInfo & at );
         string describe() const { return name; }
         string getMangledName() const;
         int64_t find ( const string & na, int64_t def ) const;

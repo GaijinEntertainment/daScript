@@ -138,13 +138,18 @@ namespace das {
         return add(f, make_smart<ExprConstInt64>(value),att);
     }
 
-    bool Enumeration::add ( const string & na, const ExpressionPtr & expr, const LineInfo & att ) {
+    bool Enumeration::addIEx ( const string & f, const string & fcpp, int64_t value, const LineInfo & att ) {
+        return addEx(f, fcpp, make_smart<ExprConstInt64>(value),att);
+    }
+
+    bool Enumeration::addEx ( const string & na, const string & naCpp, const ExpressionPtr & expr, const LineInfo & att ) {
         auto it = find_if(list.begin(), list.end(), [&](const EnumEntry & arg){
             return arg.name == na;
         });
         if ( it == list.end() ) {
             EnumEntry ena;
             ena.name = na;
+            ena.cppName = naCpp.empty() ? na : naCpp;
             ena.value = expr;
             ena.at = att;
             list.push_back(ena);
@@ -152,6 +157,10 @@ namespace das {
         } else {
             return false;
         }
+    }
+
+    bool Enumeration::add ( const string & na, const ExpressionPtr & expr, const LineInfo & att ) {
+        return addEx(na,"",expr,att);
     }
 
     // structure

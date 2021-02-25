@@ -1408,7 +1408,7 @@ namespace das {
         }
     // op2
         bool isSetBool ( ExprOp2 * that ) const {
-            return (that->op=="||=" || that->op=="&&=") && that->right->type->isSimpleType(Type::tBool);
+            return (that->op=="||=" || that->op=="&&=" || that->op=="^^=") && that->right->type->isSimpleType(Type::tBool);
         }
         bool isOpPolicy ( ExprOp2 * that ) const {
             if ( isalpha(that->op[0]) ) return true;
@@ -1480,6 +1480,7 @@ namespace das {
             } else if ( isSetBool(that) ) {
                 if ( that->op=="||=" ) ss << "DAS_SETBOOLOR((";
                 else if ( that->op=="&&=" ) ss << "DAS_SETBOOLAND((";
+                else if ( that->op=="^^=" ) ss << "DAS_SETBOOLXOR((";
             }
         }
         virtual void preVisitRight ( ExprOp2 * that, Expression * right ) override {
@@ -1851,14 +1852,22 @@ namespace das {
         virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override {
             Visitor::preVisitAtIndex(expr, index);
             if ( expr->subexpr->type->dim.size() || expr->subexpr->type->isGoodArrayType() || expr->subexpr->type->isGoodTableType() ) {
-                ss << "(";
+                if ( expr->subexpr->type->isNativeDim ) {
+                    ss << "[";
+                } else {
+                    ss << "(";
+                }
             } else {
                 ss << ",";
             }
 
         }
         virtual ExpressionPtr visit ( ExprAt * expr ) override {
-            ss << ",__context__)";
+            if ( expr->subexpr->type->isNativeDim ) {
+                ss << "]";
+            } else {
+                ss << ",__context__)";
+            }
             if ( expr->type->aotAlias ) {
                 ss << ")";
             }
@@ -1903,8 +1912,17 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstEnumeration * c ) override {
-            ss << describeCppType(c->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes,CpptRedundantConst::no)
-                << "::" << c->text;
+            ss << describeCppType(c->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes,CpptRedundantConst::no);
+            auto ctext = c->text;
+            for ( auto & ee : c->enumType->list ) {
+                if ( ee.name==c->text ) {
+                    if ( !ee.cppName.empty() ) {
+                        ctext = ee.cppName;
+                    }
+                    break;
+                }
+            }
+            ss << "::" << ctext;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt * c ) override {
@@ -1947,18 +1965,26 @@ namespace das {
             ss << (c->getValue() ? "true" : "false");
             return Visitor::visit(c);
         }
-        virtual ExpressionPtr visit ( ExprConstDouble * c ) override {
-            double val = c->getValue();
+        void writeOutDouble ( double val ) {
             if ( val==DBL_MIN ) ss << "DBL_MIN";
+            else if ( val==-DBL_MIN ) ss << "(-DBL_MIN)";
             else if ( val==DBL_MAX ) ss << "DBL_MAX";
+            else if ( val==-DBL_MAX ) ss << "(-DBL_MAX)";
             else ss << to_string_ex(val);
+        }
+        virtual ExpressionPtr visit ( ExprConstDouble * c ) override {
+            writeOutDouble(c->getValue());
             return Visitor::visit(c);
         }
-        virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
-            float val = c->getValue();
+        void writeOutFloat ( float val ) {
             if ( val==FLT_MIN ) ss << "FLT_MIN";
+            else if ( val==-FLT_MIN ) ss << "(-FLT_MIN)";
             else if ( val==FLT_MAX ) ss << "FLT_MAX";
+            else if ( val==-FLT_MAX ) ss << "(-FLT_MAX)";
             else ss << to_string_ex(val) << "f";
+        }
+        virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
+            writeOutFloat(c->getValue());
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstString * c ) override {
@@ -2013,9 +2039,15 @@ namespace das {
             if (val.x == 0.0f && val.y == 0.0f ) {
                 ss << "v_zero()";
             } else if (val.x == val.y ) {
-                ss << "v_splats(" << to_string_ex(val.x) << "f)";
+                ss << "v_splats(";
+                writeOutFloat(val.x);
+                ss << ")";
             } else {
-                ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f,0.f,0.f)";
+                ss << "v_make_vec4f(";
+                writeOutFloat(val.x);
+                ss << ",";
+                writeOutFloat(val.y);
+                ss << ",0.f,0.f)";
             }
             return Visitor::visit(c);
         }
@@ -2024,9 +2056,17 @@ namespace das {
             if (val.x == 0.0f && val.y == 0.0f && val.z == 0.0f) {
                 ss << "v_zero()";
             } else if (val.x == val.y && val.x == val.z) {
-                ss << "v_splats(" << to_string_ex(val.x) << "f)";
+                ss << "v_splats(";
+                writeOutFloat(val.x);
+                ss << ")";
             } else {
-                ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f,0.f)";
+                ss << "v_make_vec4f(";
+                writeOutFloat(val.x);
+                ss << ",";
+                writeOutFloat(val.y);
+                ss << ",";
+                writeOutFloat(val.z);
+                ss << ",0.f)";
             }
             return Visitor::visit(c);
         }
@@ -2035,9 +2075,19 @@ namespace das {
             if (val.x == 0.0f && val.y == 0.0f && val.z == 0.0f && val.w == 0.0f ) {
                 ss << "v_zero()";
             } else if (val.x == val.y && val.x == val.z && val.x == val.w ) {
-                ss << "v_splats(" << to_string_ex(val.x) << "f)";
+                ss << "v_splats(";
+                writeOutFloat(val.x);
+                ss << ")";
             } else {
-                ss << "v_make_vec4f(" << to_string_ex(val.x) << "f," << to_string_ex(val.y) << "f," << to_string_ex(val.z) << "f," << to_string_ex(val.w) << "f)";
+                ss << "v_make_vec4f(";
+                writeOutFloat(val.x);
+                ss << ",";
+                writeOutFloat(val.y);
+                ss << ",";
+                writeOutFloat(val.z);
+                ss << ",";
+                writeOutFloat(val.w);
+                ss << ")";
             }
             return Visitor::visit(c);
         }

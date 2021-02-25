@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module static shared
+module static_let shared
 
 require ast
 require rtti

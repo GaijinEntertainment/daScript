@@ -56,8 +56,14 @@ namespace das
         static __forceinline VT & from ( PT & value ) {
             return *((VT *)&value);
         }
+        static __forceinline VT * from ( PT * value ) {
+            return (VT *) value;
+        }
         static __forceinline const VT & from ( const PT & value ) {
             return *((const VT *)&value);
+        }
+        static __forceinline const VT * from ( const PT * value ) {
+            return (const VT *)value;
         }
         static __forceinline VT & from ( VT & value ) {
             return value;
@@ -321,5 +327,6 @@ namespace das
     struct cast_enum {
       static __forceinline TT to ( vec4f x )            { return (TT) v_extract_xi(v_cast_vec4i(x)); }
       static __forceinline vec4f from ( TT x )          { return v_cast_vec4f(v_splatsi(int32_t(x))); }
+      static __forceinline vec4f from ( int x )         { return v_cast_vec4f(v_splatsi(int32_t(x))); }
     };
 }
