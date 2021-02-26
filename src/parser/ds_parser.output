@@ -9726,6 +9726,7 @@ State 473
 
     "?."  shift, and go to state 515
     "?["  shift, and go to state 516
+    '.'   shift, and go to state 542
     '['   shift, and go to state 543
 
     $default  reduce using rule 306 (expr)

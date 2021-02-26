@@ -434,7 +434,8 @@
 %right      UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
 %left       DAS_IS DAS_AS
 %left       LPIPE RPIPE LBPIPE LAPIPE
-%left       POST_INC POST_DEC '.' RARROW DEREF
+%left       POST_INC POST_DEC RARROW DEREF
+%left       '.'
 %nonassoc  '[' ']' '(' ')' QDOT QBRA BRABRAB BRACBRB CBRCBRB
 %nonassoc   '$' '@'
 %nonassoc   COLCOL
