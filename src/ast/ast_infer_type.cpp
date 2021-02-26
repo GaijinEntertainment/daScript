@@ -310,7 +310,7 @@ namespace das {
                 }
             }
             TypeDeclPtr mtd = program->makeTypeDeclaration(LineInfo(),name);
-            return mtd->isAlias() ? nullptr : mtd;
+            return (!mtd || mtd->isAlias()) ? nullptr : mtd;
         }
 
         // WARNING: this is really really slow, use faster tests when u can isAutoOrAlias for one
