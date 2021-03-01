@@ -97,7 +97,7 @@ namespace das
                         if ( str+1!=strEnd && str+2!=strEnd ) {
                             int c0 = hexChar(str[1]);
                             int c1 = hexChar(str[2]);
-                            if ( c0<0 || c1<0 && error ) {
+                            if ( (c0<0 || c1<0) && error ) {
                                 *error = true;
                                 break;
                             }
