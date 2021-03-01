@@ -38,7 +38,7 @@ char * uri_to_windows_file_name ( char * uristr, Context * context ) {
 char * unix_file_name_to_uri ( char * uristr, Context * context ) {
     if ( !uristr ) return nullptr;
     int len = stringLength(*context,uristr);
-    auto buf = new char[len + 16];
+    auto buf = new char[3 * len + 1];
     char * result = nullptr;
     if ( uriUnixFilenameToUriStringA(uristr, buf) == URI_SUCCESS ) {
         result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
@@ -50,7 +50,7 @@ char * unix_file_name_to_uri ( char * uristr, Context * context ) {
 char * windows_file_name_to_uri ( char * uristr, Context * context ) {
     if ( !uristr ) return nullptr;
     int len = stringLength(*context,uristr);
-    auto buf = new char[len + 16];
+    auto buf = new char[8 + 3 * len + 1];
     char * result = nullptr;
     if ( uriWindowsFilenameToUriStringA(uristr, buf) == URI_SUCCESS ) {
         result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
