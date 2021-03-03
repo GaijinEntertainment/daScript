@@ -61,6 +61,7 @@ namespace das {
 
     void builtin_sort_string ( void * data, int32_t length );
     void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context );
+    void builtin_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context );
 
     template <typename TT>
     void builtin_sort_cblock ( TT * data, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context ) {

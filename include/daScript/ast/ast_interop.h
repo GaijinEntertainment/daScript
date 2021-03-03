@@ -156,7 +156,9 @@ namespace das
 
     template <typename CType, typename ...Args>
     inline auto addCtor ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr ) {
-        mod.addFunction(make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName));
+        auto fn = make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName);
+        DAS_ASSERT(fn->result->isRefType() && "can't add ctor to by-value types");
+        mod.addFunction(fn);
     }
 
     template <typename CType, typename ...Args>
@@ -166,7 +168,9 @@ namespace das
 
     template <typename CType, typename ...Args>
     inline auto addCtorAndUsing ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName ) {
-        mod.addFunction(make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName));
+        auto fn = make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName);
+        DAS_ASSERT(fn->result->isRefType() && "can't add ctor to by-value types");
+        mod.addFunction(fn);
         mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib,cppName));
     }
 

@@ -219,6 +219,7 @@ struct EntityId {
     EntityId( const EntityId & t ) : value(t.value) {}
     EntityId( int32_t t ) : value(t) {}
     EntityId & operator = ( const EntityId & t ) { value = t.value; return * this; }
+    operator int32_t () const { return value; }
 };
 
 namespace das {
@@ -230,6 +231,14 @@ namespace das {
 }
 __forceinline EntityId make_invalid_id() {
     return EntityId(-1);
+}
+
+__forceinline EntityId intToEid(int value) {
+    return EntityId(value);
+}
+
+__forceinline int32_t eidToInt(EntityId id) {
+    return id.value;
 }
 
 struct FancyClass {

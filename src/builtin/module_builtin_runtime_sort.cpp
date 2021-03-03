@@ -27,6 +27,36 @@ namespace das
         });
     }
 
+    void builtin_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context ) {
+        if ( length<=1 ) return;
+        vec4f bargs[2];
+        if ( elementSize <= 4 ) {
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                das_qsort_r(anyData, length, elementSize, [&](const void * x, const void * y){
+                    bargs[0] = v_ldu_x((const float *)x);
+                    bargs[1] = v_ldu_x((const float *)y);
+                    return code->evalBool(*context);
+                });
+            });
+        } else if ( elementSize <= 8 ) {
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                das_qsort_r(anyData, length, elementSize, [&](const void * x, const void * y){
+                    bargs[0] = v_ldu_half(x);
+                    bargs[1] = v_ldu_half(y);
+                    return code->evalBool(*context);
+                });
+            });
+        } else {
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                das_qsort_r(anyData, length, elementSize, [&](const void * x, const void * y){
+                    bargs[0] = v_ldu((const float *)x);
+                    bargs[1] = v_ldu((const float *)y);
+                    return code->evalBool(*context);
+                });
+            });
+        }
+    }
+
     void builtin_sort_string ( void * data, int32_t length ) {
         if ( length<=1 ) return;
         const char ** pdata = (const char **) data;
@@ -76,6 +106,8 @@ namespace das
         // generic sort
         addExtern<DAS_BIND_FUN(builtin_sort_any_cblock)>(*this, lib, "__builtin_sort_any_cblock",
             SideEffects::modifyArgumentAndExternal, "builtin_sort_any_cblock");
+        addExtern<DAS_BIND_FUN(builtin_sort_any_ref_cblock)>(*this, lib, "__builtin_sort_any_ref_cblock",
+            SideEffects::modifyArgumentAndExternal, "builtin_sort_any_ref_cblock");
     }
 }
 

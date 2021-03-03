@@ -544,6 +544,9 @@ struct EntityIdAnnotation final: das::ManagedValueAnnotation <EntityId> {
             walker.Int(eidV);
         }
     }
+    virtual bool isLocal() const override { return true; }
+    virtual bool hasNonTrivialCtor() const override { return false; }
+    virtual bool canBePlacedInContainer() const override { return true;}
 };
 
 void tempArrayAliasExample(const das::TArray<Point3> & arr,
@@ -695,6 +698,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_smart<EntityIdAnnotation>());
     addExtern<DAS_BIND_FUN(make_invalid_id)>(*this, lib, "make_invalid_id",
         SideEffects::none, "make_invalid_id");
+    addExtern<DAS_BIND_FUN(eidToInt)>(*this, lib, "int",
+        SideEffects::none, "eidToInt");
+    addExtern<DAS_BIND_FUN(intToEid)>(*this, lib, "EntityId",
+        SideEffects::none, "intToEid");
     // FancyClass
     addAnnotation(make_smart<FancyClassAnnotation>(lib));
     addCtorAndUsing<FancyClass>(*this,lib,"FancyClass","FancyClass");

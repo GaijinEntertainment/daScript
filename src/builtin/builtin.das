@@ -357,8 +357,12 @@ def sort ( var a : auto(TT)[] )
             __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
     else
         unsafe
-            __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
-                return x < y
+            static_if typeinfo(is_ref_type type<TT>)
+                __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                    return x < y
+            else
+                __builtin_sort_any_ref_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                    return x < y
 
 def sort ( var a : array<auto(TT)> )
     __builtin_array_lock(a)
@@ -372,8 +376,12 @@ def sort ( var a : array<auto(TT)> )
             __builtin_sort_string ( addr(a[0]), length(a) )     // there is string specialization
     else
         unsafe
-            __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
-                return x < y
+            static_if typeinfo(is_ref_type type<TT>)
+                __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                    return x < y
+            else
+                __builtin_sort_any_ref_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                    return x < y
     __builtin_array_unlock(a)
 
 def sort ( var a : auto(TT)[]; cmp : block<(x,y:TT):bool> )
@@ -388,7 +396,10 @@ def sort ( var a : auto(TT)[]; cmp : block<(x,y:TT):bool> )
             __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     else
         unsafe
-            __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
+            static_if typeinfo(is_ref_type type<TT>)
+                __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
+            else
+                __builtin_sort_any_ref_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
 
 def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )
     __builtin_array_lock(a)
@@ -403,7 +414,10 @@ def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )
             __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
     else
         unsafe
-            __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
+            static_if typeinfo(is_ref_type type<TT>)
+                __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
+            else
+                __builtin_sort_any_ref_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
     __builtin_array_unlock(a)
 
 def lock ( var a : array<auto(TT)> = const; blk : block<(var x : array<TT># implicit)> )
