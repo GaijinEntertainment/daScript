@@ -31,6 +31,9 @@ class Server
             server_tick(_server)
     def send ( data : uint8?; size:int ) : bool
         return server_send(_server, data, size)
+    def finalize()
+        unsafe
+            delete _server
     def abstract onConnect : void
     def abstract onDisconnect : void
     def abstract onData ( buf : uint8?; size : int ) : void
