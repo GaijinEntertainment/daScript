@@ -2752,6 +2752,12 @@ namespace das {
                 } else if (expr->trait == "is_function") {
                      reportAstChanged();
                      return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isFunction());
+                } else if (expr->trait == "is_void") {
+                     reportAstChanged();
+                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isVoid());
+                } else if (expr->trait == "is_void_pointer") {
+                     reportAstChanged();
+                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isVoidPointer());
                 } else if ( expr->trait=="can_be_placed_in_container" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canBePlacedInContainer());
