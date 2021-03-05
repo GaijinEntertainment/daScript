@@ -44,6 +44,8 @@ var substitute_field_types : table<string; string>
 
 var alias_types : table<string; string>
 
+var namespace_to_prefix : table<string; string>
+
 /*
     end of configuration
 */
@@ -452,8 +454,8 @@ def genEnums(hf,mf,df:FILE const?)
             fprint(hf,"BIND_ENUM_CAST({en.cppName})\n")
             fprint(hf,"DAS_BASE_BIND_ENUM_GEN({en.cppName},{enName})\n")
         else
-            fprint(hf,"DAS_BIND_ENUM_CAST_98({en.cppName})\n")
-            fprint(hf,"DAS_BASE_BIND_ENUM_98_GEN({en.cppName},{enName})\n")
+            fprint(hf,"DAS_BIND_ENUM_CAST({en.cppName})\n")
+            fprint(hf,"DAS_BASE_BIND_ENUM_GEN({en.cppName},{enName})\n")
 
         fprint(mf,"
 class Enumeration{enName} : public das::Enumeration \{
@@ -467,7 +469,9 @@ public:
             var entryName = ene
             var entryCppName = ene
             if removePrefix
-                if starts_with(ene,en.name)
+                if ene |> starts_with("{en.name}_")
+                    entryName = slice(ene,length(en.name)+1)
+                elif ene |> starts_with(en.name)
                     entryName = slice(ene,length(en.name))
                 else
                     print("warning: {ene} does not start with {en.name}\n")
@@ -672,7 +676,12 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
         extra_enchantation = ", SimNode_ExtFuncCallRef"
     elif fn |> isCmresFun
         extra_enchantation = ", SimNode_ExtFuncCallAndCopyOrMove"
-    fprint(df,"addExtern<{bind_enchantation}{extra_enchantation}>(*this, lib, \"{fn.name}\",SideEffects::worstDefault, {cpp_enchantation})\n")
+    var bind_name = fn.name
+    for nn,pn in keys(namespace_to_prefix),values(namespace_to_prefix)
+        if fn.cppName |> starts_with(nn)
+            bind_name = "{pn}{fn.name}"
+            break
+    fprint(df,"addExtern<{bind_enchantation}{extra_enchantation}>(*this, lib, \"{bind_name}\",SideEffects::worstDefault, {cpp_enchantation})\n")
     fprint(df,"\t->args(\{")
     if fn.isMethod
         fprint(df,"\"self\",")
