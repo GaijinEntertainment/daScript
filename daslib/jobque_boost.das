@@ -74,6 +74,9 @@ def push_clone ( channel:Channel?; data : auto(TT) )
     *heap_data := data
     _builtin_channel_push(channel, heap_data)
 
+def push ( channel:Channel?; data : auto? )
+    _builtin_channel_push(channel, data)
+
 [template (tinfo)]
 def each ( channel:Channel?; tinfo : auto(TT) )
     unsafe
