@@ -447,16 +447,18 @@ def genEnums(hf,mf,df:FILE const?)
             enName = val.name
             removePrefix = val.removePrefix
             isFlags = val.isFlags
+        fprint(df,"#ifdef {getDefinePrefix(en.cppName)}\n")
         fprint(df,"addEnumeration(make_smart<Enumeration{enName}>());\n");
         if isFlags
             fprint(df,"addEnumFlagOps<{en.cppName}>(*this,lib,\"{en.cppName}\");\n");
+        fprint(df,"#endif\n")
         if en.eclass
             fprint(hf,"BIND_ENUM_CAST({en.cppName})\n")
             fprint(hf,"DAS_BASE_BIND_ENUM_GEN({en.cppName},{enName})\n")
         else
             fprint(hf,"DAS_BIND_ENUM_CAST({en.cppName})\n")
             fprint(hf,"DAS_BASE_BIND_ENUM_GEN({en.cppName},{enName})\n")
-
+        fprint(mf,"#ifdef {getDefinePrefix(en.cppName)}\n")
         fprint(mf,"
 class Enumeration{enName} : public das::Enumeration \{
 public:
@@ -477,6 +479,7 @@ public:
                     print("warning: {ene} does not start with {en.name}\n")
             fprint(mf,"\t\taddIEx(\"{entryName}\", \"{entryCppName}\", int64_t({en.cppName}::{ene}), das::LineInfo());\n")
         fprint(mf,"\t\}\n\};\n")
+        fprint(mf,"#endif\n")
     fprint(hf,"\n")
     fprint(df,"\n")
 
@@ -503,7 +506,9 @@ def genStructs(hf,mf,df:FILE const?)
         if !needToGenStruct(st)
             continue
         if !(alias_types |> key_exists(st.cppName))
+            fprint(mf,"#ifdef {getDefinePrefix(st.cppName)}\n")
             fprint(mf,"\tIMPLEMENT_EXTERNAL_TYPE_FACTORY({st.name},{st.cppName})\n")
+            fprint(mf,"#endif\n")
     fprint(mf,"\n")
     for st in values(ast.structs)
         if !needToGenStruct(st)
@@ -523,9 +528,12 @@ def genStructs(hf,mf,df:FILE const?)
             fprint(df,"addAlias(typeFactory<{st.cppName}>::make(lib));\n")
             */
             continue
+        fprint(df,"#ifdef {getDefinePrefix(st.cppName)}\n")
         fprint(df,"auto ann_{st.name} = make_smart<{st.name}_GeneratedAnnotation>(lib);\n")
         fprint(df,"addAnnotation(ann_{st.name});\n")
+        fprint(df,"#endif\n")
         fprint(hf,"MAKE_EXTERNAL_TYPE_FACTORY({st.name},{st.cppName})\n")
+        fprint(mf,"#ifdef {getDefinePrefix(st.cppName)}\n")
         fprint(mf,"struct {st.name}_GeneratedAnnotation : ManagedStructureAnnotation<{st.cppName}> \{\n")
         if isLocalType(st.name)
             fprint(mf,"\tvirtual bool isLocal() const override \{ return true; \}\n")
@@ -548,12 +556,15 @@ def genStructs(hf,mf,df:FILE const?)
                 fprint(mf,"\t\taddField<{substType},offsetof(ManagedType,{fld.cppName})>(\"{fld.name}\",\"{fld.cppName}\")\n")
                 fprint(mf,"\t\t\t.adjustAot(\"das_reinterpret<{substType}>::pass(\",\")\");\n")
         fprint(mf,"\t\}\n\};\n")
+        fprint(mf,"#endif\n")
     for st in values(ast.structs)
         if !needToGenStruct(st)
             continue
         if alias_types |> key_exists(st.cppName)
             continue
+        fprint(df,"#ifdef {getDefinePrefix(st.cppName)}\n")
         fprint(df,"initRecAnnotation(ann_{st.name},lib);\n")
+        fprint(df,"#endif\n")
     fprint(hf,"\n")
     fprint(df,"\n")
 
@@ -650,17 +661,24 @@ def parseQualArgs ( qname:string; var rtype:string& )
         return <-  split(qargs, ", ")
     return <- [[array<string>]]
 
+def getDefinePrefix(xname:string)
+    for nn,pn in keys(namespace_to_prefix),values(namespace_to_prefix)
+        if xname |> starts_with(nn)
+            return pn
+    return "GLOBAL_NAMESPACE"
+
 def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
     var bind_enchantation = ""
     var cpp_enchantation = ""
+    var using_mname = ""
     if fn.isMethod
         if castbind
             print("warning: skipping methods {fn.cppName}, multiple definitions will requre clang ast bindging\n")
             return
         else
-            let mname = methodName(fn.name)
-            fprint(df,"using {mname} = DAS_CALL_MEMBER({fn.cppName});\n");
-            bind_enchantation = "DAS_CALL_METHOD({mname})"
+            using_mname = methodName(fn.name)
+            fprint(df,"using {using_mname} = DAS_CALL_MEMBER({fn.cppName});\n");
+            bind_enchantation = "DAS_CALL_METHOD({using_mname})"
             cpp_enchantation = "DAS_CALL_MEMBER_CPP({fn.cppName})"
     else
         if castbind
@@ -676,12 +694,10 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
         extra_enchantation = ", SimNode_ExtFuncCallRef"
     elif fn |> isCmresFun
         extra_enchantation = ", SimNode_ExtFuncCallAndCopyOrMove"
-    var bind_name = fn.name
-    for nn,pn in keys(namespace_to_prefix),values(namespace_to_prefix)
-        if fn.cppName |> starts_with(nn)
-            bind_name = "{pn}{fn.name}"
-            break
-    fprint(df,"addExtern<{bind_enchantation}{extra_enchantation}>(*this, lib, \"{bind_name}\",SideEffects::worstDefault, {cpp_enchantation})\n")
+    fprint(df,"#ifdef {getDefinePrefix(fn.cppName)}\n")
+    if !empty(using_mname)
+        fprint(df,"using {using_mname} = DAS_CALL_MEMBER({fn.cppName});\n");
+    fprint(df,"addExtern<{bind_enchantation}{extra_enchantation}>(*this, lib, \"{fn.name}\",SideEffects::worstDefault, {cpp_enchantation})\n")
     fprint(df,"\t->args(\{")
     if fn.isMethod
         fprint(df,"\"self\",")
@@ -693,7 +709,6 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
         else
             fprint(df,"\"{arg.name}\"")
     fprint(df,"\})\n")
-
     var rtype : string
     var qargs <- parseQualArgs(fn.ftype, rtype)
     var revArgs = true
@@ -701,11 +716,9 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
         print("warning: args did not parse `{fn.ftype}` to {qargs}\n")
         delete qargs
         revArgs = false
-
     if revArgs
         find_if_exists(rev_enums, rtype) <| $ ( rt )
             fprint(df,"\t\t->res_type(makeType<{*rt}>(lib))\n")
-
     for arg,_argi in fn.args,range(100500)
         let argi = fn.isMethod ? _argi+1 : _argi
         var thisArgEnum = ""
@@ -734,6 +747,7 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
                 fprint(df,"\t\t// {arg.name} : {arg.atype} = {arg.value}\n")
                 print("warning: unsupported init {arg.atype} of {arg.vtype}\n")
     fprint(df,";\n")
+    fprint(df,"#endif\n")
 
 def genBindings(hf,df,mf_enum,df_enum,mf_ann,df_ann,df_method:FILE const?)
     genEnums(hf,mf_enum,df_enum)
