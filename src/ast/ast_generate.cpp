@@ -283,7 +283,7 @@ namespace das {
         varB->name = "b";
         varB->type = make_smart<TypeDecl>(str);
         varB->type->constant = true;
-        varA->type->isExplicit = true;
+        varB->type->implicit = true;
         varB->at = str->at;
         auto fn = make_smart<Function>();
         fn->name = "clone";
@@ -1225,6 +1225,7 @@ namespace das {
         arg1->type = make_smart<TypeDecl>(*tupleType);
         arg1->type->constant = true;
         arg1->type->ref = false;
+        arg1->type->implicit = true;
         fn->arguments.push_back(arg1);
         auto block = make_smart<ExprBlock>();
         block->at = at;
@@ -1306,6 +1307,7 @@ namespace das {
         arg1->type = make_smart<TypeDecl>(*variantType);
         arg1->type->constant = true;
         arg1->type->ref = false;
+        arg1->type->implicit = true;
         fn->arguments.push_back(arg1);
         auto block = make_smart<ExprBlock>();
         block->at = at;
@@ -1426,6 +1428,7 @@ namespace das {
         arg1->type = make_smart<TypeDecl>(*right);
         arg1->type->constant = true;
         arg1->type->ref = false;
+        arg1->type->implicit = true;
         fn->arguments.push_back(arg1);
         auto block = make_smart<ExprBlock>();
         block->at = at;

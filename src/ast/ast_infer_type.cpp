@@ -4664,13 +4664,10 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                 } else if ( cloneType->canCopy() ) {
-                    if ( expr->right->type->isTemp(true,false) ) {
-                        error("can't clone (copy) temporary value", "", "",
-                            expr->at, CompilationError::cant_pass_temporary);
-                    } else {
-                        reportAstChanged();
-                        return make_smart<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
-                    }
+                    reportAstChanged();
+                    auto eCopy = make_smart<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
+                    eCopy->allowCopyTemp = true;
+                    return eCopy;
                 } else if ( cloneType->isGoodArrayType() || cloneType->isGoodTableType() ) {
                     reportAstChanged();
                     auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
