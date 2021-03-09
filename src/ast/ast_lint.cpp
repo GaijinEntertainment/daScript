@@ -345,6 +345,7 @@ namespace das {
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,
+        "multiple_contexts",            Type::tBool,
         "persistent_heap",              Type::tBool,
         "persistent_string_heap",       Type::tBool,
         "heap_size_hint",               Type::tInt,

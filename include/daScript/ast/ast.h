@@ -1013,6 +1013,7 @@ namespace das
         uint32_t    stack = 16*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap
         bool        persistent_heap = false;
+        bool        multiple_contexts = false;          // code supports context safety
         uint32_t    heap_size_hint = 65536;
         uint32_t    string_heap_size_hint = 65536;
     // rtti
