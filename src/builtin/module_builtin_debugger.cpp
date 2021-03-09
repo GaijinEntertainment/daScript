@@ -661,7 +661,14 @@ namespace debugapi {
             context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
         }
         invCtx->lock();
-        vec4f res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        vec4f res;
+        if ( !invCtx->ownStack ) {
+            StackAllocator sharedStack(8*1024);
+            SharedStackGuard guard(*invCtx, sharedStack);
+            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        } else {
+            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        }
         invCtx->unlock();
         return res;
     }
@@ -676,7 +683,14 @@ namespace debugapi {
             context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
         }
         invCtx->lock();
-        vec4f res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        vec4f res;
+        if ( !invCtx->ownStack ) {
+            StackAllocator sharedStack(8*1024);
+            SharedStackGuard guard(*invCtx, sharedStack);
+            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        } else {
+            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        }
         invCtx->unlock();
         return res;
     }
