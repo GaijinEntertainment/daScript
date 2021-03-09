@@ -202,9 +202,9 @@ namespace das {
         return false;
     }
 
-    bool Structure::canCopy() const {
+    bool Structure::canCopy(bool tempMatters) const {
         for ( const auto & fd : fields ) {
-            if ( !fd.type->canCopy() )
+            if ( !fd.type->canCopy(tempMatters) )
                 return false;
         }
         return true;

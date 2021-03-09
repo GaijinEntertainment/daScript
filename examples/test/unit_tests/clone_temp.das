@@ -1,5 +1,6 @@
 struct Foo
-	a = 10
+	a : int = 10
+	s : string = "bar"
 
 def test_c(): Foo const#
 	unsafe

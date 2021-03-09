@@ -260,6 +260,7 @@ namespace das {
         void propagateTempType ( const TypeDeclPtr & parentType, TypeDeclPtr & subexprType ) {
             if ( subexprType->isTempType() ) {
                 if ( parentType->temporary ) subexprType->temporary = true;   // array<int?># -> int?#
+                if ( parentType->implicit ) subexprType->implicit = true;
             } else {
                 subexprType->temporary = false; // array<int#> -> int
             }
@@ -4646,7 +4647,7 @@ namespace das {
                 if ( cloneType->isHandle() ) {
                     expr->type = make_smart<TypeDecl>();  // we return nothing
                     return Visitor::visit(expr);
-                } else if ( cloneType->isString() && expr->right->type->isTemp() ) {
+                } else if ( cloneType->isString() && (expr->right->type->isTemp() || expr->right->type->implicit) ) {
                     reportAstChanged();
                     auto cloneFn = make_smart<ExprCall>(expr->at, "clone_string");
                     cloneFn->arguments.push_back(expr->right->clone());
@@ -4663,7 +4664,7 @@ namespace das {
                         reportMissingFinalizer("smart pointer clone mismatch ", expr->at, cloneType);
                         return Visitor::visit(expr);
                     }
-                } else if ( cloneType->canCopy() ) {
+                } else if ( cloneType->canCopy(expr->right->type->isTemp()) ) {
                     reportAstChanged();
                     auto eCopy = make_smart<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
                     eCopy->allowCopyTemp = true;

@@ -171,7 +171,8 @@ namespace das
         const Structure * findFieldParent ( const string & name ) const;
         int getSizeOf() const;
         int getAlignOf() const;
-        bool canCopy() const;
+        __forceinline bool canCopy() const { return canCopy(false); }
+        bool canCopy(bool tempMatters) const;
         bool canClone() const;
         bool canMove() const;
         bool canAot() const;

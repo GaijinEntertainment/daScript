@@ -1041,7 +1041,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(getTupleAlign)>("tupleAlign","getTupleAlign");
             addProperty<DAS_BIND_MANAGED_PROP(getVariantSize)>("variantSize","getVariantSize");
             addProperty<DAS_BIND_MANAGED_PROP(getVariantAlign)>("variantAlign","getVariantAlign");
-            addProperty<DAS_BIND_MANAGED_PROP(canCopy)>("canCopy","canCopy");
+            addProperty<bool (TypeDecl::*)() const, &ManagedType::canCopy>("canCopy","canCopy");
             addProperty<DAS_BIND_MANAGED_PROP(canMove)>("canMove","canMove");
             addProperty<DAS_BIND_MANAGED_PROP(canClone)>("canClone","canClone");
             addProperty<DAS_BIND_MANAGED_PROP(canNew)>("canNew","canNew");

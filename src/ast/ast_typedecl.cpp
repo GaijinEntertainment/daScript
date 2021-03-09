@@ -634,22 +634,24 @@ namespace das
         }
     }
 
-    bool TypeDecl::canCopy() const {
+    bool TypeDecl::canCopy(bool tempMatters) const {
         if ( baseType == Type::tHandle ) {
             return annotation->canCopy();
         } else if (baseType == Type::tArray || baseType == Type::tTable || baseType == Type::tBlock || baseType == Type::tIterator) {
             return false;
         } else if (baseType == Type::tStructure && structType) {
-            return structType->canCopy();
+            return structType->canCopy(tempMatters);
         } else if (baseType == Type::tTuple || baseType == Type::tVariant) {
             for (const auto & arg : argTypes) {
-                if (!arg->canCopy()) return false;
+                if (!arg->canCopy(tempMatters)) return false;
             }
             return true;
         } else if (baseType == Type::tPointer) {
             return !smartPtr;
-        } if ( baseType == Type::tLambda ) {
+        } else if ( baseType == Type::tLambda ) {
             return false;
+        } else if ( baseType == Type::tString ) {
+            return tempMatters ? false : true;
         } else {
             return true;
         }
