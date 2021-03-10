@@ -42,7 +42,7 @@ bool saveToFile ( const string & fname, const string & str ) {
     return true;
 }
 
-bool compile ( const string & fn, const string & cppFn ) {
+bool compile ( const string & fn, const string & cppFn, const string &mainFnName ) {
     auto access = get_file_access(nullptr);
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
@@ -62,6 +62,13 @@ bool compile ( const string & fn, const string & cppFn ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
                 }
                 return false;
+            }
+            if (!mainFnName.empty()) {
+                if ( auto fnTest = ctx.findFunction(mainFnName.c_str()) ) {
+                    ctx.restart();
+                    ctx.eval(fnTest, nullptr);
+                }
+                return true;
             }
             // AOT time
             TextWriter tw;
@@ -187,10 +194,19 @@ int MAIN_FUNC_NAME(int argc, char * argv[]) {
         tout << "dasAot <in_script.das> <out_script.das.cpp> [-q] [-j]\n";
         return -1;
     }
+    string mainName;
     if ( argc>3  ) {
         bool scriptArgs = false;
-        for (int ai = 3; ai != argc; ++ai) {
-            if ( strcmp(argv[ai],"-q")==0 ) {
+        for (int ai = 3; ai != argc; ++ai) {\
+            if ( strcmp(argv[ai],"-main")==0  ) {
+                if (ai+1 > argc)
+                {
+                    tout << "dasAot <in_script.das> <out_script.das.cpp> [-q] [-j]\n";
+                    return -1;
+                }
+                mainName = argv[ai+1];
+                ai += 1;
+            } else if ( strcmp(argv[ai],"-q")==0 ) {
                 quiet = true;
             } else if ( strcmp(argv[ai],"-p")==0 ) {
                 paranoid_validation = true;
@@ -217,7 +233,7 @@ int MAIN_FUNC_NAME(int argc, char * argv[]) {
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();
-    bool compiled = compile(argv[1], argv[2]);
+    bool compiled = compile(argv[1], argv[2], mainName);
     Module::Shutdown();
     return compiled ? 0 : -1;
 }
