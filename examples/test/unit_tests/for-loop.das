@@ -87,6 +87,11 @@ def test:bool
                 assert(l>r)
                 i++
         assert(i==5)
+    if true
+        var u = 0u
+        for t in urange(0u,3u)
+            u += t
+        assert(u==3u)
     return true
 
 

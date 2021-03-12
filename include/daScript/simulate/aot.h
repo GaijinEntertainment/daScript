@@ -955,18 +955,18 @@ namespace das {
     template <typename TT>
     struct das_iterator;
 
-    template <>
-    struct das_iterator <const range> {
-        __forceinline das_iterator(const range & r) : that(r) {}
-        __forceinline bool first ( Context *, int32_t & i ) { i = that.from; return i!=that.to; }
-        __forceinline bool next  ( Context *, int32_t & i ) { i++; return i!=that.to; }
-        __forceinline void close ( Context *, int32_t &   ) {}
-        range that;
+    template <typename TT>
+    struct das_iterator <const RangeType<TT>> {
+        __forceinline das_iterator(const RangeType<TT> & r) : that(r) {}
+        __forceinline bool first ( Context *, TT & i ) { i = that.from; return i!=that.to; }
+        __forceinline bool next  ( Context *, TT & i ) { i++; return i!=that.to; }
+        __forceinline void close ( Context *, TT &   ) {}
+        RangeType<TT> that;
     };
 
-    template <>
-    struct das_iterator <range> : das_iterator<const range> {
-        __forceinline das_iterator(const range & r) : das_iterator<const range>(r) {}
+    template <typename TT>
+    struct das_iterator <RangeType<TT>> : das_iterator<const RangeType<TT>> {
+        __forceinline das_iterator(const RangeType<TT> & r) : das_iterator<const RangeType<TT>>(r) {}
     };
 
     template <>
