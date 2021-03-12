@@ -1967,7 +1967,6 @@ namespace das {
             if ( expr->arguments.size()==2 && !expr->arguments[1]->rtti_isStringConstant() ) {
                 error("static assert comment must be string constant",  "", "",
                     expr->at, CompilationError::invalid_argument_type);
-                return nullptr;
             }
             expr->type = make_smart<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
