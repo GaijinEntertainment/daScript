@@ -115,12 +115,20 @@ namespace das {
     mutex              g_jobQueMutex;
     shared_ptr<JobQue> g_jobQue;
 
+}
+
+das::Context* get_clone_context( das::Context * ctx );//link time resolved dependencies
+
+namespace das {
+
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         if ( !g_jobQue ) context->throw_error_at(*lineinfo, "need to be in 'with_job_que' block");
-        auto forkContext = make_shared<Context>(*context);
-        auto ptr = forkContext->heap->allocate(lambdaSize);
+        shared_ptr<Context> forkContext;
+        forkContext.reset(get_clone_context(context));
+        auto ptr = forkContext->heap->allocate(lambdaSize + 16);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
-        memset ( ptr, 0, lambdaSize );
+        memset ( ptr, 0, lambdaSize + 16 );
+        ptr += 16;
         das_invoke_function<void>::invoke(forkContext.get(), fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
         g_jobQue->push([=]() mutable {
@@ -131,10 +139,12 @@ namespace das {
     }
 
     void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context ) {
-        auto forkContext = make_shared<Context>(*context);
-        auto ptr = forkContext->heap->allocate(lambdaSize);
+        shared_ptr<Context> forkContext;
+        forkContext.reset(get_clone_context(context));
+        auto ptr = forkContext->heap->allocate(lambdaSize + 16);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_thread");
-        memset ( ptr, 0, lambdaSize );
+        memset ( ptr, 0, lambdaSize + 16 );
+        ptr += 16;
         das_invoke_function<void>::invoke(forkContext.get(), fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
         thread([=]() mutable {

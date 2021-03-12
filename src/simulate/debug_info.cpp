@@ -52,6 +52,7 @@ namespace das
         {   Type::tTuple,       "tuple"},
         {   Type::tVariant,     "variant"},
         {   Type::fakeContext,  "__context"},
+        {   Type::fakeLineInfo,  "__lineInfo"},
     };
 
     TypeAnnotation * TypeInfo::getAnnotation() const {
