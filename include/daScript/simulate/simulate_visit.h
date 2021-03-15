@@ -201,7 +201,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_CloneRefValueT<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(CopyRefValue);
+        V_OP_TT(CloneRefValue);
         V_SUB(l);
         V_SUB(r);
         V_END();
