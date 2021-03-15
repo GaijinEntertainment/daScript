@@ -344,6 +344,50 @@ namespace das {
         }
     }
 
+    ExpressionPtr FoldingVisitor::cloneWithType ( const ExpressionPtr & expr ) {
+        auto rexpr = expr->clone();
+        if ( expr->type ) rexpr->type = make_smart<TypeDecl>(*expr->type);
+        return rexpr;
+    }
+
+    ExpressionPtr FoldingVisitor::evalAndFoldStringBuilder ( ExprStringBuilder * expr )  {
+        // concatinate all constant strings, which are close together
+        smart_ptr<ExprConstString> str;
+        for ( auto it = expr->elements.begin(); it != expr->elements.end(); ) {
+            auto & elem = *it;
+            if ( elem->rtti_isStringConstant() ) {
+                auto selem = static_pointer_cast<ExprConstString>(elem);
+                if ( str ) {
+                    str->text += selem->text;
+                    it = expr->elements.erase(it);
+                    reportFolding();
+                } else {
+                    str = static_pointer_cast<ExprConstString>(cloneWithType(selem));
+                    elem = str;
+                    ++ it;
+                }
+            } else {
+                str.reset();
+                ++ it;
+            }
+        }
+        // check if we are no longer a builder
+        if ( expr->elements.size()==0 ) {
+            // empty string builder is "" string
+            auto estr = make_smart<ExprConstString>(expr->at,"");
+            estr->type = make_smart<TypeDecl>(Type::tString);
+            estr->constexpression = true;
+            reportFolding();
+            return estr;
+        } else if ( expr->elements.size()==1 && expr->elements[0]->rtti_isStringConstant() ) {
+            // string builder with one string constant is that constant
+            reportFolding();
+            return expr->elements[0];
+        } else {
+            return expr;
+        }
+    }
+
     /*
         op1 constexpr = op1(constexpr)
         op2 constexpr,constexpr = op2(constexpr,constexpr)
@@ -368,11 +412,6 @@ namespace das {
     protected:
         bool runMe = false;
     protected:
-        ExpressionPtr cloneWithType ( const ExpressionPtr & expr ) {
-            auto rexpr = expr->clone();
-            rexpr->type = make_smart<TypeDecl>(*expr->type);
-            return rexpr;
-        }
         // function which is fully a nop
         bool isNop ( const FunctionPtr & func ) {
             if ( func->builtIn ) return false;
@@ -666,39 +705,7 @@ namespace das {
             return Visitor::visitStringBuilderElement(sb, expr, last);
         }
         virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
-            // concatinate all constant strings, which are close together
-            smart_ptr<ExprConstString> str;
-            for ( auto it = expr->elements.begin(); it != expr->elements.end(); ) {
-                auto & elem = *it;
-                if ( elem->rtti_isStringConstant() ) {
-                    auto selem = static_pointer_cast<ExprConstString>(elem);
-                    if ( str ) {
-                        str->text += selem->text;
-                        it = expr->elements.erase(it);
-                        reportFolding();
-                    } else {
-                        str = static_pointer_cast<ExprConstString>(cloneWithType(selem));
-                        elem = str;
-                        ++ it;
-                    }
-                } else {
-                    str.reset();
-                    ++ it;
-                }
-            }
-            // check if we are no longer a builder
-            if ( expr->elements.size()==0 ) {
-                // empty string builder is "" string
-                auto estr = make_smart<ExprConstString>(expr->at,"");
-                estr->type = make_smart<TypeDecl>(Type::tString);
-                estr->constexpression = true;
-                return estr;
-            } else if ( expr->elements.size()==1 && expr->elements[0]->rtti_isStringConstant() ) {
-                // string builder with one string constant is that constant
-                return expr->elements[0];
-            } else {
-                return Visitor::visit(expr);
-            }
+            return evalAndFoldStringBuilder(expr);
         }
     };
 

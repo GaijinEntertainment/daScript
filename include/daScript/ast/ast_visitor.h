@@ -302,6 +302,8 @@ namespace das {
         vec4f eval ( Expression * expr, bool & failed );
         ExpressionPtr evalAndFold ( Expression * expr );
         ExpressionPtr evalAndFoldString ( Expression * expr );
+        ExpressionPtr evalAndFoldStringBuilder ( ExprStringBuilder * expr );
+        ExpressionPtr cloneWithType ( const ExpressionPtr & expr );
         bool isSameFoldValue ( const TypeDeclPtr & t, vec4f a, vec4f b ) const {
             return memcmp(&a,&b,t->getSizeOf()) == 0;
         }

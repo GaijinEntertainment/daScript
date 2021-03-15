@@ -5976,11 +5976,16 @@ namespace das {
         }
     // StringBuilder
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder *, Expression * expr, bool ) override {
-            return Expression::autoDereference(expr);
+            auto res = Expression::autoDereference(expr);
+            if ( expr->constexpression ) {
+                return evalAndFoldString(res.get());
+            } else {
+                return res;
+            }
         }
         virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override {
             expr->type = make_smart<TypeDecl>(Type::tString);
-            return Visitor::visit(expr);
+            return evalAndFoldStringBuilder(expr);
         }
     // make variant
         virtual void preVisit ( ExprMakeVariant * expr ) override {
