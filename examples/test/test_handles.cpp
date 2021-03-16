@@ -593,6 +593,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // point3 array
     addAlias(typeFactory<Point3>::make(lib));
     addAnnotation(make_smart<Point3ArrayAnnotation>(lib));
+    addCtorAndUsing<Point3Array>(*this, lib, "Point3Array", "Point3Array");
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
         SideEffects::modifyExternal, "testPoint3Array");
     // foo array
