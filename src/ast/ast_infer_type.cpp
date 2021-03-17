@@ -489,10 +489,11 @@ namespace das {
                 return program->thisModule.get();
             } else if ( func ) {
                 if ( func->fromGeneric ) {
+                    auto origin = func->getOrigin();
                     if ( moduleName.empty() ) {     // ::foo in generic means generic::goo, not this::foo
-                        moduleName = func->fromGeneric->module->name;
+                        moduleName = origin->module->name;
                     }
-                    return func->fromGeneric->module;
+                    return origin->module;
                 } else {
                     return func->module;
                 }
@@ -502,7 +503,7 @@ namespace das {
         }
 
         Module * getFunctionVisModule( Function * fn ) const {
-            return fn->fromGeneric ? fn->fromGeneric->module : fn->module;
+            return fn->fromGeneric ? fn->getOrigin()->module : fn->module;
         }
 
         bool canCallPrivate ( const FunctionPtr & pFn, Module * mod, Module * thisMod ) const {
@@ -510,8 +511,9 @@ namespace das {
                 return true;
             } else if ( pFn->module==mod || pFn->module==thisMod ) {
                 return true;
-            } else if ( pFn->fromGeneric && (pFn->fromGeneric->module==mod || pFn->fromGeneric->module==thisMod) ) {
-                return true;
+            }if ( pFn->fromGeneric ) {
+                auto origin = pFn->getOrigin();
+                return (origin->module==mod) || (origin->module==thisMod);
             } else {
                 return false;
             }
@@ -536,7 +538,7 @@ namespace das {
             if ( inWhichModule->isVisibleDirectly(objModule) ) return true;
             // can always call within same module from instanced generic
             if ( func && func->fromGeneric ) {
-                auto inWhichOtherModule = func->fromGeneric->module;
+                auto inWhichOtherModule = func->getOrigin()->module;
                 if ( inWhichOtherModule->isVisibleDirectly(objModule) ) return true;
             }
             return false;
@@ -5516,7 +5518,7 @@ namespace das {
                 auto fun = functions.back();
                 if ( generics.size()==1 ) {
                     auto gen = generics.back();
-                    if ( fun->fromGeneric != gen.get() ) {
+                    if ( fun->fromGeneric != gen.get() ) { // TODO: getOrigin??
                         reportExcess(expr, "too many matching functions or generics ", functions, generics);
                         return Visitor::visit(expr);
                     }
@@ -5885,7 +5887,7 @@ namespace das {
                         if (!program->addFunction(clone)) {
                             auto exf = program->thisModule->functions[clone->getMangledName()];
                             DAS_ASSERTF(exf, "if we can't add, this means there is function with exactly this mangled name");
-                            if (exf->fromGeneric != clone->fromGeneric) {
+                            if (exf->fromGeneric != clone->fromGeneric) { // TODO: getOrigin??
                                 error("can't instance generic " + describeFunction(clone),
                                     + "\ttrying to instance from module " + clone->fromGeneric->module->name + "\n"
                                     + "\texisting instance from module " + exf->fromGeneric->module->name, "",

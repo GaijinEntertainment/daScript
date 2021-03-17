@@ -8,7 +8,7 @@ require jobque public
 require daslib/rtti
 require daslib/ast
 require daslib/ast_boost
-require daslib/template
+require daslib/templates
 
 [tag_function(new_job_tag)]
 def new_job ( var l : lambda )

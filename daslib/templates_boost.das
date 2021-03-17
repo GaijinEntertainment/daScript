@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module template_boost shared
+module templates_boost shared
 
 require ast
 require daslib/ast_boost

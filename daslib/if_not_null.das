@@ -6,7 +6,7 @@ module if_not_null shared
 require ast
 require rtti
 require daslib/ast_boost
-require daslib/template_boost
+require daslib/templates_boost
 
 /*
     transforms

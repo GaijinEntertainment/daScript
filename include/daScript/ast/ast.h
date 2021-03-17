@@ -615,6 +615,7 @@ namespace das
             result = td;
             return this;
         }
+        Function * getOrigin() const;
     public:
         AnnotationList      annotations;
         string              name;

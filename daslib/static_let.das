@@ -6,7 +6,7 @@ module static_let shared
 require ast
 require rtti
 require daslib/ast_boost
-require daslib/template_boost
+require daslib/templates_boost
 
 [tag_function(static_let_tag)]
 def static_let ( blk : block ) {}

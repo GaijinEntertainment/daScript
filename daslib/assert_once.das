@@ -6,7 +6,7 @@ module assert_once shared
 require ast
 require rtti
 require daslib/ast_boost
-require daslib/template_boost
+require daslib/templates_boost
 
 [tag_function(asset_once_tag)]
 def assert_once ( expr:bool; message:string="" ) {}

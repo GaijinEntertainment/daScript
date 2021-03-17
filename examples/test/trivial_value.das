@@ -6,7 +6,7 @@ module trivial_value
 require ast
 require rtti
 require daslib/ast_boost
-require daslib/template_boost
+require daslib/templates_boost
 
 // macro, which replaces trivial_value(VAL)
 // with:

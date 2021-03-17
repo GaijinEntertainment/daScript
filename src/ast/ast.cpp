@@ -637,6 +637,18 @@ namespace das {
         return this;
     }
 
+    Function * Function::getOrigin() const {
+        if ( fromGeneric ) {
+            auto origin = fromGeneric;
+            while ( origin->fromGeneric ) {
+                origin = origin->fromGeneric;
+            }
+            return origin;
+        } else {
+            return nullptr;
+        }
+    }
+
     // built-in function
 
     BuiltInFunction::BuiltInFunction ( const char * fn, const char * fnCpp ) {

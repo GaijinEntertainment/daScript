@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module template shared
+module templates shared
 
 require ast
 require rtti
@@ -44,6 +44,8 @@ class TemplateMacro : AstFunctionAnnotation
             newcall <- reinterpret<smart_ptr<ExprCallFunc>> newcallexpr
         // new func
         var fclone <- clone_function(ffunc)
+        fclone.fromGeneric = expr.func
+        fclone.flags |= FunctionFlags privateFunction
         newcall.func = null
         var extra = ""
         for t in fclone.annotations[taidx].arguments

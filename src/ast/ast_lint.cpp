@@ -272,7 +272,8 @@ namespace das {
             }
         }
         virtual void preVisit ( ExprUnsafe * expr ) override {
-            auto fnMod = func->fromGeneric ? func->fromGeneric->module : func->module;
+            auto origin = func->getOrigin();
+            auto fnMod = origin ? origin->module : func->module;
             if ( fnMod == program->thisModule.get() ) {
                 anyUnsafe = true;
                 if ( checkUnsafe ) {

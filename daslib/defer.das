@@ -6,7 +6,7 @@ module defer shared
 require ast
 require rtti
 require daslib/ast_boost
-require daslib/template_boost
+require daslib/templates_boost
 
 [tag_function(defer_tag)]
 def defer ( blk : block<():void> ) {}

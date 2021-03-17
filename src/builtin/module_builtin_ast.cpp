@@ -1183,6 +1183,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(fromGeneric)>("fromGeneric");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             addField<DAS_BIND_MANAGED_FIELD(aotHash)>("aotHash");
+            // properties
+            addProperty<DAS_BIND_MANAGED_PROP(getOrigin)>("origin","getOrigin");
         }
     };
 

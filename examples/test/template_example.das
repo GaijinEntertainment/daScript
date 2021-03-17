@@ -2,7 +2,7 @@ options log = true
 
 require ast
 require daslib/ast_boost
-require daslib/template
+require daslib/templates
 
 [export]
 def test

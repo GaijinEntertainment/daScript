@@ -1,4 +1,4 @@
-require daslib/template
+require daslib/templates
 
 [template (a), sideeffects]
 def boo ( x : int; a : auto(TT) )
