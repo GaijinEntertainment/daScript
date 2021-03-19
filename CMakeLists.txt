@@ -737,7 +737,7 @@ utils/dasAot/main.cpp
 )
 add_executable(tutorial02_dasAot ${TUTORIAL_02_DASAOT_MAIN_SRC} )
 target_compile_definitions(tutorial02_dasAot PUBLIC MAIN_FUNC_NAME=das_aot_main)
-TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(tutorial02_dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
 SETUP_CPP11(tutorial02_dasAot)
 SETUP_LTO(tutorial02_dasAot)
