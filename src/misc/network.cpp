@@ -137,7 +137,7 @@ namespace das {
                 }
             } else {
                 res = errno;
-                if ( res!=EAGAIN && res!=EWOULDBLOCK ) {
+                if ( res!=0 && res!=EAGAIN && res!=EWOULDBLOCK ) {
                     onError ( "can't send", res);
                     closesocket(client_fd);
                     client_fd = 0;
