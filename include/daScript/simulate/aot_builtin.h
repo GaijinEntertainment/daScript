@@ -105,7 +105,7 @@ namespace das {
         if ( arr.isLocked() ) context.throw_error("can't resize locked array");
         uint32_t newSize = arr.size + 1;
         if ( newSize > arr.capacity ) {
-            uint32_t newCapacity = 1 << (32 - __builtin_clz (das::max(newSize,2u) - 1));
+            uint32_t newCapacity = 1 << (32 - das_clz (das::max(newSize,2u) - 1));
             newCapacity = das::max(newCapacity, 16u);
             array_reserve(context, arr, newCapacity, stride);
         }

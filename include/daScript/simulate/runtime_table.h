@@ -55,11 +55,11 @@ namespace das
         }
 
         __forceinline uint32_t computeShift(uint32_t capacity) {
-            return __builtin_clz(capacity-1);
+            return das_clz(capacity-1);
         }
 
         __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
-            uint32_t desired = 32 - __builtin_clz(capacity-1);
+            uint32_t desired = 32 - das_clz(capacity-1);
             return das::max(uint32_t(minLookups), desired * 6);
         }
 

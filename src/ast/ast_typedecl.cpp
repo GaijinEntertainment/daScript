@@ -2125,7 +2125,7 @@ namespace das
     string TypeDecl::findBitfieldName ( uint32_t val ) const {
        if ( argNames.size() ) {
             if ( val && (val & (val-1))==0 ) {  // if bit is set, and only one bit
-                int index = 31 - __builtin_clz(val);
+                int index = 31 - das_clz(val);
                 if ( index < int(argNames.size()) ) {
                     return argNames[index];
                 }

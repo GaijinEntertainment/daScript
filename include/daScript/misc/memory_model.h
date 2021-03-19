@@ -43,7 +43,7 @@ namespace das {
                 uint32_t b = bits[look];
                 uint32_t nb = ~b;
                 if ( nb ) {
-                    uint32_t j = 31 - __builtin_clz(nb);
+                    uint32_t j = 31 - das_clz(nb);
                     bits[look] = b | (1u<<j);
                     allocated ++;
                     uint32_t ofs = (look * 32 + j);
