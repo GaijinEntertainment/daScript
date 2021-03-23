@@ -174,7 +174,8 @@ def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>)
 def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>#)
     clear(a)
     for k,v in keys(b),values(b)
-        a[k] := v
+        let kk := k
+        a[kk] := v
 
 def keys(a:table<auto(keyT);auto(valT)>) : iterator<keyT & const>
     var it : iterator<keyT & const>
