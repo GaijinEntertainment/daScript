@@ -43,7 +43,7 @@ namespace das {
     int fast_to_int ( const char *str );
     void builtin_append_char_to_string(string & str, int32_t Ch);
     bool builtin_string_ends_with(const string &str, char * substr, Context * context);
-    int32_t builtin_ext_string_length(string & str);
+    int32_t builtin_ext_string_length(const string & str);
     void builtin_resize_string(string & str, int32_t newLength);
     char * string_repeat ( const char * str, int count, Context * context );
     char * to_string_char(int ch, Context * context);

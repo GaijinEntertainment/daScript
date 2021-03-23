@@ -468,7 +468,7 @@ namespace das
         return memcmp ( str.data() + sz - slen, substr, slen )==0;
     }
 
-    int32_t builtin_ext_string_length(string & str) {
+    int32_t builtin_ext_string_length(const string & str) {
         return int32_t(str.size());
     }
 
