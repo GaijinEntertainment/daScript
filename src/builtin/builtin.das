@@ -177,17 +177,17 @@ def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>#)
         let kk := k
         a[kk] := v
 
-def keys(a:table<auto(keyT);auto(valT)>) : iterator<keyT & const>
+def keys(a:table<auto(keyT);auto(valT)> implicit) : iterator<keyT & const>
     var it : iterator<keyT & const>
     __builtin_table_keys(it,a,typeinfo(sizeof type<keyT>))
     return <- it
 
-def values(a:table<auto(keyT);auto(valT)> =const) : iterator<valT & const>
+def values(a:table<auto(keyT);auto(valT)> =const implicit) : iterator<valT & const>
     var it : iterator<valT & const>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
 
-def values(var a:table<auto(keyT);auto(valT)> =const) : iterator<valT &>
+def values(var a:table<auto(keyT);auto(valT)> =const implicit) : iterator<valT &>
     var it : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
