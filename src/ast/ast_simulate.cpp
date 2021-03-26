@@ -2797,7 +2797,7 @@ namespace das
                     if (!pvar->used)
                         continue;
                     auto & gvar = context.globalVariables[pvar->index];
-                    if ( pvar->init ) {
+                    if ( !folding && pvar->init ) {
                         if ( pvar->init->rtti_isMakeLocal() ) {
                             if ( pvar->global_shared ) {
                                 auto sl = context.code->makeNode<SimNode_GetShared>(pvar->init->at, pvar->stackTop, pvar->getMangledNameHash());
@@ -2830,8 +2830,10 @@ namespace das
             isSimulating = false;
             return false;
         }
-        fusion(context, logs);
-        context.relocateCode();
+        if ( !folding ) {               // note: only run fusion when not folding
+            fusion(context, logs);
+            context.relocateCode();
+        }
         context.restart();
         // now call annotation simulate
         das_hash_map<int,Function *> indexToFunction;
@@ -2852,7 +2854,9 @@ namespace das
             }
         }
         // verify code and string heaps
-        DAS_ASSERTF(context.code->depth()<=1, "code must come in one page");
+        if ( !folding ) {
+            DAS_ASSERTF(context.code->depth()<=1, "code must come in one page");
+        }
         DAS_ASSERTF(context.constStringHeap->depth()<=1, "strings must come in one page");
         context.stringHeap->setIntern(options.getBoolOption("intern_strings", policies.intern_strings));
         // log all functions
@@ -2875,21 +2879,23 @@ namespace das
             }
         }
         // run init script and restart
-        if (!context.runWithCatch([&]() {
-            if (context.stack.size()) {
-                context.runInitScript();
-            } else if ( sharedStack ) {
-                SharedStackGuard guard(context, *sharedStack);
-                context.runInitScript();
-            } else {
-                auto ssz = getContextStackSize();
-                StackAllocator stack(ssz ? ssz : 16384);    // at least some stack
-                SharedStackGuard guard(context, stack);
-                context.runInitScript();
+        if ( !folding ) {
+            if (!context.runWithCatch([&]() {
+                if (context.stack.size()) {
+                    context.runInitScript();
+                } else if ( sharedStack ) {
+                    SharedStackGuard guard(context, *sharedStack);
+                    context.runInitScript();
+                } else {
+                    auto ssz = getContextStackSize();
+                    StackAllocator stack(ssz ? ssz : 16384);    // at least some stack
+                    SharedStackGuard guard(context, stack);
+                    context.runInitScript();
+                }
+            })) {
+                string exc = context.getException();
+                error("exception during init script", exc, "", LineInfo(), CompilationError::cant_initialize);
             }
-        })) {
-            string exc = context.getException();
-            error("exception during init script", exc, "", LineInfo(), CompilationError::cant_initialize);
         }
         context.restart();
         if (options.getBoolOption("log_mem",false)) {

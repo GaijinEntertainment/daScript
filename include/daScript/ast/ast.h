@@ -1127,6 +1127,7 @@ namespace das
         vector<Error>               errors;
         uint32_t                    globalInitStackSize = 0;
         uint32_t                    globalStringHeapSize = 0;
+        bool                        folding = false;
         union {
             struct {
                 bool    failToCompile : 1;

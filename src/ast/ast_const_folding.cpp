@@ -796,12 +796,14 @@ namespace das {
     public:
         RunFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {
             TextWriter dummy;
+            prog->folding = true;
             prog->markOrRemoveUnusedSymbols(true);
             DAS_ASSERTF ( !prog->failed(), "internal error while folding (remove unused)?" );
             prog->allocateStack(dummy);
             DAS_ASSERTF ( !prog->failed(), "internal error while folding (allocate stack)?" );
             prog->simulate(ctx, dummy);
             DAS_ASSERTF ( !prog->failed(), "internal error while folding (simulate)?" );
+            prog->folding = false;
         }
     protected:
         // ExprCall
