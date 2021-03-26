@@ -3,8 +3,11 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
+#include "daScript/misc/temp_vec.h"
 
 namespace das {
+
+    typedef vector<Function *>  MatchingFunctions;
 
     class CaptureLambda : public Visitor {
     public:
@@ -544,10 +547,10 @@ namespace das {
             return false;
         }
 
-        vector<FunctionPtr> findFuncAddr ( const string & name ) const {
+        MatchingFunctions findFuncAddr ( const string & name ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
-            vector<FunctionPtr> result;
+            MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
@@ -556,7 +559,7 @@ namespace das {
                     for ( auto & pFn : goodFunctions ) {
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
-                                result.push_back(pFn);
+                                result.push_back(pFn.get());
                             }
                         }
                     }
@@ -566,8 +569,8 @@ namespace das {
             return result;
         }
 
-        vector<FunctionPtr> findTypedFuncAddr ( const string & name, const vector<TypeDeclPtr> & arguments, const TypeDeclPtr & resType ) const {
-            vector<FunctionPtr> funcs =  findMatchingFunctions(name, arguments, false, false);
+        MatchingFunctions findTypedFuncAddr ( const string & name, const vector<TypeDeclPtr> & arguments, const TypeDeclPtr & resType ) const {
+            MatchingFunctions funcs =  findMatchingFunctions(name, arguments, false, false);
             for ( auto it = funcs.begin(); it != funcs.end();  ) {
                 const auto & mf = *it;
                 if ( !mf->result->isSameType(*resType,RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes) ) {
@@ -579,65 +582,77 @@ namespace das {
             return funcs;
         }
 
-        vector<FunctionPtr> findCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
+        MatchingFunctions findCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
-            vector<FunctionPtr> result;
+            MatchingFunctions result;
             getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
-                    result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    // result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    for ( auto & it : goodFunctions ) {
+                        result.push_back(it.get());
+                    }
                 }
                 return true;
             },moduleName);
             return result;
         }
 
-        vector<FunctionPtr> findCandidates ( const string & name, const vector<MakeFieldDeclPtr> & ) const {
+        MatchingFunctions findCandidates ( const string & name, const vector<MakeFieldDeclPtr> & ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
-            vector<FunctionPtr> result;
+            MatchingFunctions result;
             getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
-                    result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    // result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    for ( auto & it : goodFunctions ) {
+                        result.push_back(it.get());
+                    }
                 }
                 return true;
             },moduleName);
             return result;
         }
 
-        vector<FunctionPtr> findGenericCandidates ( const string & name, const vector<MakeFieldDeclPtr> & ) const {
+        MatchingFunctions findGenericCandidates ( const string & name, const vector<MakeFieldDeclPtr> & ) const {
             // TODO: better error reporting
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
-            vector<FunctionPtr> result;
+            MatchingFunctions result;
             getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->genericsByName.find(funcName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
-                    result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    // result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    for ( auto & it : goodFunctions ) {
+                        result.push_back(it.get());
+                    }
                 }
                 return true;
             },moduleName);
             return result;
         }
 
-        vector<FunctionPtr> findGenericCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
+        MatchingFunctions findGenericCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
-            vector<FunctionPtr> result;
+            MatchingFunctions result;
             getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->genericsByName.find(funcName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
-                    result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    // result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    for ( auto & it : goodFunctions ) {
+                        result.push_back(it.get());
+                    }
                 }
                 return true;
             },moduleName);
@@ -868,10 +883,10 @@ namespace das {
             return ss.str();
         }
 
-        vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
+        MatchingFunctions findMatchingFunctions ( const string & name, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
-            vector<FunctionPtr> result;
+            MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
@@ -881,7 +896,7 @@ namespace das {
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
-                                    result.push_back(pFn);
+                                    result.push_back(pFn.get());
                                 }
                             }
                         }
@@ -892,10 +907,10 @@ namespace das {
             return result;
         }
 
-        vector<FunctionPtr> findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false, bool visCheck = true ) const {
+        MatchingFunctions findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false, bool visCheck = true ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
-            vector<FunctionPtr> result;
+            MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
@@ -905,7 +920,7 @@ namespace das {
                         if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
-                                    result.push_back(pFn);
+                                    result.push_back(pFn.get());
                                 }
                             }
                         }
@@ -916,10 +931,10 @@ namespace das {
             return result;
         }
 
-        vector<FunctionPtr> findMatchingGenerics ( const string & name, const vector<MakeFieldDeclPtr> & arguments ) const {
+        MatchingFunctions findMatchingGenerics ( const string & name, const vector<MakeFieldDeclPtr> & arguments ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
-            vector<FunctionPtr> result;
+            MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->genericsByName.find(funcName);
@@ -929,7 +944,7 @@ namespace das {
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
-                                    result.push_back(pFn);
+                                    result.push_back(pFn.get());
                                 }
                             }
                         }
@@ -940,10 +955,10 @@ namespace das {
             return result;
         }
 
-        vector<FunctionPtr> findMatchingGenerics ( const string & name, const vector<TypeDeclPtr> & types ) const {
+        MatchingFunctions findMatchingGenerics ( const string & name, const vector<TypeDeclPtr> & types ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
-            vector<FunctionPtr> result;
+            MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->genericsByName.find(funcName);
@@ -953,7 +968,7 @@ namespace das {
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
-                                    result.push_back(pFn);
+                                    result.push_back(pFn.get());
                                 }
                             }
                         }
@@ -965,7 +980,7 @@ namespace das {
         }
 
         void reportFunctionNotFound( const string & name, const string & extra,
-                                    const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
+                                    const LineInfo & at, const MatchingFunctions & candidateFunctions,
             const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
             if ( verbose ) {
@@ -992,7 +1007,7 @@ namespace das {
                     if ( reportDetails ) {
                         ss << describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
                     }
-                    auto visM = getFunctionVisModule(missFn.get());
+                    auto visM = getFunctionVisModule(missFn);
                     if ( !isVisibleFunc(inWhichModule,visM) ) {
                         ss << "\t\tmodule " << visM->name << " is not visible directly from ";
                         if ( inWhichModule->name.empty()) {
@@ -1016,7 +1031,7 @@ namespace das {
         }
 
         void reportFunctionNotFound( const string & , const string & extra,
-                                    const LineInfo & at, const vector<FunctionPtr> & candidateFunctions,
+                                    const LineInfo & at, const MatchingFunctions & candidateFunctions,
                                     const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlocks, bool reportDetails ,
                                     CompilationError cerror = CompilationError::function_not_found) {
             if ( verbose ) {
@@ -1053,7 +1068,7 @@ namespace das {
             return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
         }
 
-        bool verifyAnyFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
+        bool verifyAnyFunc ( const MatchingFunctions & fnList, const LineInfo & at ) const {
             int genCount = 0;
             int customCount = 0;
             for ( auto & fn : fnList ) {
@@ -1089,7 +1104,7 @@ namespace das {
             }
         }
 
-        vector<FunctionPtr> getCloneFunc ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
+        MatchingFunctions getCloneFunc ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
             vector<TypeDeclPtr> argDummy;
             argDummy.push_back(make_smart<TypeDecl>(*left));
             argDummy.push_back(make_smart<TypeDecl>(*right));
@@ -1098,11 +1113,11 @@ namespace das {
             return clones;
         }
 
-        bool verifyCloneFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
+        bool verifyCloneFunc ( const MatchingFunctions & fnList, const LineInfo & at ) const {
             return verifyAnyFunc(fnList, at);
         }
 
-        vector<FunctionPtr> getFinalizeFunc ( const TypeDeclPtr & subexpr ) const {
+        MatchingFunctions getFinalizeFunc ( const TypeDeclPtr & subexpr ) const {
             vector<TypeDeclPtr> argDummy;
             argDummy.push_back(make_smart<TypeDecl>(*subexpr));
             auto fins = findMatchingFunctions("_::finalize", argDummy);
@@ -1110,7 +1125,7 @@ namespace das {
             return fins;
         }
 
-        bool verifyFinalizeFunc ( const vector<FunctionPtr> & fnList, const LineInfo & at ) const {
+        bool verifyFinalizeFunc ( const MatchingFunctions & fnList, const LineInfo & at ) const {
             return verifyAnyFunc(fnList, at);
         }
 
@@ -1814,14 +1829,14 @@ namespace das {
                 }
             }
             expr->func = nullptr;
-            vector<FunctionPtr> fns;
+            MatchingFunctions fns;
             if (expr->funcType) {
                 fns = findTypedFuncAddr(expr->target, expr->funcType->argTypes, expr->funcType->firstType);
             } else {
                 fns = findFuncAddr(expr->target);
             }
             if ( fns.size()==1 ) {
-                expr->func = fns.back().get();
+                expr->func = fns.back();
                 expr->func->addr = true;
                 expr->type = make_smart<TypeDecl>(Type::tFunction);
                 expr->type->firstType = make_smart<TypeDecl>(*expr->func->result);
@@ -3016,7 +3031,7 @@ namespace das {
                 if ( fnList.size() ) {
                     if ( verifyFinalizeFunc(fnList, expr->at) ) {
                         reportAstChanged();
-                        auto fn = fnList[0];
+                        // auto fn = fnList[0];
                         // string finalizeName = (fn->module->name.empty() ? "_" : fn->module->name) + "::finalize";
                         string finalizeName = "_::finalize";
                         auto finalizeFn = make_smart<ExprCall>(expr->at, finalizeName);
@@ -4299,7 +4314,7 @@ namespace das {
                       + "' with argument " + describeType(expr->subexpr->type), candidates, "",
                     expr->at, CompilationError::operator_not_found);
             } else {
-                expr->func = functions[0].get();
+                expr->func = functions[0];
                 if ( expr->func->firstArgReturnType ) {
                     expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
                     expr->type->ref = false;
@@ -4464,7 +4479,7 @@ namespace das {
                 }
             }
             else {
-                expr->func = functions[0].get();
+                expr->func = functions[0];
                 if ( expr->func->firstArgReturnType ) {
                     expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
                     expr->type->ref = false;
@@ -4621,7 +4636,7 @@ namespace das {
             auto fnList = getCloneFunc(expr->left->type, expr->right->type);
             if ( fnList.size() ) {
                 if ( verifyCloneFunc(fnList, expr->at) ) {
-                    auto fn = fnList[0];
+                    // auto fn = fnList[0];
                     string cloneName = "_::clone";
                     auto cloneFn = make_smart<ExprCall>(expr->at, cloneName);
                     cloneFn->arguments.push_back(expr->left->clone());
@@ -5389,7 +5404,7 @@ namespace das {
                 auto blk = replaceGeneratorLet(expr, func, scopes.back());
                 scopes.back()->needCollapse = true;
                 // need to update finalizer
-                vector<FunctionPtr> finFuncs = getFinalizeFunc ( func->arguments[0]->type );
+                auto finFuncs = getFinalizeFunc ( func->arguments[0]->type );
                 if ( finFuncs.size()==1 ) {
                     auto finFunc = finFuncs.back();
                     auto stype = func->arguments[0]->type->structType;
@@ -5468,19 +5483,19 @@ namespace das {
             }
             return Visitor::visitNamedCallArg(call, arg, last);
         }
-        virtual void reportMissing ( ExprNamedCall * expr, const string & msg, bool reportDetails,
+        void reportMissing ( ExprNamedCall * expr, const string & msg, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
             auto can1 = findCandidates(expr->name, expr->arguments);
             auto can2 = findGenericCandidates(expr->name, expr->arguments);
             can1.insert(can1.end(), can2.begin(), can2.end());
             reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, reportDetails, cerror);
         }
-        virtual void reportExcess ( ExprNamedCall * expr, const string & msg, vector<FunctionPtr> can1, vector<FunctionPtr> can2,
+        void reportExcess ( ExprNamedCall * expr, const string & msg, MatchingFunctions can1, const MatchingFunctions & can2,
                                     CompilationError cerror = CompilationError::function_not_found) {
             can1.insert(can1.end(), can2.begin(), can2.end());
             reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, false, cerror);
         }
-        virtual void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types,
+        void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types,
                                     const string & msg, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
             auto can1 = findCandidates(expr->name, types);
@@ -5488,8 +5503,8 @@ namespace das {
             can1.insert(can1.end(), can2.begin(), can2.end());
             reportFunctionNotFound(expr->name, msg + (verbose ? expr->describe() : ""), expr->at, can1, types, true, true, reportDetails, cerror);
         }
-        virtual void reportExcess ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types,
-                                   const string & msg, vector<FunctionPtr> can1, vector<FunctionPtr> can2,
+        void reportExcess ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types,
+                                   const string & msg, MatchingFunctions can1, const MatchingFunctions & can2,
                                     CompilationError cerror = CompilationError::function_not_found) {
             can1.insert(can1.end(), can2.begin(), can2.end());
             reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, types, false, true, false, cerror);
@@ -5518,7 +5533,7 @@ namespace das {
                 auto fun = functions.back();
                 if ( generics.size()==1 ) {
                     auto gen = generics.back();
-                    if ( fun->fromGeneric != gen.get() ) { // TODO: getOrigin??
+                    if ( fun->fromGeneric != gen ) { // TODO: getOrigin??
                         reportExcess(expr, "too many matching functions or generics ", functions, generics);
                         return Visitor::visit(expr);
                     }
@@ -5695,9 +5710,9 @@ namespace das {
             }
         }
 
-        static void applyLSP ( const vector<TypeDeclPtr> & arguments, vector<FunctionPtr> & functions ) {
+        static void applyLSP ( const vector<TypeDeclPtr> & arguments, MatchingFunctions & functions ) {
             if ( functions.size()<=1 ) return;
-            vector<pair<int,FunctionPtr>> fnm;
+            vector<pair<int,Function *>> fnm;
             for ( auto & fn : functions ) {
                 auto dist = computeSubstituteDistance(arguments, fn);
                 fnm.push_back(make_pair(dist,fn));
@@ -5799,7 +5814,7 @@ namespace das {
                 }
                 if ( generics.size()==1 ) {
                     auto oneGeneric = generics.back();
-                    auto genName = getGenericInstanceName(oneGeneric.get());
+                    auto genName = getGenericInstanceName(oneGeneric);
                     auto instancedFunctions = findMatchingFunctions("__::" + genName, types, true);
                     if ( instancedFunctions.size() > 1 ) {
                         TextWriter ss;
@@ -5815,7 +5830,7 @@ namespace das {
                     } else if (instancedFunctions.size() == 0) {
                         auto clone = oneGeneric->clone();
                         clone->name = genName;
-                        clone->fromGeneric = oneGeneric.get();
+                        clone->fromGeneric = oneGeneric;
                         clone->privateFunction = true;
                         if (func) {
                             clone->inferStack.emplace_back(expr->at, func);

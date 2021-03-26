@@ -318,6 +318,7 @@ include/daScript/misc/memory_model.h
 include/daScript/misc/fnv.h
 include/daScript/misc/smart_ptr.h
 include/daScript/misc/free_list.h
+include/daScript/misc/temp_vec.h
 include/daScript/misc/sysos.h
 include/daScript/misc/callable.h
 include/daScript/misc/debug_break.h
