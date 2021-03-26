@@ -1104,7 +1104,7 @@ namespace das
         vector<ReaderMacroPtr> getReaderMacro ( const string & markup ) const;
     public:
         template <typename TT>
-        string describeCandidates ( const vector<TT> & result, bool needHeader = true ) const {
+        string describeCandidates ( const TT & result, bool needHeader = true ) const {
             if ( !result.size() ) return "";
             TextWriter ss;
             if ( needHeader ) ss << "candidates are:";

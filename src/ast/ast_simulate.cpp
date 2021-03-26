@@ -2830,10 +2830,12 @@ namespace das
             isSimulating = false;
             return false;
         }
+#if DAS_FUSION
         if ( !folding ) {               // note: only run fusion when not folding
             fusion(context, logs);
             context.relocateCode();
         }
+#endif
         context.restart();
         // now call annotation simulate
         das_hash_map<int,Function *> indexToFunction;
@@ -2854,9 +2856,13 @@ namespace das
             }
         }
         // verify code and string heaps
+#if DAS_FUSION
         if ( !folding ) {
+            // note: this only matters if code has significant jumping around
+            // which is always introduced by fusion
             DAS_ASSERTF(context.code->depth()<=1, "code must come in one page");
         }
+#endif
         DAS_ASSERTF(context.constStringHeap->depth()<=1, "strings must come in one page");
         context.stringHeap->setIntern(options.getBoolOption("intern_strings", policies.intern_strings));
         // log all functions

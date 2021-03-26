@@ -3,11 +3,11 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
-#include "daScript/misc/temp_vec.h"
 
+#include "daScript/misc/temp_vec.h"
 namespace das {
 
-    typedef vector<Function *>  MatchingFunctions;
+    typedef temp_vector<Function *,128>  MatchingFunctions;
 
     class CaptureLambda : public Visitor {
     public:
@@ -1105,9 +1105,7 @@ namespace das {
         }
 
         MatchingFunctions getCloneFunc ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
-            vector<TypeDeclPtr> argDummy;
-            argDummy.push_back(make_smart<TypeDecl>(*left));
-            argDummy.push_back(make_smart<TypeDecl>(*right));
+            vector<TypeDeclPtr> argDummy = { left, right };
             auto clones = findMatchingFunctions("_::clone", argDummy);
             applyLSP(argDummy, clones);
             return clones;
@@ -1118,8 +1116,7 @@ namespace das {
         }
 
         MatchingFunctions getFinalizeFunc ( const TypeDeclPtr & subexpr ) const {
-            vector<TypeDeclPtr> argDummy;
-            argDummy.push_back(make_smart<TypeDecl>(*subexpr));
+            vector<TypeDeclPtr> argDummy = { subexpr };
             auto fins = findMatchingFunctions("_::finalize", argDummy);
             applyLSP(argDummy, fins);
             return fins;
@@ -3019,8 +3016,7 @@ namespace das {
             auto fakeVar = make_smart<ExprVar>(at, "this");
             fakeVar->type = make_smart<TypeDecl>(*ftype);
             fakeCall->arguments.push_back(fakeVar);
-            vector<TypeDeclPtr> fakeTypes;
-            fakeTypes.push_back(ftype);
+            vector<TypeDeclPtr> fakeTypes = { ftype };
             reportMissing(fakeCall.get(), fakeTypes, message, true, CompilationError::function_already_declared);
         }
         virtual ExpressionPtr visit ( ExprDelete * expr ) override {
@@ -5487,26 +5483,38 @@ namespace das {
                                     CompilationError cerror = CompilationError::function_not_found) {
             auto can1 = findCandidates(expr->name, expr->arguments);
             auto can2 = findGenericCandidates(expr->name, expr->arguments);
-            can1.insert(can1.end(), can2.begin(), can2.end());
+            // can1.insert(can1.end(), can2.begin(), can2.end());
+            for ( auto & cn : can2 ) {
+                can1.push_back(cn);
+            }
             reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, reportDetails, cerror);
         }
         void reportExcess ( ExprNamedCall * expr, const string & msg, MatchingFunctions can1, const MatchingFunctions & can2,
                                     CompilationError cerror = CompilationError::function_not_found) {
-            can1.insert(can1.end(), can2.begin(), can2.end());
+            // can1.insert(can1.end(), can2.begin(), can2.end());
+            for ( auto & cn : can2 ) {
+                can1.push_back(cn);
+            }
             reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, false, cerror);
         }
-        void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types,
+        void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr> & types,
                                     const string & msg, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
             auto can1 = findCandidates(expr->name, types);
             auto can2 = findGenericCandidates(expr->name, types);
-            can1.insert(can1.end(), can2.begin(), can2.end());
+            // can1.insert(can1.end(), can2.begin(), can2.end());
+            for ( auto & cn : can2 ) {
+                can1.push_back(cn);
+            }
             reportFunctionNotFound(expr->name, msg + (verbose ? expr->describe() : ""), expr->at, can1, types, true, true, reportDetails, cerror);
         }
-        void reportExcess ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr>  & types,
+        void reportExcess ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr> & types,
                                    const string & msg, MatchingFunctions can1, const MatchingFunctions & can2,
                                     CompilationError cerror = CompilationError::function_not_found) {
-            can1.insert(can1.end(), can2.begin(), can2.end());
+            // can1.insert(can1.end(), can2.begin(), can2.end());
+            for ( auto & cn : can2 ) {
+                can1.push_back(cn);
+            }
             reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, types, false, true, false, cerror);
         }
         virtual ExpressionPtr visit ( ExprNamedCall * expr ) override {
@@ -5515,6 +5523,7 @@ namespace das {
             auto generics = findMatchingGenerics(expr->name, expr->arguments);
             if ( functions.size()> 1 ) {
                 vector<TypeDeclPtr> types;
+                types.reserve(expr->arguments.size());
                 for ( const auto & arg : expr->arguments ) {
                     types.push_back(arg->value->type);
                 }
