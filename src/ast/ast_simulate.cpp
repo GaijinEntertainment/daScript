@@ -2887,15 +2887,15 @@ namespace das
         // run init script and restart
         if ( !folding ) {
             if (!context.runWithCatch([&]() {
-                if (context.stack.size()) {
+                if ( context.stack.size() && context.stack.size()>globalInitStackSize ) {
                     context.runInitScript();
-                } else if ( sharedStack ) {
+                } else if ( sharedStack && sharedStack->size()>globalInitStackSize ) {
                     SharedStackGuard guard(context, *sharedStack);
                     context.runInitScript();
                 } else {
-                    auto ssz = getContextStackSize();
-                    StackAllocator stack(ssz ? ssz : 16384);    // at least some stack
-                    SharedStackGuard guard(context, stack);
+                    auto ssz = max ( getContextStackSize(), 16384 ) + globalInitStackSize;
+                    StackAllocator init_stack(ssz);
+                    SharedStackGuard guard(context, init_stack);
                     context.runInitScript();
                 }
             })) {

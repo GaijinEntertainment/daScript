@@ -40,7 +40,7 @@ namespace das {
                 includeGet = context->findFunction("include_get"); // note, this one CAN be null
                 // get it ready
                 context->restart();
-                context->runInitScript();
+                context->runInitScript();   // note: we assume sane init stack size here
                 // setup pak root
                 int ipr = context->findVariable("DAS_PAK_ROOT");
                 if ( ipr != -1 ) {

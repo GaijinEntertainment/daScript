@@ -738,7 +738,14 @@ namespace das
         if ( g_DebugAgent ) g_DebugAgent->onCreateContext(this);
         // now, make it good to go
         restart();
-        runInitScript();
+        if ( stack.size() > globalInitStackSize ) {
+            runInitScript();
+        } else {
+            auto ssz = max ( int(stack.size()), 16384 ) + globalInitStackSize;
+            StackAllocator init_stack(ssz);
+            SharedStackGuard init_guard(*this, init_stack);
+            runInitScript();
+        }
         restart();
     }
 
