@@ -4,11 +4,10 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
 
-#include "daScript/misc/temp_vec.h"
 namespace das {
 
-    typedef temp_vector<Function *,128>  MatchingFunctions;
-
+    // todo: check for eastl and look for better container
+    typedef vector<Function *>  MatchingFunctions;
     class CaptureLambda : public Visitor {
     public:
         virtual void preVisit ( ExprVar * expr ) override {
@@ -1081,10 +1080,10 @@ namespace das {
             if ( customCount && genCount ) {
                 if ( verbose ) {
                     string candidates = program->describeCandidates(fnList);
-                    error("both generated and custom " + fnList[0]->name + " functions exist for " + describeFunction(fnList[0]), candidates, "",
+                    error("both generated and custom " + fnList.front()->name + " functions exist for " + describeFunction(fnList.front()), candidates, "",
                         at, CompilationError::function_not_found);
                 } else {
-                    error("both generated and custom " + fnList[0]->name + " functions exist", "", "",
+                    error("both generated and custom " + fnList.front()->name + " functions exist", "", "",
                         at, CompilationError::function_not_found);
 
                 }
@@ -1092,10 +1091,10 @@ namespace das {
             } else if ( customCount>1 ) {
                 if ( verbose ) {
                     string candidates = program->describeCandidates(fnList);
-                    error("too many custom  " + fnList[0]->name + " functions exist for " + describeFunction(fnList[0]), candidates, "",
+                    error("too many custom  " + fnList.front()->name + " functions exist for " + describeFunction(fnList.front()), candidates, "",
                         at,CompilationError::function_not_found);
                 } else {
-                    error("too many custom  " + fnList[0]->name + " functions exist", "", "",
+                    error("too many custom  " + fnList.front()->name + " functions exist", "", "",
                         at,CompilationError::function_not_found);
                 }
                 return false;
@@ -4310,7 +4309,7 @@ namespace das {
                       + "' with argument " + describeType(expr->subexpr->type), candidates, "",
                     expr->at, CompilationError::operator_not_found);
             } else {
-                expr->func = functions[0];
+                expr->func = functions.front();
                 if ( expr->func->firstArgReturnType ) {
                     expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
                     expr->type->ref = false;
@@ -4475,7 +4474,7 @@ namespace das {
                 }
             }
             else {
-                expr->func = functions[0];
+                expr->func = functions.front();
                 if ( expr->func->firstArgReturnType ) {
                     expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
                     expr->type->ref = false;
@@ -5737,7 +5736,7 @@ namespace das {
             }
             if ( count == 1 ) {
                 functions.resize(1);
-                functions[0] = fnm[0].second;
+                functions.front() = fnm[0].second;
             }
         }
 
@@ -5817,7 +5816,7 @@ namespace das {
                         return copmareFunctionSpecialization(f1,f2,expr);
                     });
                     // if one is most specialized, we pick it, otherwise we report all of them
-                    if ( copmareFunctionSpecialization(generics[0],generics[1],expr) ) {
+                    if ( copmareFunctionSpecialization(generics.front(),generics[1],expr) ) {
                         generics.resize(1);
                     }
                 }
