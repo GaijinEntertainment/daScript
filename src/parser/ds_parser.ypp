@@ -1685,6 +1685,9 @@ expr
                     das_yyerror("enumeration or bitfield not found " + *$ena, tokAt(@ena),
                         CompilationError::bitfield_not_found);
                 }
+            } else {
+                das_yyerror("expecting enumeration or bitfield " + *$ena, tokAt(@ena),
+                    CompilationError::syntax_error);
             }
         }
         if ( pEnum ) {
