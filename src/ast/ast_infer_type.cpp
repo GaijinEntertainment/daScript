@@ -590,7 +590,7 @@ namespace das {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
-                    // result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    result.reserve(result.size()+goodFunctions.size());
                     for ( auto & it : goodFunctions ) {
                         result.push_back(it.get());
                     }
@@ -609,7 +609,7 @@ namespace das {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
-                    // result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    result.reserve(result.size()+goodFunctions.size());
                     for ( auto & it : goodFunctions ) {
                         result.push_back(it.get());
                     }
@@ -629,7 +629,7 @@ namespace das {
                 auto itFnList = mod->genericsByName.find(funcName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
-                    // result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    result.reserve(result.size()+goodFunctions.size());
                     for ( auto & it : goodFunctions ) {
                         result.push_back(it.get());
                     }
@@ -648,7 +648,7 @@ namespace das {
                 auto itFnList = mod->genericsByName.find(funcName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
-                    // result.insert(result.end(), goodFunctions.begin(), goodFunctions.end());
+                    result.reserve(result.size()+goodFunctions.size());
                     for ( auto & it : goodFunctions ) {
                         result.push_back(it.get());
                     }
@@ -5482,18 +5482,14 @@ namespace das {
                                     CompilationError cerror = CompilationError::function_not_found) {
             auto can1 = findCandidates(expr->name, expr->arguments);
             auto can2 = findGenericCandidates(expr->name, expr->arguments);
-            // can1.insert(can1.end(), can2.begin(), can2.end());
-            for ( auto & cn : can2 ) {
-                can1.push_back(cn);
-            }
+            can1.reserve(can1.size()+can2.size());
+            can1.insert(can1.end(), can2.begin(), can2.end());
             reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, reportDetails, cerror);
         }
         void reportExcess ( ExprNamedCall * expr, const string & msg, MatchingFunctions can1, const MatchingFunctions & can2,
                                     CompilationError cerror = CompilationError::function_not_found) {
-            // can1.insert(can1.end(), can2.begin(), can2.end());
-            for ( auto & cn : can2 ) {
-                can1.push_back(cn);
-            }
+            can1.reserve(can1.size()+can2.size());
+            can1.insert(can1.end(), can2.begin(), can2.end());
             reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, false, cerror);
         }
         void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr> & types,
@@ -5501,19 +5497,15 @@ namespace das {
                                     CompilationError cerror = CompilationError::function_not_found) {
             auto can1 = findCandidates(expr->name, types);
             auto can2 = findGenericCandidates(expr->name, types);
-            // can1.insert(can1.end(), can2.begin(), can2.end());
-            for ( auto & cn : can2 ) {
-                can1.push_back(cn);
-            }
+            can1.reserve(can1.size()+can2.size());
+            can1.insert(can1.end(), can2.begin(), can2.end());
             reportFunctionNotFound(expr->name, msg + (verbose ? expr->describe() : ""), expr->at, can1, types, true, true, reportDetails, cerror);
         }
         void reportExcess ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr> & types,
                                    const string & msg, MatchingFunctions can1, const MatchingFunctions & can2,
                                     CompilationError cerror = CompilationError::function_not_found) {
-            // can1.insert(can1.end(), can2.begin(), can2.end());
-            for ( auto & cn : can2 ) {
-                can1.push_back(cn);
-            }
+            can1.reserve(can1.size()+can2.size());
+            can1.insert(can1.end(), can2.begin(), can2.end());
             reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, types, false, true, false, cerror);
         }
         virtual ExpressionPtr visit ( ExprNamedCall * expr ) override {
