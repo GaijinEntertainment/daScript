@@ -2599,7 +2599,7 @@ namespace das {
                         expr->at, CompilationError::typeinfo_auto);
                     return Visitor::visit(expr);
                 }
-                if ( allowMissingType ? expr->typeexpr->isAuto() : expr->typeexpr->isAutoOrAlias() ) {
+                if ( allowMissingType ? expr->typeexpr->isAuto() : !expr->typeexpr->isFullyInferred() ) {
                     error("typeinfo(" + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + ") can't be fully inferred",  "", "",
                         expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
