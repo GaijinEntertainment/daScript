@@ -11,6 +11,10 @@ namespace das {
     class CaptureLambda : public Visitor {
     public:
         virtual void preVisit ( ExprVar * expr ) override {
+            if ( !expr->type ) {    // trying to capture non-inferred section
+                fail = true;
+                return;
+            }
             auto var = expr->variable;
             if ( expr->local || expr->argument || expr->block ) {
                 if ( expr->argument || (scope.find(var) != scope.end()) ) {
