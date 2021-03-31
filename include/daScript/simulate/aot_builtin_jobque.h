@@ -30,9 +30,11 @@ namespace das {
         void push ( void * data, Context * context );
         void * pop();
         bool isEmpty() const;
+        int size() const;
         bool isReady() const;
         void notify();
         void wait();
+        int append(int size);
     protected:
         mutable mutex       lock;
         queue<Feature>      pipe;
@@ -52,6 +54,7 @@ namespace das {
     void notifyJob ( JobStatus * status );
     void channelPush ( Channel * ch, void * data, Context * ctx );
     void * channelPop ( Channel * ch );
+    int channelAppend ( Channel * ch, int size );
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context );
     void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context );
     void waitForChannel ( Channel * status );
