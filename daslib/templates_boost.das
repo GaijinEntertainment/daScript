@@ -66,6 +66,7 @@ def add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDecl
         ]],
         init <- value
     ]]
+    vvar.flags |= VariableFlags generated
     if priv
         vvar.flags |= VariableFlags private_variable
     if !add_variable(mod, vvar)

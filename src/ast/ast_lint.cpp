@@ -151,6 +151,18 @@ namespace das {
                 program->error("invalid variable name " + var->name, "", "",
                     var->at, CompilationError::invalid_name );
             }
+            if ( checkNoGlobalVariables ) {
+                if ( !var->type->isConst() && !var->generated ) {
+                    program->error("variable " + var->name + " is not a constant, which is disabled via option no_global_variables", "", "",
+                        var->at, CompilationError::no_global_variables );
+                }
+            }
+            if ( checkNoGlobalHeap ) {
+                if ( !var->type->isNoHeapType() ) { // note: this is too dangerous to allow even with generated
+                    program->error("variable " + var->name + " uses heap, which is disabled via option no_global_heap", "", "",
+                        var->at, CompilationError::no_global_heap );
+                }
+            }
         }
         virtual void preVisit(ExprFor * expr) override {
             Visitor::preVisit(expr);
@@ -165,21 +177,6 @@ namespace das {
                         var->at, CompilationError::invalid_name );
                 }
             }
-        }
-        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
-            if ( checkNoGlobalHeap ) {
-                if ( !init->type->isNoHeapType() ) {
-                    program->error("variable " + var->name + " uses heap, which is disabled via option no_global_heap", "", "",
-                        var->at, CompilationError::no_global_heap );
-                }
-            }
-            if ( checkNoGlobalVariables ) {
-                if ( !var->type->isConst() ) {
-                    program->error("variable " + var->name + " is not a constant, which is disabled via option no_global_variables", "", "",
-                        var->at, CompilationError::no_global_variables );
-                }
-            }
-            return Visitor::visitGlobalLetInit(var, init);
         }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
