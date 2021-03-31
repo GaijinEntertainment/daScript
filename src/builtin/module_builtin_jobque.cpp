@@ -49,6 +49,11 @@ namespace das {
         return pipe.empty();
     }
 
+    int Channel::size() const {
+        lock_guard<mutex> guard(lock);
+        return remaining;
+    }
+
     void Channel::notify() {
         lock_guard<mutex> guard(lock);
         DAS_ASSERTF(remaining != 0, "Nothing to notify!");
@@ -65,6 +70,12 @@ namespace das {
         }
     }
 
+    int Channel::append(int size) {
+        lock_guard<mutex> guard(lock);
+        remaining += size;
+        return remaining;
+    }
+
     bool Channel::isReady() const {
         lock_guard<mutex> guard(lock);
         return remaining==0;
@@ -76,6 +87,10 @@ namespace das {
 
     void * channelPop ( Channel * ch ) {
         return ch->pop();
+    }
+
+    int channelAppend ( Channel * ch, int size ) {
+        return ch->append(size);
     }
 
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context ) {
@@ -102,6 +117,7 @@ namespace das {
         ChannelAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Channel", ml) {
             addProperty<DAS_BIND_MANAGED_PROP(isEmpty)>("isEmpty");
             addProperty<DAS_BIND_MANAGED_PROP(isReady)>("isReady");
+            addProperty<DAS_BIND_MANAGED_PROP(size)>("size");
         }
     };
 
@@ -208,6 +224,8 @@ namespace das {
                 SideEffects::modifyArgumentAndExternal, "channelPush");
             addExtern<DAS_BIND_FUN(channelPop)>(*this, lib,  "_builtin_channel_pop",
                 SideEffects::modifyArgumentAndExternal, "channelPop");
+            addExtern<DAS_BIND_FUN(channelAppend)>(*this, lib, "append",
+                SideEffects::modifyArgument, "channelAppend");
             addExtern<DAS_BIND_FUN(withChannel)>(*this, lib,  "with_channel",
                 SideEffects::invoke, "withChannel");
             addExtern<DAS_BIND_FUN(withChannelEx)>(*this, lib,  "with_channel",
