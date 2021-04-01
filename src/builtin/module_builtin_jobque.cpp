@@ -25,7 +25,7 @@ namespace das {
     void * Channel::pop () {
         while ( true ) {
             unique_lock<mutex> uguard(lock);
-            if ( !cond.wait_for(uguard, chrono::milliseconds(0), [&]() {
+            if ( !cond.wait_for(uguard, chrono::milliseconds(mSleepMs), [&]() {
                 bool continue_waiting = (remaining>0) && pipe.empty();
                 return !continue_waiting;
             }) ) {

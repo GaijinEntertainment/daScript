@@ -34,6 +34,7 @@ namespace das {
         void notify();
         void wait();
     protected:
+        uint32_t            mSleepMs = 1;
         mutable mutex       lock;
         queue<Feature>      pipe;
         Feature             tail;

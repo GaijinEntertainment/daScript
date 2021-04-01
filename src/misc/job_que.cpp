@@ -5,7 +5,7 @@
 namespace das {
 
     JobQue::JobQue()
-        : mSleepMs(0)
+        : mSleepMs(1)
         , mShutdown(false)
         , mThreadCount( 0 )
         , mJobsRunning(0) {
@@ -117,6 +117,7 @@ namespace das {
                     mFifo.pop_front();
                     mJobsRunning++;
                 } else {
+                    this_thread::yield();
                     continue;
                 }
             }
@@ -204,6 +205,7 @@ namespace das {
                     if (condition.wait_for(producerFifoLock, chrono::milliseconds(mSleepMs), [&]() {return producerFifoJobs.size() > 0; })) {
                         consumerFifoJobs.swap(producerFifoJobs);
                     } else {
+                        this_thread::yield();
                         continue;
                     }
                 }
