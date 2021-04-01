@@ -63,7 +63,8 @@ def test
                         (json as _object)["foo"] = JV("bar")
                     print("{write_json(json)}\n")
                     print("before delete {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
-                    delete json
+                    unsafe
+                        delete json
                     print("before collect  {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
                     heap_report()
                     unsafe
