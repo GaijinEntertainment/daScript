@@ -987,8 +987,8 @@ namespace das
 
     class DebugInfoHelper : ptr_ref_count {
     public:
-        DebugInfoHelper () { debugInfo = make_smart<DebugInfoAllocator>(); }
-        DebugInfoHelper ( const smart_ptr<DebugInfoAllocator> & di ) : debugInfo(di) {}
+        DebugInfoHelper () { debugInfo = make_shared<DebugInfoAllocator>(); }
+        DebugInfoHelper ( const shared_ptr<DebugInfoAllocator> & di ) : debugInfo(di) {}
     public:
         TypeInfo * makeTypeInfo ( TypeInfo * info, const TypeDeclPtr & type );
         VarInfo * makeVariableDebugInfo ( const Variable & var );
@@ -999,7 +999,7 @@ namespace das
         FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
         void appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body );
     public:
-        smart_ptr<DebugInfoAllocator>  debugInfo;
+        shared_ptr<DebugInfoAllocator>  debugInfo;
         bool                            rtti = false;
     protected:
         das_map<string,StructInfo *>        smn2s;

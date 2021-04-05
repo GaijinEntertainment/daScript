@@ -673,9 +673,9 @@ namespace das
     static bool                  g_isInDebugAgentCreation;
 
     Context::Context(uint32_t stackSize, bool ph) : stack(stackSize) {
-        code = make_smart<NodeAllocator>();
-        constStringHeap = make_smart<ConstStringAllocator>();
-        debugInfo = make_smart<DebugInfoAllocator>();
+        code = make_shared<NodeAllocator>();
+        constStringHeap = make_shared<ConstStringAllocator>();
+        debugInfo = make_shared<DebugInfoAllocator>();
         ownStack = (stackSize != 0);
         persistent = ph;
         // register
@@ -782,7 +782,7 @@ namespace das
     }
 
     struct SimNodeRelocator : SimVisitor {
-        smart_ptr<NodeAllocator>   newCode;
+        shared_ptr<NodeAllocator>   newCode;
         Context * context = nullptr;
         virtual SimNode * visit ( SimNode * node ) override {
             return node->copyNode(*context, newCode.get());
@@ -792,7 +792,7 @@ namespace das
     void Context::relocateCode() {
         SimNodeRelocator rel;
         rel.context = this;
-        rel.newCode = make_smart<NodeAllocator>();
+        rel.newCode = make_shared<NodeAllocator>();
         rel.newCode->prefixWithHeader = false;
         uint32_t codeSize = uint32_t(code->bytesAllocated()) - code->totalNodesAllocated * uint32_t(sizeof(NodePrefix));
         rel.newCode->setInitialSize(codeSize);

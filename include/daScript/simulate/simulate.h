@@ -593,9 +593,9 @@ namespace das
         bool                            persistent = false;
         char *                          globals = nullptr;
         char *                          shared = nullptr;
-        smart_ptr<ConstStringAllocator> constStringHeap;
-        smart_ptr<NodeAllocator>        code;
-        smart_ptr<DebugInfoAllocator>   debugInfo;
+        shared_ptr<ConstStringAllocator> constStringHeap;
+        shared_ptr<NodeAllocator>       code;
+        shared_ptr<DebugInfoAllocator>  debugInfo;
         StackAllocator                  stack;
         uint32_t                        insideContext = 0;
         bool                            ownStack = false;
