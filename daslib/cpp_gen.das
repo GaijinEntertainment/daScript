@@ -707,7 +707,6 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
             return
         else
             using_mname = methodName(fn.name)
-            fprint(df,"using {using_mname} = DAS_CALL_MEMBER({fn.cppName});\n");
             bind_enchantation = "DAS_CALL_METHOD({using_mname})"
             cpp_enchantation = "DAS_CALL_MEMBER_CPP({fn.cppName})"
     else
