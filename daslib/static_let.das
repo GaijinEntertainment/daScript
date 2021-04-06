@@ -31,6 +31,7 @@ class StaticLetMacro : AstFunctionAnnotation
                 for vvar in lexpr.variables
                     var vclone <- clone_variable(vvar)
                     vclone.flags |= VariableFlags private_variable
+                    vclone.flags |= VariableFlags generated
                     let old_name = "{vclone.name}"
                     let new_name = "{prefix}{vclone.name}"
                     vclone.name := new_name
