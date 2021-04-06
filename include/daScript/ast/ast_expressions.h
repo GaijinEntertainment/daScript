@@ -703,6 +703,10 @@ namespace das
     struct ExprConstFloat : ExprConstT<float,ExprConstFloat> {
         ExprConstFloat(float i = 0.0f)
             : ExprConstT(i,Type::tFloat) { __rtti = "ExprConstFloat"; }
+        ExprConstFloat(int i)
+            : ExprConstT(float(i),Type::tFloat) { __rtti = "ExprConstFloat"; }
+        ExprConstFloat(double i)
+            : ExprConstT(float(i),Type::tFloat) { __rtti = "ExprConstFloat"; }
         ExprConstFloat(const LineInfo & a, float i = 0.0f)
             : ExprConstT(a,i,Type::tFloat) { __rtti = "ExprConstFloat"; }
     };

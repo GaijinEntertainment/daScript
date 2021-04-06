@@ -46,6 +46,11 @@ var alias_types : table<string; string>
 
 var namespace_to_prefix : table<string; string>
 
+var generate_split_functions = false
+var split_prefix = ""
+var split_cpp_prefix = ""
+var split_cpp_suffix = ""
+
 /*
     end of configuration
 */
@@ -630,6 +635,27 @@ def methodName(name:string)
     g_method_name ++
     return "_{name}_method_{g_method_name}"
 
+var g_split_count = 0
+var g_split_factor = 20
+var g_split_file : FILE const? = null
+
+def openSplitFile
+    if (g_split_count % g_split_factor) == 0
+        closeSplitFile()
+        let split_index = g_split_count / g_split_factor
+        let fname = "{split_prefix}_{split_index}.cpp"
+        print("SPLIT {split_index} at {fname}\n")
+        g_split_file = fopen(fname, "wb")
+        var prefix = replace(split_cpp_prefix,"$$$","{split_index}")
+        fprint(g_split_file,prefix)
+    g_split_count ++
+
+def closeSplitFile
+    if g_split_file != null
+        fprint(g_split_file,split_cpp_suffix)
+        fclose(g_split_file)
+        g_split_file = null
+
 def getFunctions(df,df_method:FILE const?)
     fprint(df,"// ------------\n// functions\n// ------------\n\n")
     var all_fn : table<string; int>
@@ -640,6 +666,10 @@ def getFunctions(df,df_method:FILE const?)
             continue
         let castbind = all_fn[fn.cppName] > 1
         genFunction(fn, castbind, df)
+        if generate_split_functions
+            openSplitFile()
+            genFunction(fn, castbind, g_split_file)
+
     fprint(df_method,"// ------------\n// methods \n// ------------\n\n")
     for st in values(ast.structs)
         var all_met : table<string; int>
@@ -753,6 +783,7 @@ def genBindings(hf,df,mf_enum,df_enum,mf_ann,df_ann,df_method:FILE const?)
     genEnums(hf,mf_enum,df_enum)
     genStructs(hf,mf_ann,df_ann)
     getFunctions(df,df_method)
+    closeSplitFile()
 
 def bindHeaders ( fname, outprefix:string )
     for enk,env in keys(ex_enums),values(ex_enums)
