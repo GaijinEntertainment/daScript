@@ -6,7 +6,10 @@ namespace das
 {
     void table_clear ( Context & context, Table & arr ) {
         if ( arr.isLocked() ) context.throw_error("can't clear locked table");
-        memset(arr.hashes, 0, arr.capacity * sizeof(uint32_t));
+        if ( arr.data ) {
+            memset(arr.hashes, 0, arr.capacity * sizeof(uint32_t));
+            memset(arr.data, 0, arr.keys - arr.data);
+        }
         arr.size = 0;
     }
 
