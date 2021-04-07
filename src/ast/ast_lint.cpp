@@ -289,6 +289,12 @@ namespace das {
                 program->error("invalid function name " + fn->name, "", "",
                     fn->at, CompilationError::invalid_name );
             }
+            if ( !fn->result->isVoid() && !fn->result->isAuto() ) {
+                if ( !exprReturns(fn->body) ) {
+                    program->error("not all control paths return value",  "", "",
+                        fn->at, CompilationError::not_all_paths_return_value);
+                }
+            }
         }
         virtual FunctionPtr visit ( Function * fn ) override {
             func = nullptr;
@@ -305,6 +311,17 @@ namespace das {
                     program->error("unused function argument " + var->name, "",
                           "use [unused_argument(" + var->name + ")] if intentional",
                         var->at, CompilationError::unused_function_argument);
+                }
+            }
+        }
+        virtual void preVisit ( ExprBlock * block ) override {
+            Visitor::preVisit(block);
+            if ( block->isClosure ) {
+                if (  !block->returnType->isVoid() && !block->returnType->isAuto() ) {
+                    if ( !exprReturns(block) ) {
+                        program->error("not all control paths of the block return value",  "", "",
+                            block->at, CompilationError::not_all_paths_return_value);
+                    }
                 }
             }
         }
@@ -408,16 +425,6 @@ namespace das {
         LintVisitor lintV(this);
         visit(lintV);
         unsafe = lintV.anyUnsafe;
-        // all control paths return something
-        for ( auto & fnT : thisModule->functions ) {
-            auto fn = fnT.second;
-            if ( !fn->result->isVoid() && !fn->result->isAuto() ) {
-                if ( !exprReturns(fn->body) ) {
-                    error("not all control paths return value",  "", "",
-                        fn->at, CompilationError::not_all_paths_return_value);
-                }
-            }
-        }
         // check for invalid options
         das_map<string,Type> ao;
         for ( const auto & opt : g_allOptions ) {
