@@ -19,7 +19,7 @@ namespace das {
     struct cast_arg<char *> {
         static __forceinline char * to ( Context & ctx, SimNode * node ) {
             char * res = node->evalPtr(ctx);
-            return res ? res : "";
+            return res ? res : ((char *)"");
         }
     };
 
@@ -27,7 +27,7 @@ namespace das {
     struct cast_arg<const char *> {
         static __forceinline char * to ( Context & ctx, SimNode * node ) {
             char * res = node->evalPtr(ctx);
-            return res ? res : "";
+            return res ? res : ((char *)"");
         }
     };
 }
