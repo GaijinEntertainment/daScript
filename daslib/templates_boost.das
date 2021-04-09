@@ -42,8 +42,9 @@ class TemplateVisitor : AstVisitor
         for arg in typ.argTypes
             self->replaceAlias(arg)
     def override visitTypeDecl(var typ:TypeDeclPtr) : TypeDeclPtr
-        self->replaceAlias(typ)
-        return typ
+        var tyyp <- clone_type(typ)
+        self->replaceAlias(tyyp)
+        return tyyp
 
 
 def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Expression>; forceAt:bool = true )
