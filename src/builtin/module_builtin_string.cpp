@@ -469,7 +469,7 @@ namespace das
     }
 
     int32_t builtin_ext_string_length(const string & str) {
-        return int32_t(str.size());
+        return int32_t(str.length());
     }
 
     void builtin_resize_string(string & str, int32_t newLength) {
