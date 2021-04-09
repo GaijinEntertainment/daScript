@@ -362,6 +362,12 @@ namespace das {
                         }
                     }
                 }
+                if ( !aT ) {
+                    auto bT = nameToBasicType(decl->alias);
+                    if ( bT != Type::none ) {
+                        aT = make_smart<TypeDecl>(bT);
+                    }
+                }
                 if ( aT ) {
                     auto resT = make_smart<TypeDecl>(*aT);
                     resT->at = decl->at;

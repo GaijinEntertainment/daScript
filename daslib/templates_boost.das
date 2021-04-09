@@ -8,12 +8,16 @@ require daslib/ast_boost
 
 struct Template
     var2expr : table<string; smart_ptr<Expression>>
+    type2type : table<string; string>
 
 def replaceVariable ( var self:Template; name:string; var expr : smart_ptr<ast::Expression> )
     self.var2expr[name] <- expr
 
 def renameVariable ( var self:Template; name, newName:string )
     self |> replaceVariable(name) <| ExpressionPtr(new [[ExprVar() name:=newName]])
+
+def replaceType ( var self:Template; name,newName:string )
+    self.type2type[name] = newName
 
 class TemplateVisitor : AstVisitor
     rules : Template?
@@ -26,6 +30,21 @@ class TemplateVisitor : AstVisitor
             rexpr.at = expr.at
             return rexpr
         return expr
+    def replaceAlias ( var typ:TypeDeclPtr )
+        if typ.baseType==Type alias
+            let ta = string(typ.alias)
+            if key_exists(rules.type2type, ta)
+                typ.alias := rules.type2type[ta]
+        if typ.firstType != null
+            self->replaceAlias(typ.firstType)
+        if typ.secondType != null
+            self->replaceAlias(typ.secondType)
+        for arg in typ.argTypes
+            self->replaceAlias(arg)
+    def override visitTypeDecl(var typ:TypeDeclPtr) : TypeDeclPtr
+        self->replaceAlias(typ)
+        return typ
+
 
 def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Expression>; forceAt:bool = true )
     var prules : Template?
