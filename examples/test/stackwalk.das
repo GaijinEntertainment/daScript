@@ -59,10 +59,10 @@ class SampleDebugAgent : DapiDebugAgent
 
 [export]
 def debug_agent ( ctx : Context )
-    install_new_debug_agent(new SampleDebugAgent())
+    install_new_debug_agent(new SampleDebugAgent(), "debug")
 
 [export]
-def test
+def main
     fork_debug_agent_context(@@debug_agent)
 	var x = 5
 	breakpoint()
@@ -73,4 +73,4 @@ def test
 		x += 3
     var z = 13
     z ++
-	return true
+

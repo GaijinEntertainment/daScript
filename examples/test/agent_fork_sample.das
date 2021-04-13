@@ -7,6 +7,7 @@ require jobque
 [export]
 def debug_agent ( ctx : Context )
     print("from debugger\n")
+    install_new_debug_agent(new DapiDebugAgent(), "sample") // note - no install = no category
 
 [export]
 def debug_agent_fn ( ctx:Context; fun:function )
@@ -25,8 +26,7 @@ def stop_waiting(msg:string#)
     wait_for_it = false
 
 def has_agent
-    unsafe
-        return reinterpret<void?> get_debug_agent_context() != null
+    return has_debug_agent_context("sample")
 
 [export]
 def main
@@ -36,7 +36,7 @@ def main
     print("forked\n")
     print("has agent? {has_agent()}\n")
     unsafe
-        get_debug_agent_context() |> invoke_in_context("debug_agent_fn", this_context(), @@stop_waiting)
+        get_debug_agent_context("sample") |> invoke_in_context("debug_agent_fn", this_context(), @@stop_waiting)
     while wait_for_it
         print("waiting\n")
     while true

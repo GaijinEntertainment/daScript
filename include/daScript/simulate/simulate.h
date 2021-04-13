@@ -211,10 +211,6 @@ namespace das
     typedef smart_ptr<StackWalker> StackWalkerPtr;
 
     void dapiStackWalk ( StackWalkerPtr walker, Context & context, const LineInfo & at );
-
-    void installDebugAgent ( DebugAgentPtr );
-    void tickDebugAgent ( );
-
     void dumpTrackingLeaks();
 
     typedef shared_ptr<Context> ContextPtr;
@@ -282,7 +278,7 @@ namespace das
             return insideContext ++;
         }
 
-        __forceinline uint32_t unlock() {
+        virtual uint32_t unlock() {
             return insideContext --;
         }
 
@@ -652,11 +648,12 @@ namespace das
     };
 
     void tickDebugAgent ( );
-    void installDebugAgent ( DebugAgentPtr newAgent );
+    void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
     void shutdownDebugAgent();
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
     bool isInDebugAgentCreation();
-    Context & getDebugAgentContext ( );
+    bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
+    Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
 
     class SharedStackGuard {
     public:

@@ -234,17 +234,17 @@ namespace das {
     struct ContextAnnotation : ManagedStructureAnnotation<Context,false> {
         ContextAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Context", ml) {
         }
-    virtual void walk ( das::DataWalker & walker, void * data ) override {
-        if ( !walker.reading ) {
-            if ( sizeof(intptr_t)==4 ) {
-                uint32_t T = uint32_t(intptr_t(data));
-                walker.UInt(T);
-            } else {
-                uint64_t T = uint64_t(intptr_t(data));
-                walker.UInt64(T);
+        virtual void walk ( das::DataWalker & walker, void * data ) override {
+            if ( !walker.reading ) {
+                if ( sizeof(intptr_t)==4 ) {
+                    uint32_t T = uint32_t(intptr_t(data));
+                    walker.UInt(T);
+                } else {
+                    uint64_t T = uint64_t(intptr_t(data));
+                    walker.UInt64(T);
+                }
             }
         }
-    }
     };
 
     struct LineInfoAnnotation : ManagedStructureAnnotation<LineInfo,false> {

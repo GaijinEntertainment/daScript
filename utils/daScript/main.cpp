@@ -22,12 +22,18 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
             if ( outputProgramCode )
                 tout << *program << "\n";
             Context ctx(program->getContextStackSize());
-            program->simulate(ctx, tout);
-            if ( auto fnTest = ctx.findFunction(mainFnName.c_str()) ) {
-                ctx.restart();
-                ctx.eval(fnTest, nullptr);
+            if ( !program->simulate(ctx, tout) ) {
+                tout << "failed to simulate\n";
+                for ( auto & err : program->errors ) {
+                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+                }
             } else {
-                tout << "function '"  << mainFnName << " ' not found\n";
+                if ( auto fnTest = ctx.findFunction(mainFnName.c_str()) ) {
+                    ctx.restart();
+                    ctx.eval(fnTest, nullptr);
+                } else {
+                    tout << "function '"  << mainFnName << " ' not found\n";
+                }
             }
         }
     }

@@ -717,6 +717,8 @@ namespace debugapi {
                 SideEffects::modifyExternal, "installDebugAgent");
             addExtern<DAS_BIND_FUN(getDebugAgentContext), SimNode_ExtFuncCallRef>(*this, lib,  "get_debug_agent_context",
                 SideEffects::modifyExternal, "getDebugAgentContext");
+            addExtern<DAS_BIND_FUN(hasDebugAgentContext)>(*this, lib,  "has_debug_agent_context",
+                SideEffects::modifyExternal, "hasDebugAgentContext");
             addExtern<DAS_BIND_FUN(forkDebugAgentContext)>(*this, lib,  "fork_debug_agent_context",
                 SideEffects::modifyExternal, "forkDebugAgentContext");
             addExtern<DAS_BIND_FUN(isInDebugAgentCreation)>(*this, lib, "is_in_debug_agent_creation",
