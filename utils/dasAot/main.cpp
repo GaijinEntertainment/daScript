@@ -5,6 +5,7 @@ using namespace das;
 
 namespace das {
     extern bool g_isInAot;
+    extern ProgramPtr g_Program;
 }
 
 void require_project_specific_modules();//link time resolved dependencies
@@ -146,7 +147,9 @@ bool compile ( const string & fn, const string & cppFn, const string &mainFnName
                 tw << "\n";
                 tw << "namespace das {\n";
                 tw << "namespace " << program->thisNamespace << " {\n"; // anonymous
+                g_Program = program;
                 program->aotCpp(ctx, tw);
+                g_Program.reset();
                 // list STUFF
                 tw << "\tstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
                 program->registerAotCpp(tw, ctx, false);
