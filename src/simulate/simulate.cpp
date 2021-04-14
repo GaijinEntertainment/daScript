@@ -672,13 +672,13 @@ namespace das
         ContextPtr      debugAgentContext;
     };
 
-    static std::mutex g_DebugAgentMutex;
+    static std::recursive_mutex g_DebugAgentMutex;
     static das_map<string, DebugAgentInstance>   g_DebugAgents;
     static bool                  g_isInDebugAgentCreation;
 
     template <typename TT>
     void for_each_debug_agent ( const TT & lmbd ) {
-        std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         for ( auto & it : g_DebugAgents ) {
             lmbd ( it.second.debugAgent );
         }
@@ -1070,7 +1070,7 @@ namespace das
         walker->showLocalVariables =  showLocalVariables;
         walker->showOutOfScope = showOutOfScope;
         walker->stackTopOnly = stackTopOnly;
-        dapiStackWalk ( walker, *this, *at );
+        dapiStackWalk ( walker, *this, at ? *at : LineInfo() );
         ssw << "\n";
     #else
         ssw << "\nCALL STACK TRACKING DISABLED:\n\n";
@@ -1087,7 +1087,7 @@ namespace das
 
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(*at, "need to specify category");
-        std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it != g_DebugAgents.end() ) {
             DebugAgent * oldAgentPtr = it->second.debugAgent.get();
@@ -1107,7 +1107,7 @@ namespace das
 
     Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(*at, "need to specify category");
-        std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it == g_DebugAgents.end() ) context->throw_error_at(*at, "can't get debug agent '%s'", category);
         return *it->second.debugAgentContext;
@@ -1115,7 +1115,7 @@ namespace das
 
     bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(*at, "need to specify category");
-        std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         return it != g_DebugAgents.end();
     }
@@ -1147,7 +1147,7 @@ namespace das
     void shutdownDebugAgent() {
         das_map<string,DebugAgentInstance> agents;
         {
-            std::lock_guard<std::mutex> guard(g_DebugAgentMutex);
+            std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
             swap(agents, g_DebugAgents);
         }
     }
