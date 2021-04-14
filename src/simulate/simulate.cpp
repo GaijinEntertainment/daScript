@@ -1145,6 +1145,11 @@ namespace das
     }
 
     void shutdownDebugAgent() {
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+           for ( auto & ap : g_DebugAgents ) {
+               ap.second.debugAgent->onUninstall(pAgent.get());
+           }
+        });
         das_map<string,DebugAgentInstance> agents;
         {
             std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
