@@ -663,6 +663,7 @@ namespace das
                 bool    noPointerCast : 1;
                 bool    isClassMethod : 1;
                 bool    isTypeConstructor : 1;
+                bool    shutdown : 1;
             };
             uint32_t flags = 0;
         };

@@ -11,6 +11,25 @@ require daslib/templates_boost
 [tag_function(static_let_tag)]
 def static_let ( blk : block ) {}
 
+[tag_function(static_let_tag)]
+def static_let_finalize ( blk : block ) {}
+
+[private]
+def make_shutdown_function ( varname:string; at:LineInfo )
+    var fn <- new [[Function() at=at, atDecl=at, name:="shutdown`{varname}"]]
+    fn.flags |= FunctionFlags generated
+    fn.flags |= FunctionFlags shutdown
+    fn.result <- new [[TypeDecl() baseType=Type tVoid, at=at]]
+    var blk <- new [[ExprBlock() at=at]]
+    var delv <- new [[ExprDelete() at=at,
+        subexpr <- new [[ExprVar() at=at, name:=varname]]
+    ]]
+    delv.genFlags |= ExprGenFlags alwaysSafe
+    emplace(blk.list,delv)
+    fn.body <- blk
+    if !(compiling_module() |> add_function(fn))
+        panic("can't setup")
+
 [tag_function_macro(tag="static_let_tag")]
 class StaticLetMacro : AstFunctionAnnotation
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
@@ -39,6 +58,8 @@ class StaticLetMacro : AstFunctionAnnotation
                     if !(compiling_module() |> add_variable(vclone))
                         errors := "can't add global variable {new_name}"
                         return [[ExpressionPtr]]
+                    if "{call.name}"=="static_let_finalize"
+                        make_shutdown_function(new_name,vvar.at)
             var success = true
             compiling_program() |> get_ast_context(call) <| $(valid, astc)
                 if !valid

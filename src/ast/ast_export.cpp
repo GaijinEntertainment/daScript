@@ -67,7 +67,7 @@ namespace das {
             lib.foreach([&](Module * pm) {
                 for (const auto & it : pm->functions) {
                     auto fn = it.second;
-                    if (forceAll || fn->exports || fn->init) {
+                    if ( forceAll || fn->exports || fn->init || fn->shutdown ) {
                         propagateFunctionUse(fn);
                     }
                 }

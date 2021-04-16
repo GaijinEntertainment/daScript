@@ -251,6 +251,8 @@ namespace das {
             }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
             if ( fn->exports ) { ss << "[export]\n"; }
+            if ( fn->init ) { ss << "[init]\n"; }
+            if ( fn->shutdown ) { ss << "[finalize]\n"; }
             if ( fn->privateFunction ) { ss << "[private]\n"; }
             if ( fn->unsafeDeref ) { ss << "[unsafe_deref]\n"; }
             if ( fn->unsafeOperation ) { ss << "[unsafe_operation]\n"; }

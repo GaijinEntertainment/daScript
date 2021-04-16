@@ -35,7 +35,9 @@ class InstanceFunctionAnnotation : AstFunctionAnnotation
         if fn == null
             errors := "generic not found {generic_name}"
             return false
-        func.body := clone_expression(fn.body)
+        func.body := null
+        unsafe
+            func.body <- clone_expression(fn.body)
         apply_template(rules, func.at, func.body)
         return true
 

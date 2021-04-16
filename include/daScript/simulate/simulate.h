@@ -334,6 +334,7 @@ namespace das
         void stackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables );
         string getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope = false, bool stackTopOnly = false );
         void runInitScript ();
+        bool runShutdownScript ();
 
         virtual void to_out ( const char * message );           // output to stdout or equivalent
         virtual void to_err ( const char * message );           // output to stderr or equivalent
@@ -595,6 +596,7 @@ namespace das
         StackAllocator                  stack;
         uint32_t                        insideContext = 0;
         bool                            ownStack = false;
+        bool                            shutdown = false;
     public:
         vec4f *         abiThisBlockArg;
         vec4f *         abiArg;

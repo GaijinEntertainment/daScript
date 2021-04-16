@@ -132,6 +132,25 @@ namespace das
         }
     };
 
+    struct FinalizeFunctionAnnotation : MarkFunctionAnnotation {
+        FinalizeFunctionAnnotation() : MarkFunctionAnnotation("finalize") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->shutdown = true;
+            return true;
+        };
+        virtual bool finalize(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & errors) override {
+            if ( func->arguments.size() ) {
+                errors += "[finalize] function can't have any arguments";
+                return false;
+            }
+            if ( !func->result->isVoid() ) {
+                errors += "[finalize] function can't return value";
+                return false;
+            }
+            return true;
+        }
+    };
+
     struct MarkUsedFunctionAnnotation : MarkFunctionAnnotation {
         MarkUsedFunctionAnnotation() : MarkFunctionAnnotation("unused_argument") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string &) override {
@@ -836,6 +855,7 @@ namespace das
         addAnnotation(make_smart<UnsafeOpFunctionAnnotation>());
         addAnnotation(make_smart<NoAotFunctionAnnotation>());
         addAnnotation(make_smart<InitFunctionAnnotation>());
+        addAnnotation(make_smart<FinalizeFunctionAnnotation>());
         addAnnotation(make_smart<HybridFunctionAnnotation>());
         addAnnotation(make_smart<UnsafeDerefFunctionAnnotation>());
         addAnnotation(make_smart<MarkUsedFunctionAnnotation>());

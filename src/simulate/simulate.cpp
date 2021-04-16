@@ -768,6 +768,8 @@ namespace das
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             pAgent->onDestroyContext(this);
         });
+        // shutdown
+        runShutdownScript();
         // and free memory
         if ( globals ) {
             das_aligned_free16(globals);
@@ -924,7 +926,7 @@ namespace das
             for ( int j=0; j!=totalFunctions && !stopFlags; ++j ) {
                 auto & pf = functions[j];
                 if ( pf.debugInfo->flags & FuncInfo::flag_init ) {
-                    call(&pf, nullptr, 0);
+                    callOrFastcall(&pf, nullptr, 0);
                 }
 
             }
@@ -941,6 +943,20 @@ namespace das
                 }
             }
         }
+    }
+
+    bool Context::runShutdownScript ( ) {
+        DAS_ASSERTF(insideContext==0,"can't run init script on the locked context");
+        if ( shutdown ) return false;
+        shutdown = true;
+        return runWithCatch([&](){
+            for ( int j=0; j!=totalFunctions && !stopFlags; ++j ) {
+                auto & pf = functions[j];
+                if ( pf.debugInfo->flags & FuncInfo::flag_shutdown ) {
+                    callOrFastcall(&pf, nullptr, 0);
+                }
+            }
+        });
     }
 
     SimFunction * Context::findFunction ( const char * name ) const {

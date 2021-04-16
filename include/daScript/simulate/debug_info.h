@@ -280,6 +280,7 @@ namespace das
             flag_init = (1<<0)
         ,   flag_builtin = (1<<1)
         ,   flag_private = (1<<2)
+        ,   flag_shutdown = (1<<3)
         };
         char *      name;
         char *      cppName;
