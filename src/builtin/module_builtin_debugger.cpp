@@ -695,6 +695,29 @@ namespace debugapi {
         return res;
     }
 
+    vec4f pinvoke_impl3 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        auto invCtx = cast<Context *>::to(args[0]);
+        auto fn = cast<Lambda>::to(args[1]);
+        int32_t * fnIndex = (int32_t *)fn.capture;
+        if (!fnIndex) context.throw_error("invoke null lambda");
+        SimFunction * simFn = invCtx->getFunction(*fnIndex-1);
+        if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%d", *fnIndex-1);
+        if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
+            context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
+        }
+        invCtx->lock();
+        vec4f res;
+        if ( !invCtx->ownStack ) {
+            StackAllocator sharedStack(8*1024);
+            SharedStackGuard guard(*invCtx, sharedStack);
+            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        } else {
+            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        }
+        invCtx->unlock();
+        return res;
+    }
+
     class Module_Debugger : public Module {
     public:
         Module_Debugger() : Module("debugapi") {
@@ -761,6 +784,21 @@ namespace debugapi {
                 SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+            // pinvoke3
+            addInterop<pinvoke_impl3,void,vec4f,Lambda>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
             // this context
             addExtern<DAS_BIND_FUN(thisContext), SimNode_ExtFuncCallRef>(*this, lib,  "this_context",
                 SideEffects::accessExternal, "thisContext");
