@@ -8,4 +8,5 @@ namespace das {
     char * windows_file_name_to_uri ( char * uristr, Context * context );
     char * escape_uri ( char * uristr, bool spaceToPlus, bool normalizeBreaks, Context * context );
     char * unescape_uri ( char * uristr,Context * context );
+    char * normalize_uri ( char * uristr,Context * context );
 }
