@@ -85,6 +85,32 @@ char * unescape_uri ( char * uristr,Context * context ) {
     return result;
 }
 
+char* normalize_uri(char* uristr, Context* context) {
+    if (!uristr) return nullptr;
+    UriUriA uri;
+    char* result = nullptr;
+    if (uriParseSingleUriA(&uri, uristr, nullptr) != URI_SUCCESS) {
+        return result;
+    }
+    const unsigned int dirtyParts = uriNormalizeSyntaxMaskRequiredA(&uri);
+    if (uriNormalizeSyntaxExA(&uri, dirtyParts) != URI_SUCCESS) {
+        return result;
+    }
+    int charsRequired;
+    if (uriToStringCharsRequiredA(&uri, &charsRequired) != URI_SUCCESS) {
+        return result;
+    }
+    charsRequired++;
+    char* buf = new char[charsRequired];
+    if (uriToStringA(buf, &uri, charsRequired, nullptr) != URI_SUCCESS) {
+        return result;
+    }
+    result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
+    delete[] buf;
+    uriFreeUriMembersA(&uri);
+    return result;
+}
+
 class Module_UriParser : public Module {
 public:
     Module_UriParser() : Module("uriparser") {
@@ -114,6 +140,8 @@ public:
             SideEffects::none, "escape_uri");
         addExtern<DAS_BIND_FUN(unescape_uri)> (*this, lib, "unescape_uri",
             SideEffects::none, "unescape_uri");
+        addExtern<DAS_BIND_FUN(normalize_uri)> (*this, lib, "normalize_uri",
+            SideEffects::none, "normalize_uri");
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"modules/uriparser/module_uriparser.h\"\n";

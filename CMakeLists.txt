@@ -517,6 +517,7 @@ SET(URIPARSER_SRCS
 3rdparty/uriparser/src/UriRecompose.c
 3rdparty/uriparser/src/UriResolve.c
 3rdparty/uriparser/src/UriShorten.c
+3rdparty/uriparser/src/UriMemory.c
 )
 
 ADD_LIBRARY(libUriParser STATIC ${URIPARSER_SRCS})
