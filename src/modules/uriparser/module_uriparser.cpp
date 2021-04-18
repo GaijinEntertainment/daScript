@@ -94,18 +94,19 @@ char* normalize_uri(char* uristr, Context* context) {
     }
     const unsigned int dirtyParts = uriNormalizeSyntaxMaskRequiredA(&uri);
     if (uriNormalizeSyntaxExA(&uri, dirtyParts) != URI_SUCCESS) {
+        uriFreeUriMembersA(&uri);
         return result;
     }
     int charsRequired;
     if (uriToStringCharsRequiredA(&uri, &charsRequired) != URI_SUCCESS) {
+        uriFreeUriMembersA(&uri);
         return result;
     }
     charsRequired++;
     char* buf = new char[charsRequired];
-    if (uriToStringA(buf, &uri, charsRequired, nullptr) != URI_SUCCESS) {
-        return result;
+    if (uriToStringA(buf, &uri, charsRequired, nullptr) == URI_SUCCESS) {
+        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
     }
-    result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
     delete[] buf;
     uriFreeUriMembersA(&uri);
     return result;
