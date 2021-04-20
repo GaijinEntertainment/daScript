@@ -958,7 +958,7 @@ namespace das {
     template <typename TT>
     struct das_iterator <const RangeType<TT>> {
         __forceinline das_iterator(const RangeType<TT> & r) : that(r) {}
-        __forceinline bool first ( Context *, TT & i ) { i = that.from; return i!=that.to; }
+        __forceinline bool first ( Context *, TT & i ) { i = that.from; return i < that.to; }
         __forceinline bool next  ( Context *, TT & i ) { i++; return i!=that.to; }
         __forceinline void close ( Context *, TT &   ) {}
         RangeType<TT> that;

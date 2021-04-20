@@ -895,14 +895,22 @@ namespace das {
 
     SimNode * SimNode_RangeIterator::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP(RangeIterator);
+        if ( isSigned ) {
+            V_OP(RangeIterator);
+        } else {
+            V_OP(URangeIterator);
+        }
         V_SUB(subexpr);
         V_END();
     }
 
     SimNode * SimNode_ForRange::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
-        V_OP(ForRange);
+        if ( isSigned ) {
+            V_OP(ForRange);
+        } else {
+            V_OP(ForURange);
+        }
         V_SP(stackTop[0]);
         V_SUB(sources[0]);
         vis.sub(list,total,"list");
@@ -912,7 +920,11 @@ namespace das {
 
     SimNode * SimNode_ForRangeNF::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
-        V_OP(ForRangeNF);
+        if ( isSigned ) {
+            V_OP(ForRangeNF);
+        } else {
+            V_OP(ForURangeNF);
+        }
         V_SP(stackTop[0]);
         V_SUB(sources[0]);
         vis.sub(list,total,"list");
@@ -922,7 +934,11 @@ namespace das {
 
     SimNode * SimNode_ForRange1::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
-        V_OP(ForRange1);
+        if ( isSigned ) {
+            V_OP(ForRange1);
+        } else {
+            V_OP(ForURange1);
+        }
         V_SP(stackTop[0]);
         V_SUB(sources[0]);
         V_SUB(list[0]);
@@ -932,7 +948,11 @@ namespace das {
 
     SimNode * SimNode_ForRangeNF1::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
-        V_OP(ForRangeNF1);
+        if ( isSigned ) {
+            V_OP(ForRangeNF1);
+        } else {
+            V_OP(ForURangeNF1);
+        }
         V_SP(stackTop[0]);
         V_SUB(sources[0]);
         V_SUB(list[0]);

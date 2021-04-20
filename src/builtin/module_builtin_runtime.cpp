@@ -449,7 +449,7 @@ namespace das
     void builtin_make_range_iterator ( Sequence & result, range rng, Context * context ) {
         char * iter = context->heap->allocate(sizeof(RangeIterator));
         context->heap->mark_comment(iter, "range iterator");
-        new (iter) RangeIterator(rng);
+        new (iter) RangeIterator(rng, true);
         result = { (Iterator *) iter };
     }
 

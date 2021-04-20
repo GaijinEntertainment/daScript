@@ -1,3 +1,37 @@
+def test_from_gte_to
+    // SimNode_ForRangeNF
+    for x in range(3,2)
+        assert(false)
+    for x in urange(3,2)
+        assert(false)
+    // SimNode_ForRangeNF
+    for x in range(3,2)
+        print("x={x}\n")
+        assert(false)
+    for x in urange(3,2)
+        print("x={x}\n")
+        assert(false)
+    // SimNode_ForRange1
+    for x in range(3,2)
+        break                // don't know how to test
+    for x in urange(3,2)
+        break                // don't know how to test
+    // SimNode_ForRange
+    for x in range(3,2)
+        assert(false)
+        break
+    for x in urange(3,2)
+        assert(false)
+        break
+    // range iterator
+    for x,y in range(3,2),urange(3,2)
+        assert(false)
+    for x,y in urange(3,2),urange(3,2)
+        assert(false)
+    // each
+    for x in each(range(3,2))
+        assert(false)
+
 [export]
 def test:bool
     // 1 variable
@@ -92,6 +126,8 @@ def test:bool
         for t in urange(0u,3u)
             u += t
         assert(u==3u)
+    // reverse order
+    test_from_gte_to()
     return true
 
 

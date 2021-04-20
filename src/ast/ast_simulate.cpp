@@ -2356,7 +2356,8 @@ namespace das
                 } else if ( sources[t]->type->isRange() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_RangeIterator>(
                         sources[t]->at,
-                        sources[t]->simulate(context));
+                        sources[t]->simulate(context),
+                        sources[t]->type->baseType==Type::tRange);
                 } else if ( sources[t]->type->isString() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_StringIterator>(
                         sources[t]->at,
@@ -2411,17 +2412,18 @@ namespace das
                     }
                 } else if ( rangeBase ) {
                     assert(total==1 && "simple range on 1 loop only");
+                    bool isSigned = sources[0]->type->baseType == Type::tRange;
                     if ( NF ) {
                         if (loop1) {
-                            result = context.code->makeNode<SimNodeDebug_ForRangeNF1>(at);
+                            result = context.code->makeNode<SimNodeDebug_ForRangeNF1>(at,isSigned);
                         } else {
-                            result = context.code->makeNode<SimNodeDebug_ForRangeNF>(at);
+                            result = context.code->makeNode<SimNodeDebug_ForRangeNF>(at,isSigned);
                         }
                     } else {
                         if (loop1) {
-                            result = context.code->makeNode<SimNodeDebug_ForRange1>(at);
+                            result = context.code->makeNode<SimNodeDebug_ForRange1>(at,isSigned);
                         } else {
-                            result = context.code->makeNode<SimNodeDebug_ForRange>(at);
+                            result = context.code->makeNode<SimNodeDebug_ForRange>(at,isSigned);
                         }
                     }
                 } else {
@@ -2446,17 +2448,18 @@ namespace das
                     }
                 } else if ( rangeBase ) {
                     assert(total==1 && "simple range on 1 loop only");
+                    bool isSigned = sources[0]->type->baseType == Type::tRange;
                     if ( NF ) {
                         if (loop1) {
-                            result = context.code->makeNode<SimNode_ForRangeNF1>(at);
+                            result = context.code->makeNode<SimNode_ForRangeNF1>(at,isSigned);
                         } else {
-                            result = context.code->makeNode<SimNode_ForRangeNF>(at);
+                            result = context.code->makeNode<SimNode_ForRangeNF>(at,isSigned);
                         }
                     } else {
                         if (loop1) {
-                            result = context.code->makeNode<SimNode_ForRange1>(at);
+                            result = context.code->makeNode<SimNode_ForRange1>(at,isSigned);
                         } else {
-                            result = context.code->makeNode<SimNode_ForRange>(at);
+                            result = context.code->makeNode<SimNode_ForRange>(at,isSigned);
                         }
                     }
                 } else {
