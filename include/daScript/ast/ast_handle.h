@@ -91,6 +91,7 @@ namespace das
         BasicStructureAnnotation(const string & n, const string & cpn, ModuleLibrary * l)
             : TypeAnnotation(n,cpn), mlib(l) {
         }
+        virtual string getSmartAnnotationCloneFunction() const override { return "smart_ptr_clone"; }
         virtual void seal(Module * m) override;
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool rtti_isBasicStructureAnnotation() const override { return true; }
@@ -269,7 +270,6 @@ namespace das
         ManagedStructureAnnotation(const string& n, ModuleLibrary& ml, const string& cpn = "")
             : ManagedStructureAnnotation<OT, false,false>(n, ml, cpn) { }
         virtual bool canNew() const override { return true; }
-        virtual string getSmartAnnotationCloneFunction() const override { return "smart_ptr_clone"; }
         virtual SimNode* simulateGetNew(Context& context, const LineInfo& at) const override {
             return context.code->makeNode<SimNode_NewHandle<ManagedType, is_smart>>(at);
         }
@@ -282,7 +282,6 @@ namespace das
         ManagedStructureAnnotation(const string& n, ModuleLibrary& ml, const string& cpn = "")
             : ManagedStructureAnnotation<OT, false,false>(n, ml, cpn) { }
         virtual bool canDeletePtr() const override { return true; }
-        virtual string getSmartAnnotationCloneFunction() const override { return "smart_ptr_clone"; }
         virtual SimNode* simulateDeletePtr(Context& context, const LineInfo& at, SimNode* sube, uint32_t count) const override {
             return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType, is_smart>>(at, sube, count);
         }
@@ -296,7 +295,6 @@ namespace das
             : ManagedStructureAnnotation<OT,false,false>(n,ml,cpn) { }
         virtual bool canNew() const override { return true; }
         virtual bool canDeletePtr() const override { return true; }
-        virtual string getSmartAnnotationCloneFunction () const override { return "smart_ptr_clone"; }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
             return context.code->makeNode<SimNode_NewHandle<ManagedType,is_smart>>(at);
         }

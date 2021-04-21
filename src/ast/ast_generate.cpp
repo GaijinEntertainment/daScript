@@ -1435,6 +1435,7 @@ namespace das {
         auto lv = make_smart<ExprVar>(at, "dest");
         auto rv = make_smart<ExprVar>(at, "src");
         auto cl = make_smart<ExprCall>(at, left->firstType->annotation->getSmartAnnotationCloneFunction());
+        DAS_ASSERT(cl->name.length() && "expecting clone name");
         cl->arguments.push_back(lv);
         cl->arguments.push_back(rv);
         block->list.push_back(cl);
