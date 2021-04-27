@@ -1,4 +1,6 @@
 options indenting = 4
+options remove_unused_symbols = false
+options no_aot = true
 
 require debugapi
 
