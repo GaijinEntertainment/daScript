@@ -339,7 +339,7 @@ namespace das {
                     if ( program->failed() ) {
                         return program;
                     }
-                    if ( policies.fail_on_lack_of_aot_export && &mod != &req.back() ) {
+                    if ( policies.fail_on_lack_of_aot_export ) {
                         if ( !program->options.getBoolOption("no_aot",false) ) {
                             if ( program->options.getBoolOption("remove_unused_symbols",true) ) {
                                 program->error("Module " + program->thisModule->name + "aka " + mod.moduleName + " is not setup correctly for AOT",
