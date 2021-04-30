@@ -1,4 +1,6 @@
-// module foo_bar
+options remove_unused_symbols = false
+
+module foo_bar
 
 [export]
 def getValue

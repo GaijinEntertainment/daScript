@@ -1,3 +1,5 @@
+options remove_unused_symbols = false
+
 module _hint_macros
 
 require ast
