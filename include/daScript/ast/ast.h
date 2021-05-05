@@ -916,7 +916,7 @@ namespace das
     public:
         virtual ~ModuleLibrary() {};
         void addBuiltInModule ();
-        void addModule ( Module * module );
+        bool addModule ( Module * module );
         void foreach ( const callable<bool (Module * module)> & func, const string & name ) const;
         void foreach_in_order ( const callable<bool (Module * module)> & func, Module * thisM ) const;
         vector<TypeDeclPtr> findAlias ( const string & name, Module * inWhichModule ) const;

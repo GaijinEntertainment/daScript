@@ -576,14 +576,16 @@ namespace das {
         addModule(Module::require("$"));
     }
 
-    void ModuleLibrary::addModule ( Module * module ) {
+    bool ModuleLibrary::addModule ( Module * module ) {
         DAS_ASSERTF(module, "module not found? or you have forgotten to NEED_MODULE(Module_BuiltIn) be called first");
         if ( module ) {
             if ( find(modules.begin(),modules.end(),module)==modules.end() ) {
                 modules.push_back(module);
                 module->addPrerequisits(*this);
+                return true;
             }
         }
+        return false;
     }
 
     void ModuleLibrary::foreach ( const callable<bool (Module * module)> & func, const string & moduleName ) const {

@@ -135,6 +135,14 @@ namespace das {
         return fname;
     }
 
+    void addRequirements(ModuleGroup & libGroup, Module * mod) {
+        if ( libGroup.addModule(mod) ) {
+            for ( const auto & dep : mod->requireModule ) {
+                addRequirements(libGroup, dep.first);
+            }
+        }
+    }
+
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           vector<ModuleInfo> & req,
@@ -204,10 +212,7 @@ namespace das {
                         if ( log ) {
                             *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - shared, ok\n";
                         }
-                        libGroup.addModule(module);
-                        for ( const auto & dep : module->requireModule ) {
-                            libGroup.addModule(dep.first);
-                        }
+                        addRequirements(libGroup, module);
                     }
                 } else {
                     if ( log ) {
