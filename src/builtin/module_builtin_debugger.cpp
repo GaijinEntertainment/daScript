@@ -777,9 +777,15 @@ namespace debugapi {
                 SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+            addInterop<pinvoke_impl, void, vec4f, const char*, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f>(*this, lib, "invoke_in_context",
+                SideEffects::worstDefault, "pinvoke_impl")->unsafeOperation = true;
             addInterop<pinvoke_impl, void, vec4f, const char*, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f>(*this, lib, "invoke_in_context",
                 SideEffects::worstDefault, "pinvoke_impl")->unsafeOperation = true;
             addInterop<pinvoke_impl, void, vec4f, const char*, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f>(*this, lib, "invoke_in_context",
+                SideEffects::worstDefault, "pinvoke_impl")->unsafeOperation = true;
+            addInterop<pinvoke_impl, void, vec4f, const char*, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f>(*this, lib, "invoke_in_context",
+                SideEffects::worstDefault, "pinvoke_impl")->unsafeOperation = true;
+            addInterop<pinvoke_impl, void, vec4f, const char*, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f>(*this, lib, "invoke_in_context",
                 SideEffects::worstDefault, "pinvoke_impl")->unsafeOperation = true;
             // pinvoke2
             addInterop<pinvoke_impl2,void,vec4f,Func>(*this,lib,"invoke_in_context",
@@ -800,6 +806,10 @@ namespace debugapi {
                 SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+            addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+            addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
             // pinvoke3
             addInterop<pinvoke_impl3,void,vec4f,Lambda>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
@@ -818,6 +828,10 @@ namespace debugapi {
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
+                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
             // this context
             addExtern<DAS_BIND_FUN(thisContext), SimNode_ExtFuncCallRef>(*this, lib,  "this_context",
