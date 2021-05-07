@@ -777,6 +777,8 @@ namespace debugapi {
                 SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+            addInterop<pinvoke_impl, void, vec4f, const char*, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f>(*this, lib, "invoke_in_context",
+                SideEffects::worstDefault, "pinvoke_impl")->unsafeOperation = true;
             addInterop<pinvoke_impl, void, vec4f, const char*, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f>(*this, lib, "invoke_in_context",
                 SideEffects::worstDefault, "pinvoke_impl")->unsafeOperation = true;
             addInterop<pinvoke_impl, void, vec4f, const char*, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f, vec4f>(*this, lib, "invoke_in_context",
