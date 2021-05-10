@@ -500,6 +500,7 @@ namespace das
         uint32_t                refStackTop = 0;
         Function *              returnFunc = nullptr;
         ExprBlock *             block = nullptr;
+        TypeDeclPtr             returnType;
     };
 
     struct ExprBreak : Expression {

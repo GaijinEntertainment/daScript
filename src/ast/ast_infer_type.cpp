@@ -4832,6 +4832,7 @@ namespace das {
         virtual void preVisit ( ExprReturn * expr ) override {
             Visitor::preVisit(expr);
             expr->block = nullptr;
+            expr->returnType.reset();
         }
         virtual ExpressionPtr visit ( ExprReturn * expr ) override {
             if ( blocks.size() ) {
@@ -4863,6 +4864,7 @@ namespace das {
                     error("returning temporary value from block requires unsafe", "", "",
                         func->result->at,CompilationError::invalid_return_type);
                 }
+                if ( block->returnType ) expr->returnType = make_smart<TypeDecl>(*block->returnType);
             } else {
                 // infer
                 func->hasReturn = true;
@@ -4889,6 +4891,7 @@ namespace das {
                     error("returning temporary value from function requires unsafe", "", "",
                         func->result->at,CompilationError::invalid_return_type);
                 }
+                if ( func->result ) expr->returnType = make_smart<TypeDecl>(*func->result);
             }
             expr->type = make_smart<TypeDecl>();
             return Visitor::visit(expr);

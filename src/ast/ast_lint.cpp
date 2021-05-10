@@ -62,6 +62,9 @@ namespace das {
     }
 
     bool needAvoidNullPtr ( const TypeDeclPtr & type, bool allowDim ) {
+        if ( !type ) {
+            return false;
+        }
         if ( !allowDim && type->dim.size() ) {
             return false;
         }
@@ -183,7 +186,7 @@ namespace das {
             } else {
                 if ( needAvoidNullPtr(var->type,false) && var->init->rtti_isNullPtr() ) {
                     program->error("global variable of type " + var->type->describe() + " can't be initialized with null", "", "",
-                        var->at, CompilationError::cant_be_null);
+                        var->init->at, CompilationError::cant_be_null);
                 }
             }
         }
@@ -195,7 +198,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( needAvoidNullPtr(expr->subexpr->type,true) ) {
                 program->error("can't delete " + expr->subexpr->type->describe() + ", it will create null pointer", "", "",
-                    expr->at, CompilationError::cant_be_null);
+                    expr->subexpr->at, CompilationError::cant_be_null);
             }
 
         }
@@ -215,9 +218,16 @@ namespace das {
                 } else {
                     if ( needAvoidNullPtr(var->type,false) && var->init->rtti_isNullPtr() ) {
                         program->error("local variable of type " + var->type->describe() + " can't be initialized with null", "", "",
-                            var->at, CompilationError::cant_be_null);
+                            var->init->at, CompilationError::cant_be_null);
                     }
                 }
+            }
+        }
+        virtual void preVisit ( ExprReturn * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->returnType && needAvoidNullPtr(expr->returnType,false) && expr->subexpr->rtti_isNullPtr() ) {
+                program->error("can't return null", "", "",
+                    expr->subexpr->at, CompilationError::cant_be_null);
             }
         }
         virtual void preVisit ( ExprCall * expr ) override {
@@ -243,6 +253,15 @@ namespace das {
                             break;
                         }
                     }
+                }
+            }
+            for ( size_t i=0; i!=expr->arguments.size(); ++i ) {
+                const auto & arg = expr->arguments[i];
+                const auto & funArg = expr->func->arguments[i];
+                const auto & argType = funArg->type;
+                if ( needAvoidNullPtr(argType,false) && arg->rtti_isNullPtr() ) {
+                    program->error("can't pass null to function " + expr->func->describeName() + " argument " + funArg->name , "", "",
+                        arg->at, CompilationError::cant_be_null);
                 }
             }
         }
@@ -284,7 +303,7 @@ namespace das {
             */
             if ( needAvoidNullPtr(expr->left->type,false) && expr->right->rtti_isNullPtr() ) {
                 program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
-                    expr->at, CompilationError::cant_be_null);
+                    expr->right->at, CompilationError::cant_be_null);
             }
         }
         virtual void preVisit ( ExprMove * expr ) override {
@@ -298,7 +317,7 @@ namespace das {
             }
             if ( needAvoidNullPtr(expr->left->type,false) && expr->right->rtti_isNullPtr() ) {
                 program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
-                    expr->at, CompilationError::cant_be_null);
+                    expr->right->at, CompilationError::cant_be_null);
             }
         }
         virtual void preVisit ( ExprClone * expr ) override {
