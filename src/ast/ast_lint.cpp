@@ -61,6 +61,18 @@ namespace das {
         return false;
     }
 
+    bool needAvoidNullPtr ( const TypeDeclPtr & type, bool allowDim ) {
+        if ( !allowDim && type->dim.size() ) {
+            return false;
+        }
+        if ( auto * ann = (TypeAnnotation *) type->isPointerToAnnotation() ) {
+            if ( ann->avoidNullPtr() ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     class LintVisitor : public Visitor {
         bool checkOnlyFastAot;
         bool checkAotSideEffects;
@@ -163,10 +175,29 @@ namespace das {
                         var->at, CompilationError::no_global_heap );
                 }
             }
+            if ( !var->init ) {
+                if ( needAvoidNullPtr(var->type,true) ) {
+                    program->error("global variable of type " + var->type->describe() + " needs to be initialized to avoid null pointer", "", "",
+                        var->at, CompilationError::cant_be_null);
+                }
+            } else {
+                if ( needAvoidNullPtr(var->type,false) && var->init->rtti_isNullPtr() ) {
+                    program->error("global variable of type " + var->type->describe() + " can't be initialized with null", "", "",
+                        var->at, CompilationError::cant_be_null);
+                }
+            }
         }
         virtual void preVisit(ExprFor * expr) override {
             Visitor::preVisit(expr);
             DAS_ASSERT(expr->visibility.line);
+        }
+        virtual void preVisit(ExprDelete * expr) override {
+            Visitor::preVisit(expr);
+            if ( needAvoidNullPtr(expr->subexpr->type,true) ) {
+                program->error("can't delete " + expr->subexpr->type->describe() + ", it will create null pointer", "", "",
+                    expr->at, CompilationError::cant_be_null);
+            }
+
         }
         virtual void preVisit(ExprLet * expr) override {
             Visitor::preVisit(expr);
@@ -175,6 +206,17 @@ namespace das {
                 if (!isValidVarName(var->name)) {
                     program->error("invalid variable name " + var->name, "", "",
                         var->at, CompilationError::invalid_name );
+                }
+                if ( !var->init ) {
+                    if ( needAvoidNullPtr(var->type,true) ) {
+                        program->error("local variable of type " + var->type->describe() + " needs to be initialized to avoid null pointer", "", "",
+                            var->at, CompilationError::cant_be_null);
+                    }
+                } else {
+                    if ( needAvoidNullPtr(var->type,false) && var->init->rtti_isNullPtr() ) {
+                        program->error("local variable of type " + var->type->describe() + " can't be initialized with null", "", "",
+                            var->at, CompilationError::cant_be_null);
+                    }
                 }
             }
         }
@@ -240,6 +282,10 @@ namespace das {
                 }
             }
             */
+            if ( needAvoidNullPtr(expr->left->type,false) && expr->right->rtti_isNullPtr() ) {
+                program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
+                    expr->at, CompilationError::cant_be_null);
+            }
         }
         virtual void preVisit ( ExprMove * expr ) override {
             Visitor::preVisit(expr);
@@ -249,6 +295,10 @@ namespace das {
                     program->error("side effects may affect move evaluation order", "", "",
                         expr->at, CompilationError::aot_side_effects );
                 }
+            }
+            if ( needAvoidNullPtr(expr->left->type,false) && expr->right->rtti_isNullPtr() ) {
+                program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
+                    expr->at, CompilationError::cant_be_null);
             }
         }
         virtual void preVisit ( ExprClone * expr ) override {

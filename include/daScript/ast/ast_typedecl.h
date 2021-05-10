@@ -146,6 +146,7 @@ namespace das {
         bool hasNonTrivialCopy( das_set<Structure*> & dep ) const;
         bool canBePlacedInContainer() const;
         bool canBePlacedInContainer( das_set<Structure*> & dep ) const;
+        Annotation * isPointerToAnnotation() const;
         Type getVectorBaseType() const;
         int getVectorDim() const;
         bool canInitWithZero() const;

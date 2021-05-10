@@ -15,6 +15,14 @@ namespace das
     {
     }
 
+    Annotation * TypeDecl::isPointerToAnnotation() const {
+        if ( baseType!=Type::tPointer || !firstType || firstType->baseType!=Type::tHandle ) {
+            return nullptr;
+        } else {
+            return firstType->annotation;
+        }
+    }
+
     bool TypeDecl::isExprType() const {
         for ( auto di : dim ) {
             if ( di==TypeDecl::dimConst ) {

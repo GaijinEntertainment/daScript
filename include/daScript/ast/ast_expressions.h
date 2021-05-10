@@ -544,6 +544,7 @@ namespace das
         bool isSmartPtr = false;
         TypeDeclPtr ptrType;
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
+        virtual bool rtti_isNullPtr() const override { return true; }
     };
 
     struct ExprConstInt : ExprConstT<int32_t,ExprConstInt> {

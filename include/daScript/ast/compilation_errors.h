@@ -74,6 +74,7 @@ namespace das
     ,   bitfield_not_found                      =   30311       //  bitfield<one;two> a; a.three
 
     ,   cant_initialize                         =   30401       //  block type declaration, default values
+    ,   cant_be_null                            =   30402       //  expression can't be null
 
     ,   cant_dereference                        =   30501
     ,   cant_index                              =   30502       //  wtf[a]

@@ -356,6 +356,7 @@ namespace das
         virtual bool isIterable ( ) const { return false; }
         virtual bool isShareable ( ) const { return true; }
         virtual bool isSmart() const { return false; }
+        virtual bool avoidNullPtr() const { return false; }
         virtual bool canSubstitute ( TypeAnnotation * /* passType */ ) const { return false; }
         virtual bool canBeSubstituted ( TypeAnnotation * /* passType */ ) const { return false; }
         virtual string getSmartAnnotationCloneFunction () const { return ""; }
@@ -479,6 +480,7 @@ namespace das
         virtual bool rtti_isFakeLineInfo() const { return false; }
         virtual bool rtti_isAscend() const { return false; }
         virtual bool rtti_isTypeDecl() const { return false; }
+        virtual bool rtti_isNullPtr() const { return false; }
         virtual Expression * tail() { return this; }
         virtual bool swap_tail ( Expression *, Expression * ) { return false; }
         virtual uint32_t getEvalFlags() const { return 0; }

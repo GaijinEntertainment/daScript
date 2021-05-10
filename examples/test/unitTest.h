@@ -123,6 +123,11 @@ struct TestObjectNotLocal {
     int fooData;
 };
 
+struct TestObjectNotNullPtr {
+    int fooData;
+};
+
+
 int *getPtr();
 
 void testFields ( das::Context * ctx );

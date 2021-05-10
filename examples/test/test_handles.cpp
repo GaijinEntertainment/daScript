@@ -32,6 +32,7 @@ MAKE_TYPE_FACTORY(TestObjectSmart,TestObjectSmart)
 MAKE_TYPE_FACTORY(TestObjectFoo,TestObjectFoo)
 MAKE_TYPE_FACTORY(TestObjectBar, TestObjectBar)
 MAKE_TYPE_FACTORY(TestObjectNotLocal, TestObjectNotLocal)
+MAKE_TYPE_FACTORY(TestObjectNotNullPtr, TestObjectNotNullPtr)
 MAKE_TYPE_FACTORY(FancyClass, FancyClass)
 
 MAKE_TYPE_FACTORY(SomeDummyType, SomeDummyType)
@@ -64,6 +65,13 @@ struct TestObjectNotLocalAnnotation : ManagedStructureAnnotation <TestObjectNotL
     }
     virtual bool isLocal() const { return false; }                  // this is here so that the class is not local
     virtual bool canBePlacedInContainer() const { return false; }   // this can't be in the container either
+};
+
+struct TestObjectNotNullPtrAnnotation : ManagedStructureAnnotation <TestObjectNotNullPtr> {
+    TestObjectNotNullPtrAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectNotNullPtr", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
+    }
+    virtual bool avoidNullPtr() const override { return true; }         // obvious null-ptr-ing this object is an error
 };
 
 struct TestObjectSmartAnnotation : ManagedStructureAnnotation <TestObjectSmart> {
@@ -577,6 +585,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // dummy type example
     addAnnotation(make_smart<DummyTypeAnnotation>("SomeDummyType", "SomeDummyType", sizeof(SomeDummyType), alignof(SomeDummyType)));
     // register types
+    addAnnotation(make_smart<TestObjectNotNullPtrAnnotation>(lib));
     addAnnotation(make_smart<TestObjectNotLocalAnnotation>(lib));
     auto fooann = make_smart<TestObjectFooAnnotation>(lib);
     addAnnotation(fooann);
