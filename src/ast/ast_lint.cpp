@@ -81,6 +81,7 @@ namespace das {
         bool checkAotSideEffects;
         bool checkNoGlobalHeap;
         bool checkNoGlobalVariables;
+        bool checkNoGlobalVariablesAtAll;
         bool checkUnusedArgument;
         bool checkUnusedBlockArgument;
         bool checkUnsafe;
@@ -90,6 +91,7 @@ namespace das {
             checkAotSideEffects = program->options.getBoolOption("aot_order_side_effects", program->policies.aot_order_side_effects);
             checkNoGlobalHeap = program->options.getBoolOption("no_global_heap", program->policies.no_global_heap);
             checkNoGlobalVariables = program->options.getBoolOption("no_global_variables", program->policies.no_global_variables);
+            checkNoGlobalVariablesAtAll = program->options.getBoolOption("no_global_variables_at_all", program->policies.no_global_variables_at_all);
             checkUnusedArgument = program->options.getBoolOption("no_unused_function_arguments", program->policies.no_unused_function_arguments);
             checkUnusedBlockArgument = program->options.getBoolOption("no_unused_block_arguments", program->policies.no_unused_block_arguments);
             checkUnsafe = program->policies.no_unsafe;
@@ -166,8 +168,11 @@ namespace das {
                 program->error("invalid variable name " + var->name, "", "",
                     var->at, CompilationError::invalid_name );
             }
-            if ( checkNoGlobalVariables ) {
-                if ( !var->type->isConst() && !var->generated ) {
+            if ( checkNoGlobalVariables && !var->generated ) {
+                if ( checkNoGlobalVariablesAtAll ) {
+                    program->error("variable " + var->name + " is disabled via option no_global_variables_at_all", "", "",
+                        var->at, CompilationError::no_global_variables );
+                } else if ( !var->type->isConst() ) {
                     program->error("variable " + var->name + " is not a constant, which is disabled via option no_global_variables", "", "",
                         var->at, CompilationError::no_global_variables );
                 }
@@ -424,6 +429,7 @@ namespace das {
         "aot_order_side_effects",       Type::tBool,
         "no_global_heap",               Type::tBool,
         "no_global_variables",          Type::tBool,
+        "no_global_variables_at_all",   Type::tBool,
         "no_unused_function_arguments", Type::tBool,
         "no_unused_block_arguments",    Type::tBool,
     // memory

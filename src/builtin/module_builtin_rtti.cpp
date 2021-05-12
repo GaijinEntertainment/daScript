@@ -516,6 +516,7 @@ namespace das {
         // language
             addField<DAS_BIND_MANAGED_FIELD(no_unsafe)>("no_unsafe");
             addField<DAS_BIND_MANAGED_FIELD(no_global_variables)>("no_global_variables");
+            addField<DAS_BIND_MANAGED_FIELD(no_global_variables_at_all)>("no_global_variables_at_all");
             addField<DAS_BIND_MANAGED_FIELD(no_global_heap)>("no_global_heap");
             addField<DAS_BIND_MANAGED_FIELD(only_fast_aot)>("only_fast_aot");
             addField<DAS_BIND_MANAGED_FIELD(aot_order_side_effects)>("aot_order_side_effects");

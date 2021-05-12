@@ -1025,6 +1025,7 @@ namespace das
     // language
         bool no_unsafe = false;
         bool no_global_variables = false;
+        bool no_global_variables_at_all = false;
         bool no_global_heap = false;
         bool only_fast_aot = false;
         bool aot_order_side_effects = false;
