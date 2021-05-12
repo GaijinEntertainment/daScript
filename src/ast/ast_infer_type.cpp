@@ -2580,11 +2580,11 @@ namespace das {
             }
             // verify
             bool allowMissingTypeExpr = false;
-            if ( expr->trait=="builtin_function_exists") {
+            if ( expr->trait=="builtin_function_exists" || expr->trait=="builtin_module_exists" ) {
                 allowMissingTypeExpr = true;
             }
             bool allowMissingType = false;
-            if ( expr->trait=="builtin_annotation_exists") {
+            if ( expr->trait=="builtin_annotation_exists" ) {
                 allowMissingType = true;
             }
             //
@@ -2971,6 +2971,21 @@ namespace das {
                             }
                         } else {
                             error("unsupported mangled name subexpression ", expr->subexpr->__rtti, "",
+                                expr->at,CompilationError::typeinfo_undefined);
+                        }
+                    }
+                } else if ( expr->trait=="builtin_module_exists" ) {
+                    if ( !expr->subexpr ) {
+                        error("builtin_module_exists requires subexpression", "", "",
+                            expr->at,CompilationError::typeinfo_undefined);
+                    } else {
+                        if ( expr->subexpr->rtti_isVar() ) {
+                            auto evar = static_pointer_cast<ExprVar>(expr->subexpr);
+                            auto mod = Module::requireEx(evar->name, false);
+                            reportAstChanged();
+                            return make_smart<ExprConstBool>(mod!=nullptr);
+                        } else {
+                            error("unsupported module name subexpression ", expr->subexpr->__rtti, "",
                                 expr->at,CompilationError::typeinfo_undefined);
                         }
                     }
