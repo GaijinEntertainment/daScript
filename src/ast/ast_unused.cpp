@@ -127,6 +127,16 @@ namespace das {
             }
             propagateRead(at->index.get());
         }
+        bool isConstCast ( const TypeDeclPtr & td ) const {
+            if ( td->constant ) return true;        // cast<foo const> is const
+            if ( td->baseType==Type::tPointer ) {
+                if ( !td->firstType ) return true;  // void? cast is ok
+                if ( td->firstType && td->firstType->constant ) return true; // cast<foo const?> is const
+            } else {
+                if ( !td->isRefType() ) return true;    // cast<int> is const
+            }
+            return false;
+        }
         void propagateRead ( Expression * expr ) {
             if ( expr->rtti_isVar() ) {
                 auto var = (ExprVar *) expr;
@@ -163,7 +173,11 @@ namespace das {
                 propagateRead(nc->defaultValue.get());
             } else if ( expr->rtti_isCast() ) {
                 auto ca = (ExprCast *) expr;
-                propagateRead(ca->subexpr.get());
+                if ( isConstCast(ca->castType) ) {
+                    propagateRead(ca->subexpr.get());
+                } else {
+                    propagateWrite(ca->subexpr.get());
+                }
             } else if ( expr->rtti_isRef2Ptr() ) {
                 auto rr = (ExprRef2Ptr *)expr;
                 propagateRead(rr->subexpr.get());
@@ -333,11 +347,13 @@ namespace das {
         virtual void preVisit ( ExprCopy * expr ) override {
             Visitor::preVisit(expr);
             propagateWrite(expr->left.get());
+            propagateRead(expr->right.get());
         }
     // ExprClone
         virtual void preVisit ( ExprClone * expr ) override {
             Visitor::preVisit(expr);
             propagateWrite(expr->left.get());
+            propagateRead(expr->right.get());
         }
     // Op1
         virtual void preVisit ( ExprOp1 * expr ) override {
