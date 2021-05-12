@@ -40,6 +40,7 @@ namespace das {
             enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding",true);
             disableAot = prog->options.getBoolOption("no_aot",false);
             multiContext = prog->options.getBoolOption("multiple_contexts", prog->policies.multiple_contexts);
+            checkNoGlobalVariablesAtAll = prog->options.getBoolOption("no_global_variables_at_all", prog->policies.no_global_variables_at_all);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -63,6 +64,7 @@ namespace das {
         bool                    multiContext = false;
         Expression *            lastEnuValue = nullptr;
         int32_t                 unsafeDepth = 0;
+        bool                    checkNoGlobalVariablesAtAll = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -1436,6 +1438,10 @@ namespace das {
     // globals
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
+            if ( checkNoGlobalVariablesAtAll && !var->generated ) {
+                error("global variables are disabled by option no_global_variables_at_all", "", "",
+                      var->at, CompilationError::no_global_variables );
+            }
             if ( var->type->isAuto() && !var->init) {
                 error("global variable type can't be inferred, it needs an initializer", "", "",
                       var->at, CompilationError::cant_infer_missing_initializer );
