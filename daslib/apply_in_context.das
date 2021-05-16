@@ -62,7 +62,7 @@ class AppendCondAnnotation : AstFunctionAnnotation
     ctxFn.arguments |> emplace_new <| new [[Variable() at=at, _type<-resType, name:=resName]]
 
     var ctxExprDeref <- new [[ExprPtr2Ref() at=at, subexpr <- new [[ExprVar() at=at, name:=resName]] ]]
-    var ctxMovOp <- new [[ExprMove() at=at, left<-ctxExprDeref, right<-callInCtx]]
+    var ctxMovOp <- new [[ExprCopy() at=at, left<-ctxExprDeref, right<-callInCtx]]
     ctxFnBlock.list |> emplace(ctxMovOp)
 
     compiling_module() |> add_function(ctxFn)
