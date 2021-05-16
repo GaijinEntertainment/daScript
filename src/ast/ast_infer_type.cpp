@@ -4595,7 +4595,7 @@ namespace das {
             } else if ( !expr->left->type->isRef() ) {
                 error("can only move to a reference"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_write_to_non_reference);
-            } else if ( !expr->right->type->isRef() && !(expr->right->type->isPointer() && expr->right->type->smartPtr) ) {
+            } else if ( !expr->right->type->isRef() && !expr->right->type->isMoveableValue() ) {
                 error("can only move to from a reference"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_write_to_non_reference);
             } else if ( expr->left->type->constant ) {

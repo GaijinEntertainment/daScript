@@ -84,6 +84,7 @@ namespace das {
         bool isPointer() const;
         bool isVoidPointer() const;
         bool isIterator() const;
+        bool isLambda() const;
         bool isEnum() const;
         bool isEnumT() const;
         bool isHandle() const;
@@ -92,6 +93,7 @@ namespace das {
         bool isFunction() const;
         bool isTuple() const;
         bool isVariant() const;
+        bool isMoveableValue() const;
         int getSizeOf() const;
         int getCountOf() const;
         int getAlignOf() const;

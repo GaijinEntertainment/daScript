@@ -1335,6 +1335,10 @@ namespace das
         return (baseType==Type::tIterator) && (dim.size()==0);
     }
 
+    bool TypeDecl::isLambda() const {
+        return (baseType==Type::tLambda) && (dim.size()==0);
+    }
+
     bool TypeDecl::isEnumT() const {
         return (baseType==Type::tEnumeration) || (baseType==Type::tEnumeration8)
             || (baseType==Type::tEnumeration16);
@@ -1620,6 +1624,10 @@ namespace das
 
     bool TypeDecl::isVariant() const {
         return (baseType==Type::tVariant) && (dim.size()==0);
+    }
+
+    bool TypeDecl::isMoveableValue() const {
+        return (isPointer() && smartPtr) || isLambda() || isIterator();
     }
 
     bool TypeDecl::isSimpleType() const {
