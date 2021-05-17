@@ -824,6 +824,7 @@ namespace das
         static Module * requireEx ( const string & name, bool allowPromoted );
         static void Initialize();
         static void Shutdown();
+        static void Reset(bool debAg);
         static TypeAnnotation * resolveAnnotation ( const TypeInfo * info );
         static Type findOption ( const string & name );
         static void foreach(const callable<bool(Module * module)> & func);

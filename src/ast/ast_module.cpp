@@ -105,6 +105,17 @@ namespace das {
         ReuseAllocator<TypeDecl>::canHold = false;
     }
 
+    void Module::Reset(bool debAg) {
+        ReuseGuard<TypeDecl> rguard;
+        if ( debAg ) shutdownDebugAgent();
+        auto m = modules;
+        while ( m ) {
+            auto pM = m;
+            m = m->next;
+            if ( pM->promoted ) delete pM;
+        }
+    }
+
     void Module::foreach ( const callable<bool (Module * module)> & func ) {
         for (auto m = modules; m != nullptr; m = m->next) {
             if (!func(m)) break;
