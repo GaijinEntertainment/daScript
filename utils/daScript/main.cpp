@@ -29,8 +29,12 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                 }
             } else {
                 if ( auto fnTest = ctx.findFunction(mainFnName.c_str()) ) {
-                    ctx.restart();
-                    ctx.eval(fnTest, nullptr);
+                    if ( verifyCall<void>(fnTest->debugInfo, dummyGroup) || verifyCall<bool>(fnTest->debugInfo, dummyGroup) ) {
+                        ctx.restart();
+                        ctx.eval(fnTest, nullptr);
+                    } else {
+                        tout << "function '"  << mainFnName << "' call arguments do not match, expecting main():void or main():bool\n";
+                    }
                 } else {
                     tout << "function '"  << mainFnName << " ' not found\n";
                 }

@@ -241,7 +241,9 @@ finally
     fclose(fcpp)
 
 [export]
-def main(fn:string)
+def main
+    let args <- get_command_line_arguments()
+    let fn = args[1]
     let atdir = "./src"
     print("{fn}\ndas network message generator at {atdir}\n")
     let main_time = stat(fn).mtime

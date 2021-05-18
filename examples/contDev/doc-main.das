@@ -21,7 +21,9 @@ def getModuleDoc(modName:string)
         print("def {info.name} // generic\n")
 
 [export]
-def main(fn:string)
+def main
+    let args <- get_command_line_arguments()
+    let fn = args[1]
     print("module documentatoin generator\n")
     // getModuleDoc("$")    // builtin
     getModuleDoc("fio")

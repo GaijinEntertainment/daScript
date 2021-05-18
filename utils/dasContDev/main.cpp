@@ -64,11 +64,12 @@ bool compile_and_run(const string& fn, bool recompile) {
                 return false;
             }
             if ( auto fnTest = ctx.findFunction("main") ) {
-                ctx.restart();
-                vec4f args[1] = {
-                    cast<char *>::from(fn.c_str())
-                };
-                ctx.eval(fnTest, args);
+                if ( verifyCall<void>(fnTest->debugInfo, dummyGroup) || verifyCall<bool>(fnTest->debugInfo, dummyGroup) ) {
+                    ctx.restart();
+                    ctx.eval(fnTest, nullptr);
+                } else {
+                    tout << "function 'main' call arguments do not match, expecting main():void or main():bool\n";
+                }
                 return true;
             } else {
                 tout << "function 'main' not found\n";

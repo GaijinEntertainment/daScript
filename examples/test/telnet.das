@@ -1,5 +1,3 @@
-// options log = true
-
 require network
 require fio
 require strings
@@ -57,7 +55,9 @@ class TelnetServer : Server
                 current_string |> push(ch)
 
 [export]
-def main (fn:string)
+def main
+    let args <- get_command_line_arguments()
+    let fn = args[1]
     isContDev = true
     let main_time = stat(fn).mtime
     print("server at {fn} {main_time}\n")
