@@ -21,6 +21,7 @@ namespace das
 // parser errors
 
     ,   syntax_error                            =   20000
+    ,   malformed_ast                           =   20001       // macro generated something, which is not a valid ast
 
 // semantic erros
 

@@ -3695,8 +3695,13 @@ namespace das {
             Visitor::preVisit(block);
             block->hasReturn = false;
             if ( block->isClosure ) {
-                blocks.push_back(block);
-                block->type = make_smart<TypeDecl>(*block->returnType);
+                if ( block->returnType ) {
+                    blocks.push_back(block);
+                    block->type = make_smart<TypeDecl>(*block->returnType);
+                } else {
+                    error("malformed ast, closure is missing return type",  "", "",
+                        block->at, CompilationError::malformed_ast );
+                }
             }
             scopes.push_back(block);
             pushVarStack();
@@ -3802,7 +3807,7 @@ namespace das {
             // to the rest of it
             popVarStack();
             scopes.pop_back();
-            if ( block->isClosure ) {
+            if ( block->isClosure && block->returnType ) {
                 blocks.pop_back();
                 if ( block->list.size() ) {
                     uint32_t flags = block->getEvalFlags();
