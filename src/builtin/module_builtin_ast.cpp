@@ -523,9 +523,9 @@ namespace das {
         }
     };
 
-    struct AstTypeInfoMacroAnnotation : ManagedStructureAnnotation<TypeInfoMacro,false> {
+    struct AstTypeInfoMacroAnnotation : ManagedStructureAnnotation<TypeInfoMacro,false,true> {
         AstTypeInfoMacroAnnotation(ModuleLibrary & ml)
-            :  ManagedStructureAnnotation<TypeInfoMacro,false> ("TypeInfoMacro", ml) {
+            :  ManagedStructureAnnotation<TypeInfoMacro,false,true> ("TypeInfoMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
         }
@@ -2087,6 +2087,33 @@ namespace das {
         }
     };
 
+    extern ProgramPtr g_Program;
+
+    struct TypeInfoMacroAdapter : TypeInfoMacro, AstTypeInfoMacro_Adapter {
+        TypeInfoMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : TypeInfoMacro(n), AstTypeInfoMacro_Adapter(info), classPtr(pClass), context(ctx) {
+        }
+        virtual ExpressionPtr getAstChange ( const ExpressionPtr & expr, string & err ) override {
+            if ( auto fnGetAstChange = get_getAstChange(classPtr) ) {
+                auto tinfo = static_pointer_cast<ExprTypeInfo>(expr);
+                return invoke_getAstChange(context,fnGetAstChange,classPtr,tinfo,err);
+            } else {
+                return nullptr;
+            }
+        }
+        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr & expr, string & err ) {
+            if ( auto fnGetAstType = get_getAstType(classPtr) ) {
+                auto tinfo = static_pointer_cast<ExprTypeInfo>(expr);
+                return invoke_getAstType(context,fnGetAstType,classPtr,lib,tinfo,err);
+            } else {
+                return nullptr;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
+
     #include "ast.das.inc"
 
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
@@ -2112,6 +2139,17 @@ namespace das {
             return ecm;
         }) ) {
             context->throw_error_ex("can't add call macro %s to module %s", newM->name.c_str(), module->name.c_str());
+        }
+    }
+
+    TypeInfoMacroPtr makeTypeInfoMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<TypeInfoMacroAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr & _newM, Context * context ) {
+        TypeInfoMacroPtr newM = move(_newM);
+        if ( ! module->addTypeInfoMacro(newM,true) ) {
+            context->throw_error_ex("can't add type info macro %s to module %s", newM->name.c_str(), module->name.c_str());
         }
     }
 
@@ -2254,8 +2292,6 @@ namespace das {
     smart_ptr_raw<Program> thisProgram ( Context * context ) {
         return context->thisProgram;
     }
-
-    extern ProgramPtr g_Program;
 
     Module * compileModule ( Context * context ) {
         if ( !g_Program ) context->throw_error("compileModule only available during compilation");
@@ -2688,6 +2724,11 @@ namespace das {
                 SideEffects::modifyExternal, "makeCallMacro");
             addExtern<DAS_BIND_FUN(addModuleCallMacro)>(*this, lib,  "add_call_macro",
                 SideEffects::modifyExternal, "addModuleCallMacro");
+            // type info macro
+            addExtern<DAS_BIND_FUN(makeTypeInfoMacro)>(*this, lib,  "make_typeinfo_macro",
+                SideEffects::modifyExternal, "makeTypeInfoMacro");
+            addExtern<DAS_BIND_FUN(addModuleTypeInfoMacro)>(*this, lib,  "add_typeinfo_macro",
+                SideEffects::modifyExternal, "addModuleTypeInfoMacro");
             // variant macro
             addAnnotation(make_smart<AstVariantMacroAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVariantMacro)>(*this, lib,  "make_variant_macro",

@@ -50,6 +50,7 @@ DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
     ,   invalid_line_directive
 // parser errors
     ,   syntax_error
+    ,   malformed_ast
 // semantic erros
     ,   invalid_type
     ,   invalid_return_type

@@ -10,7 +10,7 @@ require daslib/cpp_bind
 
 
 [export]
-def test
+def main
     let root = get_das_root() + "/src/builtin/"
     fopen(root + "ast_gen.inc","wb") <| $ ( cpp_file )
         log_cpp_class_adapter(cpp_file, "AstFunctionAnnotation_Adapter", typeinfo(ast_typedecl type<AstFunctionAnnotation>))
@@ -19,6 +19,7 @@ def test
         log_cpp_class_adapter(cpp_file, "AstVarianMacro_Adapter", typeinfo(ast_typedecl type<AstVariantMacro>))
         log_cpp_class_adapter(cpp_file, "AstReaderMacro_Adapter", typeinfo(ast_typedecl type<AstReaderMacro>))
         log_cpp_class_adapter(cpp_file, "AstCallMacro_Adapter", typeinfo(ast_typedecl type<AstCallMacro>))
+        log_cpp_class_adapter(cpp_file, "AstTypeInfoMacro_Adapter", typeinfo(ast_typedecl type<AstTypeInfoMacro>))
     fopen(root + "debugapi_gen.inc","wb") <| $ ( cpp_file )
         log_cpp_class_adapter(cpp_file, "DapiDataWalker_Adapter", typeinfo(ast_typedecl type<DapiDataWalker>))
         log_cpp_class_adapter(cpp_file, "DapiDebugAgent_Adapter", typeinfo(ast_typedecl type<DapiDebugAgent>))

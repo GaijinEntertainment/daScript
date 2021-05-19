@@ -20,6 +20,7 @@ typedef
     VariantMacroPtr = smart_ptr<VariantMacro>
     ReaderMacroPtr = smart_ptr<ReaderMacro>
     CallMacroPtr = smart_ptr<CallMacro>
+    TypeInfoMacroPtr = smart_ptr<TypeInfoMacro>
 
 [generic]
 def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true )
@@ -73,6 +74,10 @@ class AstReaderMacro
 
 class AstCallMacro
     def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+
+class AstTypeInfoMacro
+    def abstract getAstChange ( expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : ExpressionPtr
+    def abstract getAstType ( var lib:ModuleLibrary; expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : TypeDeclPtr
 
 class AstVisitor
 // program
@@ -487,6 +492,14 @@ def make_call_macro ( name : string; someClassPtr ) : CallMacroPtr
         concept_assert(false,"expecting pointer to class")
         return [[CallMacroPtr]]
 
+def make_typeinfo_macro ( name : string; someClassPtr ) : TypeInfoMacroPtr
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_typeinfo_macro(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[TypeInfoMacroPtr]]
+
 def make_pass_macro ( name : string; someClassPtr ) : PassMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
@@ -530,6 +543,12 @@ def add_new_reader_macro ( name:string; someClassPtr )
 def add_new_call_macro ( name:string; someClassPtr )
     var ann <- make_call_macro(name, someClassPtr)
     this_module() |> add_call_macro(ann)
+    unsafe
+        delete ann
+
+def add_new_typeinfo_macro ( name:string; someClassPtr )
+    var ann <- make_typeinfo_macro(name, someClassPtr)
+    this_module() |> add_typeinfo_macro(ann)
     unsafe
         delete ann
 

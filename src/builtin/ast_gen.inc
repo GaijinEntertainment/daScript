@@ -214,3 +214,39 @@ public:
 };
 int AstCallMacro_Adapter::_das_class_method_offset[1];
 
+class AstTypeInfoMacro_Adapter {
+protected:
+  enum {
+    __fn_getAstChange = 0,
+    __fn_getAstType = 1,
+  };
+protected:
+  static int _das_class_method_offset[2];
+public:
+  AstTypeInfoMacro_Adapter ( const StructInfo * info ) {
+    if ( _das_class_method_offset[0]==0 ) {
+      _das_class_method_offset[__fn_getAstChange] = adapt_field_offset("getAstChange",info);
+      _das_class_method_offset[__fn_getAstType] = adapt_field_offset("getAstType",info);
+    }
+  }
+  static __forceinline Func get_getAstChange ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_getAstChange]);
+  }
+  static __forceinline smart_ptr<Expression> invoke_getAstChange ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<ExprTypeInfo> const  expr, das::string & errors ) {
+    return das_invoke_function<smart_ptr_raw<Expression>>::invoke
+      <void *,smart_ptr_raw<ExprTypeInfo> const ,das::string &>
+        (__context__,__funcCall__,
+          self,expr,errors).marshal();
+  }
+  static __forceinline Func get_getAstType ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_getAstType]);
+  }
+  static __forceinline smart_ptr<TypeDecl> invoke_getAstType ( Context * __context__, Func __funcCall__, void * self, ModuleLibrary & lib, smart_ptr_raw<ExprTypeInfo> const  expr, das::string & errors ) {
+    return das_invoke_function<smart_ptr_raw<TypeDecl>>::invoke
+      <void *,ModuleLibrary &,smart_ptr_raw<ExprTypeInfo> const ,das::string &>
+        (__context__,__funcCall__,
+          self,lib,expr,errors).marshal();
+  }
+};
+int AstTypeInfoMacro_Adapter::_das_class_method_offset[2];
+
