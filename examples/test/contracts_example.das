@@ -1,20 +1,21 @@
 
-require UnitTest
 require daslib/contracts
 
-[expect_any_vector(blah)]
+require UnitTest
+
+[expect_any_vector(blah)]                           // dasvector`.... or similar C++ types
 def print_vec ( blah )
     for i in range(length(blah))
         print("{blah[i]}\n")
 
 [expect_any_vector(blah)]
-def print_vec_length ( blah : auto(DummyName) )
+def print_vec_length ( blah : auto(DummyName) )     // note, dummy name here so that we can differenciate from another print_vec_length
     print("length(blah) is {length(blah)}\n")
 
 def print_vec_length ( blah )
     print("blah is not a vector\n")
 
-[expect_any_array(blah)]
+[expect_any_array(blah)]                            // array<foo>, [], or dasvector`.... or similar
 def print_arr ( blah )
     for i in range(length(blah))
         print("{blah[i]}\n")
@@ -30,7 +31,7 @@ def main
     //  candidate function:
     //        print_vec ( blah : auto const ) : auto at hello_world.das:6:4
     //                argument blah is expected to be a vector template
-    var i : int[3]
+    var i : int[3]          // this one ok, because i is 'any_array'
     print_arr(i)
-    print_vec_length(13)
+    print_vec_length(13)    // this one ok, because there is print_vec_length unspecialized
     return true
