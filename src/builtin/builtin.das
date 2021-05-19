@@ -247,6 +247,10 @@ def next ( it:iterator<auto(TT)>; var value : TT& ) : bool
         unsafe
             return _builtin_iterator_iterate(it, addr(value))
 
+[expect_any_vector(vec)]
+def length ( vec )
+    return vec.length
+
 [generic]
 def each ( rng : range ) : iterator<int>
     var it : iterator<int>

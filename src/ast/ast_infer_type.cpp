@@ -759,6 +759,13 @@ namespace das {
                     return false;
                 }
             }
+            for ( const auto & ann : pFn->annotations ) {
+                auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                string err;
+                if ( !fnAnn->isCompatible(pFn, types, *ann, err) ) {
+                    return false;
+                }
+            }
             return true;
         }
 
@@ -889,6 +896,13 @@ namespace das {
                 auto & arg = pFn->arguments[ai];
                 if ( !arg->init ) {
                     ss << "\t\tmissing argument " << arg->name << "\n";
+                }
+            }
+            for ( const auto & ann : pFn->annotations ) {
+                auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                string err;
+                if ( !fnAnn->isCompatible(pFn, types, *ann, err) ) {
+                    ss << "\t\t" << err << "\n";
                 }
             }
             return ss.str();
@@ -2636,6 +2650,10 @@ namespace das {
                         error("typeinfo(dim non_array) is prohibited, " + describeType(expr->typeexpr), "", "",
                               expr->at,CompilationError::typeinfo_dim);
                     }
+                } else if ( expr->trait=="is_any_vector" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isHandle() &&
+                        expr->typeexpr->annotation && expr->typeexpr->annotation->isYetAnotherVectorTemplate());
                 } else if ( expr->trait=="variant_index" || expr->trait=="safe_variant_index" ) {
                     if ( !expr->typeexpr->isGoodVariantType() ) {
                         if (expr->trait == "variant_index") {
@@ -5744,6 +5762,20 @@ namespace das {
                 int cmpr = moreSpecialized(f1A,f2A,expr->arguments[aI]->type);
                 if ( cmpr<0 ) less = true;
                 else if ( cmpr>0 ) more = true;
+            }
+            if ( !more && !less ) {
+                // if functions are identical, the one with more specialization annotations win
+                int spF1 = 0;
+                for ( auto & ann : f1->annotations ) {
+                    auto fnA = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                    if ( fnA->isSpecialized() ) spF1 ++;
+                }
+                int spF2 = 0;
+                for ( auto & ann : f2->annotations ) {
+                    auto fnA = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                    if ( fnA->isSpecialized() ) spF2 ++;
+                }
+                if ( spF1 > spF2 ) more = true;
             }
             if ( more && !less ) {
                 return true;

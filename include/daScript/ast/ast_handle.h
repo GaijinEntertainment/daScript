@@ -460,6 +460,7 @@ namespace das
             ati->dim[ati->dimSize - 1] = uint32_t(pVec->size());
             walker.walk_dim((char *)pVec->data(), ati);
         }
+        virtual bool isYetAnotherVectorTemplate() const override { return true; }
         TypeDeclPtr                vecType;
         DebugInfoHelper            helpA;
         TypeInfo *                 ati = nullptr;

@@ -300,6 +300,8 @@ namespace das
         virtual string aotArgumentSuffix ( ExprCallFunc * /*call*/, int /*argIndex*/ ) { return ""; }
         virtual void aotPrefix ( TextWriter &, ExprCallFunc * ) { }
         virtual bool isGeneric() const { return false; }
+        virtual bool isCompatible ( const FunctionPtr &, const vector<TypeDeclPtr> &, const AnnotationDeclaration &, string &  ) const { return true; }
+        virtual bool isSpecialized() const { return false; }
     };
 
     struct TransformFunctionAnnotation : FunctionAnnotation {
@@ -388,6 +390,8 @@ namespace das
                                             const ExpressionPtr &, const ExpressionPtr &, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
         virtual void walk ( DataWalker &, void * ) { }
+        // familiar patterns
+        virtual bool isYetAnotherVectorTemplate() const { return false; }   // has [], there is length(x), data is linear in memory
     };
 
     struct StructureAnnotation : Annotation {

@@ -728,6 +728,7 @@ namespace das
         TextWriter ss;
         if (baseType == Type::autoinfer) {
             ss << "#auto";
+            if ( !alias.empty() ) ss << "#" << alias;
         } else if (baseType == Type::alias) {
             ss << "#alias#" << alias;
         } else if ( baseType==Type::tHandle ) {
