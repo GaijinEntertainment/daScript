@@ -9,6 +9,7 @@ typedef
     ExpressionPtr = smart_ptr<Expression>
     ProgramPtr = smart_ptr<Program>
     TypeDeclPtr = smart_ptr<TypeDecl>
+    VectorTypeDeclPtr = dasvector`smart_ptr`TypeDecl
     EnumerationPtr = smart_ptr<Enumeration>
     StructurePtr = smart_ptr<Structure>
     FunctionPtr = smart_ptr<Function>
@@ -55,6 +56,8 @@ class AstFunctionAnnotation
     def abstract transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
     def abstract apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
     def abstract finish ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+    def abstract isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+    def abstract isSpecialized : bool
 
 class AstStructureAnnotation
     def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
@@ -517,6 +520,12 @@ def make_variant_macro ( name : string; someClassPtr ) : VariantMacroPtr
         return [[VariantMacroPtr]]
 
 def add_new_function_annotation ( name:string; someClassPtr )
+    var ann <- make_function_annotation(name, someClassPtr)
+    this_module() |> add_function_annotation(ann)
+    unsafe
+        delete ann
+
+def add_new_contract_annotation ( name:string; someClassPtr )
     var ann <- make_function_annotation(name, someClassPtr)
     this_module() |> add_function_annotation(ann)
     unsafe

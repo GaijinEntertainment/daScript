@@ -761,9 +761,11 @@ namespace das {
             }
             for ( const auto & ann : pFn->annotations ) {
                 auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
-                string err;
-                if ( !fnAnn->isCompatible(pFn, types, *ann, err) ) {
-                    return false;
+                if ( fnAnn->isSpecialized() ) {
+                    string err;
+                    if ( !fnAnn->isCompatible(pFn, types, *ann, err) ) {
+                        return false;
+                    }
                 }
             }
             return true;
@@ -900,9 +902,11 @@ namespace das {
             }
             for ( const auto & ann : pFn->annotations ) {
                 auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
-                string err;
-                if ( !fnAnn->isCompatible(pFn, types, *ann, err) ) {
-                    ss << "\t\t" << err << "\n";
+                if ( fnAnn->isSpecialized() ) {
+                    string err;
+                    if ( !fnAnn->isCompatible(pFn, types, *ann, err) ) {
+                        ss << "\t\t" << err << "\n";
+                    }
                 }
             }
             return ss.str();

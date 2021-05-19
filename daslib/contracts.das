@@ -1,0 +1,42 @@
+options indenting = 4
+options no_aot = true
+
+module contracts shared
+
+require ast
+require daslib/ast_boost
+
+[private]
+def isYetAnotherVectorTemplate ( var td:TypeDeclPtr )
+    return td.isHandle && td.annotation!=null && td.annotation.is_any_vector
+
+[contract(name="expect_any_array")]
+class IsAnyArrayMacro : AstFunctionAnnotation
+    def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        if args.length != 1
+            errors := "expecting at least one argument"
+            return false
+        for argv in args                    // note: N^2
+            let val = get_annotation_argument_value(argv)
+            if !(val is tBool)
+                errors := "invalid argument type {argv.name}"
+                return false
+            var found = false
+            for fna in func.arguments
+                if fna.name==argv.name
+                    found = true
+                    break
+            if !found
+                errors := "function {func.name} does not have argument {argv.name}"
+                return false
+        return true
+    def override isSpecialized : bool
+        return true
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if !(typ.baseType==Type tArray || length(typ.dim)!=0 || isYetAnotherVectorTemplate(typ))
+                        errors := "argument {argv.name} is not a vector, array, or [], it is {describe(typ)}"
+                        return false
+        return true

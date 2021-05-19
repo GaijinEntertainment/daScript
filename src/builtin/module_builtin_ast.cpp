@@ -1897,7 +1897,7 @@ namespace das {
         : FunctionAnnotation(n), AstFunctionAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & group,
-                            const AnnotationArgumentList & args, string & errors ) {
+                            const AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
                 return invoke_apply(context,fnApply,classPtr,func,group,args,errors);
             } else {
@@ -1906,7 +1906,7 @@ namespace das {
         }
         virtual bool finalize ( const FunctionPtr & func, ModuleGroup & group,
                                const AnnotationArgumentList & args,
-                               const AnnotationArgumentList & progArgs, string & errors ) {
+                               const AnnotationArgumentList & progArgs, string & errors ) override {
             if ( auto fnFinish = get_finish(classPtr) ) {
                 return invoke_finish(context,fnFinish,classPtr,func,group,args,progArgs,errors);
             } else {
@@ -1914,21 +1914,36 @@ namespace das {
             }
         }
         virtual bool apply ( ExprBlock *, ModuleGroup &,
-                            const AnnotationArgumentList &, string & err ) {
+                            const AnnotationArgumentList &, string & err ) override {
             err = "not a block annotation";
             return false;
         }
         virtual bool finalize ( ExprBlock *, ModuleGroup &,
                                const AnnotationArgumentList &,
-                               const AnnotationArgumentList &, string & err ) {
+                               const AnnotationArgumentList &, string & err ) override {
             err = "not a block annotation";
             return false;
         }
-        virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) {
+        virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) override {
             if ( auto fnTransform = get_transform(classPtr) ) {
                 return invoke_transform(context,fnTransform,classPtr,call,err);
             } else {
                 return nullptr;
+            }
+        }
+        virtual bool isSpecialized () const override {
+            if ( auto fnIsSpecialized = get_isSpecialized(classPtr) ) {
+                return invoke_isSpecialized(context,fnIsSpecialized,classPtr);
+            } else {
+                return false;
+            }
+        }
+        virtual bool isCompatible ( const FunctionPtr & fn, const vector<TypeDeclPtr> & types,
+            const AnnotationDeclaration & decl, string & err  ) const override {
+            if ( auto fnIsCompatible = get_isCompatible(classPtr) ) {
+                return invoke_isCompatible(context,fnIsCompatible,classPtr,fn,const_cast<vector<TypeDeclPtr> &>(types),decl,err);
+            } else {
+                return true;
             }
         }
     protected:

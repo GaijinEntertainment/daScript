@@ -4,15 +4,19 @@ protected:
     __fn_transform = 0,
     __fn_apply = 1,
     __fn_finish = 2,
+    __fn_isCompatible = 3,
+    __fn_isSpecialized = 4,
   };
 protected:
-  static int _das_class_method_offset[3];
+  static int _das_class_method_offset[5];
 public:
   AstFunctionAnnotation_Adapter ( const StructInfo * info ) {
     if ( _das_class_method_offset[0]==0 ) {
       _das_class_method_offset[__fn_transform] = adapt_field_offset("transform",info);
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
       _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
+      _das_class_method_offset[__fn_isCompatible] = adapt_field_offset("isCompatible",info);
+      _das_class_method_offset[__fn_isSpecialized] = adapt_field_offset("isSpecialized",info);
     }
   }
   static __forceinline Func get_transform ( void * self ) {
@@ -42,8 +46,26 @@ public:
         (__context__,__funcCall__,
           self,func,group,args,progArgs,errors);
   }
+  static __forceinline Func get_isCompatible ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_isCompatible]);
+  }
+  static __forceinline bool invoke_isCompatible ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, das::vector<smart_ptr<TypeDecl>> & types, AnnotationDeclaration const  & decl, das::string & errors ) {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<Function>,das::vector<smart_ptr<TypeDecl>> &,AnnotationDeclaration const  &,das::string &>
+        (__context__,__funcCall__,
+          self,func,types,decl,errors);
+  }
+  static __forceinline Func get_isSpecialized ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_isSpecialized]);
+  }
+  static __forceinline bool invoke_isSpecialized ( Context * __context__, Func __funcCall__, void * self ) {
+    return das_invoke_function<bool>::invoke
+      <void *>
+        (__context__,__funcCall__,
+          self);
+  }
 };
-int AstFunctionAnnotation_Adapter::_das_class_method_offset[3];
+int AstFunctionAnnotation_Adapter::_das_class_method_offset[5];
 
 class AstStructureAnnotation_Adapter {
 protected:
