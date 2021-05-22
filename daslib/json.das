@@ -34,6 +34,9 @@ def JV ( v : string )
 def JV ( v : double )
     return new [[JsonValue value <- [[JsValue _number = v]]]]
 
+def JV ( v : float )
+    return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
+
 def JV ( v : bool )
     return new [[JsonValue value <- [[JsValue _bool = v]]]]
 
@@ -45,6 +48,9 @@ def JV ( var v : table<string;JsonValue?> )
 
 def JV ( var v : array<JsonValue?> )
     return new [[JsonValue value <- [[JsValue _array <- v]]]]
+
+def JV ( v : float4 )
+    return JV({{"x" => JV(v.x); "y" => JV(v.y); "z" => JV(v.z); "w" => JV(v.w)}})
 
 [private]
 def lexer ( text : string )

@@ -8,6 +8,7 @@ require ast
 require strings
 require daslib/json
 require daslib/ast_boost
+require daslib/contracts
 
 [private]
 def is_json_ptr_value ( td : TypeDeclPtr )
@@ -62,4 +63,6 @@ class JsonReader : AstReaderMacro
             var exx <- convert_to_expression(json,expr.at)
             return exx
 
-
+[expect_any_enum(ent)]
+def JV ( ent )
+    return JV("{ent}")
