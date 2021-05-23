@@ -4,7 +4,7 @@ options no_aot = true
 module ast_boost shared
 
 require rtti
-require ast
+require ast public
 require strings
 require daslib/strings_boost
 
@@ -231,6 +231,9 @@ class SetupAnyAnnotation : AstStructureAnnotation
 class SetupFunctionAnnotatoin : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_function_annotation"
 
+class SetupStructureAnnotatoin : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_structure_annotation"
+
 class SetupContractAnnotatoin : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_contract_annotation"
 
@@ -456,6 +459,7 @@ def setup
         add_new_function_annotation("macro", new MacroMacro())
         add_new_function_annotation("tag_function",new TagFunctionAnnotation())
         add_new_structure_annotation("function_macro",new SetupFunctionAnnotatoin())
+        add_new_structure_annotation("structure_macro",new SetupStructureAnnotatoin())
         add_new_structure_annotation("contract",new SetupContractAnnotatoin())
         add_new_structure_annotation("reader_macro",new SetupReaderMacro())
         add_new_structure_annotation("call_macro",new SetupCallMacro())

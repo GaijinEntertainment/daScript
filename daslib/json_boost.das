@@ -6,7 +6,7 @@ module json_boost shared
 require rtti
 require ast
 require strings
-require daslib/json
+require daslib/json public
 require daslib/ast_boost
 require daslib/contracts
 require daslib/templates

@@ -529,3 +529,8 @@ def map_to_ro_array ( data:void?; len:int; blk:block<(arg:array<auto(TT)>#)> )
     let num_elem = len / elem_size
     unsafe
         _builtin_temp_array(data, num_elem, blk)
+
+def swap ( var a,b:auto(TT)& )
+    var t : TT - & <- a
+    a <- b
+    b <- t
