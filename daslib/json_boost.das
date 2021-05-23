@@ -67,6 +67,7 @@ class JsonReader : AstReaderMacro
 def JV ( ent )
     return JV("{ent}")
 
+[unused_argument(ent)]
 def enum_from_JV ( var ent : auto(EnumT)&; jv:JsonValue? )
     concept_assert(typeinfo(is_enum type<EnumT>),"expecting enumeration")
     let name = jv.value as _string
@@ -77,3 +78,37 @@ def enum_from_JV ( var ent : auto(EnumT)&; jv:JsonValue? )
                 ent = reinterpret<EnumT> (ef.value)
             return
     panic("not a valid enumeration {name} in {typeinfo(typename type<EnumT>)}")
+
+def JV ( v : float )
+    return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
+
+def JV ( v : int )
+    return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
+
+[expect_any_vector_type(v)]
+def JV ( v : auto(VecT) )
+    static_if typeinfo(vector_dim type<VecT>)==2
+        return JV({{"x" => JV(v.x); "y" => JV(v.y)}})
+    static_elif typeinfo(vector_dim type<VecT>)==3
+        return JV({{"x" => JV(v.x); "y" => JV(v.y); "z" => JV(v.z)}})
+    static_elif typeinfo(vector_dim type<VecT>)==4
+        return JV({{"x" => JV(v.x); "y" => JV(v.y); "z" => JV(v.z); "w" => JV(v.w)}})
+
+[expect_any_vector_type(ent), unused_argument(ent)]
+def from_JV ( var v : JsonValue?; ent: auto(VecT)  )
+    var vo & = v.value as _object
+    static_if typeinfo(vector_dim type<VecT>)==2
+        return VecT(
+            vo["x"].value as _number,
+            vo["y"].value as _number)
+    static_elif typeinfo(vector_dim type<VecT>)==3
+        return VecT(
+            vo["x"].value as _number,
+            vo["y"].value as _number,
+            vo["z"].value as _number)
+    static_elif typeinfo(vector_dim type<VecT>)==4
+        return VecT(
+            vo["x"].value as _number,
+            vo["y"].value as _number,
+            vo["z"].value as _number,
+            vo["w"].value as _number)

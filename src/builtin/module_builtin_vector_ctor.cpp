@@ -139,21 +139,25 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,1>,
 #define ADD_RANGE_CTOR_1(VTYPE,VNAME) \
 addFunction ( make_smart<BuiltInFn<SimNode_Zero,VTYPE>> (#VTYPE,lib,"v_zero",false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<float,   SimPolicy<VTYPE>>,VTYPE,float>>   (#VTYPE,lib,"mk_" VNAME,false) ); \
+addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<double,  SimPolicy<VTYPE>>,VTYPE,double>>  (#VTYPE,lib,"mk_" VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<int32_t, SimPolicy<VTYPE>>,VTYPE,int32_t>> (#VTYPE,lib,"mk_" VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<uint32_t,SimPolicy<VTYPE>>,VTYPE,uint32_t>>(#VTYPE,lib,"mk_" VNAME,false) );
 
 #define ADD_VEC_CTOR_2(VTYPE,VNAME) \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,2>,VTYPE,float,float>>      (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<double,  SimPolicy<VTYPE>,2>,VTYPE,double,double>>    (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,2>,VTYPE,int32_t,int32_t>>  (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,2>,VTYPE,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) );
 
 #define ADD_VEC_CTOR_3(VTYPE,VNAME) \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,3>,VTYPE,float,float,float>>         (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<double,  SimPolicy<VTYPE>,3>,VTYPE,double,double,double>>      (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,3>,VTYPE,int32_t,int32_t,int32_t>>   (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,3>,VTYPE,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) );
 
 #define ADD_VEC_CTOR_4(VTYPE,VNAME) \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,4>,VTYPE,float,float,float,float>>            (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<double,  SimPolicy<VTYPE>,4>,VTYPE,double,double,double,double>>        (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,4>,VTYPE,int32_t,int32_t,int32_t,int32_t>>    (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,VTYPE,uint32_t,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) );
 

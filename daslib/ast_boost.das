@@ -8,6 +8,14 @@ require ast
 require strings
 require daslib/strings_boost
 
+def isVectorType ( typ:Type )
+    return (
+        typ==Type tInt2   || typ==Type tInt3   || typ==Type tInt4   ||
+        typ==Type tUInt2  || typ==Type tUInt3  || typ==Type tUInt4  ||
+        typ==Type tFloat2 || typ==Type tFloat3 || typ==Type tFloat4 ||
+        typ==Type tRange  || typ==Type tURange
+    )
+
 def describe(list:AnnotationArgumentList)
     return join([{ for arg in list; "{arg.name}={get_annotation_argument_value(arg)}" }],",")
 

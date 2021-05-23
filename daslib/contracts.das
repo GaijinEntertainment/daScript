@@ -53,3 +53,14 @@ class IsAnyEnumMacro : IsAnyType
                         errors := "argument {argv.name} is not an enumeration"
                         return false
         return true
+
+[contract(name="expect_any_vector_type")]
+class IsAnyVectorType : IsAnyType
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if length(typ.dim)!=0 || !isVectorType(typ.baseType)
+                        errors := "argument {argv.name} is not a vector type (int2, float3, range, etc)"
+                        return false
+        return true

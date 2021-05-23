@@ -2786,6 +2786,9 @@ namespace das {
                 } else if ( expr->trait=="is_vector" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isVectorType());
+                } else if ( expr->trait=="vector_dim" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstInt>(expr->at, expr->typeexpr->getVectorDim());
                 } else if ( expr->trait=="is_array" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isGoodArrayType());
