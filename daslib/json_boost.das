@@ -68,17 +68,18 @@ class JsonReader : AstReaderMacro
 def JV ( ent )
     return JV("{ent}")
 
-[unused_argument(ent)]
-def enum_from_JV ( var ent : auto(EnumT)&; jv:JsonValue? )
-    concept_assert(typeinfo(is_enum type<EnumT>),"expecting enumeration")
+[template(ent)]
+def from_JV ( jv:JsonValue?; ent : auto(EnumT) ) : EnumT
     let name = jv.value as _string
+    var res : auto(EnumTT) = [[EnumT]]
     var ti = typeinfo(rtti_typeinfo type<EnumT>)
     for ef in *ti.enumType
         if name==ef.name
             unsafe
-                ent = reinterpret<EnumT> (ef.value)
-            return
+                res = reinterpret<EnumTT> (ef.value)
+            return res
     panic("not a valid enumeration {name} in {typeinfo(typename type<EnumT>)}")
+    return res
 
 def JV ( v : float )
     return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
