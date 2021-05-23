@@ -52,6 +52,14 @@ def JV ( var v : array<JsonValue?> )
 def JV ( v : float4 )
     return JV({{"x" => JV(v.x); "y" => JV(v.y); "z" => JV(v.z); "w" => JV(v.w)}})
 
+def float4_from_JV ( var v : JsonValue? )
+    var vo & = v.value as _object
+    return float4(
+        float(vo["x"].value as _number),
+        float(vo["y"].value as _number),
+        float(vo["z"].value as _number),
+        float(vo["w"].value as _number))
+
 [private]
 def lexer ( text : string )
     var stext = clone_string(text)
