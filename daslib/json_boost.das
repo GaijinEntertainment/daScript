@@ -9,6 +9,7 @@ require strings
 require daslib/json
 require daslib/ast_boost
 require daslib/contracts
+require daslib/templates
 
 [private]
 def is_json_ptr_value ( td : TypeDeclPtr )
@@ -94,20 +95,21 @@ def JV ( v : auto(VecT) )
     static_elif typeinfo(vector_dim type<VecT>)==4
         return JV({{"x" => JV(v.x); "y" => JV(v.y); "z" => JV(v.z); "w" => JV(v.w)}})
 
-[expect_any_vector_type(ent), unused_argument(ent)]
+[expect_any_vector_type(ent), template(ent)]
 def from_JV ( var v : JsonValue?; ent: auto(VecT)  )
+    let VecV : auto(VecTT) = VecT()
     var vo & = v.value as _object
-    static_if typeinfo(vector_dim type<VecT>)==2
-        return VecT(
+    static_if typeinfo(vector_dim VecV)==2
+        return VecTT(
             vo["x"].value as _number,
             vo["y"].value as _number)
-    static_elif typeinfo(vector_dim type<VecT>)==3
-        return VecT(
+    static_elif typeinfo(vector_dim VecV)==3
+        return VecTT(
             vo["x"].value as _number,
             vo["y"].value as _number,
             vo["z"].value as _number)
-    static_elif typeinfo(vector_dim type<VecT>)==4
-        return VecT(
+    static_elif typeinfo(vector_dim VecV)==4
+        return VecTT(
             vo["x"].value as _number,
             vo["y"].value as _number,
             vo["z"].value as _number,
