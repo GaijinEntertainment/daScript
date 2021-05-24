@@ -92,6 +92,18 @@ def emplace_new ( var vec:dasvector`smart_ptr`Variable; var ptr:smart_ptr<Variab
 def emplace_new ( var vec:MakeStruct; var ptr:smart_ptr<MakeFieldDecl> )
     emplace(vec,ptr)
 
+def override_method ( var str:StructurePtr; name,funcName:string ) : bool
+    for fld in str.fields
+        if "{fld.name}" == name
+            var vcast <- new [[ExprCast() at=str.at,
+                subexpr <- new [[ExprAddr() at=str.at,target:=funcName]],
+                castType <- new [[TypeDecl() at=str.at,baseType=Type autoinfer]]
+            ]]
+            fld.init := null
+            fld.init <- vcast
+            return true
+    return false
+
 class MacroMacro : AstFunctionAnnotation
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         compiling_program().flags |= ProgramFlags needMacroModule

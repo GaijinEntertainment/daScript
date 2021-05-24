@@ -81,8 +81,20 @@ def from_JV ( jv:JsonValue?; ent : auto(EnumT) ) : EnumT
     panic("not a valid enumeration {name} in {typeinfo(typename type<EnumT>)}")
     return res
 
+[generic,template(ent)]
+def from_JV ( var v : JsonValue?; ent:bool )
+    return v.value as _bool
+
+[generic,template(ent)]
+def from_JV ( var v : JsonValue?; ent:float )
+    return float(v.value as _number)
+
 def JV ( v : float )
     return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
+
+[generic,template(ent)]
+def from_JV ( var v : JsonValue?; ent:int )
+    return int(v.value as _number)
 
 def JV ( v : int )
     return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
