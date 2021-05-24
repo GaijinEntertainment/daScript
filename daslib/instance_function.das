@@ -43,4 +43,5 @@ class InstanceFunctionAnnotation : AstFunctionAnnotation
 
 [macro,private]
 def init
-    add_new_function_annotation("instance_function", new InstanceFunctionAnnotation())
+    if is_compiling_macros_in_module("instance_function")
+        add_new_function_annotation("instance_function", new InstanceFunctionAnnotation())

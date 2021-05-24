@@ -75,4 +75,5 @@ class TemplateMacro : AstFunctionAnnotation
 
 [macro,private]
 def init
-    add_new_function_annotation("template", new TemplateMacro())
+    if is_compiling_macros_in_module("templates")
+        add_new_function_annotation("template", new TemplateMacro())

@@ -9,7 +9,7 @@ require strings
 require daslib/json public
 require daslib/ast_boost
 require daslib/contracts
-// require daslib/templates
+require daslib/templates
 
 [private]
 def is_json_ptr_value ( td : TypeDeclPtr )
@@ -68,8 +68,7 @@ class JsonReader : AstReaderMacro
 def JV ( ent )
     return JV("{ent}")
 
-//[template(ent)]
-[unused_argument(ent)]
+[template(ent)]
 def from_JV ( jv:JsonValue?; ent : auto(EnumT) ) : EnumT
     let name = jv.value as _string
     var res : auto(EnumTT) = [[EnumT]]
@@ -82,21 +81,18 @@ def from_JV ( jv:JsonValue?; ent : auto(EnumT) ) : EnumT
     panic("not a valid enumeration {name} in {typeinfo(typename type<EnumT>)}")
     return res
 
-// [generic,template(ent)]
-[generic,unused_argument(ent)]
+[generic,template(ent)]
 def from_JV ( var v : JsonValue?; ent:bool )
     return v.value as _bool
 
-// [generic,template(ent)]
-[generic,unused_argument(ent)]
+[generic,template(ent)]
 def from_JV ( var v : JsonValue?; ent:float )
     return float(v.value as _number)
 
 def JV ( v : float )
     return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
 
-// [generic,template(ent)]
-[generic,unused_argument(ent)]
+[generic,template(ent)]
 def from_JV ( var v : JsonValue?; ent:int )
     return int(v.value as _number)
 
@@ -112,8 +108,7 @@ def JV ( v : auto(VecT) )
     static_elif typeinfo(vector_dim type<VecT>)==4
         return JV({{"x" => JV(v.x); "y" => JV(v.y); "z" => JV(v.z); "w" => JV(v.w)}})
 
-// [expect_any_vector_type(ent), template(ent)]
-[expect_any_vector_type(ent), unused_argument(ent)]
+[expect_any_vector_type(ent), template(ent)]
 def from_JV ( var v : JsonValue?; ent: auto(VecT)  )
     let VecV : auto(VecTT) = VecT()
     var vo & = v.value as _object
