@@ -333,6 +333,16 @@ def to_array_move(var a:auto(TT)[]) : array<TT -const>
         concept_assert(false,"this array can't be copied or moved")
     return <- arr
 
+def to_array_move(var a:auto(TT)) : array<TT -const>
+    var arr : array<TT -const>
+    static_if typeinfo(can_copy a)
+        arr |> push(a)
+    static_elif typeinfo(can_move a)
+        arr |> emplace(a)
+    else
+        concept_assert(false,"this array can't be copied or moved")
+    return <- arr
+
 def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
     var tab : table<keyT -const;valT>
     for x in a
