@@ -99,6 +99,13 @@ def from_JV ( var v : JsonValue?; ent:int )
 def JV ( v : int )
     return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
 
+def JV ( v : bitfield )
+    return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
+
+[generic,template(ent)]
+def from_JV ( var v : JsonValue?; ent:bitfield )
+    return bitfield(v.value as _number)
+
 [expect_any_vector_type(v)]
 def JV ( v : auto(VecT) )
     static_if typeinfo(vector_dim type<VecT>)==2
