@@ -16,6 +16,10 @@ IF(NOT DAS_STDDLG_INCLUDED)
 		SET(DAS_STDDLG_MODULE_PLATFORM_SRC
 			${DAS_STDDLG_DIR}/src/dasStdDlgWin.cpp
 		)
+	ELSE()
+		SET(DAS_STDDLG_MODULE_PLATFORM_SRC
+			${DAS_STDDLG_DIR}/src/dasStdDlgNotImplemented.cpp
+		)
 	ENDIF()
 
 	ADD_MODULE_LIB(libDasModuleStdDlg)
