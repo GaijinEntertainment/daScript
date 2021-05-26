@@ -585,6 +585,28 @@ namespace das {
         return cast<VarInfo *>::from(context.getVariableInfo(index));
     }
 
+    void rtti_builtin_simulate ( const smart_ptr<Program> & program, bool useAot,
+            const TBlock<void,bool,Context *,string> & block, Context * context ) {
+        TextWriter issues;
+        Context ctx(program->getContextStackSize());
+        bool failed = !program->simulate(ctx, issues);
+        if ( !failed && useAot ) {
+            AotLibrary aotLib;
+            AotListBase::registerAot(aotLib);
+            program->linkCppAot(ctx, aotLib, issues);
+            failed = program->failed();
+        }
+        if ( failed ) {
+            for ( auto & err : program->errors ) {
+                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+            }
+            string istr = issues.str();
+            das_invoke<void>::invoke<bool,Context *,const string &>(context,block,false,nullptr,istr);
+        } else {
+            das_invoke<void>::invoke<bool,Context *,const string &>(context,block,true,&ctx,"");
+        }
+    }
+
     void rtti_builtin_compile ( char * modName, char * str, const CodeOfPolicies & cop,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context ) {
         TextWriter issues;
@@ -994,6 +1016,8 @@ namespace das {
                 SideEffects::modifyExternal, "rtti_builtin_compile");
             addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
                 SideEffects::modifyExternal, "rtti_builtin_compile_file");
+            addExtern<DAS_BIND_FUN(rtti_builtin_simulate)>(*this, lib, "simulate",
+                SideEffects::modifyExternal, "rtti_builtin_simulate");
             addExtern<DAS_BIND_FUN(makeFileAccess)>(*this, lib, "make_file_access",
                 SideEffects::modifyExternal, "makeFileAccess");
             addExtern<DAS_BIND_FUN(introduceFile)>(*this, lib, "set_file_source",

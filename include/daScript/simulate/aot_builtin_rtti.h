@@ -110,6 +110,8 @@ namespace das {
     void rtti_builtin_compile(char * modName, char * str, const CodeOfPolicies & cop, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
     void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, const CodeOfPolicies & cop, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
 
+    void rtti_builtin_simulate ( const smart_ptr<Program> & program, bool useAot, const TBlock<void,bool,Context *,string> & block, Context * context );
+
     void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, Module *> & block, Context * context);
     void rtti_builtin_program_for_each_registered_module(const TBlock<void, Module *> & block, Context * context);
 

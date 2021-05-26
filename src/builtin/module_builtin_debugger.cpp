@@ -718,6 +718,13 @@ namespace debugapi {
         return res;
     }
 
+    vec4f get_global_variable ( Context & context, SimNode_CallBase *, vec4f * args ) {
+        auto ctx = cast<Context *>::to(args[0]);
+        auto name = cast<char *>::to(args[1]);
+        auto vidx = ctx->findVariable(name);
+        return cast<void *>::from(ctx->getVariable(vidx));
+    }
+
     class Module_Debugger : public Module {
     public:
         Module_Debugger() : Module("debugapi") {
@@ -762,6 +769,9 @@ namespace debugapi {
                 SideEffects::modifyExternal, "makeStackWalker");
             addExtern<DAS_BIND_FUN(dapiStackWalk)>(*this, lib,  "walk_stack",
                 SideEffects::modifyExternal, "dapiStackWalk");
+            // global variable
+            addInterop<get_global_variable,void *,vec4f,const char *>(*this,lib,"get_context_global_variable",
+                SideEffects::accessExternal,"get_global_variable")->unsafeOperation = true;
             // pinvoke
             addInterop<pinvoke_impl,void,vec4f,const char *>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
