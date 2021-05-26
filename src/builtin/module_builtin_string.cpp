@@ -318,6 +318,33 @@ namespace das
         return res;
     }
 
+    vector<string> split ( const char * str, const char * delim ) {
+        if ( !str ) str = "";
+        if ( !delim ) delim = "";
+        vector<const char *> tokens;
+        vector<string> words;
+        const char * ch = str;
+        auto delimLen = strlen(delim);
+        if ( delimLen ) {
+            while ( *ch ) {
+                const char * tok = ch;
+                while ( *ch && !strchr(delim,*ch) ) ch++;
+                words.push_back(string(tok,ch-tok));
+                if ( !*ch ) break;
+                while ( *ch && strchr(delim,*ch) ) ch++;
+                if ( !*ch ) words.push_back("");
+            }
+        } else {
+            auto len = strlen(str);
+            words.reserve(len);
+            while ( *ch ) {
+                words.push_back(string(1,*ch));
+                ch ++;
+            }
+        }
+        return words;
+    }
+
     void builtin_string_split_by_char ( const char * str, const char * delim, const Block & block, Context * context ) {
         if ( !str ) str = "";
         if ( !delim ) delim = "";
