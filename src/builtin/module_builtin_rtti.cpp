@@ -609,6 +609,7 @@ namespace das {
 
     void rtti_builtin_compile ( char * modName, char * str, const CodeOfPolicies & cop,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context ) {
+        str = str ? str : "";
         TextWriter issues;
         uint32_t str_len = stringLengthSafe(*context, str);
         auto access = make_smart<FileAccess>();
