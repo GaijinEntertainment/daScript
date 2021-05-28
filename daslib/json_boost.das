@@ -69,8 +69,10 @@ def JV ( ent )
     return JV("{ent}")
 
 [template(ent)]
-def from_JV ( jv:JsonValue?; ent : auto(EnumT) ) : EnumT
-    let name = jv.value as _string
+def from_JV ( v:JsonValue?; ent : auto(EnumT); defV : EnumT = [[EnumT]] ) : EnumT
+    if v==null || !(v.value is _string)
+        return defV
+    let name = v.value as _string
     var res : auto(EnumTT) = [[EnumT]]
     var ti = typeinfo(rtti_typeinfo type<EnumT>)
     for ef in *ti.enumType
@@ -82,23 +84,35 @@ def from_JV ( jv:JsonValue?; ent : auto(EnumT) ) : EnumT
     return res
 
 [generic,template(ent)]
-def from_JV ( var v : JsonValue?; ent:string )
-    return v.value as _string
+def from_JV ( var v : JsonValue?; ent:string; defV:string="" )
+    if v==null || !(v.value is _string)
+        return defV
+    else
+        return v.value as _string
 
 [generic,template(ent)]
-def from_JV ( var v : JsonValue?; ent:bool )
-    return v.value as _bool
+def from_JV ( var v : JsonValue?; ent:bool; defV:bool=false )
+    if v==null || !(v.value is _bool)
+        return defV
+    else
+        return v.value as _bool
 
 [generic,template(ent)]
-def from_JV ( var v : JsonValue?; ent:float )
-    return float(v.value as _number)
+def from_JV ( var v : JsonValue?; ent:float; defV:float=0. )
+    if v==null || !(v.value is _number)
+        return defV
+    else
+        return float(v.value as _number)
 
 def JV ( v : float )
     return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
 
 [generic,template(ent)]
-def from_JV ( var v : JsonValue?; ent:int )
-    return int(v.value as _number)
+def from_JV ( var v : JsonValue?; ent:int; defV:int=0 )
+    if v==null || !(v.value is _number)
+        return defV
+    else
+        return int(v.value as _number)
 
 def JV ( v : int )
     return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
@@ -107,8 +121,11 @@ def JV ( v : bitfield )
     return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
 
 [generic,template(ent)]
-def from_JV ( var v : JsonValue?; ent:bitfield )
-    return bitfield(v.value as _number)
+def from_JV ( var v : JsonValue?; ent:bitfield; defV:bitfield=[[bitfield]] )
+    if v==null || !(v.value is _number)
+        return defV
+    else
+        return bitfield(v.value as _number)
 
 [expect_any_vector_type(v)]
 def JV ( v : auto(VecT) )
@@ -120,7 +137,9 @@ def JV ( v : auto(VecT) )
         return JV({{"x" => JV(v.x); "y" => JV(v.y); "z" => JV(v.z); "w" => JV(v.w)}})
 
 [expect_any_vector_type(ent), template(ent)]
-def from_JV ( var v : JsonValue?; ent: auto(VecT)  )
+def from_JV ( var v : JsonValue?; ent: auto(VecT); defV:VecT=[[VecT]]  )
+    if v==null
+        return defV
     let VecV : auto(VecTT) = VecT()
     var vo & = v.value as _object
     static_if typeinfo(vector_dim VecV)==2
