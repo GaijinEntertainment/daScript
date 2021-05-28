@@ -82,6 +82,10 @@ def from_JV ( jv:JsonValue?; ent : auto(EnumT) ) : EnumT
     return res
 
 [generic,template(ent)]
+def from_JV ( var v : JsonValue?; ent:string )
+    return v.value as _string
+
+[generic,template(ent)]
 def from_JV ( var v : JsonValue?; ent:bool )
     return v.value as _bool
 
