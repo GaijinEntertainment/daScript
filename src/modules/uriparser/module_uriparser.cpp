@@ -9,6 +9,31 @@
 #define URI_STATIC_BUILD
 #include "uriparser/Uri.h"
 
+#ifdef _MSC_VER
+
+#include <rpc.h>
+#pragma comment(lib,"Rpcrt4")
+
+char * das::makeNewGuid( das::Context * context ) {
+	UUID id;
+	if ( UuidCreate(&id)!=RPC_S_OK ) context->throw_error("can't create UUID");
+    CHAR* uuidstr = NULL;
+    UuidToStringA(&id, (RPC_CSTR *)&uuidstr);
+    char * res = context->stringHeap->allocateString(uuidstr);
+    RpcStringFreeA((RPC_CSTR *)&uuidstr);
+    return res;
+}
+
+#else
+
+char * das::makeNewGuid( Context * context ) {
+    context->throw_error("GUID generation is not implemented for this platform");
+    return nullptr;
+}
+
+#endif
+
+
 namespace das {
 
 char * uri_to_unix_file_name ( char * uristr, Context * context ) {
@@ -118,6 +143,8 @@ public:
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();
+        addExtern<DAS_BIND_FUN(makeNewGuid)> (*this, lib, "make_new_guid",
+            SideEffects::accessExternal, "makeNewGuid");
         addExtern<DAS_BIND_FUN(uri_to_unix_file_name)> (*this, lib, "uri_to_unix_file_name",
             SideEffects::none, "uri_to_unix_file_name");
         addExtern<DAS_BIND_FUN(uri_to_windows_file_name)> (*this, lib, "uri_to_windows_file_name",
