@@ -3828,6 +3828,22 @@ namespace das {
             }
             return Visitor::visitBlockArgumentInit(block, arg, that);
         }
+
+        virtual ExpressionPtr visitBlockExpression ( ExprBlock * block, Expression * that ) override {
+            // lets collapse the following every time
+            //  return quote() <|
+            //      pass
+            if ( that->rtti_isMakeBlock() ) {
+                auto mblk = static_cast<ExprMakeBlock *>(that);
+                auto iblk = static_cast<ExprBlock *>(mblk->block.get());
+                if ( iblk->list.empty() && iblk->finalList.empty() ) {
+                    reportAstChanged();
+                    return nullptr;
+                }
+            }
+            return Visitor::visitBlockExpression(block, that);
+        }
+
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             // to the rest of it
             popVarStack();

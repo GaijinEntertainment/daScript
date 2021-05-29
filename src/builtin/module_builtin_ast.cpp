@@ -2475,6 +2475,15 @@ namespace das {
         forceAt(expr, at);
     }
 
+    bool isExprLikeCall ( const ExpressionPtr & expr ) {
+        return expr->rtti_isCallLikeExpr();
+    }
+
+    ExpressionPtr makeCall ( const LineInfo & at, const char * name ) {
+        name = name ? name : "";
+        return g_Program->makeCall(at, name);
+    }
+
     class Module_Ast : public Module {
     public:
         template <typename RecAnn>
@@ -2810,6 +2819,11 @@ namespace das {
             // code generation
             addExtern<DAS_BIND_FUN(makeClone)>(*this, lib,  "make_clone_structure",
                 SideEffects::none, "makeClone");
+            // expression generation
+            addExtern<DAS_BIND_FUN(isExprLikeCall)>(*this, lib,  "is_expr_like_call",
+                SideEffects::none, "isExprLikeCall");
+            addExtern<DAS_BIND_FUN(makeCall)>(*this, lib,  "make_call",
+                SideEffects::none, "makeCall");
             // errors
             addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
                 SideEffects::modifyArgumentAndExternal, "ast_error");
