@@ -13,6 +13,8 @@ def lpipe_expr ( var fnCall:ExpressionPtr; var arg:ExpressionPtr ) : ExpressionP
     if fnCall |> is_expr_like_call()
         unsafe
             var pCall = reinterpret<ExprLooksLikeCall?> fnCall
+            if string(pCall.name)=="lpipe"  // not piping pipe into pipe
+                return [[ExpressionPtr]]
             pCall.arguments |> emplace(arg)
         return fnCall
     elif fnCall is ExprVar
