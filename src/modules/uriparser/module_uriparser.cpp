@@ -9,7 +9,7 @@
 #define URI_STATIC_BUILD
 #include "uriparser/Uri.h"
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
 
 #include <rpc.h>
 #pragma comment(lib,"Rpcrt4")
