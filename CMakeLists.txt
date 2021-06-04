@@ -11,6 +11,8 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(EXECUTABLE_OUTPUT_PATH  ${PROJECT_SOURCE_DIR}/bin/)
 
+SET(LINUX_UUID FALSE)
+
 FIND_XXD()
 FIND_FLEX_AND_BISON()
 
@@ -113,7 +115,7 @@ ENDMACRO()
 
 FIND_PROGRAM(CLANG_BIN_EXE clang)
 IF(CLANG_BIN_EXE)
-    MACRO(CPP_BIND_AST tgt generate_das header_from prefix src_dir inc_dirs extras)
+    MACRO(DAS_CPP_BIND_AST tgt generate_das header_from prefix src_dir inc_dirs extras)
         MESSAGE(STATUS "Generating C++ bindings target ${tgt} from ${header_from}")
         ADD_CUSTOM_TARGET(${tgt})
         ADD_DEPENDENCIES(${tgt} daScript)
@@ -133,7 +135,7 @@ IF(CLANG_BIN_EXE)
         )
     ENDMACRO()
 ELSE()
-    MACRO(CPP_BIND_AST tgt generate_das header_from prefix src_dir inc_dirs)
+    MACRO(DAS_CPP_BIND_AST tgt generate_das header_from prefix src_dir inc_dirs)
         MESSAGE(STATUS "Skipping C++ bindings from ${header_from}")
     ENDMACRO()
 ENDIF()
@@ -466,6 +468,9 @@ include_directories(include)
 ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC}
     ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC}
 	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC})
+IF(LINUX_UUID)
+target_link_libraries(libDaScript uuid)
+ENDIF()
 SETUP_CPP11(libDaScript)
 #target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
 

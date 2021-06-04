@@ -2,6 +2,9 @@
 
 
 namespace das {
+
+    void StdDlgInit();
+
     // shared impl
 	bool GetOkCancelFromUser(const char * caption, const char * body);
     bool GetOkFromUser(const char * caption, const char * body);

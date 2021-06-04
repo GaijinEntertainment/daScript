@@ -24,6 +24,9 @@ namespace das {
         return 0;
     }
 
+	void StdDlgInit() {
+	}
+
 	bool GetOkCancelFromUser(const char * caption, const char * body) {
 	    return MessageBoxA ( GetHWND(), body ? body : "", caption ? caption : "", MB_OKCANCEL)==IDOK;
 	}

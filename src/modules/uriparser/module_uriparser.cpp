@@ -6,6 +6,9 @@
 #include "daScript/ast/ast_interop.h"
 #include "daScript/simulate/hash.h"
 
+// todo: use CMAKE to detect linux UUID library
+// #define LINUX_UUID
+
 #define URI_STATIC_BUILD
 #include "uriparser/Uri.h"
 
@@ -22,6 +25,21 @@ char * das::makeNewGuid( das::Context * context ) {
     char * res = context->stringHeap->allocateString(uuidstr);
     RpcStringFreeA((RPC_CSTR *)&uuidstr);
     return res;
+}
+
+#elif defined(__linux__) && defined(LINUX_UUID)
+
+#include <uuid/uuid.h>
+
+char * das::makeNewGuid( das::Context * context ) {
+    union {
+        unsigned char   data[16];
+        uint32_t        data32[4];
+    } data;
+    uuid_generate(data.data);
+    TextWriter tw;
+    tw << HEX << data.data32[0] << "-" << data.data32[1] << "-" << data.data32[2] << "-" << data.data32[3] << DEC;
+    return context->stringHeap->allocateString(tw.str());
 }
 
 #else

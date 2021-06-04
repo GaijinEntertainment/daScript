@@ -4,6 +4,9 @@
 
 namespace das {
 
+	void StdDlgInit() {
+	}
+
 	bool GetOkCancelFromUser(const char *, const char *) {
 	    return false;
 	}

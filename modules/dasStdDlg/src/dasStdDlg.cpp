@@ -30,6 +30,8 @@ public:
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();
+        addExtern<DAS_BIND_FUN(StdDlgInit)> (*this, lib, "dlg_init",
+            SideEffects::worstDefault, "StdDlgInit");
         addExtern<DAS_BIND_FUN(GetOkCancelFromUser)> (*this, lib, "get_dlg_ok_cancel_from_user",
             SideEffects::worstDefault, "GetOkCancelFromUser");
         addExtern<DAS_BIND_FUN(GetOkFromUser)> (*this, lib, "get_dlg_ok_from_user",

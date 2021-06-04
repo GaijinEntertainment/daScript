@@ -1,3 +1,7 @@
+# note - uncomment to support standard dialogs with linux\gtx
+# TODO: use CMAKE to detect linux\gtx\etc
+SET(LINUX_GTK FALSE)
+
 IF(NOT DAS_STDDLG_INCLUDED)
     SET(DAS_STDDLG_INCLUDED TRUE)
     MESSAGE(STATUS "dasStdDlg module included.")
@@ -16,6 +20,10 @@ IF(NOT DAS_STDDLG_INCLUDED)
 		SET(DAS_STDDLG_MODULE_PLATFORM_SRC
 			${DAS_STDDLG_DIR}/src/dasStdDlgWin.cpp
 		)
+	ELSEIF(LINUX_GTK)
+		SET(DAS_STDDLG_MODULE_PLATFORM_SRC
+			${DAS_STDDLG_DIR}/src/dasStdDlgGtk.cpp
+		)
 	ELSE()
 		SET(DAS_STDDLG_MODULE_PLATFORM_SRC
 			${DAS_STDDLG_DIR}/src/dasStdDlgNotImplemented.cpp
@@ -29,5 +37,15 @@ IF(NOT DAS_STDDLG_INCLUDED)
 	TARGET_LINK_LIBRARIES(libDasModuleStdDlg ${STDDLG_LIBRARIES})
 	ADD_DEPENDENCIES(libDasModuleStdDlg libDaScript)
 	TARGET_INCLUDE_DIRECTORIES(libDasModuleStdDlg PUBLIC ${STDDLG_INCLUDE_DIR})
+
+	IF(LINUX_GTK)
+		find_package(PkgConfig REQUIRED)
+		pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+		include_directories(${GTK3_INCLUDE_DIRS})
+		link_directories(${GTK3_LIBRARY_DIRS})
+		add_definitions(${GTK3_CFLAGS_OTHER})
+		TARGET_LINK_LIBRARIES(libDasModuleStdDlg ${GTK3_LIBRARIES})
+	ENDIF()
+
 	SETUP_CPP11(libDasModuleStdDlg)
 ENDIF()
