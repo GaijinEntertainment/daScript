@@ -6131,10 +6131,13 @@ namespace das {
             auto fieldVariant = expr->makeType->findArgumentIndex(decl->name);
             if (fieldVariant != -1) {
                 auto fieldType = expr->makeType->argTypes[fieldVariant];
-                if ( !canCopyOrMoveType(fieldType,decl->value->type,TemporaryMatters::no) ) {
+                if ( !canCopyOrMoveType(fieldType,decl->value->type,TemporaryMatters::yes) ) {
                     error("can't initialize field " + decl->name + "; expecting "
                         + describeType(fieldType) + ", passing " + describeType(decl->value->type),"", "",
                         decl->value->at, CompilationError::invalid_type);
+                } else if ( decl->value->type->isTemp(true,false) ) {
+                    error("can't initialize variant field " + decl->name + " with temporary value", "", "",
+                        decl->value->at, CompilationError::cant_pass_temporary);
                 }
                 if (!fieldType->canCopy() && !decl->moveSemantics) {
                     error("field " + decl->name + " can't be copied; " + describeType(fieldType),"","use <- instead",
@@ -6217,10 +6220,18 @@ namespace das {
             }
             if ( expr->makeType->baseType == Type::tStructure ) {
                 if ( auto field = expr->makeType->structType->findField(decl->name) ) {
-                    if ( !canCopyOrMoveType(field->type,decl->value->type,TemporaryMatters::no) ) {
+                    if ( !canCopyOrMoveType(field->type,decl->value->type,TemporaryMatters::yes) ) {
                         error("can't initialize field " + decl->name + "; expecting "
                               + describeType(field->type) + ", passing " + describeType(decl->value->type), "", "",
                                 decl->value->at, CompilationError::invalid_type );
+                    } else if ( decl->value->type->isTemp(true,false) ) {
+                        if ( expr->makeType->structType->isLambda ) {
+                            error("can't capture temporary lambda variable " + decl->name, "", "",
+                                decl->value->at, CompilationError::cant_pass_temporary);
+                        } else {
+                            error("can't initialize structure field " + decl->name + " with temporary value", "", "",
+                                decl->value->at, CompilationError::cant_pass_temporary);
+                        }
                     }
                     if( !field->type->canCopy() && !decl->moveSemantics ) {
                         error("field " + decl->name + " can't be copied; " + describeType(field->type),"","use <- instead",
@@ -6658,6 +6669,9 @@ namespace das {
             } else if ( !expr->recordType->canCopy() && expr->recordType->canMove() && init->type->isConst() ) {
                 error("can't move from a constant value\n\t" + describeType(init->type), "", "",
                     init->at, CompilationError::cant_move);
+            } else if ( init->type->isTemp(true,false) ) {
+                error("can't initialize array element with temporary value", "", "",
+                    init->at, CompilationError::cant_pass_temporary);
             }
             if ( init->rtti_isMakeLocal() ) {
                 auto initl = static_cast<ExprMakeLocal *>(init);
