@@ -160,6 +160,12 @@ namespace das
                              const AnnotationArgumentList & alist, bool ms, const LineInfo & a )
                 : name(n), type(t), init(i), annotation(alist), at(a) {
                 moveSemantics = ms;
+                for ( auto & ann : annotation ) {
+                    if ( ann.name=="do_not_delete" ) {
+                        doNotDelete = true;
+                        break;
+                    }
+                }
             }
         };
     public:

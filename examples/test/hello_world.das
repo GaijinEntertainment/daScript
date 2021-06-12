@@ -1,31 +1,15 @@
-options indenting = 2
+require daslib/safe_addr
 
-options log_cpp
+struct Foo
+    a : int
 
-require daslib/json
-
-struct JsonRpcReq
-
-  js: JsonValue?
-  id: double = 0lf
-  reqType: JsonRpcReqType
-  params: JsonValue?
-
-class JsonRpcMatch
-  requests: array<JsonRpcReq>
-
-variant JsonRpcReqType
-  none: void?
-  method: string
-  result: void?
-  error: void?
-
-def clean(var match:JsonRpcMatch)
-  for it in match.requests
-    it.params = null // it.js point to same json data
-    delete it
-  match.requests |> clear()
+struct Bar
+    pfoo : Foo?#
 
 [export]
 def main
-  print("hello, world\n")
+    var t : Foo
+    var pt = safe_addr(t)
+    var abar : array<Bar>
+    abar |> push([[Bar pfoo=pt]])
+
