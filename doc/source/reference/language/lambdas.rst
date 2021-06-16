@@ -129,7 +129,7 @@ Capture structure::
 
     struct _lambda_thismodule_7_8_1
         __lambda : function<(__this:_lambda_thismodule_7_8_1;extra:int const):int> = @@_lambda_thismodule_7_8_1`function
-        __finalize : function<(__this:_lambda_thismodule_7_8_1? -const):void> = @@_lambda_thismodule_7_8_1`finazlier
+        __finalize : function<(__this:_lambda_thismodule_7_8_1? -const):void> = @@_lambda_thismodule_7_8_1`finalizer
         CNT : int
 
 Body function::
@@ -140,7 +140,7 @@ Body function::
 
 Finalizer function::
 
-    def _lambda_thismodule_7_8_1`finazlier ( var __this:_lambda_thismodule_7_8_1? explicit )
+    def _lambda_thismodule_7_8_1`finalizer ( var __this:_lambda_thismodule_7_8_1? explicit )
         delete *this
         delete __this
 

@@ -421,7 +421,7 @@ namespace das {
 
     FunctionPtr generateLambdaFinalizer ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls ) {
-        auto lfn = lambdaName + "`finazlier";
+        auto lfn = lambdaName + "`finalizer";
         auto pFunc = make_smart<Function>();
         pFunc->privateFunction = true;
         pFunc->generated = true;

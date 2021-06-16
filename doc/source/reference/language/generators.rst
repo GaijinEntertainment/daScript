@@ -82,7 +82,7 @@ A lambda is generated with all captured variables::
 
     struct _lambda_thismodule_8_8_1
         __lambda : function<(__this:_lambda_thismodule_8_8_1;_yield_8:int&):bool const> = @@_::_lambda_thismodule_8_8_1`function
-        __finalize : function<(__this:_lambda_thismodule_8_8_1? -const):void> = @@_::_lambda_thismodule_8_8_1`finazlier
+        __finalize : function<(__this:_lambda_thismodule_8_8_1? -const):void> = @@_::_lambda_thismodule_8_8_1`finalizer
         __yield : int
         _loop_at_8 : bool
         x : int // captured constant
