@@ -439,6 +439,7 @@ namespace das {
             verifyAotReady();
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
+            tw << "#include \"daScript/misc/performance_time.h\"\n";
             tw << "#include \"daScript/simulate/aot_builtin_fio.h\"\n";
             return ModuleAotType::cpp;
         }

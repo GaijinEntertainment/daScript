@@ -192,7 +192,7 @@ Reference
 
 References are types that 'references' (points) some other data::
 
-    def twice(a: int&)
+    def twice(var a: int&)
         a = a + a
     var a = 1
     twice(a) // a value is now 2
@@ -210,9 +210,9 @@ dereference will panic, if null pointer is passed to it.
 Pointers can be created using new operator, or with C++ environment.
 ::
 
-    def twice(a: int&)
+    def twice(var a: int&)
         a = a + a
-    def twicePointer(a: int?)
+    def twicePointer(var a: int?)
         twice(*a)
 
     struct Foo
