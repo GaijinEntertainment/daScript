@@ -1586,6 +1586,12 @@ namespace das {
             }
             if ( var->type->ref && var->type->isRefType() ) {   // silently fix a : Foo& into a : Foo
                 var->type->ref = false;
+                auto mname = fn->getMangledName();
+                if ( fn->module->functions.find(mname) != fn->module->functions.end() ) {
+                    error("function already exists in non-ref form", "\t" + fn->describe(Function::DescribeModule::yes), "",
+                        var->at, CompilationError::cant_infer_generic );
+                    var->type->ref = true;
+                }
             }
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {

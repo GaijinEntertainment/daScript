@@ -726,6 +726,12 @@ namespace das
 
     string TypeDecl::getMangledName() const {
         TextWriter ss;
+        if ( constant )     ss << "#const#";
+        if ( ref )          ss << "#ref#";
+        if ( temporary )    ss << "#temporary#";
+        if ( implicit )     ss << "#implicit#";
+        if ( explicitConst )ss << "#explicitconst#";
+        if ( isExplicit )   ss << "#explicit#";
         if (baseType == Type::autoinfer) {
             ss << "#auto";
             if ( !alias.empty() ) ss << "#" << alias;
@@ -798,12 +804,6 @@ namespace das
         } else {
             ss << das_to_string(baseType);
         }
-        if ( constant )     ss << "#const";
-        if ( ref )          ss << "#ref";
-        if ( temporary )    ss << "#temporary";
-        if ( implicit )     ss << "#implicit";
-        if ( explicitConst )ss << "#explicitconst";
-        if ( isExplicit )   ss << "#explicit";
         if ( dim.size() ) {
             for ( auto d : dim ) {
                 ss << "#" << d;
