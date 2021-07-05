@@ -2470,6 +2470,25 @@ namespace das {
             return ET(~int(a));
         }
     };
+
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_sort_cblock_array_T  ( TArray<TT> & arr, CompareFn && cmp, Context * context ) {
+        if ( arr.size<=1 ) return;
+        array_lock(*context, arr);
+        auto sdata = (TT *) arr.data;
+        sort(sdata, sdata + arr.size, cmp);
+        array_unlock(*context, arr);
+    }
+
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t stride, CompareFn && cmp, Context * context ) {
+        if ( arr.size<=1 ) return;
+        array_lock(*context, arr);
+        auto sdata = (TT *) arr.data;
+        sort(sdata, sdata + arr.size, cmp);
+        array_unlock(*context, arr);
+    }
+
 }
 
 #if defined(_MSC_VER)

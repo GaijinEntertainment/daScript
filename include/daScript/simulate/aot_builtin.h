@@ -77,6 +77,20 @@ namespace das {
         });
     }
 
+    template <typename TT>
+    void builtin_sort_cblock_array ( Array & arr, const TBlock<bool,TT,TT> & cmp, Context * context ) {
+        if ( arr.size<=1 ) return;
+        vec4f bargs[2];
+        auto data = (TT *) arr.data;
+        context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+            sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
+                bargs[0] = cast<TT>::from(x);
+                bargs[1] = cast<TT>::from(y);
+                return code->evalBool(*context);
+            });
+        });
+    }
+
 #if defined(_MSC_VER) && !defined(__clang__)
     __forceinline int32_t variant_index(const Variant & v) { return *(int32_t *)&v; }
     __forceinline void set_variant_index(Variant & v, int32_t index) { *(int32_t *)&v = index; }
