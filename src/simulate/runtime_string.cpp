@@ -12,7 +12,7 @@ namespace das
 {
     // string operations
 
-    vec4f SimPolicy_String::Add ( vec4f a, vec4f b, Context & context ) {
+    vec4f SimPolicy_String::Add ( vec4f a, vec4f b, Context & context, LineInfo * at ) {
         const char *  sA = to_rts(a);
         auto la = stringLength(context, sA);
         const char *  sB = to_rts(b);
@@ -25,12 +25,12 @@ namespace das
             memcpy ( sAB+la, sB, lb+1 );
             return cast<char *>::from(sAB);
         } else {
-            context.throw_error("can't add two strings, out of heap");
+            context.throw_error_at(at ? *at : LineInfo(), "can't add two strings, out of heap");
             return v_zero();
         }
     }
 
-    void SimPolicy_String::SetAdd ( char * a, vec4f b, Context & context ) {
+    void SimPolicy_String::SetAdd ( char * a, vec4f b, Context & context, LineInfo * at ) {
         char ** pA = (char **)a;
         const char *  sA = *pA ? *pA : rts_null;
         auto la = stringLength(context, sA);
@@ -46,7 +46,7 @@ namespace das
             *pA = sAB;
             context.stringHeap->recognize(sAB);
         } else {
-            context.throw_error("can't add two strings, out of heap");
+            context.throw_error_at(at ? *at : LineInfo(), "can't add two strings, out of heap");
         }
     }
 

@@ -19,25 +19,25 @@ namespace das {
         static __forceinline auto to_time ( vec4f a ) {
             return cast<Time>::to(a).time;
         }
-        static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
+        static __forceinline bool Equ     ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_time(a) == to_time(b);
         }
-        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) {
+        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_time(a) != to_time(b);
         }
-        static __forceinline bool GtEqu  ( vec4f a, vec4f b, Context & ) {
+        static __forceinline bool GtEqu  ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_time(a) >= to_time(b);
         }
-        static __forceinline bool LessEqu  ( vec4f a, vec4f b, Context & ) {
+        static __forceinline bool LessEqu  ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_time(a) <= to_time(b);
         }
-        static __forceinline bool Gt  ( vec4f a, vec4f b, Context & ) {
+        static __forceinline bool Gt  ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_time(a) > to_time(b);
         }
-        static __forceinline bool Less  ( vec4f a, vec4f b, Context & ) {
+        static __forceinline bool Less  ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_time(a) < to_time(b);
         }
-        static __forceinline float Sub  ( vec4f a, vec4f b, Context & ) {
+        static __forceinline float Sub  ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return float(difftime(to_time(a), to_time(b)));
         }
     };

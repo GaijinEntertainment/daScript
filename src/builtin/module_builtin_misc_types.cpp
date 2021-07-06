@@ -28,10 +28,10 @@ namespace das
         static __forceinline auto to_enum ( vec4f val ) {
             return cast<QQ>::to(val);
         }
-        static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
+        static __forceinline bool Equ     ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_enum(a) == to_enum(b);
         }
-        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) {
+        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_enum(a) != to_enum(b);
         }
     };
@@ -54,10 +54,10 @@ namespace das
         static __forceinline int32_t to_func ( vec4f val ) {
             return cast<Func>::to(val).index;
         }
-        static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) {
+        static __forceinline bool Equ     ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_func(a) == to_func(b);
         }
-        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) {
+        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_func(a) != to_func(b);
         }
     };

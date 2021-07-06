@@ -24,8 +24,8 @@ namespace das {
     struct SimPolicy<Object>
     {
         static __forceinline const Object &to ( vec4f a ) { return *(const Object *)v_extract_ptr(v_cast_vec4i(a)); }
-        static __forceinline bool Equ     ( vec4f a, vec4f b, Context & ) { return to(a) == to(b); }
-        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context & ) { return to(a) != to(b); }
+        static __forceinline bool Equ     ( vec4f a, vec4f b, Context &, LineInfo * ) { return to(a) == to(b); }
+        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context &, LineInfo * ) { return to(a) != to(b); }
     };
 }
 

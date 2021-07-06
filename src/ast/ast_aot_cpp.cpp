@@ -1397,7 +1397,7 @@ namespace das {
                 CallFunc_visit(that);
                 that->arguments.clear();
             } else if ( isOpPolicy(that) ){
-                ss << ",*__context__)";
+                ss << ",*__context__,nullptr)";
             } else {
                 if ( that->op=="+++" || that->op=="---" ) {
                     ss << that->op[0] << that->op[1];
@@ -1536,7 +1536,7 @@ namespace das {
                         ss << ")";
                     }
                 }
-                ss << ",*__context__)";
+                ss << ",*__context__,nullptr)";
                 if ( policyResultNeedCast(pt, that->type) ) {
                     ss << ")";
                 }
@@ -3049,7 +3049,7 @@ namespace das {
                 // c-tor?
                 ss << "/*end-c-tor*/";
             } else if ( isPolicyBasedCall(call) ) {
-                ss << ",*__context__";
+                ss << ",*__context__,nullptr";
             }
             ss << ")";
             if ( call->func->builtIn && call->func->result->isString() ) {

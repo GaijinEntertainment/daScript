@@ -3701,7 +3701,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         INLINE CTYPE compute ( Context & context ) {                    \
             DAS_PROFILE_NODE                                            \
             auto val = x->eval##TYPE(context);                          \
-            return SimPolicy<CTYPE>::CALL(val,context);                 \
+            return SimPolicy<CTYPE>::CALL(val,context,&debugInfo);      \
         }                                                               \
     };
 
@@ -3718,7 +3718,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         __forceinline CTYPE compute ( Context & context ) {             \
             DAS_PROFILE_NODE                                            \
             auto val = arguments[0]->eval##TYPE(context);               \
-            return SimPolicy<CTYPE>::CALL(val,context);                 \
+            return SimPolicy<CTYPE>::CALL(val,context,&debugInfo);      \
         }                                                               \
     };
 
@@ -3733,7 +3733,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         __forceinline CTYPE compute ( Context & context ) {             \
             DAS_PROFILE_NODE                                            \
             auto val = arguments[0]->eval##ATYPE(context);              \
-            return SimPolicy<ACTYPE>::CALL(val,context);                \
+            return SimPolicy<ACTYPE>::CALL(val,context,&debugInfo);     \
         }                                                               \
     };
 
@@ -3748,7 +3748,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         INLINE CTYPE compute ( Context & context ) {                    \
             DAS_PROFILE_NODE                                            \
             auto val = (CTYPE *) x->evalPtr(context);                   \
-            return SimPolicy<CTYPE>::CALL(*val,context);                \
+            return SimPolicy<CTYPE>::CALL(*val,context,&debugInfo);     \
         }                                                               \
     };
 
@@ -3764,7 +3764,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {             \
             DAS_PROFILE_NODE \
             auto val = x->eval(context);                                \
-            return cast_result(SimPolicy<CTYPE>::CALL(val,context));    \
+            return cast_result(SimPolicy<CTYPE>::CALL(val,context,&debugInfo)); \
         }                                                               \
     };
 
@@ -3778,7 +3778,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval ( Context & context ) override {             \
             DAS_PROFILE_NODE \
             auto val = arguments[0]->eval(context);                     \
-            return cast_result(SimPolicy<CTYPE>::CALL(val,context));    \
+            return cast_result(SimPolicy<CTYPE>::CALL(val,context,&debugInfo)); \
         }                                                               \
     };
 
@@ -3816,7 +3816,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE                                            \
             auto lv = l->eval##TYPE(context);                           \
             auto rv = r->eval##TYPE(context);                           \
-            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+            return SimPolicy<CTYPE>::CALL(lv,rv,context,&debugInfo);    \
         }                                                               \
     };
 
@@ -3834,7 +3834,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE                                            \
             auto lv = arguments[0]->eval##TYPE(context);                \
             auto rv = arguments[1]->eval##TYPE(context);                \
-            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+            return SimPolicy<CTYPE>::CALL(lv,rv,context,&debugInfo);    \
         }                                                               \
     };
 
@@ -3850,7 +3850,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE                                            \
             auto lv = (CTYPE *) l->evalPtr(context);                    \
             auto rv = r->eval##TYPE(context);                           \
-            SimPolicy<CTYPE>::CALL(*lv,rv,context);                     \
+            SimPolicy<CTYPE>::CALL(*lv,rv,context,&debugInfo);          \
             return CTYPE();                                             \
         }                                                               \
     };
@@ -3869,7 +3869,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE                                            \
             auto lv = l->eval##TYPE(context);                           \
             auto rv = r->eval##TYPE(context);                           \
-            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+            return SimPolicy<CTYPE>::CALL(lv,rv,context,&debugInfo);    \
         }                                                               \
     };
 
@@ -3884,7 +3884,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             auto lv = l->eval(context);                                 \
             auto rv = r->eval(context);                                 \
-            return cast_result(SimPolicy<CTYPE>::CALL(lv,rv,context));  \
+            return cast_result(SimPolicy<CTYPE>::CALL(lv,rv,context,&debugInfo));  \
         }                                                               \
     };
 
@@ -3899,7 +3899,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             auto lv = arguments[0]->eval(context);                      \
             auto rv = arguments[1]->eval(context);                      \
-            return cast_result(SimPolicy<CTYPE>::CALL(lv,rv,context));  \
+            return cast_result(SimPolicy<CTYPE>::CALL(lv,rv,context,&debugInfo));  \
         }                                                               \
     };
 
@@ -3914,7 +3914,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             auto lv = l->evalPtr(context);                              \
             auto rv = r->eval(context);                                 \
-            SimPolicy<CTYPE>::CALL(lv,rv,context);                      \
+            SimPolicy<CTYPE>::CALL(lv,rv,context,&debugInfo);           \
             return v_zero();                                            \
         }                                                               \
     };
@@ -3931,7 +3931,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE                                            \
             auto lv = l->eval(context);                                 \
             auto rv = r->eval(context);                                 \
-            return SimPolicy<CTYPE>::CALL(lv,rv,context);               \
+            return SimPolicy<CTYPE>::CALL(lv,rv,context,&debugInfo);    \
         }                                                               \
     };
 
@@ -4036,7 +4036,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto a0 = arguments[0]->eval##TYPE(context);                \
             auto a1 = arguments[1]->eval##TYPE(context);                \
             auto a2 = arguments[2]->eval##TYPE(context);                \
-            return SimPolicy<CTYPE>::CALL(a0,a1,a2,context);            \
+            return SimPolicy<CTYPE>::CALL(a0,a1,a2,context,&debugInfo); \
         }                                                               \
     };
 
@@ -4052,7 +4052,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto a0 = arguments[0]->eval(context);                          \
             auto a1 = arguments[1]->eval(context);                          \
             auto a2 = arguments[2]->eval(context);                          \
-            return cast_result(SimPolicy<CTYPE>::CALL(a0,a1,a2,context));   \
+            return cast_result(SimPolicy<CTYPE>::CALL(a0,a1,a2,context,&debugInfo)); \
         }                                                                   \
     };
 
