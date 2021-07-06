@@ -140,13 +140,13 @@ namespace das
             for ( auto & arg : call->arguments ) {
                 if ( !arg->type || !arg->type->isFullyInferred() ) {
                     err = "sort requires fully inferred arguments";
-                    return false;
+                    return nullptr;
                 }
             }
             const auto & arg = call->arguments[0];
             if ( !arg->type->isGoodArrayType() ) {
                 err = "expecting array<...>";
-                return false;
+                return nullptr;
             }
             const auto & arrType = arg->type->firstType;
             auto newCall = static_pointer_cast<ExprCall>(call->clone());

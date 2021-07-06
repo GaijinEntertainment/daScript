@@ -2481,7 +2481,7 @@ namespace das {
     }
 
     template <typename CompareFn, typename TT>
-    __forceinline void builtin_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t stride, CompareFn && cmp, Context * context ) {
+    __forceinline void builtin_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t, CompareFn && cmp, Context * context ) {
         if ( arr.size<=1 ) return;
         array_lock(*context, arr);
         auto sdata = (TT *) arr.data;
