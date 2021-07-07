@@ -11,7 +11,7 @@
             DAS_PROFILE_NODE \
             auto pl = FUSION_OP2_PTR(CTYPE,l.compute##COMPUTEL(context)); \
             auto rr = r.subexpr->eval##TYPE(context); \
-            SimPolicy<CTYPE>::OPNAME(FUSION_OP2_PTR_TO_LVALUE(pl),rr,context); \
+            SimPolicy<CTYPE>::OPNAME(FUSION_OP2_PTR_TO_LVALUE(pl),rr,context,&debugInfo); \
             return v_zero(); \
         } \
     };
@@ -22,7 +22,7 @@
             DAS_PROFILE_NODE \
             auto pl = FUSION_OP2_PTR(CTYPE,l.compute##COMPUTEL(context)); \
             auto rr = FUSION_OP2_RVALUE_RIGHT(CTYPE,r.compute##COMPUTER(context)); \
-            SimPolicy<CTYPE>::OPNAME(FUSION_OP2_PTR_TO_LVALUE(pl),rr,context); \
+            SimPolicy<CTYPE>::OPNAME(FUSION_OP2_PTR_TO_LVALUE(pl),rr,context,&debugInfo); \
             return v_zero(); \
         } \
     };
@@ -42,7 +42,7 @@
             DAS_PROFILE_NODE \
             auto ll = l.subexpr->eval##TYPE(context); \
             auto rr = FUSION_OP2_RVALUE_RIGHT(CTYPE,r.compute##COMPUTEL(context)); \
-            return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
+            return SimPolicy<CTYPE>::OPNAME(ll,rr,context,&debugInfo); \
         } \
         DAS_NODE(TYPE,CTYPE); \
     };
@@ -54,7 +54,7 @@
             DAS_PROFILE_NODE \
             auto ll = FUSION_OP2_RVALUE_LEFT (CTYPE,l.compute##COMPUTER(context)); \
             auto rr = r.subexpr->eval##TYPE(context); \
-            return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
+            return SimPolicy<CTYPE>::OPNAME(ll,rr,context,&debugInfo); \
         } \
         DAS_NODE(TYPE,CTYPE); \
     };
@@ -66,7 +66,7 @@
             DAS_PROFILE_NODE \
             auto ll = FUSION_OP2_RVALUE_LEFT (CTYPE,l.compute##COMPUTEL(context)); \
             auto rr = FUSION_OP2_RVALUE_RIGHT(CTYPE,r.compute##COMPUTER(context)); \
-            return SimPolicy<CTYPE>::OPNAME(ll,rr,context); \
+            return SimPolicy<CTYPE>::OPNAME(ll,rr,context,&debugInfo); \
         } \
         DAS_NODE(TYPE,CTYPE); \
     };

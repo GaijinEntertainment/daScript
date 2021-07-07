@@ -7,7 +7,7 @@
             INLINE auto compute ( Context & context ) { \
                 DAS_PROFILE_NODE \
                 auto lv =  FUSION_OP_PTR_VALUE(CTYPE,subexpr.compute##COMPUTE(context)); \
-                return SimPolicy<CTYPE>::OPNAME(lv,context); \
+                return SimPolicy<CTYPE>::OPNAME(lv,context,&debugInfo); \
             } \
             DAS_NODE(TYPE,CTYPE); \
         };
@@ -17,7 +17,7 @@
             INLINE auto compute ( Context & context ) { \
                 DAS_PROFILE_NODE \
                 auto lv =  FUSION_OP_PTR_RVALUE(CTYPE,subexpr.compute##COMPUTE(context)); \
-                return SimPolicy<CTYPE>::OPNAME(FUSION_OP_EVAL_CAST(lv),context); \
+                return SimPolicy<CTYPE>::OPNAME(FUSION_OP_EVAL_CAST(lv),context,&debugInfo); \
             } \
             DAS_NODE(TYPE,CTYPE); \
         };
