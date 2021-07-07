@@ -15,6 +15,8 @@ namespace das
         Context *   context;
     };
 
+    // unspecified
+
     void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context ) {
         if ( length<=1 ) return;
         vec4f bargs[2];
@@ -57,52 +59,27 @@ namespace das
         }
     }
 
+    void builtin_sort_dim_any_cblock ( vec4f anything, int32_t elementSize, int32_t length, const Block & cmp, Context * context ) {
+        auto anyData = cast<void *>::to(anything);
+        builtin_sort_any_cblock(anyData, elementSize, length, cmp, context);
+    }
+
+    void builtin_sort_dim_any_ref_cblock ( vec4f anything, int32_t elementSize, int32_t length, const Block & cmp, Context * context ) {
+        auto anyData = cast<void *>::to(anything);
+        builtin_sort_any_ref_cblock(anyData, elementSize, length, cmp, context);
+    }
+
     void builtin_sort_array_any_cblock ( Array & arr, int32_t elementSize, const Block & cmp, Context * context ) {
-        if ( arr.size<=1 ) return;
         array_lock(*context,arr);
-        vec4f bargs[2];
-        context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-            das_qsort_r(arr.data, arr.size, elementSize, [&](const void * x, const void * y){
-              bargs[0] = cast<void *>::from(x);
-              bargs[1] = cast<void *>::from(y);
-              return code->evalBool(*context);
-            });
-        });
+        builtin_sort_any_cblock(arr.data, elementSize, arr.size, cmp, context);
         array_unlock(*context,arr);
     }
 
     void builtin_sort_array_any_ref_cblock ( Array & arr, int32_t elementSize, const Block & cmp, Context * context ) {
-        if ( arr.size<=1 ) return;
         array_lock(*context,arr);
-        vec4f bargs[2];
-        if ( elementSize <= 4 ) {
-            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-                das_qsort_r(arr.data, arr.size, elementSize, [&](const void * x, const void * y){
-                    bargs[0] = v_ldu_x((const float *)x);
-                    bargs[1] = v_ldu_x((const float *)y);
-                    return code->evalBool(*context);
-                });
-            });
-        } else if ( elementSize <= 8 ) {
-            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-                das_qsort_r(arr.data, arr.size, elementSize, [&](const void * x, const void * y){
-                    bargs[0] = v_ldu_half(x);
-                    bargs[1] = v_ldu_half(y);
-                    return code->evalBool(*context);
-                });
-            });
-        } else {
-            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-                das_qsort_r(arr.data, arr.size, elementSize, [&](const void * x, const void * y){
-                    bargs[0] = v_ldu((const float *)x);
-                    bargs[1] = v_ldu((const float *)y);
-                    return code->evalBool(*context);
-                });
-            });
-        }
+        builtin_sort_any_ref_cblock(arr.data, elementSize, arr.size, cmp, context);
         array_unlock(*context,arr);
     }
-
 
     void builtin_sort_string ( void * data, int32_t length ) {
         if ( length<=1 ) return;
@@ -144,25 +121,43 @@ namespace das
                 }
             }
             const auto & arg = call->arguments[0];
-            if ( !arg->type->isGoodArrayType() ) {
-                err = "expecting array<...>";
+            if ( arg->type->dim.size() ) {
+                auto arrType = make_smart<TypeDecl>(*arg->type);
+                arrType->dim.clear();
+                auto newCall = static_pointer_cast<ExprCall>(call->clone());
+                if ( arrType->isNumericComparable() || arrType->isVectorType() || arrType->isString() ) {
+                    return nullptr;
+                }  else {
+                    auto stride = arrType->getSizeOf();
+                    newCall->arguments.insert(newCall->arguments.begin()+1,make_smart<ExprConstInt>(call->at, stride));
+                    auto length = arg->type->dim.back();
+                    newCall->arguments.insert(newCall->arguments.begin()+2,make_smart<ExprConstInt>(call->at, length));
+                    if ( arrType->isRefType() ) {
+                        newCall->name = "__builtin_sort_dim_any_cblock";
+                    } else {
+                        newCall->name = "__builtin_sort_dim_any_ref_cblock";
+                    }
+                }
+                return newCall;
+            } else if (arg->type->isGoodArrayType() ) {
+                const auto & arrType = arg->type->firstType;
+                auto newCall = static_pointer_cast<ExprCall>(call->clone());
+                if ( arrType->isNumericComparable() || arrType->isVectorType() || arrType->isString() ) {
+                    newCall->name = "__builtin_sort_cblock_array";
+                }  else {
+                    auto stride = arrType->getSizeOf();
+                    newCall->arguments.insert(newCall->arguments.begin()+1,make_smart<ExprConstInt>(call->at, stride));
+                    if ( arrType->isRefType() ) {
+                        newCall->name = "__builtin_sort_array_any_cblock";
+                    } else {
+                        newCall->name = "__builtin_sort_array_any_ref_cblock";
+                    }
+                }
+                return newCall;
+            } else {
+                err = "expecting array<...> or []";
                 return nullptr;
             }
-            const auto & arrType = arg->type->firstType;
-            auto newCall = static_pointer_cast<ExprCall>(call->clone());
-            if ( arrType->isNumericComparable() || arrType->isVectorType() || arrType->isString() ) {
-                newCall->name = "__builtin_sort_cblock_array";
-            }  else {
-                auto stride = arrType->getSizeOf();
-                newCall->arguments.insert(newCall->arguments.begin()+1,make_smart<ExprConstInt>(call->at, stride));
-                if ( arg->type->firstType->isRefType() ) {
-                    newCall->name = "__builtin_sort_array_any_cblock";
-                } else {
-                    newCall->name = "__builtin_sort_array_any_ref_cblock";
-                }
-
-            }
-            return newCall;
         }
     };
 
@@ -205,6 +200,11 @@ namespace das
             SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_cblock_T")->setAotTemplate();
         addExtern<DAS_BIND_FUN(builtin_sort_array_any_ref_cblock)>(*this, lib, "__builtin_sort_array_any_ref_cblock",
             SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_cblock_T")->setAotTemplate();
+        // dim sort
+        addExtern<DAS_BIND_FUN(builtin_sort_dim_any_cblock)>(*this, lib, "__builtin_sort_dim_any_cblock",
+            SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_cblock_T")->setAotTemplate()->setAnyTemplate();
+        addExtern<DAS_BIND_FUN(builtin_sort_dim_any_ref_cblock)>(*this, lib, "__builtin_sort_dim_any_ref_cblock",
+            SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_cblock_T")->setAotTemplate()->setAnyTemplate();
     }
 }
 

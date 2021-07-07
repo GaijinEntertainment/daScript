@@ -361,7 +361,7 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT
         concept_assert(false,"this array can't be copied or moved")
     return <- tab
 
-def sort ( var a : auto(TT)[] )
+def sort ( var a : auto(TT)[] implicit )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
             __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
@@ -379,7 +379,7 @@ def sort ( var a : auto(TT)[] )
                 __builtin_sort_any_ref_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
 
-def sort ( var a : array<auto(TT)> )
+def sort ( var a : array<auto(TT)> implicit )
     static_if typeinfo(is_numeric_comparable type<TT>)
         __builtin_array_lock(a)
         unsafe
@@ -401,7 +401,8 @@ def sort ( var a : array<auto(TT)> )
                 __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof type<TT>) ) <| $ ( x, y  : TT ) : bool
                     return x < y
 
-def sort ( var a : auto(TT)[]; cmp : block<(x,y:TT):bool> )
+[builtin_array_sort]
+def sort ( var a : auto(TT)[] implicit; cmp : block<(x,y:TT):bool> )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
             __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
@@ -419,7 +420,7 @@ def sort ( var a : auto(TT)[]; cmp : block<(x,y:TT):bool> )
                 __builtin_sort_any_ref_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
 
 [builtin_array_sort]
-def sort ( var a : array<auto(TT)>; cmp : block<(x,y:TT):bool> )    // note: this will be substituted via macro
+def sort ( var a : array<auto(TT)> implicit; cmp : block<(x,y:TT):bool> )    // note: this will be substituted via macro
     __builtin_array_lock(a)
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe

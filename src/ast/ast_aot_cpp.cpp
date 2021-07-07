@@ -2994,7 +2994,7 @@ namespace das {
             if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) {
                 ss << "das_auto_cast<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::cast(";
             }
-            if ( call->func->interopFn || funArgType->baseType==Type::anyArgument ) {
+            if ( !call->func->anyTemplate && (call->func->interopFn || funArgType->baseType==Type::anyArgument) ) {
                 ss << "cast<" << describeCppType(argType);
                 if ( argType->isRefType() && !argType->ref ) {
                     ss << " &";
@@ -3027,7 +3027,7 @@ namespace das {
                 ss << ")";
             }
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
-            if ( call->func->interopFn || funArgType->baseType==Type::anyArgument ) {
+            if ( !call->func->anyTemplate && (call->func->interopFn || funArgType->baseType==Type::anyArgument) ) {
                 ss << ")";
             }
             if ( needSubstitute(funArgType,arg->type) ) ss << ")";

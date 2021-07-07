@@ -2489,6 +2489,12 @@ namespace das {
         array_unlock(*context, arr);
     }
 
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_sort_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t, int32_t, CompareFn && cmp, Context * context ) {
+        if ( dimSize<=1 ) return;
+        auto sdata = (TT *) arr.data;
+        sort(sdata, sdata + dimSize, cmp);
+    }
 }
 
 #if defined(_MSC_VER)

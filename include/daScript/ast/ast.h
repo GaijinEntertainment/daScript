@@ -615,6 +615,7 @@ namespace das
         string getAotArgumentPrefix(ExprCallFunc * call, int index) const;
         string getAotArgumentSuffix(ExprCallFunc * call, int index) const;
         FunctionPtr setAotTemplate();
+        FunctionPtr setAnyTemplate();
         FunctionPtr arg_init ( int argIndex, const ExpressionPtr & initValue ) {
             arguments[argIndex]->init = initValue;
             return this;
@@ -676,6 +677,7 @@ namespace das
                 bool    isClassMethod : 1;
                 bool    isTypeConstructor : 1;
                 bool    shutdown : 1;
+                bool    anyTemplate : 1;
             };
             uint32_t flags = 0;
         };

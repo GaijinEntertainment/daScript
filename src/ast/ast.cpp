@@ -637,6 +637,11 @@ namespace das {
         return this;
     }
 
+    FunctionPtr Function::setAnyTemplate() {
+        anyTemplate = true;
+        return this;
+    }
+
     Function * Function::getOrigin() const {
         if ( fromGeneric ) {
             auto origin = fromGeneric;
