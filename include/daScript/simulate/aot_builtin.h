@@ -82,6 +82,7 @@ namespace das {
         if ( arr.size<=1 ) return;
         vec4f bargs[2];
         auto data = (TT *) arr.data;
+        array_lock(*context, arr);
         context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
             sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
                 bargs[0] = cast<TT>::from(x);
@@ -89,6 +90,7 @@ namespace das {
                 return code->evalBool(*context);
             });
         });
+        array_unlock(*context, arr);
     }
 
 #if defined(_MSC_VER) && !defined(__clang__)

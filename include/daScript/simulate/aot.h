@@ -2491,9 +2491,20 @@ namespace das {
 
     template <typename CompareFn, typename TT, int32_t dimSize>
     __forceinline void builtin_sort_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t, int32_t, CompareFn && cmp, Context * context ) {
-        if ( dimSize<=1 ) return;
-        auto sdata = (TT *) arr.data;
-        sort(sdata, sdata + dimSize, cmp);
+        sort(arr.data, arr.data + dimSize, cmp);
+    }
+
+    template <typename TT>
+    void builtin_sort_cblock_dim ( vec4f arr, int32_t, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context ) {
+        vec4f bargs[2];
+        auto data = cast<TT *>::to(arr);
+        context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+            sort ( data, data+length, [&](TT x, TT y) -> bool {
+                bargs[0] = cast<TT>::from(x);
+                bargs[1] = cast<TT>::from(y);
+                return code->evalBool(*context);
+            });
+        });
     }
 }
 
