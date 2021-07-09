@@ -35,17 +35,18 @@ class QsortMacro : AstCallMacro
         if expr.arguments[1]._type.baseType != Type tBlock
             macro_error(prog,expr.at,"expecting 2nd argument to be block(<a,b:auto(TT)>:bool))")
             return [[ExpressionPtr]]
-        var call <- new [[ExprCall() name:="sort", at=expr.at]]
         if expr.arguments[0]._type.dim.length != 0 || expr.arguments[0]._type.baseType==Type tArray
+            var call <- new [[ExprCall() name:="sort", at=expr.at]]
             emplace_new(call.arguments) <| clone_expression(expr.arguments[0])
             emplace_new(call.arguments) <| clone_expression(expr.arguments[1])
             return <- call
         elif expr.arguments[0]._type.baseType==Type tHandle
+            var call <- new [[ExprCall() name:="sort", at=expr.at]]
             var tsa <- new [[ExprCall() name:="temp_sort_array", at=expr.at]]
             emplace_new(tsa.arguments) <| clone_expression(expr.arguments[0])
             tsa.genFlags |= ExprGenFlags alwaysSafe
             emplace(call.arguments,tsa)
-            emplace_new(call.arguments,clone_expression(expr.arguments[1]))
+            emplace_new(call.arguments) <| clone_expression(expr.arguments[1])
             return <- call
         else
             macro_error(prog,expr.at,"can only qsort [], array, or handled vector")
