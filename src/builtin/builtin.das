@@ -373,10 +373,10 @@ def sort ( var a : auto(TT)[] implicit )
     else
         unsafe
             static_if typeinfo(is_ref_type type<TT>)
-                __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                __builtin_sort_dim_any_cblock ( a, typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
             else
-                __builtin_sort_any_ref_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                __builtin_sort_dim_any_ref_cblock ( a, typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
 
 def sort ( var a : array<auto(TT)> implicit )
@@ -395,49 +395,47 @@ def sort ( var a : array<auto(TT)> implicit )
     else
         unsafe
             static_if typeinfo(is_ref_type type<TT>)
-                __builtin_sort_array_any_cblock ( a, typeinfo(sizeof type<TT>) ) <| $ ( x, y  : TT ) : bool
+                __builtin_sort_array_any_cblock ( a, typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
             else
-                __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof type<TT>) ) <| $ ( x, y  : TT ) : bool
+                __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
 
 [builtin_array_sort]
 def sort ( var a : auto(TT)[] implicit; cmp : block<(x,y:TT):bool> )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
-            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+            __builtin_sort_cblock_dim ( a, typeinfo(sizeof type<TT>), length(a), cmp )
     static_elif typeinfo(is_vector type<TT>)
         unsafe
-            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+            __builtin_sort_cblock_dim ( a, typeinfo(sizeof type<TT>), length(a), cmp )
     static_elif typeinfo(is_string type<TT>)
         unsafe
-            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+            __builtin_sort_cblock_dim ( a, typeinfo(sizeof type<TT>), length(a), cmp )
     else
         unsafe
             static_if typeinfo(is_ref_type type<TT>)
-                __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
+                __builtin_sort_dim_any_cblock ( a[0], typeinfo(sizeof type<TT>), length(a), cmp )
             else
-                __builtin_sort_any_ref_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
+                __builtin_sort_dim_any_ref_cblock ( a[0], typeinfo(sizeof type<TT>), length(a), cmp )
 
 [builtin_array_sort]
-def sort ( var a : array<auto(TT)> implicit; cmp : block<(x,y:TT):bool> )    // note: this will be substituted via macro
-    __builtin_array_lock(a)
+def sort ( var a : array<auto(TT)> implicit; cmp : block<(x,y:TT):bool> )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
-            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+            __builtin_sort_cblock_array ( a, typeinfo(sizeof type<TT>), length(a), cmp )
     static_elif typeinfo(is_vector type<TT>)
         unsafe
-            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+            __builtin_sort_cblock_array ( a, typeinfo(sizeof type<TT>), length(a), cmp )
     static_elif typeinfo(is_string type<TT>)
         unsafe
-            __builtin_sort_cblock ( addr(a[0]), length(a), cmp )
+            __builtin_sort_cblock_array ( a, typeinfo(sizeof type<TT>), length(a), cmp )
     else
         unsafe
             static_if typeinfo(is_ref_type type<TT>)
-                __builtin_sort_any_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
+                __builtin_sort_array_any_cblock ( a, typeinfo(sizeof type<TT>), length(a), cmp )
             else
-                __builtin_sort_any_ref_cblock ( addr(a[0]), typeinfo(sizeof type<TT>), length(a), cmp )
-    __builtin_array_unlock(a)
+                __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof type<TT>), length(a), cmp )
 
 def lock ( var a : array<auto(TT)> = const; blk : block<(var x : array<TT># implicit)> )
     __builtin_array_lock(a)

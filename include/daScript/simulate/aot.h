@@ -2472,16 +2472,7 @@ namespace das {
     };
 
     template <typename CompareFn, typename TT>
-    __forceinline void builtin_sort_cblock_array_T  ( TArray<TT> & arr, CompareFn && cmp, Context * context ) {
-        if ( arr.size<=1 ) return;
-        array_lock(*context, arr);
-        auto sdata = (TT *) arr.data;
-        sort(sdata, sdata + arr.size, cmp);
-        array_unlock(*context, arr);
-    }
-
-    template <typename CompareFn, typename TT>
-    __forceinline void builtin_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t, CompareFn && cmp, Context * context ) {
+    __forceinline void builtin_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t, int32_t, CompareFn && cmp, Context * context ) {
         if ( arr.size<=1 ) return;
         array_lock(*context, arr);
         auto sdata = (TT *) arr.data;
@@ -2495,7 +2486,7 @@ namespace das {
     }
 
     template <typename TT>
-    void builtin_sort_cblock_dim ( vec4f arr, int32_t, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context ) {
+    void builtin_sort_cblock ( vec4f arr, int32_t, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context ) {
         vec4f bargs[2];
         auto data = cast<TT *>::to(arr);
         context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
@@ -2505,6 +2496,22 @@ namespace das {
                 return code->evalBool(*context);
             });
         });
+    }
+
+    template <typename TT>
+    void builtin_sort_cblock_array ( Array & arr, int32_t, int32_t, const TBlock<bool,TT,TT> & cmp, Context * context ) {
+        if ( arr.size<=1 ) return;
+        vec4f bargs[2];
+        auto data = (TT *) arr.data;
+        array_lock(*context, arr);
+        context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+            sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
+                bargs[0] = cast<TT>::from(x);
+                bargs[1] = cast<TT>::from(y);
+                return code->evalBool(*context);
+            });
+        });
+        array_unlock(*context, arr);
     }
 }
 
