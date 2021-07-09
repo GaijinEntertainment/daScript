@@ -24,7 +24,7 @@ def temp_sort_array ( var arr : auto implicit )
         return <- sort_array_helper ( arr, decltype(arr[0]) )
 
 [call_macro(name="qsort")]
-class ApplyMacro : AstCallMacro
+class QsortMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if expr.arguments.length != 2
             macro_error(prog,expr.at,"expecting qsort(value, block)")
