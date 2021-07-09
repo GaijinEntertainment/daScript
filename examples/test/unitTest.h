@@ -92,7 +92,7 @@ static_assert ( std::is_trivially_constructible<TestObjectFoo>::value, "this one
 
 typedef das::vector<TestObjectFoo> FooArray;
 
-void testFooArray(const das::TBlock<void, const FooArray> & blk, das::Context * context);
+void testFooArray(const das::TBlock<void, FooArray> & blk, das::Context * context);
 
 __forceinline void set_foo_data (TestObjectFoo * obj, int32_t data ) { obj->fooData = data; }
 

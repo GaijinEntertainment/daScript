@@ -515,11 +515,12 @@ void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * conte
     context->invoke(blk, args, nullptr);
 }
 
-void testFooArray(const TBlock<void,const FooArray> & blk, Context * context) {
+void testFooArray(const TBlock<void,FooArray> & blk, Context * context) {
     FooArray arr;
     for (int32_t x = 0; x != 10; ++x) {
         TestObjectFoo p;
         p.fooData = x;
+        p.foo_loop = nullptr;
         arr.push_back(p);
     }
     vec4f args[1];

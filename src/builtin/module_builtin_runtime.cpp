@@ -865,6 +865,13 @@ namespace das
         context->invoke(block, args, nullptr);
     }
 
+    void builtin_make_temp_array ( Array & arr, void * data, int size ) {
+        arr.data = (char *) data;
+        arr.size = arr.capacity = size;
+        arr.lock = 1;
+        arr.flags = 0;
+    }
+
     bool g_isInAot = false;
     bool is_in_aot ( ) {
         return g_isInAot;
@@ -1064,10 +1071,14 @@ namespace das
         addExtern<DAS_BIND_FUN(das_str_equ)>(*this, lib, "==", SideEffects::none, "das_str_equ");
         addExtern<DAS_BIND_FUN(das_str_nequ)>(*this, lib, "!=", SideEffects::none, "das_str_nequ");
         // temp array out of mem
-        auto bta = addExtern<DAS_BIND_FUN(builtin_temp_array)>(*this, lib, "_builtin_temp_array", SideEffects::invoke, "builtin_temp_array");
+        auto bta = addExtern<DAS_BIND_FUN(builtin_temp_array)>(*this, lib, "_builtin_temp_array",
+            SideEffects::invoke, "builtin_temp_array");
         bta->unsafeOperation = true;
         bta->privateFunction = true;
-        // migrate data
+        auto bmta = addExtern<DAS_BIND_FUN(builtin_make_temp_array)>(*this, lib, "_builtin_make_temp_array",
+            SideEffects::modifyArgument, "builtin_make_temp_array");
+        bmta->unsafeOperation = true;
+                // migrate data
         addExtern<DAS_BIND_FUN(is_in_aot)>(*this, lib, "is_in_aot", SideEffects::worstDefault, "is_in_aot");
     }
 }
