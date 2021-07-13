@@ -5,48 +5,43 @@ using namespace das;
 
 #define TUTORIAL_NAME   "/examples/tutorial/tutorial01.das"
 
-typedef map<string, float> ExprVars;
-
+typedef das_map<string, float> ExprVars;    // variable lookup
 class ExprCalc {
 public:
     ExprCalc ( const string & expr, const ExprVars & vars );
     float compute(ExprVars & vars);
 protected:
-    ContextPtr      ctx;
-    SimFunction *   fni = nullptr;
-    string          text;
-    map<string,int> variables;
+    ContextPtr          ctx;                // context
+    SimFunction *       fni = nullptr;      // 'test' function
+    string              text;               // program text (for reference purposes)
+    das_map<string,float *> variables;      // pointers to variables in context global data
 };
 
 float ExprCalc::compute(ExprVars & vars) {
-    if ( fni==nullptr ) {
+    if ( fni==nullptr ) {                           // if no function - no result
         return 0.0f;
     }
-    for ( auto & va : vars ) {
+    for ( auto & va : vars ) {                      // set variables
         auto it = variables.find(va.first);
         if ( it != variables.end() ) {
-            auto vidx = it->second;
-            if ( auto pvar = (float *) ctx->getVariable(vidx) ) {
-                *pvar = va.second;
-            }
+            *(it->second) = va.second;
         }
     }
-    auto res = ctx->evalWithCatch(fni, nullptr);
-    if ( auto ex = ctx->getException() ) {
+    auto res = ctx->evalWithCatch(fni, nullptr);    // eval the expression
+    if ( auto ex = ctx->getException() ) {          // if exception - report it
         TextPrinter tout;
         tout << "with exception " << ex << "\n";
         return 0.0f;
     }
-    return cast<float>::to(res);
+    return cast<float>::to(res);                    // cast result to float
 }
 
 ExprCalc::ExprCalc ( const string & expr, const ExprVars & vars ) {
-    // build expression
+    // build expression program
     TextWriter ss;
-    // ss  << "options log\n";
     ss  << "require math\n";
     for ( auto & va : vars ) {
-        ss << "var " << va.first << " = 0.0f\n";
+        ss << "var " << va.first << " = 0.0f\n";    // make each variable float, set to 0.0f by default
     }
     ss  << "[export]\n"
         << "def test\n"
@@ -83,9 +78,9 @@ ExprCalc::ExprCalc ( const string & expr, const ExprVars & vars ) {
     fni = ctx->findFunction("test");
     // variables
     for ( auto & va : vars ) {
-        auto idx = ctx->findVariable(va.first.c_str());
+        auto idx = ctx->findVariable(va.first.c_str());             // find index of the variable
         assert(idx != -1);
-        variables[va.first] = idx;
+        variables[va.first] = (float *) ctx->getVariable(idx);      // get its pointer in context
     }
 }
 
@@ -94,19 +89,16 @@ int main( int, char * [] ) {
     NEED_ALL_DEFAULT_MODULES;
     // Initialize modules
     Module::Initialize();
-
-    TextPrinter tp;
-
+    // make calculator 'program'
     ExprVars variables;
     variables["a"] = 1.0f;
     variables["b"] = 2.0f;
     variables["c"] = 3.0f;
-
     ExprCalc calc("a*b+c", variables);
-
+    // verify initial values
     auto res = calc.compute(variables);
     assert(res==5.0f);
-
+    // verify for the range of values
     for ( float a=1.0f; a<4.0f; a++ ) {
         variables["a"] = a;
         for ( float b=1.0f; b<5.0f; b++ ) {
@@ -119,8 +111,6 @@ int main( int, char * [] ) {
             }
         }
     }
-
-
     // shut-down daScript, free all memory
     Module::Shutdown();
     return 0;
