@@ -2513,6 +2513,13 @@ namespace das {
         });
         array_unlock(*context, arr);
     }
+
+    __forceinline vec4f cvt_float4 ( int2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_float4 ( int3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_float4 ( int4 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_float4 ( uint2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_float4 ( uint3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_float4 ( uint4 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
 }
 
 #if defined(_MSC_VER)

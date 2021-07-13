@@ -69,6 +69,15 @@ def test_vec4(a:auto(vec4) -const -&)
     assert("{f4_zz}"=="1,1,1,1")
     assert("{f4_ww}"=="1,1,1,1")
 
+[sideeffects]
+def test_cvt(a,b,c,d:int)
+    assert(float2(int2(a,b))    ==float2(a,b))
+    assert(float3(int3(a,b,c))  ==float3(a,b,c))
+    assert(float4(int4(a,b,c,d))==float4(a,b,c,d))
+    assert(float2(uint2(a,b))    ==float2(a,b))
+    assert(float3(uint3(a,b,c))  ==float3(a,b,c))
+    assert(float4(uint4(a,b,c,d))==float4(a,b,c,d))
+
 [export]
 def test
     test_vec2(float2())
@@ -82,4 +91,5 @@ def test
     test_vec4(uint4())
     test_vec2(range(),true)
     test_vec2(urange(),true)
+    test_cvt(1,2,3,4)
     return true
