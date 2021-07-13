@@ -800,3 +800,11 @@ examples/tutorial/tutorial05.cpp
 examples/tutorial/tutorial05.das
 )
 DAS_TUTORIAL(tutorial05 "${TUTORIAL_05_SRC}")
+
+#################################
+# tutorial 06 - expression parser
+#################################
+SET(TUTORIAL_06_SRC
+examples/tutorial/tutorial06.cpp
+)
+DAS_TUTORIAL(tutorial06 "${TUTORIAL_06_SRC}")
