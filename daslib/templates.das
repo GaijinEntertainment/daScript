@@ -55,13 +55,19 @@ class TemplateMacro : AstFunctionAnnotation
                 errors := "can't find template argument {t.name} (or duplicate)"
                 fclone := [[FunctionPtr]]
                 newcall := [[smart_ptr<ExprCallFunc>]]
-                return expr
-            if !(newcall.arguments[argidx] is ExprTypeDecl)
-                errors := "template argument must be type<...>"
+                return [[ExpressionPtr]]
+            var argExpr := newcall.arguments[argidx]
+            if (argExpr is ExprRef2Value)
+                unsafe
+                    let r2v = reinterpret<ExprRef2Value?> newcall.arguments[argidx]
+                    argExpr := r2v.subexpr
+            if !(argExpr is ExprTypeDecl)
+                errors := "template argument must be type<...> and not {describe(newcall.arguments[argidx])}. {newcall.arguments[argidx].__rtti}"
                 fclone := [[FunctionPtr]]
                 newcall := [[smart_ptr<ExprCallFunc>]]
-                return expr
-            var tname = describe_typedecl(fclone.arguments[argidx]._type,true,true,true)
+                return [[ExpressionPtr]]
+            var tname = describe_typedecl(argExpr._type,true,true,true)
+            argExpr := null
             extra += "`{hash(tname)}"
             fclone.arguments |> erase(argidx)
             newcall.arguments |> erase(argidx)

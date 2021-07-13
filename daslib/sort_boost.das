@@ -9,9 +9,9 @@ require daslib/templates public
 require daslib/contracts public
 require daslib/ast_boost
 
-[private, unsafe_operation, template (a)]
-def sort_array_helper ( var arr : auto implicit; a : auto(TT) ) : array<TT>
-    var res : array<TT>
+[private, unsafe_operation, template (a), unused_argument(a)]
+def sort_array_helper ( var arr : auto implicit; a : auto(TT) ) : array<TT -#>
+    var res : array<TT -#>
     let lenA = length(arr)
     if lenA>=1
         unsafe
