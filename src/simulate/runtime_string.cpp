@@ -66,6 +66,66 @@ namespace das
         }
     }
 
+
+    bool encodeUtf8Char(uint32_t ch, char * result) {
+
+      if (ch <= 0x7F) {
+          result[0] = ch;
+          result[1] = 0;
+          return true;
+      }
+
+      if (ch <= 0x7FF) {
+          result[0] = (ch >> 6) | 0xC0;
+          result[1] = (ch & 0x3F) | 0x80;
+          result[2] = 0;
+          return true;
+      }
+
+      if (ch <= 0xFFFF) {
+          result[0] = (ch >> 12) | 0xE0;
+          result[1] = ((ch >> 6) & 0x3F) | 0x80;
+          result[2] = ((ch >> 0) & 0x3F) | 0x80;
+          result[3] = 0;
+          return true;
+      }
+
+      if (ch <= 0x1FFFFF) {
+          result[0] = (ch >> 18) | 0xF0;
+          result[1] = ((ch >> 12) & 0x3F) | 0x80;
+          result[2] = ((ch >>  6) & 0x3F) | 0x80;
+          result[3] = ((ch >>  0) & 0x3F) | 0x80;
+          result[4] = 0;
+          return true;
+      }
+
+      if (ch <= 0x3FFFFFF) {
+          result[0] = (ch >> 24) | 0xF8;
+          result[1] = ((ch >> 18) & 0x3F) | 0x80;
+          result[2] = ((ch >> 12) & 0x3F) | 0x80;
+          result[3] = ((ch >>  6) & 0x3F) | 0x80;
+          result[4] = ((ch >>  0) & 0x3F) | 0x80;
+          result[5] = 0;
+          return true;
+      }
+
+      if (ch <= 0x7FFFFFFF) {
+          result[0] = (ch >> 30) | 0xFC;
+          result[1] = ((ch >> 24) & 0x3F) | 0x80;
+          result[2] = ((ch >> 18) & 0x3F) | 0x80;
+          result[3] = ((ch >> 12) & 0x3F) | 0x80;
+          result[4] = ((ch >>  6) & 0x3F) | 0x80;
+          result[5] = ((ch >>  0) & 0x3F) | 0x80;
+          result[6] = 0;
+          return true;
+      }
+
+      result[0] = '?';
+      result[1] = 0;
+
+      return false;
+    }
+
     string unescapeString ( const string & input, bool * error, bool ) {
         if ( error ) *error = false;
         const char* str = input.c_str();
@@ -88,24 +148,42 @@ namespace das
                     case 'n':   result += '\n';    break;
                     case 'r':   result += '\r';    break;
                     case 't':   result += '\t';    break;
-                    case 'u':   DAS_ASSERTF(0, "utf-8 characters not supported yet"); break;
+                    case 'v':   result += '\v';    break;
                     case '\n':  break;  // skip LF
                     case '{':   result += '{';    break;
                     case '}':   result += '}';    break;
                     case '\r':  if ( str+1!=strEnd && str[1]=='\n' ) str++; break;  // skip CR LF or just CR
-                    case 'x':   // \xA1 -> hex(A1)
-                        if ( str+1!=strEnd && str+2!=strEnd ) {
-                            int c0 = hexChar(str[1]);
-                            int c1 = hexChar(str[2]);
-                            if ( (c0<0 || c1<0) && error ) {
-                                *error = true;
-                                break;
+                    case 'x':
+                    case 'u':
+                    case 'U': {
+                            int symbols = (*str == 'x') ? 2 : (*str == 'u') ? 4 : 8;
+                            uint32_t charCode = 0;
+                            int x = 0;
+                            str++;
+                            for (; x < symbols && str != strEnd; x++, str++) {
+                                int h = hexChar(*str);
+                                if (h < 0)
+                                    break;
+                                charCode = charCode * 16 + h;
                             }
-                            result += (char)(c0*16 + c1);
-                            str += 2;
-                        } else {
-                            if ( error ) *error = true;    // expecting \x12
-                            break;
+                            str--;
+
+                            if (symbols == 2) { // \xNN
+                                if (!x) {
+                                    if (error) *error = true;
+                                }
+                                else
+                                    result += char(charCode);
+                            }
+                            else if (x != symbols) { // \u \U requires exactly 4 or 8 hex symbols
+                                if (error) *error = true;
+                            }
+                            else {
+                                char buf[8];
+                                if (!encodeUtf8Char(charCode, buf) && error)
+                                    *error = true;
+                                result += buf;
+                            }
                         }
                         break;
                     default:    result += *str; if ( error ) *error = true; break;  // invalid escape character
@@ -126,6 +204,7 @@ namespace das
                 case '\"':  result.append("\\\"");  break;
                 case '\\':  result.append("\\\\");  break;
                 case '\b':  result.append("\\b");   break;
+                case '\v':  result.append("\\v");   break;
                 case '\f':  result.append("\\f");   break;
                 case '\n':  result.append("\\n");   break;
                 case '\r':  result.append("\\r");   break;
