@@ -1,3 +1,5 @@
+options remove_unused_symbols=false
+
 def test_sort ( var arr : auto(TT) )
     sort ( arr )
     let len = length(arr)

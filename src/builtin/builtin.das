@@ -415,9 +415,9 @@ def sort ( var a : auto(TT)[] implicit; cmp : block<(x,y:TT):bool> )
     else
         unsafe
             static_if typeinfo(is_ref_type type<TT>)
-                __builtin_sort_dim_any_cblock ( a[0], typeinfo(sizeof type<TT>), length(a), cmp )
+                __builtin_sort_dim_any_cblock ( a, typeinfo(sizeof type<TT>), length(a), cmp )
             else
-                __builtin_sort_dim_any_ref_cblock ( a[0], typeinfo(sizeof type<TT>), length(a), cmp )
+                __builtin_sort_dim_any_ref_cblock ( a, typeinfo(sizeof type<TT>), length(a), cmp )
 
 [builtin_array_sort]
 def sort ( var a : array<auto(TT)> implicit; cmp : block<(x,y:TT):bool> )

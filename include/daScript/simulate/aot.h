@@ -2472,17 +2472,56 @@ namespace das {
     };
 
     template <typename CompareFn, typename TT>
-    __forceinline void builtin_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t, int32_t, CompareFn && cmp, Context * context ) {
-        if ( arr.size<=1 ) return;
-        array_lock(*context, arr);
-        auto sdata = (TT *) arr.data;
-        sort(sdata, sdata + arr.size, cmp);
-        array_unlock(*context, arr);
+    struct scblk;
+
+    template <typename CompareFn, typename TT>
+    struct scblk {
+        template <int dimSize>
+        static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t, CompareFn && cmp, Context * context ) {
+            sort(arr.data, arr.data + dimSize, cmp);
+        }
+        template <int dimSize>
+        static __forceinline void srtr ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context ) {
+            srt(arr,elemSize,length,forward<CompareFn>(cmp),context);
+        }
+    };
+
+    template <typename TT>
+    struct scblk < const Block &,TT > {
+        template <int dimSize>
+        static __forceinline void srtr ( TDim<TT,dimSize> & arr, int32_t, int32_t length, const Block & cmp, Context * context ) {
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                sort ( data, data+length, [&](TT x, TT y) -> bool {
+                    bargs[0] = cast<TT>::from(x);
+                    bargs[1] = cast<TT>::from(y);
+                    return code->evalBool(*context);
+                });
+            });
+        }
+        template <int dimSize>
+        static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t length, const Block & cmp, Context * context ) {
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                sort ( data, data+length, [&](const TT & x, const TT & y) -> bool {
+                    bargs[0] = cast<const TT &>::from(x);
+                    bargs[1] = cast<const TT &>::from(y);
+                    return code->evalBool(*context);
+                });
+            });
+        }
+    };
+
+    template <typename CompareFn, typename TT, int32_t dimSize>
+    __forceinline void builtin_sort_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context ) {
+        scblk<CompareFn,TT>::srt(arr,elemSize,length,forward<CompareFn>(cmp),context);
     }
 
     template <typename CompareFn, typename TT, int32_t dimSize>
-    __forceinline void builtin_sort_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t, int32_t, CompareFn && cmp, Context * context ) {
-        sort(arr.data, arr.data + dimSize, cmp);
+    __forceinline void builtin_sort_dim_any_ref_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context ) {
+        scblk<CompareFn,TT>::srtr(arr,elemSize,length,forward<CompareFn>(cmp),context);
     }
 
     template <typename TT>
@@ -2498,20 +2537,68 @@ namespace das {
         });
     }
 
+    template <typename CompareFn, typename TT>
+    struct scblk_array;
+
+    template <typename CompareFn, typename TT>
+    struct scblk_array {
+        static __forceinline void srt ( Array & arr, int32_t, int32_t, CompareFn && cmp, Context * context ) {
+            if ( arr.size<=1 ) return;
+            array_lock(*context, arr);
+            auto sdata = (TT *) arr.data;
+            das::sort(sdata, sdata + arr.size, cmp);
+            array_unlock(*context, arr);
+        }
+        static __forceinline void srtr ( Array & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context ) {
+            srt(arr,elemSize,length,forward<CompareFn>(cmp),context);
+        }
+    };
+
     template <typename TT>
-    void builtin_sort_cblock_array ( Array & arr, int32_t, int32_t, const TBlock<bool,TT,TT> & cmp, Context * context ) {
-        if ( arr.size<=1 ) return;
-        vec4f bargs[2];
-        auto data = (TT *) arr.data;
-        array_lock(*context, arr);
-        context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-            sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
-                bargs[0] = cast<TT>::from(x);
-                bargs[1] = cast<TT>::from(y);
-                return code->evalBool(*context);
+    struct scblk_array < const Block &,TT > {
+        static __forceinline void srtr ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context ) {
+            if ( arr.size<=1 ) return;
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            array_lock(*context, arr);
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                das::sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
+                    bargs[0] = cast<TT>::from(x);
+                    bargs[1] = cast<TT>::from(y);
+                    return code->evalBool(*context);
+                });
             });
-        });
-        array_unlock(*context, arr);
+            array_unlock(*context, arr);
+        }
+        static __forceinline void srt ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context ) {
+            if ( arr.size<=1 ) return;
+            vec4f bargs[2];
+            auto data = (TT *) arr.data;
+            array_lock(*context, arr);
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                das::sort ( data, data+arr.size, [&](const TT & x, const TT & y) -> bool {
+                    bargs[0] = cast<const TT &>::from(x);
+                    bargs[1] = cast<const TT &>::from(y);
+                    return code->evalBool(*context);
+                });
+            });
+            array_unlock(*context, arr);
+        }
+    };
+
+    template <typename TT>
+    void builtin_sort_cblock_array ( Array & arr, int32_t elemSize, int32_t elemCount, const TBlock<bool,TT,TT> & cmp, Context * context ) {
+        scblk_array<const Block &,TT>::srtr(arr,elemSize,elemCount,cmp,context);
+    }
+
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context ) {
+        scblk_array<CompareFn,TT>::srt(arr,elemSize,elemCount,forward<CompareFn>(cmp),context);
+    }
+
+    template <typename CompareFn, typename TT>
+    __forceinline void builtin_sort_array_any_ref_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context ) {
+        scblk_array<CompareFn,TT>::srtr(arr,elemSize,elemCount,forward<CompareFn>(cmp),context);
     }
 
     __forceinline vec4f cvt_float4 ( int2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }

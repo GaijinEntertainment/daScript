@@ -98,17 +98,17 @@ namespace das
     addExtern<DAS_BIND_FUN(builtin_sort_cblock<CTYPE>)>(*this, lib, "__builtin_sort_cblock", \
         SideEffects::modifyArgumentAndExternal, "builtin_sort_cblock<" xstr(CTYPE) ">"); \
     addExtern<DAS_BIND_FUN(builtin_sort_cblock_array<CTYPE>)>(*this, lib, "__builtin_sort_cblock_array", \
-        SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_cblock_T")->setAotTemplate(); \
+        SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_ref_cblock_T")->setAotTemplate(); \
     addExtern<DAS_BIND_FUN(builtin_sort_cblock<CTYPE>)>(*this, lib, "__builtin_sort_cblock_dim", \
-        SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_cblock_T")->setAotTemplate()->setAnyTemplate();
+        SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_ref_cblock_T")->setAotTemplate()->setAnyTemplate();
 
 #define ADD_VECTOR_SORT(CTYPE) \
     addExtern<DAS_BIND_FUN(builtin_sort_cblock<CTYPE>)>(*this, lib, "__builtin_sort_cblock", \
         SideEffects::modifyArgumentAndExternal, "builtin_sort_cblock<" xstr(CTYPE) ">"); \
     addExtern<DAS_BIND_FUN(builtin_sort_cblock_array<CTYPE>)>(*this, lib, "__builtin_sort_cblock_array", \
-        SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_cblock_T")->setAotTemplate(); \
+        SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_ref_cblock_T")->setAotTemplate(); \
     addExtern<DAS_BIND_FUN(builtin_sort_cblock<CTYPE>)>(*this, lib, "__builtin_sort_cblock_dim", \
-        SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_cblock_T")->setAotTemplate()->setAnyTemplate();
+        SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_ref_cblock_T")->setAotTemplate()->setAnyTemplate();
 
     // this one replaces sort(array<>) via correct builtin
     struct BuiltinSortFunctionAnnotation : FunctionAnnotation {
@@ -194,9 +194,9 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_sort_cblock<char *>)>(*this, lib, "__builtin_sort_cblock",
             SideEffects::modifyArgumentAndExternal, "builtin_sort_cblock<char *>");
         addExtern<DAS_BIND_FUN(builtin_sort_cblock_array<char *>)>(*this, lib, "__builtin_sort_cblock_array",
-            SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_cblock_T")->setAotTemplate();
+            SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_ref_cblock_T")->setAotTemplate();
         addExtern<DAS_BIND_FUN(builtin_sort_cblock<char *>)>(*this, lib, "__builtin_sort_cblock_dim",
-            SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_cblock_T")->setAotTemplate()->setAnyTemplate();
+            SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_ref_cblock_T")->setAotTemplate()->setAnyTemplate();
         // generic sort
         addExtern<DAS_BIND_FUN(builtin_sort_any_cblock)>(*this, lib, "__builtin_sort_any_cblock",
             SideEffects::modifyArgumentAndExternal, "builtin_sort_any_cblock");
@@ -206,12 +206,12 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_sort_array_any_cblock)>(*this, lib, "__builtin_sort_array_any_cblock",
             SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_cblock_T")->setAotTemplate();
         addExtern<DAS_BIND_FUN(builtin_sort_array_any_ref_cblock)>(*this, lib, "__builtin_sort_array_any_ref_cblock",
-            SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_cblock_T")->setAotTemplate();
+            SideEffects::modifyArgumentAndExternal, "builtin_sort_array_any_ref_cblock_T")->setAotTemplate();
         // dim sort
         addExtern<DAS_BIND_FUN(builtin_sort_dim_any_cblock)>(*this, lib, "__builtin_sort_dim_any_cblock",
             SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_cblock_T")->setAotTemplate()->setAnyTemplate();
         addExtern<DAS_BIND_FUN(builtin_sort_dim_any_ref_cblock)>(*this, lib, "__builtin_sort_dim_any_ref_cblock",
-            SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_cblock_T")->setAotTemplate()->setAnyTemplate();
+            SideEffects::modifyArgumentAndExternal, "builtin_sort_dim_any_ref_cblock_T")->setAotTemplate()->setAnyTemplate();
     }
 }
 
