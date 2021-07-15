@@ -70,52 +70,52 @@ namespace das
     bool encodeUtf8Char(uint32_t ch, char * result) {
 
       if (ch <= 0x7F) {
-          result[0] = ch;
+          result[0] = char(ch);
           result[1] = 0;
           return true;
       }
 
       if (ch <= 0x7FF) {
-          result[0] = (ch >> 6) | 0xC0;
-          result[1] = (ch & 0x3F) | 0x80;
+          result[0] = char((ch >> 6) | 0xC0);
+          result[1] = char((ch & 0x3F) | 0x80);
           result[2] = 0;
           return true;
       }
 
       if (ch <= 0xFFFF) {
-          result[0] = (ch >> 12) | 0xE0;
-          result[1] = ((ch >> 6) & 0x3F) | 0x80;
-          result[2] = ((ch >> 0) & 0x3F) | 0x80;
+          result[0] = char((ch >> 12) | 0xE0);
+          result[1] = char(((ch >> 6) & 0x3F) | 0x80);
+          result[2] = char(((ch >> 0) & 0x3F) | 0x80);
           result[3] = 0;
           return true;
       }
 
       if (ch <= 0x1FFFFF) {
-          result[0] = (ch >> 18) | 0xF0;
-          result[1] = ((ch >> 12) & 0x3F) | 0x80;
-          result[2] = ((ch >>  6) & 0x3F) | 0x80;
-          result[3] = ((ch >>  0) & 0x3F) | 0x80;
+          result[0] = char((ch >> 18) | 0xF0);
+          result[1] = char(((ch >> 12) & 0x3F) | 0x80);
+          result[2] = char(((ch >>  6) & 0x3F) | 0x80);
+          result[3] = char(((ch >>  0) & 0x3F) | 0x80);
           result[4] = 0;
           return true;
       }
 
       if (ch <= 0x3FFFFFF) {
-          result[0] = (ch >> 24) | 0xF8;
-          result[1] = ((ch >> 18) & 0x3F) | 0x80;
-          result[2] = ((ch >> 12) & 0x3F) | 0x80;
-          result[3] = ((ch >>  6) & 0x3F) | 0x80;
-          result[4] = ((ch >>  0) & 0x3F) | 0x80;
+          result[0] = char((ch >> 24) | 0xF8);
+          result[1] = char(((ch >> 18) & 0x3F) | 0x80);
+          result[2] = char(((ch >> 12) & 0x3F) | 0x80);
+          result[3] = char(((ch >>  6) & 0x3F) | 0x80);
+          result[4] = char(((ch >>  0) & 0x3F) | 0x80);
           result[5] = 0;
           return true;
       }
 
       if (ch <= 0x7FFFFFFF) {
-          result[0] = (ch >> 30) | 0xFC;
-          result[1] = ((ch >> 24) & 0x3F) | 0x80;
-          result[2] = ((ch >> 18) & 0x3F) | 0x80;
-          result[3] = ((ch >> 12) & 0x3F) | 0x80;
-          result[4] = ((ch >>  6) & 0x3F) | 0x80;
-          result[5] = ((ch >>  0) & 0x3F) | 0x80;
+          result[0] = char((ch >> 30) | 0xFC);
+          result[1] = char(((ch >> 24) & 0x3F) | 0x80);
+          result[2] = char(((ch >> 18) & 0x3F) | 0x80);
+          result[3] = char(((ch >> 12) & 0x3F) | 0x80);
+          result[4] = char(((ch >>  6) & 0x3F) | 0x80);
+          result[5] = char(((ch >>  0) & 0x3F) | 0x80);
           result[6] = 0;
           return true;
       }
