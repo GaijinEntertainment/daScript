@@ -269,7 +269,6 @@ namespace das
             col ++;
         }
         text << string(das::max(LCOL-COL+1,1),'^') << "\n";
-        text << COL << ":" << ROW << " - " << LCOL << ":" << LROW << "\n";
         return text.str();
     }
 
