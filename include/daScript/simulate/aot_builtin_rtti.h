@@ -10,6 +10,12 @@ DAS_BIND_ENUM_CAST(TemporaryMatters);
 DAS_BIND_ENUM_CAST(Type);
 
 namespace das {
+    class ModuleGroup;
+}
+
+MAKE_EXTERNAL_TYPE_FACTORY(ModuleGroup, das::ModuleGroup)
+
+namespace das {
 
     class Program;
     typedef smart_ptr<Program> ProgramPtr;
@@ -108,7 +114,7 @@ namespace das {
 
     struct CodeOfPolicies;
     void rtti_builtin_compile(char * modName, char * str, const CodeOfPolicies & cop, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
-    void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, const CodeOfPolicies & cop, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
+    void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
 
     void rtti_builtin_simulate ( const smart_ptr<Program> & program, bool useAot, const TBlock<void,bool,Context *,string> & block, Context * context );
 
