@@ -16,7 +16,6 @@ MAKE_EXTERNAL_TYPE_FACTORY(PassMacro,das::PassMacro)
 MAKE_EXTERNAL_TYPE_FACTORY(VariantMacro,das::VariantMacro)
 MAKE_EXTERNAL_TYPE_FACTORY(ReaderMacro,das::ReaderMacro)
 MAKE_EXTERNAL_TYPE_FACTORY(CallMacro,das::CallMacro)
-MAKE_EXTERNAL_TYPE_FACTORY(ModuleGroup,das::ModuleGroup)
 MAKE_EXTERNAL_TYPE_FACTORY(ModuleLibrary,das::ModuleLibrary)
 MAKE_EXTERNAL_TYPE_FACTORY(AstContext,das::AstContext)
 

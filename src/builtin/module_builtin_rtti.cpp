@@ -208,6 +208,13 @@ namespace das {
         }
     };
 
+    struct AstModuleGroupAnnotation : ManagedStructureAnnotation<ModuleGroup, true, true> {
+        AstModuleGroupAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("ModuleGroup", ml) {
+        }
+    };
+
+
     struct FileAccessAnnotation : ManagedStructureAnnotation<FileAccess,false,true> {
         FileAccessAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FileAccess", ml) {
         }
@@ -834,12 +841,11 @@ namespace das {
 
 #if !DAS_NO_FILEIO
 
-    void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, const CodeOfPolicies & cop,
+    void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context ) {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
-        ModuleGroup dummyLibGroup;
-        auto program = compileDaScript(modName, access, issues, dummyLibGroup, true, cop);
+        auto program = compileDaScript(modName, access, issues, *module_group, true, cop);
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {
@@ -883,7 +889,7 @@ namespace das {
         return nullptr;
     }
 
-    void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, const CodeOfPolicies & cop,
+    void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies & cop,
             const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context) {
         context->throw_error("not supported with DAS_NO_FILEIO");
     }
@@ -960,6 +966,7 @@ namespace das {
             addAnnotation(make_smart<ErrorAnnotation>(lib));
             addAnnotation(make_smart<FileAccessAnnotation>(lib));
             addAnnotation(make_smart<ModuleAnnotation>(lib));
+            addAnnotation(make_smart<AstModuleGroupAnnotation>(lib));
             addAnnotation(make_smart<ProgramAnnotation>(lib));
             addEnumeration(make_smart<EnumerationType>());
             addAnnotation(make_smart<AnnotationArgumentAnnotation>(lib));
@@ -994,6 +1001,8 @@ namespace das {
             addConstant<uint32_t>(*this, "FUNCINFO_SHUTDOWN", uint32_t(FuncInfo::flag_shutdown));
             // macros
             addTypeInfoMacro(make_smart<RttiTypeInfoMacro>());
+            // ctors
+            addUsing<ModuleGroup>(*this, lib, "ModuleGroup");
             // functions
             //      all the stuff is only resolved after debug info is built
             //      hence SideEffects::modifyExternal is essential for it to not be optimized out
