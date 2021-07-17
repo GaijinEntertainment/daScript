@@ -88,6 +88,7 @@ struct TestObjectSmartAnnotation : ManagedStructureAnnotation <TestObjectSmart> 
 struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
     TestObjectFooAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectFoo", ml) {
         addField<DAS_BIND_MANAGED_FIELD(hit)>("hit");
+        addField<DAS_BIND_MANAGED_FIELD(lookAt)>("lookAt");
         addField<DAS_BIND_MANAGED_FIELD(fooData)>("fooData");
         addField<DAS_BIND_MANAGED_FIELD(e16)>("e16");
         addProperty<DAS_BIND_MANAGED_PROP(propAdd13)>("propAdd13");
@@ -521,6 +522,7 @@ void testFooArray(const TBlock<void,FooArray> & blk, Context * context) {
         TestObjectFoo p;
         p.fooData = x;
         p.foo_loop = nullptr;
+        p.lookAt = nullptr;
         arr.push_back(p);
     }
     vec4f args[1];

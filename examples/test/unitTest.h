@@ -67,6 +67,7 @@ __forceinline void project_to_nearest_navmesh_point(Point3 & a, float t) { a = P
 
 struct TestObjectFoo {
     Point3 hit;
+    const Point3 * lookAt;
     int32_t fooData;
     SomeEnum_16 e16;
     TestObjectFoo * foo_loop;

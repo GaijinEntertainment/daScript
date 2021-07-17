@@ -84,9 +84,17 @@ def test_fancy
     using(1,3) <| $( var f : FancyClass# )
         assert(f.value==4)
 
+def test_nc_alias
+    var lookingAt = new TestObjectFoo
+    var lookPos = lookingAt.lookAt ?? float3()
+    assert(lookPos==float3())
+    unsafe
+        delete lookingAt
+
 [export]
 def test:bool
     test_native()
     test_handled()
     test_fancy()
+    test_nc_alias()
     return true
