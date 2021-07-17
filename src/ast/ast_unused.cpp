@@ -550,7 +550,7 @@ namespace das {
                             }
                         }
                     } else {
-                        if ( expr->type->isFoldable() && !expr->variable->access_init ) {
+                        if ( expr->type->isFoldable() && !expr->variable->access_init && expr->variable->type->constant ) {
                             if ( expr->type->isEnumT() ) {
                                 auto cfv = expr->type->enumType->find(0, "");
                                 if ( !cfv.empty() ) {
