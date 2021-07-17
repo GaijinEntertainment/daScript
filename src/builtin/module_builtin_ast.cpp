@@ -940,12 +940,6 @@ namespace das {
         }
     };
 
-    struct AstModuleGroupAnnotation : ManagedStructureAnnotation<ModuleGroup,false> {
-        AstModuleGroupAnnotation(ModuleLibrary & ml)
-            : ManagedStructureAnnotation ("ModuleGroup", ml) {
-        }
-    };
-
     struct AstEnumEntryAnnotation : ManagedStructureAnnotation <Enumeration::EnumEntry> {
         AstEnumEntryAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("EnumEntry", ml, "Enumeration::EnumEntry") {
@@ -2542,7 +2536,6 @@ namespace das {
             addEnumeration(make_smart<EnumerationCaptureMode>());
             // modules
             addAnnotation(make_smart<AstModuleLibraryAnnotation>(lib));
-            addAnnotation(make_smart<AstModuleGroupAnnotation>(lib));
             // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
             auto exa = make_smart<AstExprAnnotation<Expression>>("Expression",lib);
             addAnnotation(exa);
