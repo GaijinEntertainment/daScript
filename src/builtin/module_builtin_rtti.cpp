@@ -275,7 +275,7 @@ namespace das {
         return ft;
     }
 
-    struct ProgramAnnotation : ManagedStructureAnnotation <Program,false> {
+    struct ProgramAnnotation : ManagedStructureAnnotation <Program,false,true> {
         ProgramAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Program", ml) {
             addFieldEx ( "flags", "flags", offsetof(Program, flags), makeProgramFlags() );
             addField<DAS_BIND_MANAGED_FIELD(errors)>("errors");
