@@ -290,6 +290,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(bValue)>("bValue");
             addField<DAS_BIND_MANAGED_FIELD(iValue)>("iValue");
             addField<DAS_BIND_MANAGED_FIELD(fValue)>("fValue");
+            addField<DAS_BIND_MANAGED_FIELD(at)>("at");
         }
     };
 
@@ -298,6 +299,7 @@ namespace das {
             : ManagedStructureAnnotation ("AnnotationDeclaration", ml) {
                 addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
                 addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
+                addField<DAS_BIND_MANAGED_FIELD(at)>("at");
                 // TODO: function?
                 // addProperty<DAS_BIND_MANAGED_PROP(getMangledName)>("getMangledName","getMangledName");
         }
