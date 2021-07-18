@@ -61,6 +61,8 @@
 			"bitset": "cpp",
 			"fstream": "cpp",
 			"sstream": "cpp"
-		}
+		},
+		"dascript.experimental": true,
+		"dascript.hovers.verbose": true
 	}
 }

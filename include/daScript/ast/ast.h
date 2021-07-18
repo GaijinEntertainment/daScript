@@ -54,20 +54,21 @@ namespace das
             float   fValue;
             AnnotationArgumentList * aList; // only used during parsing
         };
+        LineInfo    at;
         AnnotationArgument () : type(Type::tVoid), iValue(0) {}
         //explicit copy is required to avoid copying union as float and cause FPE
         AnnotationArgument (const AnnotationArgument&a)
-            : type(a.type), name(a.name), sValue(a.sValue), iValue(a.iValue) {}
-        AnnotationArgument ( const string & n, const string & s )
-            : type(Type::tString), name(n), sValue(s), iValue(0) {}
-        AnnotationArgument ( const string & n, bool  b )
-            : type(Type::tBool), name(n), bValue(b) {}
-        AnnotationArgument ( const string & n, int   i )
-            : type(Type::tInt), name(n), iValue(i) {}
-        AnnotationArgument ( const string & n, float f )
-            : type(Type::tFloat), name(n), fValue(f) {}
-        AnnotationArgument ( const string & n, AnnotationArgumentList * al )
-            : type(Type::none), name(n), aList(al) {}
+            : type(a.type), name(a.name), sValue(a.sValue), iValue(a.iValue), at(a.at) {}
+        AnnotationArgument ( const string & n, const string & s, const LineInfo & loc = LineInfo() )
+            : type(Type::tString), name(n), sValue(s), iValue(0), at(loc) {}
+        AnnotationArgument ( const string & n, bool b, const LineInfo & loc = LineInfo() )
+            : type(Type::tBool), name(n), bValue(b), at(loc) {}
+        AnnotationArgument ( const string & n, int i, const LineInfo & loc = LineInfo() )
+            : type(Type::tInt), name(n), iValue(i), at(loc) {}
+        AnnotationArgument ( const string & n, float f, const LineInfo & loc = LineInfo() )
+            : type(Type::tFloat), name(n), fValue(f), at(loc) {}
+        AnnotationArgument ( const string & n, AnnotationArgumentList * al, const LineInfo & loc = LineInfo() )
+            : type(Type::none), name(n), aList(al), at(loc) {}
     };
 
     typedef vector<AnnotationArgument> AnnotationArguments;
@@ -95,6 +96,7 @@ namespace das
     struct AnnotationDeclaration : ptr_ref_count {
         AnnotationPtr           annotation;
         AnnotationArgumentList  arguments;
+        LineInfo                at;
         string getMangledName() const;
     };
     typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
