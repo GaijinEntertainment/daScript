@@ -332,6 +332,12 @@ namespace das {
                 "rtti_isHandledTypeAnnotation");
             addProperty<DAS_BIND_MANAGED_PROP(rtti_isBasicStructureAnnotation)>("isBasicStructureAnnotation",
                 "rtti_isBasicStructureAnnotation");
+            addProperty<DAS_BIND_MANAGED_PROP(rtti_isStructureAnnotation)>("isStructureAnnotation",
+                "rtti_isStructureAnnotation");
+            addProperty<DAS_BIND_MANAGED_PROP(rtti_isStructureTypeAnnotation)>("isStructureTypeAnnotation",
+                "rtti_isStructureTypeAnnotation");
+            addProperty<DAS_BIND_MANAGED_PROP(rtti_isFunctionAnnotation)>("isFunctionAnnotation",
+                "rtti_isFunctionAnnotation");
         }
     };
 
