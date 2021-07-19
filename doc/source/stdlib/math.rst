@@ -3597,3 +3597,34 @@ is_nan returns bool
 |function-math-is_nan|
 
 
+.. _function-_at_math_c__c_is_finite_double_hh_const:
+
+.. das:function:: is_finite(x: double const)
+
+is_finite returns bool
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
+
+
+|function-math-is_finite|
+
+.. _function-_at_math_c__c_is_finite_float_hh_const:
+
+.. das:function:: is_finite(x: float const)
+
+is_finite returns bool
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-is_finite|
+
+
