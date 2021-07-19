@@ -232,6 +232,7 @@ namespace das
             }
         }
         if ( row!=ROW ) return "";
+        auto beginOfLine = it;
         while ( *it ) {
             auto CH = *it++;
             if ( CH=='\t' ) {
@@ -251,6 +252,7 @@ namespace das
             }
             col ++;
         }
+        it = beginOfLine;
         const char * tail = it + COL;
         while ( *it && it != tail ) {
             auto CH = *it++;
