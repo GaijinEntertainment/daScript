@@ -1720,8 +1720,10 @@ namespace das {
         for ( auto & arg : func->arguments ) {
             if ( arg->type->baseType==Type::fakeContext ) {
                 arg->init = make_smart<ExprFakeContext>(arg->at);
+                arg->init->generated = true;
             } else if ( arg->type->baseType==Type::fakeLineInfo ) {
                 arg->init = make_smart<ExprFakeLineInfo>(arg->at);
+                arg->init->generated = true;
             }
         }
     }
