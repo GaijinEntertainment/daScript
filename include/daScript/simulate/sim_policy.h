@@ -107,6 +107,8 @@ namespace  das {
         static __forceinline TT Max   ( TT a, TT b, Context &, LineInfo * ) { return a > b ? a : b; }
         static __forceinline TT Sat   ( TT a, Context &, LineInfo * )    { return a < 0 ? 0  : (a > 1 ? 1 : a);}
         static __forceinline TT Clamp ( TT t, TT a, TT b, Context &, LineInfo * ) { return t>a ? (t<b ? t : b) : a; }
+        static __forceinline TT Sign  ( TT a, Context &, LineInfo * )    { return a == 0 ? 0 : (a > 0 ? 1 : -1); }
+        static __forceinline TT Abs   ( TT a, Context &, LineInfo * )    { return a >= 0 ? a : -a; }
     };
 
     struct SimPolicy_Int : SimPolicy_Bin<int32_t>, SimPolicy_MathTT<int32_t> {};
@@ -146,9 +148,18 @@ namespace  das {
             return v_cast_vec4f(v_mini(v_maxi(v_cast_vec4i(a),v_cast_vec4i(v_zero())),v_splatsi(1)));
         }
         static __forceinline vec4f Clamp ( vec4f t, vec4f a, vec4f b, Context & ctx, LineInfo * at ) { return Max(a, Min(t, b, ctx, at), ctx, at); }
+        static __forceinline vec4f Abs   ( vec4f a, Context &, LineInfo * ) { return v_cast_vec4f(v_absi(v_cast_vec4i(a))); }
+
+        static __forceinline vec4f Sign  ( vec4f a, Context &, LineInfo * ) {
+            vec4i zero = v_splatsi(0);
+            vec4i positive = v_andi(v_splatsi(1), v_cmp_gti(v_cast_vec4i(a), zero));
+            vec4i negative = v_andi(v_splatsi(-1), v_cmp_lti(v_cast_vec4i(a), zero));
+            return v_cast_vec4f(v_ori(positive, negative));
+        }
     };
 
     struct SimPolicy_MathFloat {
+        static __forceinline float Sign     ( float a, Context &, LineInfo * )          { return a == 0 ? 0 : (a > 0) ? 1 : -1; }
         static __forceinline float Abs      ( float a, Context &, LineInfo * )          { return v_extract_x(v_abs(v_splats(a))); }
         static __forceinline float Floor    ( float a, Context &, LineInfo * )          { return v_extract_x(v_floor(v_splats(a))); }
         static __forceinline float Ceil     ( float a, Context &, LineInfo * )          { return v_extract_x(v_ceil(v_splats(a))); }
@@ -193,6 +204,11 @@ namespace  das {
     };
 
     struct SimPolicy_MathVec {
+
+        static __forceinline vec4f Sign     ( vec4f a, Context &, LineInfo * ) {
+            return v_or(v_and(v_splats(1.0f), v_cmp_gt(a, v_zero())), v_and(v_splats(-1.0f), v_cmp_lt(a, v_zero())));
+        }
+
         static __forceinline vec4f Abs      ( vec4f a, Context &, LineInfo * )          { return v_abs(a); }
         static __forceinline vec4f Floor    ( vec4f a, Context &, LineInfo * )          { return v_floor(a); }
         static __forceinline vec4f Ceil     ( vec4f a, Context &, LineInfo * )          { return v_ceil(a); }
