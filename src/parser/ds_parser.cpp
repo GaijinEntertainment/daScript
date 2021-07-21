@@ -4282,11 +4282,11 @@ yyreduce:
     {
         auto strb = static_cast<ExprStringBuilder *>((yyvsp[-1].pExpression));
         if ( strb->elements.size()==0 ) {
-            (yyval.pExpression) = new ExprConstString(strb->at,"");
+            (yyval.pExpression) = new ExprConstString(tokRangeAt((yylsp[-2]),(yylsp[0])),"");
             delete (yyvsp[-1].pExpression);
         } else if ( strb->elements.size()==1 && strb->elements[0]->rtti_isStringConstant() ) {
             auto sconst = static_pointer_cast<ExprConstString>(strb->elements[0]);
-            (yyval.pExpression) = new ExprConstString(strb->at,sconst->text);
+            (yyval.pExpression) = new ExprConstString(tokRangeAt((yylsp[-2]),(yylsp[0])),sconst->text);
             delete (yyvsp[-1].pExpression);
         } else {
             (yyval.pExpression) = (yyvsp[-1].pExpression);
