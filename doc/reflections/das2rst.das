@@ -20,7 +20,7 @@ def document_module_math(root:string)
     var mod = get_module("math")
     var groups <- [{DocGroup
         group_by_regex("all numerics (uint*, int*, float*, double)", mod, %regex~(min|max)$%%);
-        group_by_regex("float* and double", mod, %regex~(abs|acos|asin|atan|atan2|cos|sin|tan|exp|log|exp2|
+        group_by_regex("float* and double", mod, %regex~(sign|abs|acos|asin|atan|atan2|cos|sin|tan|exp|log|exp2|
 log2|pow|sqrt|rcp|ceil|floor|abs|saturate|sincos)$%%);
         group_by_regex("float* only", mod, %regex~(atan2_est|rcp_est|ceili|floori|roundi|trunci|rsqrt|rsqrt_est)$%%);
         group_by_regex("float3 only", mod, %regex~(cross|reflect|refract|distance|distance_sq|

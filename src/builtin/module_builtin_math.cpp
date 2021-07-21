@@ -33,6 +33,13 @@ namespace das {
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, float3);     \
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, float4);
 
+#define MATH_FUN_OP1I(fun)\
+      DEFINE_POLICY(fun);\
+      IMPLEMENT_OP1_FUNCTION_POLICY(fun,Int,int32_t); \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, int2);  \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, int3);  \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, int4);
+
 #define MATH_FUN_OP2I(fun)\
       IMPLEMENT_OP2_FUNCTION_POLICY(fun,Int,int32_t);\
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int2);     \
@@ -51,6 +58,16 @@ namespace das {
       IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float2);     \
       IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float3);     \
       IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float4);
+
+#define MATH_FUN_OP1A(fun)                               \
+    DEFINE_POLICY(fun);                                  \
+    MATH_FUN_OP1(fun);                                   \
+    MATH_FUN_OP1I(fun);                                  \
+    IMPLEMENT_OP1_FUNCTION_POLICY(fun,UInt,uint32_t);    \
+    IMPLEMENT_OP1_FUNCTION_POLICY(fun,Int64,int64_t);    \
+    IMPLEMENT_OP1_FUNCTION_POLICY(fun,UInt64,uint64_t);  \
+    IMPLEMENT_OP1_FUNCTION_POLICY(fun,Double,double);
+
 
 #define MATH_FUN_OP2A(fun)                              \
     MATH_FUN_OP2(fun);                                  \
@@ -72,9 +89,10 @@ namespace das {
     MATH_FUN_OP2A(Min)
     MATH_FUN_OP2A(Max)
     MATH_FUN_OP3A(Clamp)
+    MATH_FUN_OP1A(Sign)
+    MATH_FUN_OP1A(Abs)
 
     //common
-    MATH_FUN_OP1(Abs)
     MATH_FUN_OP1(Floor)
     MATH_FUN_OP1(Ceil)
     MATH_FUN_OP1(Sqrt)
@@ -133,12 +151,13 @@ namespace das {
         mod.addFunction( make_smart<BuiltInFn<Sim_Min <TT>, TT,   TT,   TT>      >("min",   lib, "Min")->args({"x","y"}) );
         mod.addFunction( make_smart<BuiltInFn<Sim_Max <TT>, TT,   TT,   TT>      >("max",   lib, "Max")->args({"x","y"}) );
         mod.addFunction( make_smart<BuiltInFn<Sim_Clamp<TT>,TT,   TT,   TT,  TT> >("clamp", lib, "Clamp")->args({"t","a","b"}) );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Abs<TT>,  TT,   TT>            >("abs",   lib, "Abs")->arg("x") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Sign<TT>, TT,   TT>            >("sign",  lib, "Sign")->arg("x") );
     }
 
     template <typename TT>
     void addFunctionCommon(Module & mod, const ModuleLibrary & lib) {
         //                                     policy            ret   arg1     name
-        mod.addFunction( make_smart<BuiltInFn<Sim_Abs<TT>,      TT,   TT>   >("abs",         lib, "Abs")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Floor<TT>,    TT,   TT>   >("floor",       lib, "Floor")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Ceil<TT>,     TT,   TT>   >("ceil",        lib, "Ceil")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Sqrt<TT>,     TT,   TT>   >("sqrt",        lib, "Sqrt")->arg("x") );
@@ -615,7 +634,6 @@ namespace das {
             //double functions
             addExtern<DAS_BIND_FUN(disnan)>(*this, lib, "is_nan", SideEffects::none, "disnan")->arg("x");
             addExtern<DAS_BIND_FUN(disfinite)>(*this, lib, "is_finite", SideEffects::none, "disfinite")->arg("x");
-            addExtern<DAS_BIND_FUN(dabs)>(*this, lib, "abs",     SideEffects::none, "dabs")->arg("x");
             addExtern<DAS_BIND_FUN(dsqrt)>(*this, lib, "sqrt",   SideEffects::none, "dsqrt")->arg("x");
             addExtern<DAS_BIND_FUN(dexp)>(*this, lib, "exp",     SideEffects::none, "dexp")->arg("x");
             addExtern<DAS_BIND_FUN(drcp)>(*this, lib, "rcp",     SideEffects::none, "drcp")->arg("x");

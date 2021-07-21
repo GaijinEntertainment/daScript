@@ -59,6 +59,7 @@ namespace das {
     __forceinline bool   disfinite(double a) { return fabs(a) <= DBL_MAX; }
 
 
+    __forceinline double dsign (double a){return (a == 0) ? 0 : (a > 0) ? 1 : -1;}
     __forceinline double dabs  (double a){return fabs(a);}
     __forceinline double dsqrt (double a){return sqrt(a);}
     __forceinline double dexp  (double a){return exp(a);}

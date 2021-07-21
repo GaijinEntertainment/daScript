@@ -1,3 +1,5 @@
+.. |function-math-sign| replace:: returns sign of x, or 0 if x == 0
+
 .. |function-math-abs| replace:: returns the absolute value of x
 
 .. |function-math-acos| replace:: returns the arccosine of x
