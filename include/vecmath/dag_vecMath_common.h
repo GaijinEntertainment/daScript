@@ -17,6 +17,9 @@
 //we use direct conversion to bool from int
 #endif
 
+VECMATH_FINLINE vec4f VECTORCALL v_cmp_le(vec4f a, vec4f b) { return v_cmp_ge(b, a); }
+VECMATH_FINLINE vec4f VECTORCALL v_cmp_lt(vec4f a, vec4f b) { return v_cmp_gt(b, a); }
+
 VECMATH_FINLINE void VECTORCALL v_set_vec3_mem(vec3f &v, float x, float y, float z)
 {
   float *m = (float*)((char*)&v);
