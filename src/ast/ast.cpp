@@ -670,8 +670,10 @@ namespace das {
             arg->type = args[argi];
             if ( arg->type->baseType==Type::fakeContext ) {
                 arg->init = make_smart<ExprFakeContext>(at);
+                arg->init->generated = true;
             } else if ( arg->type->baseType==Type::fakeLineInfo ) {
                 arg->init = make_smart<ExprFakeLineInfo>(at);
+                arg->init->generated = true;
             }
             if ( arg->type->isTempType() ) {
                 arg->type->implicit = true;
@@ -708,8 +710,10 @@ namespace das {
             arg->type = args[argi];
             if ( arg->type->baseType==Type::fakeContext ) {
                 arg->init = make_smart<ExprFakeContext>(at);
+                arg->init->generated = true;
             } else if ( arg->type->baseType==Type::fakeLineInfo ) {
                 arg->init = make_smart<ExprFakeLineInfo>(at);
+                arg->init->generated = true;
             }
             this->arguments.push_back(arg);
         }
@@ -739,8 +743,10 @@ namespace das {
             arg->type = args[argi];
             if ( arg->type->baseType==Type::fakeContext ) {
                 arg->init = make_smart<ExprFakeContext>(at);
+                arg->init->generated = true;
             } else if ( arg->type->baseType==Type::fakeLineInfo ) {
                 arg->init = make_smart<ExprFakeLineInfo>(at);
+                arg->init->generated = true;
             }
             this->arguments.push_back(arg);
         }
