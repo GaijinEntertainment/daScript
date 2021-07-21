@@ -159,7 +159,7 @@ namespace  das {
     };
 
     struct SimPolicy_MathFloat {
-        static __forceinline float Sign     ( float a, Context &, LineInfo * )          { return a == 0 ? 0 : (a > 0) ? 1 : -1; }
+        static __forceinline float Sign     ( float a, Context &, LineInfo * )          { return a == 0.0f ? 0.0f : (a > 0.0f) ? 1.0f : -1.0f; }
         static __forceinline float Abs      ( float a, Context &, LineInfo * )          { return v_extract_x(v_abs(v_splats(a))); }
         static __forceinline float Floor    ( float a, Context &, LineInfo * )          { return v_extract_x(v_floor(v_splats(a))); }
         static __forceinline float Ceil     ( float a, Context &, LineInfo * )          { return v_extract_x(v_ceil(v_splats(a))); }
