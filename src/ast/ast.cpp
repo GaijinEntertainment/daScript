@@ -2169,6 +2169,7 @@ namespace das {
     ExpressionPtr ExprLooksLikeCall::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprLooksLikeCall>(expr);
         Expression::clone(cexpr);
+        cexpr->atEnclosure = atEnclosure;
         cexpr->name = name;
         for ( auto & arg : arguments ) {
             cexpr->arguments.push_back(arg->clone());
@@ -2635,6 +2636,16 @@ namespace das {
             error("too many options for " + name,"","", at, CompilationError::function_not_found);
             return new ExprCall(at,name);
         }
+    }
+
+    ExprLooksLikeCall * Program::makeCall ( const LineInfo & at, const LineInfo & atEnd, const string & name ) {
+        auto res = makeCall(at, name);
+        if ( res ) {
+            res->atEnclosure = at;
+            res->atEnclosure.last_column = atEnd.last_column;
+            res->atEnclosure.last_line = atEnd.last_line;
+        }
+        return res;
     }
 
     int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr ) {

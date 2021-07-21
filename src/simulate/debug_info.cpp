@@ -464,6 +464,10 @@ namespace das
         return (column>=from) && (column<=to);
     }
 
+    bool LineInfo::empty() const {
+        return (line==0) && (column==0) && (last_line==0) && (last_column==0);
+    }
+
     void FileInfo::reserveProfileData() {
 #if DAS_ENABLE_PROFILER
         if ( source ) {

@@ -344,6 +344,7 @@ namespace das
         vector<ExpressionPtr>   arguments;
         bool                    argumentsFailedToInfer = false;
         TypeDeclPtr             aliasSubstitution;  // only used during infer
+        LineInfo                atEnclosure;
     };
 
     struct ExprCallMacro : ExprLooksLikeCall {

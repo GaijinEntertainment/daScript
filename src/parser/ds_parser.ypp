@@ -880,8 +880,6 @@ optional_function_argument_list
 optional_function_type
     :   {
         $$ = new TypeDecl(Type::autoinfer);
-        $$->at = LineInfo(g_FileAccessStack.back(),
-            yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line);
     }
     |   ':' type_declaration[typeDecl]  {
         $$ = $typeDecl;
@@ -1564,19 +1562,19 @@ expr
     |   expr[subexpr] QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name); delete $name; }
     |   func_addr_expr[subexpr]                  { $$ = $subexpr; }
-    |   name_in_namespace[name] '(' ')' {
-            $$ = g_Program->makeCall(tokAt(@name),*$name);
+    |   name_in_namespace[name] '(' ')'[atend] {
+            $$ = g_Program->makeCall(tokAt(@name),tokAt(@atend),*$name);
             delete $name;
         }
-    |   name_in_namespace[name] '(' expr_list[arguments] ')' {
-            $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@name),*$name),$arguments);
+    |   name_in_namespace[name] '(' expr_list[arguments] ')'[atend] {
+            $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@name),tokAt(@atend),*$name),$arguments);
             delete $name;
         }
-    |   basic_type_declaration[type] '(' ')' {
-        $$ = g_Program->makeCall(tokAt(@type),das_to_string($type));
+    |   basic_type_declaration[type] '(' ')'[atend] {
+        $$ = g_Program->makeCall(tokAt(@type),tokAt(@atend),das_to_string($type));
     }
-    |   basic_type_declaration[type] '(' expr_list[arguments] ')' {
-        $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),das_to_string($type)),$arguments);
+    |   basic_type_declaration[type] '(' expr_list[arguments] ')'[atend] {
+        $$ = parseFunctionArguments(g_Program->makeCall(tokAt(@type),tokAt(@atend),das_to_string($type)),$arguments);
     }
     |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(@loc),ExpressionPtr($subexpr)); }

@@ -1463,6 +1463,24 @@ namespace das {
         return expr->visit(swapAt);
     }
 
+    void minPoint ( uint32_t & line, uint32_t & column, uint32_t LINE, uint32_t COLUMN ) {
+        if ( line==LINE ) {
+            column = das::min(column, COLUMN);
+        } else if ( line>LINE ) {
+            line = LINE;
+            column = COLUMN;
+        }
+    }
+
+    void maxPoint ( uint32_t & line, uint32_t & column, uint32_t LINE, uint32_t COLUMN ) {
+        if ( line==LINE ) {
+            column = das::max(column, COLUMN);
+        } else if ( line<LINE ) {
+            line = LINE;
+            column = COLUMN;
+        }
+    }
+
     class EncloseVisitor : public Visitor {
     public:
         EncloseVisitor() {}
@@ -1473,11 +1491,15 @@ namespace das {
                 enclosure = expr->at;
                 first = false;
             } else {
-                enclosure.column      = das::min(enclosure.column,      expr->at.column);
-                enclosure.line        = das::min(enclosure.line,        expr->at.line);
-                enclosure.last_column = das::max(enclosure.last_column, expr->at.last_column);
-                enclosure.last_column = das::max(enclosure.last_line,   expr->at.last_line);
-
+                minPoint(enclosure.line, enclosure.column, expr->at.line, expr->at.column);
+                maxPoint(enclosure.last_line, enclosure.last_column, expr->at.last_line, expr->at.last_column);
+            }
+            if ( expr->rtti_isCallLikeExpr() ) {
+                auto ellc = static_cast<ExprLooksLikeCall *>(expr);
+                if ( !ellc->atEnclosure.empty() ) {
+                    minPoint(enclosure.line, enclosure.column, ellc->atEnclosure.line, ellc->atEnclosure.column);
+                    maxPoint(enclosure.last_line, enclosure.last_column, ellc->atEnclosure.last_line, ellc->atEnclosure.last_column);
+                }
             }
         }
     public:
