@@ -718,7 +718,7 @@ namespace debugapi {
         return res;
     }
 
-    vec4f get_global_variable ( Context & context, SimNode_CallBase *, vec4f * args ) {
+    vec4f get_global_variable ( Context &, SimNode_CallBase *, vec4f * args ) {
         auto ctx = cast<Context *>::to(args[0]);
         auto name = cast<char *>::to(args[1]);
         auto vidx = ctx->findVariable(name);

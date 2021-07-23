@@ -2294,6 +2294,20 @@ namespace das {
         func->annotations.push_back(annDecl);
     }
 
+    void addAndApplyFunctionAnnotation ( smart_ptr_raw<Function> func, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context ) {
+        string err;
+        if (!ann->annotation->rtti_isFunctionAnnotation()) {
+            context->throw_error_ex("annotation %s failed to apply to function %s, not a FunctionAnnotation",
+                ann->annotation->name.c_str(), func->name.c_str());
+        }
+        auto fAnn = (FunctionAnnotation*)ann->annotation.get();
+        if ( !fAnn->apply(func, *g_Program->thisModuleGroup, ann->arguments, err) ) {
+            context->throw_error_ex("annotation %s failed to apply to function %s",
+                ann->annotation->name.c_str(), func->name.c_str());
+        }
+        func->annotations.push_back(ann);
+    }
+
     Module * thisModule ( Context * context, LineInfoArg * lineinfo ) {
         if ( !context->thisProgram ) {
             context->throw_error_at(*lineinfo, "can't get this module past compilation");
@@ -2713,6 +2727,8 @@ namespace das {
                 SideEffects::modifyExternal, "addModuleFunction");
             addExtern<DAS_BIND_FUN(addFunctionFunctionAnnotation)>(*this, lib,  "add_function_annotation",
                 SideEffects::modifyExternal, "addFunctionFunctionAnnotation");
+            addExtern<DAS_BIND_FUN(addAndApplyFunctionAnnotation)>(*this, lib,  "add_function_annotation",
+                SideEffects::modifyExternal, "addAndApplyFunctionAnnotation");
             // variables
             addExtern<DAS_BIND_FUN(addModuleVariable)>(*this, lib, "add_variable",
                 SideEffects::modifyExternal, "addModuleVariable");

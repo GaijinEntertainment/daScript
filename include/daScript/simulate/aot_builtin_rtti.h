@@ -11,6 +11,7 @@ DAS_BIND_ENUM_CAST(Type);
 
 namespace das {
     class ModuleGroup;
+    struct AnnotationArgumentList;
 }
 
 MAKE_EXTERNAL_TYPE_FACTORY(ModuleGroup, das::ModuleGroup)
@@ -95,6 +96,7 @@ namespace das {
     };
 
     char * rtti_get_das_type_name(Type tt, Context * context);
+    int rtti_add_annotation_argument(AnnotationArgumentList& list, const char* name);
 
     vec4f rtti_contextFunctionInfo ( Context & context, SimNode_CallBase *, vec4f * );
     vec4f rtti_contextVariableInfo ( Context & context, SimNode_CallBase *, vec4f * );

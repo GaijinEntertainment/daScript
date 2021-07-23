@@ -36,6 +36,22 @@ namespace das
         }
     };
 
+    struct MarkFunctionOrBlockAnnotation : FunctionAnnotation {
+        MarkFunctionOrBlockAnnotation() : FunctionAnnotation("marker") { }
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) {
+            return true;
+        }
+        virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            return true;
+        }
+        virtual bool finalize(ExprBlock *, ModuleGroup &,const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+            return true;
+        }
+        virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+            return true;
+        }
+    };
+
     struct PrivateFunctionAnnotation : MarkFunctionAnnotation {
         PrivateFunctionAnnotation() : MarkFunctionAnnotation("private") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -884,6 +900,7 @@ namespace das
         addReaderMacro(make_smart<UnescapedStringMacro>());
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
+        addAnnotation(make_smart<MarkFunctionOrBlockAnnotation>());
         addAnnotation(make_smart<CppAlignmentAnnotation>());
         addAnnotation(make_smart<GenericFunctionAnnotation>());
         addAnnotation(make_smart<PrivateFunctionAnnotation>());

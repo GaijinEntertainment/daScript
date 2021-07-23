@@ -847,6 +847,11 @@ namespace das {
         return context->stringHeap->allocateString(str);
     }
 
+    int rtti_add_annotation_argument(AnnotationArgumentList& list, const char* name) {
+        list.emplace_back(name != nullptr ? name : "", 0);
+        return (int)list.size() - 1;
+    }
+
 #if !DAS_NO_FILEIO
 
     void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
@@ -1070,11 +1075,14 @@ namespace das {
                 SideEffects::modifyExternal, "isCompatibleCast");
             addExtern<DAS_BIND_FUN(rtti_get_das_type_name)>(*this, lib,  "get_das_type_name",
                 SideEffects::none, "rtti_get_das_type_name");
+            addExtern<DAS_BIND_FUN(rtti_add_annotation_argument)>(*this, lib,  "add_annotation_argument",
+                SideEffects::none, "add_annotation_argument");
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo");
             // extras
-            registerVectorFunctions<AnnotationDeclarationPtr>::init(this,lib,false,false);
+            registerVectorFunctions<AnnotationList>::init(this,lib,false,false);
+            registerVectorFunctions<AnnotationArgumentList>::init(this,lib,false,false);
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready

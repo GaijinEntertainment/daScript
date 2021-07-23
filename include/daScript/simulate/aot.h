@@ -2213,77 +2213,77 @@ namespace das {
     };
 
     template <typename TT>
-    Sequence das_vector_each_sequence ( const vector<TT> & vec, Context * context ) {
-        using VectorIterator = StdVectorIterator<vector<TT>>;
+    Sequence das_vector_each_sequence ( const TT & vec, Context * context ) {
+        using VectorIterator = StdVectorIterator<TT>;
         char * iter = context->heap->allocate(sizeof(VectorIterator));
         context->heap->mark_comment(iter, "std::vector<> iterator");
-        new (iter) VectorIterator((vector<TT> *)&vec);
+        new (iter) VectorIterator((TT *)&vec);
         return { (Iterator *) iter };
     }
 
-    template <typename TT>
-    __forceinline TSequence<TT &> das_vector_each ( vector<TT> & vec, Context * context ) {
+    template <typename TT, typename QQ = typename TT::value_type>
+    __forceinline TSequence<QQ &> das_vector_each ( TT & vec, Context * context ) {
         return das_vector_each_sequence(vec,context);
     }
 
-    template <typename TT>
-    __forceinline TSequence<const TT &> das_vector_each_const ( const vector<TT> & vec, Context * context ) {
+    template <typename TT, typename QQ = typename TT::value_type>
+    __forceinline TSequence<const QQ &> das_vector_each_const ( const TT & vec, Context * context ) {
         return das_vector_each_sequence(vec,context);
     }
 
-    template <typename TT, typename QQ>
-    __forceinline void das_vector_push ( vector<TT> & vec, const QQ & value, int32_t at, Context * context ) {
+    template <typename TT, typename QQ = typename TT::value_type>
+    __forceinline void das_vector_push ( TT & vec, const QQ & value, int32_t at, Context * context ) {
         if ( uint32_t(at)>vec.size() ) {
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
         vec.insert(vec.begin() + at, value);
     }
 
-    template <typename TT, typename QQ>
-    __forceinline void das_vector_push_value ( vector<TT> & vec, QQ value, int32_t at, Context * context ) {
+    template <typename TT, typename QQ = typename TT::value_type>
+    __forceinline void das_vector_push_value ( TT & vec, QQ value, int32_t at, Context * context ) {
         if ( uint32_t(at)>vec.size() ) {
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
         vec.insert(vec.begin() + at, value);
     }
 
-    template <typename TT, typename QQ>
-    __forceinline void das_vector_emplace ( vector<TT> & vec, QQ & value, int32_t at ) {
+    template <typename TT, typename QQ = typename TT::value_type>
+    __forceinline void das_vector_emplace ( TT & vec, QQ & value, int32_t at ) {
         vec.emplace(vec.begin()+at, move(value));
     }
 
-    template <typename TT, typename QQ>
-    __forceinline void das_vector_push_back ( vector<TT> & vec, const QQ & value ) {
+    template <typename TT, typename QQ = typename TT::value_type>
+    __forceinline void das_vector_push_back ( TT & vec, const QQ & value ) {
         vec.push_back(value);
     }
 
-    template <typename TT, typename QQ>
-    __forceinline void das_vector_push_back_value ( vector<TT> & vec, QQ value ) {
+    template <typename TT, typename QQ = typename TT::value_type>
+    __forceinline void das_vector_push_back_value ( TT & vec, QQ value ) {
         vec.push_back(value);
     }
 
-    template <typename TT, typename QQ>
-    __forceinline void das_vector_emplace_back ( vector<TT> & vec, QQ & value ) {
+    template <typename TT, typename QQ = typename TT::value_type>
+    __forceinline void das_vector_emplace_back ( TT & vec, QQ & value ) {
         vec.emplace_back(move(value));
     }
 
     template <typename TT>
-    __forceinline void das_vector_pop ( vector<TT> & vec ) {
+    __forceinline void das_vector_pop ( TT & vec ) {
         vec.pop_back();
     }
 
     template <typename TT>
-    __forceinline void das_vector_clear ( vector<TT> & vec ) {
+    __forceinline void das_vector_clear ( TT & vec ) {
         vec.clear();
     }
 
     template <typename TT>
-    __forceinline void das_vector_resize ( vector<TT> & vec, int32_t newSize ) {
+    __forceinline void das_vector_resize ( TT & vec, int32_t newSize ) {
         vec.resize(newSize);
     }
 
     template <typename TT>
-    __forceinline void das_vector_erase ( vector<TT> & vec, int32_t index, Context * context ) {
+    __forceinline void das_vector_erase ( TT & vec, int32_t index, Context * context ) {
         if ( uint32_t(index)>vec.size() ) {
             context->throw_error_ex("erasing vector index out of range %i of %i", index, int32_t(vec.size()));
         }

@@ -9,6 +9,8 @@ require daslib/ast_boost
 struct Template
     var2expr : table<string; smart_ptr<Expression>>
     type2type : table<string; string>
+    blockArgName : table<string; string>
+    annArg : table<string; lambda<(var ann: AnnotationDeclaration):void> >
 
 def replaceVariable ( var self:Template; name:string; var expr : smart_ptr<ast::Expression> )
     self.var2expr[name] <- expr
@@ -18,6 +20,12 @@ def renameVariable ( var self:Template; name, newName:string )
 
 def replaceType ( var self:Template; name,newName:string )
     self.type2type[name] = newName
+
+def replaceAnnotationArgument ( var self:Template; name:string; var cb:lambda<(var ann: AnnotationDeclaration):void> )
+    self.annArg[name] <- cb
+
+def replaceBlockArgument ( var self:Template; name,newName:string )
+    self.blockArgName[name] = newName
 
 class TemplateVisitor : AstVisitor
     rules : Template?
@@ -45,6 +53,16 @@ class TemplateVisitor : AstVisitor
         var tyyp <- clone_type(typ)
         self->replaceAlias(tyyp)
         return tyyp
+    def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>)
+        if !blk.blockFlags.isClosure
+            return
+        for arg in blk.arguments
+            let vn = "{arg.name}"
+            if key_exists(rules.blockArgName, vn)
+                arg.name := rules.blockArgName[vn]
+        for ann in blk.annotations
+            rules.annArg |> find_if_exists("{ann.annotation.name}") <| $(cb)
+                (*cb) |> invoke(*ann)
 
 
 def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Expression>; forceAt:bool = true )
