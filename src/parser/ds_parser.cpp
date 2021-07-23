@@ -9126,7 +9126,7 @@ void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, 
 
 void runFunctionAnnotations ( Function * func, AnnotationList * annL, const LineInfo & at ) {
     if ( annL ) {
-        for ( auto pA : *annL ) {
+        for ( const auto & pA : *annL ) {
             if ( pA->annotation ) {
                 if ( pA->annotation->rtti_isFunctionAnnotation() ) {
                     auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
@@ -9142,6 +9142,9 @@ void runFunctionAnnotations ( Function * func, AnnotationList * annL, const Line
             }
         }
         swap ( func->annotations, *annL );
+        for ( const auto & pA : *annL ) {
+            func->annotations.push_back(pA);
+        }
         delete annL;
     }
 }
