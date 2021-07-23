@@ -465,6 +465,44 @@ def convert_to_expression ( var value : auto&; at:LineInfo )
 	    let pval = addr(value)
 	    return walk_and_convert(reinterpret<uint8?> pval, info, at)
 
+def find_annotation ( mod_name,ann_name:string ) : Annotation const?
+    var mod = find_compiling_module(mod_name)
+    if mod==null
+        return null
+    var ann : Annotation const?
+    module_for_each_annotation(mod) <| $ ( value )
+        peek(value.name) <| $ ( vname )
+            if vname == ann_name
+                unsafe
+                    ann = addr(value)
+    return ann
+
+def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
+    var ann = find_annotation(mod_name, ann_name)
+    assert(ann!=null)
+    var decl <- new [[AnnotationDeclaration()]]
+    unsafe
+        decl.annotation := reinterpret<smart_ptr<Annotation>> ann
+    for argP in args
+        let argName & = argP.argname
+        let arg & = argP.argvalue
+        let argIndex = decl.arguments |> add_annotation_argument(argName)
+        if arg is tBool
+            decl.arguments[argIndex].basicType = Type tBool
+            decl.arguments[argIndex].bValue = arg as tBool
+        elif arg is tInt
+            decl.arguments[argIndex].basicType = Type tInt
+            decl.arguments[argIndex].iValue = arg as tInt
+        elif arg is tFloat
+            decl.arguments[argIndex].basicType = Type tFloat
+            decl.arguments[argIndex].fValue = arg as tFloat
+        elif arg is tString
+            decl.arguments[argIndex].basicType = Type tString
+            decl.arguments[argIndex].sValue := arg as tString
+        else
+            panic("Invalid rtti value")
+    add_function_annotation(func, decl)
+
 [_macro,private]
 def setup
     if is_compiling_macros_in_module("ast_boost")

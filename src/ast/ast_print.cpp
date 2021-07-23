@@ -146,7 +146,9 @@ namespace das {
         void logAnnotations(const AnnotationList & annList) {
             if (!annList.empty()) {
                 ss << "[";
+                bool first = true;
                 for (const auto & ann : annList) {
+                    if ( first ) first = false; else ss << ",";
                     ss << ann->annotation->name;
                     if (!ann->arguments.empty()) {
                         ss << "(";

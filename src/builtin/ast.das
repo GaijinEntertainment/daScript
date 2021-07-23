@@ -568,11 +568,18 @@ def add_new_pass_macro ( name:string; someClassPtr )
         delete ann
 
 [generic]
-def find_module(name:string) : Module?
+def find_module(prog:smart_ptr<Program>; name:string) : Module?
     var rm : Module?
-    program_for_each_module(this_program()) <| $ ( mod )
+    program_for_each_module(prog) <| $ ( mod )
         if string(mod.name)==name
             rm = mod
     verify(rm!=null,"module not found")
     return rm
 
+[generic]
+def find_module(name:string) : Module?
+    return find_module(this_program(),name)
+
+[generic]
+def find_compiling_module(name:string) : Module?
+    return find_module(compiling_program(),name)
