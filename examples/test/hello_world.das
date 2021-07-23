@@ -1,15 +1,18 @@
-require daslib/safe_addr
 
-struct Foo
-    a : int
+options log
 
-struct Bar
-    pfoo : Foo?#
+require extra_ann
+
+[export,test_extra]
+def foo
+    print("bar")
 
 [export]
 def main
-    var t : Foo
-    var pt = safe_addr(t)
-    var abar : array<Bar>
-    abar |> push([[Bar pfoo=pt]])
+    var a = "blah, blah"
+    a += ", blah"
+    print("a = {a}\n")
+
+
+
 

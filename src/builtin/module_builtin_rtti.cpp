@@ -294,7 +294,7 @@ namespace das {
         }
     };
 
-    struct AnnotationDeclarationAnnotation : ManagedStructureAnnotation <AnnotationDeclaration,false> {
+    struct AnnotationDeclarationAnnotation : ManagedStructureAnnotation <AnnotationDeclaration,true> {
         AnnotationDeclarationAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("AnnotationDeclaration", ml) {
                 addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
