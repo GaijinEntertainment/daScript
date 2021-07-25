@@ -502,6 +502,7 @@ def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:arr
         else
             panic("Invalid rtti value")
     add_function_annotation(func, decl)
+    decl := null
 
 [_macro,private]
 def setup
