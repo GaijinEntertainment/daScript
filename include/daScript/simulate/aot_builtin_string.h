@@ -10,7 +10,8 @@ namespace das {
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context );
     vec4f builtin_write_string ( Context & context, SimNode_CallBase * call, vec4f * args );
 
-    void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context );
+    void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context );
+    char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context );
 
     char * builtin_string_escape ( const char *str, Context * context );
     char * builtin_string_unescape ( const char *str, Context * context );

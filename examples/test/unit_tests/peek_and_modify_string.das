@@ -1,10 +1,7 @@
 require daslib/strings_boost
 
-def is_char_at(foo:array<uint8>#; idx:int; ch:int)
-    return int(foo[idx])==ch
-
 [export]
-def main
+def test
     var sample = " a + b * ( c << d ) blah blah b"
     peek_data(sample) <| $ ( foo )
         for x in range(length(foo))
@@ -15,6 +12,8 @@ def main
             if is_char_at(foo, x, 'b')
                 foo[x] = uint8('B')
     assert(new_sample==" a + B * ( c << d ) Blah Blah B")
+    return true
+
 
 
 

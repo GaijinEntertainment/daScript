@@ -48,3 +48,6 @@ def split_by_chars ( text, delim : string ) : array<string>
     builtin_string_split_by_char (text, delim) <| $ ( arr : array<string># ) : void
         res := arr
     return <- res
+
+def is_char_at(foo:array<uint8>#; idx:int; ch:int)
+    return int(foo[idx])==ch

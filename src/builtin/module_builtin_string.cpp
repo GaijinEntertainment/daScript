@@ -534,7 +534,7 @@ namespace das
         }
     }
 
-    void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context ) {
+    void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context ) {
         if ( !str ) return;
         Array arr;
         arr.data = (char *) str;
@@ -543,6 +543,21 @@ namespace das
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
         context->invoke(block, args, nullptr);
+    }
+
+    char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context ) {
+        if ( !str ) return nullptr;
+        int32_t len = int32_t(strlen(str));
+        char * cstr = context->stringHeap->allocateString(str, len);
+        memcpy(cstr, str, len);
+        Array arr;
+        arr.data = cstr;
+        arr.capacity = arr.size = len;
+        arr.lock = 1;
+        vec4f args[1];
+        args[0] = cast<Array *>::from(&arr);
+        context->invoke(block, args, nullptr);
+        return cstr;
     }
 
     class Module_Strings : public Module {
@@ -560,6 +575,8 @@ namespace das
                 SideEffects::modifyExternal,"builtin_build_string_T")->args({"block","context"})->setAotTemplate();
             addExtern<DAS_BIND_FUN(builtin_string_peek)>(*this, lib, "peek_data",
                 SideEffects::modifyExternal,"builtin_string_peek")->args({"str","block","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_peek_and_modify)>(*this, lib, "modify_data",
+                SideEffects::modifyExternal,"builtin_string_peek_and_modify")->args({"str","block","context"});
             addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
                 SideEffects::modifyExternal, "builtin_write_string")->args({"writer","anything"});
             addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char",
