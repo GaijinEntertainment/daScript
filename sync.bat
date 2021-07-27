@@ -12,10 +12,10 @@ If %ERRORLEVEL% NEQ 0	ECHO CREATE PATCH %1 FAILED
 echo syncing examples
 call make_empty_folder.bat %DEST_DIR%\examples
 call sync_folder.bat %SRC_DIR%\examples %DEST_DIR%\examples
-call remove_folder.bat %DEST_DIR%\examples\json
 call remove_folder.bat %DEST_DIR%\examples\profile\tests\angelscript
 call remove_folder.bat %DEST_DIR%\examples\profile\tests\squirrel
 call remove_folder.bat %DEST_DIR%\examples\profile\tests\lua
+call remove_folder.bat %DEST_DIR%\examples\profile\tests\js
 
 echo syncing utils
 call make_empty_folder.bat %DEST_DIR%\utils
@@ -30,6 +30,10 @@ call remove_folder.bat %DEST_DIR%\include\vecmath
 echo syncing src
 call make_empty_folder.bat %DEST_DIR%\src
 call sync_folder.bat %SRC_DIR%\src %DEST_DIR%\src
+
+echo syncing src
+call make_empty_folder.bat %DEST_DIR%\daslib
+call sync_folder.bat %SRC_DIR%\daslib %DEST_DIR%\daslib
 
 echo syncing doc
 call make_empty_folder.bat %DEST_DIR%\doc
