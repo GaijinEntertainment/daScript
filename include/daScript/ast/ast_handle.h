@@ -628,8 +628,8 @@ namespace das
 
     template <typename TT>
     void addEquNeqVal(Module & mod, const ModuleLibrary & lib) {
-        addExtern<decltype(&das_equ_val<TT>),  das_equ<TT>> (mod, lib, "==", SideEffects::none, "das_equ_val");
-        addExtern<decltype(&das_nequ_val<TT>), das_nequ<TT>>(mod, lib, "!=", SideEffects::none, "das_nequ_val");
+        addExtern<decltype(&das_equ_val<TT>),  das_equ_val<TT>> (mod, lib, "==", SideEffects::none, "das_equ_val");
+        addExtern<decltype(&das_nequ_val<TT>), das_nequ_val<TT>>(mod, lib, "!=", SideEffects::none, "das_nequ_val");
     }
 }
 

@@ -153,6 +153,11 @@ namespace das
         addFunctionOrdered<double>(*this,lib);
         ADD_NUMERIC_CASTS(double, double);
         ADD_NUMERIC_LIMITS(DBL, double);
+        // small types
+        addEquNeqVal<int8_t>(*this,lib);
+        addEquNeqVal<uint8_t>(*this,lib);
+        addEquNeqVal<int16_t>(*this,lib);
+        addEquNeqVal<uint16_t>(*this,lib);
         // misc types
         addMiscTypes(lib);
         // VECTOR & MATRIX TYPES
