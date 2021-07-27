@@ -6468,6 +6468,11 @@ namespace das {
             } else if ( !expr->type->isRefType() ) {
                 expr->type->ref = true;
             }
+            if ( expr->type->isAuto() ) {
+                error("[[auto ]] needs to be fully inferred", "", "",
+                    expr->at, CompilationError::invalid_type);
+                return Visitor::visit(expr);
+            }
             verifyType(expr->type);
             return Visitor::visit(expr);
         }

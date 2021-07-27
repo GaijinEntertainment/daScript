@@ -97,6 +97,7 @@ namespace das {
             if (newPos != pos) {
                 string st(data.data() + pos, newPos - pos);
                 printf("%s", st.c_str());
+                fflush(stdout);
                 pos = newPos;
             }
         }
