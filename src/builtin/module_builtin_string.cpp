@@ -533,6 +533,18 @@ namespace das
             return s;
         }
     }
+
+    void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context ) {
+        if ( !str ) return;
+        Array arr;
+        arr.data = (char *) str;
+        arr.capacity = arr.size = uint32_t(strlen(str));
+        arr.lock = 1;
+        vec4f args[1];
+        args[0] = cast<Array *>::from(&arr);
+        context->invoke(block, args, nullptr);
+    }
+
     class Module_Strings : public Module {
     public:
         Module_Strings() : Module("strings") {
@@ -546,6 +558,8 @@ namespace das
                 SideEffects::modifyExternal,"delete_string")->args({"str","context"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
                 SideEffects::modifyExternal,"builtin_build_string_T")->args({"block","context"})->setAotTemplate();
+            addExtern<DAS_BIND_FUN(builtin_string_peek)>(*this, lib, "peek_data",
+                SideEffects::modifyExternal,"builtin_string_peek")->args({"str","block","context"});
             addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
                 SideEffects::modifyExternal, "builtin_write_string")->args({"writer","anything"});
             addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char",
