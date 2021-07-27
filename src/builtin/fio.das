@@ -1,6 +1,7 @@
 options indenting=4
 
 require fio
+require strings
 
 typedef
     file = FILE const?
@@ -29,6 +30,12 @@ def fstat(f:file):FStat
     if fstat(f,fs)
         fs.is_valid = true
     return fs
+
+def fread(f:file; blk:block<(data:string const#)>)
+    var stmp = fread(f)
+    unsafe
+        invoke(blk, reinterpret<string#>(stmp))
+        delete_string(stmp)
 
 let
     df_magic = 0x12345678

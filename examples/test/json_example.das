@@ -48,8 +48,8 @@ def test
     for jidx in range(1,8)
         let fname = "C:/Users/Boris/Work/yzg/examples/test/json/{jidx}.json"
         // let fname = "/Users/borisbatkin/Work/yzg/examples/test/json/{jidx}.json"
-        fopen(fname, "r") <| $ ( f )
-            fmap(f) <| $ ( data )
+        fopen(fname, "rb") <| $ ( f )
+            fread(f) <| $ ( data )
                 print ( "\n{fname}\n" )
                 // print("before read {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
                 var error = ""
@@ -75,3 +75,7 @@ def test
         string_heap_collect()
     print("after collect {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
     return true
+
+[export]
+def main
+    test()

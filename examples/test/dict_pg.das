@@ -8,7 +8,7 @@ def test
         fopen(fname, "rb") <| $( f )
             if f != null
                 var dict : table<string; int>
-                fmap(f) <| $(data)
+                fread(f) <| $(data)
                     var offset, length, index = 0
                     for ch,index in data,range(INT_MAX)
                         if is_alpha(ch)

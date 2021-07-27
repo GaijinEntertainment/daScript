@@ -787,11 +787,11 @@ def genBindings(hf,df,mf_enum,df_enum,mf_ann,df_ann,df_method:FILE const?)
 def bindHeaders ( fname, outprefix:string )
     for enk,env in keys(ex_enums),values(ex_enums)
         rev_enums[env.name] = enk
-    fopen(fname, "r") <| $ ( f )
+    fopen(fname, "rb") <| $ ( f )
         if f==null
             print("can't open {fname}")
         else
-            fmap(f) <| $ ( data )
+            fread(f) <| $ ( data )
                 print ( "\n{fname}\n" )
                 var error = ""
                 var json = read_json(data, error)

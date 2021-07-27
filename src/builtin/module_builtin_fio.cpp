@@ -187,14 +187,18 @@ namespace das {
         return feof(f);
     }
 
-    void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<const char*>>& blk, Context* context) {
+    void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context) {
         if ( !f ) context->throw_error("can't map NULL file");
         struct stat st;
         int fd = fileno((FILE *)f);
         fstat(fd, &st);
         void* data = mmap(nullptr, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+        Array arr;
+        arr.data = (char *) data;
+        arr.capacity = arr.size = uint32_t(st.st_size);
+        arr.lock = 1;
         vec4f args[1];
-        args[0] = cast<void*>::from(data);
+        args[0] = cast<Array *>::from(&arr);
         context->invoke(blk, args, nullptr);
         munmap(data, 0);
     }
@@ -403,6 +407,7 @@ namespace das {
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();
+            lib.addModule(Module::require("strings"));
             // type
             addAnnotation(make_smart<FileAnnotation>(lib));
             addAnnotation(make_smart<FStatAnnotation>(lib));
