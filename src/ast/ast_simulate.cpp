@@ -2183,7 +2183,11 @@ namespace das
         DAS_ASSERTF(simSubE, "internal error. can't be zero");
         if ( moveSemantics ) {
             // TODO: support by-value annotations?
-            return context.code->makeValueNode<SimNode_ReturnAndMoveR2V>(subexpr->type->baseType, at, simSubE);
+            if ( subexpr->type->isRef() ) {
+                return context.code->makeValueNode<SimNode_ReturnAndMoveR2V>(subexpr->type->baseType, at, simSubE);
+            } else {
+                return context.code->makeNode<SimNode_Return>(at, simSubE);
+            }
         } else {
             return context.code->makeNode<SimNode_Return>(at, simSubE);
         }
