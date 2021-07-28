@@ -486,23 +486,42 @@ def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:arr
     for argP in args
         let argName & = argP.argname
         let arg & = argP.argvalue
-        let argIndex = decl.arguments |> add_annotation_argument(argName)
         if arg is tBool
-            decl.arguments[argIndex].basicType = Type tBool
-            decl.arguments[argIndex].bValue = arg as tBool
+            decl.arguments |> add_annotation_argument(argName, arg as tBool)
         elif arg is tInt
-            decl.arguments[argIndex].basicType = Type tInt
-            decl.arguments[argIndex].iValue = arg as tInt
+            decl.arguments |> add_annotation_argument(argName, arg as tInt)
         elif arg is tFloat
-            decl.arguments[argIndex].basicType = Type tFloat
-            decl.arguments[argIndex].fValue = arg as tFloat
+            decl.arguments |> add_annotation_argument(argName, arg as tFloat)
         elif arg is tString
-            decl.arguments[argIndex].basicType = Type tString
-            decl.arguments[argIndex].sValue := arg as tString
+            decl.arguments |> add_annotation_argument(argName, arg as tString)
         else
             panic("Invalid rtti value")
     add_function_annotation(func, decl)
     decl := null
+
+def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:string; val:bool )
+    let argIdx = arguments |> add_annotation_argument(argName)
+    arguments[argIdx].basicType = Type tBool
+    arguments[argIdx].bValue = val
+    return argIdx
+
+def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:string; val:int )
+    let argIdx = arguments |> add_annotation_argument(argName)
+    arguments[argIdx].basicType = Type tInt
+    arguments[argIdx].iValue = val
+    return argIdx
+
+def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:string; val:float )
+    let argIdx = arguments |> add_annotation_argument(argName)
+    arguments[argIdx].basicType = Type tFloat
+    arguments[argIdx].fValue = val
+    return argIdx
+
+def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:string; val:string )
+    let argIdx = arguments |> add_annotation_argument(argName)
+    arguments[argIdx].basicType = Type tString
+    arguments[argIdx].sValue := val
+    return argIdx
 
 [_macro,private]
 def setup

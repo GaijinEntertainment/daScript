@@ -124,3 +124,9 @@ def add_global_private_let ( mod:Module?; vname:string; vat:LineInfo; var value:
 
 def make_unique_private_name ( prefix:string; vat:LineInfo )
     return "{prefix}_{vat.line}_{vat.column}"
+
+def apply_template ( at:LineInfo; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void>; forceAt:bool = true )
+    var rules : Template
+    invoke(blk, rules)
+    apply_template(rules, at, expr, forceAt)
+    delete rules

@@ -28,10 +28,8 @@ class AssertOnceMacro : AstFunctionAnnotation
                 __assert_once_I = false
                 assert(false, message)
         // rename
-        var rules : Template
-        rules |> renameVariable("__assert_once_I") <| once_name
-        rules |> replaceVariable("expr") <| clone_expression(call.arguments[0])
-        rules |> replaceVariable("message") <| clone_expression(call.arguments[1])
-        apply_template(rules, call.at, qblock)
-        delete rules
+        apply_template(call.at, qblock) <| $ ( rules )
+            rules |> renameVariable("__assert_once_I") <| once_name
+            rules |> replaceVariable("expr") <| clone_expression(call.arguments[0])
+            rules |> replaceVariable("message") <| clone_expression(call.arguments[1])
         return move_unquote_block(qblock)

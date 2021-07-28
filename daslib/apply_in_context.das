@@ -40,10 +40,8 @@ class AppendCondAnnotation : AstFunctionAnnotation
         verify(has_debug_agent_context(CONTEXT_NAME))
         verify(addr(get_debug_agent_context(CONTEXT_NAME)) == addr(this_context()))
 
-    var rules : Template
-    defer_delete(rules)
-    rules |> replaceVariable("CONTEXT_NAME") <| new [[ExprConstString() at = at, value := contextName]]
-    apply_template(rules, at, ctxQblock)
+    apply_template(at, ctxQblock) <| $ ( rules )
+      rules |> replaceVariable("CONTEXT_NAME") <| new [[ExprConstString() at = at, value := contextName]]
     unsafe
       ctxFn.body <- move_unquote_block(ctxQblock)
 
@@ -82,10 +80,8 @@ class AppendCondAnnotation : AstFunctionAnnotation
         verify(has_debug_agent_context(CONTEXT_NAME))
         verify(addr(get_debug_agent_context(CONTEXT_NAME)) != addr(this_context()))
 
-    var rules2 : Template
-    defer_delete(rules2)
-    rules2 |> replaceVariable("CONTEXT_NAME") <| new [[ExprConstString() at = at, value := contextName]]
-    apply_template(rules2, at, qblock)
+    apply_template(at, qblock) <| $ ( rules2 )
+      rules2 |> replaceVariable("CONTEXT_NAME") <| new [[ExprConstString() at = at, value := contextName]]
 
     unsafe
       func.body <- move_unquote_block(qblock)

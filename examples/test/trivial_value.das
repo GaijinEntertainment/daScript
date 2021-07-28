@@ -27,9 +27,7 @@ class TrivialValueMacro : AstCallMacro
         var qblock <- quote() <| @@ (effects : int) // effects : ArmyEffects
             return <- [{ auto[] val => 1.0 }]
         // replace ExprVar("val") with the first argument
-        var rules : Template
-        rules |> replaceVariable("val") <| clone_expression(call.arguments[0])
-        apply_template(rules, call.at, qblock)
-        delete rules
+        apply_template(call.at, qblock) <| $ ( rules )
+            rules |> replaceVariable("val") <| clone_expression(call.arguments[0])
         // return said block
         return qblock
