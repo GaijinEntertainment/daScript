@@ -49,5 +49,21 @@ def split_by_chars ( text, delim : string ) : array<string>
         res := arr
     return <- res
 
-def is_char_at(foo:array<uint8>#; idx:int; ch:int)
+[generic]
+def is_character_at(foo:array<uint8>#; idx:int; ch:int)
     return int(foo[idx])==ch
+
+[generic]
+def eq ( a:string; b:das_string )
+    var res : bool
+    peek(b) <| $ ( B )
+        res = a==B
+    return res
+
+[generic]
+def eq ( b:das_string; a:string )
+    var res : bool
+    peek(b) <| $ ( B )
+        res = a==B
+    return res
+

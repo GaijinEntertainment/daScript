@@ -48,7 +48,7 @@ def isExpression(t:TypeDeclPtr; top:bool=true) : bool
     elif t.dim.length!=0
         return false
     elif t.baseType==Type tHandle
-        if "{t.annotation._module.name}" == "ast"
+        if eq(t.annotation._module.name,"ast")
             return starts_with("{t.annotation.name}","Expr")
         else
             return false
@@ -94,7 +94,7 @@ def emplace_new ( var vec:MakeStruct; var ptr:smart_ptr<MakeFieldDecl> )
 
 def override_method ( var str:StructurePtr; name,funcName:string ) : bool
     for fld in str.fields
-        if "{fld.name}" == name
+        if eq(fld.name,name)
             var vcast <- new [[ExprCast() at=str.at,
                 subexpr <- new [[ExprAddr() at=str.at,target:=funcName]],
                 castType <- new [[TypeDecl() at=str.at,baseType=Type autoinfer]]
@@ -138,20 +138,20 @@ class TagStructureAnnotation : AstStructureAnnotation
 def for_each_tag_function(mod:Module?; tag:string; blk : block<(var func:FunctionPtr):void> )
     for_each_function(mod, "") <| $ ( func )
         for ann in func.annotations
-            if ann!=null && "{ann.annotation.name}" == "tag_function"
+            if ann!=null && eq(ann.annotation.name,"tag_function")
                 for t in ann.arguments
-                    if "{t.name}" == tag
+                    if eq(t.name,tag)
                         invoke(blk, func)
     for_each_generic(mod, "") <| $ ( func )
         for ann in func.annotations
-            if ann!=null && "{ann.annotation.name}" == "tag_function"
+            if ann!=null && eq(ann.annotation.name,"tag_function")
                 for t in ann.arguments
-                    if "{t.name}" == tag
+                    if eq(t.name,tag)
                         invoke(blk, func)
 
 def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
     for a in args
-        if "{a.name}" == argn
+        if eq(a.name,argn)
             return get_annotation_argument_value(a)
     return RttiValue_nothing()
 

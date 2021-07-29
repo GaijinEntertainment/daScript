@@ -10,6 +10,7 @@ require daslib/json public
 require daslib/ast_boost
 require daslib/contracts
 require daslib/templates
+require daslib/strings_boost
 
 [private]
 def is_json_ptr_value ( td : TypeDeclPtr )
@@ -20,7 +21,7 @@ def is_json_ptr_value ( td : TypeDeclPtr )
     if td.firstType.baseType != Type tStructure
         return false
     let st = td.firstType.structType
-    if "{st.name}" != "JsonValue" && "{st._module.name}" != "json"
+    if !eq(st.name,"JsonValue") && !eq(st._module.name,"json")
         return false
     return true
 

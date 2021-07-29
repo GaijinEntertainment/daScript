@@ -7,6 +7,7 @@ require fio
 require rtti
 require ast
 require daslib/ast_boost
+require daslib/strings_boost
 
 def log_cpp_class_method ( cpp_file:file; name:string; fntype:TypeDeclPtr )
     var cft <- clone_type(fntype.firstType)
@@ -52,7 +53,7 @@ def log_cpp_class_adapter ( cpp_file:file; name:string; cinfo:TypeDeclPtr )
     var methods : array<string>
     var types : array<TypeDeclPtr>
     for fld in cinfo.structType.fields
-        if !fld._type.isFunction|| "{fld.name}"=="__finalize"
+        if !fld._type.isFunction|| eq(fld.name,"__finalize")
             continue
         push(methods,"{fld.name}")
         push_clone(types,fld._type)
