@@ -372,14 +372,17 @@ global variables
 
 ::
 
-    stat ::= 'let' { shared } '\n' indent id '=' expression
-    stat ::= 'let' { shared } '\n' indent id '<-' expression
-    stat ::= 'let' { shared } '\n' indent id ':=' expression
+    stat ::= 'let|var' { shared } {private} '\n' indent id '=' expression
+    stat ::= 'let|var' { shared } {private} '\n' indent id '<-' expression
+    stat ::= 'let|var' { shared } {private} '\n' indent id ':=' expression
 
 Declares a constant global variable.
 This variable will be initialized once during initialization of script (or each time when script init is manually called).
+
 ``shared`` indicates that the constant is to be initialized once,
 and its memory is shared between multiple instances of daScript context.
+
+``private`` indicates that the variable is not visible outside of its module.
 
 --------------
 enum

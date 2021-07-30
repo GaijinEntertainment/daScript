@@ -46,7 +46,7 @@ The following words are reserved as keywords and cannot be used as identifiers:
 +------------+------------+-----------+------------+------------+-------------+
 | reinterpret| module     | public    | label      | goto       | implicit    |
 +------------+------------+-----------+------------+------------+-------------+
-| shared     | smart_ptr  | generator | yield      | unsafe     |             |
+| shared     | private    | smart_ptr | generator  | yield      | unsafe      |
 +------------+------------+-----------+------------+------------+-------------+
 
 The following words are reserved as type names and cannot be used as identifiers:
