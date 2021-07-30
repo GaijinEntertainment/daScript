@@ -98,9 +98,9 @@ Internal builtin functions
 .. warning:: 
   This group of functions is hidden. It will not be in the final documentation.
 
-  *  :ref:`builtin_dir (arg0:string const implicit;arg1:block\<\> const implicit;arg2: const) : void <function-_at_fio_c__c_builtin_dir_string_hh_const_hh_implicit__hh_block_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`builtin_dir (arg0:string const implicit;arg1:block\<\> const implicit;arg2:__context const) : void <function-_at_fio_c__c_builtin_dir__hh_const_hh__hh_implicit_hh_string__hh_const_hh__hh_implicit_hh__hh_block__hh_const_hh___context>` 
 
-.. _function-_at_fio_c__c_builtin_dir_string_hh_const_hh_implicit__hh_block_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_builtin_dir__hh_const_hh__hh_implicit_hh_string__hh_const_hh__hh_implicit_hh__hh_block__hh_const_hh___context:
 
 .. das:function:: builtin_dir(arg0: string const implicit; arg1: block<> const implicit)
 
@@ -119,26 +119,30 @@ Internal builtin functions
 File manipulation
 +++++++++++++++++
 
-  *  :ref:`fclose (arg0:fio::FILE const? const implicit;arg1: const) : void <function-_at_fio_c__c_fclose__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const>` 
-  *  :ref:`feof (arg0:fio::FILE const? const implicit) : bool <function-_at_fio_c__c_feof__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit>` 
-  *  :ref:`fgets (arg0:fio::FILE const? const implicit;arg1: const) : string <function-_at_fio_c__c_fgets__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const>` 
-  *  :ref:`fmap (arg0:fio::FILE const? const implicit;arg1:block\<(string const#):void\> const implicit;arg2: const) : void <function-_at_fio_c__c_fmap__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_block_hh_string_hh_const_hh_temporary_hh__c_void_hh_const_hh_implicit__hh_const>` 
-  *  :ref:`fopen (arg0:string const implicit;arg1:string const implicit) : fio::FILE const? const <function-_at_fio_c__c_fopen_string_hh_const_hh_implicit_string_hh_const_hh_implicit>` 
-  *  :ref:`fprint (arg0:fio::FILE const? const implicit;arg1:string const implicit;arg2: const) : void <function-_at_fio_c__c_fprint__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const_hh_implicit__hh_const>` 
-  *  :ref:`fread (arg0:fio::FILE const? const implicit;arg1: const) : string <function-_at_fio_c__c_fread__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const>` 
-  *  :ref:`fstat (arg0:fio::FILE const? const implicit;arg1:fio::FStat implicit) : bool <function-_at_fio_c__c_fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_handle_hh_FStat_hh_implicit>` 
+  *  :ref:`fclose (arg0:fio::FILE const? const implicit;arg1:__context const) : void <function-_at_fio_c__c_fclose__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh___context>` 
+  *  :ref:`feof (arg0:fio::FILE const? const implicit) : bool <function-_at_fio_c__c_feof__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE>` 
+  *  :ref:`fgets (arg0:fio::FILE const? const implicit;arg1:__context const) : string <function-_at_fio_c__c_fgets__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh___context>` 
+  *  :ref:`fload (file:fio::FILE const? const;size:int const;blk:block\<(data:array\<uint8\> const):void\> const) : void <function-_at_fio_c__c_fload__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh_int__hh_const_hh__hh_block_hh__hh_const_hh__hh_array_hh_uint8_hh__rq_data_hh__c_void>` 
+  *  :ref:`fmap (arg0:fio::FILE const? const implicit;arg1:block\<(array\<uint8\>#):void\> const implicit;arg2:__context const) : void <function-_at_fio_c__c_fmap__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh__hh_block_hh__hh_temporary_hh__hh_array_hh_uint8_hh__c_void__hh_const_hh___context>` 
+  *  :ref:`fopen (arg0:string const implicit;arg1:string const implicit) : fio::FILE const? const <function-_at_fio_c__c_fopen__hh_const_hh__hh_implicit_hh_string__hh_const_hh__hh_implicit_hh_string>` 
+  *  :ref:`fprint (arg0:fio::FILE const? const implicit;arg1:string const implicit;arg2:__context const) : void <function-_at_fio_c__c_fprint__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh_string__hh_const_hh___context>` 
+  *  :ref:`fread (arg0:fio::FILE const? const implicit;arg1:__context const) : string <function-_at_fio_c__c_fread__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh___context>` 
+  *  :ref:`fstat (arg0:fio::FILE const? const implicit;arg1:fio::FStat implicit;arg2:__context const;arg3:__lineInfo const) : bool <function-_at_fio_c__c_fstat__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_implicit_hh__hh_handle_hh_FStat__hh_const_hh___context__hh_const_hh___lineInfo>` 
   *  :ref:`fstderr () : fio::FILE const? const <function-_at_fio_c__c_fstderr>` 
   *  :ref:`fstdin () : fio::FILE const? const <function-_at_fio_c__c_fstdin>` 
   *  :ref:`fstdout () : fio::FILE const? const <function-_at_fio_c__c_fstdout>` 
-  *  :ref:`fwrite (arg0:fio::FILE const? const implicit;arg1:string const implicit;arg2: const) : void <function-_at_fio_c__c_fwrite__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const_hh_implicit__hh_const>` 
-  *  :ref:`stat (arg0:string const implicit;arg1:fio::FStat implicit) : bool <function-_at_fio_c__c_stat_string_hh_const_hh_implicit__hh_handle_hh_FStat_hh_implicit>` 
-  *  :ref:`fload (f:fio::FILE const? const;buf:auto(BufType) const -const) : auto <function-_at_fio_c__c_fload__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const>` 
-  *  :ref:`fopen (name:string const;mode:string const;blk:block\<(f:fio::FILE const? const):void\> const) : auto <function-_at_fio_c__c_fopen_string_hh_const_string_hh_const__hh_block_hh__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh__rq_f_hh__c_void_hh_const>` 
-  *  :ref:`fsave (f:fio::FILE const? const;buf:auto(BufType) const) : auto <function-_at_fio_c__c_fsave__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const>` 
-  *  :ref:`fstat (f:fio::FILE const? const) : fio::FStat <function-_at_fio_c__c_fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const>` 
-  *  :ref:`stat (path:string const) : fio::FStat <function-_at_fio_c__c_stat_string_hh_const>` 
+  *  :ref:`fwrite (arg0:fio::FILE const? const implicit;arg1:string const implicit;arg2:__context const) : void <function-_at_fio_c__c_fwrite__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh_string__hh_const_hh___context>` 
+  *  :ref:`stat (arg0:string const implicit;arg1:fio::FStat implicit) : bool <function-_at_fio_c__c_stat__hh_const_hh__hh_implicit_hh_string__hh_implicit_hh__hh_handle_hh_FStat>` 
+  *  :ref:`fload (f:fio::FILE const? const;buf:auto(BufType) const -const) : auto <function-_at_fio_c__c_fload__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_auto_hh_BufType>` 
+  *  :ref:`fopen (name:string const;mode:string const;blk:block\<(f:fio::FILE const? const):void\> const) : auto <function-_at_fio_c__c_fopen__hh_const_hh_string__hh_const_hh_string__hh_const_hh__hh_block_hh__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE_hh__rq_f_hh__c_void>` 
+  *  :ref:`fread (f:fio::FILE const? const;blk:block\<(data:string const#):auto\> const) : auto <function-_at_fio_c__c_fread__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_block_hh__hh_const_hh__hh_temporary_hh_string_hh__rq_data_hh__c__hh_auto>` 
+  *  :ref:`fsave (f:fio::FILE const? const;buf:auto(BufType) const) : auto <function-_at_fio_c__c_fsave__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_auto_hh_BufType>` 
+  *  :ref:`fstat (f:fio::FILE const? const) : fio::FStat <function-_at_fio_c__c_fstat__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE>` 
+  *  :ref:`fwrite (f:fio::FILE const? const;buf:array\<auto(BufType)\> const implicit) : auto <function-_at_fio_c__c_fwrite__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh__hh_array_hh__hh_auto_hh_BufType>` 
+  *  :ref:`fwrite (f:fio::FILE const? const;buf:auto(BufType) const implicit) : auto <function-_at_fio_c__c_fwrite__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh__hh_auto_hh_BufType>` 
+  *  :ref:`stat (path:string const) : fio::FStat <function-_at_fio_c__c_stat__hh_const_hh_string>` 
 
-.. _function-_at_fio_c__c_fclose__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_fclose__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh___context:
 
 .. das:function:: fclose(arg0: fio::FILE const? const implicit)
 
@@ -151,7 +155,7 @@ File manipulation
 
 |function-fio-fclose|
 
-.. _function-_at_fio_c__c_feof__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit:
+.. _function-_at_fio_c__c_feof__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE:
 
 .. das:function:: feof(arg0: fio::FILE const? const implicit)
 
@@ -166,7 +170,7 @@ feof returns bool
 
 |function-fio-feof|
 
-.. _function-_at_fio_c__c_fgets__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_fgets__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh___context:
 
 .. das:function:: fgets(arg0: fio::FILE const? const implicit)
 
@@ -181,22 +185,39 @@ fgets returns string
 
 |function-fio-fgets|
 
-.. _function-_at_fio_c__c_fmap__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_block_hh_string_hh_const_hh_temporary_hh__c_void_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_fload__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh_int__hh_const_hh__hh_block_hh__hh_const_hh__hh_array_hh_uint8_hh__rq_data_hh__c_void:
 
-.. das:function:: fmap(arg0: fio::FILE const? const implicit; arg1: block<(string const#):void> const implicit)
+.. das:function:: fload(file: file; size: int const; blk: block<(data:array<uint8> const):void> const)
+
++--------+-------------------------------------------+
++argument+argument type                              +
++========+===========================================+
++file    + :ref:`file <alias-file>`                  +
++--------+-------------------------------------------+
++size    +int const                                  +
++--------+-------------------------------------------+
++blk     +block<(data:array<uint8> const):void> const+
++--------+-------------------------------------------+
+
+
+|function-fio-fload|
+
+.. _function-_at_fio_c__c_fmap__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh__hh_block_hh__hh_temporary_hh__hh_array_hh_uint8_hh__c_void__hh_const_hh___context:
+
+.. das:function:: fmap(arg0: fio::FILE const? const implicit; arg1: block<(array<uint8>#):void> const implicit)
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
 +========+==========================================================+
 +arg0    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
 +--------+----------------------------------------------------------+
-+arg1    +block<(string const#):void> const implicit                +
++arg1    +block<(array<uint8>#):void> const implicit                +
 +--------+----------------------------------------------------------+
 
 
 |function-fio-fmap|
 
-.. _function-_at_fio_c__c_fopen_string_hh_const_hh_implicit_string_hh_const_hh_implicit:
+.. _function-_at_fio_c__c_fopen__hh_const_hh__hh_implicit_hh_string__hh_const_hh__hh_implicit_hh_string:
 
 .. das:function:: fopen(arg0: string const implicit; arg1: string const implicit)
 
@@ -213,7 +234,7 @@ fopen returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 |function-fio-fopen|
 
-.. _function-_at_fio_c__c_fprint__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_fprint__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh_string__hh_const_hh___context:
 
 .. das:function:: fprint(arg0: fio::FILE const? const implicit; arg1: string const implicit)
 
@@ -228,7 +249,7 @@ fopen returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 |function-fio-fprint|
 
-.. _function-_at_fio_c__c_fread__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_fread__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh___context:
 
 .. das:function:: fread(arg0: fio::FILE const? const implicit)
 
@@ -243,7 +264,7 @@ fread returns string
 
 |function-fio-fread|
 
-.. _function-_at_fio_c__c_fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit__hh_handle_hh_FStat_hh_implicit:
+.. _function-_at_fio_c__c_fstat__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_implicit_hh__hh_handle_hh_FStat__hh_const_hh___context__hh_const_hh___lineInfo:
 
 .. das:function:: fstat(arg0: fio::FILE const? const implicit; arg1: FStat implicit)
 
@@ -284,7 +305,7 @@ fstdout returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 |function-fio-fstdout|
 
-.. _function-_at_fio_c__c_fwrite__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh_implicit_string_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_fwrite__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh_string__hh_const_hh___context:
 
 .. das:function:: fwrite(arg0: fio::FILE const? const implicit; arg1: string const implicit)
 
@@ -299,7 +320,7 @@ fstdout returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 |function-fio-fwrite|
 
-.. _function-_at_fio_c__c_stat_string_hh_const_hh_implicit__hh_handle_hh_FStat_hh_implicit:
+.. _function-_at_fio_c__c_stat__hh_const_hh__hh_implicit_hh_string__hh_implicit_hh__hh_handle_hh_FStat:
 
 .. das:function:: stat(arg0: string const implicit; arg1: FStat implicit)
 
@@ -316,7 +337,7 @@ stat returns bool
 
 |function-fio-stat|
 
-.. _function-_at_fio_c__c_fload__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const:
+.. _function-_at_fio_c__c_fload__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_auto_hh_BufType:
 
 .. das:function:: fload(f: file; buf: auto(BufType) const)
 
@@ -333,7 +354,7 @@ fload returns auto
 
 |function-fio-fload|
 
-.. _function-_at_fio_c__c_fopen_string_hh_const_string_hh_const__hh_block_hh__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const_hh__rq_f_hh__c_void_hh_const:
+.. _function-_at_fio_c__c_fopen__hh_const_hh_string__hh_const_hh_string__hh_const_hh__hh_block_hh__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE_hh__rq_f_hh__c_void:
 
 .. das:function:: fopen(name: string const; mode: string const; blk: block<(f:fio::FILE const? const):void> const)
 
@@ -352,7 +373,24 @@ fopen returns auto
 
 |function-fio-fopen|
 
-.. _function-_at_fio_c__c_fsave__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const__hh_auto_hh_const:
+.. _function-_at_fio_c__c_fread__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_block_hh__hh_const_hh__hh_temporary_hh_string_hh__rq_data_hh__c__hh_auto:
+
+.. das:function:: fread(f: file; blk: block<(data:string const#):auto> const)
+
+fread returns auto
+
++--------+--------------------------------------+
++argument+argument type                         +
++========+======================================+
++f       + :ref:`file <alias-file>`             +
++--------+--------------------------------------+
++blk     +block<(data:string const#):auto> const+
++--------+--------------------------------------+
+
+
+|function-fio-fread|
+
+.. _function-_at_fio_c__c_fsave__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_auto_hh_BufType:
 
 .. das:function:: fsave(f: file; buf: auto(BufType) const)
 
@@ -369,7 +407,7 @@ fsave returns auto
 
 |function-fio-fsave|
 
-.. _function-_at_fio_c__c_fstat__hh_ptr_hh__hh_handle_hh_FILE_hh_const_hh_const:
+.. _function-_at_fio_c__c_fstat__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE:
 
 .. das:function:: fstat(f: file)
 
@@ -384,7 +422,41 @@ fstat returns  :ref:`fio::FStat <handle-fio-FStat>`
 
 |function-fio-fstat|
 
-.. _function-_at_fio_c__c_stat_string_hh_const:
+.. _function-_at_fio_c__c_fwrite__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh__hh_array_hh__hh_auto_hh_BufType:
+
+.. das:function:: fwrite(f: file; buf: array<auto(BufType)> const implicit)
+
+fwrite returns auto
+
++--------+-----------------------------------+
++argument+argument type                      +
++========+===================================+
++f       + :ref:`file <alias-file>`          +
++--------+-----------------------------------+
++buf     +array<auto(BufType)> const implicit+
++--------+-----------------------------------+
+
+
+|function-fio-fwrite|
+
+.. _function-_at_fio_c__c_fwrite__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh__hh_auto_hh_BufType:
+
+.. das:function:: fwrite(f: file; buf: auto(BufType) const implicit)
+
+fwrite returns auto
+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++f       + :ref:`file <alias-file>`   +
++--------+----------------------------+
++buf     +auto(BufType) const implicit+
++--------+----------------------------+
+
+
+|function-fio-fwrite|
+
+.. _function-_at_fio_c__c_stat__hh_const_hh_string:
 
 .. das:function:: stat(path: string const)
 
@@ -403,10 +475,10 @@ stat returns  :ref:`fio::FStat <handle-fio-FStat>`
 Path manipulation
 +++++++++++++++++
 
-  *  :ref:`base_name (arg0:string const implicit;arg1: const) : string <function-_at_fio_c__c_base_name_string_hh_const_hh_implicit__hh_const>` 
-  *  :ref:`dir_name (arg0:string const implicit;arg1: const) : string <function-_at_fio_c__c_dir_name_string_hh_const_hh_implicit__hh_const>` 
+  *  :ref:`base_name (arg0:string const implicit;arg1:__context const) : string <function-_at_fio_c__c_base_name__hh_const_hh__hh_implicit_hh_string__hh_const_hh___context>` 
+  *  :ref:`dir_name (arg0:string const implicit;arg1:__context const) : string <function-_at_fio_c__c_dir_name__hh_const_hh__hh_implicit_hh_string__hh_const_hh___context>` 
 
-.. _function-_at_fio_c__c_base_name_string_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_base_name__hh_const_hh__hh_implicit_hh_string__hh_const_hh___context:
 
 .. das:function:: base_name(arg0: string const implicit)
 
@@ -421,7 +493,7 @@ base_name returns string
 
 |function-fio-base_name|
 
-.. _function-_at_fio_c__c_dir_name_string_hh_const_hh_implicit__hh_const:
+.. _function-_at_fio_c__c_dir_name__hh_const_hh__hh_implicit_hh_string__hh_const_hh___context:
 
 .. das:function:: dir_name(arg0: string const implicit)
 
@@ -440,10 +512,10 @@ dir_name returns string
 Directory manipulation
 ++++++++++++++++++++++
 
-  *  :ref:`mkdir (arg0:string const implicit) : bool <function-_at_fio_c__c_mkdir_string_hh_const_hh_implicit>` 
-  *  :ref:`dir (path:string const;blk:block\<(filename:string const):void\> const) : auto <function-_at_fio_c__c_dir_string_hh_const__hh_block_hh_string_hh_const_hh__rq_filename_hh__c_void_hh_const>` 
+  *  :ref:`mkdir (arg0:string const implicit) : bool <function-_at_fio_c__c_mkdir__hh_const_hh__hh_implicit_hh_string>` 
+  *  :ref:`dir (path:string const;blk:block\<(filename:string const):void\> const) : auto <function-_at_fio_c__c_dir__hh_const_hh_string__hh_const_hh__hh_block_hh__hh_const_hh_string_hh__rq_filename_hh__c_void>` 
 
-.. _function-_at_fio_c__c_mkdir_string_hh_const_hh_implicit:
+.. _function-_at_fio_c__c_mkdir__hh_const_hh__hh_implicit_hh_string:
 
 .. das:function:: mkdir(arg0: string const implicit)
 
@@ -458,7 +530,7 @@ mkdir returns bool
 
 |function-fio-mkdir|
 
-.. _function-_at_fio_c__c_dir_string_hh_const__hh_block_hh_string_hh_const_hh__rq_filename_hh__c_void_hh_const:
+.. _function-_at_fio_c__c_dir__hh_const_hh_string__hh_const_hh__hh_block_hh__hh_const_hh_string_hh__rq_filename_hh__c_void:
 
 .. das:function:: dir(path: string const; blk: block<(filename:string const):void> const)
 
@@ -479,9 +551,9 @@ dir returns auto
 OS thread helper
 ++++++++++++++++
 
-  *  :ref:`sleep (arg0:uint const) : void <function-_at_fio_c__c_sleep_uint_hh_const>` 
+  *  :ref:`sleep (arg0:uint const) : void <function-_at_fio_c__c_sleep__hh_const_hh_uint>` 
 
-.. _function-_at_fio_c__c_sleep_uint_hh_const:
+.. _function-_at_fio_c__c_sleep__hh_const_hh_uint:
 
 .. das:function:: sleep(arg0: uint const)
 

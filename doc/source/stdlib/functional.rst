@@ -17,7 +17,7 @@ All functions and symbols are in "functional" module, use require to get access 
 Uncategorized
 +++++++++++++
 
-.. _function-_at_functional_c__c_all__hh_auto_hh_const:
+.. _function-_at_functional_c__c_all__hh_const_hh__hh_auto:
 
 .. das:function:: all(it: auto const)
 
@@ -32,7 +32,7 @@ all returns auto
 
 |function-functional-all|
 
-.. _function-_at_functional_c__c_any__hh_auto_hh_const:
+.. _function-_at_functional_c__c_any__hh_const_hh__hh_auto:
 
 .. das:function:: any(it: auto const)
 
@@ -64,7 +64,7 @@ count returns iterator<int>
 
 |function-functional-count|
 
-.. _function-_at_functional_c__c_cycle__hh_iterator_hh__hh_auto:
+.. _function-_at_functional_c__c_cycle__hh_iterator_hh__hh_auto_hh_TT:
 
 .. das:function:: cycle(src: iterator<auto(TT)>)
 
@@ -79,7 +79,7 @@ cycle returns auto
 
 |function-functional-cycle|
 
-.. _function-_at_functional_c__c_echo__hh_auto_string_hh_const:
+.. _function-_at_functional_c__c_echo__hh_auto__hh_const_hh_string:
 
 .. das:function:: echo(x: auto; extra: string const)
 
@@ -96,7 +96,7 @@ echo returns auto
 
 |function-functional-echo|
 
-.. _function-_at_functional_c__c_filter__hh_iterator_hh__hh_auto__hh_function_hh__hh_alias_hh_TT_hh_const_hh__rq_what_hh__c_bool_hh_const:
+.. _function-_at_functional_c__c_filter__hh_iterator_hh__hh_auto_hh_TT__hh_const_hh__hh_function_hh__hh_const_hh__hh_alias_hh_TT_hh__rq_what_hh__c_bool:
 
 .. das:function:: filter(src: iterator<auto(TT)>; blk: function<(what:TT const -&):bool> const)
 
@@ -113,7 +113,7 @@ filter returns auto
 
 |function-functional-filter|
 
-.. _function-_at_functional_c__c_filter__hh_iterator_hh__hh_auto__hh_lambda_hh__hh_alias_hh_TT_hh_const_hh__rq_what_hh__c_bool_hh_const:
+.. _function-_at_functional_c__c_filter__hh_iterator_hh__hh_auto_hh_TT__hh_const_hh__hh_lambda_hh__hh_const_hh__hh_alias_hh_TT_hh__rq_what_hh__c_bool:
 
 .. das:function:: filter(src: iterator<auto(TT)>; blk: lambda<(what:TT const -&):bool> const)
 
@@ -130,7 +130,7 @@ filter returns auto
 
 |function-functional-filter|
 
-.. _function-_at_functional_c__c_is_equal__hh_auto_hh_const__hh_auto_hh_const:
+.. _function-_at_functional_c__c_is_equal__hh_const_hh__hh_auto__hh_const_hh__hh_auto:
 
 .. das:function:: is_equal(a: auto const; b: auto const)
 
@@ -147,7 +147,7 @@ is_equal returns auto
 
 |function-functional-is_equal|
 
-.. _function-_at_functional_c__c_is_not_equal__hh_auto_hh_const__hh_auto_hh_const:
+.. _function-_at_functional_c__c_is_not_equal__hh_const_hh__hh_auto__hh_const_hh__hh_auto:
 
 .. das:function:: is_not_equal(a: auto const; b: auto const)
 
@@ -164,7 +164,7 @@ is_not_equal returns auto
 
 |function-functional-is_not_equal|
 
-.. _function-_at_functional_c__c_islice__hh_iterator_hh__hh_auto_int_hh_const_int_hh_const:
+.. _function-_at_functional_c__c_islice__hh_iterator_hh__hh_auto_hh_TT__hh_const_hh_int__hh_const_hh_int:
 
 .. das:function:: islice(src: iterator<auto(TT)>; start: int const; stop: int const)
 
@@ -183,7 +183,7 @@ islice returns auto
 
 |function-functional-islice|
 
-.. _function-_at_functional_c__c_map__hh_iterator_hh__hh_auto__hh_function_hh__hh_alias_hh_TT_hh_const_hh__rq_what_hh__c__hh_auto_hh_const:
+.. _function-_at_functional_c__c_map__hh_iterator_hh__hh_auto_hh_TT__hh_const_hh__hh_function_hh__hh_const_hh__hh_alias_hh_TT_hh__rq_what_hh__c__hh_auto_hh_QQ:
 
 .. das:function:: map(src: iterator<auto(TT)>; blk: function<(what:TT const -&):auto(QQ)> const)
 
@@ -200,7 +200,7 @@ map returns auto
 
 |function-functional-map|
 
-.. _function-_at_functional_c__c_map__hh_iterator_hh__hh_auto__hh_lambda_hh__hh_alias_hh_TT_hh_const_hh__rq_what_hh__c__hh_auto_hh_const:
+.. _function-_at_functional_c__c_map__hh_iterator_hh__hh_auto_hh_TT__hh_const_hh__hh_lambda_hh__hh_const_hh__hh_alias_hh_TT_hh__rq_what_hh__c__hh_auto_hh_QQ:
 
 .. das:function:: map(src: iterator<auto(TT)>; blk: lambda<(what:TT const -&):auto(QQ)> const)
 
@@ -217,7 +217,7 @@ map returns auto
 
 |function-functional-map|
 
-.. _function-_at_functional_c__c_not__hh_auto_hh_const:
+.. _function-_at_functional_c__c_not__hh_const_hh__hh_auto:
 
 .. das:function:: not(x: auto const)
 
@@ -232,7 +232,7 @@ not returns auto
 
 |function-functional-not|
 
-.. _function-_at_functional_c__c_reduce__hh_iterator_hh__hh_auto_hh_const__hh_block_hh__hh_alias_hh_TT_hh_const_hh__hh_alias_hh_TT_hh_const_hh__rq_left_hh__rq_right_hh__c__hh_alias_hh_TT_hh_const_hh_const:
+.. _function-_at_functional_c__c_reduce__hh_const_hh__hh_iterator_hh__hh_auto_hh_TT__hh_const_hh__hh_block_hh__hh_const_hh__hh_alias_hh_TT_hh__hh_const_hh__hh_alias_hh_TT_hh__rq_left_hh__rq_right_hh__c__hh_const_hh__hh_alias_hh_TT:
 
 .. das:function:: reduce(it: iterator<auto(TT)> const; blk: block<(left:TT const -&;right:TT const -&):TT const -&> const)
 
@@ -249,7 +249,7 @@ reduce returns auto
 
 |function-functional-reduce|
 
-.. _function-_at_functional_c__c_reduce__hh_iterator_hh__hh_auto_hh_const__hh_function_hh__hh_alias_hh_TT_hh_const_hh__hh_alias_hh_TT_hh_const_hh__rq_left_hh__rq_right_hh__c__hh_alias_hh_TT_hh_const_hh_const:
+.. _function-_at_functional_c__c_reduce__hh_const_hh__hh_iterator_hh__hh_auto_hh_TT__hh_const_hh__hh_function_hh__hh_const_hh__hh_alias_hh_TT_hh__hh_const_hh__hh_alias_hh_TT_hh__rq_left_hh__rq_right_hh__c__hh_const_hh__hh_alias_hh_TT:
 
 .. das:function:: reduce(it: iterator<auto(TT)> const; blk: function<(left:TT const -&;right:TT const -&):TT const -&> const)
 
@@ -266,7 +266,7 @@ reduce returns auto
 
 |function-functional-reduce|
 
-.. _function-_at_functional_c__c_reduce__hh_iterator_hh__hh_auto_hh_const__hh_lambda_hh__hh_alias_hh_TT_hh_const_hh__hh_alias_hh_TT_hh_const_hh__rq_left_hh__rq_right_hh__c__hh_alias_hh_TT_hh_const_hh_const:
+.. _function-_at_functional_c__c_reduce__hh_const_hh__hh_iterator_hh__hh_auto_hh_TT__hh_const_hh__hh_lambda_hh__hh_const_hh__hh_alias_hh_TT_hh__hh_const_hh__hh_alias_hh_TT_hh__rq_left_hh__rq_right_hh__c__hh_const_hh__hh_alias_hh_TT:
 
 .. das:function:: reduce(it: iterator<auto(TT)> const; blk: lambda<(left:TT const -&;right:TT const -&):TT const -&> const)
 
@@ -283,7 +283,7 @@ reduce returns auto
 
 |function-functional-reduce|
 
-.. _function-_at_functional_c__c_repeat__hh_auto_hh_const_int:
+.. _function-_at_functional_c__c_repeat__hh_const_hh__hh_auto_hh_TT_int:
 
 .. das:function:: repeat(value: auto(TT) const; count: int)
 
@@ -300,7 +300,7 @@ repeat returns auto
 
 |function-functional-repeat|
 
-.. _function-_at_functional_c__c_sum__hh_iterator_hh__hh_auto_hh_const:
+.. _function-_at_functional_c__c_sum__hh_const_hh__hh_iterator_hh__hh_auto_hh_TT:
 
 .. das:function:: sum(it: iterator<auto(TT)> const)
 

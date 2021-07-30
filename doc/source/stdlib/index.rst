@@ -36,10 +36,25 @@ THE SOFTWARE.
    strings.rst
    strings_boost.rst
    functional.rst
+   jobque.rst
+   jobque_boost.rst
+   apply_in_context.rst
    json.rst
    json_boost.rst
    regex.rst
    regex_boost.rst
    rst.rst
    apply.rst
+   algorithm.rst
+   contracts.rst
+   defer.rst
+   if_not_null.rst
+   instance_function.rst
+   templates.rst
+   templates_boost.rst
+   is_local.rst
+   safe_addr.rst
+   static_let.rst
+   lpipe.rst
+
 
