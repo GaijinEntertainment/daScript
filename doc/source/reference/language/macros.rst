@@ -105,6 +105,8 @@ There is additionally ``[function_macro]`` annotation which accomplishes the sam
         def abstract transform ( var call : smart_ptr<ExprCall>; var errors : das_string ) : ExpressionPtr
         def abstract apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract finish ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors : das_string ) : bool
+        def abstract isSpecialized : bool
 
 ``transform`` allows changing call to the function and is applied at infer pass.
 Transform is the best way to replace or modify function call with other semantics.
@@ -116,6 +118,12 @@ Apply is typically where global function body modifications or instancing occurs
 It's only called to non-generic functions or instances of the generic functions.
 ``finish`` is typically used to register functions, notify C++ code, etc.
 Function is fully defined and inferred, and can no longer be modified.
+
+``isSpecialized`` must return true, if the particular function matching is governed by contracts.
+In that case ``isCompatible`` will be called, and result taken into account.
+
+``isCompatible`` returns true, if specialized function is compatible with arguments.
+If function is not compatible, errors field must be specified.
 
 Lets review the following example from `ast_boost` of how ``macro`` annotation is implemented::
 
@@ -280,6 +288,22 @@ and can be invoked at numerous passes::
 ``add_dirty_infer_macro`` adds pass macro to the infer pass.
 
 Typically such macro creates an ``AstVisitor`` which performs necessary transformations.
+
+----------------
+AstTypeInfoMacro
+----------------
+
+``AstTypeInfoMacro`` is designed to implement custom type information inside typeinfo expression::
+
+    class AstTypeInfoMacro
+        def abstract getAstChange ( expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : ExpressionPtr
+        def abstract getAstType ( var lib:ModuleLibrary; expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : TypeDeclPtr
+
+``getAstChange`` returns newly generated ast for the typeinfo expression.
+Alternatively it returns null if no changes are required, or if there is an error.
+In case of error errors string must be filled.
+
+``getAstType`` returns type of the new typeinfo expression.
 
 ----------
 AstVisitor

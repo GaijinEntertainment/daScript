@@ -221,6 +221,15 @@ When matching function daScript picks the ones which are most specialized, and s
 Substitute distance is increased by 1 for each argument, if cast is required for the LSP (Liskov substitution principle).
 At the end function with the least distance is picked. If more than one function is left for picking, compilation error is reported.
 
+Function specialization can be limited by contracts (contract macros)::
+
+    [expect_any_array(blah)]  // array<foo>, [], or dasvector`.... or similar
+    def print_arr ( blah )
+        for i in range(length(blah))
+            print("{blah[i]}\n")
+
+In the example above only arrays will be matched.
+
 ^^^^^^^^^^^^^^^^^^
 Default Parameters
 ^^^^^^^^^^^^^^^^^^
