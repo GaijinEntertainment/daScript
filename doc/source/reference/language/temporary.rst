@@ -66,3 +66,13 @@ Temporary values can and are intended to be cloned::
             accept_string(boo_clone)
 
 Returning a temporary value is unsafe operation.
+
+Pointer to the temporary value can be received for the corresponding scope via safe_addr macro::
+
+    require daslib/safe_addr
+
+    def foo
+        var a = 13
+        ...
+        var b = safe_addr(a)    // b is int?#, and this operation does not require unsafe
+        ...
