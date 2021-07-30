@@ -1,12 +1,12 @@
 .. _constants_and_enumerations:
 
 
-========================
-Constants & Enumerations
-========================
+=========================================
+Constants, Enumerations, Global variables
+=========================================
 
 .. index::
-    single: Constants & Enumerations
+    single: Constants, Enumerations, Global variables
 
 
 
@@ -31,17 +31,36 @@ Constants are declared with the following syntax::
       floatbar = 1.2
     let
       stringbar = "I'm a constant string"
+    let blah = "I'm string constant which is declared on the same line as variable"
 
 constants are always globally scoped from the moment they are declared.
 Any subsequential code can reference them.
 
 You can not change such global variables.
+
+---------------
+Global variable
+---------------
+
 Mutable global variables are defined as::
 
     var
       foobar = 100
+    var barfoo = 100
 
 and their usage can be switched on and off per-project basis via CodeOfPolicies.
+
+Local static variables can be declared via static_let macro::
+
+    require daslib/static_let
+
+    def foo
+        static_let <|
+            var bar = 13
+        bar = 14
+
+Variable ``bar`` in the example above is effectively global variable.
+However it's only visible inside the scope of the corresponding static_let macro.
 
 .. _enumerations:
 
