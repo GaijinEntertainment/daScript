@@ -274,6 +274,18 @@ daScript supports pipe operators. Pipe operator is similar to 'call' expression 
         let t =  addOne() <| 2
         assert(t == 3)
 
+``lpipe`` macro allows piping to the previous line::
+
+    require daslib/lpipe
+
+    [export]
+    def main
+        print()
+        lpipe() <| "this is string constant"
+
+In the example above string constant will be piped to the print expression on the previous line.
+This allows piping of multiple blocks while still using significant whitespace syntax.
+
 ^^^^^^^^^^^^^^^^^^^^^
 Operators precedence
 ^^^^^^^^^^^^^^^^^^^^^

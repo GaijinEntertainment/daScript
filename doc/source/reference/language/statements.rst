@@ -259,6 +259,25 @@ It is designed to ensure execution after 'all is done'. Consider ::
 
 Finally may be used for resource de-allocation.
 
+It's possible to add code to the finally statement of the block via ``defer`` macro::
+
+    require daslib/defer
+
+    def foo
+        print("a\n")
+    finally
+        print("b\n")
+
+    def bar
+        defer <|
+            print("b\n")
+        print("a\n")
+
+In the example above functions ``foo`` and ``bar`` are semantically identical.
+Multiple ``defer`` statements occur in reverse order.
+
+``defer_delete`` macro adds delete statement for its argument, and does not require block.
+
 ---------------------------
 Local variables declaration
 ---------------------------
