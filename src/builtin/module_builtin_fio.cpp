@@ -122,7 +122,7 @@ namespace das {
 #if defined(_MSC_VER)
         _sleep(msec);
 #else
-        usleep(msec);
+        usleep(1000 * msec);
 #endif
     }
 
