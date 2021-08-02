@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module apply shared
+module apply shared private
 
 require ast
 require daslib/ast_boost
@@ -12,7 +12,7 @@ require daslib/ast_boost
         invoke(arg_field2,"field2",self.field2)
         ...
 */
-def private generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
+def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     assert(stype.baseType==Type tStructure)
     assert(stype.dim.length==0)
     var fn <- new [[Function() at=at, atDecl=at, name:=fnname]]                     // def apply`foo : void

@@ -1,12 +1,12 @@
 options indenting = 4
 options no_aot = true
 
-module contracts shared
+module contracts shared private
 
 require ast
 require daslib/ast_boost
 
-def private isYetAnotherVectorTemplate ( var td:TypeDeclPtr )
+def isYetAnotherVectorTemplate ( var td:TypeDeclPtr )
     return td.isHandle && td.annotation!=null && td.annotation.is_any_vector
 
 class IsAnyType : AstFunctionAnnotation

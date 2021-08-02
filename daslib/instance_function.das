@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module instance_function shared
+module instance_function shared private
 
 require ast
 require rtti
@@ -42,6 +42,6 @@ class InstanceFunctionAnnotation : AstFunctionAnnotation
         return true
 
 [macro]
-def private init
+def init
     if is_compiling_macros_in_module("instance_function")
         add_new_function_annotation("instance_function", new InstanceFunctionAnnotation())

@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module safe_addr shared
+module safe_addr shared private
 
 require ast
 require rtti
@@ -9,13 +9,13 @@ require daslib/ast_boost
 require daslib/is_local
 
 [tag_function(safe_addr_tag)]
-def safe_addr(var x : auto(T)& = const) : T-& ? #
+def public safe_addr(var x : auto(T)& = const) : T-& ? #
     unsafe
         return reinterpret<T-&?#>(addr(x))
 
 
 [tag_function(safe_addr_tag)]
-def safe_addr(x : auto(T)& = const) : T-& ? const #
+def public safe_addr(x : auto(T)& = const) : T-& ? const #
     unsafe
         return reinterpret<T-&? const #>(addr(x))
 

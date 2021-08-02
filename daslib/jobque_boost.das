@@ -19,7 +19,7 @@ def new_thread ( var l : lambda )
     invoke(l)   // note, this is never called if job-que is there
 
 [tag_function_macro(tag="new_job_tag")]
-class NewJobMacro : AstFunctionAnnotation
+class private NewJobMacro : AstFunctionAnnotation
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if !call.arguments[0] is ExprAscend
             compiling_program() |>macro_error(call.at,"expecting lambda declaration, ExprAscend")

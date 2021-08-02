@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module assert_once shared
+module assert_once shared private
 
 require ast
 require rtti
@@ -9,7 +9,7 @@ require daslib/ast_boost
 require daslib/templates_boost
 
 [tag_function(asset_once_tag)]
-def assert_once ( expr:bool; message:string="" ) {}
+def public assert_once ( expr:bool; message:string="" ) {}
 
 // convert assert_once(expr,message) to
 //  var

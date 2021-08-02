@@ -3,7 +3,7 @@ options indenting = 2
 options no_unused_function_arguments = false
 options no_aot = true
 
-module apply_in_context shared
+module apply_in_context shared private
 
 require ast
 require daslib/ast_boost

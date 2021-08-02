@@ -1,6 +1,6 @@
 options indenting = 4
 
-module regex_boost shared
+module regex_boost shared private
 
 require ast
 require strings

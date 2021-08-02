@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module defer shared
+module defer shared private
 
 require ast
 require rtti
@@ -9,9 +9,9 @@ require daslib/ast_boost
 require daslib/templates_boost
 
 [tag_function(defer_tag)]
-def defer ( blk : block<():void> ) {}
+def public defer ( blk : block<():void> ) {}
 
-def nada() {}
+def public nada() {}
 
 // covnert defer() <| block expression
 // into {}, and move block to the finally section of the current block

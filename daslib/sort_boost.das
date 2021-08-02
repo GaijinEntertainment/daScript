@@ -1,6 +1,6 @@
 options indenting = 4
 
-module sort_boost shared
+module sort_boost shared private
 
 require ast
 
@@ -18,7 +18,7 @@ def private sort_array_helper ( var arr : auto implicit; a : auto(TT) ) : array<
     return <- res
 
 [unsafe_operation]
-def temp_sort_array ( var arr : auto implicit )
+def public temp_sort_array ( var arr : auto implicit )
     unsafe
         return <- sort_array_helper ( arr, decltype(arr[0]) )
 

@@ -1,14 +1,14 @@
 options indenting = 4
 options no_aot = true
 
-module lpipe shared
+module lpipe shared private
 
 require ast
 require rtti
 require daslib/ast_boost
 require daslib/templates_boost
 
-def private lpipe_expr ( var fnCall:ExpressionPtr; var arg:ExpressionPtr ) : ExpressionPtr
+def lpipe_expr ( var fnCall:ExpressionPtr; var arg:ExpressionPtr ) : ExpressionPtr
     if fnCall |> is_expr_like_call()
         unsafe
             var pCall = reinterpret<ExprLooksLikeCall?> fnCall

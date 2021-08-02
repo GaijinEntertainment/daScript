@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module static_let shared
+module static_let shared private
 
 require ast
 require rtti
@@ -9,10 +9,10 @@ require daslib/ast_boost
 require daslib/templates_boost
 
 [tag_function(static_let_tag)]
-def static_let ( blk : block ) {}
+def public static_let ( blk : block ) {}
 
 [tag_function(static_let_tag)]
-def static_let_finalize ( blk : block ) {}
+def public static_let_finalize ( blk : block ) {}
 
 def private make_shutdown_function ( varname:string; at:LineInfo )
     var fn <- new [[Function() at=at, atDecl=at, name:="shutdown`{varname}"]]
