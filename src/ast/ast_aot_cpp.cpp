@@ -1263,7 +1263,7 @@ namespace das {
             if ( var->type->ref ) {
                 ss << "&(";
             }
-            if ( needPtrCast(var->type, expr->type) ) {
+            if ( needPtrCast(var->type, expr->type, expr) ) {
                 ss << "das_auto_cast<" << describeCppType(var->type) << ">::cast(";
             }
             if ( expr->type->isString() ) {
@@ -1274,7 +1274,7 @@ namespace das {
             if ( expr->type->isString() ) {
                 ss << ")";
             }
-            if ( needPtrCast(var->type, expr->type) ) {
+            if ( needPtrCast(var->type, expr->type, expr) ) {
                 ss << ")";
             }
             if ( var->type->ref ) {
@@ -2971,7 +2971,8 @@ namespace das {
             if (argType->baseType == Type::anyArgument) return false;
             return !argType->isSameType(*passType,RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::no);
         }
-        bool needPtrCast ( const TypeDeclPtr & argType, const TypeDeclPtr & passType ) const {
+        bool needPtrCast ( const TypeDeclPtr & argType, const TypeDeclPtr & passType, Expression * passExpr ) const {
+            if ( passExpr->rtti_isNullPtr() ) return true;
             return argType->isVoidPointer() ^ passType->isVoidPointer();
         }
         void CallFunc_preVisitCallArg ( ExprCallFunc * call, Expression * arg, bool ) {
@@ -2994,7 +2995,7 @@ namespace das {
                     ss << "das_alias<" << funArgType->alias << ">::to(";
                 }
             }
-            if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) {
+            if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type,arg) ) {
                 ss << "das_auto_cast<" << describeCppType(funArgType,CpptSubstitureRef::no,CpptSkipRef::no) << ">::cast(";
             }
             if ( !call->func->anyTemplate && (call->func->interopFn || funArgType->baseType==Type::anyArgument) ) {
@@ -3039,7 +3040,7 @@ namespace das {
                     ss << ")";
                 }
             }
-            if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type) ) ss << ")";
+            if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type,arg) ) ss << ")";
             if ( funArgType->isAotAlias() ) ss << ")";
             ss << call->func->getAotArgumentSuffix(call, argIndex);
             if ( !last ) ss << ",";

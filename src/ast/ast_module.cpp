@@ -165,6 +165,7 @@ namespace das {
         } else {
             requireModule[this] = false;
         }
+        isModule = !n.empty();
     }
 
     void Module::promoteToBuiltin(const FileAccessPtr & access) {

@@ -526,6 +526,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(stack)>("stack");
             addField<DAS_BIND_MANAGED_FIELD(intern_strings)>("intern_strings");
             addField<DAS_BIND_MANAGED_FIELD(persistent_heap)>("persistent_heap");
+            addField<DAS_BIND_MANAGED_FIELD(multiple_contexts)>("multiple_contexts");
             addField<DAS_BIND_MANAGED_FIELD(heap_size_hint)>("heap_size_hint");
             addField<DAS_BIND_MANAGED_FIELD(string_heap_size_hint)>("string_heap_size_hint");
         // rtti
@@ -543,6 +544,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(allow_block_variable_shadowing)>("allow_block_variable_shadowing");
             addField<DAS_BIND_MANAGED_FIELD(allow_shared_lambda)>("allow_shared_lambda");
             addField<DAS_BIND_MANAGED_FIELD(ignore_shared_modules)>("ignore_shared_modules");
+            addField<DAS_BIND_MANAGED_FIELD(default_module_public)>("default_module_public");
         // environment
             addField<DAS_BIND_MANAGED_FIELD(no_optimizations)>("no_optimizations");
             addField<DAS_BIND_MANAGED_FIELD(fail_on_no_aot)>("fail_on_no_aot");

@@ -302,7 +302,7 @@ namespace das {
                 if (!program->failed())
                     program->verifyAndFoldContracts();
                 if (!program->failed())
-                    program->markOrRemoveUnusedSymbols(exportAll);
+                    program->markOrRemoveUnusedSymbols(exportAll || program->thisModule->isModule);
                 if (!program->failed())
                     program->allocateStack(logs);
                 if (!program->failed())
@@ -346,12 +346,6 @@ namespace das {
                     }
                     if ( policies.fail_on_lack_of_aot_export ) {
                         if ( !program->options.getBoolOption("no_aot",false) ) {
-                            if ( program->options.getBoolOption("remove_unused_symbols",true) ) {
-                                program->error("Module " + program->thisModule->name + " aka " + mod.moduleName + " is not setup correctly for AOT",
-                                    "options remove_unused_symbols = false is required", "", LineInfo(),
-                                        CompilationError::module_does_not_export_unused_symbols);
-                                return program;
-                            }
                             if ( program->thisModule->name.empty() ) {
                                 program->error("Module " + mod.moduleName + " is not setup correctly for AOT",
                                     "module " + mod.moduleName + " is required", "", LineInfo(),

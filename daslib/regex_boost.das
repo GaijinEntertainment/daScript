@@ -1,5 +1,4 @@
 options indenting = 4
-options remove_unused_symbols = false
 
 module regex_boost shared
 

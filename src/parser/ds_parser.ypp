@@ -343,6 +343,7 @@
 %type <i>               optional_shared_or_private
 %type <i>               block_or_lambda
 %type <b>               optional_ref
+%type <b>               optional_public_or_private
 
 %type <b>               if_or_static_if
 %type <b>               elif_or_static_elif
@@ -413,6 +414,7 @@
 
 %type <s>               character_sequence
 %type <s>               string_constant
+%type <s>               module_name
 
 /* operation precedence*/
 %left       ','
@@ -458,8 +460,21 @@ program
     |   program ';'
     ;
 
+optional_public_or_private
+    :                   { $$ = g_Program->policies.default_module_public; }
+    |   DAS_PUBLIC      { $$ = true; }
+    |   DAS_PRIVATE     { $$ = false; }
+    ;
+
+module_name
+    :   '$'         { $$ = new string("$"); }
+    |   NAME[name]  { $$ = $name; }
+    ;
+
 module_declaration
-    :   DAS_MODULE  NAME[name] optional_shared[mtype] {
+    :   DAS_MODULE  module_name[name] optional_shared[mtype] optional_public_or_private[ispub] {
+        g_Program->thisModule->isPublic = $ispub;
+        g_Program->thisModule->isModule = true;
         if ( g_Program->thisModule->name.empty() ) {
             g_Program->thisModule->name = *$name;
         } else if ( g_Program->thisModule->name != *$name ){

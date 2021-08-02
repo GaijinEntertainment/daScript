@@ -1,20 +1,18 @@
-require daslib/strings_boost
+struct Foo
+    a: int
 
-def is_char_at(foo:array<uint8>#; idx:int; ch:int)
-    return int(foo[idx])==ch
+def finalize(var a:Foo&)
+    print("destroy Foo[{a.a}]\n")
 
 [export]
-def main
-    var sample = " a + b * ( c << d ) blah blah b"
-    peek_data(sample) <| $ ( foo )
-        for x in range(length(foo))
-            if is_char_at(foo, x, 'b')
-                assert(x==5 || x==20 || x==25 || x==30)
-    var new_sample = modify_data(sample) <| $ ( var foo )
-        for x in range(length(foo))
-            if is_char_at(foo, x, 'b')
-                foo[x] = uint8('B')
-    assert(new_sample==" a + B * ( c << d ) Blah Blah B")
+def main()
+    var a = [[Foo a=0]]
+    // delete a
 
+    var arr <- [{ Foo[] [[Foo a=1]]; [[Foo a=2]] }]
+    print("arr len = {length(arr)}\n")
 
-
+    // delete arr
+    var arr2 <- [{ Foo[] [[Foo a=3]] }]
+    arr <- arr2
+    // delete arr

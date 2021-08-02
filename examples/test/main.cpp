@@ -394,7 +394,7 @@ int main( int argc, char * argv[] ) {
     // #define TEST_NAME   "/doc/reflections/das2rst.das"
 // examples
     // #define TEST_NAME   "/examples/test/dict_pg.das"
-    #define TEST_NAME   "/examples/test/hello_world.das"
+    // #define TEST_NAME   "/examples/test/hello_world.das"
     // #define TEST_NAME   "/examples/test/ast_print.das"
     // #define TEST_NAME   "/examples/test/base64.das"
     // #define TEST_NAME   "/examples/test/regex_lite.das"
@@ -405,8 +405,9 @@ int main( int argc, char * argv[] ) {
     // #define TEST_NAME   "/examples/test/unit_tests/hint_macros_example.das"
     // #define TEST_NAME   "/examples/test/unit_tests/aonce.das"
     // #define TEST_NAME   "/examples/test/unit_tests/check_defer.das"
+    #define TEST_NAME   "/examples/test/unit_tests/split.das"
     unit_test(getDasRoot() +  TEST_NAME,false);
-    // unit_test(getDasRoot() +  TEST_NAME,true);
+    unit_test(getDasRoot() +  TEST_NAME,true);
     // extra
     //  #define TEST_NAME   "/examples/test/unit_tests/apply_macro_example.das"
     //  unit_test(getDasRoot() +  TEST_NAME,false);

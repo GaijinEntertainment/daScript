@@ -1,5 +1,6 @@
 options indenting=4
 options no_aot=true
+options remove_unused_symbols=false
 
 require ast
 require rtti public

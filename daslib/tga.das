@@ -1,5 +1,4 @@
 options indenting = 4
-options remove_unused_symbols = false
 
 module tga shared
 

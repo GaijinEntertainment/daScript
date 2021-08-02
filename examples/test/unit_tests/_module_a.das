@@ -1,4 +1,3 @@
-options remove_unused_symbols = false
 module _module_a
 
 var

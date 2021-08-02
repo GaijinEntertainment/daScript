@@ -899,6 +899,8 @@ namespace das
             struct {
                 bool    builtIn : 1;
                 bool    promoted : 1;
+                bool    isPublic : 1;
+                bool    isModule : 1;
             };
             uint32_t        moduleFlags = 0;
         };
@@ -1050,6 +1052,7 @@ namespace das
         bool allow_block_variable_shadowing = false;
         bool allow_shared_lambda = false;
         bool ignore_shared_modules = false;
+        bool default_module_public = true;              // by default module is 'public', not 'private'
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error

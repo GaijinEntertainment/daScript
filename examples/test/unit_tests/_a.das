@@ -1,5 +1,3 @@
-options remove_unused_symbols = false
-
 module _a
 
 require _b

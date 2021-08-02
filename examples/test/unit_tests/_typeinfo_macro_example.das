@@ -1,4 +1,3 @@
-options remove_unused_symbols = false
 options no_aot = true
 
 module _typeinfo_macro_example
