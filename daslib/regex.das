@@ -58,47 +58,39 @@ let
 var
     trace_tab = 0
 
-[private]
-def trace(msg:string; offset:int)
+def private trace(msg:string; offset:int)
     static_if log_parse_enabled
         print("{repeat(" ",trace_tab)}{offset}: {msg}\n")
         trace_tab ++
 
-[private]
-def note(msg:string; offset:int)
+def private note(msg:string; offset:int)
     static_if log_parse_enabled
         print("{repeat(" ",trace_tab)}{offset}: {msg}\n")
 
-[private]
-def trace_backtrack()
+def private trace_backtrack()
     static_if log_parse_enabled
         trace_tab --
         print("{repeat(" ",trace_tab)}backtrack\n")
 
-[private]
-def trace_value(value : ReNode?)
+def private trace_value(value : ReNode?)
     static_if log_parse_enabled
         if value==null
             panic("trace_value null?")
         trace_tab --
         print("{repeat(" ",trace_tab)}matched {value.op}, next {value.at.y}\n")
 
-[private]
-def nada()
+def private nada()
     trace_backtrack()
     return [[MaybeReNode nothing=null]]
 
-[private]
-def maybe( value : ReNode? )
+def private maybe( value : ReNode? )
     trace_value(value)
     return [[MaybeReNode value=value]]
 
-[private]
-def eos(expr:string; offset:int)
+def private eos(expr:string; offset:int)
     return offset >= length(expr)
 
-[private]
-def at(expr:string; offset:int) : int
+def private at(expr:string; offset:int) : int
     static_if range_check_enabled
         let len = length(expr)
         if offset<len
@@ -113,46 +105,38 @@ def at(expr:string; offset:int) : int
         unsafe
             return character_uat(expr, offset)
 
-[private]
-def next(re:MaybeReNode)
+def private next(re:MaybeReNode)
     if !(re is value)
         stackwalk()
         panic("expecting value")
     return (re as value).at.y
 
-[private]
-def is_set_empty(cset:CharSet)
+def private is_set_empty(cset:CharSet)
     for x in cset
         if x != 0u
             return false
     return true
 
-[private]
-def set_or_char(var cset:CharSet; ch:int)
+def private set_or_char(var cset:CharSet; ch:int)
     cset[ch>>5] |= uint(1 << (ch & 31))
 
-[private]
-def set_or_range(var cset:CharSet; bits:range)
+def private set_or_range(var cset:CharSet; bits:range)
     for ch in range(bits.x,bits.y+1)
         cset[ch>>5] |= uint(1 << (ch & 31))
 
-[private]
-def set_invert(var cset:CharSet)
+def private set_invert(var cset:CharSet)
     for x in cset
         x ^= 0xffffffff
 
-[private]
-def set_or_set(var cset:CharSet; eset:CharSet)
+def private set_or_set(var cset:CharSet; eset:CharSet)
     for x,y in cset,eset
         x |= y
 
-[private]
-def set_negative(var cset:CharSet)
+def private set_negative(var cset:CharSet)
     for x in cset
         x = ~x
 
-[private]
-def set_meta(var cset:CharSet; che:int)
+def private set_meta(var cset:CharSet; che:int)
     if che=='w'
         set_or_range(cset,range('a','z'))
         set_or_range(cset,range('A','Z'))
@@ -182,17 +166,14 @@ let
     meta = "\\+-*.()[]|^"
     meta_set = "wWsSdD"
 
-[private]
-def is_meta_character(ch:int) : bool
+def private is_meta_character(ch:int) : bool
     return find(meta,ch) != -1
 
-[private]
-def is_set_character(ch:int) : bool
+def private is_set_character(ch:int) : bool
     return find(meta_set,ch) != -1
 
 // <char>	::=	any non metacharacter | "\" metacharacter
-[private]
-def re_char (expr : string; offset:int) : MaybeReNode
+def private re_char (expr : string; offset:int) : MaybeReNode
     trace("re_char",offset)
     if eos(expr,offset)
         return nada()
@@ -215,8 +196,7 @@ def re_char (expr : string; offset:int) : MaybeReNode
 // <set-item>	::=	<range> | <char>
 // <range>	::=	<char> "-" <char>
 // <char>	::=	any non metacharacter | "\" metacharacter
-[private]
-def re_set_items(expr:string; offset:int) : MaybeReNode
+def private re_set_items(expr:string; offset:int) : MaybeReNode
     trace("re_set_items",offset)
     if eos(expr,offset)
         return nada()
@@ -255,8 +235,7 @@ def re_set_items(expr:string; offset:int) : MaybeReNode
 // <negative-set>	::=	"[^" <set-items> "]"
 // <positive-set>	::=	"[" <set-items> "]"
 // <set>	::=	<positive-set> | <negative-set>
-[private]
-def re_set(expr:string; offset:int) : MaybeReNode
+def private re_set(expr:string; offset:int) : MaybeReNode
     trace("re_set",offset)
     if eos(expr,offset)
         return nada()
@@ -281,8 +260,7 @@ def re_set(expr:string; offset:int) : MaybeReNode
     return oset
 
 // <any>	::=	"."
-[private]
-def re_any(expr:string; offset:int) : MaybeReNode
+def private re_any(expr:string; offset:int) : MaybeReNode
     trace("re_any",offset)
     if eos(expr,offset)
         return nada()
@@ -291,8 +269,7 @@ def re_any(expr:string; offset:int) : MaybeReNode
     return nada()
 
 // <eos>	::=	"$"
-[private]
-def re_eos(expr:string; offset:int) : MaybeReNode
+def private re_eos(expr:string; offset:int) : MaybeReNode
     trace("re_eos",offset)
     if eos(expr,offset)
         return nada()
@@ -301,8 +278,7 @@ def re_eos(expr:string; offset:int) : MaybeReNode
     return nada()
 
 // <group>	::=	"(" <RE> ")"
-[private]
-def re_group(expr:string; offset:int) : MaybeReNode
+def private re_group(expr:string; offset:int) : MaybeReNode
     trace("re_group",offset)
     if eos(expr,offset)
         return nada()
@@ -317,8 +293,7 @@ def re_group(expr:string; offset:int) : MaybeReNode
     return maybe(new [[ReNode op=ReOp Group, subexpr=ore as value, at=range(offset,next(ore)+1)]])
 
 // <elementary-RE>	::=	<group> | <any> | <eos> | <set> | <char>
-[private]
-def re_elementary(expr:string; offset:int) : MaybeReNode
+def private re_elementary(expr:string; offset:int) : MaybeReNode
     trace("re_elementary",offset)
     if eos(expr,offset)
         return nada()
@@ -339,8 +314,7 @@ def re_elementary(expr:string; offset:int) : MaybeReNode
         return ochr
     return nada()
 
-[private]
-def mk_concat(var left,right:ReNode?)
+def private mk_concat(var left,right:ReNode?)
     if left == null
         return right
     elif left.op==ReOp Char && right.op==ReOp Char
@@ -364,8 +338,7 @@ def mk_concat(var left,right:ReNode?)
     else
         return new [[ReNode op=ReOp Concat, left = left, right = right, at=range(left.at.x,right.at.y)]]
 
-[private]
-def mk_union(var left,right:ReNode?) : ReNode?
+def private mk_union(var left,right:ReNode?) : ReNode?
     if left.op==ReOp Union
         left.at.y = right.at.y
         if right.op==ReOp Union                    // union(union(x),union(y)) = union(xy)
@@ -387,8 +360,7 @@ def mk_union(var left,right:ReNode?) : ReNode?
 // <union>	::=	<RE> "|" <simple-RE>
 // <simple-RE>	::=	<concatenation> | <basic-RE>
 // <concatenation>	::=	<simple-RE> <basic-RE>
-[private]
-def re_re(expr:string; offset:int) : MaybeReNode
+def private  re_re(expr:string; offset:int) : MaybeReNode
     trace("re_re",offset)
     if eos(expr,offset)
         return nada()
@@ -416,8 +388,7 @@ def re_re(expr:string; offset:int) : MaybeReNode
 // <basic-RE>	::=	<star> | <plus> | <elementary-RE>
 // <star>	::=	<elementary-RE> "*"
 // <plus>	::=	<elementary-RE> "+"
-[private]
-def re_basic(expr:string; offset:int) : MaybeReNode
+def private re_basic(expr:string; offset:int) : MaybeReNode
     trace("re_basic",offset)
     if eos(expr,offset)
         return nada()
@@ -433,8 +404,7 @@ def re_basic(expr:string; offset:int) : MaybeReNode
         return maybe(new [[ReNode op=ReOp Question, subexpr=oelem as value, at=range(offset,next(oelem)+1)]])
     return oelem
 
-[private]
-def re_parse ( expr:string ) : ReNode?
+def private re_parse ( expr:string ) : ReNode?
     var ore = re_re(expr, 0)
     if ore is nothing
         return null
@@ -444,8 +414,7 @@ def re_parse ( expr:string ) : ReNode?
         return null
     return ore as value
 
-[private]
-def visit_top_down ( var node:ReNode?; blk : block<(var n:ReNode?):void> )
+def private visit_top_down ( var node:ReNode?; blk : block<(var n:ReNode?):void> )
     invoke(blk,node)
     for x in node.all
         visit_top_down(x, blk)
@@ -456,8 +425,7 @@ def visit_top_down ( var node:ReNode?; blk : block<(var n:ReNode?):void> )
     if node.right!=null
         visit_top_down(node.right, blk)
 
-[private]
-def re_assign_next ( var re:Regex )
+def private re_assign_next ( var re:Regex )
     var id = 0
     visit_top_down(re.root) <| $ ( var node )
         node.id = id ++
@@ -470,8 +438,7 @@ def re_assign_next ( var re:Regex )
             for sub in node.all
                 sub.next = node.next
 
-[private]
-def re_assign_groups ( var re:Regex )
+def private re_assign_groups ( var re:Regex )
     push(re.groups, [[auto range(0),""]])
     visit_top_down(re.root) <| $ ( var node )
         if node.op == ReOp Group
@@ -483,8 +450,7 @@ def re_assign_groups ( var re:Regex )
     matching
 */
 
-[private]
-def re_assign_match_functions ( var re:Regex )
+def private re_assign_match_functions ( var re:Regex )
     visit_top_down(re.root) <| $ ( var node )
         if node.op==ReOp Char
             if node.textLen==1
@@ -517,8 +483,8 @@ def re_assign_match_functions ( var re:Regex )
         else
             panic("unsupported {node.op}")
 
-[private,unsafe_deref]
-def re_match2_single_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_single_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match single char `{node.text}` {str}\n")
     unsafe
@@ -532,8 +498,8 @@ def re_match2_single_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : ui
         else
             return tail
 
-[private,unsafe_deref]
-def re_match2_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match char `{node.text}` {str}\n")
     unsafe
@@ -549,8 +515,8 @@ def re_match2_char ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         else
             return tail
 
-[private,unsafe_deref]
-def re_match2_union ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_union ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match union {str}\n")
     for sub in node.all
@@ -560,8 +526,8 @@ def re_match2_union ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
             return osub
     return null
 
-[private,unsafe_deref]
-def re_match2_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 set {str}\n")
     if !is_char_in_set(int(*str),node.cset)
@@ -575,8 +541,8 @@ def re_match2_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         else
             return tail
 
-[private,unsafe_deref]
-def re_match2_any ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_any ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 any {str}\n")
     if int(*str)==0
@@ -590,8 +556,8 @@ def re_match2_any ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         else
             return tail
 
-[private,unsafe_deref]
-def re_match2_concat ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_concat ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 concat {str}\n")
     var left = node.left
@@ -601,8 +567,8 @@ def re_match2_concat ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     node.tail = node.right.tail
     return oleft
 
-[private,unsafe_deref]
-def re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match eos {str}\n")
     if int(*str)!=0
@@ -614,8 +580,8 @@ def re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     else
         return str
 
-[private,unsafe_deref]
-def re_match2_question ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_question ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match question {str}\n")
     var nsub = node.subexpr
@@ -629,8 +595,8 @@ def re_match2_question ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8
     else
         return tail
 
-[private,unsafe_deref]
-def re_match2_plus ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_plus ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {str}\n")
     var nsub = node.subexpr
@@ -654,8 +620,8 @@ def re_match2_plus ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         node.tail = ofs
         return ofs
 
-[private,unsafe_deref]
-def re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {str}\n")
     panic("oi")
@@ -685,8 +651,8 @@ def re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8
             node.tail = ofs
             return ofs
 
-[private,unsafe_deref]
-def re_match2_star ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_star ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {str}\n")
     var ofs = str
@@ -708,8 +674,8 @@ def re_match2_star ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
         node.tail = ofs
         return ofs
 
-[private,unsafe_deref]
-def re_match2_group ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
+[unsafe_deref]
+def private re_match2_group ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 group {str}\n")
     var nsub = node.subexpr
@@ -862,8 +828,7 @@ def debug_set(cset:CharSet)
             else
                 print("\\{x}")
 
-[private]
-def debug_re ( node: ReNode?; tab:int )
+def private debug_re ( node: ReNode?; tab:int )
     print("(")
     if node != null
         print("#{node.id}")

@@ -45,18 +45,15 @@ def JV ( var v : table<string;JsonValue?> )
 def JV ( var v : array<JsonValue?> )
     return new [[JsonValue value <- [[JsValue _array <- v]]]]
 
-[private]
-def lexer ( text : string )
+def private lexer ( text : string )
     var stext = clone_string(text)
     return <- _lexer(stext)
 
-[private]
-def lexer ( text : array<uint8> )
+def private lexer ( text : array<uint8> )
     var stext = string(text)
     return <- _lexer(stext)
 
-[private]
-def _lexer ( var stext : string implicit )
+def private _lexer ( var stext : string implicit )
     return <- generator<Token>() <|
         var tin : iterator<int>
         unsafe
@@ -142,8 +139,7 @@ def _lexer ( var stext : string implicit )
         unsafe
             delete_string(stext)
 
-[private]
-def expect_token ( var itv : iterator<Token>; var ahead : Token; vindex : int; var error : string & ) : bool
+def private expect_token ( var itv : iterator<Token>; var ahead : Token; vindex : int; var error : string & ) : bool
     if !next(itv, ahead)
         error = "unexected eos"
         return false
@@ -153,8 +149,7 @@ def expect_token ( var itv : iterator<Token>; var ahead : Token; vindex : int; v
     else
         return true
 
-[private]
-def expect_symbol ( var itv : iterator<Token>; var ahead : Token; sym : int; var error : string & ) : bool
+def private expect_symbol ( var itv : iterator<Token>; var ahead : Token; sym : int; var error : string & ) : bool
     if !next(itv, ahead)
         error = "unexected eos"
         return false
@@ -167,8 +162,7 @@ def expect_symbol ( var itv : iterator<Token>; var ahead : Token; sym : int; var
     else
         return true
 
-[private]
-def parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
+def private parse_value ( var itv : iterator<Token>; var error : string & ) : JsonValue?
     var ahead : Token
     if !next(itv, ahead)
         return null
@@ -256,8 +250,8 @@ def read_json ( text : array<uint8>; var error : string& ) : JsonValue?
     delete lex
     return res
 
-[private] // note - we use StringBuilderWriter for performance reasons here
-def write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : int )
+// note - we use StringBuilderWriter for performance reasons here
+def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : int )
     if jsv == null
         write(writer, "null")
     elif jsv.value is _string

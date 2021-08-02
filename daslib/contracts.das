@@ -6,8 +6,7 @@ module contracts shared
 require ast
 require daslib/ast_boost
 
-[private]
-def isYetAnotherVectorTemplate ( var td:TypeDeclPtr )
+def private isYetAnotherVectorTemplate ( var td:TypeDeclPtr )
     return td.isHandle && td.annotation!=null && td.annotation.is_any_vector
 
 class IsAnyType : AstFunctionAnnotation

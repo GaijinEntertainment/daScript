@@ -216,6 +216,7 @@ namespace das
                 bool    generated : 1;
                 bool    persistent : 1;
                 bool    isLambda : 1;
+                bool    privateStructure : 1;
             };
             uint32_t    flags = 0;
         };

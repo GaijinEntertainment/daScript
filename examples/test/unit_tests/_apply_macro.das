@@ -3,8 +3,7 @@ module _apply_macro
 require ast
 require daslib/ast_boost
 
-[private]
-def prepend_cond(var fn:FunctionPtr; cond:string)
+def private prepend_cond(var fn:FunctionPtr; cond:string)
     var iblk <- fn.body
     var blk <- new [[ExprBlock() at=fn.at]]
     var ifm <- new [[ExprCall() at=fn.at, name:=cond]]

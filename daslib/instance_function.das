@@ -41,7 +41,7 @@ class InstanceFunctionAnnotation : AstFunctionAnnotation
         apply_template(rules, func.at, func.body)
         return true
 
-[macro,private]
-def init
+[macro]
+def private init
     if is_compiling_macros_in_module("instance_function")
         add_new_function_annotation("instance_function", new InstanceFunctionAnnotation())

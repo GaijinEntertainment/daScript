@@ -1,7 +1,8 @@
 options indenting = 2
-options remove_unused_symbols = false
+
 options no_unused_function_arguments = false
 options no_aot = true
+
 module apply_in_context shared
 
 require ast

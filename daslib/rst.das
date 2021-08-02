@@ -225,14 +225,12 @@ def make_header(name,lab:string)
     let wide = length(name)
     return ".. _stdlib_{lab}:\n\n{strings::repeat("=",wide)}\n{name}\n{strings::repeat("=",wide)}\n\n"
 
-[private]
-def write_table_separator(var writer:StringBuilderWriter; wid:array<int>; sep:string="-")
+def private write_table_separator(var writer:StringBuilderWriter; wid:array<int>; sep:string="-")
     for x in wid
         write(writer,"+{strings::repeat(sep,x)}")
     write(writer,"+\n")
 
-[private]
-def write_table_line(var writer:StringBuilderWriter;line:array<string>;wid:array<int>)
+def private write_table_line(var writer:StringBuilderWriter;line:array<string>;wid:array<int>)
     for x,l in wid,line
         write(writer,"+{wide(l,x)}")
     write(writer,"+\n")
@@ -327,8 +325,7 @@ def document_global_constant(doc_file:file;mod:Module?;value:VariablePtr)
     fwrite(doc_file," = {describe(value.init)}\n\n")
     document_topic(doc_file,topic("variable",mod,string(value.name)))
 
-[private]
-def is_global_constant(value:VariablePtr)
+def private is_global_constant(value:VariablePtr)
     if !value._type.flags.constant
         return false
     if !value._type.isWorkhorseType
@@ -688,14 +685,12 @@ def hide_group(var group:DocGroup)
     group.hidden = true
     return <- group
 
-[private]
-def generate_topic_stub(var tab:table<string;bool>;doc_file:file;topic:string implicit)
+def private generate_topic_stub(var tab:table<string;bool>;doc_file:file;topic:string implicit)
     if !tab[topic]
         tab[topic] = true
         fwrite(doc_file,".. {topic} replace:: to be documented\n\n" )
 
-[private]
-def generate_substitute_stub(mod:Module?;substname:string)
+def private generate_substitute_stub(mod:Module?;substname:string)
     var st : FStat
     if stat(substname,st)   // this is actually 'see if it exists'
         return
@@ -738,8 +733,7 @@ def generate_substitute_stub(mod:Module?;substname:string)
         else
             panic("can't generate stub at {substname}\n")
 
-[private]
-def getDetailIncludePath ( fname, substname : string )
+def private getDetailIncludePath ( fname, substname : string )
     var fnp <- split_by_chars(fname,"\\/")
     var snp <- split_by_chars(substname,"\\/")
     var index = 0

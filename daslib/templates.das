@@ -79,7 +79,7 @@ class TemplateMacro : AstFunctionAnnotation
         compiling_module() |> add_function(fclone)
         return newcall
 
-[macro,private]
-def init
+[macro]
+def private init
     if is_compiling_macros_in_module("templates")
         add_new_function_annotation("template", new TemplateMacro())

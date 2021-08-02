@@ -1,5 +1,6 @@
 options indenting = 4
-module das_source_formatter shared
+
+module das_source_formatter shared private
 
 require fio
 require strings
@@ -65,8 +66,6 @@ var insideOptions: bool = false
 var crCount: int = 0     // CR \r
 var lfCount: int = 0     // LF \n
 
-
-[private]
 def initialize_token_templates()
     if length(tokenTemplates) > 0
         return
@@ -78,23 +77,19 @@ def initialize_token_templates()
         tt.length = length(s)
 
 
-[private]
 def isUtf8Bom(var text: array<uint8>&): bool
     return (length(text) >= 3 &&
         uint(text[0]) == 0xEF && uint(text[1]) == 0xBB && uint(text[2]) == 0xBF)
 
 
-[private]
 def eq(index: int; s: string const implicit)
     return (index < 0 || index >= length(tokens)) ? false : tokens[index].str == s
 
 
-[private]
 def new_line_before(index: int)
     return (index <= 1 || index >= length(tokens)) ? true : tokens[index].newLines > 0
 
 
-[private]
 def next_char
     c = int(data[pos])
     if c == 0
@@ -131,13 +126,11 @@ def next_char
         return
 
 
-[private]
 def skip_spaces
     while (c == ' ' || c == '\t' || c == '\r' || c == '\n')
         next_char()
 
 
-[private]
 def on_token_added()
     let t: Token& = tokens[length(tokens) - 1]
     if indenting == 0 && newLineCounter > 0 && spaceCounter > 0 && t.tokenType != TokenType COMMENT
@@ -151,7 +144,6 @@ def on_token_added()
         indenting = clamp(to_int(t.str), 1, 8)
 
 
-[private]
 def push_token(from_char_idx, to_char_idx, space_count, new_lines, src_line, column: int; token_type: TokenType)
     var buf <- [{ for i in range(from_char_idx, to_char_idx); uint8(data[i]) }]
     tokens |> push([[ Token
@@ -167,7 +159,6 @@ finally
     delete buf
 
 
-[private]
 def parse_token()
     skip_spaces()
     if eof
@@ -260,7 +251,6 @@ def parse_token()
     return
 
 
-[private]
 def parse_all_tokens()
     initialize_token_templates()
     let emptyToken: Token
@@ -300,7 +290,6 @@ struct ParenCounter
     curly: int = 0
 
 
-[private]
 def update_paren(index: int; var paren_counter: ParenCounter&)
     if eq(index, "<")
         paren_counter.angle++
@@ -326,7 +315,6 @@ def update_paren(index: int; var paren_counter: ParenCounter&)
         paren_counter.curly--
 
 
-[private]
 def find_pair_paren(from_index: int): int
     var pc: ParenCounter
     for j in range(from_index + 1, length(tokens))
@@ -336,7 +324,6 @@ def find_pair_paren(from_index: int): int
     return from_index
 
 
-[private]
 def find_pair_square(from_index: int): int
     var pc: ParenCounter
     for j in range(from_index + 1, length(tokens))
@@ -346,7 +333,6 @@ def find_pair_square(from_index: int): int
     return from_index
 
 
-[private]
 def mark_tokens_as_type(i: int)
     var pc: ParenCounter
     for j in range(i, length(tokens))
@@ -358,7 +344,6 @@ def mark_tokens_as_type(i: int)
             tokens[j].isInType = true
 
 
-[private]
 def mark_tokens_as_type_inside_angle(i: int)
     var pc: ParenCounter
     for j in range(i, length(tokens))
@@ -369,7 +354,6 @@ def mark_tokens_as_type_inside_angle(i: int)
             break
 
 
-[private]
 def search_token_in_line(from_index: int; str: string const): int
     var pc: ParenCounter
     for j in range(from_index, length(tokens))
@@ -386,7 +370,6 @@ def search_token_in_line(from_index: int; str: string const): int
     return 0
 
 
-[private]
 def mark_token_context()
     // don't format  require / expect / label
     for i in range(0, length(tokens) - 1)
@@ -464,13 +447,11 @@ def mark_token_context()
                         mark_tokens_as_type(endParams + 1)
 
 
-[private]
 def debug_print_tokens()
     for t in tokens
         print("{t.isInFunctionParam ? ">" : " "}{t.isInType ? "*" : " "} '{t.str}'\n");
 
 
-[private]
 def generate_source(): string
     var res: array<uint8>
     res |> reserve(1000 + length(tokens) * 8)
@@ -506,7 +487,6 @@ finally
     delete res
 
 
-[private]
 def need_spaces_around(index: int): bool
     let t & = tokens[index]
     if t.tokenType != TokenType UNKNOWN || t.dontFormat
@@ -518,7 +498,6 @@ def need_spaces_around(index: int): bool
     return true
 
 
-[private]
 def need_space_only_before(index: int): bool
     let t & = tokens[index]
     if !t.isInType
@@ -536,7 +515,6 @@ def need_space_only_before(index: int): bool
     return false
 
 
-[private]
 def add_space_before(i)
     if (tokens[i].dontFormat || tokens[i - 1].dontFormat) || new_line_before(i)
         return
@@ -544,7 +522,6 @@ def add_space_before(i)
         tokens[i].spaces = 1
 
 
-[private]
 def remove_space_before(i)
     if (tokens[i].dontFormat || tokens[i - 1].dontFormat) || new_line_before(i)
         return
@@ -555,7 +532,6 @@ let tokens_before_unary <- [[auto "("; "["; "?["; "\{"; "auto"; "int"; "float"; 
     "if"; "while"; "switch"; "return"; "yield"; "in"
     ]]
 
-[private]
 def is_unary(index: int): bool
     if eq(index, "!") || eq(index, "~")
         return true
@@ -566,7 +542,6 @@ def is_unary(index: int): bool
     return false
 
 
-[private]
 def remove_spaces_around(index: int)
     if !new_line_before(index)
         remove_space_before(index)
@@ -574,7 +549,6 @@ def remove_spaces_around(index: int)
         remove_space_before(index + 1)
 
 
-[private]
 def make_spaces_around(index: int)
     if !new_line_before(index) && tokens[index].spaces == 0
         add_space_before(index)
@@ -582,35 +556,30 @@ def make_spaces_around(index: int)
         add_space_before(index + 1)
 
 
-[private]
 def fmt_space_after_comma()
     for i in range(1, length(tokens))
         if !new_line_before(i) && eq(i - 1, ",") && tokens[i].spaces == 0
             add_space_before(i)
 
 
-[private]
 def fmt_space_after_semicolon()
     for i in range(1, length(tokens))
         if !new_line_before(i) && eq(i - 1, ";") && tokens[i].spaces == 0
             add_space_before(i)
 
 
-[private]
 def fmt_remove_space_before_comma()
     for i in range(1, length(tokens))
         if !new_line_before(i) && eq(i, ",")
             remove_space_before(i)
 
 
-[private]
 def fmt_remove_space_before_semicolon()
     for i in range(1, length(tokens))
         if !new_line_before(i) && eq(i, ";")
             remove_space_before(i)
 
 
-[private]
 def fmt_type_colon()
     for i in range(1, length(tokens) - 1)
         if tokens[i].isInType && eq(i, ":")
@@ -619,7 +588,6 @@ def fmt_type_colon()
                 add_space_before(i + 1)
 
 
-[private]
 def fmt_function_decl_param_paren()
     for i in range(1, length(tokens) - 1)
         if tokens[i].isInFunctionParam && !tokens[i - 1].isInFunctionParam && eq(i, "(")
@@ -630,7 +598,6 @@ def fmt_function_decl_param_paren()
             remove_space_before(i)
 
 
-[private]
 def fmt_function_call_param_paren_call()
     for i in range(1, length(tokens) - 1)
         if eq(i, "(") && !new_line_before(i) && tokens[i - 1].tokenType == TokenType KEYWORD_OR_IDENTIFIER
@@ -639,7 +606,6 @@ def fmt_function_call_param_paren_call()
             remove_space_before(closingParen)
 
 
-[private]
 def fmt_spaces_around_operators()
     for i in range(1, length(tokens) - 1)
         if !empty(tokens[i].str)
@@ -653,7 +619,6 @@ let space_after_keywords <- [[auto "if"; "elif"; "while"; "switch"; "with"; "ret
         "yield"; "catch"; "static_if"; "static_elif"; "for"
     ]]
 
-[private]
 def fmt_space_after_keyword()
     for i in range(1, length(tokens) - 1)
         if space_after_keywords |> find_index(tokens[i].str) >= 0
@@ -661,21 +626,18 @@ def fmt_space_after_keyword()
                 add_space_before(i + 1)
 
 
-[private]
 def fmt_space_after_paren()
     for i in range(1, length(tokens) - 1)
         if eq(i, ")") && (tokens[i + 1].tokenType != TokenType UNKNOWN)
             add_space_before(i + 1)
 
 
-[private]
 def fmt_space_after_square_brackets()
     for i in range(1, length(tokens) - 1)
         if eq(i, "]") && (tokens[i + 1].tokenType != TokenType UNKNOWN)
             add_space_before(i + 1)
 
 
-[private]
 def fmt_remove_space_inside_parens()
     for i in range(1, length(tokens) - 1)
         if eq(i, "(")
@@ -686,7 +648,6 @@ def fmt_remove_space_inside_parens()
 
 let type_specifiers = [[string "-"; "?"; "&"; "#"]]
 
-[private]
 def fmt_glue_type_specifiers()
     for i in range(1, length(tokens))
         if (tokens[i].isInType && tokens[i].tokenType == TokenType UNKNOWN &&
@@ -694,7 +655,6 @@ def fmt_glue_type_specifiers()
             remove_space_before(i)
 
 
-[private]
 def fmt_space_after_cast_type()
     for i in range(0, length(tokens) - 3)
         if tokens[i].tokenType == TokenType KEYWORD_OR_IDENTIFIER
@@ -705,7 +665,6 @@ def fmt_space_after_cast_type()
                         break
 
 
-[private]
 def do_format
     parse_all_tokens()
     mark_token_context()
@@ -726,24 +685,21 @@ def do_format
     fmt_space_after_square_brackets()
 
 
-[export]
-def format_source_string(file_data: string const& implicit): string
+def public format_source_string(file_data: string const& implicit): string
     data <- [{ for c in file_data; uint8(c) }]
     data |> push(uint8(0))
     do_format()
     return <- generate_source()
 
 
-[export]
-def format_source(file_data: array<uint8> const& implicit): string
+def public format_source(file_data: array<uint8> const& implicit): string
     data := file_data
     data |> push(uint8(0))
     do_format()
     return <- generate_source()
 
 
-[export]
-def format_file(file_name: string const&)
+def public format_file(file_name: string const&)
     var unformatted: string = ""
     var formatted: string = ""
     fopen(file_name, "rb") <| $(fr)
@@ -765,8 +721,7 @@ def format_file(file_name: string const&)
                 fw |> fprint(formatted)
 
 
-[export]
-def format_files(file_names: array<string>&)
+def public format_files(file_names: array<string>&)
     for fname in file_names
         format_file(fname)
 

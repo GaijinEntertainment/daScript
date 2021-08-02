@@ -163,7 +163,7 @@ namespace das {
             Visitor::preVisit(that);
             logAnnotations(that->annotations);
             ss << (that->isClass ? "class" : "struct");
-            ss << " " << that->name << "\n";
+            ss << (that->privateStructure ? "private " : "public ") << that->name << "\n";
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
@@ -255,12 +255,11 @@ namespace das {
             if ( fn->exports ) { ss << "[export]\n"; }
             if ( fn->init ) { ss << "[init]\n"; }
             if ( fn->shutdown ) { ss << "[finalize]\n"; }
-            if ( fn->privateFunction ) { ss << "[private]\n"; }
             if ( fn->unsafeDeref ) { ss << "[unsafe_deref]\n"; }
             if ( fn->unsafeOperation ) { ss << "[unsafe_operation]\n"; }
             if ( fn->generator ) { ss << "[GENERATOR]\n"; }
             logAnnotations(fn->annotations);
-            ss << "def " << fn->name;
+            ss << "def " << (fn->privateFunction ? "private " : "public ") << fn->name;
             if ( fn->arguments.size() ) ss << " ( ";
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {

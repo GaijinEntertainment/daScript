@@ -134,8 +134,7 @@ class TagStructureAnnotation : AstStructureAnnotation
                 return false
         return true
 
-[private]
-def for_each_tag_function(mod:Module?; tag:string; blk : block<(var func:FunctionPtr):void> )
+def private for_each_tag_function(mod:Module?; tag:string; blk : block<(var func:FunctionPtr):void> )
     for_each_function(mod, "") <| $ ( func )
         for ann in func.annotations
             if ann!=null && eq(ann.annotation.name,"tag_function")
@@ -155,8 +154,7 @@ def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
             return get_annotation_argument_value(a)
     return RttiValue_nothing()
 
-[private]
-def apply_tag_annotation(tag:string; ann:FunctionAnnotationPtr)
+def private apply_tag_annotation(tag:string; ann:FunctionAnnotationPtr)
     for_each_tag_function(this_module(), tag) <| $ ( func )
         var tagAnn := ann
         add_function_annotation(func, tagAnn)
@@ -287,8 +285,7 @@ class BetterRttiVisitor : AstVariantMacro
             return veq
         return [[ExpressionPtr]]
 
-[private]
-def walk_and_convert_array ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+def private walk_and_convert_array ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     let total = any_array_size(data)
     if total != 0
         let stride = info.firstType.sizeOf
@@ -304,8 +301,7 @@ def walk_and_convert_array ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
         var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
         return mkArr
 
-[private]
-def walk_and_convert_dim ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+def private walk_and_convert_dim ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
 	let stride = info.baseSizeOf
 	let total = info.countOf
 	var einfo <- clone_type(info)
@@ -318,16 +314,14 @@ def walk_and_convert_dim ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Expr
     einfo := null
 	return mkArr
 
-[private]
-def walk_and_convert_pointer ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+def private walk_and_convert_pointer ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     unsafe
     	let pdata = *(reinterpret<uint8??> data)
         var elem <- walk_and_convert(pdata, info.firstType, at)
         var mkAsc <- new [[ExprAscend() at=at, subexpr <- elem]]
         return mkAsc
 
-[private]
-def walk_and_convert_tuple ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+def private walk_and_convert_tuple ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     var mkArr <- new [[ExprMakeTuple() at=at, recordType<-clone_type(info)]]
     for idx in range( info.argTypes.length)
         let offset = get_tuple_field_offset(info,idx)
@@ -336,8 +330,7 @@ def walk_and_convert_tuple ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
             emplace(mkArr.values, elem)
     return mkArr
 
-[private]
-def walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+def private walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
 	var mkStruct <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
 	let stype = info.structType
     var mkS <- new [[ MakeStruct() ]]
@@ -353,8 +346,7 @@ def walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) 
     emplace(mkStruct.structs, mkS)
 	return mkStruct
 
-[private]
-def walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+def private walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     unsafe
         let vindex = * reinterpret<int?> data
         let offset = get_variant_field_offset(info,vindex)
@@ -366,8 +358,7 @@ def walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
         emplace(mkVariant.variants, mkS)
         return mkVariant
 
-[private]
-def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+def private walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     let total = any_table_size(data)
     if total != 0
         var tupT <- new [[TypeDecl() baseType=Type tTuple, at=at]]
@@ -393,8 +384,7 @@ def walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
         var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
         return mkArr
 
-[private]
-def walk_and_convert_basic ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+def private walk_and_convert_basic ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     unsafe
         if info.baseType == Type tInt
             return new [[ExprConstInt() at=at, value=*reinterpret<int?> data]]
@@ -416,8 +406,7 @@ def walk_and_convert_basic ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : Ex
             panic("unsupported {info.baseType}")
             return [[ExpressionPtr]]
 
-[private]
-def walk_and_convert_enumeration ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+def private walk_and_convert_enumeration ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     var eval = 0
     if info.baseType == Type tEnumeration
         unsafe
@@ -431,8 +420,7 @@ def walk_and_convert_enumeration ( data : uint8?; info:TypeDeclPtr; at:LineInfo 
         panic("unsupported enumeration")
     return new [[ExprConstEnumeration() enumType:=info.enumType, value:=info.enumType.list[eval].name]]
 
-[private]
-def walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
+def private walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
 	// print("0x{intptr(data)} {describe(info)}\n")
 	if info.dim.length != 0
 		return walk_and_convert_dim(data,info,at)
@@ -523,8 +511,8 @@ def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:stri
     arguments[argIdx].sValue := val
     return argIdx
 
-[_macro,private]
-def setup
+[_macro]
+def private setup
     if is_compiling_macros_in_module("ast_boost")
         add_new_function_annotation("macro", new MacroMacro())
         add_new_function_annotation("tag_function",new TagFunctionAnnotation())

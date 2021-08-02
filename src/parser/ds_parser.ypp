@@ -340,10 +340,12 @@
 %type <b>               kwd_let
 %type <b>               is_public_module
 %type <b>               optional_shared
-%type <i>               optional_shared_or_private
 %type <i>               block_or_lambda
 %type <b>               optional_ref
-%type <b>               optional_public_or_private
+%type <b>               optional_public_or_private_module
+%type <b>               optional_public_or_private_variable
+%type <b>               optional_public_or_private_structure
+%type <b>               optional_public_or_private_function
 
 %type <b>               if_or_static_if
 %type <b>               elif_or_static_elif
@@ -460,7 +462,7 @@ program
     |   program ';'
     ;
 
-optional_public_or_private
+optional_public_or_private_module
     :                   { $$ = g_Program->policies.default_module_public; }
     |   DAS_PUBLIC      { $$ = true; }
     |   DAS_PRIVATE     { $$ = false; }
@@ -472,7 +474,7 @@ module_name
     ;
 
 module_declaration
-    :   DAS_MODULE  module_name[name] optional_shared[mtype] optional_public_or_private[ispub] {
+    :   DAS_MODULE  module_name[name] optional_shared[mtype] optional_public_or_private_module[ispub] {
         g_Program->thisModule->isPublic = $ispub;
         g_Program->thisModule->isModule = true;
         if ( g_Program->thisModule->name.empty() ) {
@@ -973,12 +975,19 @@ global_function_declaration
     }
     ;
 
+optional_public_or_private_function
+    :                   { $$ = g_thisStructure ? !g_thisStructure->privateStructure : g_Program->thisModule->isPublic; }
+    |   DAS_PRIVATE     { $$ = false; }
+    |   DAS_PUBLIC      { $$ = true; }
+    ;
+
 function_declaration_header
-    :  function_name[name] optional_function_argument_list[list] optional_function_type[result] {
+    :  optional_public_or_private_function[pub_func] function_name[name] optional_function_argument_list[list] optional_function_type[result] {
         auto pFunction = make_smart<Function>();
         pFunction->at = tokAt(@name);
         pFunction->name = *$name;
         pFunction->result = TypeDeclPtr($result);
+        pFunction->privateFunction = !$pub_func;
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -2005,18 +2014,18 @@ global_variable_declaration_list
     ;
 
 optional_shared
-    :   { $$ = false; }
-    |   DAS_SHARED  { $$ = true; }
+    :                { $$ = false; }
+    |   DAS_SHARED   { $$ = true; }
     ;
 
-optional_shared_or_private
-    :   { $$ = 0; }
-    |   DAS_SHARED  { $$ = 1; }
-    |   DAS_PRIVATE  { $$ = 2; }
+optional_public_or_private_variable
+    :                { $$ = g_Program->thisModule->isPublic; }
+    |   DAS_PRIVATE  { $$ = false; }
+    |   DAS_PUBLIC   { $$ = true; }
     ;
 
 global_let
-    :   kwd_let optional_shared_or_private[glob_shar] '{' global_variable_declaration_list[list] '}' {
+    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] '{' global_variable_declaration_list[list] '}' {
         for ( auto pDecl : *$list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
@@ -2034,8 +2043,8 @@ global_let
                     } else {
                         pVar->type->removeConstant = true;
                     }
-                    pVar->global_shared = ($glob_shar==1);
-                    pVar->private_variable = ($glob_shar==2);
+                    pVar->global_shared = $glob_shar;
+                    pVar->private_variable = !$pub_var;
                     if ( !g_Program->addVariable(pVar) )
                         das_yyerror("global variable is already declared " + name_at.first,name_at.second,
                             CompilationError::global_variable_already_declared);
@@ -2044,7 +2053,7 @@ global_let
         }
         deleteVariableDeclarationList($list);
     }
-    |   kwd_let optional_shared_or_private[glob_shar] { das_force_oxford_comma=true; } let_variable_declaration[decl] {
+    |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] { das_force_oxford_comma=true; } let_variable_declaration[decl] {
         auto pDecl = $decl;
         if ( pDecl->pTypeDecl ) {
             for ( const auto & name_at : *pDecl->pNameList ) {
@@ -2062,8 +2071,8 @@ global_let
                 } else {
                     pVar->type->removeConstant = true;
                 }
-                pVar->global_shared = ($glob_shar==1);
-                pVar->private_variable = ($glob_shar==2);
+                pVar->global_shared = $glob_shar;
+                pVar->private_variable = !$pub_var;
                 if ( !g_Program->addVariable(pVar) )
                     das_yyerror("global variable is already declared " + name_at.first,name_at.second,
                         CompilationError::global_variable_already_declared);
@@ -2192,8 +2201,15 @@ class_or_struct
     |   DAS_STRUCT  { $$ = false; }
     ;
 
+optional_public_or_private_structure
+    :                { $$ = g_Program->thisModule->isPublic; }
+    |   DAS_PRIVATE  { $$ = false; }
+    |   DAS_PUBLIC   { $$ = true; }
+    ;
+
 structure_declaration
-    : optional_annotation_list[annL] class_or_struct[loc] structure_name[ps] { if ( $ps ) $ps->isClass = $loc; } '{' struct_variable_declaration_list[list] '}' {
+    : optional_annotation_list[annL] class_or_struct[loc] optional_public_or_private_structure[pub_str] structure_name[ps]
+        { if ( $ps ) { $ps->isClass = $loc; $ps->privateStructure = !$pub_str; } } '{' struct_variable_declaration_list[list] '}' {
         if ( $ps ) {
             auto pStruct = $ps;
             pStruct->at = tokAt(@ps);

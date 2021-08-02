@@ -11,7 +11,7 @@ class DumpFields : AstStructureAnnotation
         print("\}\n")
         return true
 
-[macro,private]
-def init
+[macro]
+def private init
     add_new_structure_annotation("dump_fields", new DumpFields())
 

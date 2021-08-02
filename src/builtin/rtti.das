@@ -34,8 +34,7 @@ def context_for_each_variable( blk:block<(info:VarInfo):void> )
     for vi in range(get_total_variables())
         invoke(blk,get_variable_info(vi))
 
-[private]
-def each_dim_any(info)
+def private each_dim_any(info)
     unsafe
         let pinfo = addr(info)
         return <- [[ for index in range(int(pinfo.dimSize)); get_dim(*pinfo,index) ]]
@@ -48,8 +47,7 @@ def each_dim(info:TypeInfo)
 def each_dim(info:VarInfo)
     return <- each_dim_any(info)
 
-[private]
-def arg_types_any(info)
+def private arg_types_any(info)
     unsafe
         let pinfo = addr(info)
         return <- generator<TypeInfo const&>() <|
@@ -67,8 +65,7 @@ def arg_types(info:TypeInfo)
 def arg_types(info:VarInfo)
     return <- arg_types_any(info)
 
-[private]
-def arg_names_any(info)
+def private arg_names_any(info)
     unsafe
         let pinfo = addr(info)
         return <- generator<string>() <|
@@ -86,7 +83,7 @@ def arg_names(info:TypeInfo)
 def arg_names(info:VarInfo)
     return <- arg_names_any(info)
 
-def class_info ( cl ) : StructInfo const?
+def public class_info ( cl ) : StructInfo const?
     static_if typeinfo(is_pointer cl)
         static_if typeinfo(is_class cl)
             return reinterpret<StructInfo const?>((reinterpret<TypeInfo const?>(cl.__rtti)).structType)
@@ -100,7 +97,6 @@ def class_info ( cl ) : StructInfo const?
         concept_assert(false,"not a class")
         return null
 
-[generic]
 def type_info ( vinfo:LocalVariableInfo ) : TypeInfo const?
     unsafe
         return reinterpret<TypeInfo const?>(addr(vinfo))

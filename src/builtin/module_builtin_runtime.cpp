@@ -52,14 +52,6 @@ namespace das
         }
     };
 
-    struct PrivateFunctionAnnotation : MarkFunctionAnnotation {
-        PrivateFunctionAnnotation() : MarkFunctionAnnotation("private") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
-            func->privateFunction = true;
-            return true;
-        };
-    };
-
     extern ProgramPtr g_Program;
 
     struct MacroFunctionAnnotation : MarkFunctionAnnotation {
@@ -903,7 +895,6 @@ namespace das
         addAnnotation(make_smart<MarkFunctionOrBlockAnnotation>());
         addAnnotation(make_smart<CppAlignmentAnnotation>());
         addAnnotation(make_smart<GenericFunctionAnnotation>());
-        addAnnotation(make_smart<PrivateFunctionAnnotation>());
         addAnnotation(make_smart<MacroFunctionAnnotation>());
         addAnnotation(make_smart<ExportFunctionAnnotation>());
         addAnnotation(make_smart<SideEffectsFunctionAnnotation>());

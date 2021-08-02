@@ -2,8 +2,7 @@ options indenting = 4
 
 module functional shared
 
-[private]
-def filter_any(var src:iterator<auto(TT)>; var blk )
+def private filter_any(var src:iterator<auto(TT)>; var blk )
     static_if !typeinfo(is_ref_type type<TT>)
         return <- generator<TT -&> [[<-src,<-blk]] () <| $ ()
             for w in src
@@ -24,8 +23,7 @@ def filter(var src:iterator<auto(TT)>; blk:lambda<(what:TT -&):bool> )
 def filter(var src:iterator<auto(TT)>; blk:function<(what:TT -&):bool> )
     return <- filter_any(src,blk)
 
-[private]
-def map_any(var src:iterator<auto(TT)>; var blk)
+def private map_any(var src:iterator<auto(TT)>; var blk)
     static_if typeinfo(can_copy type<QQ>)
         return <- generator<QQ -&> [[<-src,<-blk]] () <| $ ()
             for w in src
@@ -51,8 +49,7 @@ def map(var src:iterator<auto(TT)>; blk:function<(what:TT -&):auto(QQ)>)
     return <- map_any(src,blk)
 
 // reduce value, any invokable
-[private]
-def reduce_any(it:iterator<auto(TT)>;functor)
+def private reduce_any(it:iterator<auto(TT)>;functor)
     var left : TT -&
     var first = true
     for right in it

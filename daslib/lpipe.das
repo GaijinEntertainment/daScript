@@ -8,8 +8,7 @@ require rtti
 require daslib/ast_boost
 require daslib/templates_boost
 
-[private]
-def lpipe_expr ( var fnCall:ExpressionPtr; var arg:ExpressionPtr ) : ExpressionPtr
+def private lpipe_expr ( var fnCall:ExpressionPtr; var arg:ExpressionPtr ) : ExpressionPtr
     if fnCall |> is_expr_like_call()
         unsafe
             var pCall = reinterpret<ExprLooksLikeCall?> fnCall

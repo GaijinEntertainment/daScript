@@ -94,8 +94,7 @@ def move_unquote_block ( var expr:ExpressionPtr& ) : smart_ptr<ExprBlock>
         mkb := null
         return res
 
-[private]
-def add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDeclFlags; var value:ExpressionPtr; priv:bool )
+def private add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDeclFlags; var value:ExpressionPtr; priv:bool )
     var vvar <- new [[Variable() at=vat,
         name:=vname,
         _type <- new [[TypeDecl() at=vat,

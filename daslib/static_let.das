@@ -14,8 +14,7 @@ def static_let ( blk : block ) {}
 [tag_function(static_let_tag)]
 def static_let_finalize ( blk : block ) {}
 
-[private]
-def make_shutdown_function ( varname:string; at:LineInfo )
+def private make_shutdown_function ( varname:string; at:LineInfo )
     var fn <- new [[Function() at=at, atDecl=at, name:="shutdown`{varname}"]]
     fn.flags |= FunctionFlags generated
     fn.flags |= FunctionFlags shutdown

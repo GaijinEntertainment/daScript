@@ -5,8 +5,7 @@ module tga shared
 require fio
 require math
 
-[private]
-def make_header ( width,height : uint ) : uint8[18]
+def private make_header ( width,height : uint ) : uint8[18]
     return [[uint8[18]
         uint8(0);                               // ID length
         uint8(0);                               // no color map

@@ -11,8 +11,7 @@ require daslib/contracts
 require daslib/templates
 require daslib/strings_boost
 
-[private]
-def is_json_ptr_value ( td : TypeDeclPtr )
+def private is_json_ptr_value ( td : TypeDeclPtr )
     if td.baseType != Type tPointer
         return false
     if td.firstType == null
