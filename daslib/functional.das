@@ -1,6 +1,6 @@
 options indenting = 4
 
-module functional shared
+module functional shared public
 
 def private filter_any(var src:iterator<auto(TT)>; var blk )
     static_if !typeinfo(is_ref_type type<TT>)

@@ -494,6 +494,8 @@ Annotation properties are
 +--------------------------+----+
 +isTypeAnnotation          +bool+
 +--------------------------+----+
++isEnumerationAnnotation   +bool+
++--------------------------+----+
 +isStructureAnnotation     +bool+
 +--------------------------+----+
 +isBasicStructureAnnotation+bool+
@@ -587,6 +589,8 @@ CodeOfPolicies fields are
 +------------------------------+----+
 +allow_shared_lambda           +bool+
 +------------------------------+----+
++multiple_contexts             +bool+
++------------------------------+----+
 +heap_size_hint                +uint+
 +------------------------------+----+
 +persistent_heap               +bool+
@@ -616,6 +620,8 @@ CodeOfPolicies fields are
 +no_global_variables_at_all    +bool+
 +------------------------------+----+
 +only_fast_aot                 +bool+
++------------------------------+----+
++default_module_public         +bool+
 +------------------------------+----+
 
 
@@ -1557,6 +1563,21 @@ set_file_source returns bool
 
 |function-rtti-simulate|
 
+.. _function-_at_rtti_c__c_type_info__hh_const_hh__hh_handle_hh_LocalVariableInfo:
+
+.. das:function:: type_info(vinfo: LocalVariableInfo const)
+
+type_info returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const?
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++vinfo   + :ref:`rtti::LocalVariableInfo <handle-rtti-LocalVariableInfo>`  const+
++--------+----------------------------------------------------------------------+
+
+
+|function-rtti-type_info|
+
 .. _function-_at_rtti_c__c_using__hh_const_hh__hh_implicit_hh__hh_block_hh__hh_temporary_hh__hh_explicit_hh__hh_handle_hh_CodeOfPolicies_hh__c_void:
 
 .. das:function:: using(arg0: block<(rtti::CodeOfPolicies# explicit):void> const implicit)
@@ -1784,20 +1805,5 @@ structure_for_each_annotation returns auto
 
 
 |function-rtti-structure_for_each_annotation|
-
-.. _function-_at_rtti_c__c_type_info__hh_const_hh__hh_handle_hh_LocalVariableInfo:
-
-.. das:function:: type_info(vinfo: LocalVariableInfo const)
-
-type_info returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const?
-
-+--------+----------------------------------------------------------------------+
-+argument+argument type                                                         +
-+========+======================================================================+
-+vinfo   + :ref:`rtti::LocalVariableInfo <handle-rtti-LocalVariableInfo>`  const+
-+--------+----------------------------------------------------------------------+
-
-
-|function-rtti-type_info|
 
 

@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module templates_boost shared
+module templates_boost shared public
 
 require ast
 require daslib/ast_boost
@@ -27,7 +27,7 @@ def replaceAnnotationArgument ( var self:Template; name:string; var cb:lambda<(v
 def replaceBlockArgument ( var self:Template; name,newName:string )
     self.blockArgName[name] = newName
 
-class TemplateVisitor : AstVisitor
+class private TemplateVisitor : AstVisitor
     rules : Template?
     def TemplateVisitor ( r : Template? )
         rules = r

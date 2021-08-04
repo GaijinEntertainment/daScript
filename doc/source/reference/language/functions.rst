@@ -41,6 +41,20 @@ Returning different types is a compilation error::
         else
             return 2.0  // error, expecting int
 
+
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Publicity
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Functions can be `private` or `public` ::
+
+    def private foo(a:bool)
+
+    def public bar(a:float)
+
+If not specified functions inherit module publicity. I.e. in public modules functions are public,
+and in private modules functions are private.
+
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Function calls
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

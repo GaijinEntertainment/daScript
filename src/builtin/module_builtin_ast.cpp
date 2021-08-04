@@ -1106,7 +1106,7 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "StructureFlags";
         ft->argNames = { "isClass", "genCtor", "cppLayout", "cppLayoutNotPod",
-            "generated", "persistent", "isLambda" };
+            "generated", "persistent", "isLambda", "privateStructure" };
         return ft;
     }
 
@@ -2512,6 +2512,11 @@ namespace das {
         }
     }
 
+    void for_each_call_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context ) {
+        for ( auto & td : mod->callThis ) {
+            das_invoke<void>::invoke<const char *>(context,block,td.first.c_str());
+        }
+    }
 
     bool isSameAstType ( TypeDeclPtr THIS,
                      TypeDeclPtr decl,
@@ -2820,6 +2825,8 @@ namespace das {
                 SideEffects::modifyExternal, "makeCallMacro");
             addExtern<DAS_BIND_FUN(addModuleCallMacro)>(*this, lib,  "add_call_macro",
                 SideEffects::modifyExternal, "addModuleCallMacro");
+            addExtern<DAS_BIND_FUN(for_each_call_macro)>(*this, lib,  "for_each_call_macro",
+                SideEffects::modifyExternal, "for_each_call_macro");
             // type info macro
             addExtern<DAS_BIND_FUN(makeTypeInfoMacro)>(*this, lib,  "make_typeinfo_macro",
                 SideEffects::modifyExternal, "makeTypeInfoMacro");

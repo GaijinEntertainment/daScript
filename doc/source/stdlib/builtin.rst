@@ -105,6 +105,170 @@ Constants
 
 |variable-builtin-print_flags_debugger|
 
+++++++++++++++++++++
+Function annotations
+++++++++++++++++++++
+
+.. _handle-builtin-_macro:
+
+.. das:attribute:: _macro
+
+|function_annotation-builtin-_macro|
+
+.. _handle-builtin-builtin_array_sort:
+
+.. das:attribute:: builtin_array_sort
+
+|function_annotation-builtin-builtin_array_sort|
+
+.. _handle-builtin-expect_any_vector:
+
+.. das:attribute:: expect_any_vector
+
+|function_annotation-builtin-expect_any_vector|
+
+.. _handle-builtin-export:
+
+.. das:attribute:: export
+
+|function_annotation-builtin-export|
+
+.. _handle-builtin-finalize:
+
+.. das:attribute:: finalize
+
+|function_annotation-builtin-finalize|
+
+.. _handle-builtin-generic:
+
+.. das:attribute:: generic
+
+|function_annotation-builtin-generic|
+
+.. _handle-builtin-hybrid:
+
+.. das:attribute:: hybrid
+
+|function_annotation-builtin-hybrid|
+
+.. _handle-builtin-init:
+
+.. das:attribute:: init
+
+|function_annotation-builtin-init|
+
+.. _handle-builtin-local_only:
+
+.. das:attribute:: local_only
+
+|function_annotation-builtin-local_only|
+
+.. _handle-builtin-marker:
+
+.. das:attribute:: marker
+
+|function_annotation-builtin-marker|
+
+.. _handle-builtin-no_aot:
+
+.. das:attribute:: no_aot
+
+|function_annotation-builtin-no_aot|
+
+.. _handle-builtin-run:
+
+.. das:attribute:: run
+
+|function_annotation-builtin-run|
+
+.. _handle-builtin-sideeffects:
+
+.. das:attribute:: sideeffects
+
+|function_annotation-builtin-sideeffects|
+
+.. _handle-builtin-unsafe_deref:
+
+.. das:attribute:: unsafe_deref
+
+|function_annotation-builtin-unsafe_deref|
+
+.. _handle-builtin-unsafe_operation:
+
+.. das:attribute:: unsafe_operation
+
+|function_annotation-builtin-unsafe_operation|
+
+.. _handle-builtin-unused_argument:
+
+.. das:attribute:: unused_argument
+
+|function_annotation-builtin-unused_argument|
+
++++++++++++
+Call macros
++++++++++++
+
+.. _call-macro-builtin-concept_assert:
+
+.. das:attribute:: concept_assert
+
+|function_annotation-builtin-concept_assert|
+
+.. _call-macro-builtin-__builtin_table_key_exists:
+
+.. das:attribute:: __builtin_table_key_exists
+
+|function_annotation-builtin-__builtin_table_key_exists|
+
+.. _call-macro-builtin-static_assert:
+
+.. das:attribute:: static_assert
+
+|function_annotation-builtin-static_assert|
+
+.. _call-macro-builtin-verify:
+
+.. das:attribute:: verify
+
+|function_annotation-builtin-verify|
+
+.. _call-macro-builtin-debug:
+
+.. das:attribute:: debug
+
+|function_annotation-builtin-debug|
+
+.. _call-macro-builtin-assert:
+
+.. das:attribute:: assert
+
+|function_annotation-builtin-assert|
+
+.. _call-macro-builtin-memzero:
+
+.. das:attribute:: memzero
+
+|function_annotation-builtin-memzero|
+
+.. _call-macro-builtin-__builtin_table_find:
+
+.. das:attribute:: __builtin_table_find
+
+|function_annotation-builtin-__builtin_table_find|
+
+.. _call-macro-builtin-invoke:
+
+.. das:attribute:: invoke
+
+|function_annotation-builtin-invoke|
+
+.. _call-macro-builtin-__builtin_table_erase:
+
+.. das:attribute:: __builtin_table_erase
+
+|function_annotation-builtin-__builtin_table_erase|
+
 +++++++++++++
 Handled types
 +++++++++++++

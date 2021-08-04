@@ -1,8 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module cpp_gen
-
+module cpp_gen public
 
 require fio
 require daslib/defer

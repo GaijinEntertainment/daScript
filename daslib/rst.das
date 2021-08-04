@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module rst
+module rst public
 
 require fio
 require math
@@ -47,6 +47,9 @@ def struct_label_name(value:StructurePtr)
 
 def handle_label_name(value)
     return "handle-{module_name(value._module)}-{value.name}"
+
+def call_macro_label_name(mod,value)
+    return "call-macro-{module_name(mod)}-{value}"
 
 def function_label_name(value:FunctionPtr)
     var mn = get_mangled_name(value)
@@ -258,7 +261,7 @@ def topic(category:string;mod:Module?;name:string implicit)
 def topic(mod:Module?)
     return "|module-{module_name(mod)}|"
 
-def document_topic(doc_file:file;topic:string)
+def document_topic(doc_file:file;topic:string implicit)
     let topic_file_name = "{topic_root}/{slice(topic,1,-1)}.rst"
     var st : FStat
     if stat(topic_file_name,st)
@@ -362,11 +365,15 @@ def document_enumeration(doc_file:file;mod:Module?;value)
 def document_enumerations(doc_file:file;mod:Module?)
     var any = false
     for_each_enumeration(mod) <| $(value)
+        if value.isPrivate
+            return
         any = true
     if !any
         return
     fwrite(doc_file,make_group("Enumerations"))
     for_each_enumeration(mod) <| $(value)
+        if value.isPrivate
+            return
         document_enumeration(doc_file,mod,value)
 
 def argument_needs_documenting ( tt )
@@ -414,13 +421,13 @@ def document_class_method(doc_file:file;mod:Module?;value;fld)
 def document_classes(doc_file:file;mod:Module?)
     var any = false
     for_each_structure(mod) <| $(value)
-        if value.flags.isClass
+        if value.flags.isClass && !value.flags.privateStructure
             any = true
     if !any
         return
     fwrite(doc_file,make_group("Classes"))
     for_each_structure(mod) <| $(value)
-        if !value.flags.isClass
+        if !value.flags.isClass || value.flags.privateStructure
             return
         fwrite(doc_file,make_label(struct_label_name(value)))
         fwrite(doc_file,make_domain("das:attribute"))
@@ -463,14 +470,14 @@ def document_structure(doc_file:file;mod:Module?;value:StructurePtr)
 def document_structures(doc_file:file;mod:Module?)
     var any = false
     for_each_structure(mod) <| $(value)
-        if value.flags.isClass || value.flags.generated
+        if value.flags.isClass || value.flags.generated || value.flags.privateStructure
             return
         any = true
     if !any
         return
     make_group("Structures")
     for_each_structure(mod) <| $(value)
-        if value.flags.isClass || value.flags.generated
+        if value.flags.isClass || value.flags.generated || value.flags.privateStructure
             return
         document_structure(doc_file,mod,value)
 
@@ -524,6 +531,26 @@ def document_structure_annotations(doc_file:file;mod:Module?)
             return
         document_structure_annotation(doc_file,mod,value)
 
+def document_function_annotation(doc_file:file;mod:Module?;value)
+    fwrite(doc_file,make_label(handle_label_name(value)))
+    fwrite(doc_file,make_domain("das:attribute"))
+    fwrite(doc_file,"{value.name}\n\n")
+    document_topic(doc_file,topic("function_annotation",mod,string(value.name)))
+
+def document_function_annotations(doc_file:file;mod:Module?)
+    var any = false
+    module_for_each_annotation(mod) <| $(value)
+        if !value.isFunctionAnnotation
+            return
+        any = true
+    if !any
+        return
+    fwrite(doc_file,make_group("Function annotations"))
+    module_for_each_annotation(mod) <| $(value)
+        if !value.isFunctionAnnotation
+            return
+        document_function_annotation(doc_file,mod,value)
+
 def document_annotation(doc_file:file;mod:Module?;value)
     fwrite(doc_file,make_label(handle_label_name(value)))
     fwrite(doc_file,make_domain("das:attribute"))
@@ -543,6 +570,22 @@ def document_annotations(doc_file:file;mod:Module?)
         if !value.isTypeAnnotation || value.isBasicStructureAnnotation
             return
         document_annotation(doc_file,mod,value)
+
+def document_call_macro(doc_file:file;mod:Module?;value:string implicit)
+    fwrite(doc_file,make_label(call_macro_label_name(mod,value)))
+    fwrite(doc_file,make_domain("das:attribute"))
+    fwrite(doc_file,"{value}\n\n")
+    document_topic(doc_file,topic("function_annotation",mod,value))
+
+def document_call_macros(doc_file:file;mod:Module?)
+    var any = false
+    for_each_call_macro(mod) <| $(value)
+        any = true
+    if !any
+        return
+    fwrite(doc_file,make_group("Call macros"))
+    for_each_call_macro(mod) <| $(value)
+        document_call_macro(doc_file,mod,value)
 
 def function_needs_documenting(func:FunctionPtr)
     if func.flags.generated
@@ -767,6 +810,8 @@ def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGrou
     document_enumerations(doc_file,mod)
     document_structures(doc_file,mod)
     document_structure_annotations(doc_file,mod)
+    document_function_annotations(doc_file,mod)
+    document_call_macros(doc_file,mod)
     document_annotations(doc_file,mod)
     document_classes(doc_file,mod)
     document_functions(doc_file,mod,groups)

@@ -1,6 +1,6 @@
 options indenting = 4
 
-module tga shared
+module tga shared public
 
 require fio
 require math

@@ -21,12 +21,22 @@ Struct Declaration
     pair: declaration; Struct
     single: Struct Declaration
 
-
 A structure object is created through the keyword 'struct' . ::
 
     struct Foo
         x, y: int
         xf: float
+
+Sturctures can be `private` or `public` ::
+
+    struct private Foo
+        x, y: int
+
+    struct public Bar
+        xf: float
+
+If not specified structures inherit module publicity. I.e. in public modules structures are public,
+and in private modules structures are private.
 
 Structures instances are created through a 'new expression' or a 'variable declaration statement'::
 

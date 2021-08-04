@@ -1,6 +1,6 @@
 options indenting = 4
 
-module algorithm shared
+module algorithm shared public
 
 def reverse ( var a:array<auto> )
     let l = length(a)

@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module cpp_bind
+module cpp_bind public
 
 require fio
 require rtti

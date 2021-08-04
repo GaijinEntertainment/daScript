@@ -9,103 +9,15 @@ Boost package for jobs and threads
 
 |module-jobque_boost|
 
-+++++++
-Classes
-+++++++
+++++++++++++++++++++
+Function annotations
+++++++++++++++++++++
 
-.. _struct-jobque_boost-NewJobMacro:
+.. _handle-jobque_boost-NewJobMacro:
 
-.. das:attribute:: NewJobMacro : AstFunctionAnnotation
+.. das:attribute:: NewJobMacro
 
-|class-jobque_boost-NewJobMacro|
-
-.. das:function:: NewJobMacro.transform(self: AstFunctionAnnotation; call: smart_ptr<ast::ExprCallFunc>; errors: das_string)
-
-transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-+--------+----------------------------------------------------------------------+
-+argument+argument type                                                         +
-+========+======================================================================+
-+self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
-+--------+----------------------------------------------------------------------+
-+call    +smart_ptr< :ref:`ast::ExprCallFunc <handle-ast-ExprCallFunc>` >       +
-+--------+----------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`               +
-+--------+----------------------------------------------------------------------+
-
-
-|method-jobque_boost-NewJobMacro.transform|
-
-.. das:function:: NewJobMacro.apply(self: AstFunctionAnnotation; func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
-
-apply returns bool
-
-+--------+--------------------------------------------------------------------------------+
-+argument+argument type                                                                   +
-+========+================================================================================+
-+self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
-+--------+--------------------------------------------------------------------------------+
-+func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
-+--------+--------------------------------------------------------------------------------+
-+group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
-+--------+--------------------------------------------------------------------------------+
-+args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+--------+--------------------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+--------+--------------------------------------------------------------------------------+
-
-
-|method-jobque_boost-NewJobMacro.apply|
-
-.. das:function:: NewJobMacro.finish(self: AstFunctionAnnotation; func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList const; progArgs: AnnotationArgumentList const; errors: das_string)
-
-finish returns bool
-
-+--------+--------------------------------------------------------------------------------+
-+argument+argument type                                                                   +
-+========+================================================================================+
-+self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
-+--------+--------------------------------------------------------------------------------+
-+func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
-+--------+--------------------------------------------------------------------------------+
-+group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
-+--------+--------------------------------------------------------------------------------+
-+args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+--------+--------------------------------------------------------------------------------+
-+progArgs+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+--------+--------------------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+--------+--------------------------------------------------------------------------------+
-
-
-|method-jobque_boost-NewJobMacro.finish|
-
-.. das:function:: NewJobMacro.isCompatible(self: AstFunctionAnnotation; func: FunctionPtr; types: VectorTypeDeclPtr; decl: AnnotationDeclaration const; errors: das_string)
-
-isCompatible returns bool
-
-+--------+------------------------------------------------------------------------------+
-+argument+argument type                                                                 +
-+========+==============================================================================+
-+self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`         +
-+--------+------------------------------------------------------------------------------+
-+func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                       +
-+--------+------------------------------------------------------------------------------+
-+types   + :ref:`VectorTypeDeclPtr <alias-VectorTypeDeclPtr>`                           +
-+--------+------------------------------------------------------------------------------+
-+decl    + :ref:`rtti::AnnotationDeclaration <handle-rtti-AnnotationDeclaration>`  const+
-+--------+------------------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                       +
-+--------+------------------------------------------------------------------------------+
-
-
-|method-jobque_boost-NewJobMacro.isCompatible|
-
-.. das:function:: NewJobMacro.isSpecialized(self: AstFunctionAnnotation)
-
-isSpecialized returns bool
-
-|method-jobque_boost-NewJobMacro.isSpecialized|
+|function_annotation-jobque_boost-NewJobMacro|
 
 +++++++++++++
 Uncategorized

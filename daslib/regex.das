@@ -1,6 +1,6 @@
 options indenting = 4
 
-module regex shared
+module regex shared public
 
 require strings
 

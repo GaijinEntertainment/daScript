@@ -24,6 +24,12 @@ Type aliases
 
 |typedef-ast-CallMacroPtr|
 
+.. _alias-EnumerationAnnotationPtr:
+
+.. das:attribute:: EnumerationAnnotationPtr = smart_ptr<ast::EnumerationAnnotation>
+
+|typedef-ast-EnumerationAnnotationPtr|
+
 .. _alias-EnumerationPtr:
 
 .. das:attribute:: EnumerationPtr = smart_ptr<ast::Enumeration>
@@ -508,23 +514,25 @@ Type aliases
 
 .. das:attribute:: StructureFlags is a bitfield
 
-+---------------+---+-----+
-+field          +bit+value+
-+===============+===+=====+
-+isClass        +0  +1    +
-+---------------+---+-----+
-+genCtor        +1  +2    +
-+---------------+---+-----+
-+cppLayout      +2  +4    +
-+---------------+---+-----+
-+cppLayoutNotPod+3  +8    +
-+---------------+---+-----+
-+generated      +4  +16   +
-+---------------+---+-----+
-+persistent     +5  +32   +
-+---------------+---+-----+
-+isLambda       +6  +64   +
-+---------------+---+-----+
++----------------+---+-----+
++field           +bit+value+
++================+===+=====+
++isClass         +0  +1    +
++----------------+---+-----+
++genCtor         +1  +2    +
++----------------+---+-----+
++cppLayout       +2  +4    +
++----------------+---+-----+
++cppLayoutNotPod +3  +8    +
++----------------+---+-----+
++generated       +4  +16   +
++----------------+---+-----+
++persistent      +5  +32   +
++----------------+---+-----+
++isLambda        +6  +64   +
++----------------+---+-----+
++privateStructure+7  +128  +
++----------------+---+-----+
 
 
 |typedef-ast-StructureFlags|
@@ -790,24 +798,34 @@ EnumEntry fields are
 
 Enumeration fields are
 
-+--------+------------------------------------------------------------------+
-+_module + :ref:`rtti::Module <handle-rtti-Module>` ?                       +
-+--------+------------------------------------------------------------------+
-+at      + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                     +
-+--------+------------------------------------------------------------------+
-+cppName + :ref:`builtin::das_string <handle-builtin-das_string>`           +
-+--------+------------------------------------------------------------------+
-+list    + :ref:`ast::dasvector`EnumEntry <handle-ast-dasvector`EnumEntry>` +
-+--------+------------------------------------------------------------------+
-+name    + :ref:`builtin::das_string <handle-builtin-das_string>`           +
-+--------+------------------------------------------------------------------+
-+external+bool                                                              +
-+--------+------------------------------------------------------------------+
-+baseType+ :ref:`rtti::Type <enum-rtti-Type>`                               +
-+--------+------------------------------------------------------------------+
++-----------+------------------------------------------------------------------+
++_module    + :ref:`rtti::Module <handle-rtti-Module>` ?                       +
++-----------+------------------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                     +
++-----------+------------------------------------------------------------------+
++isPrivate  +bool                                                              +
++-----------+------------------------------------------------------------------+
++cppName    + :ref:`builtin::das_string <handle-builtin-das_string>`           +
++-----------+------------------------------------------------------------------+
++list       + :ref:`ast::dasvector`EnumEntry <handle-ast-dasvector`EnumEntry>` +
++-----------+------------------------------------------------------------------+
++annotations+ :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`         +
++-----------+------------------------------------------------------------------+
++name       + :ref:`builtin::das_string <handle-builtin-das_string>`           +
++-----------+------------------------------------------------------------------+
++external   +bool                                                              +
++-----------+------------------------------------------------------------------+
++baseType   + :ref:`rtti::Type <enum-rtti-Type>`                               +
++-----------+------------------------------------------------------------------+
 
 
 |structure_annotation-ast-Enumeration|
+
+.. _handle-ast-EnumerationAnnotation:
+
+.. das:attribute:: EnumerationAnnotation
+
+|structure_annotation-ast-EnumerationAnnotation|
 
 .. _handle-ast-ExprAddr:
 
@@ -4090,6 +4108,16 @@ VariantMacro fields are
 
 |structure_annotation-ast-VisitorAdapter|
 
++++++++++++
+Call macros
++++++++++++
+
+.. _call-macro-ast-quote:
+
+.. das:attribute:: quote
+
+|function_annotation-ast-quote|
+
 +++++++++++++
 Handled types
 +++++++++++++
@@ -4216,6 +4244,37 @@ visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 
 |method-ast-AstCallMacro.visit|
+
+.. _struct-ast-AstEnumerationAnnotation:
+
+.. das:attribute:: AstEnumerationAnnotation
+
+|class-ast-AstEnumerationAnnotation|
+
+it defines as follows
+
+  __rtti : void?
+
+.. das:function:: AstEnumerationAnnotation.apply(self: AstEnumerationAnnotation; st: EnumerationPtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
+
+apply returns bool
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstEnumerationAnnotation <struct-ast-AstEnumerationAnnotation>`     +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`EnumerationPtr <alias-EnumerationPtr>`                                   +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
+
+
+|method-ast-AstEnumerationAnnotation.apply|
 
 .. _struct-ast-AstFunctionAnnotation:
 
@@ -8585,6 +8644,38 @@ Uncategorized
 
 |function-ast-add_dirty_infer_macro|
 
+.. _function-_at_ast_c__c_add_enumeration_annotation__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_handle_hh_Module__hh_ref_hh__hh_implicit_hh__hh_smart_ptr_hh__hh_handle_hh_EnumerationAnnotation__hh_const_hh___context:
+
+.. das:function:: add_enumeration_annotation(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::EnumerationAnnotation>& implicit)
+
++--------+-------------------------------------------------------------------------------------------+
++argument+argument type                                                                              +
++========+===========================================================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                 +
++--------+-------------------------------------------------------------------------------------------+
++arg1    +smart_ptr< :ref:`ast::EnumerationAnnotation <handle-ast-EnumerationAnnotation>` >& implicit+
++--------+-------------------------------------------------------------------------------------------+
+
+
+|function-ast-add_enumeration_annotation|
+
+.. _function-_at_ast_c__c_add_enumeration_entry__hh_const_hh__hh_implicit_hh__hh_smart_ptr_hh__hh_handle_hh_Enumeration__hh_const_hh__hh_implicit_hh_string:
+
+.. das:function:: add_enumeration_entry(arg0: smart_ptr<ast::Enumeration> const implicit; arg1: string const implicit)
+
+add_enumeration_entry returns int
+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++arg0    +smart_ptr< :ref:`ast::Enumeration <handle-ast-Enumeration>` > const implicit+
++--------+----------------------------------------------------------------------------+
++arg1    +string const implicit                                                       +
++--------+----------------------------------------------------------------------------+
+
+
+|function-ast-add_enumeration_entry|
+
 .. _function-_at_ast_c__c_add_function__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_handle_hh_Module__hh_ref_hh__hh_implicit_hh__hh_smart_ptr_hh__hh_handle_hh_Function__hh_const_hh___context:
 
 .. das:function:: add_function(arg0: rtti::Module? const implicit; arg1: smart_ptr<ast::Function>& implicit)
@@ -9019,6 +9110,21 @@ find_bitfield_name returns string
 
 |function-ast-find_bitfield_name|
 
+.. _function-_at_ast_c__c_for_each_call_macro__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_implicit_hh__hh_block_hh__hh_temporary_hh_string_hh__c_void__hh_const_hh___context:
+
+.. das:function:: for_each_call_macro(arg0: rtti::Module? const implicit; arg1: block<(string#):void> const implicit)
+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++arg0    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++--------+----------------------------------------------------------+
++arg1    +block<(string#):void> const implicit                      +
++--------+----------------------------------------------------------+
+
+
+|function-ast-for_each_call_macro|
+
 .. _function-_at_ast_c__c_for_each_enumeration__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_implicit_hh__hh_block_hh__hh_smart_ptr_hh__hh_handle_hh_Enumeration_hh__c_void__hh_const_hh___context:
 
 .. das:function:: for_each_enumeration(arg0: rtti::Module? const implicit; arg1: block<(smart_ptr<ast::Enumeration>):void> const implicit)
@@ -9330,6 +9436,25 @@ make_clone_structure returns smart_ptr< :ref:`ast::Function <handle-ast-Function
 
 |function-ast-make_clone_structure|
 
+.. _function-_at_ast_c__c_make_enumeration_annotation__hh_const_hh__hh_implicit_hh_string__hh_const_hh__hh_implicit_hh__hh_ptr__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_StructInfo__hh_const_hh___context:
+
+.. das:function:: make_enumeration_annotation(arg0: string const implicit; arg1: void? const implicit; arg2: rtti::StructInfo const? const implicit)
+
+make_enumeration_annotation returns smart_ptr< :ref:`ast::EnumerationAnnotation <handle-ast-EnumerationAnnotation>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++arg0    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++arg1    +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++arg2    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_enumeration_annotation|
+
 .. _function-_at_ast_c__c_make_function_annotation__hh_const_hh__hh_implicit_hh_string__hh_const_hh__hh_implicit_hh__hh_ptr__hh_const_hh__hh_implicit_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_StructInfo__hh_const_hh___context:
 
 .. das:function:: make_function_annotation(arg0: string const implicit; arg1: void? const implicit; arg2: rtti::StructInfo const? const implicit)
@@ -9586,6 +9711,23 @@ add_new_contract_annotation returns auto
 
 |function-ast-add_new_contract_annotation|
 
+.. _function-_at_ast_c__c_add_new_enumeration_annotation__hh_const_hh_string__hh_const_hh__hh_auto:
+
+.. das:function:: add_new_enumeration_annotation(name: string const; someClassPtr: auto const)
+
+add_new_enumeration_annotation returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_enumeration_annotation|
+
 .. _function-_at_ast_c__c_add_new_function_annotation__hh_const_hh_string__hh_const_hh__hh_auto:
 
 .. das:function:: add_new_function_annotation(name: string const; someClassPtr: auto const)
@@ -9825,6 +9967,23 @@ make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>`
 
 
 |function-ast-make_call_macro|
+
+.. _function-_at_ast_c__c_make_enumeration_annotation__hh_const_hh_string__hh_const_hh__hh_auto:
+
+.. das:function:: make_enumeration_annotation(name: string const; someClassPtr: auto const)
+
+make_enumeration_annotation returns  :ref:`EnumerationAnnotationPtr <alias-EnumerationAnnotationPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_enumeration_annotation|
 
 .. _function-_at_ast_c__c_make_function_annotation__hh_const_hh_string__hh_const_hh__hh_auto:
 

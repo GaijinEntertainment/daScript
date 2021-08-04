@@ -318,7 +318,7 @@ def document_module_is_local(root:string)
 def document_module_safe_addr(root:string)
     var mod = find_module("safe_addr")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
+        group_by_regex("Safe temporary address", mod, %regex~(safe_addr)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
     document("safe_addr macro",mod,"{root}/safe_addr.rst","{root}/detail/safe_addr.rst",groups)
@@ -326,7 +326,7 @@ def document_module_safe_addr(root:string)
 def document_module_static_let(root:string)
     var mod = find_module("static_let")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
+        group_by_regex("Static variable declarations", mod, %regex~(static_let|static_let_finalize)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
     document("static_let macro",mod,"{root}/static_let.rst","{root}/detail/static_let.rst",groups)
@@ -376,4 +376,5 @@ def main
     document_module_safe_addr(root)
     document_module_static_let(root)
     document_module_lpipe(root)
+
 

@@ -338,6 +338,8 @@ namespace das {
                 "rtti_isStructureTypeAnnotation");
             addProperty<DAS_BIND_MANAGED_PROP(rtti_isFunctionAnnotation)>("isFunctionAnnotation",
                 "rtti_isFunctionAnnotation");
+            addProperty<DAS_BIND_MANAGED_PROP(rtti_isEnumerationAnnotation)>("isEnumerationAnnotation",
+                "rtti_isEnumerationAnnotation");
         }
     };
 

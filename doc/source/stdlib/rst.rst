@@ -56,9 +56,12 @@ Document writers
   *  :ref:`document (name:string const;mod:rtti::Module? const;fname:string const;substname:string const;groups:array\<rst::DocGroup\> const) : void <function-_at_rst_c__c_document__hh_const_hh_string__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh_string__hh_const_hh_string__hh_const_hh__hh_array_hh_DocGroup>` 
   *  :ref:`document_annotations (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_annotations__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module>` 
   *  :ref:`document_bitfield (doc_file:fio::FILE const? const;value:smart_ptr\<ast::TypeDecl\> const) : void <function-_at_rst_c__c_document_bitfield__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_smart_ptr_hh__hh_handle_hh_TypeDecl>` 
+  *  :ref:`document_call_macro (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:string const implicit) : void <function-_at_rst_c__c_document_call_macro__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_implicit_hh_string>` 
+  *  :ref:`document_call_macros (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_call_macros__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module>` 
   *  :ref:`document_classes (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_classes__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module>` 
   *  :ref:`document_enumerations (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_enumerations__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module>` 
   *  :ref:`document_function (doc_file:fio::FILE const? const;mod:rtti::Module? const;func:smart_ptr\<ast::Function\> const) : void <function-_at_rst_c__c_document_function__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_smart_ptr_hh__hh_handle_hh_Function>` 
+  *  :ref:`document_function_annotations (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_function_annotations__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module>` 
   *  :ref:`document_function_arguments (doc_file:fio::FILE const? const;argNames:array\<string\> const;argTypes:array\<ast::TypeDecl?\> const) : void <function-_at_rst_c__c_document_function_arguments__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_array_hh_string__hh_const_hh__hh_array_hh__hh_ptr_hh__hh_handle_hh_TypeDecl>` 
   *  :ref:`document_function_declaration (doc_file:fio::FILE const? const;domain:string const;func_name:string const;argNames:array\<string\> const;argTypes:array\<ast::TypeDecl?\> const;resType:smart_ptr\<ast::TypeDecl\> const) : void <function-_at_rst_c__c_document_function_declaration__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh_string__hh_const_hh_string__hh_const_hh__hh_array_hh_string__hh_const_hh__hh_array_hh__hh_ptr_hh__hh_handle_hh_TypeDecl__hh_const_hh__hh_smart_ptr_hh__hh_handle_hh_TypeDecl>` 
   *  :ref:`document_functions (doc_file:fio::FILE const? const;mod:rtti::Module? const;groups:array\<rst::DocGroup\> const) : void <function-_at_rst_c__c_document_functions__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_array_hh_DocGroup>` 
@@ -67,13 +70,14 @@ Document writers
   *  :ref:`document_structure (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:smart_ptr\<ast::Structure\> const) : void <function-_at_rst_c__c_document_structure__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_smart_ptr_hh__hh_handle_hh_Structure>` 
   *  :ref:`document_structure_annotations (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_structure_annotations__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module>` 
   *  :ref:`document_structures (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_structures__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module>` 
-  *  :ref:`document_topic (doc_file:fio::FILE const? const;topic:string const) : void <function-_at_rst_c__c_document_topic__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh_string>` 
+  *  :ref:`document_topic (doc_file:fio::FILE const? const;topic:string const implicit) : void <function-_at_rst_c__c_document_topic__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh_string>` 
   *  :ref:`document_typedefs (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_typedefs__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module>` 
   *  :ref:`document_variant (doc_file:fio::FILE const? const;value:smart_ptr\<ast::TypeDecl\> const) : void <function-_at_rst_c__c_document_variant__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_smart_ptr_hh__hh_handle_hh_TypeDecl>` 
   *  :ref:`document_warning (doc_file:fio::FILE const? const;issue:string const) : void <function-_at_rst_c__c_document_warning__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh_string>` 
   *  :ref:`document_annotation (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:auto const) : auto <function-_at_rst_c__c_document_annotation__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_auto>` 
   *  :ref:`document_class_method (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:auto const;fld:auto const) : auto <function-_at_rst_c__c_document_class_method__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_auto__hh_const_hh__hh_auto>` 
   *  :ref:`document_enumeration (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:auto const) : auto <function-_at_rst_c__c_document_enumeration__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_auto>` 
+  *  :ref:`document_function_annotation (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:auto const) : auto <function-_at_rst_c__c_document_function_annotation__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_auto>` 
   *  :ref:`document_structure_annotation (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:auto const) : auto <function-_at_rst_c__c_document_structure_annotation__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_auto>` 
   *  :ref:`document_typedef (doc_file:fio::FILE const? const;mod:rtti::Module? const;name:string const implicit;value:auto const) : auto <function-_at_rst_c__c_document_typedef__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_implicit_hh_string__hh_const_hh__hh_auto>` 
 
@@ -128,6 +132,38 @@ Document writers
 
 |function-rst-document_bitfield|
 
+.. _function-_at_rst_c__c_document_call_macro__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_implicit_hh_string:
+
+.. das:function:: document_call_macro(doc_file: file; mod: rtti::Module? const; value: string const implicit)
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++doc_file+ :ref:`file <alias-file>`                        +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
++value   +string const implicit                            +
++--------+-------------------------------------------------+
+
+
+|function-rst-document_call_macro|
+
+.. _function-_at_rst_c__c_document_call_macros__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module:
+
+.. das:function:: document_call_macros(doc_file: file; mod: rtti::Module? const)
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++doc_file+ :ref:`file <alias-file>`                        +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
+
+
+|function-rst-document_call_macros|
+
 .. _function-_at_rst_c__c_document_classes__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module:
 
 .. das:function:: document_classes(doc_file: file; mod: rtti::Module? const)
@@ -174,6 +210,21 @@ Document writers
 
 
 |function-rst-document_function|
+
+.. _function-_at_rst_c__c_document_function_annotations__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module:
+
+.. das:function:: document_function_annotations(doc_file: file; mod: rtti::Module? const)
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++doc_file+ :ref:`file <alias-file>`                        +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
+
+
+|function-rst-document_function_annotations|
 
 .. _function-_at_rst_c__c_document_function_arguments__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_array_hh_string__hh_const_hh__hh_array_hh__hh_ptr_hh__hh_handle_hh_TypeDecl:
 
@@ -311,16 +362,16 @@ Document writers
 
 |function-rst-document_structures|
 
-.. _function-_at_rst_c__c_document_topic__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh_string:
+.. _function-_at_rst_c__c_document_topic__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_implicit_hh_string:
 
-.. das:function:: document_topic(doc_file: file; topic: string const)
+.. das:function:: document_topic(doc_file: file; topic: string const implicit)
 
 +--------+--------------------------+
 +argument+argument type             +
 +========+==========================+
 +doc_file+ :ref:`file <alias-file>` +
 +--------+--------------------------+
-+topic   +string const              +
++topic   +string const implicit     +
 +--------+--------------------------+
 
 
@@ -429,6 +480,25 @@ document_enumeration returns auto
 
 
 |function-rst-document_enumeration|
+
+.. _function-_at_rst_c__c_document_function_annotation__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_auto:
+
+.. das:function:: document_function_annotation(doc_file: file; mod: rtti::Module? const; value: auto const)
+
+document_function_annotation returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++doc_file+ :ref:`file <alias-file>`                        +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
++value   +auto const                                       +
++--------+-------------------------------------------------+
+
+
+|function-rst-document_function_annotation|
 
 .. _function-_at_rst_c__c_document_structure_annotation__hh_const_hh__hh_ptr_hh__hh_const_hh__hh_handle_hh_FILE__hh_const_hh__hh_ptr_hh__hh_handle_hh_Module__hh_const_hh__hh_auto:
 
@@ -551,6 +621,7 @@ Label makers
   *  :ref:`global_label_name (value:smart_ptr\<ast::Variable\> const) : string <function-_at_rst_c__c_global_label_name__hh_const_hh__hh_smart_ptr_hh__hh_handle_hh_Variable>` 
   *  :ref:`struct_label_name (value:ast::Structure? const) : string <function-_at_rst_c__c_struct_label_name__hh_const_hh__hh_ptr_hh__hh_handle_hh_Structure>` 
   *  :ref:`struct_label_name (value:smart_ptr\<ast::Structure\> const) : string <function-_at_rst_c__c_struct_label_name__hh_const_hh__hh_smart_ptr_hh__hh_handle_hh_Structure>` 
+  *  :ref:`call_macro_label_name (mod:auto const;value:auto const) : auto <function-_at_rst_c__c_call_macro_label_name__hh_const_hh__hh_auto__hh_const_hh__hh_auto>` 
   *  :ref:`handle_label_name (value:auto const) : auto <function-_at_rst_c__c_handle_label_name__hh_const_hh__hh_auto>` 
 
 .. _function-_at_rst_c__c_alias_label_name__hh_const_hh__hh_smart_ptr_hh__hh_handle_hh_TypeDecl:
@@ -672,6 +743,23 @@ struct_label_name returns string
 
 
 |function-rst-struct_label_name|
+
+.. _function-_at_rst_c__c_call_macro_label_name__hh_const_hh__hh_auto__hh_const_hh__hh_auto:
+
+.. das:function:: call_macro_label_name(mod: auto const; value: auto const)
+
+call_macro_label_name returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++mod     +auto const   +
++--------+-------------+
++value   +auto const   +
++--------+-------------+
+
+
+|function-rst-call_macro_label_name|
 
 .. _function-_at_rst_c__c_handle_label_name__hh_const_hh__hh_auto:
 

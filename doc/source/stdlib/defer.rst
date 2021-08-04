@@ -9,128 +9,25 @@ defer and defer_delete macros
 
 |module-defer|
 
-+++++++
-Classes
-+++++++
+++++++++++++++++++++
+Function annotations
+++++++++++++++++++++
 
-.. _struct-defer-DeferDeleteMacro:
+.. _handle-defer-DeferMacro:
 
-.. das:attribute:: DeferDeleteMacro : AstCallMacro
+.. das:attribute:: DeferMacro
 
-|class-defer-DeferDeleteMacro|
+|function_annotation-defer-DeferMacro|
 
-.. das:function:: DeferDeleteMacro.visit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
++++++++++++
+Call macros
++++++++++++
 
-visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+.. _call-macro-defer-defer_delete:
 
-+--------+-----------------------------------------------------------------------+
-+argument+argument type                                                          +
-+========+=======================================================================+
-+self    + :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
-+--------+-----------------------------------------------------------------------+
-+prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+--------+-----------------------------------------------------------------------+
-+mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+--------+-----------------------------------------------------------------------+
-+expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
-+--------+-----------------------------------------------------------------------+
+.. das:attribute:: defer_delete
 
-
-|method-defer-DeferDeleteMacro.visit|
-
-.. _struct-defer-DeferMacro:
-
-.. das:attribute:: DeferMacro : AstFunctionAnnotation
-
-|class-defer-DeferMacro|
-
-.. das:function:: DeferMacro.transform(self: AstFunctionAnnotation; call: smart_ptr<ast::ExprCallFunc>; errors: das_string)
-
-transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-+--------+----------------------------------------------------------------------+
-+argument+argument type                                                         +
-+========+======================================================================+
-+self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
-+--------+----------------------------------------------------------------------+
-+call    +smart_ptr< :ref:`ast::ExprCallFunc <handle-ast-ExprCallFunc>` >       +
-+--------+----------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`               +
-+--------+----------------------------------------------------------------------+
-
-
-|method-defer-DeferMacro.transform|
-
-.. das:function:: DeferMacro.apply(self: AstFunctionAnnotation; func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
-
-apply returns bool
-
-+--------+--------------------------------------------------------------------------------+
-+argument+argument type                                                                   +
-+========+================================================================================+
-+self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
-+--------+--------------------------------------------------------------------------------+
-+func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
-+--------+--------------------------------------------------------------------------------+
-+group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
-+--------+--------------------------------------------------------------------------------+
-+args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+--------+--------------------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+--------+--------------------------------------------------------------------------------+
-
-
-|method-defer-DeferMacro.apply|
-
-.. das:function:: DeferMacro.finish(self: AstFunctionAnnotation; func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList const; progArgs: AnnotationArgumentList const; errors: das_string)
-
-finish returns bool
-
-+--------+--------------------------------------------------------------------------------+
-+argument+argument type                                                                   +
-+========+================================================================================+
-+self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
-+--------+--------------------------------------------------------------------------------+
-+func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
-+--------+--------------------------------------------------------------------------------+
-+group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
-+--------+--------------------------------------------------------------------------------+
-+args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+--------+--------------------------------------------------------------------------------+
-+progArgs+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+--------+--------------------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+--------+--------------------------------------------------------------------------------+
-
-
-|method-defer-DeferMacro.finish|
-
-.. das:function:: DeferMacro.isCompatible(self: AstFunctionAnnotation; func: FunctionPtr; types: VectorTypeDeclPtr; decl: AnnotationDeclaration const; errors: das_string)
-
-isCompatible returns bool
-
-+--------+------------------------------------------------------------------------------+
-+argument+argument type                                                                 +
-+========+==============================================================================+
-+self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`         +
-+--------+------------------------------------------------------------------------------+
-+func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                       +
-+--------+------------------------------------------------------------------------------+
-+types   + :ref:`VectorTypeDeclPtr <alias-VectorTypeDeclPtr>`                           +
-+--------+------------------------------------------------------------------------------+
-+decl    + :ref:`rtti::AnnotationDeclaration <handle-rtti-AnnotationDeclaration>`  const+
-+--------+------------------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                       +
-+--------+------------------------------------------------------------------------------+
-
-
-|method-defer-DeferMacro.isCompatible|
-
-.. das:function:: DeferMacro.isSpecialized(self: AstFunctionAnnotation)
-
-isSpecialized returns bool
-
-|method-defer-DeferMacro.isSpecialized|
+|function_annotation-defer-defer_delete|
 
 +++++++++++++
 Uncategorized

@@ -114,7 +114,8 @@ namespace das {
     // enumeration
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
-            ss << "enum " << enu->name << " : " << das_to_string(enu->baseType) << "\n";
+            ss << "enum ";
+            ss << (enu->isPrivate ? "private " : "public ") << enu->name << " : " << das_to_string(enu->baseType) << "\n";
         }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
             Visitor::preVisitEnumerationValue(enu, name, value, last);
@@ -162,7 +163,7 @@ namespace das {
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             logAnnotations(that->annotations);
-            ss << (that->isClass ? "class" : "struct");
+            ss << (that->isClass ? "class " : "struct ");
             ss << (that->privateStructure ? "private " : "public ") << that->name << "\n";
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {

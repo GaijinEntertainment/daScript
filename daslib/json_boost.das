@@ -1,6 +1,6 @@
 options indenting = 4
 
-module json_boost shared
+module json_boost shared public
 
 require rtti
 require ast

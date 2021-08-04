@@ -38,6 +38,13 @@ Any subsequential code can reference them.
 
 You can not change such global variables.
 
+Constants can be shared::
+
+    let shared blah <- [{string "blah"; "blahh"; "blahh"}]
+
+Shared constants point to the same memory in different instances of `Context`.
+They are initialized once during the first context initialization.
+
 ---------------
 Global variable
 ---------------
@@ -62,6 +69,16 @@ Local static variables can be declared via static_let macro::
 Variable ``bar`` in the example above is effectively global variable.
 However it's only visible inside the scope of the corresponding static_let macro.
 
+Global variables can be `private` or `public` ::
+
+    let public foobar = 100
+
+    let private barfoo = 100
+
+If not specified structures inherit module publicity. I.e. in public modules global variables are public,
+and in private modules global variables are private.
+
+
 .. _enumerations:
 
 -----------
@@ -83,6 +100,19 @@ It is not required to assign specific value to enum::
         one      // will be 1
         two      // will be 2
         ten = 9+1 // will be 10, since its explicitly specified
+
+Enumerations can be `private` or `public` ::
+
+    enum private Foo
+        fooA
+        fooB
+
+    enum public Bar
+        barA
+        barB
+
+If not specified enumeration inherit module publicity. I.e. in public modules enumerations are public,
+and in private modules enumerations are private.
 
 An enum name itself is strong type, and all enum values are of this type.
 An enum value can be addressed as 'enum name' followed by exact enumeration ::

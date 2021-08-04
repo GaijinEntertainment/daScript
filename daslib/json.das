@@ -1,6 +1,6 @@
 options indenting = 4
 
-module json shared
+module json shared public
 
 require strings
 

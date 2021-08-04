@@ -14,6 +14,22 @@ All functions and symbols are in "ast" module, use require to get access to it. 
     require daslib/ast_boost
 
 
+++++++++++++++++++++
+Function annotations
+++++++++++++++++++++
+
+.. _handle-ast_boost-macro:
+
+.. das:attribute:: macro
+
+|function_annotation-ast_boost-macro|
+
+.. _handle-ast_boost-tag_function:
+
+.. das:attribute:: tag_function
+
+|function_annotation-ast_boost-tag_function|
+
 +++++++
 Classes
 +++++++
@@ -378,6 +394,74 @@ finish returns bool
 
 
 |method-ast_boost-SetupContractAnnotatoin.setup_call|
+
+.. _struct-ast_boost-SetupEnumerationAnnotation:
+
+.. das:attribute:: SetupEnumerationAnnotation : SetupAnyAnnotation
+
+|class-ast_boost-SetupEnumerationAnnotation|
+
+it defines as follows
+
+  annotation_function_call : string
+  name                     : string
+
+.. das:function:: SetupEnumerationAnnotation.apply(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
+
+apply returns bool
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupEnumerationAnnotation.apply|
+
+.. das:function:: SetupEnumerationAnnotation.finish(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
+
+finish returns bool
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupEnumerationAnnotation.finish|
+
+.. das:function:: SetupEnumerationAnnotation.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++self    + :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
++--------+----------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                   +
++--------+----------------------------------------------------------------------------+
++cll     +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
++--------+----------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupEnumerationAnnotation.setup_call|
 
 .. _struct-ast_boost-SetupFunctionAnnotatoin:
 

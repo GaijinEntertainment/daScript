@@ -33,11 +33,14 @@ Native module is separate daScript file, with an optional ``module`` name::
 
 If not specified, module name is defaulted to that of a file name.
 
-``[private]`` function annotation specifies that function will not be visible outside of module::
+Modules can be `private` or `public` ::
 
-    [private]
-    def implementation_detail(a:string) // local to current module
-        ...
+    module Foo private
+
+    module Foo public
+
+Default publicity of the functions, structures, or enumerations are that of the module.
+I.e. if module is public and function publicity is not specified, function is public.
 
 ---------------
 Builtin modules

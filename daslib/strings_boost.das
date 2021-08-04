@@ -1,6 +1,6 @@
 options indenting = 4
 
-module strings_boost shared
+module strings_boost shared public
 
 require strings public
 

@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module jobque_boost shared
+module jobque_boost shared public
 
 require jobque public
 

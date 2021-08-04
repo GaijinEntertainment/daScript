@@ -1,7 +1,7 @@
 options indenting = 4
 options no_aot = true
 
-module ast_boost shared
+module ast_boost shared public
 
 require rtti
 require ast public

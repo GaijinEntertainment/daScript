@@ -9,37 +9,14 @@ if_not_null macro
 
 |module-if_not_null|
 
-+++++++
-Classes
-+++++++
++++++++++++
+Call macros
++++++++++++
 
-.. _struct-if_not_null-ApplyMacro:
+.. _call-macro-if_not_null-if_not_null:
 
-.. das:attribute:: ApplyMacro : AstCallMacro
+.. das:attribute:: if_not_null
 
-|class-if_not_null-ApplyMacro|
-
-it defines as follows
-
-  if_not_null_index : int
-
-.. das:function:: ApplyMacro.visit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
-
-visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-+--------+-----------------------------------------------------------------------+
-+argument+argument type                                                          +
-+========+=======================================================================+
-+self    + :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
-+--------+-----------------------------------------------------------------------+
-+prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+--------+-----------------------------------------------------------------------+
-+mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+--------+-----------------------------------------------------------------------+
-+expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
-+--------+-----------------------------------------------------------------------+
-
-
-|method-if_not_null-ApplyMacro.visit|
+|function_annotation-if_not_null-if_not_null|
 
 
