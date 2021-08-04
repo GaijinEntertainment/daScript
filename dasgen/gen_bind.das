@@ -15,6 +15,7 @@ def main
     fopen(root + "ast_gen.inc","wb") <| $ ( cpp_file )
         log_cpp_class_adapter(cpp_file, "AstFunctionAnnotation_Adapter", typeinfo(ast_typedecl type<AstFunctionAnnotation>))
         log_cpp_class_adapter(cpp_file, "AstStructureAnnotation_Adapter", typeinfo(ast_typedecl type<AstStructureAnnotation>))
+        log_cpp_class_adapter(cpp_file, "AstEnumerationAnnotation_Adapter", typeinfo(ast_typedecl type<AstEnumerationAnnotation>))
         log_cpp_class_adapter(cpp_file, "AstPassMacro_Adapter", typeinfo(ast_typedecl type<AstPassMacro>))
         log_cpp_class_adapter(cpp_file, "AstVarianMacro_Adapter", typeinfo(ast_typedecl type<AstVariantMacro>))
         log_cpp_class_adapter(cpp_file, "AstReaderMacro_Adapter", typeinfo(ast_typedecl type<AstReaderMacro>))

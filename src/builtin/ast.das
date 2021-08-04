@@ -18,6 +18,7 @@ typedef
     MakeFieldDeclPtr = smart_ptr<MakeFieldDecl>
     FunctionAnnotationPtr = smart_ptr<FunctionAnnotation>
     StructureAnnotationPtr = smart_ptr<StructureAnnotation>
+    EnumerationAnnotationPtr = smart_ptr<EnumerationAnnotation>
     PassMacroPtr = smart_ptr<PassMacro>
     VariantMacroPtr = smart_ptr<VariantMacro>
     ReaderMacroPtr = smart_ptr<ReaderMacro>
@@ -82,6 +83,9 @@ class AstCallMacro
 class AstTypeInfoMacro
     def abstract getAstChange ( expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : ExpressionPtr
     def abstract getAstType ( var lib:ModuleLibrary; expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : TypeDeclPtr
+
+class AstEnumerationAnnotation
+    def abstract apply ( var st:EnumerationPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
 
 class AstVisitor
 // program
@@ -470,6 +474,14 @@ def make_structure_annotation ( name : string; someClassPtr ) : StructureAnnotat
         concept_assert(false,"expecting pointer to class")
         return [[StructureAnnotationPtr]]
 
+def make_enumeration_annotation ( name : string; someClassPtr ) : EnumerationAnnotationPtr
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_enumeration_annotation(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[EnumerationAnnotationPtr]]
+
 def make_visitor ( someClass ) : smart_ptr<VisitorAdapter>
     static_if typeinfo(is_class someClass)
         unsafe
@@ -535,6 +547,12 @@ def add_new_contract_annotation ( name:string; someClassPtr )
 def add_new_structure_annotation ( name:string; someClassPtr )
     var ann <- make_structure_annotation(name, someClassPtr)
     this_module() |> add_structure_annotation(ann)
+    unsafe
+        delete ann
+
+def add_new_enumeration_annotation ( name:string; someClassPtr )
+    var ann <- make_enumeration_annotation(name, someClassPtr)
+    this_module() |> add_enumeration_annotation(ann)
     unsafe
         delete ann
 

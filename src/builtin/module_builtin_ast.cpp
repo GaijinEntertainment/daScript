@@ -31,6 +31,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(Variable,Variable)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(VisitorAdapter,VisitorAdapter)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(FunctionAnnotation,FunctionAnnotation)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(StructureAnnotation,StructureAnnotation)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(EnumerationAnnotation,EnumerationAnnotation)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(PassMacro,PassMacro)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(VariantMacro,VariantMacro)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ReaderMacro,ReaderMacro)
@@ -964,6 +965,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(module)>("_module","module");
             addField<DAS_BIND_MANAGED_FIELD(external)>("external");
             addField<DAS_BIND_MANAGED_FIELD(baseType)>("baseType");
+            addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
+            addField<DAS_BIND_MANAGED_FIELD(isPrivate)>("isPrivate");
         }
     };
 
@@ -1959,7 +1962,7 @@ namespace das {
             : StructureAnnotation(n), AstStructureAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
         virtual bool touch ( const StructurePtr & st, ModuleGroup & group,
-                            const AnnotationArgumentList & args, string & errors ) {
+                            const AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
                 return invoke_apply(context,fnApply,classPtr,st,group,args,errors);
             } else {
@@ -1967,7 +1970,7 @@ namespace das {
             }
         }
         virtual bool look (const StructurePtr & st, ModuleGroup & group,
-            const AnnotationArgumentList & args, string & errors ) {
+            const AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnFinish = get_finish(classPtr) ) {
                 return invoke_finish(context,fnFinish,classPtr,st,group,args,errors);
             } else {
@@ -1984,6 +1987,30 @@ namespace das {
             : ManagedStructureAnnotation ("StructureAnnotation", ml) {
         }
     };
+
+    struct EnumerationAnnotationAdapter : EnumerationAnnotation, AstEnumerationAnnotation_Adapter {
+        EnumerationAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : EnumerationAnnotation(n), AstEnumerationAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
+        }
+        virtual bool touch ( const EnumerationPtr & st, ModuleGroup & group,
+                            const AnnotationArgumentList & args, string & errors ) override {
+            if ( auto fnApply = get_apply(classPtr) ) {
+                return invoke_apply(context,fnApply,classPtr,st,group,args,errors);
+            } else {
+                return true;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
+
+    struct AstEnumerationAnnotationAnnotation : ManagedStructureAnnotation<EnumerationAnnotation,false,true> {
+        AstEnumerationAnnotationAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("EnumerationAnnotation", ml) {
+        }
+    };
+
     struct PassMacroAdapter : PassMacro, AstPassMacro_Adapter {
         PassMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : PassMacro(n), AstPassMacro_Adapter(info), classPtr(pClass), context(ctx) {
@@ -2113,7 +2140,7 @@ namespace das {
                 return nullptr;
             }
         }
-        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr & expr, string & err ) {
+        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr & expr, string & err ) override {
             if ( auto fnGetAstType = get_getAstType(classPtr) ) {
                 auto tinfo = static_pointer_cast<ExprTypeInfo>(expr);
                 return invoke_getAstType(context,fnGetAstType,classPtr,lib,tinfo,err);
@@ -2185,6 +2212,31 @@ namespace das {
     void addModuleInferDirtyMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
         PassMacroPtr newM = move(_newM);
         module->inferMacros.push_back(newM);
+    }
+
+    EnumerationAnnotationPtr makeEnumerationAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<EnumerationAnnotationAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleEnumerationAnnotation ( Module * module, EnumerationAnnotationPtr & _ann, Context * context ) {
+        EnumerationAnnotationPtr ann = move(_ann);
+        if ( !module->addAnnotation(ann, true) ) {
+            context->throw_error_ex("can't add enumeration annotation %s to module %s",
+                ann->name.c_str(), module->name.c_str());
+        }
+    }
+
+    int addEnumerationEntry ( smart_ptr<Enumeration> enu, const char* name ) {
+        if ( !name ) return -1;
+        for ( auto & ee : enu->list ) {
+            if ( ee.name==name ) {
+                return -1;
+            }
+        }
+        enu->list.push_back(Enumeration::EnumEntry());
+        int index = (int)enu->list.size() - 1;
+        enu->list[index].name = name;
+        return index;
     }
 
     StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
@@ -2744,6 +2796,14 @@ namespace das {
                 SideEffects::modifyExternal, "addModuleStructure");
             addExtern<DAS_BIND_FUN(clone_structure)>(*this, lib,  "clone_structure",
                 SideEffects::none, "clone_structure");
+            // enumeration annotation
+            addAnnotation(make_smart<AstEnumerationAnnotationAnnotation>(lib));
+            addExtern<DAS_BIND_FUN(makeEnumerationAnnotation)>(*this, lib,  "make_enumeration_annotation",
+                SideEffects::modifyExternal, "makeEnumerationAnnotation");
+            addExtern<DAS_BIND_FUN(addModuleEnumerationAnnotation)>(*this, lib,  "add_enumeration_annotation",
+                SideEffects::modifyExternal, "addModuleEnumerationAnnotation");
+            addExtern<DAS_BIND_FUN(addEnumerationEntry)>(*this, lib,  "add_enumeration_entry",
+                SideEffects::modifyExternal, "addEnumerationEntry");
             // pass macro
             addAnnotation(make_smart<AstPassMacroAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makePassMacro)>(*this, lib,  "make_pass_macro",

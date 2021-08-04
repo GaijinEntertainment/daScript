@@ -346,6 +346,7 @@
 %type <b>               optional_public_or_private_variable
 %type <b>               optional_public_or_private_structure
 %type <b>               optional_public_or_private_function
+%type <b>               optional_public_or_private_enum
 
 %type <b>               if_or_static_if
 %type <b>               elif_or_static_elif
@@ -2128,24 +2129,64 @@ alias_declaration
     :   DAS_TYPEDEF '{' alias_list '}'
     ;
 
+optional_public_or_private_enum
+    :                { $$ = g_Program->thisModule->isPublic; }
+    |   DAS_PRIVATE  { $$ = false; }
+    |   DAS_PUBLIC   { $$ = true; }
+    ;
+
 enum_declaration
-    :   DAS_ENUM[loc] NAME[name] '{' enum_list[pE] '}' {
+    :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] NAME[name] '{' enum_list[pE] '}' {
         das_checkName(*$name,tokAt(@name));
         auto pEnum = EnumerationPtr($pE);
         pEnum->at = tokAt(@name);
         pEnum->name = *$name;
+        pEnum->isPrivate = !$pubE;
+        if ( $annL ) {
+            for ( auto pA : *$annL ) {
+                if ( pA->annotation ) {
+                    if ( pA->annotation->rtti_isEnumerationAnnotation() ) {
+                        auto ann = static_pointer_cast<EnumerationAnnotation>(pA->annotation);
+                        string err;
+                        if ( !ann->touch(pEnum, *g_Program->thisModuleGroup, pA->arguments, err) ) {
+                            das_yyerror("can't 'touch' with enumeration annotation\n" + err,
+                                tokAt(@loc), CompilationError::invalid_annotation);
+                        }
+                    }
+                }
+            }
+            swap ( pEnum->annotations, *$annL );
+            delete $annL;
+        }
         if ( !g_Program->addEnumeration(pEnum) ) {
             das_yyerror("enumeration is already defined "+*$name,tokAt(@pE),
                 CompilationError::enumeration_already_declared);
         }
         delete $name;
     }
-    |   DAS_ENUM[loc] NAME[name] ':' enum_basic_type_declaration[ebt] '{' enum_list[pE] '}' {
+    |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] NAME[name] ':' enum_basic_type_declaration[ebt] '{' enum_list[pE] '}' {
         das_checkName(*$name,tokAt(@name));
         auto pEnum = EnumerationPtr($pE);
         pEnum->at = tokAt(@name);
         pEnum->name = *$name;
         pEnum->baseType = $ebt;
+        pEnum->isPrivate = !$pubE;
+        if ( $annL ) {
+            for ( auto pA : *$annL ) {
+                if ( pA->annotation ) {
+                    if ( pA->annotation->rtti_isEnumerationAnnotation() ) {
+                        auto ann = static_pointer_cast<EnumerationAnnotation>(pA->annotation);
+                        string err;
+                        if ( !ann->touch(pEnum, *g_Program->thisModuleGroup, pA->arguments, err) ) {
+                            das_yyerror("can't 'touch' with enumeration annotation\n" + err,
+                                tokAt(@loc), CompilationError::invalid_annotation);
+                        }
+                    }
+                }
+            }
+            swap ( pEnum->annotations, *$annL );
+            delete $annL;
+        }
         if ( !g_Program->addEnumeration(pEnum) ) {
             das_yyerror("enumeration is already defined "+*$name,tokAt(@pE),
                 CompilationError::enumeration_already_declared);

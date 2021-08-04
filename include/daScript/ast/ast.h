@@ -86,6 +86,7 @@ namespace das
         virtual bool rtti_isHandledTypeAnnotation() const { return false; }
         virtual bool rtti_isStructureAnnotation() const { return false; }
         virtual bool rtti_isStructureTypeAnnotation() const { return false; }
+        virtual bool rtti_isEnumerationAnnotation() const { return false; }
         virtual bool rtti_isFunctionAnnotation() const { return false; }
         virtual bool rtti_isBasicStructureAnnotation() const { return false;  }
         string describe() const { return name; }
@@ -135,6 +136,8 @@ namespace das
         Module *            module = nullptr;
         bool                external = false;
         Type                baseType = Type::tInt;
+        AnnotationList      annotations;
+        bool                isPrivate = false;
     };
 
     class Structure : public ptr_ref_count {
@@ -412,6 +415,15 @@ namespace das
             const AnnotationArgumentList & args, string & err ) = 0;                    // this one happens after infer. structure is read-only, or at-least infer-safe
     };
     typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
+
+    struct EnumerationAnnotation : Annotation {
+        EnumerationAnnotation ( const string & n ) : Annotation(n) {}
+        virtual bool rtti_isEnumerationAnnotation() const override { return true; }
+        virtual bool touch ( const EnumerationPtr & st, ModuleGroup & libGroup,
+                            const AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change enum here
+    };
+    typedef smart_ptr<EnumerationAnnotation> EnumerationAnnotationPtr;
+
 
     // annotated structure
     //  needs to override

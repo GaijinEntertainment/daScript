@@ -438,7 +438,10 @@ namespace das {
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & ann, Context * context );
     FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
     StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
+    EnumerationAnnotationPtr makeEnumerationAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
     void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr & ann, Context * context );
+    void addModuleEnumerationAnnotation ( Module * module, EnumerationAnnotationPtr & ann, Context * context );
+    int addEnumerationEntry ( smart_ptr<Enumeration> enu, const char* name );
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
     void forEachGenericFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
     bool addModuleFunction ( Module * module, FunctionPtr & func, Context * context );

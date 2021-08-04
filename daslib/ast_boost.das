@@ -244,6 +244,9 @@ class SetupFunctionAnnotatoin : SetupAnyAnnotation
 class SetupStructureAnnotatoin : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_structure_annotation"
 
+class SetupEnumerationAnnotation : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_enumeration_annotation"
+
 class SetupContractAnnotatoin : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_contract_annotation"
 
@@ -518,6 +521,7 @@ def private setup
         add_new_function_annotation("tag_function",new TagFunctionAnnotation())
         add_new_structure_annotation("function_macro",new SetupFunctionAnnotatoin())
         add_new_structure_annotation("structure_macro",new SetupStructureAnnotatoin())
+        add_new_structure_annotation("enumeration_macro",new SetupEnumerationAnnotation())
         add_new_structure_annotation("contract",new SetupContractAnnotatoin())
         add_new_structure_annotation("reader_macro",new SetupReaderMacro())
         add_new_structure_annotation("call_macro",new SetupCallMacro())

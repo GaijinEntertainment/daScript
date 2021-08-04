@@ -103,6 +103,31 @@ public:
 };
 int AstStructureAnnotation_Adapter::_das_class_method_offset[2];
 
+class AstEnumerationAnnotation_Adapter {
+protected:
+  enum {
+    __fn_apply = 0,
+  };
+protected:
+  static int _das_class_method_offset[1];
+public:
+  AstEnumerationAnnotation_Adapter ( const StructInfo * info ) {
+    if ( _das_class_method_offset[0]==0 ) {
+      _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
+    }
+  }
+  static __forceinline Func get_apply ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_apply]);
+  }
+  static __forceinline bool invoke_apply ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Enumeration> st, ModuleGroup & group, AnnotationArgumentList const  & args, das::string & errors ) {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<Enumeration>,ModuleGroup &,AnnotationArgumentList const  &,das::string &>
+        (__context__,__funcCall__,
+          self,st,group,args,errors);
+  }
+};
+int AstEnumerationAnnotation_Adapter::_das_class_method_offset[1];
+
 class AstPassMacro_Adapter {
 protected:
   enum {
