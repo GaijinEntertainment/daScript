@@ -2378,7 +2378,8 @@ namespace das {
                 } else if ( !blockT->isGoodBlockType() && !blockT->isGoodFunctionType() && !blockT->isGoodLambdaType() ) {
                     // no go, not a good block
                 } else if ( expr->arguments.size()-1 != blockT->argTypes.size() ) {
-                    // no go, not a good argument
+                    error("expecting " + to_string(blockT->argTypes.size()) + " arguments, got " + to_string(expr->arguments.size()-1) ,  "", "",
+                        expr->at, CompilationError::invalid_argument_count);
                 } else {
                     for ( size_t i=0; i != blockT->argTypes.size(); ++i ) {
                         auto & arg = expr->arguments[i+1];
