@@ -249,7 +249,7 @@ def document_module_apply_in_context(root:string)
         group_by_regex("stub0", mod, %regex~(stub0)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
-    document("Corss-context evaluation helpers",mod,"{root}/apply_in_context.rst","{root}/detail/apply_in_context.rst",groups)
+    document("Cross-context evaluation helpers",mod,"{root}/apply_in_context.rst","{root}/detail/apply_in_context.rst",groups)
 
 def document_module_algorithm(root:string)
     var mod = find_module("algorithm")
