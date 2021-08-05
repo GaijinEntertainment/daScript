@@ -40,6 +40,7 @@ bool saveToFile ( const string & fname, const string & str ) {
         return false;
     }
     fwrite ( str.c_str(), str.length(), 1, f );
+    fclose ( f );
     return true;
 }
 
