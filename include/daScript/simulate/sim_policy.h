@@ -136,6 +136,10 @@ namespace  das {
             if ( b==0.0 ) context.throw_error_at(at ? *at : LineInfo(), "division by zero in modulo");
             a = fmod(a,b);
         }
+        static __forceinline int Trunci ( double a, Context &, LineInfo * )          { return int(trunc(a)); }
+        static __forceinline int Roundi ( double a, Context &, LineInfo * )          { return int(round(a)); }
+        static __forceinline int Floori ( double a, Context &, LineInfo * )          { return int(floor(a)); }
+        static __forceinline int Ceili  ( double a, Context &, LineInfo * )          { return int(ceil(a)); }
     };
 
     struct SimPolicy_Pointer : SimPolicy_CoreType<void *> {

@@ -107,6 +107,11 @@ namespace das {
     MATH_FUN_OP1_INT(Ceili)
     MATH_FUN_OP1_INT(Roundi)
 
+    IMPLEMENT_OP1_FUNCTION_POLICY_EX(Trunci,Int,int32_t,Double,double);
+    IMPLEMENT_OP1_FUNCTION_POLICY_EX(Floori,Int,int32_t,Double,double);
+    IMPLEMENT_OP1_FUNCTION_POLICY_EX(Ceili,Int,int32_t,Double,double);
+    IMPLEMENT_OP1_FUNCTION_POLICY_EX(Roundi,Int,int32_t,Double,double);
+
     //exp
     MATH_FUN_OP1(Exp)
     MATH_FUN_OP1(Log)
@@ -655,6 +660,7 @@ namespace das {
             addExternEx<bool(float3,float3,float,float3&),DAS_BIND_FUN(refract)>(*this, lib, "refract",
                 SideEffects::modifyArgument, "refract")->args({"v","n","nint","outRefracted"});
             addFunctionCommonConversion<int, float>  (*this, lib);
+            addFunctionCommonConversion<int, double>  (*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);
             addFunctionCommonConversion<int3, float3>(*this,lib);
             addFunctionCommonConversion<int4, float4>(*this,lib);

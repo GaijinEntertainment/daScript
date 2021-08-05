@@ -60,6 +60,11 @@ def test
     assert(floori(float2(0.5,-0.1)) == int2(0,-1))
     assert(roundi(float2(0.501,-0.1)) == int2(1,0))
     assert(trunci(float2(0.501,-0.1)) == int2(0,0))
+    // and doubles
+    assert(ceili(0.5lf) == 1)
+    assert(floori(0.5lf) == 0)
+    assert(roundi(0.501lf) == 1)
+    assert(trunci(0.501lf) == 0)
     // policy AOT
     verify(rightPolicyCeili(1.2)==2)
     // constants
