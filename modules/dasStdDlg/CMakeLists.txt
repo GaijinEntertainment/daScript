@@ -2,7 +2,20 @@
 # TODO: use CMAKE to detect linux\gtx\etc
 SET(LINUX_GTK FALSE)
 
-IF(NOT DAS_STDDLG_INCLUDED)
+# detect ATL
+IF (WIN32)
+    find_path(_vc_atlmfc "atlbase.h")
+    if(IS_DIRECTORY ${_vc_atlmfc})
+		SET(DAS_STDDLG_DETECTED TRUE)
+    else()
+        message(STATUS "Module 'stddlg' requires ATL/MFC which is missing (using Visual Studio Express?).")
+		SET(DAS_STDDLG_INCLUDED FALSE)
+    endif()
+ELSE()
+	SET(DAS_STDDLG_DETECTED TRUE)
+ENDIF()
+
+IF ((NOT DAS_STDDLG_INCLUDED) AND DAS_STDDLG_DETECTED)
     SET(DAS_STDDLG_INCLUDED TRUE)
     MESSAGE(STATUS "dasStdDlg module included.")
 
