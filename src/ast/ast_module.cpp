@@ -632,8 +632,19 @@ namespace das {
         splitTypeName(name, moduleName, aliasName);
         foreach([&](Module * pm) -> bool {
             if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
-                if ( auto pp = pm->findAlias(aliasName) )
-                    ptr.push_back(pp);
+                if ( auto pp = pm->findAlias(aliasName) ) {
+                    if ( pp->isEnumT() ) {
+                        if ( !pp->enumType->isPrivate || pp->enumType->module==inWhichModule ) {
+                            ptr.push_back(pp);
+                        }
+                    } else if ( pp->baseType==Type::tStructure ) {
+                        if ( !pp->structType->privateStructure || pp->structType->module==inWhichModule ) {
+                            ptr.push_back(pp);
+                        }
+                    } else {
+                        ptr.push_back(pp);
+                    }
+                }
             return true;
         }, moduleName);
         return ptr;
@@ -670,9 +681,13 @@ namespace das {
         string moduleName, funcName;
         splitTypeName(name, moduleName, funcName);
         foreach([&](Module * pm) -> bool {
-            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
-                if ( auto pp = pm->findStructure(funcName) )
-                    ptr.push_back(pp);
+            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) ) {
+                if ( auto pp = pm->findStructure(funcName) ) {
+                    if ( !pp->privateStructure || pp->module==inWhichModule ) {
+                        ptr.push_back(pp);
+                    }
+                }
+            }
             return true;
         }, moduleName);
         return ptr;
@@ -683,9 +698,13 @@ namespace das {
         string moduleName, enumName;
         splitTypeName(name, moduleName, enumName);
         foreach([&](Module * pm) -> bool {
-            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
-                if ( auto pp = pm->findEnum(enumName) )
-                    ptr.push_back(pp);
+            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) ) {
+                if ( auto pp = pm->findEnum(enumName) ) {
+                    if ( !pp->isPrivate || pp->module==inWhichModule ) {
+                        ptr.push_back(pp);
+                    }
+                }
+            }
             return true;
         }, moduleName);
         return ptr;
