@@ -330,6 +330,7 @@ src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
 src/misc/job_que.cpp
+src/misc/daScriptC.cpp
 )
 list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
@@ -453,6 +454,7 @@ SOURCE_GROUP_FILES("flat_hash_map" FLAT_HASH_MAP_SRC)
 
 SET(MAIN_SRC
 include/daScript/daScript.h
+include/daScript/daScriptC.h
 include/daScript/daScriptModule.h
 include/daScript/das_config.h
 )
@@ -808,3 +810,11 @@ SET(TUTORIAL_06_SRC
 examples/tutorial/tutorial06.cpp
 )
 DAS_TUTORIAL(tutorial06 "${TUTORIAL_06_SRC}")
+
+#################################
+# tutorial 07 - "C" interface
+#################################
+SET(TUTORIAL_07_SRC
+examples/tutorial/tutorial07.c
+)
+DAS_TUTORIAL(tutorial07 "${TUTORIAL_07_SRC}")
