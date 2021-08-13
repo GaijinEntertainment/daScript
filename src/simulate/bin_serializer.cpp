@@ -214,6 +214,9 @@ namespace das {
         virtual void Null ( TypeInfo * ) override {
             error("binary serialization of null pointers is not supported");
         }
+        virtual void VoidPtr ( void * & ) override {
+            error("binary serialization of void pointers is not supported");
+        }
         virtual void beforeIterator ( Sequence *, TypeInfo * ) override {
             error("binary serialization of iterators is not supported");
         }

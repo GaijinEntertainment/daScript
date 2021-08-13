@@ -307,6 +307,11 @@ namespace debugapi {
                 invoke_Null(context,fn_Null,classPtr,*ti);
             }
         }
+        virtual void VoidPtr ( void * & value ) override {
+           if ( auto fn_VoidPtr = get_VoidPtr(classPtr) ) {
+                invoke_VoidPtr(context,fn_VoidPtr,classPtr,value);
+            }
+        }
         virtual void Bool ( bool & value ) override {
            if ( auto fn_Bool = get_Bool(classPtr) ) {
                 invoke_Bool(context,fn_Bool,classPtr,value);

@@ -284,6 +284,13 @@ namespace das {
                 ss << "ul";
             }
         }
+        virtual void VoidPtr ( void * & p ) override {
+            uint64_t ui = uint64_t(intptr_t(p));
+            ss << "0x" << HEX << ui << DEC;
+            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                ss << "p";
+            }
+        }
         virtual void String ( char * & str ) override {
             string text = str ? str : "";
             if ( int(flags) & int(PrintFlags::escapeString) ) {

@@ -217,8 +217,11 @@ namespace das {
                 case Type::tPointer:
                     beforePtr(pa, info);
                     if ( cancel ) return;
-                    if ( info->firstType ) {
+                    if ( info->firstType && info->firstType->type!=Type::tVoid ) {
                         walk(*(char**)pa, info->firstType);
+                        if ( cancel ) return;
+                    } else {
+                        VoidPtr(*(void**)pa);
                         if ( cancel ) return;
                     }
                     afterPtr(pa, info);

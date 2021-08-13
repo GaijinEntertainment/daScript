@@ -39,39 +39,40 @@ protected:
     __fn_beforeIterator = 35,
     __fn_afterIterator = 36,
     __fn_Null = 37,
-    __fn_Bool = 38,
-    __fn_Int8 = 39,
-    __fn_UInt8 = 40,
-    __fn_Int16 = 41,
-    __fn_UInt16 = 42,
-    __fn_Int64 = 43,
-    __fn_UInt64 = 44,
-    __fn_String = 45,
-    __fn_Double = 46,
-    __fn_Float = 47,
-    __fn_Int = 48,
-    __fn_UInt = 49,
-    __fn_Bitfield = 50,
-    __fn_Int2 = 51,
-    __fn_Int3 = 52,
-    __fn_Int4 = 53,
-    __fn_UInt2 = 54,
-    __fn_UInt3 = 55,
-    __fn_UInt4 = 56,
-    __fn_Float2 = 57,
-    __fn_Float3 = 58,
-    __fn_Float4 = 59,
-    __fn_Range = 60,
-    __fn_URange = 61,
-    __fn_WalkBlock = 62,
-    __fn_WalkFunction = 63,
-    __fn_WalkEnumeration = 64,
-    __fn_WalkEnumeration8 = 65,
-    __fn_WalkEnumeration16 = 66,
-    __fn_FakeContext = 67,
+    __fn_VoidPtr = 38,
+    __fn_Bool = 39,
+    __fn_Int8 = 40,
+    __fn_UInt8 = 41,
+    __fn_Int16 = 42,
+    __fn_UInt16 = 43,
+    __fn_Int64 = 44,
+    __fn_UInt64 = 45,
+    __fn_String = 46,
+    __fn_Double = 47,
+    __fn_Float = 48,
+    __fn_Int = 49,
+    __fn_UInt = 50,
+    __fn_Bitfield = 51,
+    __fn_Int2 = 52,
+    __fn_Int3 = 53,
+    __fn_Int4 = 54,
+    __fn_UInt2 = 55,
+    __fn_UInt3 = 56,
+    __fn_UInt4 = 57,
+    __fn_Float2 = 58,
+    __fn_Float3 = 59,
+    __fn_Float4 = 60,
+    __fn_Range = 61,
+    __fn_URange = 62,
+    __fn_WalkBlock = 63,
+    __fn_WalkFunction = 64,
+    __fn_WalkEnumeration = 65,
+    __fn_WalkEnumeration8 = 66,
+    __fn_WalkEnumeration16 = 67,
+    __fn_FakeContext = 68,
   };
 protected:
-  static int _das_class_method_offset[68];
+  static int _das_class_method_offset[69];
 public:
   DapiDataWalker_Adapter ( const StructInfo * info ) {
     if ( _das_class_method_offset[0]==0 ) {
@@ -113,6 +114,7 @@ public:
       _das_class_method_offset[__fn_beforeIterator] = adapt_field_offset("beforeIterator",info);
       _das_class_method_offset[__fn_afterIterator] = adapt_field_offset("afterIterator",info);
       _das_class_method_offset[__fn_Null] = adapt_field_offset("Null",info);
+      _das_class_method_offset[__fn_VoidPtr] = adapt_field_offset("VoidPtr",info);
       _das_class_method_offset[__fn_Bool] = adapt_field_offset("Bool",info);
       _das_class_method_offset[__fn_Int8] = adapt_field_offset("Int8",info);
       _das_class_method_offset[__fn_UInt8] = adapt_field_offset("UInt8",info);
@@ -487,6 +489,15 @@ public:
         (__context__,__funcCall__,
           self,ti);
   }
+  static __forceinline Func get_VoidPtr ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_VoidPtr]);
+  }
+  static __forceinline void invoke_VoidPtr ( Context * __context__, Func __funcCall__, void * self, void * & value ) {
+    das_invoke_function<void>::invoke
+      <void *,void * &>
+        (__context__,__funcCall__,
+          self,value);
+  }
   static __forceinline Func get_Bool ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_Bool]);
   }
@@ -758,7 +769,7 @@ public:
           self,value);
   }
 };
-int DapiDataWalker_Adapter::_das_class_method_offset[68];
+int DapiDataWalker_Adapter::_das_class_method_offset[69];
 
 class DapiDebugAgent_Adapter {
 protected:

@@ -100,6 +100,7 @@ class DapiDataWalker
     def abstract beforeIterator ( var value:DapiSequence; ti:TypeInfo ) : void
     def abstract afterIterator ( var value:DapiSequence; ti:TypeInfo ) : void
     def abstract Null ( ti:TypeInfo ) : void
+    def abstract VoidPtr ( var value:void? & ) : void
     def abstract Bool ( var value:bool & ) : void
     def abstract Int8 ( var value:int8 & ) : void
     def abstract UInt8 ( var value:uint8 & ) : void
