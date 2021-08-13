@@ -135,8 +135,8 @@ namespace das {
         return fname;
     }
 
-    bool addRequirements(ModuleGroup & libGroup, Module * mod, const FileAccessPtr & access, vector<string> & notAllowed, TextWriter * log, int tab ) {
-        if ( !access->isModuleAllowed(mod->name) ) {
+    bool addRequirements(const string & fileName, ModuleGroup & libGroup, Module * mod, const FileAccessPtr & access, vector<string> & notAllowed, TextWriter * log, int tab ) {
+        if ( !access->isModuleAllowed(mod->name, fileName) ) {
             notAllowed.push_back(mod->name);
             if ( log ) {
                 *log << string(tab,'\t') << "dependency " << mod->name << " - NOT ALLOWED\n";
@@ -149,7 +149,7 @@ namespace das {
             if ( libGroup.addModule(mod) ) {
                 tab ++;
                 for ( const auto & dep : mod->requireModule ) {
-                    if ( !addRequirements(libGroup, dep.first, access, notAllowed, log, tab) ) {
+                    if ( !addRequirements(fileName, libGroup, dep.first, access, notAllowed, log, tab) ) {
                         return false;
                     }
                 }
@@ -229,7 +229,7 @@ namespace das {
                         if ( log ) {
                             *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - shared, ok\n";
                         }
-                        if ( !addRequirements(libGroup, module, access, notAllowed, log, tab) ) {
+                        if ( !addRequirements(fileName, libGroup, module, access, notAllowed, log, tab) ) {
                             return false;
                         }
                     }
@@ -237,7 +237,7 @@ namespace das {
                     if ( log ) {
                         *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok\n";
                     }
-                    if ( !access->isModuleAllowed(module->name) ) {
+                    if ( !access->isModuleAllowed(module->name, fileName) ) {
                         notAllowed.push_back(module->name);
                         if ( log ) {
                             *log << string(tab,'\t') << "in " << fileName << " module " << module->name << " - NOT ALLOWED\n";

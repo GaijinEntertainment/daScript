@@ -127,7 +127,7 @@ namespace das
         void freeSourceData();
         FileInfoPtr letGoOfFileInfo ( const string & fileName );
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
-        virtual bool isModuleAllowed ( const string & ) const { return true; };
+        virtual bool isModuleAllowed ( const string &, const string & ) const { return true; };
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
@@ -147,7 +147,7 @@ namespace das
         bool failed() const { return !context || !modGet; }
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const override;
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const override;
-        virtual bool isModuleAllowed ( const string & ) const;
+        virtual bool isModuleAllowed ( const string &, const string & ) const;
     protected:
         Context *           context = nullptr;
         SimFunction *       modGet = nullptr;

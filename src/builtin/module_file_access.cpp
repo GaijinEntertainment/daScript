@@ -68,10 +68,11 @@ namespace das {
         }
     }
 
-    bool ModuleFileAccess::isModuleAllowed ( const string & mod ) const {
-        if(failed() || !moduleAllowed) return FileAccess::isModuleAllowed(mod);
-        vec4f args[1];
+    bool ModuleFileAccess::isModuleAllowed ( const string & mod, const string & fileName ) const {
+        if(failed() || !moduleAllowed) return FileAccess::isModuleAllowed(mod,fileName);
+        vec4f args[2];
         args[0] = cast<const char *>::from(mod.c_str());
+        args[1] = cast<const char *>::from(fileName.c_str());
         auto res = context->evalWithCatch(moduleAllowed, args, nullptr);
         auto exc = context->getException(); exc;
         DAS_ASSERTF(!exc, "exception failed in `module_allowed`: %s", exc);
