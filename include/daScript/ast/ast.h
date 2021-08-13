@@ -1208,6 +1208,7 @@ namespace das
                           vector<ModuleInfo> & req,
                           vector<string> & missing,
                           vector<string> & circular,
+                          vector<string> & notAllowed,
                           das_set<string> & dependencies,
                           ModuleGroup & libGroup,
                           TextWriter * log,

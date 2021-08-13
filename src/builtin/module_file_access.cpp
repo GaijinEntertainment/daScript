@@ -37,7 +37,8 @@ namespace das {
                 }
                 modGet = context->findFunction("module_get");
                 DAS_ASSERTF(modGet!=nullptr, "can't find module_get function");
-                includeGet = context->findFunction("include_get"); // note, this one CAN be null
+                includeGet = context->findFunction("include_get");          // note, this one CAN be null
+                moduleAllowed = context->findFunction("module_allowed");    // note, this one CAN be null
                 // get it ready
                 context->restart();
                 context->runInitScript();   // note: we assume sane init stack size here
@@ -65,6 +66,16 @@ namespace das {
             DAS_FATAL_LOG("%s", tout.str().c_str());
             DAS_FATAL_ERROR;
         }
+    }
+
+    bool ModuleFileAccess::isModuleAllowed ( const string & mod ) const {
+        if(failed() || !moduleAllowed) return FileAccess::isModuleAllowed(mod);
+        vec4f args[1];
+        args[0] = cast<const char *>::from(mod.c_str());
+        auto res = context->evalWithCatch(moduleAllowed, args, nullptr);
+        auto exc = context->getException(); exc;
+        DAS_ASSERTF(!exc, "exception failed in `module_allowed`: %s", exc);
+        return cast<bool>::to(res);
     }
 
     ModuleInfo ModuleFileAccess::getModuleInfo ( const string & req, const string & from ) const {

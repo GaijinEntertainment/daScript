@@ -33,5 +33,9 @@ def module_get(req,from:string) : module_info
             return res
     return module_default(req,from)
 
+[export]
+def module_allowed(mod:string#)
+    print("IS ALLOWED {mod}\n")
+    return false
 
 

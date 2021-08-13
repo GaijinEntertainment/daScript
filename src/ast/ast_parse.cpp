@@ -135,11 +135,27 @@ namespace das {
         return fname;
     }
 
-    void addRequirements(ModuleGroup & libGroup, Module * mod) {
-        if ( libGroup.addModule(mod) ) {
-            for ( const auto & dep : mod->requireModule ) {
-                addRequirements(libGroup, dep.first);
+    bool addRequirements(ModuleGroup & libGroup, Module * mod, const FileAccessPtr & access, vector<string> & notAllowed, TextWriter * log, int tab ) {
+        if ( !access->isModuleAllowed(mod->name) ) {
+            notAllowed.push_back(mod->name);
+            if ( log ) {
+                *log << string(tab,'\t') << "dependency " << mod->name << " - NOT ALLOWED\n";
             }
+            return false;
+        } else {
+            if ( log ) {
+                *log << string(tab,'\t') << "add dependency " << mod->name << "\n";
+            }
+            if ( libGroup.addModule(mod) ) {
+                tab ++;
+                for ( const auto & dep : mod->requireModule ) {
+                    if ( !addRequirements(libGroup, dep.first, access, notAllowed, log, tab) ) {
+                        return false;
+                    }
+                }
+                tab --;
+            }
+            return true;
         }
     }
 
@@ -148,6 +164,7 @@ namespace das {
                           vector<ModuleInfo> & req,
                           vector<string> & missing,
                           vector<string> & circular,
+                          vector<string> & notAllowed,
                           das_set<string> & dependencies,
                           ModuleGroup & libGroup,
                           TextWriter * log,
@@ -195,7 +212,7 @@ namespace das {
                                 missing.push_back(mod);
                                 return false;
                             }
-                            if ( !getPrerequisits(info.fileName, access, req, missing, circular, dependencies, libGroup, log, tab + 1, allowPromoted) ) {
+                            if ( !getPrerequisits(info.fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, log, tab + 1, allowPromoted) ) {
                                 return false;
                             }
                             if ( log ) {
@@ -212,13 +229,23 @@ namespace das {
                         if ( log ) {
                             *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - shared, ok\n";
                         }
-                        addRequirements(libGroup, module);
+                        if ( !addRequirements(libGroup, module, access, notAllowed, log, tab) ) {
+                            return false;
+                        }
                     }
                 } else {
                     if ( log ) {
                         *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok\n";
                     }
-                    libGroup.addModule(module);
+                    if ( !access->isModuleAllowed(module->name) ) {
+                        notAllowed.push_back(module->name);
+                        if ( log ) {
+                            *log << string(tab,'\t') << "in " << fileName << " module " << module->name << " - NOT ALLOWED\n";
+                        }
+                        return false;
+                    } else {
+                        libGroup.addModule(module);
+                    }
                 }
             }
             return true;
@@ -335,9 +362,9 @@ namespace das {
                                 CodeOfPolicies policies ) {
         ReuseGuard<TypeDecl> rguard;
         vector<ModuleInfo> req;
-        vector<string> missing, circular;
+        vector<string> missing, circular, notAllowed;
         das_set<string> dependencies;
-        if ( getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
+        if ( getPrerequisits(fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod.moduleName) ) {
                     auto program = parseDaScript(mod.fileName, access, logs, libGroup, true, true, policies);
@@ -394,8 +421,9 @@ namespace das {
                 req.clear();
                 missing.clear();
                 circular.clear();
+                notAllowed.clear();
                 dependencies.clear();
-                getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, &tw, 1, false);
+                getPrerequisits(fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, &tw, 1, false);
                 logs << "module dependency graph:\n" << tw.str();
             }
             if ( !res->failed() ) {
@@ -409,7 +437,7 @@ namespace das {
             missing.clear();
             circular.clear();
             dependencies.clear();
-            getPrerequisits(fileName, access, req, missing, circular, dependencies, libGroup, &tw, 1, false);
+            getPrerequisits(fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, &tw, 1, false);
             auto program = make_smart<Program>();
             program->policies = policies;
             program->thisModuleGroup = &libGroup;
@@ -419,6 +447,9 @@ namespace das {
             }
             for ( auto & mis : circular ) {
                 err << "circular dependency " << mis << "\n";
+            }
+            for ( auto & mis : notAllowed ) {
+                err << "module not allowed " << mis << "\n";
             }
             program->error(err.str(),"module dependency graph:\n" + tw.str(), "", LineInfo(),
                             CompilationError::module_not_found);
