@@ -1,6 +1,8 @@
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 
+das::Context * get_context ( int stackSize=0 );
+
 namespace das {
 
     ModuleFileAccess::ModuleFileAccess() {
@@ -22,7 +24,7 @@ namespace das {
                 DAS_FATAL_LOG("%s", tout.str().c_str());
                 DAS_FATAL_ERROR;
             } else {
-                context = new Context();
+                context = get_context(program->getContextStackSize());
                 if ( !program->simulate(*context, tout) ) {
                     tout << "failed to simulate\n";
                     for ( auto & err : program->errors ) {

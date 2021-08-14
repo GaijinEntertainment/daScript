@@ -13,7 +13,11 @@ smart_ptr<das::FileAccess> get_file_access( char * pak ) {
     }
 }
 
-Context* get_clone_context( Context * ctx ) {
+Context * get_context( int stackSize = 0 ) {
+    return new Context(stackSize);
+}
+
+Context * get_clone_context( Context * ctx ) {
     return new Context(*ctx);
 }
 

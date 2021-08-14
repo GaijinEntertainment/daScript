@@ -5,6 +5,8 @@
 
 using namespace das;
 
+Context * get_context( int stackSize = 0 );
+
 void das_initialize_modules() {
     NEED_ALL_DEFAULT_MODULES;
 }
@@ -99,7 +101,7 @@ das_error * das_program_get_error ( das_program * program, int index ) {
 }
 
 das_context * das_context_make ( int stackSize ) {
-    return (das_context *) new Context(stackSize);
+    return (das_context *) get_context(stackSize);
 }
 
 void das_context_release ( das_context * context ) {
