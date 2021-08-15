@@ -415,10 +415,10 @@ namespace das {
         }
     };
 
-    template <typename TT, uint32_t size>
+    template <typename TT, int size>
     struct TDim;
 
-    template <typename TT, uint32_t size>
+    template <typename TT, int size>
     struct typeFactory<TDim<TT,size>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & lib) {
             auto t = typeFactory<TT>::make(lib);

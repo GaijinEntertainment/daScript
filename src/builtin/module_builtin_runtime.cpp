@@ -38,7 +38,7 @@ namespace das
 
     struct MarkFunctionOrBlockAnnotation : FunctionAnnotation {
         MarkFunctionOrBlockAnnotation() : FunctionAnnotation("marker") { }
-        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) {
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
             return true;
         }
         virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string &) override {

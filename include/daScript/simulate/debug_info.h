@@ -147,7 +147,7 @@ namespace das
         bool failed() const { return !context || !modGet; }
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const override;
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const override;
-        virtual bool isModuleAllowed ( const string &, const string & ) const;
+        virtual bool isModuleAllowed ( const string &, const string & ) const override;
     protected:
         Context *           context = nullptr;
         SimFunction *       modGet = nullptr;
