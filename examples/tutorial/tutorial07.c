@@ -3,7 +3,7 @@
 
 #include "daScript/daScriptC.h"
 
-#define TUTORIAL_NAME   "/examples/tutorial/tutorial01.das"
+#define TUTORIAL_NAME   "/examples/tutorial/tutorial07.das"
 
 void tutorial () {
     das_text_writer * tout = das_text_make_printer();               // output stream for all compiler messages (stdout. for stringstream use TextWriter)
@@ -46,7 +46,7 @@ void tutorial () {
         goto shutdown;
     }
     // evaluate 'test' function in the context
-    das_context_eval_with_catch_void(ctx, fnTest, NULL);
+    das_context_eval_with_catch(ctx, fnTest, NULL);
     char * ex = das_context_get_exception(ctx);
     if ( ex!=NULL ) {
         das_text_output(tout, "exception: ");
@@ -61,10 +61,31 @@ shutdown:;
     das_text_release(tout);
 }
 
+// this is test function
+vec4f das_c_func ( das_context * ctx, das_node * node, vec4f * args ) {
+    ctx; node;
+    printf("from das_c_func(%i)\n", das_argument_int(args[0]));     // access argument
+    return das_result_void();                                       // return result
+}
+
+das_module * register_module_tutorial_07() {
+    // create module and library
+    das_module * mod = das_module_create ("tutorial_07");
+    das_module_group * lib = das_modulegroup_make();
+    // bind das_c_func
+    char * args_das_c_func[] = {"v", "i", NULL};    // result, arg0, arg1, etc...
+    das_module_bind_interop_function(mod, lib, &das_c_func, "das_c_func", "das_c_func", args_das_c_func);
+    // cleanup
+    das_modulegroup_release(lib);
+    return mod;
+}
+
 int main( int argc, char ** argv ) {
     argc; argv;
     // Initialize all default modules
     das_initialize();
+    // register modules
+    register_module_tutorial_07();
     // run the tutorial
     tutorial();
     // shut-down daScript, free all memory

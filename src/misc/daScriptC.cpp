@@ -5,6 +5,50 @@
 
 using namespace das;
 
+namespace das {
+    struct SimNode_CFuncCall : SimNode_ExtFuncCallBase {
+        SimNode_CFuncCall ( const LineInfo & at, const char * fnName, das_interop_function * FN )
+            : SimNode_ExtFuncCallBase(at,fnName) { fn = FN; }
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
+            evalArgs(context, args);
+            return (*fn)((das_context *)&context,(das_node *)this,args);
+        }
+        das_interop_function * fn;
+    };
+
+    class CFunction : public BuiltInFunction {
+    public:
+        __forceinline CFunction(const char * name, const ModuleLibrary &, const char * cppName, das_interop_function * FN )
+            : BuiltInFunction(name,cppName) {
+            this->callBased = true;
+            this->interopFn = true;
+            fn = FN;
+        }
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
+            const char * fnName = context.code->allocateName(this->name);
+            return context.code->makeNode<SimNode_CFuncCall>(BuiltInFunction::at,fnName,fn);
+        }
+        das_interop_function * fn;
+    };
+
+    TypeDeclPtr make_c_type ( char * ch ) {
+        switch ( *ch ) {
+            case 'i':   return make_smart<TypeDecl>(Type::tInt);
+            case 'f':   return make_smart<TypeDecl>(Type::tFloat);
+            case 's':   return make_smart<TypeDecl>(Type::tString);
+            case 'v':   return make_smart<TypeDecl>(Type::tVoid);
+            case '?': {
+                auto pt = make_smart<TypeDecl>(Type::tPointer);
+                pt->firstType = make_c_type(ch+1);
+                return pt;
+            };
+        }
+        return nullptr;
+    }
+}
+
 Context * get_context( int stackSize = 0 );
 
 void das_initialize_modules() {
@@ -112,8 +156,8 @@ das_function * das_context_find_function ( das_context * context, char * name ) 
     return (das_function *) ((Context *)context)->findFunction(name);
 }
 
-void das_context_eval_with_catch_void ( das_context * context, das_function * fun, void * arguments ) {
-    ((Context *)context)->evalWithCatch((SimFunction *)fun,(vec4f *)arguments);
+vec4f das_context_eval_with_catch ( das_context * context, das_function * fun, vec4f * arguments ) {
+    return ((Context *)context)->evalWithCatch((SimFunction *)fun,(vec4f *)arguments);
 }
 
 char * das_context_get_exception ( das_context * context ) {
@@ -130,5 +174,29 @@ void das_error_report ( das_error * error, char * text, int maxLength ) {
     auto str = reportError(err->at, err->what, err->extra, err->fixme, err->cerr );
     strncpy(text, str.c_str(), maxLength);
 }
+
+das_module * das_module_create ( char * name ) {
+    return (das_module *) new Module(name);
+}
+
+void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, char** args ) {
+    auto fn = make_smart<CFunction>(name, *(ModuleLibrary *)lib, cppName, fun);
+    fn->setSideEffects(SideEffects::worstDefault);  // TODO: pass correct sideeffects
+    vector <TypeDeclPtr> arguments;
+    for ( char ** arg = args; *arg; ++arg ) {
+        arguments.push_back(make_c_type(*arg));
+    }
+    fn->constructInterop(arguments);
+    ((Module *)mod)->addFunction(fn, false);
+}
+
+int    das_argument_int ( vec4f arg ) { return cast<int>::to(arg); }
+float  das_argument_float ( vec4f arg ) { return cast<float>::to(arg); }
+char * das_argument_string ( vec4f arg ) { char * a = cast<char *>::to(arg); return a ? a : ""; }
+
+vec4f das_result_void () { return v_zero(); }
+vec4f das_result_int ( int r ) { return cast<int>::from(r); }
+vec4f das_result_float ( float r ) { return cast<float>::from(r); }
+vec4f das_result_string ( char * r ) { return cast<char *>::from(r); }
 
 }

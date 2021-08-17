@@ -816,5 +816,6 @@ DAS_TUTORIAL(tutorial06 "${TUTORIAL_06_SRC}")
 #################################
 SET(TUTORIAL_07_SRC
 examples/tutorial/tutorial07.c
+examples/tutorial/tutorial07.das
 )
 DAS_TUTORIAL(tutorial07 "${TUTORIAL_07_SRC}")

@@ -738,7 +738,7 @@ namespace das
             }
             return this;
         }
-    protected:
+    public:
         void construct (const vector<TypeDeclPtr> & args );
         void constructExternal (const vector<TypeDeclPtr> & args );
         void constructInterop (const vector<TypeDeclPtr> & args );
