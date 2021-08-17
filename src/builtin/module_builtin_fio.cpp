@@ -434,6 +434,8 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_stdout)>(*this, lib, "fstdout", SideEffects::modifyExternal, "builtin_stdout");
             addExtern<DAS_BIND_FUN(builtin_stderr)>(*this, lib, "fstderr", SideEffects::modifyExternal, "builtin_stderr");
             addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep", SideEffects::modifyExternal, "builtin_sleep");
+            addExtern<DAS_BIND_FUN(getchar)>(*this, lib, "getchar", SideEffects::modifyExternal, "getchar");
+            addExtern<DAS_BIND_FUN(exit)>(*this, lib, "exit", SideEffects::modifyExternal, "exit");
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
             // lets verify all names
