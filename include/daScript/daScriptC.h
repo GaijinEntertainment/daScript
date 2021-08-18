@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 //if target is not defined, try to auto-detect target
 #ifndef _TARGET_SIMD_SSE
     #if __SSE4_1__ || defined(__AVX__) || defined(__AVX2__)
@@ -32,6 +34,18 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+extern uint32_t SIDEEFFECTS_none;
+extern uint32_t SIDEEFFECTS_unsafe;
+extern uint32_t SIDEEFFECTS_userScenario;
+extern uint32_t SIDEEFFECTS_modifyExternal;
+extern uint32_t SIDEEFFECTS_accessExternal;
+extern uint32_t SIDEEFFECTS_modifyArgument;
+extern uint32_t SIDEEFFECTS_modifyArgumentAndExternal;
+extern uint32_t SIDEEFFECTS_worstDefault;
+extern uint32_t SIDEEFFECTS_accessGlobal;
+extern uint32_t SIDEEFFECTS_invoke;
+extern uint32_t SIDEEFFECTS_inferredSideEffects;
 
 typedef struct dasTextOutputHandle das_text_writer;
 typedef struct dasModuleGroupHandle das_module_group;
@@ -79,7 +93,7 @@ vec4f das_context_eval_with_catch ( das_context * context, das_function * fun, v
 char * das_context_get_exception ( das_context * context );
 
 das_module * das_module_create ( char * name );
-void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, char** args );
+void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, uint32_t sideffects, char** args );
 
 int    das_argument_int ( vec4f arg );
 float  das_argument_float ( vec4f arg );

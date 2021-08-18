@@ -57,6 +57,18 @@ void das_initialize_modules() {
 
 extern "C" {
 
+uint32_t SIDEEFFECTS_none = uint32_t(SideEffects::none);
+uint32_t SIDEEFFECTS_unsafe = uint32_t(SideEffects::unsafe);
+uint32_t SIDEEFFECTS_userScenario = uint32_t(SideEffects::userScenario);
+uint32_t SIDEEFFECTS_modifyExternal = uint32_t(SideEffects::modifyExternal);
+uint32_t SIDEEFFECTS_accessExternal = uint32_t(SideEffects::accessExternal);
+uint32_t SIDEEFFECTS_modifyArgument = uint32_t(SideEffects::modifyArgument);
+uint32_t SIDEEFFECTS_modifyArgumentAndExternal = uint32_t(SideEffects::modifyArgumentAndExternal);
+uint32_t SIDEEFFECTS_worstDefault = uint32_t(SideEffects::worstDefault);
+uint32_t SIDEEFFECTS_accessGlobal = uint32_t(SideEffects::accessGlobal);
+uint32_t SIDEEFFECTS_invoke =  uint32_t(SideEffects::invoke);
+uint32_t SIDEEFFECTS_inferredSideEffects =  uint32_t(SideEffects::inferredSideEffects);
+
 void das_initialize() {
     das_initialize_modules();
     Module::Initialize();
@@ -179,9 +191,9 @@ das_module * das_module_create ( char * name ) {
     return (das_module *) new Module(name);
 }
 
-void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, char** args ) {
+void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, uint32_t sideffects, char** args ) {
     auto fn = make_smart<CFunction>(name, *(ModuleLibrary *)lib, cppName, fun);
-    fn->setSideEffects(SideEffects::worstDefault);  // TODO: pass correct sideeffects
+    fn->setSideEffects((das::SideEffects) sideffects);
     vector <TypeDeclPtr> arguments;
     for ( char ** arg = args; *arg; ++arg ) {
         arguments.push_back(make_c_type(*arg));
