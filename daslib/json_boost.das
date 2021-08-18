@@ -10,6 +10,7 @@ require daslib/ast_boost
 require daslib/contracts
 require daslib/templates
 require daslib/strings_boost
+require daslib/apply
 
 def private is_json_ptr_value ( td : TypeDeclPtr )
     if td.baseType != Type tPointer
@@ -63,10 +64,6 @@ class private JsonReader : AstReaderMacro
             var exx <- convert_to_expression(json,expr.at)
             return exx
 
-[expect_any_enum(ent)]
-def JV ( ent )
-    return JV("{ent}")
-
 [template(ent)]
 def from_JV ( v:JsonValue?; ent : auto(EnumT); defV : EnumT = [[EnumT]] ) : EnumT
     if v==null || !(v.value is _string)
@@ -103,21 +100,12 @@ def from_JV ( var v : JsonValue?; ent:float; defV:float=0. )
     else
         return float(v.value as _number)
 
-def JV ( v : float )
-    return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
-
 [generic,template(ent)]
 def from_JV ( var v : JsonValue?; ent:int; defV:int=0 )
     if v==null || !(v.value is _number)
         return defV
     else
         return int(v.value as _number)
-
-def JV ( v : int )
-    return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
-
-def JV ( v : bitfield )
-    return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
 
 [generic,template(ent)]
 def from_JV ( var v : JsonValue?; ent:bitfield; defV:bitfield=[[bitfield]] )
@@ -156,3 +144,100 @@ def from_JV ( var v : JsonValue?; ent: auto(VecT); defV:VecT=[[VecT]]  )
             vo["y"].value as _number,
             vo["z"].value as _number,
             vo["w"].value as _number)
+
+
+def JV ( v : float )
+    return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
+
+def JV ( v : int )
+    return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
+
+def JV ( v : bitfield )
+    return new [[JsonValue value <- [[JsValue _number = double(v)]]]]
+
+def JV(val: int8): JsonValue?
+    return new [[JsonValue value <- [[JsValue _number = double(val)]]]]
+
+def JV(val: uint8): JsonValue?
+    return new [[JsonValue value <- [[JsValue _number = double(val)]]]]
+
+def JV(val: int16): JsonValue?
+    return new [[JsonValue value <- [[JsValue _number = double(val)]]]]
+
+def JV(val: uint16): JsonValue?
+    return new [[JsonValue value <- [[JsValue _number = double(val)]]]]
+
+def JV(val: uint): JsonValue?
+    return new [[JsonValue value <- [[JsValue _number = double(val)]]]]
+
+def JV(val: int64): JsonValue?
+    return new [[JsonValue value <- [[JsValue _number = double(val)]]]]
+
+def JV(val: uint64): JsonValue?
+    return new [[JsonValue value <- [[JsValue _number = double(val)]]]]
+
+
+def JV(value): JsonValue?
+    static_if typeinfo(typename value) == "JVon::JsonValue?" || typeinfo(typename value) == "JVon::JsonValue? const"
+        return value
+    static_elif typeinfo(is_pointer value)
+        return value == null ? null : _::JV(*value)
+    static_elif typeinfo(is_enum value)
+        return JV("{value}")
+    static_elif typeinfo(is_string value)
+        return _::JV(value)
+    static_elif typeinfo(is_struct value)
+        var map: table<string; JsonValue?>
+        apply(value) <| $(name: string; field)
+            static_if typeinfo(is_function field)
+                pass // skip functions
+            static_elif typeinfo(is_void_pointer field)
+                pass // skip void?
+            static_elif typeinfo(is_pointer field)
+                if field != null
+                    map[name] = _::JV(field)
+            else
+                map[name] = _::JV(field)
+        return _::JV(map)
+    static_elif typeinfo(is_table value)
+        var map: table<string; JsonValue?>
+        for k, v in keys(value), values(value)
+            map[k] = _::JV(v)
+        return _::JV(map)
+    static_elif typeinfo(is_iterable value)
+        var arr: array<JsonValue?>
+        for x in value
+            arr |> push <| _::JV(x)
+        return _::JV(arr)
+    else
+        print("unsupported type {typeinfo(typename value)}\n")
+        concept_assert(false, "unknown JV()")
+        return null
+
+
+def JV(val1; val2): JsonValue?
+    return _::JV([{auto[] _::JV(val1); _::JV(val2)}])
+
+def JV(val1; val2; val3): JsonValue?
+    return _::JV([{auto[] _::JV(val1); _::JV(val2); _::JV(val3)}])
+
+def JV(val1; val2; val3; val4): JsonValue?
+    return _::JV([{auto[] _::JV(val1); _::JV(val2); _::JV(val3); _::JV(val4)}])
+
+def JV(val1; val2; val3; val4; val5): JsonValue?
+    return _::JV([{auto[] _::JV(val1); _::JV(val2); _::JV(val3); _::JV(val4); _::JV(val5)}])
+
+def JV(val1; val2; val3; val4; val5; val6): JsonValue?
+    return _::JV([{auto[] _::JV(val1); _::JV(val2); _::JV(val3); _::JV(val4); _::JV(val5); _::JV(val6)}])
+
+def JV(val1; val2; val3; val4; val5; val6; val7): JsonValue?
+    return _::JV([{auto[] _::JV(val1); _::JV(val2); _::JV(val3); _::JV(val4); _::JV(val5); _::JV(val6); _::JV(val7)}])
+
+def JV(val1; val2; val3; val4; val5; val6; val7; val8): JsonValue?
+    return _::JV([{auto[] _::JV(val1); _::JV(val2); _::JV(val3); _::JV(val4); _::JV(val5); _::JV(val6); _::JV(val7); _::JV(val8)}])
+
+def JV(val1; val2; val3; val4; val5; val6; val7; val8; val9): JsonValue?
+    return _::JV([{auto[] _::JV(val1); _::JV(val2); _::JV(val3); _::JV(val4); _::JV(val5); _::JV(val6); _::JV(val7); _::JV(val8); _::JV(val9)}])
+
+def JV(val1; val2; val3; val4; val5; val6; val7; val8; val9; val10): JsonValue?
+    return _::JV([{auto[] _::JV(val1); _::JV(val2); _::JV(val3); _::JV(val4); _::JV(val5); _::JV(val6); _::JV(val7); _::JV(val8); _::JV(val9); _::JV(val10)}])
