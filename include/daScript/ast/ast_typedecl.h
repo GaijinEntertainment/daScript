@@ -562,5 +562,7 @@ namespace das {
                            CpptSkipConst skipConst = CpptSkipConst::no,
                            CpptRedundantConst redundantConst = CpptRedundantConst::yes );
 
+    TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library  );
+    TypeDeclPtr makeTypeFromMangledName ( const string & st, const ModuleLibrary & library );
 }
 

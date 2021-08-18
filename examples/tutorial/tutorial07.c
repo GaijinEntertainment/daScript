@@ -73,8 +73,7 @@ das_module * register_module_tutorial_07() {
     das_module * mod = das_module_create ("tutorial_07");
     das_module_group * lib = das_modulegroup_make();
     // bind das_c_func
-    char * args_das_c_func[] = {"v", "i", NULL};    // result, arg0, arg1, etc...
-    das_module_bind_interop_function(mod, lib, &das_c_func, "das_c_func", "das_c_func", SIDEEFFECTS_modifyExternal, args_das_c_func);
+    das_module_bind_interop_function(mod, lib, &das_c_func, "das_c_func", "das_c_func", SIDEEFFECTS_modifyExternal, "v i");
     // cleanup
     das_modulegroup_release(lib);
     return mod;

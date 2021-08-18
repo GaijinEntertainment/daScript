@@ -32,21 +32,6 @@ namespace das {
         }
         das_interop_function * fn;
     };
-
-    TypeDeclPtr make_c_type ( char * ch ) {
-        switch ( *ch ) {
-            case 'i':   return make_smart<TypeDecl>(Type::tInt);
-            case 'f':   return make_smart<TypeDecl>(Type::tFloat);
-            case 's':   return make_smart<TypeDecl>(Type::tString);
-            case 'v':   return make_smart<TypeDecl>(Type::tVoid);
-            case '?': {
-                auto pt = make_smart<TypeDecl>(Type::tPointer);
-                pt->firstType = make_c_type(ch+1);
-                return pt;
-            };
-        }
-        return nullptr;
-    }
 }
 
 Context * get_context( int stackSize = 0 );
@@ -191,12 +176,15 @@ das_module * das_module_create ( char * name ) {
     return (das_module *) new Module(name);
 }
 
-void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, uint32_t sideffects, char** args ) {
+void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, uint32_t sideffects, char* args ) {
     auto fn = make_smart<CFunction>(name, *(ModuleLibrary *)lib, cppName, fun);
     fn->setSideEffects((das::SideEffects) sideffects);
     vector <TypeDeclPtr> arguments;
-    for ( char ** arg = args; *arg; ++arg ) {
-        arguments.push_back(make_c_type(*arg));
+    const char * arg = args;
+    while ( *arg ) {
+        auto tt = parseTypeFromMangledName(arg, *(ModuleLibrary*)lib);
+        arguments.push_back(tt);
+        while (*arg==' ') arg ++;
     }
     fn->constructInterop(arguments);
     ((Module *)mod)->addFunction(fn, false);

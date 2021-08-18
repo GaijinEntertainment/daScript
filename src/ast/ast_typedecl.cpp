@@ -2187,4 +2187,150 @@ namespace das
         argNames.push_back(name);
         argTypes.push_back(tt);
     }
+
+    string parseTypeName ( const char * & ch ) {
+        if ( *ch!='<' ) return ""; ch ++;
+        string name;
+        while ( *ch!='>' ) {
+            if ( isalnum(*ch) || *ch=='_' || *ch=='`' || *ch==':' ) {
+                char che[2] = { *ch, 0 };
+                name.append(che);
+                ch ++;
+            } else if ( *ch==0 ) {
+                DAS_ASSERT(0 && "unsupported mangled name format - name exceeds string");
+                return "";
+            } else  {
+                DAS_ASSERT(0 && "unsupported mangled name format - unsupported symbol");
+                return "";
+            }
+        }
+        ch ++; // skip >
+        return name;
+    }
+
+    TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library  ) {
+        switch ( *ch ) {
+            case 'S': { // structure
+                ch ++;
+                auto sname = parseTypeName(ch);
+                auto pt = make_smart<TypeDecl>(Type::tStructure);
+                auto stt = library.findStructure(sname, nullptr);
+                if ( stt.size()!=1 ) {
+                    DAS_ASSERT(0 && "structure not found");
+                    return nullptr;
+                }
+                pt->structType = stt.back().get();
+                return pt;
+            }
+            // TODO: array, table, tuple, bitfield, variant, dim
+            case '.':   ch++; return make_smart<TypeDecl>(Type::autoinfer);
+            case '*':   ch++; return make_smart<TypeDecl>(Type::anyArgument);
+            case 'L':   ch++; return make_smart<TypeDecl>(Type::alias);
+            case '_': {
+                        if ( ch[1]=='c' )                   { ch+=2; return make_smart<TypeDecl>(Type::fakeContext); }
+                else    if ( ch[1]=='l' )                   { ch+=2; return make_smart<TypeDecl>(Type::fakeLineInfo); }
+                else                                        { DAS_ASSERT(0 && "unsupported mangled name format - expecting fake..."); return nullptr; }
+            }
+            case 'i': {
+                        if ( ch[1]=='2' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt2); }
+                else    if ( ch[1]=='3' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt3); }
+                else    if ( ch[1]=='4' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt4); }
+                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return make_smart<TypeDecl>(Type::tInt16); }
+                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tInt64); }
+                else                                        { ch+=1; return make_smart<TypeDecl>(Type::tInt); }
+            }
+            case 'u': {
+                        if ( ch[1]=='2' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt2); }
+                else    if ( ch[1]=='3' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt3); }
+                else    if ( ch[1]=='4' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt4); }
+                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return make_smart<TypeDecl>(Type::tUInt16); }
+                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tUInt64); }
+                else                                        { ch+=1; return make_smart<TypeDecl>(Type::tUInt); }
+            }
+            case 'f': {
+                        if ( ch[1]=='2' )                   { ch+=2; return make_smart<TypeDecl>(Type::tFloat2); }
+                else    if ( ch[1]=='3' )                   { ch+=2; return make_smart<TypeDecl>(Type::tFloat3); }
+                else    if ( ch[1]=='4' )                   { ch+=2; return make_smart<TypeDecl>(Type::tFloat4); }
+                else                                        { ch+=1; return make_smart<TypeDecl>(Type::tFloat); }
+
+            case 'r':   ch++; return make_smart<TypeDecl>(Type::tRange);
+            case 'z':   ch++; return make_smart<TypeDecl>(Type::tURange);      // why z? dunno
+            case 'd':   ch++; return make_smart<TypeDecl>(Type::tDouble);
+            case 's':   ch++; return make_smart<TypeDecl>(Type::tString);
+            case 'v':   ch++; return make_smart<TypeDecl>(Type::tVoid);
+            case 'b':   ch++; return make_smart<TypeDecl>(Type::tBool);
+            case '?': {
+                ch ++;
+                auto pt = make_smart<TypeDecl>(Type::tPointer);
+                pt->firstType = parseTypeFromMangledName(ch,library);
+                return pt;
+            };
+            case '&': {
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library);
+                pt->ref = true;
+                return pt;
+            };
+            case '#': {
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library);
+                pt->temporary = true;
+                return pt;
+            };
+            case 'C': {
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library);
+                pt->constant = true;
+                return pt;
+            };
+            case '-': {
+                switch ( ch[1] ) {
+                case '&': {
+                    ch += 2;
+                    auto pt = parseTypeFromMangledName(ch,library);
+                    pt->ref = false;
+                    pt->removeRef = true;
+                    return pt;
+                }
+                case '#': {
+                    ch += 2;
+                    auto pt = parseTypeFromMangledName(ch,library);
+                    pt->temporary = false;
+                    pt->removeTemporary = true;
+                    return pt;
+                }
+                case 'C': {
+                    ch += 2;
+                    auto pt = parseTypeFromMangledName(ch,library);
+                    pt->constant = false;
+                    pt->removeConstant = true;
+                    return pt;
+                }
+                // TODO: support remove dim
+                }
+                DAS_ASSERT(0 && "unsupported mangled name format - expecting remove trait");
+                return nullptr;
+            }
+            case 'I': { // implicit
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library);
+                pt->implicit = true;
+                return pt;
+            };
+            case 'X': { // explicit
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library);
+                pt->explicitConst = true;
+                return pt;
+            };
+            }
+        }
+        DAS_ASSERT(0 && "unsupported mangled name format symbol");
+        return nullptr;
+    }
+
+    TypeDeclPtr makeTypeFromMangledName ( const string & st, const ModuleLibrary & library ) {
+        const char * cstr = st.c_str();
+        return parseTypeFromMangledName(cstr,library);
+    }
 }
