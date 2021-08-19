@@ -41,7 +41,7 @@ namespace das
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
-        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t * pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
         if ( !first(r.from,r_to) ) goto loopend;
         { SimNode ** __restrict tail = list + total;
@@ -64,7 +64,7 @@ namespace das
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
-        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t * pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
         if ( !first(r.from,r_to) ) goto loopend;
         { SimNode ** __restrict tail = list + total;
@@ -84,7 +84,7 @@ namespace das
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
-        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t * pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
         if ( !first(r.from,r_to) ) goto loopend;
         { SimNode * __restrict pbody = list[0];
@@ -103,7 +103,7 @@ namespace das
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
-        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t * pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
         if ( !first(r.from,r_to) ) goto loopend;
         { SimNode * __restrict pbody = list[0];
@@ -127,7 +127,7 @@ namespace das
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
-        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t * pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
         if ( !first(r.from,r_to) ) goto loopend;
         { SimNode ** __restrict tail = list + total;
@@ -151,7 +151,7 @@ namespace das
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
-        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t * pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
         if ( !first(r.from,r_to) ) goto loopend;
         { SimNode ** __restrict tail = list + total;
@@ -172,7 +172,7 @@ namespace das
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
-        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t * pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
         if ( !first(r.from,r_to) ) goto loopend;
         { SimNode * __restrict pbody = list[0];
@@ -192,7 +192,7 @@ namespace das
         DAS_PROFILE_NODE
         vec4f ll = sources[0]->eval(context);
         range r = cast<range>::to(ll);
-        int32_t * __restrict pi = (int32_t *)(context.stack.sp() + stackTop[0]);
+        int32_t * pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
         if ( !first(r.from,r_to) ) goto loopend;
         { SimNode * __restrict pbody = list[0];
