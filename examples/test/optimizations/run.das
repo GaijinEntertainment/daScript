@@ -48,7 +48,8 @@ def test
     let q = make_another_name("modify_arg")
     assert("{q}"=="modify_arg_ok")
     let w = name_foo()
-    assert("{w}"=="[[ 20; 20]]")
+    print("w = {w}\n")
+    assert("{w}"=="[[ 20; 20.000000000]]")
     let g = make_g_name("touch_global")
     assert("{g}"=="touch_global_global_ok")
     var T = "blah"
