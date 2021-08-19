@@ -6,7 +6,6 @@ require UnitTest
 
 // options log = true
 
-[unsafe]
 def funC(y:string)
     var j = 13
     j ++

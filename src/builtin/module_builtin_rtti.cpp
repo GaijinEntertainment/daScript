@@ -955,6 +955,12 @@ namespace das {
         return *lineInfo;
     }
 
+    char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context ) {
+        TextWriter ssw;
+        ssw << debug_value(data, (TypeInfo *)typeInfo, PrintFlags(uint32_t(flags)));
+        return context->stringHeap->allocateString(ssw.str());
+    }
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -1081,6 +1087,9 @@ namespace das {
                 SideEffects::none, "rtti_get_das_type_name");
             addExtern<DAS_BIND_FUN(rtti_add_annotation_argument)>(*this, lib,  "add_annotation_argument",
                 SideEffects::none, "add_annotation_argument");
+            // data printer
+            addExtern<DAS_BIND_FUN(builtin_print_data)>(*this, lib, "print_data",
+                SideEffects::modifyExternal, "builtin_print_data");
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo");

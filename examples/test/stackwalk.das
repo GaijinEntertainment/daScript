@@ -32,7 +32,8 @@ class SampleStackWalker : DapiStackWalker
         print("\t{vinfo.name} ")
         if inScope
             if arg != null
-                walk_data(data_walker_adapter,arg,*type_info(vinfo))
+                // walk_data(data_walker_adapter,arg,*type_info(vinfo))
+                print(print_data(arg,type_info(vinfo),print_flags humanReadable))
             else
                 print ("optimized out")
         else

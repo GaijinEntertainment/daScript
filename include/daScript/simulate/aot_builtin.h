@@ -9,6 +9,7 @@ namespace das {
     void builtin_throw ( char * text, Context * context );
     void builtin_print ( char * text, Context * context );
     vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
+    char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context );
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * );
     void builtin_stackwalk ( bool args, bool vars, Context * context, LineInfoArg * lineInfo );
     void builtin_terminate ( Context * context );
