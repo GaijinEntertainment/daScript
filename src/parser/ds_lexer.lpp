@@ -164,6 +164,9 @@ void YYNEWLINE() {
     BEGIN(normal);
     return END_STRING;
 }
+<strb>\\\\        {
+    return STRING_CHARACTER_ESC;
+}
 <strb>\\[\{\"\}]        {
     das_yylval.ch = yytext[1];
     return STRING_CHARACTER;

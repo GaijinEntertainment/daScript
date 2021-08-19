@@ -264,17 +264,18 @@ extern int das_yydebug;
     NAME = 400,
     BEGIN_STRING = 401,
     STRING_CHARACTER = 402,
-    END_STRING = 403,
-    BEGIN_STRING_EXPR = 404,
-    END_STRING_EXPR = 405,
-    END_OF_READ = 406,
-    UNARY_MINUS = 407,
-    UNARY_PLUS = 408,
-    PRE_INC = 409,
-    PRE_DEC = 410,
-    POST_INC = 411,
-    POST_DEC = 412,
-    DEREF = 413
+    STRING_CHARACTER_ESC = 403,
+    END_STRING = 404,
+    BEGIN_STRING_EXPR = 405,
+    END_STRING_EXPR = 406,
+    END_OF_READ = 407,
+    UNARY_MINUS = 408,
+    UNARY_PLUS = 409,
+    PRE_INC = 410,
+    PRE_DEC = 411,
+    POST_INC = 412,
+    POST_DEC = 413,
+    DEREF = 414
   };
 #endif
 
@@ -311,7 +312,7 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 315 "ds_parser.hpp"
+#line 316 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

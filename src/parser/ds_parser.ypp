@@ -293,6 +293,7 @@
 
 %token      BEGIN_STRING            "start of the string"
 %token<ch>  STRING_CHARACTER
+%token      STRING_CHARACTER_ESC
 %token      END_STRING              "end of the string"
 %token      BEGIN_STRING_EXPR       "{"
 %token      END_STRING_EXPR         "}"
@@ -493,7 +494,9 @@ module_declaration
 
 character_sequence
     :   STRING_CHARACTER[char]                              { $$ = new string(); *$$ += $char; }
+    |   STRING_CHARACTER_ESC                                { $$ = new string(); *$$ += "\\\\"; }
     |   character_sequence[elem]  STRING_CHARACTER[char]    { $$ = $elem; *$elem += $char; }
+    |   character_sequence[elem]  STRING_CHARACTER_ESC      { $$ = $elem; *$elem += "\\\\"; }
     ;
 
 string_constant
