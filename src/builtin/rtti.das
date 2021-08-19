@@ -101,6 +101,10 @@ def type_info ( vinfo:LocalVariableInfo ) : TypeInfo const?
     unsafe
         return reinterpret<TypeInfo const?>(addr(vinfo))
 
+def type_info ( vinfo:VarInfo ) : TypeInfo const?
+    unsafe
+        return reinterpret<TypeInfo const?>(addr(vinfo))
+
 [generic]
 def RttiValue_nothing
     var t : RttiValue

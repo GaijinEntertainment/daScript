@@ -28,8 +28,12 @@ class SampleStackWalker : DapiStackWalker
         print("{info.name} at {at}\n")
     def override onCall ( pp:Prologue; info:FuncInfo ) : void
         print("{info.name}\n")
+    def override onArgument ( info:FuncInfo; index:int; vinfo:VarInfo; arg:float4 ) : void
+        print("\targ {vinfo.name} ")
+        print(sprint_data(arg,type_info(vinfo),print_flags humanReadable))
+        print("\n")
     def override onVariable ( inf:FuncInfo; vinfo:LocalVariableInfo; arg:void?; inScope:bool ) : void
-        print("\t{vinfo.name} ")
+        print("\tvar {vinfo.name} ")
         if inScope
             if arg != null
                 // walk_data(data_walker_adapter,arg,*type_info(vinfo))
@@ -63,6 +67,10 @@ def debug_agent ( ctx : Context )
     assert(this_context().category.debug_context)
     install_new_debug_agent(new SampleDebugAgent(), "debug")
 
+def foo(var x:int&)
+    x ++
+    x ++
+
 [export]
 def main
     this_context().name := "stackwalk main context"
@@ -73,7 +81,7 @@ def main
 	for t in range(10)
 		print("x={x} t={t}\n")
 		x ++
-		x += 3
+        foo(x)
     var z = 13
     z ++
 

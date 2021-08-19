@@ -970,6 +970,12 @@ namespace das {
         return context->stringHeap->allocateString(ssw.str());
     }
 
+    char * builtin_print_data_v ( float4 data, const TypeInfo * typeInfo, Bitfield flags, Context * context ) {
+        TextWriter ssw;
+        ssw << debug_value(vec4f(data), (TypeInfo *)typeInfo, PrintFlags(uint32_t(flags)));
+        return context->stringHeap->allocateString(ssw.str());
+    }
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -1099,6 +1105,8 @@ namespace das {
             // data printer
             addExtern<DAS_BIND_FUN(builtin_print_data)>(*this, lib, "sprint_data",
                 SideEffects::modifyExternal, "builtin_print_data");
+            addExtern<DAS_BIND_FUN(builtin_print_data_v)>(*this, lib, "sprint_data",
+                SideEffects::modifyExternal, "builtin_print_data_v");
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo");
