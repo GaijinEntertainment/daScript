@@ -20,6 +20,7 @@ def install_new_debug_agent ( agentPtr; category:string )
         let agentInfo = class_info(*agentPtr)
         var agentAdapter <- make_debug_agent(agentPtr,agentInfo)
         install_debug_agent(agentAdapter,category)
+        this_context().name := "debug agent {category}"
         unsafe
             delete agentAdapter
     else

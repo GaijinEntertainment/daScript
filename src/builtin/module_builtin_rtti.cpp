@@ -239,8 +239,17 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeContextCategoryFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "context_category_flags";
+        ft->argNames = { "debug_context", "thread_clone", "job_clone" };
+        return ft;
+    }
+
     struct ContextAnnotation : ManagedStructureAnnotation<Context,false> {
         ContextAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Context", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addFieldEx("category", "category", offsetof(Context, category), makeContextCategoryFlags());
         }
         virtual void walk ( das::DataWalker & walker, void * data ) override {
             if ( !walker.reading ) {
@@ -1088,7 +1097,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_add_annotation_argument)>(*this, lib,  "add_annotation_argument",
                 SideEffects::none, "add_annotation_argument");
             // data printer
-            addExtern<DAS_BIND_FUN(builtin_print_data)>(*this, lib, "print_data",
+            addExtern<DAS_BIND_FUN(builtin_print_data)>(*this, lib, "sprint_data",
                 SideEffects::modifyExternal, "builtin_print_data");
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,

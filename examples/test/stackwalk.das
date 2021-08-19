@@ -33,7 +33,7 @@ class SampleStackWalker : DapiStackWalker
         if inScope
             if arg != null
                 // walk_data(data_walker_adapter,arg,*type_info(vinfo))
-                print(print_data(arg,type_info(vinfo),print_flags humanReadable))
+                print(sprint_data(arg,type_info(vinfo),print_flags humanReadable))
             else
                 print ("optimized out")
         else
@@ -52,18 +52,20 @@ class SampleDebugAgent : DapiDebugAgent
             delete walker_adapter
             delete walker
     def override onBreakpoint ( var ctx:Context; at:LineInfo ) : void
-        print("{ctx} breakpoint at line {int(at.line)}\n")
+        print("{ctx} {ctx.name} : breakpoint at line {int(at.line)}\n")
         set_single_step(ctx,true)
     def override onSingleStep ( var ctx:Context; at:LineInfo ) : void
-        print("{ctx} step at {int(at.line)}\n")
+        print("{ctx} {ctx.name} : step at {int(at.line)}\n")
         walk_stack(walker_adapter,ctx,at)
 
 [export]
 def debug_agent ( ctx : Context )
+    assert(this_context().category.debug_context)
     install_new_debug_agent(new SampleDebugAgent(), "debug")
 
 [export]
 def main
+    this_context().name := "stackwalk main context"
     fork_debug_agent_context(@@debug_agent)
 	var x = 5
 	breakpoint()

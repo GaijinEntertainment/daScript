@@ -44,6 +44,13 @@ namespace das
     struct Block;
     struct SimVisitor;
 
+    enum class ContextCategory : uint32_t {
+        none =              0
+    ,   debug_context =     (1<<0)
+    ,   thread_clone =      (1<<1)
+    ,   job_clone =         (1<<2)
+    };
+
     struct GlobalVariable {
         char *          name;
         VarInfo *       debugInfo;
@@ -597,6 +604,9 @@ namespace das
         uint32_t                        insideContext = 0;
         bool                            ownStack = false;
         bool                            shutdown = false;
+    public:
+        string                          name;
+        Bitfield                        category = 0;
     public:
         vec4f *         abiThisBlockArg;
         vec4f *         abiArg;

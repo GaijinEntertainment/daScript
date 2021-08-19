@@ -702,6 +702,7 @@ namespace das
         debugInfo = ctx.debugInfo;
         thisProgram = ctx.thisProgram;
         thisHelper = ctx.thisHelper;
+        name = "clone of " + ctx.name;
         ownStack = (ctx.stack.size() != 0);
         if ( persistent ) {
             heap = make_smart<PersistentHeapAllocator>();
@@ -959,20 +960,20 @@ namespace das
         });
     }
 
-    SimFunction * Context::findFunction ( const char * name ) const {
+    SimFunction * Context::findFunction ( const char * fnname ) const {
         for ( int fni = 0; fni != totalFunctions; ++fni ) {
-            if ( strcmp(functions[fni].name, name)==0 ) {
+            if ( strcmp(functions[fni].name, fnname)==0 ) {
                 return functions + fni;
             }
         }
         return nullptr;
     }
 
-    SimFunction * Context::findFunction ( const char * name, bool & isUnique ) const {
+    SimFunction * Context::findFunction ( const char * fnname, bool & isUnique ) const {
         int candidates = 0;
         SimFunction * found = nullptr;
         for ( int fni = 0; fni != totalFunctions; ++fni ) {
-            if ( strcmp(functions[fni].name, name)==0 ) {
+            if ( strcmp(functions[fni].name, fnname)==0 ) {
                 found = functions + fni;
                 candidates++;
             }
@@ -981,9 +982,9 @@ namespace das
         return found;
     }
 
-    int Context::findVariable ( const char * name ) const {
+    int Context::findVariable ( const char * fnname ) const {
         for ( int vni = 0; vni != totalVariables; ++vni ) {
-            if ( strcmp(globalVariables[vni].name, name)==0 ) {
+            if ( strcmp(globalVariables[vni].name, fnname)==0 ) {
                 return vni;
             }
         }
@@ -1148,6 +1149,7 @@ namespace das
         bool realPersistent = context->persistent;
         context->persistent = true;
         forkContext.reset(get_clone_context(context));
+        forkContext->category.value |= uint32_t(ContextCategory::debug_context);
         context->persistent = realPersistent;
         g_isInDebugAgentCreation = false;
         vec4f args[1];
