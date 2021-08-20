@@ -229,8 +229,7 @@ class DAgent: DapiDebugAgent
 
             if ctxData.stepRequestedStack > 0
                 self->nextStep(ctx, ctxData, at)
-                server->log("deep: wait step out {ctxData.stepRequestedStack} vs currect {length(ctxData.stack)}")
-                if length(ctxData.stack) != ctxData.stepRequestedStack
+                if length(ctxData.stack) > ctxData.stepRequestedStack
                     return
                 ctxData.stepRequestedStack = 0
                 self->sendStopped(ctx, ctxData, at, "step", -1ul)
@@ -240,11 +239,9 @@ class DAgent: DapiDebugAgent
 
             let file = string(at.fileInfo.name)
             var prevBreak = -1ul
-            var inBreak = true
+            var inBreak = key_exists(breakpoints, file)
             while inBreak
                 inBreak = false
-                if !key_exists(breakpoints, file)
-                    break
                 let brs = breakpoints |> find(file)
                 // server->log("search break `{file}` {breakpoints[file]} in {at.fileInfo.name}\n")
                 for brIdx in iter_range(*brs)
@@ -703,7 +700,7 @@ def private start_debug_agent(ctx: Context)
 
 
 [export]
-def start_agent(force:bool = false): bool
+def private start_agent(force:bool = false): bool
     if force || !has_debug_agent_context("debug")
         fork_debug_agent_context(@@start_debug_agent)
         print("install debug agent\n")
