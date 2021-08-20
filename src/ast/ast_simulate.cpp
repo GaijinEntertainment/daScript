@@ -321,17 +321,6 @@ namespace das
     }
 
     SimNode * Function::makeSimNode ( Context & context, const vector<ExpressionPtr> & ) {
-#if DAS_DEBUGGER
-        if ( context.thisProgram->getDebugger() ) {
-            if ( copyOnReturn || moveOnReturn ) {
-                return context.code->makeNodeUnrollAny<SimNodeDebug_CallAndCopyOrMove>(int(arguments.size()), at);
-            } else if ( fastCall ) {
-                return context.code->makeNodeUnrollAny<SimNodeDebug_FastCall>(int(arguments.size()), at);
-            } else {
-                return context.code->makeNodeUnrollAny<SimNodeDebug_Call>(int(arguments.size()), at);
-            }
-        } else
-#endif
         {
             if ( copyOnReturn || moveOnReturn ) {
                 return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
@@ -363,7 +352,20 @@ namespace das
                 return block->list.back()->simulate(context);
             }
         } else {
-            return body->simulate(context);
+            if ( context.thisProgram->getDebugger() ) {
+                auto sbody = body->simulate(context);
+                if ( !sbody->rtti_isBlock() ) {
+                    auto block = context.code->makeNode<SimNodeDebug_BlockNF>(sbody->debugInfo);
+                    block->total = 1;
+                    block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*1);
+                    block->list[0] = sbody;
+                    return block;
+                } else {
+                    return sbody;
+                }
+            } else {
+                return body->simulate(context);
+            }
         }
     }
 
@@ -1118,31 +1120,6 @@ namespace das
     SimNode * ExprInvoke::simulate (Context & context) const {
         auto blockT = arguments[0]->type;
         SimNode_CallBase * pInvoke;
-#if DAS_DEBUGGER
-        if ( context.thisProgram->getDebugger() ) {
-            if ( isCopyOrMove() ) {
-                auto getSp = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
-                if ( blockT->baseType==Type::tBlock ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_InvokeAndCopyOrMove>(
-                                                        int(arguments.size()), at, getSp);
-                } else if ( blockT->baseType==Type::tFunction ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_InvokeAndCopyOrMoveFn>(
-                                                        int(arguments.size()), at, getSp);
-                } else {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_InvokeAndCopyOrMoveLambda>(
-                                                        int(arguments.size()), at, getSp);
-                }
-            } else {
-                if ( blockT->baseType==Type::tBlock ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_Invoke>(int(arguments.size()),at);
-                } else if ( blockT->baseType==Type::tFunction ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_InvokeFn>(int(arguments.size()),at);
-                } else {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNodeDebug_InvokeLambda>(int(arguments.size()),at);
-                }
-            }
-        } else
-#endif
         {
             if ( isCopyOrMove() ) {
                 auto getSp = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
