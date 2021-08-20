@@ -9,12 +9,6 @@ require strings
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Initialize
-struct InitializeRequest
-    arguments: InitializeRequestArguments
-
-def InitializeRequest(data: JsonValue?)
-    return [[InitializeRequest arguments=InitializeRequestArguments(joj(data, "arguments")) ]]
-
 struct InitializeRequestArguments {}
 
 def InitializeRequestArguments(data: JsonValue?)
@@ -22,12 +16,6 @@ def InitializeRequestArguments(data: JsonValue?)
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Disconnect
-struct DisconnectRequest
-    arguments: DisconnectArguments
-
-def DisconnectRequest(data: JsonValue?)
-    return [[DisconnectRequest arguments=DisconnectArguments(joj(data, "arguments")) ]]
-
 struct DisconnectArguments
     restart: bool
     terminateDebuggee: bool
@@ -52,12 +40,6 @@ struct Capabilities
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
-struct SetBreakpointsRequest
-    arguments: SetBreakpointsArguments
-
-def SetBreakpointsRequest(data: JsonValue?)
-    return <- [[SetBreakpointsRequest arguments<-SetBreakpointsArguments(joj(data, "arguments")) ]]
-
 struct SetBreakpointsArguments
     source: Source
     breakpoints: array<SourceBreakpoint>
@@ -116,12 +98,6 @@ struct Thread
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_StackTrace
-struct StackTraceRequest
-    arguments: StackTraceArguments
-
-def StackTraceRequest(data: JsonValue?)
-    return <- [[StackTraceRequest arguments<-StackTraceArguments(joj(data, "arguments")) ]]
-
 struct StackTraceArguments
     threadId: double
     startFrame: double
@@ -143,12 +119,6 @@ struct StackFrame
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Scopes
-struct ScopesRequest
-    arguments: ScopesArguments
-
-def ScopesRequest(data: JsonValue?)
-    return <- [[ScopesRequest arguments<-ScopesArguments(joj(data, "arguments")) ]]
-
 struct ScopesArguments
     frameId: double
 
@@ -166,12 +136,6 @@ struct Scope
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Variables
-struct VariablesRequest
-    arguments: VariablesArguments
-
-def VariablesRequest(data: JsonValue?)
-    return <- [[VariablesRequest arguments<-VariablesArguments(joj(data, "arguments")) ]]
-
 struct VariablesArguments
     variablesReference: double
 
@@ -195,12 +159,6 @@ struct OutputEventBody
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Continue
-struct ContinueRequest
-    arguments: ContinueArguments
-
-def ContinueRequest(data: JsonValue?)
-    return <- [[ContinueRequest arguments=ContinueArguments(joj(data, "arguments")) ]]
-
 struct ContinueArguments
     threadId: double
 
@@ -209,12 +167,6 @@ def ContinueArguments(data: JsonValue?)
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Pause
-struct PauseRequest
-    arguments: PauseArguments
-
-def PauseRequest(data: JsonValue?)
-    return <- [[PauseRequest arguments=PauseArguments(joj(data, "arguments")) ]]
-
 struct PauseArguments
     threadId: double
 

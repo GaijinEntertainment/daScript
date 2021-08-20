@@ -403,48 +403,49 @@ class DAServer: Server
                 let typ = msg |> jos("type", "n/a")
                 if typ == "request"
                     let command = msg |> jos("command", "n/a")
+                    let arguments = msg |> joj("arguments")
                     if command == "initialize"
-                        self->reqInitialize(seq, command, msg)
+                        self->reqInitialize(seq, command, arguments)
                         return
                     elif command == "configurationDone"
-                        self->reqConfigurationDone(seq, command, msg)
+                        self->reqConfigurationDone(seq, command, arguments)
                         return
                     elif command == "disconnect"
-                        self->reqDisconnect(seq, command, msg)
+                        self->reqDisconnect(seq, command, arguments)
                         return
                     elif command == "terminate"
-                        self->reqTerminate(seq, command, msg)
+                        self->reqTerminate(seq, command, arguments)
                         return
                     elif command == "launch"
-                        self->reqLaunch(seq, command, msg)
+                        self->reqLaunch(seq, command, arguments)
                         return
                     elif command == "setBreakpoints"
-                        self->reqSetBreakpoints(seq, command, msg)
+                        self->reqSetBreakpoints(seq, command, arguments)
                         return
                     elif command == "threads"
-                        self->reqThreads(seq, command, msg)
+                        self->reqThreads(seq, command, arguments)
                         return
                     elif command == "stackTrace"
-                        self->reqStackTrace(seq, command, msg)
+                        self->reqStackTrace(seq, command, arguments)
                         return
                     elif command == "scopes"
-                        self->reqScopes(seq, command, msg)
+                        self->reqScopes(seq, command, arguments)
                         return
                     elif command == "variables"
-                        self->reqVariables(seq, command, msg)
+                        self->reqVariables(seq, command, arguments)
                         return
                     elif command == "continue"
-                        self->reqContinue(seq, command, msg)
+                        self->reqContinue(seq, command, arguments)
                         return
                     elif command == "pause"
-                        self->reqPause(seq, command, msg)
+                        self->reqPause(seq, command, arguments)
                         return
 
             self->log("[Error] unknown message\n{write_json(msg)}\n")
 
-    def reqInitialize(seq: double; command: string; data: JsonValue?)
-        var ini = InitializeRequest(data)
-        defer_delete(ini)
+    def reqInitialize(seq: double; command: string; arguments: JsonValue?)
+        // var ini <- InitializeRequestArguments(arguments)
+        // defer_delete(ini)
         var res = [[Capabilities
                                 supportsConfigurationDoneRequest=true,
                                 supportsRestartRequest=false,
@@ -478,22 +479,22 @@ class DAServer: Server
         fio::exit(0)
 
     def reqSetBreakpoints(seq: double; command: string; data: JsonValue?)
-        var ini <- SetBreakpointsRequest(data)
+        var ini <- SetBreakpointsArguments(data)
         defer_delete(ini)
         var res: SetBreakpointsResponse
         defer_delete(res)
-        let path = ini.arguments.source.path
+        let path = ini.source.path
         if key_exists(agent.breakpoints, path)
             delete agent.breakpoints[path]
         agent.breakpoints |> erase(path)
-        if length(ini.arguments.breakpoints) >= 0
+        if length(ini.breakpoints) >= 0
             var breaks <- [[array<DABreakpoint>]]
-            for b in ini.arguments.breakpoints
+            for b in ini.breakpoints
                 breaks |> emplace([[DABreakpoint line=uint(b.line), id=agent.breakpointId ]])
                 res.breakpoints |> emplace([[Breakpoint
                     verified=true,
                     id=double(agent.breakpointId),
-                    source=ini.arguments.source,
+                    source=ini.source,
                     line=b.line,
                     message="breakpoint #{int(agent.breakpointId)} {path}:{int(b.line)}"
                 ]])
@@ -510,12 +511,12 @@ class DAServer: Server
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqStackTrace(seq: double; command: string; data: JsonValue?)
-        var ini <- StackTraceRequest(data)
+        var ini <- StackTraceArguments(data)
         defer_delete(ini)
         var res: StackTraceResponseBody
         defer_delete(res)
-        agent->getContextData(uint64(ini.arguments.threadId)) <| $(var ctxData: DAContext)
-            for idx, line in range(ini.arguments.levels), ctxData.stack
+        agent->getContextData(uint64(ini.threadId)) <| $(var ctxData: DAContext)
+            for idx, line in range(ini.levels), ctxData.stack
                 res.stackFrames |> emplace([[StackFrame
                     id=double(ctxData.id * 100ul + uint64(idx)),
                     name=line.name,
@@ -527,37 +528,37 @@ class DAServer: Server
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqScopes(seq: double; command: string; data: JsonValue?)
-        var ini <- ScopesRequest(data)
+        var ini <- ScopesArguments(data)
         defer_delete(ini)
         var res: ScopesResponseBody
         defer_delete(res)
-        let ctxId = uint64(ini.arguments.frameId / 100lf)
+        let ctxId = uint64(ini.frameId / 100lf)
         agent->getContextData(ctxId) <| $(var ctxData: DAContext)
-            let frameId = int(ini.arguments.frameId % 100lf)
+            let frameId = int(ini.frameId % 100lf)
             if frameId >= 0 && frameId < length(ctxData.stack)
                 let line & = ctxData.stack[frameId]
                 if length(line.variables) > 0
                     res.scopes |> emplace([[Scope
                         name="Locals",
-                        variablesReference=double(uint64(ini.arguments.frameId) * 10ul + LOCAL_VARS)
+                        variablesReference=double(uint64(ini.frameId) * 10ul + LOCAL_VARS)
                     ]])
                 if length(line.arguments) > 0
                     res.scopes |> emplace([[Scope
                         name="Arguments",
-                        variablesReference=double(uint64(ini.arguments.frameId) * 10ul + ARGUMENT_VARS)
+                        variablesReference=double(uint64(ini.frameId) * 10ul + ARGUMENT_VARS)
                     ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqVariables(seq: double; command: string; data: JsonValue?)
-        var ini <- VariablesRequest(data)
+        var ini <- VariablesArguments(data)
         defer_delete(ini)
         var res: VariablesResponseBody
         defer_delete(res)
-        let ctxId = uint64(ini.arguments.variablesReference / 1000lf)
+        let ctxId = uint64(ini.variablesReference / 1000lf)
         agent->getContextData(ctxId) <| $(var ctxData: DAContext)
-            let frameId = int((ini.arguments.variablesReference / 10lf) % 100lf)
+            let frameId = int((ini.variablesReference / 10lf) % 100lf)
             if frameId >= 0 && frameId < length(ctxData.stack)
-                let kind = ini.arguments.variablesReference % 10lf
+                let kind = ini.variablesReference % 10lf
                 let line & = ctxData.stack[frameId]
                 let vars & = kind == double(LOCAL_VARS) ? line.variables : line.arguments
                 for v in vars
@@ -569,17 +570,17 @@ class DAServer: Server
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqContinue(seq: double; command: string; data: JsonValue?)
-        var ini <- ContinueRequest(data)
+        var ini <- ContinueArguments(data)
         defer_delete(ini)
-        agent->getContextData(uint64(ini.arguments.threadId)) <| $(var ctx: DAContext)
+        agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             ctx.continueRequested = true
             ctx.pauseRequested = false
         self->sendSuccessResponse(seq, command, null)
 
     def reqPause(seq: double; command: string; data: JsonValue?)
-        var ini <- PauseRequest(data)
+        var ini <- PauseArguments(data)
         defer_delete(ini)
-        agent->getContextData(uint64(ini.arguments.threadId)) <| $(var ctx: DAContext)
+        agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             ctx.pauseRequested = true
         self->sendSuccessResponse(seq, command, null)
 
