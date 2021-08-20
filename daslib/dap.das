@@ -182,6 +182,22 @@ def StepInArguments(data: JsonValue?)
     return <- [[StepInArguments threadId=jon(data, "threadId") ]]
 
 
+// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Next
+struct NextArguments
+    threadId: double
+
+def NextArguments(data: JsonValue?)
+    return <- [[NextArguments threadId=jon(data, "threadId") ]]
+
+
+// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_StepOut
+struct StepOutArguments
+    threadId: double
+
+def StepOutArguments(data: JsonValue?)
+    return <- [[StepOutArguments threadId=jon(data, "threadId") ]]
+
+
 
 
 def joj(val : JsonValue?; id : string) : JsonValue?
