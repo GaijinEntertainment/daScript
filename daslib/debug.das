@@ -6,6 +6,7 @@ options persistent_heap = true
 options persistent_string_heap = true
 module debug shared
 
+require math
 require strings
 require rtti
 require debugapi
@@ -112,6 +113,7 @@ struct DAContext
     continueRequested: bool = false
     pauseRequested: bool = false
     stepInRequested: bool = false
+    stepRequestedStack: int = 0 // stack depth
 
 
 def to_string(ctx: DAContext)
@@ -186,7 +188,7 @@ class DAgent: DapiDebugAgent
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             self->sendStopped(ctx, ctxData, at, "pause", -1ul)
             ctxData.continueRequested = false
-            while !ctxData.continueRequested && !ctxData.stepInRequested
+            while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debug_agent()
                 sleep(1u)
             ctxData.continueRequested = false
@@ -213,17 +215,28 @@ class DAgent: DapiDebugAgent
                     tick_debug_agent()
                     sleep(1u)
 
-            if  ctxData.stepInRequested
+            if ctxData.stepInRequested
                 ctxData.stepInRequested = false
                 self->sendStopped(ctx, ctxData, at, "step", -1ul)
                 ctxData.continueRequested = false
-                while !ctxData.continueRequested && !ctxData.stepInRequested
+                while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debug_agent()
                     sleep(1u)
                 ctxData.continueRequested = false
 
             if ctxData.stepInRequested
                 return
+
+            if ctxData.stepRequestedStack > 0
+                self->nextStep(ctx, ctxData, at)
+                server->log("deep: wait step out {ctxData.stepRequestedStack} vs currect {length(ctxData.stack)}")
+                if length(ctxData.stack) != ctxData.stepRequestedStack
+                    return
+                ctxData.stepRequestedStack = 0
+                self->sendStopped(ctx, ctxData, at, "step", -1ul)
+                while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
+                    tick_debug_agent()
+                    sleep(1u)
 
             let file = string(at.fileInfo.name)
             var prevBreak = -1ul
@@ -240,7 +253,7 @@ class DAgent: DapiDebugAgent
                         if ctxData.continueRequested && prevBreak == br.id
                             ctxData.continueRequested = false
                             continue
-                        if ctxData.stepInRequested
+                        if ctxData.stepInRequested || ctxData.stepRequestedStack > 0
                             continue
 
                         inBreak = true
@@ -253,9 +266,7 @@ class DAgent: DapiDebugAgent
                         sleep(1u)
                         break
 
-    def sendStopped(var ctx: Context; var ctxData:DAContext; at:LineInfo; reason: string; brId: uint64)
-        server->log("<< stopped `{reason}` at {at.fileInfo.name}:{int(at.line)}")
-
+    def nextStep(var ctx: Context; var ctxData:DAContext; at:LineInfo)
         delete ctxData.stack
         unsafe
             walker.ctx = addr(ctxData)
@@ -268,6 +279,11 @@ class DAgent: DapiDebugAgent
                 ctxData.stack[j].line = ctxData.stack[q].line
             ctxData.stack[0].path = "{at.fileInfo.name}"
             ctxData.stack[0].line = at.line
+
+    def sendStopped(var ctx: Context; var ctxData:DAContext; at:LineInfo; reason: string; brId: uint64)
+        server->log("<< stopped `{reason}` at {at.fileInfo.name}:{int(at.line)}")
+
+        self->nextStep(ctx, ctxData, at)
         server->sendStopped(ctxData, reason, brId)
 
     def override onTick()
@@ -457,6 +473,12 @@ class DAServer: Server
                     elif command == "stepIn"
                         self->reqStepIn(seq, command, arguments)
                         return
+                    elif command == "next"
+                        self->reqNext(seq, command, arguments)
+                        return
+                    elif command == "stepOut"
+                        self->reqStepOut(seq, command, arguments)
+                        return
 
             self->log("[Error] unknown message\n{write_json(msg)}\n")
 
@@ -591,23 +613,51 @@ class DAServer: Server
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             ctx.continueRequested = true
+            ctx.stepInRequested = false
             ctx.pauseRequested = false
+            ctx.stepRequestedStack = 0
         self->sendSuccessResponse(seq, command, null)
 
     def reqPause(seq: double; command: string; data: JsonValue?)
         var ini <- PauseArguments(data)
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
+            ctx.continueRequested = false
             ctx.pauseRequested = true
+            ctx.stepInRequested = false
+            ctx.stepRequestedStack = 0
         self->sendSuccessResponse(seq, command, null)
 
     def reqStepIn(seq: double; command: string; data: JsonValue?)
         var ini <- StepInArguments(data)
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
-            ctx.stepInRequested = true
+            ctx.continueRequested = false
             ctx.pauseRequested = false
+            ctx.stepInRequested = true
+            ctx.stepRequestedStack = 0
         self->sendSuccessResponse(seq, command, null)
+
+    def reqNext(seq: double; command: string; data: JsonValue?)
+        var ini <- NextArguments(data)
+        defer_delete(ini)
+        agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
+            ctx.continueRequested = false
+            ctx.pauseRequested = false
+            ctx.stepRequestedStack = length(ctx.stack)
+            ctx.stepInRequested = ctx.stepRequestedStack == 0
+        self->sendSuccessResponse(seq, command, null)
+
+    def reqStepOut(seq: double; command: string; data: JsonValue?)
+        var ini <- NextArguments(data)
+        defer_delete(ini)
+        agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
+            ctx.continueRequested = false
+            ctx.pauseRequested = false
+            ctx.stepRequestedStack = max(length(ctx.stack) - 1, 0)
+            ctx.stepInRequested = ctx.stepRequestedStack == 0
+        self->sendSuccessResponse(seq, command, null)
+
 
     def log(msg: string)
         // print("{msg}\n")
