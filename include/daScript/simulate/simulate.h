@@ -218,6 +218,7 @@ namespace das
     typedef smart_ptr<StackWalker> StackWalkerPtr;
 
     void dapiStackWalk ( StackWalkerPtr walker, Context & context, const LineInfo & at );
+    int32_t dapiStackDepth ( Context & context );
     void dumpTrackingLeaks();
 
     typedef shared_ptr<Context> ContextPtr;

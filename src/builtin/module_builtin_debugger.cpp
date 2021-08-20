@@ -587,6 +587,35 @@ namespace debugapi {
         walker->walk((vec4f)data,(TypeInfo*)&info);
     }
 
+    int32_t dapiStackDepth ( Context & context ) {
+    #if DAS_ENABLE_STACK_WALK
+        char * sp = context.stack.ap();
+        int32_t depth = 0;
+        while (  sp < context.stack.top() ) {
+            Prologue * pp = (Prologue *) sp;
+            Block * block = nullptr;
+            FuncInfo * info = nullptr;
+            char * SP = sp;
+            if ( pp->info ) {
+                intptr_t iblock = intptr_t(pp->block);
+                if ( iblock & 1 ) {
+                    block = (Block *) (iblock & ~1);
+                    info = block->info;
+                    SP = context.stack.bottom() + block->stackOffset;
+                } else {
+                    info = pp->info;
+                }
+            }
+            sp += info ? info->stackSize : pp->stackSize;
+            depth ++;
+        }
+        return depth;
+    #else
+        context.throw_error("stack walking disabled");
+        return 0;
+    #endif
+    }
+
     void dapiStackWalk ( StackWalkerPtr walker, Context & context, const LineInfo & at ) {
     #if DAS_ENABLE_STACK_WALK
         char * sp = context.stack.ap();
@@ -774,6 +803,8 @@ namespace debugapi {
                 SideEffects::modifyExternal, "makeStackWalker");
             addExtern<DAS_BIND_FUN(dapiStackWalk)>(*this, lib,  "walk_stack",
                 SideEffects::modifyExternal, "dapiStackWalk");
+            addExtern<DAS_BIND_FUN(dapiStackDepth)>(*this, lib,  "stack_depth",
+                SideEffects::modifyExternal, "dapiStacDepth");
             // global variable
             addInterop<get_global_variable,void *,vec4f,const char *>(*this,lib,"get_context_global_variable",
                 SideEffects::accessExternal,"get_global_variable")->unsafeOperation = true;
