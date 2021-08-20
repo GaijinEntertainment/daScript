@@ -111,6 +111,7 @@ struct DAContext
     stack: array<DAStackFrame>
     continueRequested: bool = false
     pauseRequested: bool = false
+    stepInRequested: bool = false
 
 
 def to_string(ctx: DAContext)
@@ -187,7 +188,7 @@ class DAgent: DapiDebugAgent
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             self->sendStopped(ctx, ctxData, at, "pause", -1ul)
             ctxData.continueRequested = false
-            while !ctxData.continueRequested
+            while !ctxData.continueRequested && !ctxData.stepInRequested
                 tick_debug_agent()
                 sleep(1u)
             ctxData.continueRequested = false
@@ -214,6 +215,18 @@ class DAgent: DapiDebugAgent
                     tick_debug_agent()
                     sleep(1u)
 
+            if  ctxData.stepInRequested
+                ctxData.stepInRequested = false
+                self->sendStopped(ctx, ctxData, at, "step", -1ul)
+                ctxData.continueRequested = false
+                while !ctxData.continueRequested && !ctxData.stepInRequested
+                    tick_debug_agent()
+                    sleep(1u)
+                ctxData.continueRequested = false
+
+            if ctxData.stepInRequested
+                return
+
             let file = string(at.fileInfo.name)
             var prevBreak = -1ul
             var inBreak = true
@@ -228,6 +241,8 @@ class DAgent: DapiDebugAgent
                     if br.line == uint(at.line)
                         if ctxData.continueRequested && prevBreak == br.id
                             ctxData.continueRequested = false
+                            continue
+                        if ctxData.stepInRequested
                             continue
 
                         inBreak = true
@@ -440,6 +455,9 @@ class DAServer: Server
                     elif command == "pause"
                         self->reqPause(seq, command, arguments)
                         return
+                    elif command == "stepIn"
+                        self->reqStepIn(seq, command, arguments)
+                        return
 
             self->log("[Error] unknown message\n{write_json(msg)}\n")
 
@@ -582,6 +600,14 @@ class DAServer: Server
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             ctx.pauseRequested = true
+        self->sendSuccessResponse(seq, command, null)
+
+    def reqStepIn(seq: double; command: string; data: JsonValue?)
+        var ini <- StepInArguments(data)
+        defer_delete(ini)
+        agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
+            ctx.stepInRequested = true
+            ctx.pauseRequested = false
         self->sendSuccessResponse(seq, command, null)
 
     def log(msg: string)

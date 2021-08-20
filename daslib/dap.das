@@ -174,6 +174,14 @@ def PauseArguments(data: JsonValue?)
     return <- [[PauseArguments threadId=jon(data, "threadId") ]]
 
 
+// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Pause
+struct StepInArguments
+    threadId: double
+
+def StepInArguments(data: JsonValue?)
+    return <- [[StepInArguments threadId=jon(data, "threadId") ]]
+
+
 
 
 def joj(val : JsonValue?; id : string) : JsonValue?
