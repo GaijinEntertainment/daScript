@@ -228,8 +228,7 @@ class DAgent: DapiDebugAgent
                 return
 
             if ctxData.stepRequestedStack > 0
-                self->nextStep(ctx, ctxData, at)
-                if length(ctxData.stack) > ctxData.stepRequestedStack
+                if stack_depth(*ctxData.ctx) > ctxData.stepRequestedStack
                     return
                 ctxData.stepRequestedStack = 0
                 self->sendStopped(ctx, ctxData, at, "step", -1ul)
@@ -641,7 +640,7 @@ class DAServer: Server
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             ctx.continueRequested = false
             ctx.pauseRequested = false
-            ctx.stepRequestedStack = length(ctx.stack)
+            ctx.stepRequestedStack = stack_depth(*ctx.ctx)
             ctx.stepInRequested = ctx.stepRequestedStack == 0
         self->sendSuccessResponse(seq, command, null)
 
@@ -651,7 +650,7 @@ class DAServer: Server
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             ctx.continueRequested = false
             ctx.pauseRequested = false
-            ctx.stepRequestedStack = max(length(ctx.stack) - 1, 0)
+            ctx.stepRequestedStack = max(stack_depth(*ctx.ctx) - 1, 0)
             ctx.stepInRequested = ctx.stepRequestedStack == 0
         self->sendSuccessResponse(seq, command, null)
 
@@ -717,6 +716,7 @@ def auto_start_debug()
         if !has_debug_agent_context("debug")
             if start_agent()
                 new_thread <| @
+                    this_context().name := "tick thread"
                     while true
                         tick_debug_agent()
                         sleep(1u)
