@@ -25,6 +25,15 @@ require daslib/dap
 let
     LOCAL_VARS = 1ul
     ARGUMENT_VARS = 2ul
+    GLOBAL_VARS = 3ul
+
+    print_flags_debug = (
+            print_flags escapeString
+        |   print_flags namesAndDimensions
+        // |   print_flags humanReadable
+        // |   print_flags typeQualifiers
+        // |   print_flags refAddresses
+    )
 
 def ctx_at(var ctx: Context): DAContextAt
     unsafe
@@ -87,13 +96,13 @@ class DAStackWalker: DapiStackWalker
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
         let stackLen = length(ctx.stack)
         if stackLen > 0
-            let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, type_info(vinfo), print_flags humanReadable) : "<optimized>"
+            let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, type_info(vinfo), print_flags_debug) : "<optimized>"
             ctx.stack[stackLen-1].variables |> emplace([[DAVariable name="{vinfo.name}", value=value]])
 
     def override onArgument (inf: FuncInfo; index: int; vinfo: VarInfo; arg: float4)
         let stackLen = length(ctx.stack)
         if  stackLen > 0
-            let value = sprint_data(arg, type_info(vinfo), print_flags humanReadable)
+            let value = sprint_data(arg, type_info(vinfo), print_flags_debug)
             ctx.stack[stackLen-1].arguments |> emplace([[DAVariable name="{vinfo.name}", value=value]])
 
 
