@@ -20,13 +20,12 @@ require daslib/jobque_boost
 require daslib/strings_boost
 require daslib/dap
 
-require uriparser
 
 let
-    LOCAL_VARS = 1
-    ARGUMENT_VARS = 2
+    LOCAL_VARS = 1ul
+    ARGUMENT_VARS = 2ul
 
-def ctx_id(var ctx: Context): uint64
+def ctx_at(var ctx: Context): DAContextAt
     unsafe
         return intptr(addr(ctx))
 
@@ -56,7 +55,7 @@ class DAStackWalker: DapiStackWalker
     data_walker_adapter: smart_ptr<DataWalker>
     // data_walker: DAWalker?
 
-    stack: array<DAStackFrame>
+    [[do_not_delete]] ctx: DAContext?
 
     def DAStackWalker()
         pass
@@ -71,28 +70,30 @@ class DAStackWalker: DapiStackWalker
 
     def override onCallAOT(pp:Prologue; fileName:string#): void
         // print("AOT {fileName}\n")
-        stack |> emplace([[DAStackFrame() name="aot {pp.info.name}", path = "{fileName}" ]])
+        ctx.stack |> emplace([[DAStackFrame() name="aot {pp.info.name}", path = "{fileName}" ]])
         pass
 
     def override onCallAt(pp:Prologue; info:FuncInfo; at:LineInfo): void
         // print("def {info.name} at {at}\n")
-        stack |> emplace([[DAStackFrame name="def {info.name}", path="{at.fileInfo.name}", line=at.line ]])
+        ctx.stack |> emplace([[DAStackFrame name="def {info.name}", path="{at.fileInfo.name}", line=at.line ]])
         pass
 
     def override onCall(pp:Prologue; info:FuncInfo): void
         // print("def {info.name}\n")
-        stack |> emplace([[DAStackFrame() name="def {info.name}" ]])
+        ctx.stack |> emplace([[DAStackFrame() name="def {info.name}" ]])
         pass
 
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
-        if length(stack) > 0
+        let stackLen = length(ctx.stack)
+        if stackLen > 0
             let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, type_info(vinfo), print_flags humanReadable) : "<optimized>"
-            stack[length(stack)-1].variables |> emplace([[DAVariable name="{vinfo.name}", value=value]])
+            ctx.stack[stackLen-1].variables |> emplace([[DAVariable name="{vinfo.name}", value=value]])
 
     def override onArgument (inf: FuncInfo; index: int; vinfo: VarInfo; arg: float4)
-        if length(stack) > 0
+        let stackLen = length(ctx.stack)
+        if  stackLen > 0
             let value = sprint_data(arg, type_info(vinfo), print_flags humanReadable)
-            stack[length(stack)-1].arguments |> emplace([[DAVariable name="{vinfo.name}", value=value]])
+            ctx.stack[stackLen-1].arguments |> emplace([[DAVariable name="{vinfo.name}", value=value]])
 
 
 struct DABreakpoint
@@ -101,10 +102,33 @@ struct DABreakpoint
 
 typedef
     DABreakpoints = table<string; array<DABreakpoint>>
-
+    DAContextAt = uint64
 
 struct DAContext
+    id: uint64
+    at: DAContextAt
     ctx: Context?
+    stack: array<DAStackFrame>
+    continueRequested: bool = false
+    pauseRequested: bool = false
+
+
+def to_string(ctx: DAContext)
+    return build_string() <| $(str)
+        let stoppable = (uint(ctx.ctx.category) & (1u << 31u)) != 0u
+        if stoppable
+            str |> write("*")
+        str |> write(ctx.at)
+        if length(ctx.ctx.name) > 0
+            str |> write(" \"")
+            str |> write(ctx.ctx.name)
+            str |> write("\"")
+        if int(ctx.ctx.category) > 0
+            str |> write(" ")
+            str |> write(ctx.ctx.category)
+        str |> write(" (")
+        str |> write(int64(ctx.id))
+        str |> write(")")
 
 
 class DAgent: DapiDebugAgent
@@ -116,10 +140,8 @@ class DAgent: DapiDebugAgent
     breakpoints: DABreakpoints
     breakpointId: uint64 = 1ul
 
-    contexts: table<uint64; DAContext>
-
-    continueRequested: bool = false
-    pauseRequested: bool = false
+    contexts: array<DAContext>
+    contextId: uint64 = 1ul
 
     def DAgent()
         walker = new DAStackWalker()
@@ -157,74 +179,84 @@ class DAgent: DapiDebugAgent
             delete server
 
     def override onBreakpoint(var ctx:Context; at:LineInfo): void
-        server->log("{ctx} breakpoint at line {int(at.line)}\n")
+        let path = "{at.fileInfo.name}"
+        server->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
         set_single_step(ctx,true)
+
+        self->addContext(ctx)
+        self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
+            self->sendStopped(ctx, ctxData, at, "pause", -1ul)
+            ctxData.continueRequested = false
+            while !ctxData.continueRequested
+                tick_debug_agent()
+                sleep(1u)
+            ctxData.continueRequested = false
 
     def override onSingleStep(var ctx:Context; at:LineInfo): void
         // unsafe
-        //     self->log("{double(ctx_id(ctx))} step at {at.fileInfo.name}:{int(at.line)}\n")
+        //     server->log("{double(ctx_at(ctx))} step at {at.fileInfo.name}:{int(at.line)}\n")
 
-        if server != null && !server.configurationDone
-            // if string(at.fileInfo.name) |> find("debug_test.das") >= 0
+        if (uint(ctx.category) & (1u << 31u)) != 0u
+            self->addContext(ctx)
+
+        if server != null && (!server.configurationDone || !server.threadsDone)
             if (uint(ctx.category) & (1u << 31u)) != 0u
-                // self->log("!!! wait debug_test.das in context {ctx} {uint(ctx.category)}")
-                while !server.configurationDone
-                    // self->log("wait server")
+                while !server.configurationDone || !server.threadsDone
+                    tick_debug_agent()
+                    sleep(1u)
+            else
+                server->log("non debug context in single step {ctx.name}")
+
+        self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
+            if ctxData.pauseRequested
+                self->sendStopped(ctx, ctxData, at, "pause", -1ul)
+                while ctxData.pauseRequested
                     tick_debug_agent()
                     sleep(1u)
 
-        if pauseRequested && !ctx.category.thread_clone
-            self->sendStopped(ctx, at, "pause", -1ul)
-            while pauseRequested
-                tick_debug_agent()
-                sleep(1u)
-
-        let file = string(at.fileInfo.name)
-        var prevBreak = -1ul
-        var inBreak = true
-        while inBreak
-            inBreak = false
-            if !key_exists(breakpoints, file)
-                break
-            let brs = breakpoints |> find(file)
-            // self->log("search break {i} `{file}` {breakpoints[file]} in {at.fileInfo.name}\n")
-            for brIdx in iter_range(*brs)
-                let br & = (*brs)[brIdx]
-                if br.line == uint(at.line)
-                    if continueRequested && prevBreak == br.id
-                        continueRequested = false
-                        continue
-
-                    inBreak = true
-
-                    if prevBreak != br.id
-                        self->sendStopped(ctx, at, "breakpoint", br.id)
-
-                    prevBreak = br.id
-                    tick_debug_agent()
-                    sleep(1u)
+            let file = string(at.fileInfo.name)
+            var prevBreak = -1ul
+            var inBreak = true
+            while inBreak
+                inBreak = false
+                if !key_exists(breakpoints, file)
                     break
+                let brs = breakpoints |> find(file)
+                // server->log("search break `{file}` {breakpoints[file]} in {at.fileInfo.name}\n")
+                for brIdx in iter_range(*brs)
+                    let br & = (*brs)[brIdx]
+                    if br.line == uint(at.line)
+                        if ctxData.continueRequested && prevBreak == br.id
+                            ctxData.continueRequested = false
+                            continue
 
-        // walker.stack |> emplace([[DAStackFrame name="{at.fileInfo.name}", path="{at.fileInfo.name}", line=at.line ]], 0)
+                        inBreak = true
 
-    def sendStopped(var ctx:Context; at:LineInfo; reason: string; brId: uint64)
+                        if prevBreak != br.id
+                            self->sendStopped(ctx, ctxData, at, "breakpoint", br.id)
+
+                        prevBreak = br.id
+                        tick_debug_agent()
+                        sleep(1u)
+                        break
+
+    def sendStopped(var ctx: Context; var ctxData:DAContext; at:LineInfo; reason: string; brId: uint64)
         server->log("<< stopped `{reason}` at {at.fileInfo.name}:{int(at.line)}")
-        self->addContext(ctx)
 
-        delete walker.stack
-        walk_stack(walker_adapter, ctx, at)
-        if length(walker.stack) > 0
-            for i in range(1, length(walker.stack))
-                let j = length(walker.stack) - 1
-                let q = j - 1
-                walker.stack[j].path = walker.stack[q].path
-                walker.stack[j].line = walker.stack[q].line
-            walker.stack[0].path = "{at.fileInfo.name}"
-            walker.stack[0].line = at.line
-        let file = string(at.fileInfo.name)
+        delete ctxData.stack
         unsafe
-            server->sendStopped(ctx, file, reason, brId)
-            
+            walker.ctx = addr(ctxData)
+        walk_stack(walker_adapter, ctx, at)
+        if length(ctxData.stack) > 0
+            for i in range(1, length(ctxData.stack))
+                let j = length(ctxData.stack) - 1
+                let q = j - 1
+                ctxData.stack[j].path = ctxData.stack[q].path
+                ctxData.stack[j].line = ctxData.stack[q].line
+            ctxData.stack[0].path = "{at.fileInfo.name}"
+            ctxData.stack[0].line = at.line
+        server->sendStopped(ctxData, reason, brId)
+
     def override onTick()
         if server != null
             if !server.done
@@ -243,16 +275,53 @@ class DAgent: DapiDebugAgent
     def override onCreateContext(var ctx: Context): void
         self->addContext(ctx)
 
-    def addContext(var ctx: Context): void
-        unsafe
-            var ctxAddr = addr(ctx)
-            contexts[ctx_id(ctx)] <- [[DAContext ctx=ctxAddr]]
-
     def override onDestroyContext(var ctx: Context): void
-        unsafe
-            var ctxAddr = addr(ctx)
-            contexts |> erase(ctx_id(ctx))
+        self->removeContext(ctx)
 
+    def getContextDataFor(var ctx: Context; cb: block<(var ctx: DAContext): void>): bool
+        let at = ctx_at(ctx)
+        for ctx in contexts
+            if ctx.at == at
+                cb |> invoke(ctx)
+                return true
+        return false
+
+    def getContextData(id: DAContextAt; cb: block<(var ctx: DAContext): void>): bool
+        for ctx in contexts
+            if ctx.id == id
+                cb |> invoke(ctx)
+                return true
+        return false
+
+    def getContextIdx(var ctx: Context): int
+        var ctxAt = ctx_at(ctx)
+        for idx in iter_range(contexts)
+            if contexts[idx].at == ctxAt
+                return idx
+        return -1
+
+    def addContext(var ctx: Context): bool
+        let idx = self->getContextIdx(ctx)
+        if idx >= 0
+            return false
+        unsafe
+            contexts |> emplace([[DAContext at=ctx_at(ctx), id=contextId, ctx=addr(ctx)]], 0)
+        contextId += 1ul
+        contexts |> sort <| $(a, b: DAContext)
+            let aid = uint(a.ctx.category) & ~(1u << 31u)
+            let bid = uint(b.ctx.category) & ~(1u << 31u)
+            return aid < bid
+        // TODO: send `threads` event
+        return true
+
+    def removeContext(var ctx: Context): void
+        let idx = self->getContextIdx(ctx)
+        if idx >= 0
+            self->removeContextIdx(idx)
+
+    def removeContextIdx(idx: int)
+        delete contexts[idx]
+        contexts |> erase(idx)
 
 class DAServer: Server
     [[do_not_delete]] agent: DAgent?
@@ -265,6 +334,7 @@ class DAServer: Server
 
     initialized: int = -1 // initialized event: ticks delay
     configurationDone: bool = false
+    threadsDone: bool = false
 
     def DAServer
         Server`Server(cast<Server> self)
@@ -320,7 +390,6 @@ class DAServer: Server
             if length(current_string) < toRead
                 continue
             toRead = 0
-            // print(string(current_string))
             var error : string
             var msg = json::read_json(current_string, error)
             defer <| $
@@ -332,10 +401,8 @@ class DAServer: Server
             if msg.value is _object
                 let seq = msg |> jon("seq", 0lf)
                 let typ = msg |> jos("type", "n/a")
-                self->log("type {typ}\n")
                 if typ == "request"
                     let command = msg |> jos("command", "n/a")
-                    self->log("command {command}\n")
                     if command == "initialize"
                         self->reqInitialize(seq, command, msg)
                         return
@@ -437,9 +504,9 @@ class DAServer: Server
     def reqThreads(seq: double; command: string; data: JsonValue?)
         var res: ThreadsResponseBody
         defer_delete(res)
-        for ctxId, ctx in keys(agent.contexts), values(agent.contexts)
-            let name = "{ctxId} `{ctx.ctx.name}` {ctx.ctx.category} ({int64(ctxId)})"
-            res.threads |> emplace([[Thread id=double(ctxId), name=name ]])
+        threadsDone = true
+        for ctx in agent.contexts
+            res.threads |> emplace([[Thread id=double(ctx.id), name=ctx |> to_string() ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqStackTrace(seq: double; command: string; data: JsonValue?)
@@ -447,15 +514,16 @@ class DAServer: Server
         defer_delete(ini)
         var res: StackTraceResponseBody
         defer_delete(res)
-        for idx, line in range(ini.arguments.levels), agent.walker.stack
-            res.stackFrames |> emplace([[StackFrame
-                id=double(idx),
-                name=line.name,
-                line=double(line.line),
-                column=1lf,
-                source=[[Source name=line.path, path=line.path]]
-            ]])
-        res.totalFrames = double(length(agent.walker.stack))
+        agent->getContextData(uint64(ini.arguments.threadId)) <| $(var ctxData: DAContext)
+            for idx, line in range(ini.arguments.levels), ctxData.stack
+                res.stackFrames |> emplace([[StackFrame
+                    id=double(ctxData.id * 100ul + uint64(idx)),
+                    name=line.name,
+                    line=double(line.line),
+                    column=1lf,
+                    source=[[Source name=line.path, path=line.path]]
+                ]])
+            res.totalFrames = double(length(ctxData.stack))
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqScopes(seq: double; command: string; data: JsonValue?)
@@ -463,19 +531,21 @@ class DAServer: Server
         defer_delete(ini)
         var res: ScopesResponseBody
         defer_delete(res)
-        let frameId = int(ini.arguments.frameId)
-        if frameId >= 0 && frameId < length(agent.walker.stack)
-            let line & = agent.walker.stack[frameId]
-            if length(line.variables) > 0
-                res.scopes |> emplace([[Scope
-                    name="Locals",
-                    variablesReference=double(frameId * 10 + LOCAL_VARS)
-                ]])
-            if length(line.arguments) > 0
-                res.scopes |> emplace([[Scope
-                    name="Arguments",
-                    variablesReference=double(frameId * 10 + ARGUMENT_VARS)
-                ]])
+        let ctxId = uint64(ini.arguments.frameId / 100lf)
+        agent->getContextData(ctxId) <| $(var ctxData: DAContext)
+            let frameId = int(ini.arguments.frameId % 100lf)
+            if frameId >= 0 && frameId < length(ctxData.stack)
+                let line & = ctxData.stack[frameId]
+                if length(line.variables) > 0
+                    res.scopes |> emplace([[Scope
+                        name="Locals",
+                        variablesReference=double(uint64(ini.arguments.frameId) * 10ul + LOCAL_VARS)
+                    ]])
+                if length(line.arguments) > 0
+                    res.scopes |> emplace([[Scope
+                        name="Arguments",
+                        variablesReference=double(uint64(ini.arguments.frameId) * 10ul + ARGUMENT_VARS)
+                    ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqVariables(seq: double; command: string; data: JsonValue?)
@@ -483,63 +553,70 @@ class DAServer: Server
         defer_delete(ini)
         var res: VariablesResponseBody
         defer_delete(res)
-        let frameId = int(ini.arguments.variablesReference / 10lf)
-        let kind = ini.arguments.variablesReference % 10lf
-        if frameId >= 0 && frameId < length(agent.walker.stack)
-            let line & = agent.walker.stack[frameId]
-            let vars & = kind == double(LOCAL_VARS) ? line.variables : line.arguments
-            for v in vars
-                res.variables |> emplace([[Variable
-                    name=v.name,
-                    value=v.value
-                    // variablesReference=ini.arguments.variablesReference
-                ]])
+        let ctxId = uint64(ini.arguments.variablesReference / 1000lf)
+        agent->getContextData(ctxId) <| $(var ctxData: DAContext)
+            let frameId = int((ini.arguments.variablesReference / 10lf) % 100lf)
+            if frameId >= 0 && frameId < length(ctxData.stack)
+                let kind = ini.arguments.variablesReference % 10lf
+                let line & = ctxData.stack[frameId]
+                let vars & = kind == double(LOCAL_VARS) ? line.variables : line.arguments
+                for v in vars
+                    res.variables |> emplace([[Variable
+                        name=v.name,
+                        value=v.value
+                        // variablesReference=ini.arguments.variablesReference
+                    ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqContinue(seq: double; command: string; data: JsonValue?)
-        // var ini <- ContinueRequest(data)
-        // defer_delete(ini)
-        agent.continueRequested = true
-        agent.pauseRequested = false
+        var ini <- ContinueRequest(data)
+        defer_delete(ini)
+        agent->getContextData(uint64(ini.arguments.threadId)) <| $(var ctx: DAContext)
+            ctx.continueRequested = true
+            ctx.pauseRequested = false
         self->sendSuccessResponse(seq, command, null)
 
     def reqPause(seq: double; command: string; data: JsonValue?)
-        // var ini <- PauseArguments(data)
-        // defer_delete(ini)
-        agent.pauseRequested = true
+        var ini <- PauseRequest(data)
+        defer_delete(ini)
+        agent->getContextData(uint64(ini.arguments.threadId)) <| $(var ctx: DAContext)
+            ctx.pauseRequested = true
         self->sendSuccessResponse(seq, command, null)
 
     def log(msg: string)
         print("{msg}\n")
         // self->sendOutput("console", msg)
-        self->sendOutput("console", msg)
+        self->sendOutput("console", "{msg}\n")
 
     def sendOutput(category: string; output: string)
         var res = [[OutputEventBody category=category, output=output ]]
         defer_delete(res)
-        self->sendEvent("output", JV(res))
+        self->sendRawData(JV({{"type"=>JV("event"); "event"=>JV("output"); "body"=>JV(res)}}), /*log*/false)
 
     def sendEvent(event: string; body: JsonValue?)
-        self->sendRawData(JV({{"type"=>JV("event"); "event"=>JV(event); "body"=>body}}))
+        self->sendRawData(JV({{"type"=>JV("event"); "event"=>JV(event); "body"=>body}}), /*log*/true)
 
     def sendSuccessResponse(id: double; command: string; body: JsonValue?)
         self->sendRawData(JV({{"request_seq"=>JV(id); "type"=>JV("response");
-                                "body"=>body; "command"=>JV(command); "success"=>JV(true)}}))
+                                "body"=>body; "command"=>JV(command); "success"=>JV(true)}}), /*log*/true)
 
     // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#responseMessage
-    def sendRawData(var data : JsonValue?)
+    def sendRawData(var data : JsonValue?; logData: bool)
         var msg = write_json(data)
         var packStr = "Content-Length: {length(msg)}\r\n\r\n{msg}"
-        print("<------\n{packStr}\n-------\n")
-        print("<---- send data {length(packStr)}\n")
+        if logData
+            self->log("<------\n{packStr}")
+        else
+            print("<------\n{packStr}\n")
         unsafe
             self->send(reinterpret<uint8?> packStr, length(packStr))
             delete data
 
-    def sendStopped(var ctx: Context; path: string; reason: string; brId: uint64)
+    def sendStopped(ctx: DAContext; reason: string; brId: uint64)
         self->sendEvent("stopped", JV({{
             "reason"=>JV(reason);
-            "threadId"=>JV(double(ctx_id(ctx)));
+            "threadId"=>JV(double(ctx.id));
+            "allThreadsStopped"=>JV(false);
             "hitBreakpointIds"=>brId == -1ul ? null : JV([{auto[] JV(brId)}])
         }}))
 
