@@ -153,10 +153,10 @@ class DAgent: DapiDebugAgent
 
     def startServer()
         let args <- get_command_line_arguments()
-        debug(args)
+        // debug(args)
         let fn = args[1]
         let main_time = stat(fn).mtime
-        print("server at {fn} {main_time}\n")
+        // print("server at {fn} {main_time}\n")
         let port = 9000
         server = new DAServer()
         // var session : smart_ptr<NetworkServer> <- gc0_restore_smart_ptr("telnet-session")
@@ -166,9 +166,7 @@ class DAgent: DapiDebugAgent
         // elif server->init(port)
         unsafe
             server.agent = addr(self)
-        if server->init(port)
-            print("sever at port {port}\n")
-        else
+        if !server->init(port)
             print("server failed to initialize\n")
             unsafe
                 delete server
@@ -295,16 +293,16 @@ class DAgent: DapiDebugAgent
 
     def getContextDataFor(var ctx: Context; cb: block<(var ctx: DAContext): void>): bool
         let at = ctx_at(ctx)
-        for ctx in contexts
-            if ctx.at == at
-                cb |> invoke(ctx)
+        for i in iter_range(contexts)
+            if contexts[i].at == at
+                cb |> invoke(contexts[i])
                 return true
         return false
 
     def getContextData(id: DAContextAt; cb: block<(var ctx: DAContext): void>): bool
-        for ctx in contexts
-            if ctx.id == id
-                cb |> invoke(ctx)
+        for i in iter_range(contexts)
+            if contexts[i].id == id
+                cb |> invoke(contexts[i])
                 return true
         return false
 
@@ -358,13 +356,14 @@ class DAServer: Server
         print("server error:{code} - {msg}\n")
 
     def override onConnect()
-        print("connected\n")
+        pass
+        // print("connected\n")
 
     def override onDisconnect()
         if length(current_string) > 0
             print(string(current_string))
             current_string |> clear()
-        print("disconnected\n")
+        // print("disconnected\n")
 
     def restart()
         if _server != null
@@ -611,7 +610,7 @@ class DAServer: Server
         self->sendSuccessResponse(seq, command, null)
 
     def log(msg: string)
-        print("{msg}\n")
+        // print("{msg}\n")
         // self->sendOutput("console", msg)
         self->sendOutput("console", "{msg}\n")
 
@@ -633,8 +632,8 @@ class DAServer: Server
         var packStr = "Content-Length: {length(msg)}\r\n\r\n{msg}"
         if logData
             self->log("<------\n{packStr}")
-        else
-            print("<------\n{packStr}\n")
+        // else
+        //     print("<------\n{packStr}\n")
         unsafe
             self->send(reinterpret<uint8?> packStr, length(packStr))
             delete data
