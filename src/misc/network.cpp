@@ -122,7 +122,7 @@ namespace das {
     bool Server::send_msg ( char * data, int size ) {
         errno = 0;
         if ( client_fd <= 0 ) {
-            onError("can't send, not conencted", -1);
+            onError("can't send, not connected", -1);
             return false;
         }
         int res = 0;
