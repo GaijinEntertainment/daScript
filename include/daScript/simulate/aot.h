@@ -1056,7 +1056,7 @@ namespace das {
         Context * context = nullptr;
     };
 
-    template <typename TT, uint32_t size>
+    template <typename TT, int size>
     struct das_iterator<TDim<TT,size>> {
         __forceinline das_iterator(TDim<TT,size> & r) : that(&r) {
             array_end = that->data + size;
@@ -1076,7 +1076,7 @@ namespace das {
         TT *            array_end;
     };
 
-    template <typename TT, uint32_t size>
+    template <typename TT, int size>
     struct das_iterator<const TDim<TT,size>> {
         __forceinline das_iterator(const TDim<TT,size> & r) : that(&r) {
             array_end = that->data + size;
