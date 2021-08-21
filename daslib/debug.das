@@ -458,54 +458,40 @@ class DAServer: Server
                     let arguments = msg |> joj("arguments")
                     if command == "initialize"
                         self->reqInitialize(seq, command, arguments)
-                        return
                     elif command == "configurationDone"
                         self->reqConfigurationDone(seq, command, arguments)
-                        return
                     elif command == "disconnect"
                         self->reqDisconnect(seq, command, arguments)
-                        return
                     elif command == "terminate"
                         self->reqTerminate(seq, command, arguments)
-                        return
                     elif command == "launch"
                         self->reqLaunch(seq, command, arguments)
-                        return
                     elif command == "attach"
                         self->reqAttach(seq, command, arguments)
-                        return
                     elif command == "setBreakpoints"
                         self->reqSetBreakpoints(seq, command, arguments)
-                        return
                     elif command == "threads"
                         self->reqThreads(seq, command, arguments)
-                        return
                     elif command == "stackTrace"
                         self->reqStackTrace(seq, command, arguments)
-                        return
                     elif command == "scopes"
                         self->reqScopes(seq, command, arguments)
-                        return
                     elif command == "variables"
                         self->reqVariables(seq, command, arguments)
-                        return
                     elif command == "continue"
                         self->reqContinue(seq, command, arguments)
-                        return
                     elif command == "pause"
                         self->reqPause(seq, command, arguments)
-                        return
                     elif command == "stepIn"
                         self->reqStepIn(seq, command, arguments)
-                        return
                     elif command == "next"
                         self->reqNext(seq, command, arguments)
-                        return
                     elif command == "stepOut"
                         self->reqStepOut(seq, command, arguments)
-                        return
-
-            self->log("[Error] unknown message\n{write_json(msg)}\n")
+                    else
+                        self->log("[Error] unknown request message\n{write_json(msg)}\n")
+            else
+                self->log("[Error] unknown message\n{write_json(msg)}\n")
 
     def reqInitialize(seq: double; command: string; arguments: JsonValue?)
         // var ini <- InitializeRequestArguments(arguments)
