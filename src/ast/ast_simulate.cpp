@@ -352,6 +352,7 @@ namespace das
                 return block->list.back()->simulate(context);
             }
         } else {
+#if DAS_DEBUGGER
             if ( context.thisProgram->getDebugger() ) {
                 auto sbody = body->simulate(context);
                 if ( !sbody->rtti_isBlock() ) {
@@ -366,6 +367,9 @@ namespace das
             } else {
                 return body->simulate(context);
             }
+#else
+            return body->simulate(context);
+#endif
         }
     }
 
