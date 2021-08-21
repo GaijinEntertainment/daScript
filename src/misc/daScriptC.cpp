@@ -192,7 +192,7 @@ void das_module_bind_interop_function ( das_module * mod, das_module_group * lib
 
 int    das_argument_int ( vec4f arg ) { return cast<int>::to(arg); }
 float  das_argument_float ( vec4f arg ) { return cast<float>::to(arg); }
-char * das_argument_string ( vec4f arg ) { char * a = cast<char *>::to(arg); return a ? a : ""; }
+char * das_argument_string ( vec4f arg ) { char * a = cast<char *>::to(arg); return a ? a : ((char *)""); }
 
 vec4f das_result_void () { return v_zero(); }
 vec4f das_result_int ( int r ) { return cast<int>::from(r); }
