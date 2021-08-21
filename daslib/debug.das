@@ -625,6 +625,11 @@ class DAServer: Server
                         name="Arguments",
                         variablesReference=double(uint64(ini.frameId) * 10ul + ARGUMENT_VARS)
                     ]])
+                if get_total_variables(*ctxData.ctx) > 0
+                    res.scopes |> emplace([[Scope
+                        name="Globals",
+                        variablesReference=double(uint64(ini.frameId) * 10ul + GLOBAL_VARS)
+                    ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqVariables(seq: double; command: string; data: JsonValue?)
@@ -636,15 +641,26 @@ class DAServer: Server
         agent->getContextData(ctxId) <| $(var ctxData: DAContext)
             let frameId = int((ini.variablesReference / 10lf) % 100lf)
             if frameId >= 0 && frameId < length(ctxData.stack)
-                let kind = ini.variablesReference % 10lf
+                let kind = uint64(ini.variablesReference % 10lf)
                 let line & = ctxData.stack[frameId]
-                let vars & = kind == double(LOCAL_VARS) ? line.variables : line.arguments
-                for v in vars
-                    res.variables |> emplace([[Variable
-                        name=v.name,
-                        value=v.value
-                        // variablesReference=ini.arguments.variablesReference
-                    ]])
+                if kind == LOCAL_VARS || kind == ARGUMENT_VARS
+                    let vars & = kind == LOCAL_VARS ? line.variables : line.arguments
+                    for v in vars
+                        res.variables |> emplace([[Variable
+                            name=v.name,
+                            value=v.value
+                            // variablesReference=ini.arguments.variablesReference
+                        ]])
+                elif kind == GLOBAL_VARS
+                    for i in range(get_total_variables(*ctxData.ctx))
+                        let vinfo & = get_variable_info(*ctxData.ctx, i)
+                        var value: void?
+                        unsafe
+                            value = get_context_global_variable(*ctxData.ctx, vinfo.name)
+                        res.variables |> emplace([[Variable
+                            name="{vinfo.name}",
+                            value=sprint_data(value, type_info(vinfo), print_flags_debug)
+                        ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqContinue(seq: double; command: string; data: JsonValue?)
