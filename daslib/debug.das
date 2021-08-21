@@ -259,6 +259,7 @@ class DAgent: DapiDebugAgent
         let args <- get_command_line_arguments()
         let port = args |> get_int_arg("--das-debug-port", 9000)
         server = new DAServer()
+        server.port = port
         unsafe
             server.agent = addr(self)
         if !server->init(port)
@@ -454,6 +455,7 @@ class DAgent: DapiDebugAgent
         contexts |> erase(idx)
 
 class DAServer: Server
+    port: int
     [[do_not_delete]] agent: DAgent?
 
     disconnected: bool = false
@@ -470,11 +472,10 @@ class DAServer: Server
         Server`Server(cast<Server> self)
 
     def override onError(msg:string; code:int)
-        print("server error:{code} - {msg}\n")
+        print("dap: server error:{code} - {msg}\n")
 
     def override onConnect()
-        pass
-        // print("connected\n")
+        print("dap: connected ::{port}\n")
 
     def override onDisconnect()
         if length(current_string) > 0
@@ -816,9 +817,9 @@ def private start_debug_agent(ctx: Context)
 def private start_agent(force:bool = false): bool
     if force || !has_debug_agent_context("debug")
         fork_debug_agent_context(@@start_debug_agent)
-        print("install debug agent\n")
+        print("dap: install debug agent\n")
     else
-        print("debug agent already exists\n")
+        print("dap: debug agent already exists\n")
     set_single_step(this_context(), true)
     return true
 
