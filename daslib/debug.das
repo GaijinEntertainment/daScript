@@ -178,7 +178,7 @@ class DAgent: DapiDebugAgent
 
     def startServer()
         let args <- get_command_line_arguments()
-        let port = args |> get_int_arg("--port", 9000)
+        let port = args |> get_int_arg("--das-debug-port", 9000)
         server = new DAServer()
         unsafe
             server.agent = addr(self)
