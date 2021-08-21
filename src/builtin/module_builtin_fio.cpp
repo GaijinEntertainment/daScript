@@ -400,6 +400,10 @@ namespace das {
         }
     }
 
+    void builtin_exit ( int32_t ec ) {
+        exit(ec);
+    }
+
     class Module_FIO : public Module {
     public:
         Module_FIO() : Module("fio") {
@@ -435,7 +439,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_stderr)>(*this, lib, "fstderr", SideEffects::modifyExternal, "builtin_stderr");
             addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep", SideEffects::modifyExternal, "builtin_sleep");
             addExtern<DAS_BIND_FUN(getchar)>(*this, lib, "getchar", SideEffects::modifyExternal, "getchar");
-            addExtern<DAS_BIND_FUN(exit)>(*this, lib, "exit", SideEffects::modifyExternal, "exit");
+            addExtern<DAS_BIND_FUN(builtin_exit)>(*this, lib, "exit", SideEffects::modifyExternal, "builtin_exit")->unsafeOperation = true;
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
             // lets verify all names

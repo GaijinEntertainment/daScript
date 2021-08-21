@@ -44,4 +44,5 @@ namespace das {
 
     Time builtin_clock();
     void builtin_sleep ( uint32_t msec );
+    void builtin_exit ( int32_t ec );
 }
