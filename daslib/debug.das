@@ -39,6 +39,11 @@ def ctx_at(var ctx: Context): DAContextAt
     unsafe
         return intptr(addr(ctx))
 
+def get_int_arg(args: array<string>; name: string; def_val: int): int
+    let idx = find_index(args, name)
+    return idx >= 0 && idx + 1 < length(args) ? int(args[idx + 1]) : def_val
+
+
 // class DAWalker: DapiDataWalker
 
 //     def override Float(var value:float&): void
@@ -166,17 +171,8 @@ class DAgent: DapiDebugAgent
 
     def startServer()
         let args <- get_command_line_arguments()
-        // debug(args)
-        let fn = args[1]
-        let main_time = stat(fn).mtime
-        // print("server at {fn} {main_time}\n")
-        let port = 9000
+        let port = args |> get_int_arg("--port", 9000)
         server = new DAServer()
-        // var session : smart_ptr<NetworkServer> <- gc0_restore_smart_ptr("telnet-session")
-        // if session != null
-        //   print("restoring server after restart\n")
-        //   server->restore(session)
-        // elif server->init(port)
         unsafe
             server.agent = addr(self)
         if !server->init(port)
@@ -319,12 +315,6 @@ class DAgent: DapiDebugAgent
                 unsafe
                     delete server
                 self->startServer()
-            // let new_time = stat(fn).mtime
-            // if new_time != main_time
-            //   print("restarting via source change {new_time}\n")
-            //   server->restart()
-            //   break
-        // walker.stack |> clear()
 
     def override onCreateContext(var ctx: Context): void
         self->addContext(ctx)
