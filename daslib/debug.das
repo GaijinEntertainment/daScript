@@ -188,9 +188,18 @@ class DAgent: DapiDebugAgent
             delete walker
             delete server
 
+    def log(msg: string)
+        if server != null
+            server->log(msg)
+        else
+            print("{msg}\n")
+
     def override onBreakpoint(var ctx:Context; at:LineInfo): void
+        if server == null
+            self->log("[Error] onBreakpoint without server")
+            return
         let path = "{at.fileInfo.name}"
-        server->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
+        self->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
         set_single_step(ctx,true)
 
         self->addContext(ctx)
@@ -203,19 +212,23 @@ class DAgent: DapiDebugAgent
             ctxData.continueRequested = false
 
     def override onSingleStep(var ctx:Context; at:LineInfo): void
+        if server == null
+            self->log("[Error] onSingleStep without server")
+            return
+
         // unsafe
-        //     server->log("{double(ctx_at(ctx))} step at {at.fileInfo.name}:{int(at.line)}\n")
+        //     self->log("{double(ctx_at(ctx))} step at {at.fileInfo.name}:{int(at.line)}\n")
 
         if (uint(ctx.category) & (1u << 31u)) != 0u
             self->addContext(ctx)
 
-        if server != null && (!server.configurationDone || !server.threadsDone)
+        if !server.configurationDone || !server.threadsDone
             if (uint(ctx.category) & (1u << 31u)) != 0u
                 while !server.configurationDone || !server.threadsDone
                     tick_debug_agent()
                     sleep(1u)
             else
-                server->log("non debug context in single step {ctx.name}")
+                self->log("[Error] non debug context in single step {ctx.name}")
 
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             if ctxData.pauseRequested
@@ -251,7 +264,7 @@ class DAgent: DapiDebugAgent
             while inBreak
                 inBreak = false
                 let brs = breakpoints |> find(file)
-                // server->log("search break `{file}` {breakpoints[file]} in {at.fileInfo.name}\n")
+                // self->log("search break `{file}` {breakpoints[file]} in {at.fileInfo.name}\n")
                 for brIdx in iter_range(*brs)
                     let br & = (*brs)[brIdx]
                     if br.line == uint(at.line)
@@ -286,7 +299,7 @@ class DAgent: DapiDebugAgent
             ctxData.stack[0].line = at.line
 
     def sendStopped(var ctx: Context; var ctxData:DAContext; at:LineInfo; reason: string; brId: uint64)
-        server->log("<< stopped `{reason}` at {at.fileInfo.name}:{int(at.line)}")
+        self->log("<< stopped `{reason}` at {at.fileInfo.name}:{int(at.line)}")
 
         self->nextStep(ctx, ctxData, at)
         server->sendStopped(ctxData, reason, brId)
