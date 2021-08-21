@@ -155,6 +155,8 @@ class DAgent: DapiDebugAgent
     contexts: array<DAContext>
     contextId: uint64 = 1ul
 
+    waitConnection: bool = true
+
     def DAgent()
         walker = new DAStackWalker()
         unsafe
@@ -198,6 +200,8 @@ class DAgent: DapiDebugAgent
         if server == null
             self->log("[Error] onBreakpoint without server")
             return
+        if !waitConnection && (!server.configurationDone || !server.threadsDone)
+            return
         let path = "{at.fileInfo.name}"
         self->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
         set_single_step(ctx,true)
@@ -222,7 +226,7 @@ class DAgent: DapiDebugAgent
         if (uint(ctx.category) & (1u << 31u)) != 0u
             self->addContext(ctx)
 
-        if !server.configurationDone || !server.threadsDone
+        if waitConnection && (!server.configurationDone || !server.threadsDone)
             if (uint(ctx.category) & (1u << 31u)) != 0u
                 while !server.configurationDone || !server.threadsDone
                     tick_debug_agent()
@@ -261,12 +265,14 @@ class DAgent: DapiDebugAgent
             let file = string(at.fileInfo.name)
             var prevBreak = -1ul
             var inBreak = key_exists(breakpoints, file)
+            // self->log("search break `{file}`:{at.line} - {inBreak}\n")
             while inBreak
                 inBreak = false
                 let brs = breakpoints |> find(file)
-                // self->log("search break `{file}` {breakpoints[file]} in {at.fileInfo.name}\n")
-                for brIdx in iter_range(*brs)
-                    let br & = (*brs)[brIdx]
+                var brIdx = 0
+                while brs != null && brIdx < length(*brs)
+                    let br & = (*brs)[brIdx++]
+                    // self->log("search break `{file}` {brs} in {at.fileInfo.name}\n")
                     if br.line == uint(at.line)
                         if ctxData.continueRequested && prevBreak == br.id
                             ctxData.continueRequested = false
@@ -306,9 +312,10 @@ class DAgent: DapiDebugAgent
 
     def override onTick()
         if server != null
-            if !server.done
+            if !server.disconnected
                 server->tick()
             else
+                waitConnection = false
                 unsafe
                     delete server
                 self->startServer()
@@ -373,7 +380,7 @@ class DAgent: DapiDebugAgent
 class DAServer: Server
     [[do_not_delete]] agent: DAgent?
 
-    done: bool = false
+    disconnected: bool = false
 
     // message data
     current_string: array<uint8>
@@ -467,6 +474,9 @@ class DAServer: Server
                     elif command == "launch"
                         self->reqLaunch(seq, command, arguments)
                         return
+                    elif command == "attach"
+                        self->reqAttach(seq, command, arguments)
+                        return
                     elif command == "setBreakpoints"
                         self->reqSetBreakpoints(seq, command, arguments)
                         return
@@ -524,12 +534,23 @@ class DAServer: Server
     def reqLaunch(seq: double; command: string; data: JsonValue?)
         self->sendSuccessResponse(seq, command, null)
 
+    def reqAttach(seq: double; command: string; data: JsonValue?)
+        self->sendSuccessResponse(seq, command, null)
+
     def reqDisconnect(seq: double; command: string; data: JsonValue?)
         // var ini = DisconnectRequest(data)
         // defer_delete(ini)
         self->sendSuccessResponse(seq, command, null)
+        for ctx in agent.contexts
+            ctx.continueRequested = true
+            ctx.stepInRequested = false
+            ctx.pauseRequested = false
+            ctx.stepRequestedStack = 0
+        for data in values(agent.breakpoints)
+            delete data
+        agent.breakpoints |> clear()
         // ini.arguments.restart
-        done = true // force restart server
+        disconnected = true
 
     def reqTerminate(seq: double; command: string; data: JsonValue?)
         self->sendSuccessResponse(seq, command, null)
@@ -679,8 +700,8 @@ class DAServer: Server
 
     def log(msg: string)
         // print("{msg}\n")
-        // self->sendOutput("console", msg)
-        self->sendOutput("console", "{msg}\n")
+        if self->is_connected()
+            self->sendOutput("console", "{msg}\n")
 
     def sendOutput(category: string; output: string)
         var res = [[OutputEventBody category=category, output=output ]]
