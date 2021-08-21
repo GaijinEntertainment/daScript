@@ -877,9 +877,6 @@ namespace debugapi {
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
-            // this context
-            addExtern<DAS_BIND_FUN(thisContext), SimNode_ExtFuncCallRef>(*this, lib,  "this_context",
-                SideEffects::accessExternal, "thisContext");
             // add builtin module
             compileBuiltinModule("debugger.das",debugger_das,sizeof(debugger_das));
             // lets make sure its all aot ready

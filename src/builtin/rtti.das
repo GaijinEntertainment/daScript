@@ -26,13 +26,13 @@ def is_compatible_cast( a,b:StructInfo )
 
 [generic]
 def context_for_each_function( blk:block<(info:FuncInfo):void> )
-    for fni in range(get_total_functions())
-        invoke(blk,get_function_info(fni))
+    for fni in range(get_total_functions(this_context()))
+        invoke(blk,get_function_info(this_context(),fni))
 
 [generic]
 def context_for_each_variable( blk:block<(info:VarInfo):void> )
-    for vi in range(get_total_variables())
-        invoke(blk,get_variable_info(vi))
+    for vi in range(get_total_variables(this_context()))
+        invoke(blk,get_variable_info(this_context(),vi))
 
 def private each_dim_any(info)
     unsafe

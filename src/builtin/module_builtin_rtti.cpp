@@ -586,31 +586,33 @@ namespace das {
         return rtti_getDim(ti, index, context);
     }
 
-    int32_t rtti_contextTotalFunctions ( Context * context ) {
-        return context->getTotalFunctions();
+    int32_t rtti_contextTotalFunctions ( Context & context ) {
+        return context.getTotalFunctions();
     }
 
-    int32_t rtti_contextTotalVariables ( Context * context ) {
-        return context->getTotalVariables();
+    int32_t rtti_contextTotalVariables ( Context & context ) {
+        return context.getTotalVariables();
     }
 
     vec4f rtti_contextFunctionInfo ( Context & context, SimNode_CallBase *, vec4f * args ) {
-        int32_t tf = context.getTotalFunctions();
-        int32_t index = cast<int32_t>::to(args[0]);
+        Context * ctx = cast<Context *>::to(args[0]);
+        int32_t tf = ctx->getTotalFunctions();
+        int32_t index = cast<int32_t>::to(args[1]);
         if ( index<0 || index>=tf ) {
             context.throw_error_ex("function index out of range, %i of %i", index, tf);
         }
-        FuncInfo * fi = context.getFunction(index)->debugInfo;
+        FuncInfo * fi = ctx->getFunction(index)->debugInfo;
         return cast<FuncInfo *>::from(fi);
     }
 
     vec4f rtti_contextVariableInfo ( Context & context, SimNode_CallBase *, vec4f * args ) {
-        int32_t tf = context.getTotalVariables();
-        int32_t index = cast<int32_t>::to(args[0]);
+        Context * ctx = cast<Context *>::to(args[0]);
+        int32_t tf = ctx->getTotalVariables();
+        int32_t index = cast<int32_t>::to(args[1]);
         if ( index<0 || index>=tf ) {
             context.throw_error_ex("variable index out of range, %i of %i", index, tf);
         }
-        return cast<VarInfo *>::from(context.getVariableInfo(index));
+        return cast<VarInfo *>::from(ctx->getVariableInfo(index));
     }
 
     void rtti_builtin_simulate ( const smart_ptr<Program> & program, bool useAot,
@@ -1052,9 +1054,9 @@ namespace das {
                 SideEffects::modifyExternal, "rtti_contextTotalFunctions");
             addExtern<DAS_BIND_FUN(rtti_contextTotalVariables)>(*this, lib, "get_total_variables",
                 SideEffects::modifyExternal, "rtti_contextTotalVariables");
-            addInterop<rtti_contextFunctionInfo,const FuncInfo &,int32_t>(*this, lib, "get_function_info",
+            addInterop<rtti_contextFunctionInfo,const FuncInfo &,vec4f,int32_t>(*this, lib, "get_function_info",
                 SideEffects::modifyExternal, "rtti_contextFunctionInfo");
-            addInterop<rtti_contextVariableInfo,const VarInfo &,int32_t>(*this, lib, "get_variable_info",
+            addInterop<rtti_contextVariableInfo,const VarInfo &,vec4f,int32_t>(*this, lib, "get_variable_info",
                 SideEffects::modifyExternal, "rtti_contextVariableInfo");
             addExtern<DAS_BIND_FUN(rtti_get_this_module)>(*this, lib, "get_this_module",
                 SideEffects::modifyExternal, "rtti_get_this_module");
@@ -1110,6 +1112,9 @@ namespace das {
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo");
+            // this context
+            addExtern<DAS_BIND_FUN(thisContext), SimNode_ExtFuncCallRef>(*this, lib,  "this_context",
+                SideEffects::accessExternal, "thisContext");
             // extras
             registerVectorFunctions<AnnotationList>::init(this,lib,false,false);
             registerVectorFunctions<AnnotationArgumentList>::init(this,lib,false,false);

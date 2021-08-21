@@ -100,8 +100,10 @@ namespace das {
 
     vec4f rtti_contextFunctionInfo ( Context & context, SimNode_CallBase *, vec4f * );
     vec4f rtti_contextVariableInfo ( Context & context, SimNode_CallBase *, vec4f * );
-    int32_t rtti_contextTotalFunctions(Context * context);
-    int32_t rtti_contextTotalVariables(Context * context);
+    int32_t rtti_contextTotalFunctions(Context & context);
+    int32_t rtti_contextTotalVariables(Context & context);
+
+    __forceinline Context  & thisContext ( Context * context ) { return *context; }
 
     RttiValue rtti_builtin_variable_value(const VarInfo & info);
 
