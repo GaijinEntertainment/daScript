@@ -25,6 +25,15 @@ require daslib/dap
 let
     LOCAL_VARS = 1ul
     ARGUMENT_VARS = 2ul
+    GLOBAL_VARS = 3ul
+
+    print_flags_debug = (
+            print_flags escapeString
+        |   print_flags namesAndDimensions
+        // |   print_flags humanReadable
+        // |   print_flags typeQualifiers
+        // |   print_flags refAddresses
+    )
 
 def ctx_at(var ctx: Context): DAContextAt
     unsafe
@@ -87,13 +96,13 @@ class DAStackWalker: DapiStackWalker
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
         let stackLen = length(ctx.stack)
         if stackLen > 0
-            let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, type_info(vinfo), print_flags humanReadable) : "<optimized>"
+            let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, type_info(vinfo), print_flags_debug) : "<optimized>"
             ctx.stack[stackLen-1].variables |> emplace([[DAVariable name="{vinfo.name}", value=value]])
 
     def override onArgument (inf: FuncInfo; index: int; vinfo: VarInfo; arg: float4)
         let stackLen = length(ctx.stack)
         if  stackLen > 0
-            let value = sprint_data(arg, type_info(vinfo), print_flags humanReadable)
+            let value = sprint_data(arg, type_info(vinfo), print_flags_debug)
             ctx.stack[stackLen-1].arguments |> emplace([[DAVariable name="{vinfo.name}", value=value]])
 
 
@@ -146,6 +155,8 @@ class DAgent: DapiDebugAgent
     contexts: array<DAContext>
     contextId: uint64 = 1ul
 
+    waitConnection: bool = true
+
     def DAgent()
         walker = new DAStackWalker()
         unsafe
@@ -179,9 +190,20 @@ class DAgent: DapiDebugAgent
             delete walker
             delete server
 
+    def log(msg: string)
+        if server != null
+            server->log(msg)
+        else
+            print("{msg}\n")
+
     def override onBreakpoint(var ctx:Context; at:LineInfo): void
+        if server == null
+            self->log("[Error] onBreakpoint without server")
+            return
+        if !waitConnection && (!server.configurationDone || !server.threadsDone)
+            return
         let path = "{at.fileInfo.name}"
-        server->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
+        self->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
         set_single_step(ctx,true)
 
         self->addContext(ctx)
@@ -194,19 +216,23 @@ class DAgent: DapiDebugAgent
             ctxData.continueRequested = false
 
     def override onSingleStep(var ctx:Context; at:LineInfo): void
+        if server == null
+            self->log("[Error] onSingleStep without server")
+            return
+
         // unsafe
-        //     server->log("{double(ctx_at(ctx))} step at {at.fileInfo.name}:{int(at.line)}\n")
+        //     self->log("{double(ctx_at(ctx))} step at {at.fileInfo.name}:{int(at.line)}\n")
 
         if (uint(ctx.category) & (1u << 31u)) != 0u
             self->addContext(ctx)
 
-        if server != null && (!server.configurationDone || !server.threadsDone)
+        if waitConnection && (!server.configurationDone || !server.threadsDone)
             if (uint(ctx.category) & (1u << 31u)) != 0u
                 while !server.configurationDone || !server.threadsDone
                     tick_debug_agent()
                     sleep(1u)
             else
-                server->log("non debug context in single step {ctx.name}")
+                self->log("[Error] non debug context in single step {ctx.name}")
 
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             if ctxData.pauseRequested
@@ -239,12 +265,14 @@ class DAgent: DapiDebugAgent
             let file = string(at.fileInfo.name)
             var prevBreak = -1ul
             var inBreak = key_exists(breakpoints, file)
+            // self->log("search break `{file}`:{at.line} - {inBreak}\n")
             while inBreak
                 inBreak = false
                 let brs = breakpoints |> find(file)
-                // server->log("search break `{file}` {breakpoints[file]} in {at.fileInfo.name}\n")
-                for brIdx in iter_range(*brs)
-                    let br & = (*brs)[brIdx]
+                var brIdx = 0
+                while brs != null && brIdx < length(*brs)
+                    let br & = (*brs)[brIdx++]
+                    // self->log("search break `{file}` {brs} in {at.fileInfo.name}\n")
                     if br.line == uint(at.line)
                         if ctxData.continueRequested && prevBreak == br.id
                             ctxData.continueRequested = false
@@ -277,16 +305,17 @@ class DAgent: DapiDebugAgent
             ctxData.stack[0].line = at.line
 
     def sendStopped(var ctx: Context; var ctxData:DAContext; at:LineInfo; reason: string; brId: uint64)
-        server->log("<< stopped `{reason}` at {at.fileInfo.name}:{int(at.line)}")
+        self->log("<< stopped `{reason}` at {at.fileInfo.name}:{int(at.line)}")
 
         self->nextStep(ctx, ctxData, at)
         server->sendStopped(ctxData, reason, brId)
 
     def override onTick()
         if server != null
-            if !server.done
+            if !server.disconnected
                 server->tick()
             else
+                waitConnection = false
                 unsafe
                     delete server
                 self->startServer()
@@ -351,7 +380,7 @@ class DAgent: DapiDebugAgent
 class DAServer: Server
     [[do_not_delete]] agent: DAgent?
 
-    done: bool = false
+    disconnected: bool = false
 
     // message data
     current_string: array<uint8>
@@ -445,6 +474,9 @@ class DAServer: Server
                     elif command == "launch"
                         self->reqLaunch(seq, command, arguments)
                         return
+                    elif command == "attach"
+                        self->reqAttach(seq, command, arguments)
+                        return
                     elif command == "setBreakpoints"
                         self->reqSetBreakpoints(seq, command, arguments)
                         return
@@ -502,12 +534,23 @@ class DAServer: Server
     def reqLaunch(seq: double; command: string; data: JsonValue?)
         self->sendSuccessResponse(seq, command, null)
 
+    def reqAttach(seq: double; command: string; data: JsonValue?)
+        self->sendSuccessResponse(seq, command, null)
+
     def reqDisconnect(seq: double; command: string; data: JsonValue?)
         // var ini = DisconnectRequest(data)
         // defer_delete(ini)
         self->sendSuccessResponse(seq, command, null)
+        for ctx in agent.contexts
+            ctx.continueRequested = true
+            ctx.stepInRequested = false
+            ctx.pauseRequested = false
+            ctx.stepRequestedStack = 0
+        for data in values(agent.breakpoints)
+            delete data
+        agent.breakpoints |> clear()
         // ini.arguments.restart
-        done = true // force restart server
+        disconnected = true
 
     def reqTerminate(seq: double; command: string; data: JsonValue?)
         self->sendSuccessResponse(seq, command, null)
@@ -582,6 +625,11 @@ class DAServer: Server
                         name="Arguments",
                         variablesReference=double(uint64(ini.frameId) * 10ul + ARGUMENT_VARS)
                     ]])
+                if get_total_variables(*ctxData.ctx) > 0
+                    res.scopes |> emplace([[Scope
+                        name="Globals",
+                        variablesReference=double(uint64(ini.frameId) * 10ul + GLOBAL_VARS)
+                    ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqVariables(seq: double; command: string; data: JsonValue?)
@@ -593,15 +641,26 @@ class DAServer: Server
         agent->getContextData(ctxId) <| $(var ctxData: DAContext)
             let frameId = int((ini.variablesReference / 10lf) % 100lf)
             if frameId >= 0 && frameId < length(ctxData.stack)
-                let kind = ini.variablesReference % 10lf
+                let kind = uint64(ini.variablesReference % 10lf)
                 let line & = ctxData.stack[frameId]
-                let vars & = kind == double(LOCAL_VARS) ? line.variables : line.arguments
-                for v in vars
-                    res.variables |> emplace([[Variable
-                        name=v.name,
-                        value=v.value
-                        // variablesReference=ini.arguments.variablesReference
-                    ]])
+                if kind == LOCAL_VARS || kind == ARGUMENT_VARS
+                    let vars & = kind == LOCAL_VARS ? line.variables : line.arguments
+                    for v in vars
+                        res.variables |> emplace([[Variable
+                            name=v.name,
+                            value=v.value
+                            // variablesReference=ini.arguments.variablesReference
+                        ]])
+                elif kind == GLOBAL_VARS
+                    for i in range(get_total_variables(*ctxData.ctx))
+                        let vinfo & = get_variable_info(*ctxData.ctx, i)
+                        var value: void?
+                        unsafe
+                            value = get_context_global_variable(*ctxData.ctx, vinfo.name)
+                        res.variables |> emplace([[Variable
+                            name="{vinfo.name}",
+                            value=sprint_data(value, type_info(vinfo), print_flags_debug)
+                        ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqContinue(seq: double; command: string; data: JsonValue?)
@@ -657,8 +716,8 @@ class DAServer: Server
 
     def log(msg: string)
         // print("{msg}\n")
-        // self->sendOutput("console", msg)
-        self->sendOutput("console", "{msg}\n")
+        if self->is_connected()
+            self->sendOutput("console", "{msg}\n")
 
     def sendOutput(category: string; output: string)
         var res = [[OutputEventBody category=category, output=output ]]
