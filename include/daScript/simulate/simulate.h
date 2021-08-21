@@ -826,6 +826,19 @@ __forceinline void profileNode ( SimNode * node ) {
                 context.stopFlags = SF;
             }
         }
+#if DAS_DEBUGGER
+        __forceinline void evalFinalSingleStep ( Context & context ) {
+            if ( totalFinal ) {
+                auto SF = context.stopFlags;
+                context.stopFlags = 0;
+                for ( uint32_t i=0; i!=totalFinal; ++i ) {
+                    DAS_SINGLE_STEP(context,finalList[i]->debugInfo,false);
+                    finalList[i]->eval(context);
+                }
+                context.stopFlags = SF;
+            }
+        }
+#endif
         SimNode ** finalList = nullptr;
         uint32_t totalFinal = 0;
     };

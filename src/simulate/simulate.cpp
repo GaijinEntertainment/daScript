@@ -342,7 +342,7 @@ namespace das
             (*body)->eval(context);
             if ( context.stopFlags ) break;
         }
-        evalFinal(context);
+        evalFinalSingleStep(context);
         return v_zero();
     }
 
@@ -400,7 +400,7 @@ namespace das
             (*body)->eval(context);
             if ( context.stopFlags ) break;
         }
-        evalFinal(context);
+        evalFinalSingleStep(context);
         if ( context.stopFlags & EvalFlags::stopForReturn ) {
             context.stopFlags &= ~EvalFlags::stopForReturn;
             return context.abiResult();
@@ -463,7 +463,7 @@ namespace das
             } }
         }
     loopend:;
-        evalFinal(context);
+        evalFinalSingleStep(context);
         return v_zero();
     }
 
@@ -513,7 +513,7 @@ namespace das
             }
         }
     loopend:;
-        evalFinal(context);
+        evalFinalSingleStep(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
