@@ -130,6 +130,13 @@ struct DAContext
     stepRequestedStack: int = 0 // stack depth
 
 
+def reset_debug_flags(var ctx: DAContext)
+    ctx.continueRequested = false
+    ctx.pauseRequested = false
+    ctx.stepInRequested = false
+    ctx.stepRequestedStack = 0
+
+
 def to_string(ctx: DAContext)
     return build_string() <| $(str)
         let stoppable = (uint(ctx.ctx.category) & (1u << 31u)) != 0u
@@ -532,10 +539,8 @@ class DAServer: Server
         // defer_delete(ini)
         self->sendSuccessResponse(seq, command, null)
         for ctx in agent.contexts
+            ctx |> reset_debug_flags()
             ctx.continueRequested = true
-            ctx.stepInRequested = false
-            ctx.pauseRequested = false
-            ctx.stepRequestedStack = 0
         for data in values(agent.breakpoints)
             delete data
         agent.breakpoints |> clear()
@@ -657,38 +662,31 @@ class DAServer: Server
         var ini <- ContinueArguments(data)
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
+            ctx |> reset_debug_flags()
             ctx.continueRequested = true
-            ctx.stepInRequested = false
-            ctx.pauseRequested = false
-            ctx.stepRequestedStack = 0
         self->sendSuccessResponse(seq, command, null)
 
     def reqPause(seq: double; command: string; data: JsonValue?)
         var ini <- PauseArguments(data)
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
-            ctx.continueRequested = false
+            ctx |> reset_debug_flags()
             ctx.pauseRequested = true
-            ctx.stepInRequested = false
-            ctx.stepRequestedStack = 0
         self->sendSuccessResponse(seq, command, null)
 
     def reqStepIn(seq: double; command: string; data: JsonValue?)
         var ini <- StepInArguments(data)
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
-            ctx.continueRequested = false
-            ctx.pauseRequested = false
+            ctx |> reset_debug_flags()
             ctx.stepInRequested = true
-            ctx.stepRequestedStack = 0
         self->sendSuccessResponse(seq, command, null)
 
     def reqNext(seq: double; command: string; data: JsonValue?)
         var ini <- NextArguments(data)
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
-            ctx.continueRequested = false
-            ctx.pauseRequested = false
+            ctx |> reset_debug_flags()
             ctx.stepRequestedStack = stack_depth(*ctx.ctx)
             ctx.stepInRequested = ctx.stepRequestedStack == 0
         self->sendSuccessResponse(seq, command, null)
@@ -697,8 +695,7 @@ class DAServer: Server
         var ini <- NextArguments(data)
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
-            ctx.continueRequested = false
-            ctx.pauseRequested = false
+            ctx |> reset_debug_flags()
             ctx.stepRequestedStack = max(stack_depth(*ctx.ctx) - 1, 0)
             ctx.stepInRequested = ctx.stepRequestedStack == 0
         self->sendSuccessResponse(seq, command, null)
