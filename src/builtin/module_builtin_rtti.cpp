@@ -978,7 +978,7 @@ namespace das {
         return context->stringHeap->allocateString(ssw.str());
     }
 
-    char * builtin_debug_type ( TypeInfo * typeInfo, Context * context ) {
+    char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context ) {
         auto dt = debug_type(typeInfo);
         return context->stringHeap->allocateString(dt);
     }

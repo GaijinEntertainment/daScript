@@ -327,6 +327,6 @@ namespace das
             | PrintFlags::typeQualifiers | PrintFlags::humanReadable
     };
 
-    string debug_type ( TypeInfo * info );
+    string debug_type ( const TypeInfo * info );
 }
 
