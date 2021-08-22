@@ -423,7 +423,7 @@ namespace das
                 stream << debug_type(info->argTypes[a]);
             }
             stream << ">";
-        } else if ( info->type==Type::tFunction || info->type==Type::tBlock || info->type==Type::tHandle ) {
+        } else if ( info->type==Type::tFunction || info->type==Type::tBlock || info->type==Type::tLambda ) {
             stream << das_to_string(info->type) << "<";
             if ( info->argCount ) {
                 stream << "(";
