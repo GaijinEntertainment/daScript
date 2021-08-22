@@ -81,6 +81,13 @@ namespace debugapi {
                 context->unlock();
             }
         }
+        virtual void onInstrument ( Context * ctx, const LineInfo & at ) override {
+            if ( auto fnOnInstrument = get_onInstrument(classPtr) ) {
+                context->lock();
+                invoke_onInstrument(context,fnOnInstrument,classPtr,*ctx,at);
+                context->unlock();
+            }
+        }
         virtual void onBreakpoint ( Context * ctx, const LineInfo & at ) override {
             if ( auto fnOnBreakpoint = get_onBreakpoint(classPtr) ) {
                 context->lock();
@@ -759,6 +766,11 @@ namespace debugapi {
         return cast<void *>::from(ctx->getVariable(vidx));
     }
 
+    void instrument_context ( Context & ctx, char * fileName, int32_t lineNumber ) {
+        if ( !fileName ) return;
+        ctx.InstrumentContext(fileName, lineNumber);
+    }
+
     class Module_Debugger : public Module {
     public:
         Module_Debugger() : Module("debugapi") {
@@ -791,6 +803,9 @@ namespace debugapi {
                 SideEffects::modifyExternal, "debuggerSetContextSingleStep");
             addExtern<DAS_BIND_FUN(debuggerStackWalk)>(*this, lib, "stackwalk",
                 SideEffects::modifyExternal, "debuggerStackWalk");
+            // instrumentation
+            addExtern<DAS_BIND_FUN(instrument_context)>(*this, lib,  "instrument_context",
+                SideEffects::modifyExternal, "instrument_context");
             // data walker
             addExtern<DAS_BIND_FUN(makeDataWalker)>(*this, lib,  "make_data_walker",
                 SideEffects::modifyExternal, "makeDataWalker");

@@ -788,6 +788,15 @@ namespace das {
         V_END();
     }
 
+#if DAS_DEBUGGER
+    SimNode * SimNodeDebug_Instrument::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Instrument);
+        V_SUB(subexpr);
+        V_END();
+    }
+#endif
+
     SimNode * SimNode_IfThenElse::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(IfThenElse);

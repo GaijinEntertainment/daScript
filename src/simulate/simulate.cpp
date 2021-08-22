@@ -1524,6 +1524,13 @@ namespace das
         return text.str();
     }
 
+    void Context::instrumentcallback ( const LineInfo & at ) {
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onInstrument(this, at);
+        });
+
+    }
+
     void Context::bpcallback( const LineInfo & at ) {
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             pAgent->onSingleStep(this, at);

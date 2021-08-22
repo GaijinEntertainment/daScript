@@ -12,6 +12,7 @@ class DapiDebugAgent
     def abstract onCreateContext ( var ctx:Context ) : void
     def abstract onDestroyContext ( var ctx:Context ) : void
     def abstract onSingleStep ( var ctx:Context; at:LineInfo ) : void
+    def abstract onInstrument ( var ctx:Context; at:LineInfo ) : void
     def abstract onBreakpoint ( var ctx:Context; at:LineInfo ) : void
     def abstract onTick : void
 

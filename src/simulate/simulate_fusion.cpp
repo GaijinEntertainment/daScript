@@ -75,12 +75,12 @@ namespace das {
         SimNode_Op2Fusion * result = (SimNode_Op2Fusion *) match(info,node,node_l,node_r,context);
         if ( result ) {
             set(result,node);
-            if ( !anyLeft && node_l->rtti_isSourceBase() ) {
+            if ( !anyLeft && node_l->rtti_node_isSourceBase() ) {
                 result->l = static_cast<SimNode_SourceBase *>(node_l)->subexpr;
             } else {
                 result->l.setSimNode(node_l);
             }
-            if ( !anyRight && node_r->rtti_isSourceBase() ) {
+            if ( !anyRight && node_r->rtti_node_isSourceBase() ) {
                 result->r = static_cast<SimNode_SourceBase *>(node_r)->subexpr;
             } else {
                 result->r.setSimNode(node_r);

@@ -355,7 +355,7 @@ namespace das
 #if DAS_DEBUGGER
             if ( context.thisProgram->getDebugger() ) {
                 auto sbody = body->simulate(context);
-                if ( !sbody->rtti_isBlock() ) {
+                if ( !sbody->rtti_node_isBlock() ) {
                     auto block = context.code->makeNode<SimNodeDebug_BlockNF>(sbody->debugInfo);
                     block->total = 1;
                     block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*1);

@@ -97,8 +97,9 @@ namespace das
         virtual int64_t     evalInt64 ( Context & context );
         virtual uint64_t    evalUInt64 ( Context & context );
         LineInfo debugInfo;
-        virtual bool rtti_isSourceBase() const { return false;  }
-        virtual bool rtti_isBlock() const { return false; }
+        virtual bool rtti_node_isSourceBase() const { return false;  }
+        virtual bool rtti_node_isBlock() const { return false; }
+        virtual bool rtti_node_isInstrument() const { return false; }
     protected:
         virtual ~SimNode() {}
     };
@@ -196,6 +197,7 @@ namespace das
         virtual void onCreateContext ( Context * ) {}
         virtual void onDestroyContext ( Context * ) {}
         virtual void onSingleStep ( Context *, const LineInfo & ) {}
+        virtual void onInstrument ( Context *, const LineInfo & ) {}
         virtual void onBreakpoint ( Context *, const LineInfo & ) {}
         virtual void onTick () {}
     };
@@ -565,6 +567,7 @@ namespace das
 
         void relocateCode();
         void collectStringHeap(LineInfo * at);
+        void InstrumentContext ( const char * fileName, int32_t lineNumber );
 
         uint64_t getSharedMemorySize() const;
         uint64_t getUniqueMemorySize() const;
@@ -577,6 +580,7 @@ namespace das
         char * intern ( const char * str );
 
         void bpcallback ( const LineInfo & at );
+        void instrumentcallback ( const LineInfo & at );
 
 #define DAS_SINGLE_STEP(context,at,forceStep) \
     context.singleStep(at,forceStep);
@@ -845,6 +849,7 @@ __forceinline void profileNode ( SimNode * node ) {
 
     struct SimNode_Block : SimNode_Final {
         SimNode_Block ( const LineInfo & at ) : SimNode_Final(at) {}
+        virtual bool rtti_node_isBlock() const override { return true; }
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         void visitBlock ( SimVisitor & vis );
         void visitLabels ( SimVisitor & vis );

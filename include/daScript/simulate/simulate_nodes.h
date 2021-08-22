@@ -189,7 +189,7 @@ namespace das {
 
     struct SimNode_SourceBase : SimNode {
         SimNode_SourceBase ( const LineInfo & at ) : SimNode(at) {}
-        virtual bool rtti_isSourceBase() const override { return true;  }
+        virtual bool rtti_node_isSourceBase() const override { return true;  }
         SimSource   subexpr;
     };
 
@@ -2304,7 +2304,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_PTR_NODE;
         SimNode_MakeLocal ( const LineInfo & at, uint32_t sp )
             : SimNode_Block(at), stackTop(sp) {}
-        virtual bool rtti_isBlock() const override { return true; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
@@ -2385,6 +2384,27 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
 #if DAS_DEBUGGER
+
+    struct SimNodeDebug_Instrument : SimNode {
+        SimNodeDebug_Instrument ( const LineInfo & at, SimNode * se )
+            : SimNode(at), subexpr(se) {}
+        virtual bool rtti_node_isInstrument() const override { return true; }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            context.instrumentcallback(subexpr->debugInfo);
+            return subexpr->eval(context);
+        }
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+                DAS_PROFILE_NODE \
+                context.instrumentcallback(subexpr->debugInfo); \
+                return subexpr->eval##TYPE(context); \
+            }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+        SimNode * subexpr;
+    };
 
     // IF-THEN-ELSE (also Cond)
     struct SimNodeDebug_IfThenElse : SimNode_IfThenElse {
