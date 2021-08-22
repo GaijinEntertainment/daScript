@@ -397,25 +397,70 @@ namespace das
 
     string debug_type ( TypeInfo * info ) {
         TextWriter stream;
+        // its never auto or alias
         if ( info->type==Type::tHandle ) {
             stream << info->getAnnotation()->name;
         } else if ( info->type==Type::tStructure ) {
             stream << info->structType->name;
         } else if ( info->type==Type::tPointer ) {
-            stream << debug_type(info->firstType) << " *";
+            stream << debug_type(info->firstType) << " ?";
         } else if ( info->type==Type::tEnumeration || info->type==Type::tEnumeration8 || info->type==Type::tEnumeration16 ) {
             stream << info->enumType->name;
         } else if ( info->type==Type::tArray ) {
-            stream << "Array<" << debug_type(info->firstType) << ">";
+            stream << "array<" << debug_type(info->firstType) << ">";
         } else if ( info->type==Type::tTable ) {
-            stream << "Table<" << debug_type(info->firstType) << "," << debug_type(info->secondType) << ">";
+            stream << "table<" << debug_type(info->firstType) << "," << debug_type(info->secondType) << ">";
         } else if ( info->type==Type::tIterator ) {
-            stream << "Iterator<" << (info->firstType ? debug_type(info->firstType) : "") << ">";
+            stream << "iterator<" << (info->firstType ? debug_type(info->firstType) : "") << ">";
+        } else if ( info->type==Type::tTuple || info->type==Type::tVariant ) {
+            stream << das_to_string(info->type) << "<";
+            for ( uint32_t a=0; a!=info->argCount; ++a ) {
+                if ( a!=0 ) stream << "; ";
+                if ( info->argNames ) {
+                    stream << info->argNames[a] << ":";
+                }
+                stream << debug_type(info->argTypes[a]);
+            }
+            stream << ">";
+        } else if ( info->type==Type::tFunction || info->type==Type::tBlock || info->type==Type::tHandle ) {
+            stream << das_to_string(info->type) << "<";
+            if ( info->argCount ) {
+                stream << "(";
+                for ( uint32_t ai=0; ai!=info->argCount; ++ ai ) {
+                    if ( ai!=0 ) stream << "; ";
+                    if ( info->argNames ) {
+                        stream << info->argNames[ai] << ":";
+                    }
+                    stream << debug_type(info->argTypes[ai]);
+                }
+                stream << ")";
+            }
+            if ( info->firstType ) {
+                if ( info->argCount ) {
+                    stream << ":";
+                }
+                stream << debug_type(info->firstType);
+            }
+            stream << ">";
+        } else if ( info->type==Type::tBitfield ) {
+            stream << "bitfield";
+            if ( info->argNames ) {
+                stream << "<";
+                for ( uint32_t ai = 0; ai!=info->argCount; ++ai ) {
+                    if ( ai !=0 ) stream << "; ";
+                    stream << info->argNames[ai];
+                    ai ++;
+                }
+                stream << ">";
+            }
         } else {
             stream << das_to_string(info->type);
         }
         for ( uint32_t i=0; i!=info->dimSize; ++i ) {
             stream << "[" << info->dim[i] << "]";
+        }
+        if ( info->flags & TypeInfo::flag_isConst ) {
+            stream << " const";
         }
         if ( info->flags & TypeInfo::flag_ref )
             stream << " &";

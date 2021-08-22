@@ -978,6 +978,11 @@ namespace das {
         return context->stringHeap->allocateString(ssw.str());
     }
 
+    char * builtin_debug_type ( TypeInfo * typeInfo, Context * context ) {
+        auto dt = debug_type(typeInfo);
+        return context->stringHeap->allocateString(dt);
+    }
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -1106,9 +1111,12 @@ namespace das {
                 SideEffects::none, "add_annotation_argument");
             // data printer
             addExtern<DAS_BIND_FUN(builtin_print_data)>(*this, lib, "sprint_data",
-                SideEffects::modifyExternal, "builtin_print_data");
+                SideEffects::none, "builtin_print_data");
             addExtern<DAS_BIND_FUN(builtin_print_data_v)>(*this, lib, "sprint_data",
-                SideEffects::modifyExternal, "builtin_print_data_v");
+                SideEffects::none, "builtin_print_data_v");
+            // debug typeinfo
+            addExtern<DAS_BIND_FUN(builtin_debug_type)>(*this, lib, "describe",
+                SideEffects::none, "builtin_debug_type");
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo");
