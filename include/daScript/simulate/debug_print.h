@@ -27,7 +27,9 @@ namespace das {
     // data structures
         __forceinline void br() {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << "\n";
+                if ( !(int(flags) & int(PrintFlags::singleLine)) ) {
+                    ss << "\n";
+                }
             }
         }
         virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {

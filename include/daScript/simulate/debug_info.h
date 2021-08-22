@@ -319,6 +319,7 @@ namespace das
     ,   typeQualifiers =        (1<<2)
     ,   refAddresses =          (1<<3)
     ,   humanReadable =         (1<<4)
+    ,   singleLine =            (1<<5)
 
     ,   string_builder  =   PrintFlags::none
     ,   debugger        =   PrintFlags::escapeString | PrintFlags::namesAndDimensions
