@@ -979,6 +979,7 @@ namespace das {
     }
 
     char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context ) {
+        if ( !typeInfo ) return nullptr;
         auto dt = debug_type(typeInfo);
         return context->stringHeap->allocateString(dt);
     }

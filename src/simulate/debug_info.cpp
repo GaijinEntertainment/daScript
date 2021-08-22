@@ -395,7 +395,8 @@ namespace das
         return true;
     }
 
-    string debug_type ( TypeInfo * info ) {
+    string debug_type ( const TypeInfo * info ) {
+        if ( !info ) return "";
         TextWriter stream;
         // its never auto or alias
         if ( info->type==Type::tHandle ) {
