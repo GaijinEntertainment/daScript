@@ -151,6 +151,15 @@ struct Variable
     name: string
     value: string
     variablesReference: double
+    _type: string
+
+def JV(data: Variable)
+    return JV({{
+        "name"=>JV(data.name);
+        "value"=>JV(data.value);
+        "variablesReference"=>JV(data.variablesReference);
+        "type"=>JV(data._type)
+    }})
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Events_Output
 struct OutputEventBody
