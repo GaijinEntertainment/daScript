@@ -615,7 +615,8 @@ class DAServer: Server
 
     def reqTerminate(seq: double; command: string; data: JsonValue?)
         self->sendSuccessResponse(seq, command, null)
-        fio::exit(0)
+        unsafe
+            fio::exit(0)
 
     def reqSetBreakpoints(seq: double; command: string; data: JsonValue?)
         var ini <- SetBreakpointsArguments(data)
