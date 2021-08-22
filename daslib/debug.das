@@ -43,78 +43,6 @@ def get_int_arg(args: array<string>; name: string; def_val: int): int
     let idx = find_index(args, name)
     return idx >= 0 && idx + 1 < length(args) ? int(args[idx + 1]) : def_val
 
-// from dascript-vscode plugin server\das\completion.das
-def module_name(mod)
-    return mod == null || length(mod.name) == 0 ? "" : "{mod.name}::"
-
-def get_type_name(info)
-    var res: string
-    if info.basicType == Type tHandle
-        res = info.annotation != null ? "{module_name(info.annotation._module)}{info.annotation.name}" : "tHandle"
-    elif info.basicType == Type tStructure
-        res = info.structType?.name ?? "structure"
-    elif info.basicType == Type tEnumeration || info.basicType==Type tEnumeration8 || info.basicType==Type tEnumeration16
-        res = info.enumType?.name ?? "enumeration"
-    elif info.basicType == Type tPointer
-        res = info.firstType != null ? "{get_type_name(*(info.firstType))}?" : "void?"
-    elif info.basicType == Type tArray
-        res = info.firstType != null ? "array<{get_type_name(*(info.firstType))}>" : "array"
-    elif info.basicType == Type tTable
-        if info.firstType != null && info.secondType!=null
-            res = "table<{get_type_name(deref(info.firstType))};{get_type_name(deref(info.secondType))}>"
-        else
-            res = "table"
-    elif info.basicType == Type tTuple
-        if info.argTypes != null
-            var args <- [{for argtype in arg_types(info); get_type_name(argtype)}]
-            res = "tuple<" + join(args,";") + ">"
-            delete args
-        else
-            res = "tuple"
-    elif info.basicType == Type tVariant
-        if info.argTypes != null && info.argNames != null
-            res = "variant<"
-            var variantDesc = "variant<"
-            var f = true
-            for argname, argtype in arg_names(info), arg_types(info)
-                if !f
-                    res += "; "
-                f = false
-                var desc = "{argname}: {get_type_name(argtype)}"
-                res += desc
-                variantDesc += "\n\t{desc}"
-            res += ">"
-            variantDesc += "\n>"
-        else
-            res = "variant"
-    elif info.basicType == Type tFunction || info.basicType == Type tLambda || info.basicType == Type tBlock
-        res = "{get_das_type_name(info.basicType)}<"
-        if info.argTypes != null
-            var args <- [{for argtype in arg_types(info); get_type_name(argtype)}]
-            res += "(" + join(args,"; ") + ")"
-            delete args
-        if info.firstType != null
-            res += (info.argTypes != null ? ":" : "") + "{get_type_name(*(info.firstType))}"
-        res += ">"
-    elif info.basicType == Type fakeContext
-        res = "__context__"
-    elif info.basicType == Type fakeLineInfo
-        res = "__lineInfo__"
-    else
-        res = get_das_type_name(info.basicType)
-    var dim <- [{for d in each_dim(info); d != -1 ? "[{d}]" : "[]"}]
-    res += join(dim, "")
-    delete dim
-    if info.isConst
-        res += " const"
-    if info.isRef
-        res += " &"
-    if info.isTemp
-        res += "#"
-    if info.isImplicit
-        res += " implicit"
-    return res
-
 
 // class DAWalker: DapiDataWalker
 
@@ -178,16 +106,16 @@ class DAStackWalker: DapiStackWalker
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
         let stackLen = length(ctx.stack)
         if stackLen > 0
-            let ti = type_info(vinfo)
+            var ti = type_info(vinfo)
             let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, ti, print_flags_debug)  |> fix_var_value(): "<optimized>"
-            ctx.stack[stackLen-1].variables |> emplace([[DAVariable name="{vinfo.name}", value=value, _type=ti != null ? get_type_name(*ti) : ""]])
+            ctx.stack[stackLen-1].variables |> emplace([[DAVariable name="{vinfo.name}", value=value, _type=describe(ti)]])
 
     def override onArgument (inf: FuncInfo; index: int; vinfo: VarInfo; arg: float4)
         let stackLen = length(ctx.stack)
         if  stackLen > 0
             let ti = type_info(vinfo)
             let value = sprint_data(arg, ti, print_flags_debug) |> fix_var_value()
-            ctx.stack[stackLen-1].arguments |> emplace([[DAVariable name="{vinfo.name}", value=value, _type=ti != null ? get_type_name(*ti) : ""]])
+            ctx.stack[stackLen-1].arguments |> emplace([[DAVariable name="{vinfo.name}", value=value, _type=describe(ti)]])
 
 
 struct DABreakpoint
@@ -724,7 +652,7 @@ class DAServer: Server
                         res.variables |> emplace([[Variable
                             name="{vinfo.name}",
                             value=sprint_data(value, ti, print_flags_debug) |> fix_var_value(),
-                            _type=ti != null ? get_type_name(*ti) : ""
+                            _type=describe(ti)
                         ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
