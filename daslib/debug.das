@@ -67,10 +67,6 @@ struct DAStackFrame
     arguments: array<DAVariable>
 
 
-def fix_var_value(val: string)
-    return val |> replace("\n", " ") |> replace("     ", " ") |> replace("    ", " ")
-
-
 class DAStackWalker: DapiStackWalker
     data_walker_adapter: smart_ptr<DataWalker>
     // data_walker: DAWalker?
@@ -107,14 +103,14 @@ class DAStackWalker: DapiStackWalker
         let stackLen = length(ctx.stack)
         if stackLen > 0
             var ti = type_info(vinfo)
-            let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, ti, print_flags_debug)  |> fix_var_value(): "<optimized>"
+            let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, ti, print_flags_debug): "<optimized>"
             ctx.stack[stackLen-1].variables |> emplace([[DAVariable name="{vinfo.name}", value=value, _type=describe(ti)]])
 
     def override onArgument (inf: FuncInfo; index: int; vinfo: VarInfo; arg: float4)
         let stackLen = length(ctx.stack)
         if  stackLen > 0
             let ti = type_info(vinfo)
-            let value = sprint_data(arg, ti, print_flags_debug) |> fix_var_value()
+            let value = sprint_data(arg, ti, print_flags_debug)
             ctx.stack[stackLen-1].arguments |> emplace([[DAVariable name="{vinfo.name}", value=value, _type=describe(ti)]])
 
 
@@ -651,7 +647,7 @@ class DAServer: Server
                         let ti = type_info(vinfo)
                         res.variables |> emplace([[Variable
                             name="{vinfo.name}",
-                            value=sprint_data(value, ti, print_flags_debug) |> fix_var_value(),
+                            value=sprint_data(value, ti, print_flags_debug),
                             _type=describe(ti)
                         ]])
         self->sendSuccessResponse(seq, command, JV(res))
