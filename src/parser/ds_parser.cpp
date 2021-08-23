@@ -4619,7 +4619,7 @@ yyreduce:
 #line 744 "ds_parser.ypp"
     {
         auto pFor = new ExprFor(tokAt((yylsp[-5])));
-        pFor->visibility = tokRangeAt((yylsp[-5]),(yylsp[0]));
+        pFor->visibility = tokAt((yylsp[0]));
         for ( const auto & np : *(yyvsp[-4].pNameWithPosList) ) {
             pFor->iterators.push_back(np.first);
             pFor->iteratorsAt.push_back(np.second);
@@ -8862,7 +8862,7 @@ yyreduce:
 #line 2842 "ds_parser.ypp"
     {
         auto pFor = make_smart<ExprFor>(tokAt((yylsp[-8])));
-        pFor->visibility = tokRangeAt((yylsp[-8]),(yylsp[0]));
+        pFor->visibility = tokRangeAt((yylsp[-3]),(yylsp[0]));
         for ( const auto & np : *(yyvsp[-7].pNameWithPosList) ) {
             pFor->iterators.push_back(np.first);
             pFor->iteratorsAt.push_back(np.second);
@@ -8885,7 +8885,7 @@ yyreduce:
 #line 2860 "ds_parser.ypp"
     {
         auto pFor = make_smart<ExprFor>(tokAt((yylsp[-8])));
-        pFor->visibility = tokRangeAt((yylsp[-8]),(yylsp[0]));
+        pFor->visibility = tokRangeAt((yylsp[-3]),(yylsp[0]));
         for ( const auto & np : *(yyvsp[-7].pNameWithPosList) ) {
             pFor->iterators.push_back(np.first);
             pFor->iteratorsAt.push_back(np.second);

@@ -155,8 +155,8 @@ namespace das {
         }, 0, JobPriority::Default);
     }
 
-    atomic<bool>    g_jobQueShutdown = false;
-    atomic<int32_t> g_jobQueTotalThreads = 0;
+    atomic<bool>    g_jobQueShutdown;
+    atomic<int32_t> g_jobQueTotalThreads;
 
     bool is_job_que_shutting_down () {
         return g_jobQueShutdown;
@@ -227,7 +227,7 @@ namespace das {
         Module_JobQue() : Module("jobque") {
             DAS_PROFILE_SECTION("Module_JobQue");
             g_jobQueShutdown = false;
-            DAS_ASSERT(g_jobQueTotalThreads==0);
+            g_jobQueTotalThreads = 0;
             // libs
             ModuleLibrary lib;
             lib.addModule(this);

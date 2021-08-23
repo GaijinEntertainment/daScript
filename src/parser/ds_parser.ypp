@@ -743,7 +743,7 @@ expression_if_then_else
 expression_for_loop
     :   DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ';' expression_block[block] {
         auto pFor = new ExprFor(tokAt(@loc));
-        pFor->visibility = tokRangeAt(@loc,@block);
+        pFor->visibility = tokAt(@block);
         for ( const auto & np : *$iters ) {
             pFor->iterators.push_back(np.first);
             pFor->iteratorsAt.push_back(np.second);
@@ -2841,7 +2841,7 @@ array_comprehension_where
 array_comprehension
     :   BRABRAB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
         auto pFor = make_smart<ExprFor>(tokAt(@loc));
-        pFor->visibility = tokRangeAt(@loc,@forend);
+        pFor->visibility = tokRangeAt(@subexpr,@forend);
         for ( const auto & np : *$iters ) {
             pFor->iterators.push_back(np.first);
             pFor->iteratorsAt.push_back(np.second);
@@ -2859,7 +2859,7 @@ array_comprehension
     }
     |   BRACBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' [forend] {
         auto pFor = make_smart<ExprFor>(tokAt(@loc));
-        pFor->visibility = tokRangeAt(@loc,@forend);
+        pFor->visibility = tokRangeAt(@subexpr,@forend);
         for ( const auto & np : *$iters ) {
             pFor->iterators.push_back(np.first);
             pFor->iteratorsAt.push_back(np.second);

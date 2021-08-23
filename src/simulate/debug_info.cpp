@@ -504,10 +504,10 @@ namespace das
 
     bool LineInfo::inside ( const LineInfo & info ) const {
         if ( fileInfo && fileInfo != info.fileInfo ) return false;
-        if ( line < info.line || line > info.last_line ) return false;
+        if ( line < info.line || line >= info.last_line ) return false;
         uint32_t from = line==info.line ? info.column : 0;
         uint32_t to = line==info.last_line ? info.last_column : 100500;
-        return (column>=from) && (column<=to);
+        return (column>=from) && (column<to);
     }
 
     bool LineInfo::empty() const {
