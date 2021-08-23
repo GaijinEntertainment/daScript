@@ -15,11 +15,14 @@ class DapiDebugAgent
     def abstract onInstrument ( var ctx:Context; at:LineInfo ) : void
     def abstract onBreakpoint ( var ctx:Context; at:LineInfo ) : void
     def abstract onTick : void
+    [[do_not_delete]] thisAgent:DebugAgent?
 
-def install_new_debug_agent ( agentPtr; category:string )
+def install_new_debug_agent ( var agentPtr; category:string )
     static_if typeinfo(is_class *agentPtr)
         let agentInfo = class_info(*agentPtr)
         var agentAdapter <- make_debug_agent(agentPtr,agentInfo)
+        unsafe
+            agentPtr.thisAgent = reinterpret<DebugAgent?>(agentPtr)
         install_debug_agent(agentAdapter,category)
         this_context().name := "debug agent {category}"
         unsafe
