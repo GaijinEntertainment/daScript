@@ -45,6 +45,7 @@ namespace das {
         Context *           owner = nullptr;
     };
 
+    bool is_job_que_shutting_down();
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
     void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context );
     void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );

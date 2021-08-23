@@ -758,7 +758,7 @@ def auto_start_debug()
             if start_agent()
                 new_thread <| @
                     this_context().name := "tick thread"
-                    while true
+                    while !is_job_que_shutting_down()
                         tick_debug_agent()
                         sleep(1u)
         set_single_step(this_context(), true)
