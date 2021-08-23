@@ -140,17 +140,14 @@ class DAStackWalker: DapiStackWalker
     def override onCallAOT(pp:Prologue; fileName:string#): void
         // print("AOT {fileName}\n")
         ctx.stack |> emplace([[DAStackFrame() name="aot {pp.info.name}", path = "{fileName}" ]])
-        pass
 
     def override onCallAt(pp:Prologue; info:FuncInfo; at:LineInfo): void
         // print("def {info.name} at {at}\n")
         ctx.stack |> emplace([[DAStackFrame name="def {info.name}", path="{at.fileInfo.name}" |> resolve_path(*workingPaths), line=at.line ]])
-        pass
 
     def override onCall(pp:Prologue; info:FuncInfo): void
         // print("def {info.name}\n")
         ctx.stack |> emplace([[DAStackFrame() name="def {info.name}" ]])
-        pass
 
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
         let stackLen = length(ctx.stack)
@@ -256,6 +253,10 @@ class DAgent: DapiDebugAgent
             unsafe
                 delete server
 
+    def override onUninstall(agent:DebugAgent?)
+        if agent == thisAgent
+            delete self
+
     def finalize()
         unsafe
             delete walker_adapter
@@ -269,8 +270,10 @@ class DAgent: DapiDebugAgent
             print("{msg}\n")
 
     def override onBreakpoint(var ctx:Context; at:LineInfo): void
+        if at.fileInfo == null
+            return
         if server == null
-            self->log("[Error] onBreakpoint without server")
+            self->log("[E] onBreakpoint without server")
             return
         if !waitConnection && (!server.configurationDone || !server.threadsDone)
             return
@@ -288,8 +291,10 @@ class DAgent: DapiDebugAgent
             ctxData.continueRequested = false
 
     def override onSingleStep(var ctx:Context; at:LineInfo): void
+        if at.fileInfo == null
+            return
         if server == null
-            self->log("[Error] onSingleStep without server")
+            self->log("[E] onSingleStep without server")
             return
 
         // unsafe
@@ -461,7 +466,7 @@ class DAServer: Server
         Server`Server(cast<Server> self)
 
     def override onError(msg:string; code:int)
-        print("dap: server error:{code} - {msg}\n")
+        print("[E] dap: server error:{code} - {msg}\n")
 
     def override onConnect()
         print("dap: connected ::{port}\n")
