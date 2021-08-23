@@ -12,6 +12,7 @@ require rtti
 require debugapi
 require fio
 require network
+require uriparser
 
 require daslib/json
 require daslib/json_boost
@@ -36,13 +37,63 @@ let
         // |   print_flags refAddresses
     )
 
-def ctx_at(var ctx: Context): DAContextAt
+def private ctx_at(var ctx: Context): DAContextAt
     unsafe
         return intptr(addr(ctx))
 
-def get_int_arg(args: array<string>; name: string; def_val: int): int
+def private get_int_arg(args: array<string>; name: string; def_val: int): int
     let idx = find_index(args, name)
     return idx >= 0 && idx + 1 < length(args) ? int(args[idx + 1]) : def_val
+
+def private ends_with_separator(str: string): bool
+    for c in "\\/"
+        if ends_with(str, to_char(c))
+            return true
+    return false
+
+def private starts_with_separator(str: string): bool
+    for c in "\\/"
+        if starts_with(str, to_char(c))
+            return true
+    return false
+
+def private trim_path(path: string): string
+    if path == "."
+        return ""
+    if path |> starts_with("./") || path |> starts_with(".\\")
+        return path |> slice(2)
+    return path
+
+def private join_path(a, path_b: string): string
+    let b = trim_path(path_b)
+    if length(a) == 0
+        return fix_path(b)
+    if length(b) == 0
+        return fix_path(a)
+    var res = build_string() <| $(builder)
+        builder |> write(a)
+        let ends = ends_with_separator(a)
+        let starts = starts_with_separator(b)
+        if ends && starts
+            builder |> write(slice(b, 1))
+        elif !ends && !starts
+            builder |> write("/")
+            builder |> write(b)
+        else
+            builder |> write(b)
+    return fix_path(res)
+
+def private fix_path(path: string): string
+    return path |> trim_path() |> file_name_to_uri() |> normalize_uri() |> uri_to_file_name()
+
+def private resolve_path(path: string; paths: array<string>): string
+    if path |> empty()
+        return path
+    for it in paths
+        let newPath = it |> join_path(path)
+        if stat(newPath).is_valid
+            return newPath
+    return fix_path(path)
 
 
 // class DAWalker: DapiDataWalker
@@ -73,6 +124,7 @@ class DAStackWalker: DapiStackWalker
     // data_walker: DAWalker?
 
     [[do_not_delete]] ctx: DAContext?
+    [[do_not_delete]] workingPaths: array<string>?
 
     def DAStackWalker()
         pass
@@ -92,7 +144,7 @@ class DAStackWalker: DapiStackWalker
 
     def override onCallAt(pp:Prologue; info:FuncInfo; at:LineInfo): void
         // print("def {info.name} at {at}\n")
-        ctx.stack |> emplace([[DAStackFrame name="def {info.name}", path="{at.fileInfo.name}", line=at.line ]])
+        ctx.stack |> emplace([[DAStackFrame name="def {info.name}", path="{at.fileInfo.name}" |> resolve_path(*workingPaths), line=at.line ]])
         pass
 
     def override onCall(pp:Prologue; info:FuncInfo): void
@@ -172,17 +224,29 @@ class DAgent: DapiDebugAgent
     contextId: uint64 = 1ul
 
     waitConnection: bool = true
+    workingPaths: array<string>
 
     def DAgent()
+        let args <- get_command_line_arguments()
+        waitConnection = args |> find_index("--das-wait-debugger") >= 0
+
+        for i in range(length(args) - 1)
+            if args[i] == "--das-debug-path"
+                workingPaths |> push(args[i + 1])
+        let dasRoot = get_das_root()
+        workingPaths |> push(dasRoot |> join_path("daslib"))
+        workingPaths |> push(dasRoot |> join_path("src/builtin"))
+
         walker = new DAStackWalker()
         unsafe
             walker_adapter <- make_stack_walker(walker)
+            walker.workingPaths = addr(workingPaths)
         self->startServer()
         self->addContext(this_context())
 
     def startServer()
         let args <- get_command_line_arguments()
-        let port = args |> get_int_arg("--das-debug-port", 9000)
+        let port = args |> get_int_arg("--das-debug-port", 10000)
         server = new DAServer()
         server.port = port
         unsafe
@@ -210,13 +274,13 @@ class DAgent: DapiDebugAgent
             return
         if !waitConnection && (!server.configurationDone || !server.threadsDone)
             return
-        let path = "{at.fileInfo.name}"
+        let path = "{at.fileInfo.name}" |> resolve_path(workingPaths)
         self->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
         set_single_step(ctx,true)
 
         self->addContext(ctx)
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
-            self->sendStopped(ctx, ctxData, at, "pause", -1ul)
+            self->sendStopped(ctx, ctxData, path, at, "pause", -1ul)
             ctxData.continueRequested = false
             while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debug_agent()
@@ -229,7 +293,7 @@ class DAgent: DapiDebugAgent
             return
 
         // unsafe
-        //     self->log("{double(ctx_at(ctx))} step at {at.fileInfo.name}:{int(at.line)}\n")
+        //     self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path(workingPaths)}:{int(at.line)}\n")
 
         if (uint(ctx.category) & (1u << 31u)) != 0u
             self->addContext(ctx)
@@ -243,15 +307,16 @@ class DAgent: DapiDebugAgent
                 self->log("[Error] non debug context in single step {ctx.name}")
 
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
+            let file = string(at.fileInfo.name) |> resolve_path(workingPaths)
             if ctxData.pauseRequested
-                self->sendStopped(ctx, ctxData, at, "pause", -1ul)
+                self->sendStopped(ctx, ctxData, file, at, "pause", -1ul)
                 while ctxData.pauseRequested
                     tick_debug_agent()
                     sleep(1u)
 
             if ctxData.stepInRequested
                 ctxData.stepInRequested = false
-                self->sendStopped(ctx, ctxData, at, "step", -1ul)
+                self->sendStopped(ctx, ctxData, file, at, "step", -1ul)
                 ctxData.continueRequested = false
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debug_agent()
@@ -265,12 +330,11 @@ class DAgent: DapiDebugAgent
                 if stack_depth(*ctxData.ctx) > ctxData.stepRequestedStack
                     return
                 ctxData.stepRequestedStack = 0
-                self->sendStopped(ctx, ctxData, at, "step", -1ul)
+                self->sendStopped(ctx, ctxData, file, at, "step", -1ul)
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debug_agent()
                     sleep(1u)
 
-            let file = string(at.fileInfo.name)
             var prevBreak = -1ul
             var inBreak = key_exists(breakpoints, file)
             // self->log("search break `{file}`:{at.line} - {inBreak}\n")
@@ -280,7 +344,7 @@ class DAgent: DapiDebugAgent
                 var brIdx = 0
                 while brs != null && brIdx < length(*brs)
                     let br & = (*brs)[brIdx++]
-                    // self->log("search break `{file}` {brs} in {at.fileInfo.name}\n")
+                    // self->log("search break `{file}` {brs} in {file}\n")
                     if br.line == uint(at.line)
                         if ctxData.continueRequested && prevBreak == br.id
                             ctxData.continueRequested = false
@@ -291,14 +355,14 @@ class DAgent: DapiDebugAgent
                         inBreak = true
 
                         if prevBreak != br.id
-                            self->sendStopped(ctx, ctxData, at, "breakpoint", br.id)
+                            self->sendStopped(ctx, ctxData, file, at, "breakpoint", br.id)
 
                         prevBreak = br.id
                         tick_debug_agent()
                         sleep(1u)
                         break
 
-    def nextStep(var ctx: Context; var ctxData:DAContext; at:LineInfo)
+    def nextStep(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo)
         delete ctxData.stack
         unsafe
             walker.ctx = addr(ctxData)
@@ -309,13 +373,13 @@ class DAgent: DapiDebugAgent
                 let q = j - 1
                 ctxData.stack[j].path = ctxData.stack[q].path
                 ctxData.stack[j].line = ctxData.stack[q].line
-            ctxData.stack[0].path = "{at.fileInfo.name}"
+            ctxData.stack[0].path = path
             ctxData.stack[0].line = at.line
 
-    def sendStopped(var ctx: Context; var ctxData:DAContext; at:LineInfo; reason: string; brId: uint64)
-        self->log("<< stopped `{reason}` at {at.fileInfo.name}:{int(at.line)}")
+    def sendStopped(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo; reason: string; brId: uint64)
+        self->log("<< stopped `{reason}` at {path}:{int(at.line)}")
 
-        self->nextStep(ctx, ctxData, at)
+        self->nextStep(ctx, ctxData, path, at)
         server->sendStopped(ctxData, reason, brId)
 
     def override onTick()
@@ -751,7 +815,7 @@ def private start_agent(force:bool = false): bool
 
 
 [init,export]
-def auto_start_debug()
+def private auto_start_debug()
     if !is_in_debug_agent_creation()
         this_context().category |= bitfield(1u << 31u) // TODO:
         if !has_debug_agent_context("debug")
