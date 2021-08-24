@@ -104,6 +104,8 @@ namespace das
 
     typedef vector<AnnotationDeclarationPtr> AnnotationList;
 
+    AnnotationList cloneAnnotationList ( const AnnotationList & list );
+
     class Enumeration : public ptr_ref_count {
     public:
         struct EnumEntry {

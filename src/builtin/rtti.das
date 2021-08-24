@@ -97,10 +97,12 @@ def public class_info ( cl ) : StructInfo const?
         concept_assert(false,"not a class")
         return null
 
+[generic]
 def type_info ( vinfo:LocalVariableInfo ) : TypeInfo const?
     unsafe
         return reinterpret<TypeInfo const?>(addr(vinfo))
 
+[generic]
 def type_info ( vinfo:VarInfo ) : TypeInfo const?
     unsafe
         return reinterpret<TypeInfo const?>(addr(vinfo))

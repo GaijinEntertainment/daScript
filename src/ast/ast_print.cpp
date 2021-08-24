@@ -342,6 +342,7 @@ namespace das {
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
             if ( block->isClosure ) {
+                logAnnotations(block->annotations);
                 if ( block->returnType || block->arguments.size() ) {
                     ss << "(";
                     for ( auto & arg : block->arguments ) {

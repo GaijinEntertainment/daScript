@@ -174,7 +174,7 @@ namespace das {
         cs->at = at;
         cs->module = module;
         cs->flags = flags;
-        cs->annotations = annotations;
+        cs->annotations = cloneAnnotationList(annotations);
         return cs;
     }
 
@@ -447,13 +447,25 @@ namespace das {
 
     // function
 
+    AnnotationList cloneAnnotationList ( const AnnotationList & list ) {
+        AnnotationList clist;
+        for ( auto & ann : list ) {
+            auto decl = make_smart<AnnotationDeclaration>();
+            decl->annotation = ann->annotation;
+            decl->arguments = ann->arguments;
+            decl->at = ann->at;
+            clist.push_back(decl);
+        }
+        return clist;
+    }
+
     FunctionPtr Function::clone() const {
         auto cfun = make_smart<Function>();
         cfun->name = name;
         for ( const auto & arg : arguments ) {
             cfun->arguments.push_back(arg->clone());
         }
-        cfun->annotations = annotations;
+        cfun->annotations = cloneAnnotationList(annotations);
         cfun->result = make_smart<TypeDecl>(*result);
         cfun->body = body->clone();
         cfun->index = -1;
@@ -1491,7 +1503,7 @@ namespace das {
         for ( auto & arg : arguments ) {
             cexpr->arguments.push_back(arg->clone());
         }
-        cexpr->annotations = annotations;
+        cexpr->annotations = cloneAnnotationList(annotations);
         cexpr->maxLabelIndex = maxLabelIndex;
         cexpr->inFunction = inFunction;
         return cexpr;
