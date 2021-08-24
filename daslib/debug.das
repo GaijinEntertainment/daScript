@@ -210,14 +210,17 @@ def private to_string(ctx: DAContext)
         let stoppable = (uint(ctx.ctx.category) & (1u << 31u)) != 0u
         if stoppable
             str |> write("*")
-        str |> write(ctx.at)
-        if length(ctx.ctx.name) > 0
-            str |> write(" \"")
+        let ctxNameLen = length(ctx.ctx.name)
+        if ctxNameLen > 0
             str |> write(ctx.ctx.name)
-            str |> write("\"")
+        else
+            str |> write(ctx.at)
         if int(ctx.ctx.category) > 0
             str |> write(" ")
             str |> write(ctx.ctx.category)
+        if ctxNameLen > 0
+            str |> write(" ")
+            str |> write(ctx.at)
         str |> write(" (")
         str |> write(int64(ctx.id))
         str |> write(")")
