@@ -24,6 +24,13 @@ require daslib/dap
 
 
 let
+    logStrMemory = false
+    initialStrLimit = uint64(2 * 1024 * 1024)
+
+var
+    strLimit = initialStrLimit
+
+let
     LOCAL_VARS = 1ul
     ARGUMENT_VARS = 2ul
     GLOBAL_VARS = 3ul
@@ -94,6 +101,14 @@ def private resolve_path(path: string; paths: array<string>): string
         if stat(newPath).is_valid
             return newPath
     return fix_path(path)
+
+
+def private bytes_hr(value : uint64)
+    if value > uint64(1024 * 1024)
+        return "{float(value) / (1024f * 1024f)}mb ({int(value)})"
+    if value > uint64(1024)
+        return "{float(value) / 1024f}kb ({int(value)})"
+    return "{int(value)} b"
 
 
 // class DAWalker: DapiDataWalker
@@ -183,26 +198,29 @@ struct DAContext
     stepRequestedStack: int = 0 // stack depth
 
 
-def reset_debug_flags(var ctx: DAContext)
+def private reset_debug_flags(var ctx: DAContext)
     ctx.continueRequested = false
     ctx.pauseRequested = false
     ctx.stepInRequested = false
     ctx.stepRequestedStack = 0
 
 
-def to_string(ctx: DAContext)
+def private to_string(ctx: DAContext)
     return build_string() <| $(str)
         let stoppable = (uint(ctx.ctx.category) & (1u << 31u)) != 0u
         if stoppable
             str |> write("*")
-        str |> write(ctx.at)
-        if length(ctx.ctx.name) > 0
-            str |> write(" \"")
+        let ctxNameLen = length(ctx.ctx.name)
+        if ctxNameLen > 0
             str |> write(ctx.ctx.name)
-            str |> write("\"")
+        else
+            str |> write(ctx.at)
         if int(ctx.ctx.category) > 0
             str |> write(" ")
             str |> write(ctx.ctx.category)
+        if ctxNameLen > 0
+            str |> write(" ")
+            str |> write(ctx.at)
         str |> write(" (")
         str |> write(int64(ctx.id))
         str |> write(")")
@@ -396,6 +414,26 @@ class DAgent: DapiDebugAgent
                 unsafe
                     delete server
                 self->startServer()
+
+        var alloc = string_heap_bytes_allocated()
+        if alloc > strLimit
+            // string_heap_report()
+            var report: string
+            if logStrMemory
+                report = "STRING HEAP COLLECT: {bytes_hr(alloc)} -> "
+            unsafe
+                string_heap_collect()
+            alloc = string_heap_bytes_allocated()
+            if logStrMemory
+                print("dap: {report}{bytes_hr(alloc)} limit : {bytes_hr(strLimit)}\n")
+            if alloc > strLimit
+                strLimit *= uint64(2)
+                if logStrMemory
+                    print("dap: UP string heap limit: {bytes_hr(strLimit)}\n")
+            elif strLimit > initialStrLimit && alloc < strLimit / uint64(2)
+                strLimit = strLimit / uint64(2)
+                if logStrMemory
+                    print("dap: DOWN string heap limit: {bytes_hr(strLimit)}\n")
 
     def override onCreateContext(var ctx: Context): void
         self->addContext(ctx)
@@ -823,11 +861,13 @@ def private start_agent(force:bool = false): bool
 def private auto_start_debug()
     if !is_in_debug_agent_creation()
         this_context().category |= bitfield(1u << 31u) // TODO:
+        set_single_step(this_context(), true)
         if !has_debug_agent_context("debug")
             if start_agent()
                 new_thread <| @
+                    this_context().category &= ~bitfield(1u << 31u) // TODO:
+                    set_single_step(this_context(), false)
                     this_context().name := "tick thread"
                     while !is_job_que_shutting_down()
                         tick_debug_agent()
                         sleep(1u)
-        set_single_step(this_context(), true)
