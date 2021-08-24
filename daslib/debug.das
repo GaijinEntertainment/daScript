@@ -23,14 +23,14 @@ require daslib/strings_boost
 require daslib/dap
 
 
-let
+let private
     logStrMemory = false
     initialStrLimit = uint64(2 * 1024 * 1024)
 
-var
+var private
     strLimit = initialStrLimit
 
-let
+let private
     LOCAL_VARS = 1ul
     ARGUMENT_VARS = 2ul
     GLOBAL_VARS = 3ul
@@ -120,13 +120,13 @@ def private bytes_hr(value : uint64)
 //         print("[int] {value}")
 
 
-struct DAVariable
+struct private DAVariable
     name: string
     value: string
     _type: string
 
 
-struct DAStackFrame
+struct private DAStackFrame
     name: string
     path: string
     line: uint = 1u
@@ -134,7 +134,7 @@ struct DAStackFrame
     arguments: array<DAVariable>
 
 
-class DAStackWalker: DapiStackWalker
+class private DAStackWalker: DapiStackWalker
     data_walker_adapter: smart_ptr<DataWalker>
     // data_walker: DAWalker?
 
@@ -179,7 +179,7 @@ class DAStackWalker: DapiStackWalker
             ctx.stack[stackLen-1].arguments |> emplace([[DAVariable name="{vinfo.name}", value=value, _type=describe(ti)]])
 
 
-struct DABreakpoint
+struct private DABreakpoint
     id: uint64
     line: uint
 
@@ -187,7 +187,7 @@ typedef
     DABreakpoints = table<string; array<DABreakpoint>>
     DAContextAt = uint64
 
-struct DAContext
+struct private DAContext
     id: uint64
     at: DAContextAt
     ctx: Context?
@@ -226,7 +226,7 @@ def private to_string(ctx: DAContext)
         str |> write(")")
 
 
-class DAgent: DapiDebugAgent
+class private DAgent: DapiDebugAgent
 
     walker_adapter: smart_ptr<StackWalker>
     walker: DAStackWalker?
@@ -486,7 +486,7 @@ class DAgent: DapiDebugAgent
         delete contexts[idx]
         contexts |> erase(idx)
 
-class DAServer: Server
+class private DAServer: Server
     port: int
     [[do_not_delete]] agent: DAgent?
 
