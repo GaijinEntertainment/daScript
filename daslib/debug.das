@@ -858,11 +858,13 @@ def private start_agent(force:bool = false): bool
 def private auto_start_debug()
     if !is_in_debug_agent_creation()
         this_context().category |= bitfield(1u << 31u) // TODO:
+        set_single_step(this_context(), true)
         if !has_debug_agent_context("debug")
             if start_agent()
                 new_thread <| @
+                    this_context().category &= ~bitfield(1u << 31u) // TODO:
+                    set_single_step(this_context(), false)
                     this_context().name := "tick thread"
                     while !is_job_que_shutting_down()
                         tick_debug_agent()
                         sleep(1u)
-        set_single_step(this_context(), true)
