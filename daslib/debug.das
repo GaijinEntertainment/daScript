@@ -23,14 +23,14 @@ require daslib/strings_boost
 require daslib/dap
 
 
-let
+let private
     logStrMemory = false
     initialStrLimit = uint64(2 * 1024 * 1024)
 
-var
+var private
     strLimit = initialStrLimit
 
-let
+let private
     LOCAL_VARS = 1ul
     ARGUMENT_VARS = 2ul
     GLOBAL_VARS = 3ul
