@@ -450,7 +450,6 @@ namespace das
                 for ( uint32_t ai = 0; ai!=info->argCount; ++ai ) {
                     if ( ai !=0 ) stream << "; ";
                     stream << info->argNames[ai];
-                    ai ++;
                 }
                 stream << ">";
             }
