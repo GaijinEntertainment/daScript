@@ -130,7 +130,7 @@ namespace das {
             res = send(client_fd, data, size, 0);
             if ( res>0 ) {
                 DAS_ASSERT(size>=res);
-                data += size;
+                data += res;
                 size -= res;
                 if ( size==0 ) {
                     return true;
