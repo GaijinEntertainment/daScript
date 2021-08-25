@@ -724,94 +724,6 @@ namespace das
         return true;
     }
 
-    string TypeDecl::getMangledName() const {
-        TextWriter ss;
-        if ( constant )     ss << "#const#";
-        if ( ref )          ss << "#ref#";
-        if ( temporary )    ss << "#temporary#";
-        if ( implicit )     ss << "#implicit#";
-        if ( explicitConst )ss << "#explicitconst#";
-        if ( isExplicit )   ss << "#explicit#";
-        if (baseType == Type::autoinfer) {
-            ss << "#auto";
-            if ( !alias.empty() ) ss << "#" << alias;
-        } else if (baseType == Type::alias) {
-            ss << "#alias#" << alias;
-        } else if ( baseType==Type::tHandle ) {
-            ss << "#handle#" << annotation->name;
-        } else if ( baseType==Type::tArray ) {
-            ss << "#array";
-            if ( firstType ) {
-                ss << "#" << firstType->getMangledName();
-            }
-        } else if ( baseType==Type::tTable ) {
-            ss << "#table";
-            if ( firstType ) {
-                ss << "#" << firstType->getMangledName();
-            }
-            if ( secondType ) {
-                ss << "#" << secondType->getMangledName();
-            }
-        } else if ( baseType==Type::tPointer ) {
-            ss << (smartPtr ? "#smart_ptr" : "#ptr");
-            if ( firstType ) {
-                ss << "#" << firstType->getMangledName();
-            }
-        } else if ( baseType==Type::tEnumeration ) {
-            ss << "#enum";
-            if ( enumType ) {
-                ss << "#" << enumType->getMangledName();
-            }
-        } else if ( baseType==Type::tEnumeration8 ) {
-            ss << "#enum8";
-            if ( enumType ) {
-                ss << "#" << enumType->getMangledName();
-            }
-        } else if ( baseType==Type::tEnumeration16 ) {
-            ss << "#enum16";
-            if ( enumType ) {
-                ss << "#" << enumType->getMangledName();
-            }
-        } else if ( baseType==Type::tIterator ) {
-            ss << "#iterator";
-            if ( firstType ) {
-                ss << "#" << firstType->getMangledName();
-            }
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
-                   baseType==Type::tLambda || baseType==Type::tTuple ||
-                   baseType==Type::tVariant ) {
-            ss << "#" << das_to_string(baseType);
-            for ( auto & arg : argTypes ) {
-                ss << "#" << arg->getMangledName();
-            }
-            for ( auto & arg : argNames ) {
-                ss << "#`" << arg;
-            }
-            if ( firstType ) {
-                ss << "#:" << firstType->getMangledName();
-            }
-        } else if ( baseType==Type::tStructure ) {
-            if ( structType ) {
-                ss << structType->name;
-            } else {
-                ss << "structue?";
-            }
-        } else if ( baseType==Type::tBitfield ) {
-            ss << "#" << das_to_string(baseType);
-            for ( auto & arg : argNames ) {
-                ss << "#`" << arg;
-            }
-        } else {
-            ss << das_to_string(baseType);
-        }
-        if ( dim.size() ) {
-            for ( auto d : dim ) {
-                ss << "#" << d;
-            }
-        }
-        return ss.str();
-    }
-
     bool TypeDecl::canBePlacedInContainer() const {
         das_set<Structure *> dep;
         return canBePlacedInContainer(dep);
@@ -2188,44 +2100,262 @@ namespace das
         argTypes.push_back(tt);
     }
 
-    string parseTypeName ( const char * & ch ) {
-        if ( *ch!='<' ) return ""; ch ++;
+    string parseAnyName ( const char * & ch, bool allowModule ) {
         string name;
-        while ( *ch!='>' ) {
-            if ( isalnum(*ch) || *ch=='_' || *ch=='`' || *ch==':' ) {
-                char che[2] = { *ch, 0 };
-                name.append(che);
-                ch ++;
-            } else if ( *ch==0 ) {
-                DAS_ASSERT(0 && "unsupported mangled name format - name exceeds string");
-                return "";
-            } else  {
-                DAS_ASSERT(0 && "unsupported mangled name format - unsupported symbol");
-                return "";
+        while ( isalnum(*ch) || *ch=='_' || *ch=='`' || (*ch==':' && allowModule) ) {
+            char che[2] = { *ch, 0 };
+            name.append(che);
+            ch ++;
+        }
+        return name;
+    }
+
+    string parseAnyNameInBrackets ( const char * & ch ) {
+        DAS_ASSERT ( *ch=='<' );
+        ch ++;
+        auto name = parseAnyName(ch, true);
+        DAS_ASSERT ( *ch=='>' );
+        ch ++;
+        return name;
+    }
+
+    string TypeDecl::getMangledName ( bool fullName ) const {
+        TextWriter ss;
+        if ( constant )     ss << "C";
+        if ( ref )          ss << "&";
+        if ( temporary )    ss << "#";
+        if ( implicit )     ss << "I";
+        if ( explicitConst )ss << "=";
+        if ( isExplicit )   ss << "X";
+        if ( dim.size() ) {
+            for ( auto d : dim ) {
+                ss << "[" << d << "]";
             }
         }
-        ch ++; // skip >
-        return name;
+        if ( fullName ) {
+            if ( removeDim )        ss << "-[]";
+            if ( removeConstant )   ss << "-C";
+            if ( removeRef )        ss << "-&";
+            if ( removeTemporary )  ss << "-#";
+        }
+        if ( argNames.size() ) {
+            ss << "N<";
+            bool first = true;
+            for ( auto & arg : argNames ) {
+                if ( first ) first = false; else ss << ";";
+                ss << arg;
+            }
+            ss << ">";
+        }
+        if ( argTypes.size() ) {
+            ss << "0<";
+            bool first = true;
+            for ( auto & arg : argTypes ) {
+                if ( first ) first = false; else ss << ";";
+                ss << arg->getMangledName(fullName);
+            }
+            ss << ">";
+        }
+        if ( firstType ) {
+            ss << "1<" << firstType->getMangledName(fullName) << ">";
+        }
+        if ( secondType ) {
+            ss << "2<" << secondType->getMangledName(fullName) << ">";
+        }
+        if (baseType == Type::autoinfer) {
+            ss << ".";
+            if ( !alias.empty() ) ss << "<" << alias << ">";
+        } else if (baseType == Type::alias) {
+            ss << "L<" << alias << ">";
+        } else if ( baseType==Type::tHandle ) {
+            ss << "H<";
+            if ( !annotation->module->name.empty() ) {
+                ss << annotation->module->name << "::";
+             }
+             ss << annotation->name << ">";
+        } else if ( baseType==Type::tStructure ) {
+            ss << "S<";
+            if ( structType->module && structType->module->name.empty() ) {
+                ss << structType->module->name << "::";
+            }
+            ss << structType->name << ">";
+        } else if ( baseType==Type::tEnumeration || baseType==Type::tEnumeration8 || baseType==Type::tEnumeration16 ) {
+            ss << "E";
+            if ( baseType==Type::tEnumeration8 ) ss << "8";
+            else if ( baseType==Type::tEnumeration16 ) ss << "16";
+            if ( enumType ) {
+                ss << "<" << enumType->getMangledName() << ">";
+            }
+        } else {
+            switch ( baseType ) {
+                case Type::anyArgument:     ss << "*"; break;
+                case Type::fakeContext:     ss << "_c"; break;
+                case Type::fakeLineInfo:    ss << "_l"; break;
+                case Type::tIterator:       ss << "G";
+                case Type::tArray:          ss << "A";
+                case Type::tTable:          ss << "T";
+                case Type::tPointer:        ss << "?";
+                case Type::tBlock:          ss << "$"; break;
+                case Type::tFunction:       ss << "@@"; break;
+                case Type::tLambda:         ss << "@"; break;
+                case Type::tTuple:          ss << "U"; break;
+                case Type::tVariant:        ss << "V"; break;
+                case Type::tBitfield:       ss << "t"; break;
+                case Type::tInt:            ss << "i"; break;
+                case Type::tInt2:           ss << "i2"; break;
+                case Type::tInt3:           ss << "i3"; break;
+                case Type::tInt4:           ss << "i4"; break;
+                case Type::tInt8:           ss << "i8"; break;
+                case Type::tInt16:          ss << "i16"; break;
+                case Type::tInt64:          ss << "i64"; break;
+                case Type::tUInt:           ss << "u"; break;
+                case Type::tUInt2:          ss << "u2"; break;
+                case Type::tUInt3:          ss << "u3"; break;
+                case Type::tUInt4:          ss << "u4"; break;
+                case Type::tUInt8:          ss << "u8"; break;
+                case Type::tUInt16:         ss << "u16"; break;
+                case Type::tUInt64:         ss << "u64"; break;
+                case Type::tFloat:          ss << "f"; break;
+                case Type::tFloat2:         ss << "f2"; break;
+                case Type::tFloat3:         ss << "f3"; break;
+                case Type::tFloat4:         ss << "f4"; break;
+                case Type::tRange:          ss << "r"; break;
+                case Type::tURange:         ss << "z"; break;
+                case Type::tDouble:         ss << "d"; break;
+                case Type::tString:         ss << "s"; break;
+                case Type::tVoid:           ss << "v"; break;
+                case Type::tBool:           ss << "b"; break;
+                default:
+                    TextPrinter tp;
+                    tp << "ERROR " << das_to_string(baseType) << "\n";
+                    DAS_ASSERT(0 && "we should not be here");
+                    break;
+            }
+        }
+        return ss.str();
     }
 
     TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library  ) {
         switch ( *ch ) {
-            case 'S': { // structure
+            case '[': {
                 ch ++;
-                auto sname = parseTypeName(ch);
+                string numT = "";
+                while ( isdigit(*ch) ) {
+                    numT += *ch;
+                    ch ++;
+                }
+                DAS_ASSERT(*ch==']');
+                ch ++;
+                int di = atoi(numT.c_str());
+                auto pt = parseTypeFromMangledName(ch, library);
+                pt->dim.insert(pt->dim.begin(), di);
+                return pt;
+            }
+            case '1': {
+                ch ++;
+                DAS_ASSERT(*ch=='<');
+                ch ++;
+                auto ft = parseTypeFromMangledName(ch,library);
+                DAS_ASSERT(*ch=='>');
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library);
+                pt->firstType = move(ft);
+                return pt;
+            };
+            case '2': {
+                ch ++;
+                DAS_ASSERT(*ch=='<');
+                ch ++;
+                auto ft = parseTypeFromMangledName(ch,library);
+                DAS_ASSERT(*ch=='>');
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library);
+                pt->secondType = move(ft);
+                return pt;
+            };
+            case 'H': {
+                ch ++;
+                auto pt = make_smart<TypeDecl>(Type::tHandle);
+                auto annName = parseAnyNameInBrackets(ch);
+                auto ann = library.findAnnotation(annName,nullptr);
+                DAS_ASSERT(ann.size()==1);
+                pt->annotation = (TypeAnnotation *) ann.back().get();
+                DAS_ASSERT(pt->annotation->rtti_isHandledTypeAnnotation());
+                return pt;
+            };
+            case 'S': {
+                ch ++;
+                auto sname = parseAnyNameInBrackets(ch);
                 auto pt = make_smart<TypeDecl>(Type::tStructure);
                 auto stt = library.findStructure(sname, nullptr);
-                if ( stt.size()!=1 ) {
-                    DAS_ASSERT(0 && "structure not found");
-                    return nullptr;
-                }
+                DAS_ASSERT ( stt.size()==1 );
                 pt->structType = stt.back().get();
                 return pt;
             }
-            // TODO: array, table, tuple, bitfield, variant, dim
-            case '.':   ch++; return make_smart<TypeDecl>(Type::autoinfer);
-            case '*':   ch++; return make_smart<TypeDecl>(Type::anyArgument);
-            case 'L':   ch++; return make_smart<TypeDecl>(Type::alias);
+            case '0': {
+                ch ++;
+                vector<TypeDeclPtr> types;
+                while ( *ch!=0 && *ch!='>' ) {
+                    ch ++;
+                    auto tt = parseTypeFromMangledName(ch,library);
+                    types.push_back(tt);
+                }
+                DAS_ASSERT ( *ch=='>' );
+                ch++;
+                auto pt = parseTypeFromMangledName(ch,library);
+                pt->argTypes = move(types);
+                return pt;
+            };
+            case 'N': {
+                ch ++;
+                vector<string> names;
+                while ( *ch!=0 && *ch!='>' ) {
+                    ch ++;
+                    auto name = parseAnyName(ch, false);
+                    if ( !name.empty() ) names.push_back(name);
+                }
+                DAS_ASSERT ( *ch=='>' );
+                ch++;
+                auto pt = parseTypeFromMangledName(ch,library);
+                pt->argNames = move(names);
+                return pt;
+            };
+            case 'E': {
+                ch ++;
+                TypeDeclPtr pt;
+                if ( *ch=='8' ) {
+                    ch ++;
+                    pt = make_smart<TypeDecl>(Type::tEnumeration8);
+                } else if ( ch[0]=='1' && ch[1]=='6' ) {
+                    ch += 2;
+                    pt = make_smart<TypeDecl>(Type::tEnumeration16);
+                } else {
+                    pt = make_smart<TypeDecl>(Type::tEnumeration);
+                }
+                if ( *ch=='<' ) {
+                    auto sname = parseAnyNameInBrackets(ch);
+                    auto stt = library.findEnum(sname, nullptr);
+                    DAS_ASSERT ( stt.size()==1 );
+                    pt->enumType = stt.back().get();
+                }
+                return pt;
+            }
+            case '.': {
+                 ch++;
+                 auto pt = make_smart<TypeDecl>(Type::autoinfer);
+                 if ( *ch=='<' ) pt->alias = parseAnyNameInBrackets(ch);
+                 return pt;
+            };
+            case '*': {
+                ch++;
+                return make_smart<TypeDecl>(Type::anyArgument);
+            };
+            case 'L': {
+                ch++;
+                auto pt = make_smart<TypeDecl>(Type::alias);
+                pt->alias = parseAnyNameInBrackets(ch);
+                return pt;
+            };
             case '_': {
                         if ( ch[1]=='c' )                   { ch+=2; return make_smart<TypeDecl>(Type::fakeContext); }
                 else    if ( ch[1]=='l' )                   { ch+=2; return make_smart<TypeDecl>(Type::fakeLineInfo); }
@@ -2252,19 +2382,29 @@ namespace das
                 else    if ( ch[1]=='3' )                   { ch+=2; return make_smart<TypeDecl>(Type::tFloat3); }
                 else    if ( ch[1]=='4' )                   { ch+=2; return make_smart<TypeDecl>(Type::tFloat4); }
                 else                                        { ch+=1; return make_smart<TypeDecl>(Type::tFloat); }
-
+            case 'A':   ch++; return make_smart<TypeDecl>(Type::tArray);
+            case 'T':   ch++; return make_smart<TypeDecl>(Type::tTable);
+            case 'G':   ch++; return make_smart<TypeDecl>(Type::tIterator);
+            case '$':   ch++; return make_smart<TypeDecl>(Type::tBlock);
+            case 'U':   ch++; return make_smart<TypeDecl>(Type::tTuple);
+            case 'V':   ch++; return make_smart<TypeDecl>(Type::tVariant);
+            case 't':   ch++; return make_smart<TypeDecl>(Type::tBitfield);
             case 'r':   ch++; return make_smart<TypeDecl>(Type::tRange);
             case 'z':   ch++; return make_smart<TypeDecl>(Type::tURange);      // why z? dunno
             case 'd':   ch++; return make_smart<TypeDecl>(Type::tDouble);
             case 's':   ch++; return make_smart<TypeDecl>(Type::tString);
             case 'v':   ch++; return make_smart<TypeDecl>(Type::tVoid);
             case 'b':   ch++; return make_smart<TypeDecl>(Type::tBool);
-            case '?': {
-                ch ++;
-                auto pt = make_smart<TypeDecl>(Type::tPointer);
-                pt->firstType = parseTypeFromMangledName(ch,library);
-                return pt;
-            };
+            case '?':   ch++; return make_smart<TypeDecl>(Type::tPointer);
+            case '@':   {
+                if ( ch[1]=='@' ) {
+                    ch++;
+                    return make_smart<TypeDecl>(Type::tLambda);
+                } else {
+                    ch+=2;
+                    return make_smart<TypeDecl>(Type::tFunction);
+                }
+            }
             case '&': {
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library);
@@ -2306,18 +2446,30 @@ namespace das
                     pt->removeConstant = true;
                     return pt;
                 }
-                // TODO: support remove dim
+                case '[': {
+                    DAS_ASSERT ( ch[2]==']' );
+                    ch += 3;
+                    auto pt = parseTypeFromMangledName(ch,library);
+                    pt->removeDim = true;
+                    return pt;
+                }
                 }
                 DAS_ASSERT(0 && "unsupported mangled name format - expecting remove trait");
                 return nullptr;
-            }
-            case 'I': { // implicit
+            };
+            case 'I': {
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library);
                 pt->implicit = true;
                 return pt;
             };
-            case 'X': { // explicit
+            case 'X': {
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library);
+                pt->isExplicit = true;
+                return pt;
+            };
+            case '=': {
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library);
                 pt->explicitConst = true;

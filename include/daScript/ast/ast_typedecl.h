@@ -47,7 +47,7 @@ namespace das {
         TypeDecl(const EnumerationPtr & ep);
         TypeDeclPtr visit ( Visitor & vis );
         friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
-        string getMangledName() const;
+        string getMangledName ( bool fullName=false ) const;
         bool canAot() const;
         bool canAot( das_set<Structure *> & recAot ) const;
         bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters,
