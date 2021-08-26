@@ -291,7 +291,6 @@ class private DAgent: DapiDebugAgent
         if at.fileInfo == null
             return
         if server == null
-            self->log("[E] onBreakpoint without server")
             return
         if !waitConnection && (!server.configurationDone || !server.threadsDone)
             return
@@ -312,7 +311,6 @@ class private DAgent: DapiDebugAgent
         if at.fileInfo == null
             return
         if server == null
-            self->log("[E] onSingleStep without server")
             return
 
         // unsafe
