@@ -34,6 +34,8 @@ namespace das {
     };
 }
 
+das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
+
 Context * get_context( int stackSize = 0 );
 
 void das_initialize_modules() {
@@ -88,17 +90,17 @@ void das_modulegroup_release ( das_module_group * group ) {
 }
 
 das_file_access * das_fileaccess_make_default (  ) {
-    auto access = make_smart<FsFileAccess>();
+    auto access = get_file_access(nullptr);
     return (das_file_access *) access.orphan();
 }
 
 das_file_access * das_fileaccess_make_project ( const char * project_file  ) {
-    auto access = make_smart<FsFileAccess>(project_file, make_smart<FsFileAccess>());
+    auto access = get_file_access((char *)project_file);
     return (das_file_access *) access.orphan();
 }
 
 void das_fileaccess_release ( das_file_access * access ) {
-    if ( access ) ((FsFileAccess *) access)->delRef();
+    if ( access ) ((FileAccess *) access)->delRef();
 }
 
 void das_get_root ( char * root, int maxbuf ) {
