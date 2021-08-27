@@ -52,6 +52,7 @@ namespace das {
         bool canAot( das_set<Structure *> & recAot ) const;
         bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters,
             TemporaryMatters temporaryMatters, AllowSubstitute allowSubstitute = AllowSubstitute::no, bool topLevel = true, bool isPassType = false ) const;
+        bool isSameExactType ( const TypeDecl & decl ) const;
         void sanitize();
         bool isExprType() const;
         bool isSimpleType () const;
@@ -562,7 +563,7 @@ namespace das {
                            CpptSkipConst skipConst = CpptSkipConst::no,
                            CpptRedundantConst redundantConst = CpptRedundantConst::yes );
 
-    TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library  );
-    TypeDeclPtr makeTypeFromMangledName ( const string & st, const ModuleLibrary & library );
+    TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library, Module * thisModule );
+    TypeDeclPtr makeTypeFromMangledName ( const string & st, const ModuleLibrary & library, Module * thisModule );
 }
 

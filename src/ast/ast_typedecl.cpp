@@ -903,6 +903,46 @@ namespace das
         for ( auto & argT : argTypes ) argT->sanitize();
     }
 
+    bool isSameExactNullType ( const TypeDeclPtr & a, const TypeDeclPtr & b ) {
+        if ( a && b ) {
+            return a->isSameExactType(*b);
+        } else if ( a && !b ) {
+            return false;
+        } else if ( !a && b ) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
+    bool TypeDecl::isSameExactType ( const TypeDecl & decl ) const {
+        if (    baseType!=decl.baseType || structType!=decl.structType || enumType!=decl.enumType
+            ||  annotation!=decl.annotation || flags!=decl.flags || alias!=decl.alias ) {
+                return false;
+            }
+        if ( dim.size() != decl.dim.size() ) return false;
+        for ( size_t i=0; i!=dim.size(); ++i ) {
+            if ( dim[i] != decl.dim[i] ) {
+                return false;
+            }
+        }
+        if ( !isSameExactNullType(firstType,decl.firstType) ) return false;
+        if ( !isSameExactNullType(secondType,decl.secondType) ) return false;
+        if ( argTypes.size() != decl.argTypes.size() ) return false;
+        for ( size_t i=0; i!=argTypes.size(); ++i ) {
+            if ( !argTypes[i]->isSameExactType(*(decl.argTypes[i])) ) {
+                return false;
+            }
+        }
+        if ( argNames.size() != decl.argNames.size() ) return false;
+        for ( size_t i=0; i!=argNames.size(); ++i ) {
+            if ( argNames[i]!=decl.argNames[i] ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool TypeDecl::isSameType ( const TypeDecl & decl,
              RefMatters refMatters,
              ConstMatters constMatters,
@@ -2102,7 +2142,7 @@ namespace das
 
     string parseAnyName ( const char * & ch, bool allowModule ) {
         string name;
-        while ( isalnum(*ch) || *ch=='_' || *ch=='`' || (*ch==':' && allowModule) ) {
+        while ( isalnum(*ch) || *ch=='_' || *ch=='`' || (*ch==':' && allowModule) || (*ch=='$' && allowModule) ) {
             char che[2] = { *ch, 0 };
             name.append(che);
             ch ++;
@@ -2110,10 +2150,10 @@ namespace das
         return name;
     }
 
-    string parseAnyNameInBrackets ( const char * & ch ) {
+    string parseAnyNameInBrackets ( const char * & ch, bool allowModule ) {
         DAS_ASSERT ( *ch=='<' );
         ch ++;
-        auto name = parseAnyName(ch, true);
+        auto name = parseAnyName(ch, allowModule);
         DAS_ASSERT ( *ch=='>' );
         ch ++;
         return name;
@@ -2127,6 +2167,7 @@ namespace das
         if ( implicit )     ss << "I";
         if ( explicitConst )ss << "=";
         if ( isExplicit )   ss << "X";
+        if ( aotAlias )     ss << "F";
         if ( dim.size() ) {
             for ( auto d : dim ) {
                 ss << "[" << d << "]";
@@ -2137,6 +2178,9 @@ namespace das
             if ( removeConstant )   ss << "-C";
             if ( removeRef )        ss << "-&";
             if ( removeTemporary )  ss << "-#";
+        }
+        if ( !alias.empty() ) {
+            ss << "Y<" << alias << ">";
         }
         if ( argNames.size() ) {
             ss << "N<";
@@ -2162,12 +2206,7 @@ namespace das
         if ( secondType ) {
             ss << "2<" << secondType->getMangledName(fullName) << ">";
         }
-        if (baseType == Type::autoinfer) {
-            ss << ".";
-            if ( !alias.empty() ) ss << "<" << alias << ">";
-        } else if (baseType == Type::alias) {
-            ss << "L<" << alias << ">";
-        } else if ( baseType==Type::tHandle ) {
+        if ( baseType==Type::tHandle ) {
             ss << "H<";
             if ( !annotation->module->name.empty() ) {
                 ss << annotation->module->name << "::";
@@ -2186,15 +2225,21 @@ namespace das
             if ( enumType ) {
                 ss << "<" << enumType->getMangledName() << ">";
             }
+        } else if ( baseType==Type::tPointer ) {
+            ss << "?";
+            if ( smartPtr ) {
+                ss << (smartPtrNative ? "W" : "M");
+            }
         } else {
             switch ( baseType ) {
                 case Type::anyArgument:     ss << "*"; break;
                 case Type::fakeContext:     ss << "_c"; break;
                 case Type::fakeLineInfo:    ss << "_l"; break;
-                case Type::tIterator:       ss << "G";
-                case Type::tArray:          ss << "A";
-                case Type::tTable:          ss << "T";
-                case Type::tPointer:        ss << "?";
+                case Type::autoinfer:       ss << "."; break;
+                case Type::alias:           ss << "L"; break;
+                case Type::tIterator:       ss << "G"; break;
+                case Type::tArray:          ss << "A"; break;
+                case Type::tTable:          ss << "T"; break;
                 case Type::tBlock:          ss << "$"; break;
                 case Type::tFunction:       ss << "@@"; break;
                 case Type::tLambda:         ss << "@"; break;
@@ -2235,11 +2280,16 @@ namespace das
         return ss.str();
     }
 
-    TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library  ) {
+    TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library, Module * thisModule ) {
         switch ( *ch ) {
             case '[': {
                 ch ++;
                 string numT = "";
+                bool neg = false;
+                if ( *ch=='-' ) {
+                    ch ++;
+                    neg = true;
+                }
                 while ( isdigit(*ch) ) {
                     numT += *ch;
                     ch ++;
@@ -2247,7 +2297,8 @@ namespace das
                 DAS_ASSERT(*ch==']');
                 ch ++;
                 int di = atoi(numT.c_str());
-                auto pt = parseTypeFromMangledName(ch, library);
+                if ( neg ) di = -di;
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->dim.insert(pt->dim.begin(), di);
                 return pt;
             }
@@ -2255,10 +2306,10 @@ namespace das
                 ch ++;
                 DAS_ASSERT(*ch=='<');
                 ch ++;
-                auto ft = parseTypeFromMangledName(ch,library);
+                auto ft = parseTypeFromMangledName(ch,library,thisModule);
                 DAS_ASSERT(*ch=='>');
                 ch ++;
-                auto pt = parseTypeFromMangledName(ch,library);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->firstType = move(ft);
                 return pt;
             };
@@ -2266,18 +2317,23 @@ namespace das
                 ch ++;
                 DAS_ASSERT(*ch=='<');
                 ch ++;
-                auto ft = parseTypeFromMangledName(ch,library);
+                auto ft = parseTypeFromMangledName(ch,library,thisModule);
                 DAS_ASSERT(*ch=='>');
                 ch ++;
-                auto pt = parseTypeFromMangledName(ch,library);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->secondType = move(ft);
                 return pt;
             };
             case 'H': {
                 ch ++;
                 auto pt = make_smart<TypeDecl>(Type::tHandle);
-                auto annName = parseAnyNameInBrackets(ch);
-                auto ann = library.findAnnotation(annName,nullptr);
+                auto annName = parseAnyNameInBrackets(ch,true);
+                auto ann = library.findAnnotation(annName,thisModule);
+                if ( thisModule && ann.size()==0 ) {
+                    if ( auto tann = thisModule->findAnnotation(annName) ) {
+                        ann.push_back(tann);
+                    }
+                }
                 DAS_ASSERT(ann.size()==1);
                 pt->annotation = (TypeAnnotation *) ann.back().get();
                 DAS_ASSERT(pt->annotation->rtti_isHandledTypeAnnotation());
@@ -2285,9 +2341,14 @@ namespace das
             };
             case 'S': {
                 ch ++;
-                auto sname = parseAnyNameInBrackets(ch);
+                auto sname = parseAnyNameInBrackets(ch,true);
                 auto pt = make_smart<TypeDecl>(Type::tStructure);
-                auto stt = library.findStructure(sname, nullptr);
+                auto stt = library.findStructure(sname, thisModule);
+               if ( thisModule && stt.size()==0 ) {
+                    if ( auto tstt = thisModule->findStructure(sname) ) {
+                        stt.push_back(tstt);
+                    }
+                }
                 DAS_ASSERT ( stt.size()==1 );
                 pt->structType = stt.back().get();
                 return pt;
@@ -2297,12 +2358,13 @@ namespace das
                 vector<TypeDeclPtr> types;
                 while ( *ch!=0 && *ch!='>' ) {
                     ch ++;
-                    auto tt = parseTypeFromMangledName(ch,library);
+                    auto tt = parseTypeFromMangledName(ch,library,thisModule);
                     types.push_back(tt);
+                    DAS_ASSERT(*ch==';' || *ch=='>');
                 }
                 DAS_ASSERT ( *ch=='>' );
                 ch++;
-                auto pt = parseTypeFromMangledName(ch,library);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->argTypes = move(types);
                 return pt;
             };
@@ -2312,11 +2374,11 @@ namespace das
                 while ( *ch!=0 && *ch!='>' ) {
                     ch ++;
                     auto name = parseAnyName(ch, false);
-                    if ( !name.empty() ) names.push_back(name);
+                    names.push_back(name);
                 }
                 DAS_ASSERT ( *ch=='>' );
                 ch++;
-                auto pt = parseTypeFromMangledName(ch,library);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->argNames = move(names);
                 return pt;
             };
@@ -2333,27 +2395,23 @@ namespace das
                     pt = make_smart<TypeDecl>(Type::tEnumeration);
                 }
                 if ( *ch=='<' ) {
-                    auto sname = parseAnyNameInBrackets(ch);
-                    auto stt = library.findEnum(sname, nullptr);
+                    auto sname = parseAnyNameInBrackets(ch,true);
+                    auto stt = library.findEnum(sname, thisModule);
+                    if ( thisModule && stt.size()==0 ) {
+                        if ( auto tstt = thisModule->findEnum(sname) ) {
+                            stt.push_back(tstt);
+                        }
+                    }
                     DAS_ASSERT ( stt.size()==1 );
                     pt->enumType = stt.back().get();
                 }
                 return pt;
             }
-            case '.': {
-                 ch++;
-                 auto pt = make_smart<TypeDecl>(Type::autoinfer);
-                 if ( *ch=='<' ) pt->alias = parseAnyNameInBrackets(ch);
-                 return pt;
-            };
-            case '*': {
-                ch++;
-                return make_smart<TypeDecl>(Type::anyArgument);
-            };
-            case 'L': {
-                ch++;
-                auto pt = make_smart<TypeDecl>(Type::alias);
-                pt->alias = parseAnyNameInBrackets(ch);
+            case 'Y': {
+                ch ++;
+                auto aname = parseAnyNameInBrackets(ch,false);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
+                pt->alias = aname;
                 return pt;
             };
             case '_': {
@@ -2365,6 +2423,7 @@ namespace das
                         if ( ch[1]=='2' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt2); }
                 else    if ( ch[1]=='3' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt3); }
                 else    if ( ch[1]=='4' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt4); }
+                else    if ( ch[1]=='8' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt8); }
                 else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return make_smart<TypeDecl>(Type::tInt16); }
                 else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tInt64); }
                 else                                        { ch+=1; return make_smart<TypeDecl>(Type::tInt); }
@@ -2373,6 +2432,7 @@ namespace das
                         if ( ch[1]=='2' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt2); }
                 else    if ( ch[1]=='3' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt3); }
                 else    if ( ch[1]=='4' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt4); }
+                else    if ( ch[1]=='8' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt8); }
                 else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return make_smart<TypeDecl>(Type::tUInt16); }
                 else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tUInt64); }
                 else                                        { ch+=1; return make_smart<TypeDecl>(Type::tUInt); }
@@ -2382,6 +2442,9 @@ namespace das
                 else    if ( ch[1]=='3' )                   { ch+=2; return make_smart<TypeDecl>(Type::tFloat3); }
                 else    if ( ch[1]=='4' )                   { ch+=2; return make_smart<TypeDecl>(Type::tFloat4); }
                 else                                        { ch+=1; return make_smart<TypeDecl>(Type::tFloat); }
+            case '.':   ch++; return make_smart<TypeDecl>(Type::autoinfer);
+            case '*':   ch++; return make_smart<TypeDecl>(Type::anyArgument);
+            case 'L':   ch++; return make_smart<TypeDecl>(Type::alias);
             case 'A':   ch++; return make_smart<TypeDecl>(Type::tArray);
             case 'T':   ch++; return make_smart<TypeDecl>(Type::tTable);
             case 'G':   ch++; return make_smart<TypeDecl>(Type::tIterator);
@@ -2395,31 +2458,44 @@ namespace das
             case 's':   ch++; return make_smart<TypeDecl>(Type::tString);
             case 'v':   ch++; return make_smart<TypeDecl>(Type::tVoid);
             case 'b':   ch++; return make_smart<TypeDecl>(Type::tBool);
-            case '?':   ch++; return make_smart<TypeDecl>(Type::tPointer);
+            case '?':   {
+                ch++;
+                auto pt = make_smart<TypeDecl>(Type::tPointer);
+                if ( *ch=='M' ) {
+                    pt->smartPtr = true;
+                    pt->smartPtrNative = false;
+                    ch ++;
+                } else if ( *ch=='W' ) {
+                    pt->smartPtr = true;
+                    pt->smartPtrNative = true;
+                    ch ++;
+                }
+                return pt;
+            };
             case '@':   {
                 if ( ch[1]=='@' ) {
-                    ch++;
-                    return make_smart<TypeDecl>(Type::tLambda);
-                } else {
                     ch+=2;
                     return make_smart<TypeDecl>(Type::tFunction);
+                } else {
+                    ch++;
+                    return make_smart<TypeDecl>(Type::tLambda);
                 }
-            }
+            };
             case '&': {
                 ch ++;
-                auto pt = parseTypeFromMangledName(ch,library);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->ref = true;
                 return pt;
             };
             case '#': {
                 ch ++;
-                auto pt = parseTypeFromMangledName(ch,library);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->temporary = true;
                 return pt;
             };
             case 'C': {
                 ch ++;
-                auto pt = parseTypeFromMangledName(ch,library);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->constant = true;
                 return pt;
             };
@@ -2427,21 +2503,21 @@ namespace das
                 switch ( ch[1] ) {
                 case '&': {
                     ch += 2;
-                    auto pt = parseTypeFromMangledName(ch,library);
+                    auto pt = parseTypeFromMangledName(ch,library,thisModule);
                     pt->ref = false;
                     pt->removeRef = true;
                     return pt;
                 }
                 case '#': {
                     ch += 2;
-                    auto pt = parseTypeFromMangledName(ch,library);
+                    auto pt = parseTypeFromMangledName(ch,library,thisModule);
                     pt->temporary = false;
                     pt->removeTemporary = true;
                     return pt;
                 }
                 case 'C': {
                     ch += 2;
-                    auto pt = parseTypeFromMangledName(ch,library);
+                    auto pt = parseTypeFromMangledName(ch,library,thisModule);
                     pt->constant = false;
                     pt->removeConstant = true;
                     return pt;
@@ -2449,7 +2525,7 @@ namespace das
                 case '[': {
                     DAS_ASSERT ( ch[2]==']' );
                     ch += 3;
-                    auto pt = parseTypeFromMangledName(ch,library);
+                    auto pt = parseTypeFromMangledName(ch,library,thisModule);
                     pt->removeDim = true;
                     return pt;
                 }
@@ -2459,20 +2535,26 @@ namespace das
             };
             case 'I': {
                 ch ++;
-                auto pt = parseTypeFromMangledName(ch,library);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->implicit = true;
                 return pt;
             };
             case 'X': {
                 ch ++;
-                auto pt = parseTypeFromMangledName(ch,library);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->isExplicit = true;
                 return pt;
             };
             case '=': {
                 ch ++;
-                auto pt = parseTypeFromMangledName(ch,library);
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->explicitConst = true;
+                return pt;
+            };
+            case 'F': {
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
+                pt->aotAlias = true;
                 return pt;
             };
             }
@@ -2481,8 +2563,8 @@ namespace das
         return nullptr;
     }
 
-    TypeDeclPtr makeTypeFromMangledName ( const string & st, const ModuleLibrary & library ) {
+    TypeDeclPtr makeTypeFromMangledName ( const string & st, const ModuleLibrary & library, Module * thisModule ) {
         const char * cstr = st.c_str();
-        return parseTypeFromMangledName(cstr,library);
+        return parseTypeFromMangledName(cstr,library,thisModule);
     }
 }
