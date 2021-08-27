@@ -1224,6 +1224,22 @@ namespace das {
             if ( inferTypeExpr(type) ) {
                 reportAstChanged();
             }
+#if 0
+            // note: this code here is for debugging mangled names facilities
+            //  do not delete, until those are stabilized
+            auto mname = type->getMangledName(true);
+            if ( mname=="CN<;f>0<i;f>U" ) {
+                mname = type->getMangledName(true);
+            }
+            auto mtype = makeTypeFromMangledName ( mname, program->library, program->thisModule.get() );
+            if ( !type->isSameExactType(*mtype) ) {
+                TextPrinter tp;
+                auto mtname = mtype->getMangledName(true);
+                tp << "Not exactly the same type '" << mname << "` vs `" << mtname << "`\n";
+                if ( mname==mtname ) tp << "however strings match\n";
+                DAS_ASSERT(type->isSameExactType(*mtype) && "type validation failed");
+            }
+#endif
         }
 
         virtual  TypeDeclPtr visitAlias ( TypeDecl * td, const string & ) override {

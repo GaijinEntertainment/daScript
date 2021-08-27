@@ -60,7 +60,7 @@ namespace das {
     // enumeration
 
     string Enumeration::getMangledName() const {
-        return (module ? module->name+"::"+name : name) + "#" + das_to_string(baseType);
+        return (module ? module->name+"::"+name : name); // + "#" + das_to_string(baseType);
     }
 
     TypeDeclPtr Enumeration::makeBaseType() const {

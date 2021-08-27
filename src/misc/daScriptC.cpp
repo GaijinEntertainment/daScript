@@ -184,7 +184,7 @@ void das_module_bind_interop_function ( das_module * mod, das_module_group * lib
     vector <TypeDeclPtr> arguments;
     const char * arg = args;
     while ( *arg ) {
-        auto tt = parseTypeFromMangledName(arg, *(ModuleLibrary*)lib);
+        auto tt = parseTypeFromMangledName(arg, *(ModuleLibrary*)lib,((Module *)mod));
         arguments.push_back(tt);
         while (*arg==' ') arg ++;
     }
