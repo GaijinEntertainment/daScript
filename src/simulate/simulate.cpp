@@ -684,6 +684,14 @@ namespace das
         }
     }
 
+    template <typename TT>
+    void for_each_debug_agent_pair ( const TT & lmbd ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        for ( auto & it : g_DebugAgents ) {
+            lmbd ( it.first, it.second.debugAgent );
+        }
+    }
+
     Context::Context(uint32_t stackSize, bool ph) : stack(stackSize) {
         code = make_shared<NodeAllocator>();
         constStringHeap = make_shared<ConstStringAllocator>();
@@ -1093,6 +1101,15 @@ namespace das
         ssw << "\nCALL STACK TRACKING DISABLED:\n\n";
     #endif
         return ssw.str();
+    }
+
+    void tickSpecificDebugAgent ( const char * name ) {
+        // register
+        for_each_debug_agent_pair([&](const string & aname, const DebugAgentPtr & pAgent){
+            if ( aname==name ) {
+                pAgent->onTick();
+            }
+        });
     }
 
     void tickDebugAgent ( ) {
