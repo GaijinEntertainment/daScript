@@ -119,6 +119,7 @@ class DAWalker: DapiDataWalker
 
     def endWalk()
         varsStack |> clear()
+        delete visited
 
     def popStack()
         let n = length(varsStack)
