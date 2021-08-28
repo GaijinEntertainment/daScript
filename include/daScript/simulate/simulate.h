@@ -666,6 +666,7 @@ namespace das
     };
 
     void tickDebugAgent ( );
+    void tickSpecificDebugAgent ( const char * name );
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
     void shutdownDebugAgent();
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
