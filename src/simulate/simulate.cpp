@@ -1104,16 +1104,14 @@ namespace das
     }
 
     void tickSpecificDebugAgent ( const char * name ) {
-        // register
-        for_each_debug_agent_pair([&](const string & aname, const DebugAgentPtr & pAgent){
-            if ( aname==name ) {
-                pAgent->onTick();
-            }
-        });
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(name);
+        if ( it != g_DebugAgents.end() ) {
+            it->second.debugAgent->onTick();
+        }
     }
 
     void tickDebugAgent ( ) {
-        // register
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             pAgent->onTick();
         });
