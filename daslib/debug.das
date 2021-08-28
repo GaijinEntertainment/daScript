@@ -994,5 +994,5 @@ def private auto_start_debug()
                     set_single_step(this_context(), false)
                     this_context().name := "tick thread"
                     while !is_job_que_shutting_down()
-                        tick_debug_agent()
+                        tick_debug_agent("debug")
                         sleep(1u)
