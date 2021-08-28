@@ -2071,12 +2071,12 @@ namespace das {
         try {
             try_block();
         } catch ( const dasException & ) {
+            catch_block();
             __context__->abiArg = aa;
             __context__->abiCMRES = acm;
             __context__->stack.pop(EP,SP);
             __context__->stopFlags = 0;
             __context__->exception = nullptr;
-            catch_block();
         }
 #else
         jmp_buf ev;
@@ -2085,13 +2085,13 @@ namespace das {
         if ( !setjmp(ev) ) {
             try_block();
         } else {
+            catch_block();
             __context__->throwBuf = JB;
             __context__->abiArg = aa;
             __context__->abiCMRES = acm;
             __context__->stack.pop(EP,SP);
             __context__->stopFlags = 0;
             __context__->exception = nullptr;
-            catch_block();
         }
         __context__->throwBuf = JB;
 #endif
