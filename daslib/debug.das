@@ -152,10 +152,10 @@ class DAWalker: DapiDataWalker
         if n > 0
             var ti = type_info(vi)
             let value = sprint_data(pv, ti, print_flags_debug)
-            var stack & = varsStack[n - 1]
-            *stack.children |> emplace([[DAVariable uid=frame.varId++, name="{vi.name}", value=value, _type=describe(ti)]])
+            var v & = varsStack[n - 1]
+            *v.children |> emplace([[DAVariable uid=frame.varId++, name="{vi.name}", value=value, _type=describe(ti)]])
             unsafe
-                varsStack |> push(addr((*stack.children)[length(*stack.children) - 1]))
+                varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override afterStructureField(ps:void?; si: StructInfo; pv: void?; vi:VarInfo; last: bool): void
         self->popStack()
@@ -169,12 +169,36 @@ class DAWalker: DapiDataWalker
             unsafe
                 value = sprint_data(pe, addr(ti), print_flags_debug)
                 _type = describe(addr(ti))
-            var stack & = varsStack[n - 1]
-            *stack.children |> emplace([[DAVariable uid=frame.varId++, name="{int64(index)}", value=value, _type=_type]])
+            var v & = varsStack[n - 1]
+            *v.children |> emplace([[DAVariable uid=frame.varId++, name="{int64(index)}", value=value, _type=_type]])
             unsafe
-                varsStack |> push(addr((*stack.children)[length(*stack.children) - 1]))
+                varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override afterArrayElement(ps: void?; ti: TypeInfo; pe: void?; index: uint; last: bool): void
+        self->popStack()
+
+    def override beforeTableKey(pa: DapiTable; ti: TypeInfo; pk: void?; ki: TypeInfo; index: uint; last: bool): void
+        self->startCont()
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            unsafe
+                *v.children |> emplace([[DAVariable uid=frame.varId++, name="{sprint_data(pk, addr(ki), print_flags_debug)}"]])
+                varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
+
+    def override beforeTableValue(pa: DapiTable; ti: TypeInfo; pv: void?; kv: TypeInfo; index: uint; last: bool): void
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            var value: string
+            var _type: string
+            unsafe
+                value = sprint_data(pv, addr(kv), print_flags_debug)
+                _type = describe(addr(kv))
+            v.value = value
+            v._type = _type
+
+    def override afterTableValue(pa: DapiTable; ti: TypeInfo; pv: void?; kv: TypeInfo; index: uint; last: bool): void
         self->popStack()
 
 
