@@ -2552,7 +2552,7 @@ namespace das {
         LineInfo *  at = nullptr;
     };
 
-    TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleLibrary & lib, Module * thisModule, Context * context, LineInfoArg * at ) {
+    TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at ) {
         if ( !txt ) context->throw_error_at(*at, "can't parse empty mangled name");
         MangledNameParserCtx parser;
         parser.context = context;
@@ -2795,6 +2795,7 @@ namespace das {
                 SideEffects::accessExternal, "astVisitExpression");
             addExtern<DAS_BIND_FUN(forceAtRaw)>(*this, lib,  "force_at",
                 SideEffects::accessExternal, "forceAtRaw");
+
             addExtern<DAS_BIND_FUN(parseMangledNameFn)>(*this, lib,  "parse_mangled_name",
                 SideEffects::none, "parseMangledNameFn");
             // function annotation

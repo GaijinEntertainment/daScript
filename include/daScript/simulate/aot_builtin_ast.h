@@ -465,7 +465,7 @@ namespace das {
     void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context );
     char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context );
     char * get_mangled_name_t ( smart_ptr_raw<TypeDecl> typ, Context * context );
-    TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleLibrary & lib, Module * thisModule, Context * context, LineInfoArg * at );
+    TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {
