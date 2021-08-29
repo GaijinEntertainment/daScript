@@ -142,39 +142,98 @@ class DAWalker: DapiDataWalker
 
     def override afterStructure(ps: void?; si: StructInfo): void
         visited |> erase(length(visited) - 1)
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            if empty(v.value)
+                v.value = v._type
 
     def override afterStructureCancel(ps: void?; si: StructInfo): void
         visited |> erase(length(visited) - 1)
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            if empty(v.value)
+                v.value = v._type
 
     def override beforeStructureField(ps:void?; si: StructInfo; pv: void?; vi:VarInfo; last: bool): void
         self->startCont()
         let n = length(varsStack)
         if n > 0
             var ti = type_info(vi)
-            let value = sprint_data(pv, ti, print_flags_debug)
-            var stack & = varsStack[n - 1]
-            *stack.children |> emplace([[DAVariable uid=frame.varId++, name="{vi.name}", value=value, _type=describe(ti)]])
+            var v & = varsStack[n - 1]
+            *v.children |> emplace([[DAVariable uid=frame.varId++, name=vi.name, _type=describe(ti)]])
             unsafe
-                varsStack |> push(addr((*stack.children)[length(*stack.children) - 1]))
+                varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override afterStructureField(ps:void?; si: StructInfo; pv: void?; vi:VarInfo; last: bool): void
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            if v.children == null
+                var ti = type_info(vi)
+                v.value = sprint_data(pv, ti, print_flags_debug)
+            elif empty(v.value)
+                v.value = v._type
         self->popStack()
 
     def override beforeArrayElement(ps: void?; ti: TypeInfo; pe: void?; index: uint; last: bool): void
         self->startCont()
         let n = length(varsStack)
         if n > 0
-            var value: string
             var _type: string
             unsafe
-                value = sprint_data(pe, addr(ti), print_flags_debug)
                 _type = describe(addr(ti))
-            var stack & = varsStack[n - 1]
-            *stack.children |> emplace([[DAVariable uid=frame.varId++, name="{int64(index)}", value=value, _type=_type]])
+            var v & = varsStack[n - 1]
+            *v.children |> emplace([[DAVariable uid=frame.varId++, name="{int64(index)}", _type=_type]])
             unsafe
-                varsStack |> push(addr((*stack.children)[length(*stack.children) - 1]))
+                varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override afterArrayElement(ps: void?; ti: TypeInfo; pe: void?; index: uint; last: bool): void
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            if v.children == null
+                unsafe
+                    v.value = sprint_data(pe, addr(ti), print_flags_debug)
+            elif empty(v.value)
+                v.value = v._type
+        self->popStack()
+
+    def override afterArray(pa: DapiArray; ti: TypeInfo): void
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            if empty(v.value)
+                v.value = v._type
+
+    def override beforeTableKey(pa: DapiTable; ti: TypeInfo; pk: void?; ki: TypeInfo; index: uint; last: bool): void
+        self->startCont()
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            unsafe
+                *v.children |> emplace([[DAVariable uid=frame.varId++, name=sprint_data(pk, addr(ki), print_flags_debug)]])
+                varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
+
+    def override beforeTableValue(pa: DapiTable; ti: TypeInfo; pv: void?; kv: TypeInfo; index: uint; last: bool): void
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            var _type: string
+            unsafe
+                _type = describe(addr(kv))
+            v._type = _type
+
+    def override afterTableValue(pa: DapiTable; ti: TypeInfo; pv: void?; kv: TypeInfo; index: uint; last: bool): void
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            if v.children == null
+                unsafe
+                    v.value = sprint_data(pv, addr(kv), print_flags_debug)
+            elif empty(v.value)
+                v.value = v._type
         self->popStack()
 
 
@@ -223,6 +282,7 @@ def find_child_var(stack: DAStackFrame; id: uint64; cb: block<(res:DAVariable): 
 class private DAStackWalker: DapiStackWalker
     dataWalkerAdapter: smart_ptr<DataWalker>
     dataWalker: DAWalker?
+    useDataWalker = true
 
     [[do_not_delete]] ctx: DAContext?
     [[do_not_delete]] workingPaths: array<string>?
@@ -249,12 +309,17 @@ class private DAStackWalker: DapiStackWalker
             let ti = type_info(vinfo)
 
             var frame & = ctx.stack[stackLen - 1]
-            var global = [[DAVariable uid=frame.varId++, name="{vinfo.name}", value=sprint_data(value, ti, print_flags_debug), _type=describe(ti)]]
+            var global = [[DAVariable uid=frame.varId++, name="{vinfo.name}", _type=describe(ti)]]
 
-            if ti != null
+            if useDataWalker && ti != null
                 dataWalker->startWalk(frame, global)
                 dataWalkerAdapter |> walk_data(value, *ti)
                 dataWalker->endWalk()
+
+            if global.children == null
+                global.value = sprint_data(value, ti, print_flags_debug)
+            elif empty(global.value)
+                global.value = global._type
 
             frame.globals |> emplace(global)
 
@@ -278,12 +343,17 @@ class private DAStackWalker: DapiStackWalker
         if stackLen > 0
             var frame & = ctx.stack[stackLen - 1]
             var ti = type_info(vinfo)
-            let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, ti, print_flags_debug): "<optimized>"
-            var variable = [[DAVariable uid=frame.varId++, name="{vinfo.name}", value=value, _type=describe(ti)]]
-            if ti != null
+            var variable = [[DAVariable uid=frame.varId++, name="{vinfo.name}", _type=describe(ti)]]
+            if useDataWalker && ti != null
                 dataWalker->startWalk(frame, variable)
                 dataWalkerAdapter |> walk_data(arg, *ti)
                 dataWalker->endWalk()
+
+            if variable.children == null
+                let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, ti, print_flags_debug): "<optimized>"
+                variable.value = value
+            elif empty(variable.value)
+                variable.value = variable._type
 
             frame.variables |> emplace(variable)
 
@@ -292,12 +362,16 @@ class private DAStackWalker: DapiStackWalker
         if  stackLen > 0
             var frame & = ctx.stack[stackLen-1]
             let ti = type_info(vinfo)
-            let value = sprint_data(arg, ti, print_flags_debug)
-            var variable = [[DAVariable uid=frame.varId++, name="{vinfo.name}", value=value, _type=describe(ti)]]
-            if ti != null
+            var variable = [[DAVariable uid=frame.varId++, name="{vinfo.name}", _type=describe(ti)]]
+            if useDataWalker && ti != null
                 dataWalker->startWalk(frame, variable)
                 dataWalkerAdapter |> walk_data(arg, *ti)
                 dataWalker->endWalk()
+
+            if variable.children == null
+                variable.value = sprint_data(arg, ti, print_flags_debug)
+            elif empty(variable.value)
+                variable.value = variable._type
 
             frame.arguments |> emplace(variable)
 
@@ -365,8 +439,8 @@ class private DAgent: DapiDebugAgent
     workingPaths: array<string>
 
     logStrMemory = false
-    initialStrLimit = uint64(2 * 1024 * 1024)
-    strLimit: uint64 = uint64(2 * 1024 * 1024)
+    initialStrLimit = uint64(32 * 1024 * 1024)
+    strLimit: uint64 = uint64(32 * 1024 * 1024)
 
     def DAgent()
         let args <- get_command_line_arguments()
