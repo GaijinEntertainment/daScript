@@ -1231,7 +1231,9 @@ namespace das {
             if ( mname=="CN<;f>0<i;f>U" ) {
                 mname = type->getMangledName(true);
             }
-            auto mtype = makeTypeFromMangledName ( mname, program->library, program->thisModule.get() );
+            MangledNameParser parser;
+            const char * mnamec = mname.c_str();
+            auto mtype = parser.parseTypeFromMangledName ( mnamec, program->library, program->thisModule.get() );
             if ( !type->isSameExactType(*mtype) ) {
                 TextPrinter tp;
                 auto mtname = mtype->getMangledName(true);

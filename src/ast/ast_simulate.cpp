@@ -2079,13 +2079,12 @@ namespace das
                                                     try_block->simulate(context),
                                                     catch_block->simulate(context));
         } else
-#else
+#endif
         {
             return context.code->makeNode<SimNode_TryCatch>(at,
                                                     try_block->simulate(context),
                                                     catch_block->simulate(context));
         }
-#endif
     }
 
     SimNode * ExprReturn::simulate (Context & context) const {

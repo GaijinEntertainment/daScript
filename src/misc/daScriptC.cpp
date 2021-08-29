@@ -182,9 +182,10 @@ void das_module_bind_interop_function ( das_module * mod, das_module_group * lib
     auto fn = make_smart<CFunction>(name, *(ModuleLibrary *)lib, cppName, fun);
     fn->setSideEffects((das::SideEffects) sideffects);
     vector <TypeDeclPtr> arguments;
+    MangledNameParser parser;
     const char * arg = args;
     while ( *arg ) {
-        auto tt = parseTypeFromMangledName(arg, *(ModuleLibrary*)lib,((Module *)mod));
+        auto tt = parser.parseTypeFromMangledName(arg, *(ModuleLibrary*)lib,((Module *)mod));
         arguments.push_back(tt);
         while (*arg==' ') arg ++;
     }

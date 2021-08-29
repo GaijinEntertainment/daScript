@@ -42,14 +42,14 @@ namespace das {
         }
         Context * context = nullptr;
         const char * fileName = nullptr;
-        int32_t lineNumber = 0;
+        uint32_t lineNumber = 0;
     };
 
     void Context::InstrumentContext ( const char * fileName, int32_t lineNumber ) {
         SimInstVisitor instrument;
         instrument.context = this;
         instrument.fileName = fileName;
-        instrument.lineNumber = lineNumber;
+        instrument.lineNumber = uint32_t(lineNumber);
         for ( int gvi=0; gvi!=totalVariables; ++gvi ) {
             const auto & gv = globalVariables[gvi];
             if ( gv.init ) gv.init->visit(instrument);

@@ -2539,6 +2539,27 @@ namespace das {
         return context->stringHeap->allocateString(func->getMangledName());
     }
 
+    char * get_mangled_name_t ( smart_ptr_raw<TypeDecl> typ, Context * context ) {
+        return context->stringHeap->allocateString(typ->getMangledName());
+    }
+
+    class MangledNameParserCtx : public MangledNameParser {
+        virtual void error ( const string & err, const char * ch ) override {
+            context->throw_error_at(*at, "%s, near %s", err.c_str(), ch );
+        }
+    public:
+        Context *   context = nullptr;
+        LineInfo *  at = nullptr;
+    };
+
+    TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleLibrary & lib, Module * thisModule, Context * context, LineInfoArg * at ) {
+        if ( !txt ) context->throw_error_at(*at, "can't parse empty mangled name");
+        MangledNameParserCtx parser;
+        parser.context = context;
+        parser.at = at;
+        return parser.parseTypeFromMangledName(txt, lib, thisModule);
+    }
+
     void forceAtRaw ( const smart_ptr_raw<Expression> & expr, const LineInfo & at ) {
         forceAt(expr, at);
     }
@@ -2774,6 +2795,8 @@ namespace das {
                 SideEffects::accessExternal, "astVisitExpression");
             addExtern<DAS_BIND_FUN(forceAtRaw)>(*this, lib,  "force_at",
                 SideEffects::accessExternal, "forceAtRaw");
+            addExtern<DAS_BIND_FUN(parseMangledNameFn)>(*this, lib,  "parse_mangled_name",
+                SideEffects::none, "parseMangledNameFn");
             // function annotation
             addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeFunctionAnnotation)>(*this, lib,  "make_function_annotation",
@@ -2851,6 +2874,8 @@ namespace das {
                 SideEffects::none, "find_bitfield_name");
             addExtern<DAS_BIND_FUN(get_mangled_name)>(*this, lib,  "get_mangled_name",
                 SideEffects::none, "get_mangled_name");
+            addExtern<DAS_BIND_FUN(get_mangled_name_t)>(*this, lib,  "get_mangled_name",
+                SideEffects::none, "get_mangled_name_t");
             // type conversion functions
             addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
                 SideEffects::none, "das_to_string");

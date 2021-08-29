@@ -2140,25 +2140,6 @@ namespace das
         argTypes.push_back(tt);
     }
 
-    string parseAnyName ( const char * & ch, bool allowModule ) {
-        string name;
-        while ( isalnum(*ch) || *ch=='_' || *ch=='`' || (*ch==':' && allowModule) || (*ch=='$' && allowModule) ) {
-            char che[2] = { *ch, 0 };
-            name.append(che);
-            ch ++;
-        }
-        return name;
-    }
-
-    string parseAnyNameInBrackets ( const char * & ch, bool allowModule ) {
-        DAS_ASSERT ( *ch=='<' );
-        ch ++;
-        auto name = parseAnyName(ch, allowModule);
-        DAS_ASSERT ( *ch=='>' );
-        ch ++;
-        return name;
-    }
-
     string TypeDecl::getMangledName ( bool fullName ) const {
         TextWriter ss;
         if ( constant )     ss << "C";
@@ -2280,7 +2261,30 @@ namespace das
         return ss.str();
     }
 
-    TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library, Module * thisModule ) {
+    void MangledNameParser::error ( const string &, const char * ) {
+        DAS_VERIFY(0 && "invalid mangled name");
+    }
+
+    string MangledNameParser::parseAnyName ( const char * & ch, bool allowModule ) {
+        string name;
+        while ( isalnum(*ch) || *ch=='_' || *ch=='`' || (*ch==':' && allowModule) || (*ch=='$' && allowModule) ) {
+            char che[2] = { *ch, 0 };
+            name.append(che);
+            ch ++;
+        }
+        return name;
+    }
+
+    string MangledNameParser::parseAnyNameInBrackets ( const char * & ch, bool allowModule ) {
+        if ( *ch!='<' ) error("expecting '<'", ch);
+        ch ++;
+        auto name = parseAnyName(ch, allowModule);
+        if ( *ch!='>' ) error("expecting '>'", ch);
+        ch ++;
+        return name;
+    }
+
+    TypeDeclPtr MangledNameParser::parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library, Module * thisModule ) {
         switch ( *ch ) {
             case '[': {
                 ch ++;
@@ -2294,7 +2298,7 @@ namespace das
                     numT += *ch;
                     ch ++;
                 }
-                DAS_ASSERT(*ch==']');
+                if ( *ch!=']' ) error("expecting ']", ch);
                 ch ++;
                 int di = atoi(numT.c_str());
                 if ( neg ) di = -di;
@@ -2304,10 +2308,10 @@ namespace das
             }
             case '1': {
                 ch ++;
-                DAS_ASSERT(*ch=='<');
+                if ( *ch!='<' ) error("expecting '<'", ch);
                 ch ++;
                 auto ft = parseTypeFromMangledName(ch,library,thisModule);
-                DAS_ASSERT(*ch=='>');
+                if ( *ch!='>' ) error("expecting '>'", ch);
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->firstType = move(ft);
@@ -2315,10 +2319,10 @@ namespace das
             };
             case '2': {
                 ch ++;
-                DAS_ASSERT(*ch=='<');
+                if ( *ch!='<' ) error("expecting '<'", ch);
                 ch ++;
                 auto ft = parseTypeFromMangledName(ch,library,thisModule);
-                DAS_ASSERT(*ch=='>');
+                if ( *ch!='>' ) error("expecting '>'", ch);
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->secondType = move(ft);
@@ -2334,9 +2338,9 @@ namespace das
                         ann.push_back(tann);
                     }
                 }
-                DAS_ASSERT(ann.size()==1);
+                if ( ann.size()!=1 ) error("unresolved annotation '" + annName + "'", ch);
                 pt->annotation = (TypeAnnotation *) ann.back().get();
-                DAS_ASSERT(pt->annotation->rtti_isHandledTypeAnnotation());
+                if ( !pt->annotation->rtti_isHandledTypeAnnotation() ) error("'" + annName + "' is not a handled type", ch);
                 return pt;
             };
             case 'S': {
@@ -2344,12 +2348,12 @@ namespace das
                 auto sname = parseAnyNameInBrackets(ch,true);
                 auto pt = make_smart<TypeDecl>(Type::tStructure);
                 auto stt = library.findStructure(sname, thisModule);
-               if ( thisModule && stt.size()==0 ) {
+                if ( thisModule && stt.size()==0 ) {
                     if ( auto tstt = thisModule->findStructure(sname) ) {
                         stt.push_back(tstt);
                     }
                 }
-                DAS_ASSERT ( stt.size()==1 );
+                if ( stt.size()==1 ) error("unknown structure '" + sname + "'", ch);
                 pt->structType = stt.back().get();
                 return pt;
             }
@@ -2360,9 +2364,9 @@ namespace das
                     ch ++;
                     auto tt = parseTypeFromMangledName(ch,library,thisModule);
                     types.push_back(tt);
-                    DAS_ASSERT(*ch==';' || *ch=='>');
+                    if (*ch!=';' && *ch!='>') error("expecting ';' or '>'", ch);
                 }
-                DAS_ASSERT ( *ch=='>' );
+                if ( *ch!='>' ) error("expecting '>'", ch);
                 ch++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->argTypes = move(types);
@@ -2376,7 +2380,7 @@ namespace das
                     auto name = parseAnyName(ch, false);
                     names.push_back(name);
                 }
-                DAS_ASSERT ( *ch=='>' );
+                if ( *ch!='>' ) error("expecting '>'", ch);
                 ch++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->argNames = move(names);
@@ -2402,7 +2406,7 @@ namespace das
                             stt.push_back(tstt);
                         }
                     }
-                    DAS_ASSERT ( stt.size()==1 );
+                    if ( stt.size()!=1 ) error("unresolved enumeration '" + sname + "'", ch);
                     pt->enumType = stt.back().get();
                 }
                 return pt;
@@ -2417,7 +2421,7 @@ namespace das
             case '_': {
                         if ( ch[1]=='c' )                   { ch+=2; return make_smart<TypeDecl>(Type::fakeContext); }
                 else    if ( ch[1]=='l' )                   { ch+=2; return make_smart<TypeDecl>(Type::fakeLineInfo); }
-                else                                        { DAS_ASSERT(0 && "unsupported mangled name format - expecting fake..."); return nullptr; }
+                else                                        { error("unsupported mangled name format - expecting fake...", ch); return make_smart<TypeDecl>(); }
             }
             case 'i': {
                         if ( ch[1]=='2' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt2); }
@@ -2523,15 +2527,15 @@ namespace das
                     return pt;
                 }
                 case '[': {
-                    DAS_ASSERT ( ch[2]==']' );
+                    if ( ch[2]!=']' ) error("expecting '-[]'", ch);
                     ch += 3;
                     auto pt = parseTypeFromMangledName(ch,library,thisModule);
                     pt->removeDim = true;
                     return pt;
                 }
                 }
-                DAS_ASSERT(0 && "unsupported mangled name format - expecting remove trait");
-                return nullptr;
+                error("unsupported mangled name format - expecting remove trait", ch);
+                return make_smart<TypeDecl>();
             };
             case 'I': {
                 ch ++;
@@ -2559,12 +2563,12 @@ namespace das
             };
             }
         }
-        DAS_ASSERT(0 && "unsupported mangled name format symbol");
-        return nullptr;
+        error("unsupported mangled name format symbol", ch);
+        return make_smart<TypeDecl>();
     }
 
-    TypeDeclPtr makeTypeFromMangledName ( const string & st, const ModuleLibrary & library, Module * thisModule ) {
-        const char * cstr = st.c_str();
-        return parseTypeFromMangledName(cstr,library,thisModule);
+    TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library, Module * thisModule ) {
+        MangledNameParser parser;
+        return parser.parseTypeFromMangledName(ch, library, thisModule);
     }
 }

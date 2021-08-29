@@ -563,7 +563,13 @@ namespace das {
                            CpptSkipConst skipConst = CpptSkipConst::no,
                            CpptRedundantConst redundantConst = CpptRedundantConst::yes );
 
-    TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library, Module * thisModule );
-    TypeDeclPtr makeTypeFromMangledName ( const string & st, const ModuleLibrary & library, Module * thisModule );
+    class MangledNameParser {
+    protected:
+        virtual void error ( const string &, const char * );
+        string parseAnyName ( const char * & ch, bool allowModule );
+        string parseAnyNameInBrackets ( const char * & ch, bool allowModule );
+    public:
+        TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library, Module * thisModule );
+    };
 }
 
