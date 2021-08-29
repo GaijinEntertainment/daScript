@@ -138,9 +138,15 @@ struct Scope
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Variables
 struct VariablesArguments
     variablesReference: double
+    start: double
+    count: double
 
 def VariablesArguments(data: JsonValue?)
-    return <- [[VariablesArguments variablesReference=jon(data, "variablesReference") ]]
+    return <- [[VariablesArguments
+        variablesReference=jon(data, "variablesReference"),
+        start=jon(data, "start", -1lf),
+        count=jon(data, "count", -1lf)
+    ]]
 
 struct VariablesResponseBody
     variables: array<Variable>
@@ -152,12 +158,14 @@ struct Variable
     value: string
     variablesReference: double
     _type: string
+    indexedVariables: double
 
 def JV(data: Variable)
     return JV({{
         "name"=>JV(data.name);
         "value"=>JV(data.value);
         "variablesReference"=>JV(data.variablesReference);
+        "indexedVariables"=>data.indexedVariables > 0lf ? JV(data.indexedVariables) : JV(null);
         "type"=>JV(data._type)
     }})
 

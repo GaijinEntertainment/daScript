@@ -108,6 +108,7 @@ def private bytes_hr(value : uint64)
 
 
 class DAWalker: DapiDataWalker
+    childrenMax = 500u
     varsStack: array<DAVariable?>
     [[do_not_delete]] frame: DAStackFrame?
     visited: array<tuple<ps: void?; hash: uint>>
@@ -177,7 +178,16 @@ class DAWalker: DapiDataWalker
                 v.value = v._type
         self->popStack()
 
+    def override beforeArray(pa: DapiArray; ti: TypeInfo): void
+        self->startCont()
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            v.indexedVariables = pa.size
+
     def override beforeArrayElement(ps: void?; ti: TypeInfo; pe: void?; index: uint; last: bool): void
+        if index >= childrenMax
+            return
         self->startCont()
         let n = length(varsStack)
         if n > 0
@@ -207,7 +217,16 @@ class DAWalker: DapiDataWalker
             if empty(v.value)
                 v.value = v._type
 
+    def override beforeTable(pa: DapiTable; ti: TypeInfo): void
+        self->startCont()
+        let n = length(varsStack)
+        if n > 0
+            var v & = varsStack[n - 1]
+            v.indexedVariables = pa.size
+
     def override beforeTableKey(pa: DapiTable; ti: TypeInfo; pk: void?; ki: TypeInfo; index: uint; last: bool): void
+        if index >= childrenMax
+            return
         self->startCont()
         let n = length(varsStack)
         if n > 0
@@ -217,6 +236,8 @@ class DAWalker: DapiDataWalker
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override beforeTableValue(pa: DapiTable; ti: TypeInfo; pv: void?; kv: TypeInfo; index: uint; last: bool): void
+        if index >= childrenMax
+            return
         let n = length(varsStack)
         if n > 0
             var v & = varsStack[n - 1]
@@ -226,6 +247,8 @@ class DAWalker: DapiDataWalker
             v._type = _type
 
     def override afterTableValue(pa: DapiTable; ti: TypeInfo; pv: void?; kv: TypeInfo; index: uint; last: bool): void
+        if index >= childrenMax
+            return
         let n = length(varsStack)
         if n > 0
             var v & = varsStack[n - 1]
@@ -242,6 +265,7 @@ struct private DAVariable
     name: string
     value: string
     _type: string
+    indexedVariables: uint
     children: array<DAVariable>?
 
 
@@ -309,7 +333,7 @@ class private DAStackWalker: DapiStackWalker
             let ti = type_info(vinfo)
 
             var frame & = ctx.stack[stackLen - 1]
-            var global = [[DAVariable uid=frame.varId++, name="{vinfo.name}", _type=describe(ti)]]
+            var global = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti)]]
 
             if useDataWalker && ti != null
                 dataWalker->startWalk(frame, global)
@@ -343,7 +367,7 @@ class private DAStackWalker: DapiStackWalker
         if stackLen > 0
             var frame & = ctx.stack[stackLen - 1]
             var ti = type_info(vinfo)
-            var variable = [[DAVariable uid=frame.varId++, name="{vinfo.name}", _type=describe(ti)]]
+            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti)]]
             if useDataWalker && ti != null
                 dataWalker->startWalk(frame, variable)
                 dataWalkerAdapter |> walk_data(arg, *ti)
@@ -362,7 +386,7 @@ class private DAStackWalker: DapiStackWalker
         if  stackLen > 0
             var frame & = ctx.stack[stackLen-1]
             let ti = type_info(vinfo)
-            var variable = [[DAVariable uid=frame.varId++, name="{vinfo.name}", _type=describe(ti)]]
+            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti)]]
             if useDataWalker && ti != null
                 dataWalker->startWalk(frame, variable)
                 dataWalkerAdapter |> walk_data(arg, *ti)
@@ -439,8 +463,8 @@ class private DAgent: DapiDebugAgent
     workingPaths: array<string>
 
     logStrMemory = false
-    initialStrLimit = uint64(32 * 1024 * 1024)
-    strLimit: uint64 = uint64(32 * 1024 * 1024)
+    initialStrLimit = uint64(8 * 1024 * 1024)
+    strLimit: uint64 = uint64(8 * 1024 * 1024)
 
     def DAgent()
         let args <- get_command_line_arguments()
@@ -939,23 +963,29 @@ class private DAServer: Server
                 let line & = ctxData.stack[frameId]
                 if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS
                     let vars & = kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : line.globals
-                    for v in vars
+                    let varsNum = length(vars)
+                    for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
+                        let v & = vars[idx]
                         let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
                         res.variables |> emplace([[Variable
                             name=v.name,
                             value=v.value,
                             _type=v._type,
+                            indexedVariables=double(v.indexedVariables),
                             variablesReference=double(ref)
                         ]])
                 else
                     line |> find_child_var(uint64(kind)) <| $(child)
                         if child.children != null
-                            for v in *child.children
+                            let varsNum = length(*child.children)
+                            for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
+                                let v & = (*child.children)[idx]
                                 let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
                                 res.variables |> emplace([[Variable
                                     name=v.name,
                                     value=v.value,
                                     _type=v._type,
+                                    indexedVariables=double(v.indexedVariables),
                                     variablesReference=double(ref)
                                 ]])
         self->sendSuccessResponse(seq, command, JV(res))
@@ -1070,4 +1100,4 @@ def private auto_start_debug()
                     this_context().name := "tick thread"
                     while !is_job_que_shutting_down()
                         tick_debug_agent("debug")
-                        sleep(1u)
+                        sleep(10u)
