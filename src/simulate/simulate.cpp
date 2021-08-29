@@ -247,6 +247,7 @@ namespace das
         return v_zero();
     }
 
+#if DAS_DEBUGGER
     vec4f SimNodeDebug_TryCatch::eval ( Context & context ) {
         DAS_PROFILE_NODE
         auto aa = context.abiArg; auto acm = context.abiCMRES;
@@ -286,7 +287,7 @@ namespace das
         #endif
         return v_zero();
     }
-
+#endif
 
 #ifdef _MSC_VER
 #pragma warning(pop)
