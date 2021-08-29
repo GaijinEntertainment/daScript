@@ -1675,6 +1675,13 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * try_block, * catch_block;
     };
 
+    struct SimNodeDebug_TryCatch : SimNode_TryCatch {
+        SimNodeDebug_TryCatch ( const LineInfo & at, SimNode * t, SimNode * c )
+            : SimNode_TryCatch(at,t,c) {}
+        virtual vec4f eval ( Context & context ) override;
+    };
+
+
     // RETURN
     struct SimNode_Return : SimNode {
         SimNode_Return ( const LineInfo & at, SimNode * s )

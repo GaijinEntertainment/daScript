@@ -2073,9 +2073,15 @@ namespace das
     }
 
     SimNode * ExprTryCatch::simulate (Context & context) const {
-        return context.code->makeNode<SimNode_TryCatch>(at,
-                                                  try_block->simulate(context),
-                                                  catch_block->simulate(context));
+        if ( context.thisProgram->getDebugger() ) {
+            return context.code->makeNode<SimNodeDebug_TryCatch>(at,
+                                                    try_block->simulate(context),
+                                                    catch_block->simulate(context));
+        } else {
+            return context.code->makeNode<SimNode_TryCatch>(at,
+                                                    try_block->simulate(context),
+                                                    catch_block->simulate(context));
+        }
     }
 
     SimNode * ExprReturn::simulate (Context & context) const {

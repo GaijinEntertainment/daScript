@@ -247,6 +247,47 @@ namespace das
         return v_zero();
     }
 
+    vec4f SimNodeDebug_TryCatch::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        auto aa = context.abiArg; auto acm = context.abiCMRES;
+        char * EP, * SP;
+        context.stack.watermark(EP,SP);
+        #if DAS_ENABLE_EXCEPTIONS
+            try {
+                DAS_SINGLE_STEP(context,try_block->debugInfo,false);
+                try_block->eval(context);
+            } catch ( const dasException & ) {
+                context.abiArg = aa;
+                context.abiCMRES = acm;
+                context.stack.pop(EP,SP);
+                context.stopFlags = 0;
+                context.exception = nullptr;
+                DAS_SINGLE_STEP(context,catch_block->debugInfo,false);
+                catch_block->eval(context);
+            }
+        #else
+            jmp_buf ev;
+            jmp_buf * JB = context.throwBuf;
+            context.throwBuf = &ev;
+            if ( !setjmp(ev) ) {
+                DAS_SINGLE_STEP(context,try_block->debugInfo,false);
+                try_block->eval(context);
+            } else {
+                context.throwBuf = JB;
+                context.abiArg = aa;
+                context.abiCMRES = acm;
+                context.stack.pop(EP,SP);
+                context.stopFlags = 0;
+                context.exception = nullptr;
+                DAS_SINGLE_STEP(context,catch_block->debugInfo,false);
+                catch_block->eval(context);
+            }
+            context.throwBuf = JB;
+        #endif
+        return v_zero();
+    }
+
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
