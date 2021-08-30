@@ -11,14 +11,14 @@ namespace das {
     public:
         virtual void preVisit ( ExprLet * expr ) override {
             for ( const auto & var : expr->variables) {
-                locals.push_back(make_pair(var,expr->visibility));
+                locals.push_back(make_tuple(var,expr->visibility,false));
             }
         }
         virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool ) override {
-            locals.push_back(make_pair(var,expr->visibility));
+            locals.push_back(make_tuple(var,expr->visibility,bool(var->type->ref)));
         }
     public:
-        vector<pair<VariablePtr,LineInfo>> locals;
+        vector<tuple<VariablePtr,LineInfo,bool>> locals;
     };
 
     void DebugInfoHelper::appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body ) {
@@ -28,13 +28,14 @@ namespace das {
         info->locals = (LocalVariableInfo **) debugInfo->allocate(sizeof(VarInfo *) * info->localCount);
         uint32_t i = 0;
         for ( auto & var_vis : lv.locals ) {
-            auto var = var_vis.first;
+            auto var = get<0>(var_vis);
             LocalVariableInfo * lvar = (LocalVariableInfo *) debugInfo->allocate(sizeof(LocalVariableInfo));
             info->locals[i] = lvar;
             makeTypeInfo(lvar, var->type);
+            if ( get<2>(var_vis) ) lvar->flags |= TypeInfo::flag_ref;
             lvar->name = debugInfo->allocateName(var->name);
             lvar->stackTop = var->stackTop;
-            lvar->visibility = var_vis.second;
+            lvar->visibility = get<1>(var_vis);
             lvar->localFlags = 0;
             lvar->cmres = var->aliasCMRES;
             i ++ ;

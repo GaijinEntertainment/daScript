@@ -166,6 +166,7 @@ namespace das {
             TypeInfo ti = *info;
             ti.flags &= ~TypeInfo::flag_ref;
             walk(*(char **)pa, &ti);
+            ti.flags |= TypeInfo::flag_ref;
             if ( cancel ) return;
             afterRef(pa,info);
         } else if ( info->dimSize ) {
