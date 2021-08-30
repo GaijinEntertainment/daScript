@@ -607,32 +607,23 @@ class private DAgent: DapiDebugAgent
                     tick_debugger()
                     sleep(10u)
 
-            var prevBreak = -1ul
-            var inBreak = key_exists(breakpoints, file)
             // self->log("search break `{file}`:{at.line} - {inBreak}\n")
-            while inBreak
-                inBreak = false
+            if key_exists(breakpoints, file)
                 let brs = breakpoints |> find(file)
                 var brIdx = 0
                 while brs != null && brIdx < length(*brs)
                     let br & = (*brs)[brIdx++]
                     // self->log("search break `{file}` {brs} in {file}\n")
-                    if br.line == uint(at.line)
-                        if ctxData.continueRequested && prevBreak == br.id
-                            ctxData.continueRequested = false
-                            continue
-                        if ctxData.stepInRequested || ctxData.stepRequestedStack > 0
-                            continue
+                    if br.line != uint(at.line)
+                        continue
+                    self->sendStopped(ctx, ctxData, file, at, "breakpoint", br.id)
 
-                        inBreak = true
-
-                        if prevBreak != br.id
-                            self->sendStopped(ctx, ctxData, file, at, "breakpoint", br.id)
-
-                        prevBreak = br.id
+                    ctxData.continueRequested = false
+                    while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                         tick_debugger()
                         sleep(10u)
-                        break
+                    ctxData.continueRequested = false
+                    break
 
     def nextStep(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo)
         delete ctxData.stack
