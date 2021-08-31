@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stddef.h>
 
 #include "daScript/daScriptC.h"
 
@@ -68,10 +69,32 @@ vec4f das_c_func ( das_context * ctx, das_node * node, vec4f * args ) {
     return das_result_void();                                       // return result
 }
 
+typedef struct {
+    int     foo;
+    float   bar;
+} FooBar;
+
+typedef enum {
+    OneTwo_one = 1,
+    OneTwo_two = 2
+} OneTwo;
+
 das_module * register_module_tutorial_07() {
     // create module and library
     das_module * mod = das_module_create ("tutorial_07");
     das_module_group * lib = das_modulegroup_make();
+    // alias
+    das_module_bind_alias (mod, lib, "intarray", "1<i>A" );
+    // enumeration
+    das_enumeration * en = das_enumeration_make("OneTwo", "OneTwo", 1);
+    das_enumeration_add_value(en, "one", "OneTwo_one", OneTwo_one);
+    das_enumeration_add_value(en, "two", "OneTwo_two", OneTwo_two);
+    das_module_bind_enumeration(mod, en);
+    // handled structure
+    das_structure * st = das_structure_make(lib, "FooBar", "FooBar", sizeof(FooBar), _Alignof(FooBar));
+    das_structure_add_field(st, mod, lib, "foo", "foo", offsetof(FooBar,foo), "i");
+    das_structure_add_field(st, mod, lib, "bar", "bar", offsetof(FooBar,bar), "f");
+    das_module_bind_structure(mod, st);
     // bind das_c_func
     das_module_bind_interop_function(mod, lib, &das_c_func, "das_c_func", "das_c_func", SIDEEFFECTS_modifyExternal, "v i");
     // cleanup

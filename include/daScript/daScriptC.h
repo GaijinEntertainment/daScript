@@ -56,6 +56,8 @@ typedef struct dasFunction das_function;
 typedef struct dasError das_error;
 typedef struct dasModule das_module;
 typedef struct dasNode das_node;
+typedef struct dasStructure das_structure;
+typedef struct dasEnumeration das_enumeration;
 
 typedef vec4f (das_interop_function) ( das_context * ctx, das_node * node, vec4f * arguments );
 
@@ -92,17 +94,30 @@ das_function * das_context_find_function ( das_context * context, char * name );
 vec4f das_context_eval_with_catch ( das_context * context, das_function * fun, vec4f * arguments );
 char * das_context_get_exception ( das_context * context );
 
+das_structure * das_structure_make ( das_module_group * lib, const char * name, const char * cppname, int sz, int al );
+void das_structure_add_field ( das_structure * st, das_module * mod, das_module_group * lib,  const char * name, const char * cppname, int offset, const char * tname );
+
+das_enumeration * das_enumeration_make ( const char * name, const char * cppname, int ext );
+void das_enumeration_add_value ( das_enumeration * enu, const char * name, const char * cppName, int value );
+
 das_module * das_module_create ( char * name );
 void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, uint32_t sideffects, char* args );
+void das_module_bind_alias ( das_module * mod, das_module_group * lib, char * aname, char * tname );
+void das_module_bind_structure ( das_module * mod, das_structure * st );
+void das_module_bind_enumeration ( das_module * mod, das_enumeration * en );
 
 int    das_argument_int ( vec4f arg );
 float  das_argument_float ( vec4f arg );
+double das_argument_double ( vec4f arg );
 char * das_argument_string ( vec4f arg );
+void * das_argument_ptr ( vec4f arg );
 
 vec4f das_result_void ();
 vec4f das_result_int ( int r );
 vec4f das_result_float ( float r );
+vec4f das_result_double ( double r );
 vec4f das_result_string ( char * r );
+vec4f das_result_ptr ( void * r );
 
 #ifdef __cplusplus
 }

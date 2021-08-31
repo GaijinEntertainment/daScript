@@ -32,6 +32,28 @@ namespace das {
         }
         das_interop_function * fn;
     };
+
+    struct CStructureAnnotation : BasicStructureAnnotation {
+        uint32_t    sizeOf = 0;
+        uint32_t    alignOf = 0;
+        CStructureAnnotation(const string & n, const string & cpn, ModuleLibrary * l)
+            : BasicStructureAnnotation(n,cpn,l) {}
+        virtual size_t getSizeOf() const override { return sizeOf; }
+        virtual size_t getAlignOf() const override { return alignOf; }
+        virtual bool isSmart() const override { return false; }
+        virtual bool hasNonTrivialCtor() const override { return false; }
+        virtual bool hasNonTrivialDtor() const override { return false; }
+        virtual bool hasNonTrivialCopy() const override { return false; }
+        virtual bool isPod() const override { return true; }
+        virtual bool isRawPod() const override { return false; }
+        virtual bool canClone() const override { return true; }
+        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
+            return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, sizeOf);
+        }
+        virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
+            return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, sizeOf);
+        }
+    };
 }
 
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
@@ -185,7 +207,7 @@ void das_module_bind_interop_function ( das_module * mod, das_module_group * lib
     MangledNameParser parser;
     const char * arg = args;
     while ( *arg ) {
-        auto tt = parser.parseTypeFromMangledName(arg, *(ModuleLibrary*)lib,((Module *)mod));
+        auto tt = parser.parseTypeFromMangledName(arg, *(ModuleLibrary*)lib,(Module *)mod);
         arguments.push_back(tt);
         while (*arg==' ') arg ++;
     }
@@ -193,13 +215,59 @@ void das_module_bind_interop_function ( das_module * mod, das_module_group * lib
     ((Module *)mod)->addFunction(fn, false);
 }
 
+void das_module_bind_alias ( das_module * mod, das_module_group * lib, char * aname, char * tname ) {
+    MangledNameParser parser;
+    auto tt = (const char *) tname;
+    auto at = parser.parseTypeFromMangledName(tt, *(ModuleLibrary*)lib,(Module *)mod);
+    DAS_ASSERT(at->alias.empty() && "already an alias");
+    at->alias = aname;
+    ((Module *)mod)->addAlias(at);
+}
+
+void das_module_bind_structure ( das_module * mod, das_structure * st ) {
+    ((Module *)mod)->addAnnotation((Annotation *)st);
+}
+
+void das_module_bind_enumeration ( das_module * mod, das_enumeration * en ) {
+    ((Module *)mod)->addEnumeration((Enumeration *)en);
+}
+
+das_structure * das_structure_make ( das_module_group * lib, const char * name, const char * cppname, int sz, int al ) {
+    auto st = make_smart<CStructureAnnotation>(name,cppname,(ModuleLibrary *)lib);
+    st->sizeOf = sz;
+    st->alignOf = al;
+    return (das_structure *) st.orphan();
+}
+
+void das_structure_add_field ( das_structure * st, das_module * mod, das_module_group * lib,  const char * name, const char * cppname, int offset, const char * tname ) {
+    MangledNameParser parser;
+    auto tt = (const char *) tname;
+    auto at = parser.parseTypeFromMangledName(tt, *(ModuleLibrary*)lib,(Module *)mod);
+    ((CStructureAnnotation *)st)->addFieldEx(name,cppname,offset,at);
+}
+
+das_enumeration * das_enumeration_make ( const char * name, const char * cppname, int ext ) {
+    auto pEnum = make_smart<Enumeration>(name);
+    pEnum->cppName = cppname;
+    pEnum->external = ext;
+    return (das_enumeration *) pEnum.orphan();
+}
+
+void das_enumeration_add_value ( das_enumeration * enu, const char * name, const char * cppName, int value ) {
+    ((Enumeration *)enu)->addIEx(name, cppName, value, LineInfo());
+}
+
 int    das_argument_int ( vec4f arg ) { return cast<int>::to(arg); }
 float  das_argument_float ( vec4f arg ) { return cast<float>::to(arg); }
+double  das_argument_double ( vec4f arg ) { return cast<double>::to(arg); }
 char * das_argument_string ( vec4f arg ) { char * a = cast<char *>::to(arg); return a ? a : ((char *)""); }
+void * das_argument_ptr ( vec4f arg ) { return cast<void *>::to(arg); }
 
 vec4f das_result_void () { return v_zero(); }
 vec4f das_result_int ( int r ) { return cast<int>::from(r); }
 vec4f das_result_float ( float r ) { return cast<float>::from(r); }
+vec4f das_result_double ( double r ) { return cast<double>::from(r); }
 vec4f das_result_string ( char * r ) { return cast<char *>::from(r); }
+vec4f das_result_ptr ( void * r ) { return cast<void *>::from(r); }
 
 }
