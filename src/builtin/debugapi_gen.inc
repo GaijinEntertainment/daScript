@@ -780,11 +780,12 @@ protected:
     __fn_onDestroyContext = 3,
     __fn_onSingleStep = 4,
     __fn_onInstrument = 5,
-    __fn_onBreakpoint = 6,
-    __fn_onTick = 7,
+    __fn_onInstrumentFunction = 6,
+    __fn_onBreakpoint = 7,
+    __fn_onTick = 8,
   };
 protected:
-  static int _das_class_method_offset[8];
+  static int _das_class_method_offset[9];
 public:
   DapiDebugAgent_Adapter ( const StructInfo * info ) {
     if ( _das_class_method_offset[0]==0 ) {
@@ -794,6 +795,7 @@ public:
       _das_class_method_offset[__fn_onDestroyContext] = adapt_field_offset("onDestroyContext",info);
       _das_class_method_offset[__fn_onSingleStep] = adapt_field_offset("onSingleStep",info);
       _das_class_method_offset[__fn_onInstrument] = adapt_field_offset("onInstrument",info);
+      _das_class_method_offset[__fn_onInstrumentFunction] = adapt_field_offset("onInstrumentFunction",info);
       _das_class_method_offset[__fn_onBreakpoint] = adapt_field_offset("onBreakpoint",info);
       _das_class_method_offset[__fn_onTick] = adapt_field_offset("onTick",info);
     }
@@ -852,6 +854,15 @@ public:
         (__context__,__funcCall__,
           self,ctx,at);
   }
+  static __forceinline Func get_onInstrumentFunction ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onInstrumentFunction]);
+  }
+  static __forceinline void invoke_onInstrumentFunction ( Context * __context__, Func __funcCall__, void * self, Context & ctx, SimFunction * const  fn, bool entering ) {
+    das_invoke_function<void>::invoke
+      <void *,Context &,SimFunction * const ,bool>
+        (__context__,__funcCall__,
+          self,ctx,fn,entering);
+  }
   static __forceinline Func get_onBreakpoint ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onBreakpoint]);
   }
@@ -871,7 +882,7 @@ public:
           self);
   }
 };
-int DapiDebugAgent_Adapter::_das_class_method_offset[8];
+int DapiDebugAgent_Adapter::_das_class_method_offset[9];
 
 class DapiStackWalker_Adapter {
 protected:

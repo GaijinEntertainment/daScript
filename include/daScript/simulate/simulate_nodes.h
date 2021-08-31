@@ -2400,18 +2400,45 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            context.instrumentcallback(subexpr->debugInfo);
+            context.instrumentCallback(subexpr->debugInfo);
             return subexpr->eval(context);
         }
 #define EVAL_NODE(TYPE,CTYPE) \
         virtual CTYPE eval##TYPE ( Context & context ) override { \
                 DAS_PROFILE_NODE \
-                context.instrumentcallback(subexpr->debugInfo); \
+                context.instrumentCallback(subexpr->debugInfo); \
                 return subexpr->eval##TYPE(context); \
             }
         DAS_EVAL_NODE
 #undef EVAL_NODE
         SimNode * subexpr;
+    };
+
+    struct SimNodeDebug_InstrumentFunction : SimNode {
+        SimNodeDebug_InstrumentFunction ( const LineInfo & at, SimFunction * simF, int32_t fni, SimNode * se )
+            : SimNode(at), func(simF), fnIndex(fni), subexpr(se) {}
+        virtual bool rtti_node_isInstrumentFunction() const override { return true; }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            context.instrumentFunctionCallback(func, true);
+            auto res = subexpr->eval(context);
+            context.instrumentFunctionCallback(func, false);
+            return res;
+        }
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+                DAS_PROFILE_NODE \
+                context.instrumentFunctionCallback(func, true); \
+                auto res = subexpr->eval##TYPE(context); \
+                context.instrumentFunctionCallback(func, false); \
+                return res; \
+            }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+        SimFunction *   func;
+        int32_t         fnIndex;
+        SimNode *       subexpr;
     };
 
     // IF-THEN-ELSE (also Cond)

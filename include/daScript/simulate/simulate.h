@@ -100,6 +100,7 @@ namespace das
         virtual bool rtti_node_isSourceBase() const { return false;  }
         virtual bool rtti_node_isBlock() const { return false; }
         virtual bool rtti_node_isInstrument() const { return false; }
+        virtual bool rtti_node_isInstrumentFunction() const { return false; }
     protected:
         virtual ~SimNode() {}
     };
@@ -198,6 +199,7 @@ namespace das
         virtual void onDestroyContext ( Context * ) {}
         virtual void onSingleStep ( Context *, const LineInfo & ) {}
         virtual void onInstrument ( Context *, const LineInfo & ) {}
+        virtual void onInstrumentFunction ( Context *, SimFunction *, bool ) {}
         virtual void onBreakpoint ( Context *, const LineInfo & ) {}
         virtual void onTick () {}
     };
@@ -567,6 +569,7 @@ namespace das
 
         void relocateCode();
         void collectStringHeap(LineInfo * at);
+        void instrumentFunction ( int index, bool isInstrumenting );
         void instrumentContextNode ( const char * fileName, int32_t lineNumber, bool isInstrumenting );
         void clearInstruments();
         void runVisitor ( SimVisitor * vis ) const;
@@ -582,7 +585,8 @@ namespace das
         char * intern ( const char * str );
 
         void bpcallback ( const LineInfo & at );
-        void instrumentcallback ( const LineInfo & at );
+        void instrumentFunctionCallback ( SimFunction * sim, bool entering );
+        void instrumentCallback ( const LineInfo & at );
 
 #define DAS_SINGLE_STEP(context,at,forceStep) \
     context.singleStep(at,forceStep);

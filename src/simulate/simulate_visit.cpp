@@ -795,6 +795,15 @@ namespace das {
         V_SUB(subexpr);
         V_END();
     }
+
+    SimNode * SimNodeDebug_InstrumentFunction::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(Instrument);
+        vis.arg(func->name,"fnPtr");
+        vis.arg(Func(fnIndex+1), "fnIndex");
+        V_SUB(subexpr);
+        V_END();
+    }
 #endif
 
     SimNode * SimNode_IfThenElse::visit ( SimVisitor & vis ) {

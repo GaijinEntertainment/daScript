@@ -82,9 +82,18 @@ namespace debugapi {
             }
         }
         virtual void onInstrument ( Context * ctx, const LineInfo & at ) override {
+            if ( ctx==context ) return; // do not step into the same context
             if ( auto fnOnInstrument = get_onInstrument(classPtr) ) {
                 context->lock();
                 invoke_onInstrument(context,fnOnInstrument,classPtr,*ctx,at);
+                context->unlock();
+            }
+        }
+        virtual void onInstrumentFunction ( Context * ctx, SimFunction * sim, bool entering ) override {
+            if ( ctx==context ) return;  // do not step into the same context
+            if ( auto fnOnInstrumentFunction = get_onInstrumentFunction(classPtr) ) {
+                context->lock();
+                invoke_onInstrumentFunction(context,fnOnInstrumentFunction,classPtr,*ctx,sim,entering);
                 context->unlock();
             }
         }
@@ -771,6 +780,15 @@ namespace debugapi {
         ctx.instrumentContextNode(fileName, lineNumber,isInstrumenting);
     }
 
+    void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, LineInfoArg * arg ) {
+        if ( !fn ) ctx.throw_error_at(*arg, "expecting function");
+        ctx.instrumentFunction(fn.index-1, isInstrumenting);
+    }
+
+    void instrument_all_functions ( Context & ctx ) {
+        ctx.instrumentFunction(-1, true);
+    }
+
     void clear_instruments ( Context & ctx ) {
         ctx.clearInstruments();
     }
@@ -810,8 +828,12 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(debuggerStackWalk)>(*this, lib, "stackwalk",
                 SideEffects::modifyExternal, "debuggerStackWalk");
             // instrumentation
-            addExtern<DAS_BIND_FUN(instrument_context)>(*this, lib,  "instrument_context",
+            addExtern<DAS_BIND_FUN(instrument_context)>(*this, lib,  "instrument_node",
                 SideEffects::modifyExternal, "instrument_context");
+            addExtern<DAS_BIND_FUN(instrument_function)>(*this, lib,  "instrument_function",
+                SideEffects::modifyExternal, "instrument_function");
+            addExtern<DAS_BIND_FUN(instrument_all_functions)>(*this, lib,  "instrument_all_functions",
+                SideEffects::modifyExternal, "instrument_all_functions");
             addExtern<DAS_BIND_FUN(clear_instruments)>(*this, lib,  "clear_instruments",
                 SideEffects::modifyExternal, "clear_instruments");
             // data walker

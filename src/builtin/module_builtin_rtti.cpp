@@ -34,6 +34,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(Module,Module)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Error,Error)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(FileAccess,FileAccess)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Context,Context)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(SimFunction,SimFunction)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(CodeOfPolicies,CodeOfPolicies)
 
 DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
@@ -261,6 +262,16 @@ namespace das {
                     walker.UInt64(T);
                 }
             }
+        }
+    };
+
+    struct SimFunctionAnnotation : ManagedStructureAnnotation<SimFunction,false> {
+        SimFunctionAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("SimFunction", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(mangledName)>("mangledName");
+            addField<DAS_BIND_MANAGED_FIELD(debugInfo)>("debugInfo");
+            addField<DAS_BIND_MANAGED_FIELD(stackSize)>("stackSize");
+            addField<DAS_BIND_MANAGED_FIELD(mangledNameHash)>("mangledNameHash");
         }
     };
 
@@ -1035,6 +1046,7 @@ namespace das {
             addRecAnnotation<LocalVariableInfoAnnotation>(lib);
             initRecAnnotation(sia, lib);
             addAnnotation(make_smart<FuncInfoAnnotation>(lib));
+            addAnnotation(make_smart<SimFunctionAnnotation>(lib));
             // CodeOfPolicies
             addAnnotation(make_smart<CodeOfPoliciesAnnotation>(lib));
             addCtorAndUsing<CodeOfPolicies>(*this,lib,"CodeOfPolicies","CodeOfPolicies");

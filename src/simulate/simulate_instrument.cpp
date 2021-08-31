@@ -64,14 +64,40 @@ namespace das {
         instrument.isInstrumenting = isInstrumenting;
         runVisitor(&instrument);
     }
+
     void Context::clearInstruments() {
         SimInstVisitor instrument;
         instrument.context = this;
         instrument.isInstrumenting = false;
         instrument.anyLine = true;
         runVisitor(&instrument);
+        instrumentFunction(-1, false);
+    }
+
+    void Context::instrumentFunction ( int index, bool isInstrumenting ) {
+        auto instFn = [&](SimFunction * fun, int32_t fnIndex) {
+            if ( !fun->code ) return;
+            if ( isInstrumenting ) {
+                if ( !fun->code->rtti_node_isInstrumentFunction() ) {
+                    fun->code = code->makeNode<SimNodeDebug_InstrumentFunction>(fun->code->debugInfo, fun, fnIndex, fun->code);
+                }
+            } else {
+                if ( fun->code->rtti_node_isInstrumentFunction() ) {
+                    auto inode = (SimNodeDebug_InstrumentFunction *) fun->code;
+                    fun->code = inode->subexpr;
+                }
+            }
+        };
+        if ( index==-1 ) {
+            for ( int fni=0; fni!=totalFunctions; ++fni ) {
+                instFn(&functions[fni], fni);
+            }
+        } else {
+            instFn(&functions[index], index);
+        }
     }
 #else
+    void Context::instrumentFunction ( int, bool );
     void Context::instrumentContextNode ( const char *, int32_t, bool ) {}
     void Context::clearInstruments() {}
 #endif
