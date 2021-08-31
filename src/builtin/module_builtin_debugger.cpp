@@ -766,9 +766,13 @@ namespace debugapi {
         return cast<void *>::from(ctx->getVariable(vidx));
     }
 
-    void instrument_context ( Context & ctx, char * fileName, int32_t lineNumber ) {
+    void instrument_context ( Context & ctx, char * fileName, int32_t lineNumber, bool isInstrumenting ) {
         if ( !fileName ) return;
-        ctx.InstrumentContext(fileName, lineNumber);
+        ctx.instrumentContextNode(fileName, lineNumber,isInstrumenting);
+    }
+
+    void clear_instruments ( Context & ctx ) {
+        ctx.clearInstruments();
     }
 
     class Module_Debugger : public Module {
@@ -808,6 +812,8 @@ namespace debugapi {
             // instrumentation
             addExtern<DAS_BIND_FUN(instrument_context)>(*this, lib,  "instrument_context",
                 SideEffects::modifyExternal, "instrument_context");
+            addExtern<DAS_BIND_FUN(clear_instruments)>(*this, lib,  "clear_instruments",
+                SideEffects::modifyExternal, "clear_instruments");
             // data walker
             addExtern<DAS_BIND_FUN(makeDataWalker)>(*this, lib,  "make_data_walker",
                 SideEffects::modifyExternal, "makeDataWalker");

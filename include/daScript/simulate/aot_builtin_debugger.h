@@ -18,5 +18,6 @@ namespace das {
 
     vec4f get_global_variable ( Context & context, SimNode_CallBase * call, vec4f * args );
 
-    void instrument_context ( Context & ctx, char * fileName, int32_t lineNumber );
+    void instrument_context_node ( Context & ctx, char * fileName, int32_t lineNumber, bool isInstrumenting );
+    void clear_instruments ( Context & ctx );
 }

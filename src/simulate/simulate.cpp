@@ -1467,14 +1467,7 @@ namespace das
     vector<FileInfo *> Context::getAllFiles() const {
         vector<FileInfo *> allFiles;
         FileInfoCollector collector;
-        for ( int gvi=0; gvi!=totalVariables; ++gvi ) {
-            const auto & gv = globalVariables[gvi];
-            if ( gv.init ) gv.init->visit(collector);
-        }
-        for ( int fni=0; fni!=totalFunctions; ++fni ) {
-            const auto & fn = functions[fni];
-            if ( fn.code ) fn.code->visit(collector);
-        }
+        runVisitor(&collector);
         for ( auto & it : collector.allFiles ) {
             allFiles.push_back(it);
         }
@@ -1594,6 +1587,16 @@ namespace das
         });
     }
 
+    void Context::runVisitor ( SimVisitor * vis ) const {
+        for ( int gvi=0; gvi!=totalVariables; ++gvi ) {
+            const auto & gv = globalVariables[gvi];
+            if ( gv.init ) gv.init->visit(*vis);
+        }
+        for ( int fni=0; fni!=totalFunctions; ++fni ) {
+            const auto & fn = functions[fni];
+            if ( fn.code ) fn.code->visit(*vis);
+        }
+    }
 }
 
 //workaround compiler bug in MSVC 32 bit

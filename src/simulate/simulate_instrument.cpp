@@ -8,7 +8,6 @@ namespace das {
 #if DAS_DEBUGGER
 
     struct SimInstVisitor : SimVisitor {
-
         bool isCorrectFileAndLine ( const LineInfo & info ) {
             if ( lineNumber>=info.line && lineNumber<=info.last_line ) {
                 if ( info.fileInfo && info.fileInfo->name==fileName ) {
@@ -17,24 +16,34 @@ namespace das {
             }
             return false;
         }
-
         SimNode * instrumentNode ( SimNode * expr ) {
-            return context->code->makeNode<SimNodeDebug_Instrument>(expr->debugInfo, expr);
+            if ( !expr->rtti_node_isInstrument() ) {
+                return context->code->makeNode<SimNodeDebug_Instrument>(expr->debugInfo, expr);
+            } else {
+                return expr;
+            }
         }
-
+        SimNode * clearNode ( SimNode * expr ) {
+            if ( expr->rtti_node_isInstrument() ) {
+                auto si = (SimNodeDebug_Instrument *) expr;
+                return si->subexpr;
+            } else {
+                return expr;
+            }
+        }
         virtual SimNode * visit ( SimNode * node ) override {
             if ( node->rtti_node_isBlock() ) {
                 SimNode_Block * blk = (SimNode_Block *) node;
                 for ( uint32_t i=0; i!=blk->total; ++i ) {
                     auto & expr = blk->list[i];
-                    if ( !expr->rtti_node_isInstrument() && isCorrectFileAndLine(expr->debugInfo) ) {
-                        expr = instrumentNode(expr);
+                    if ( anyLine || isCorrectFileAndLine(expr->debugInfo) ) {
+                        expr = isInstrumenting ? instrumentNode(expr) : clearNode(expr);
                     }
                 }
                 for ( uint32_t i=0; i!=blk->totalFinal; ++i ) {
                     auto & expr = blk->finalList[i];
-                    if ( !expr->rtti_node_isInstrument() && isCorrectFileAndLine(expr->debugInfo) ) {
-                        expr = instrumentNode(expr);
+                    if ( anyLine || isCorrectFileAndLine(expr->debugInfo) ) {
+                        expr = isInstrumenting ? instrumentNode(expr) : clearNode(expr);
                     }
                 }
             }
@@ -43,26 +52,28 @@ namespace das {
         Context * context = nullptr;
         const char * fileName = nullptr;
         uint32_t lineNumber = 0;
+        bool isInstrumenting = true;
+        bool anyLine = false;
     };
 
-    void Context::InstrumentContext ( const char * fileName, int32_t lineNumber ) {
+    void Context::instrumentContextNode ( const char * fileName, int32_t lineNumber, bool isInstrumenting ) {
         SimInstVisitor instrument;
         instrument.context = this;
         instrument.fileName = fileName;
         instrument.lineNumber = uint32_t(lineNumber);
-        for ( int gvi=0; gvi!=totalVariables; ++gvi ) {
-            const auto & gv = globalVariables[gvi];
-            if ( gv.init ) gv.init->visit(instrument);
-        }
-        for ( int fni=0; fni!=totalFunctions; ++fni ) {
-            const auto & fn = functions[fni];
-            if ( fn.code ) fn.code->visit(instrument);
-        }
+        instrument.isInstrumenting = isInstrumenting;
+        runVisitor(&instrument);
     }
-
+    void Context::clearInstruments() {
+        SimInstVisitor instrument;
+        instrument.context = this;
+        instrument.isInstrumenting = false;
+        instrument.anyLine = true;
+        runVisitor(&instrument);
+    }
 #else
-    void Context::InstrumentContext ( const char *, int32_t ) {
-    }
+    void Context::instrumentContextNode ( const char *, int32_t, bool ) {}
+    void Context::clearInstruments() {}
 #endif
 
 }

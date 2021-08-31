@@ -567,7 +567,9 @@ namespace das
 
         void relocateCode();
         void collectStringHeap(LineInfo * at);
-        void InstrumentContext ( const char * fileName, int32_t lineNumber );
+        void instrumentContextNode ( const char * fileName, int32_t lineNumber, bool isInstrumenting );
+        void clearInstruments();
+        void runVisitor ( SimVisitor * vis ) const;
 
         uint64_t getSharedMemorySize() const;
         uint64_t getUniqueMemorySize() const;
