@@ -614,6 +614,10 @@ require_module_name
     :   NAME[name] {
         $$ = $name;
     }
+    |   '%' require_module_name[req] {
+        *$req = "%" + *$req;
+        $$ = $req;
+    }
     |   require_module_name[req] '.' NAME[name] {
         *$req += ".";
         *$req += *$name;
