@@ -9,12 +9,14 @@ namespace das {
 
     struct SimInstVisitor : SimVisitor {
         bool isCorrectFileAndLine ( const LineInfo & info ) {
-            if ( lineNumber>=info.line && lineNumber<=info.last_line ) {
-                if ( info.fileInfo && info.fileInfo->name==fileName ) {
-                    return true;
-                }
+            if ( cmpBlk ) {
+                vec4f args[1];
+                args[0] = cast<LineInfo&>::from(info);
+                auto res = context->invoke(*cmpBlk, args, nullptr);
+                return cast<bool>::to(res);
+            } else {
+                return true;
             }
-            return false;
         }
         SimNode * instrumentNode ( SimNode * expr ) {
             if ( !expr->rtti_node_isInstrument() ) {
@@ -50,17 +52,15 @@ namespace das {
             return node;
         }
         Context * context = nullptr;
-        const char * fileName = nullptr;
-        uint32_t lineNumber = 0;
+        const Block * cmpBlk = nullptr;
         bool isInstrumenting = true;
         bool anyLine = false;
     };
 
-    void Context::instrumentContextNode ( const char * fileName, int32_t lineNumber, bool isInstrumenting ) {
+    void Context::instrumentContextNode ( const Block & blk, bool isInstrumenting ) {
         SimInstVisitor instrument;
         instrument.context = this;
-        instrument.fileName = fileName;
-        instrument.lineNumber = uint32_t(lineNumber);
+        instrument.cmpBlk = &blk;
         instrument.isInstrumenting = isInstrumenting;
         runVisitor(&instrument);
     }
@@ -98,7 +98,7 @@ namespace das {
     }
 #else
     void Context::instrumentFunction ( int, bool ) {}
-    void Context::instrumentContextNode ( const char *, int32_t, bool ) {}
+    void Context::instrumentContextNode ( const Block & blk, bool ) {}
     void Context::clearInstruments() {}
 #endif
 

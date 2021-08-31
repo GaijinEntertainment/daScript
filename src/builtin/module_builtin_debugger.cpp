@@ -775,9 +775,8 @@ namespace debugapi {
         return cast<void *>::from(ctx->getVariable(vidx));
     }
 
-    void instrument_context ( Context & ctx, char * fileName, int32_t lineNumber, bool isInstrumenting ) {
-        if ( !fileName ) return;
-        ctx.instrumentContextNode(fileName, lineNumber,isInstrumenting);
+    void instrument_context ( Context & ctx, bool isInstrumenting, const TBlock<bool,LineInfo> & blk ) {
+        ctx.instrumentContextNode(blk, isInstrumenting);
     }
 
     void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, LineInfoArg * arg ) {

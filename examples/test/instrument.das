@@ -10,7 +10,11 @@ class SampleDebugAgent : DapiDebugAgent
         pass
     def override onBreakpoint ( var ctx:Context; at:LineInfo ) : void
         print("{ctx} {ctx.name} : breakpoint at line {int(at.line)}\n")
-        instrument_context(ctx, "{at.fileInfo.name}", int(at.line) + 2, true)
+        instrument_node(ctx, true) <| $ ( ati )
+            if ati.fileInfo == at.fileInfo
+                if ati.line == at.line + 2u
+                    return true
+            return false
     def override onSingleStep ( var ctx:Context; at:LineInfo ) : void
         print("{ctx} {ctx.name} : step at {int(at.line)}\n")
     def override onInstrument ( var ctx:Context; at:LineInfo ) : void
