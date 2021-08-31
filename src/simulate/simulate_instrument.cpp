@@ -97,7 +97,7 @@ namespace das {
         }
     }
 #else
-    void Context::instrumentFunction ( int, bool );
+    void Context::instrumentFunction ( int, bool ) {}
     void Context::instrumentContextNode ( const char *, int32_t, bool ) {}
     void Context::clearInstruments() {}
 #endif
