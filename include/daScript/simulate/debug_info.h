@@ -189,6 +189,7 @@ namespace das
             flag_refValue = 1<<8,
             flag_hasInitValue = 1<<9,
             flag_isSmartPtr = 1<<10,
+            flag_isSmartPtrNative = 1<<11,
         };
         Type                type;
         StructInfo *        structType;
@@ -247,6 +248,7 @@ namespace das
 
     struct StructInfo {
         char *      name;
+        char *      module_name;
         VarInfo **  fields;
         uint32_t    count;
         uint32_t    size;
@@ -262,6 +264,7 @@ namespace das
 
     struct EnumInfo {
         char *              name;
+        char *              module_name;
         EnumValueInfo **    fields;
         uint32_t            count;
         uint32_t            hash;
@@ -329,5 +332,6 @@ namespace das
     };
 
     string debug_type ( const TypeInfo * info );
+    string getTypeInfoMangledName ( TypeInfo * info );
 }
 

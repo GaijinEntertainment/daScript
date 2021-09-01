@@ -48,6 +48,7 @@ namespace das {
         if ( it!=emn2e.end() ) return it->second;
         EnumInfo * eni = debugInfo->makeNode<EnumInfo>();
         eni->name = debugInfo->allocateName(en.name);
+        eni->module_name = debugInfo->allocateName(en.module->name);
         eni->count = uint32_t(en.list.size());
         eni->fields = (EnumValueInfo **) debugInfo->allocate(sizeof(EnumValueInfo *) * eni->count);
         uint32_t i = 0;
@@ -115,6 +116,7 @@ namespace das {
         if ( it!=smn2s.end() ) return it->second;
         StructInfo * sti = debugInfo->makeNode<StructInfo>();
         sti->name = debugInfo->allocateName(st.name);
+        sti->module_name = debugInfo->allocateName(st.module->name);
         sti->count = (uint32_t) st.fields.size();
         sti->size = st.getSizeOf();
         sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
@@ -187,8 +189,11 @@ namespace das {
             info->flags |= TypeInfo::flag_isImplicit;
         if (type->isRawPod())
             info->flags |= TypeInfo::flag_isRawPod;
-        if (type->smartPtr)
+        if (type->smartPtr) {
             info->flags |= TypeInfo::flag_isSmartPtr;
+            if ( type->smartPtrNative )
+                info->flags |= TypeInfo::flag_isSmartPtrNative;
+        }
         if ( type->firstType ) {
             info->firstType = makeTypeInfo(nullptr, type->firstType);
         } else {

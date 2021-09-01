@@ -473,6 +473,122 @@ namespace das
         return stream.str();
     }
 
+    string getTypeInfoMangledName ( TypeInfo * info ) {
+        TextWriter ss;
+        if ( info->flags & TypeInfo::flag_isConst )     ss << "C";
+        if ( info->flags & TypeInfo::flag_ref )         ss << "&";
+        if ( info->flags & TypeInfo::flag_isTemp )      ss << "#";
+        if ( info->flags & TypeInfo::flag_isImplicit )  ss << "I";
+        //  if ( explicitConst )ss << "=";
+        //  if ( isExplicit )   ss << "X";
+        //  if ( aotAlias )     ss << "F";
+        if ( info->dimSize ) {
+            for ( uint32_t d=0; d!=info->dimSize; ++d ) {
+                ss << "[" << info->dim[d] << "]";
+            }
+        }
+        if ( info->argNames ) {
+            ss << "N<";
+            for ( uint32_t a=0; a!=info->argCount; ++a ) {
+                if ( a ) ss << ";";
+                ss << info->argNames[a];
+            }
+            ss << ">";
+        }
+        if ( info->argTypes ) {
+            ss << "0<";
+            for ( uint32_t a=0; a!=info->argCount; ++a ) {
+                if ( a ) ss << ";";
+                ss << getTypeInfoMangledName(info->argTypes[a]);
+            }
+            ss << ">";
+        }
+        if ( info->firstType ) {
+            ss << "1<" << getTypeInfoMangledName(info->firstType) << ">";
+        }
+        if ( info->secondType ) {
+            ss << "2<" << getTypeInfoMangledName(info->secondType) << ">";
+        }
+        if ( info->type==Type::tHandle ) {
+            ss << "H<";
+            auto annotation = info->getAnnotation();
+            if ( !annotation->module->name.empty() ) {
+                ss << annotation->module->name << "::";
+             }
+             ss << annotation->name << ">";
+        } else if ( info->type==Type::tStructure ) {
+            ss << "S<";
+            // TODO: add module name to struct info
+            /*
+            if ( info->structType->module && info->structType->module->name.empty() ) {
+                ss << info->structType->module->name << "::";
+            }
+            */
+            ss << info->structType->name << ">";
+        } else if ( info->type==Type::tEnumeration || info->type==Type::tEnumeration8 || info->type==Type::tEnumeration16 ) {
+            ss << "E";
+            if ( info->type==Type::tEnumeration8 ) ss << "8";
+            else if ( info->type==Type::tEnumeration16 ) ss << "16";
+            if ( info->enumType ) {
+                // TODO: add module name to enum info
+                ss << "<" << info->enumType->name << ">";
+            }
+        } else if ( info->type==Type::tPointer ) {
+            ss << "?";
+            if ( info->flags & TypeInfo::flag_isSmartPtr ) {
+                ss << (info->flags & TypeInfo::flag_isSmartPtrNative ? "W" : "M");
+            }
+        } else {
+            switch ( info->type ) {
+                case Type::anyArgument:     ss << "*"; break;
+                case Type::fakeContext:     ss << "_c"; break;
+                case Type::fakeLineInfo:    ss << "_l"; break;
+                case Type::autoinfer:       ss << "."; break;
+                case Type::alias:           ss << "L"; break;
+                case Type::tIterator:       ss << "G"; break;
+                case Type::tArray:          ss << "A"; break;
+                case Type::tTable:          ss << "T"; break;
+                case Type::tBlock:          ss << "$"; break;
+                case Type::tFunction:       ss << "@@"; break;
+                case Type::tLambda:         ss << "@"; break;
+                case Type::tTuple:          ss << "U"; break;
+                case Type::tVariant:        ss << "V"; break;
+                case Type::tBitfield:       ss << "t"; break;
+                case Type::tInt:            ss << "i"; break;
+                case Type::tInt2:           ss << "i2"; break;
+                case Type::tInt3:           ss << "i3"; break;
+                case Type::tInt4:           ss << "i4"; break;
+                case Type::tInt8:           ss << "i8"; break;
+                case Type::tInt16:          ss << "i16"; break;
+                case Type::tInt64:          ss << "i64"; break;
+                case Type::tUInt:           ss << "u"; break;
+                case Type::tUInt2:          ss << "u2"; break;
+                case Type::tUInt3:          ss << "u3"; break;
+                case Type::tUInt4:          ss << "u4"; break;
+                case Type::tUInt8:          ss << "u8"; break;
+                case Type::tUInt16:         ss << "u16"; break;
+                case Type::tUInt64:         ss << "u64"; break;
+                case Type::tFloat:          ss << "f"; break;
+                case Type::tFloat2:         ss << "f2"; break;
+                case Type::tFloat3:         ss << "f3"; break;
+                case Type::tFloat4:         ss << "f4"; break;
+                case Type::tRange:          ss << "r"; break;
+                case Type::tURange:         ss << "z"; break;
+                case Type::tDouble:         ss << "d"; break;
+                case Type::tString:         ss << "s"; break;
+                case Type::tVoid:           ss << "v"; break;
+                case Type::tBool:           ss << "b"; break;
+                default:
+                    TextPrinter tp;
+                    tp << "ERROR " << das_to_string(info->type) << "\n";
+                    DAS_ASSERT(0 && "we should not be here");
+                    break;
+            }
+        }
+        return ss.str();
+    }
+
+
     LineInfo LineInfo::g_LineInfoNULL;
 
     string LineInfo::describe(bool fully) const {

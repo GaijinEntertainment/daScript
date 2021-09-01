@@ -441,6 +441,7 @@ namespace das {
     struct EnumInfoAnnotation : DebugInfoAnnotation<EnumValueInfo,EnumInfo> {
         EnumInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("EnumInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(module_name)>("module_name");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             fieldType = makeType<EnumValueInfo>(*mlib);
             fieldType->ref = true;
@@ -450,6 +451,7 @@ namespace das {
     struct StructInfoAnnotation : DebugInfoAnnotation<VarInfo,StructInfo> {
         StructInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("StructInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(module_name)>("module_name");
             addField<DAS_BIND_MANAGED_FIELD(size)>("size");
             addField<DAS_BIND_MANAGED_FIELD(initializer)>("initializer");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
@@ -995,6 +997,12 @@ namespace das {
         return context->stringHeap->allocateString(dt);
     }
 
+    char * builtin_get_typeinfo_mangled_name ( TypeInfo * typeInfo, Context * context ) {
+        if ( !typeInfo ) return nullptr;
+        auto dt = getTypeInfoMangledName(typeInfo);
+        return context->stringHeap->allocateString(dt);
+    }
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -1130,6 +1138,8 @@ namespace das {
             // debug typeinfo
             addExtern<DAS_BIND_FUN(builtin_debug_type)>(*this, lib, "describe",
                 SideEffects::none, "builtin_debug_type");
+            addExtern<DAS_BIND_FUN(builtin_get_typeinfo_mangled_name)>(*this, lib, "get_mangled_name",
+                SideEffects::none, "getTypeInfoMangledName");
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo");
