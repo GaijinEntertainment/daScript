@@ -42,7 +42,7 @@ def describe ( expr : smart_ptr<Function> )
     return describe_function(expr)
 
 def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
-    if starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
+    static_if starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
         unsafe
             return reinterpret<smart_ptr<Expression>> expr
     else

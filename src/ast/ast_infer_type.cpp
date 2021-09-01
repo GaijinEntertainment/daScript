@@ -6085,6 +6085,8 @@ namespace das {
                 for (auto & arg : expr->arguments) {
                     if ( auto carg = getConstExpr(arg.get()) ) {
                         cargs.push_back(carg);
+                    } else if ( arg->type->baseType==Type::fakeContext || arg->type->baseType==Type::fakeLineInfo ) {
+                        cargs.push_back(cloneWithType(arg));
                     } else {
                         failed = true;
                         break;

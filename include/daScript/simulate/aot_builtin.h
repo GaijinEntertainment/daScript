@@ -133,4 +133,7 @@ namespace das {
         memset(pArray.data + idx*stride, 0, stride);
         return idx;
     }
+
+    __forceinline void concept_assert ( bool, const char * ) {}
+    __forceinline void das_static_assert ( bool, const char * ) {}
 }

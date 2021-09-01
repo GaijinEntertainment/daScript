@@ -2094,6 +2094,15 @@ namespace das {
             }
             return Visitor::visit(c);
         }
+    // ExprWith
+        virtual void preVisit ( ExprWith * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "\n#if 0 // with, note optimizations are off\n";
+        }
+        virtual void preVisitWithBody ( ExprWith * expr, Expression * body ) override {
+            Visitor::preVisitWithBody(expr, body);
+            ss << "\n#endif\n";
+        }
     // ExprWhile
         virtual void preVisit ( ExprWhile * wh ) override {
             Visitor::preVisit(wh);
@@ -2768,6 +2777,8 @@ namespace das {
                 ss << "(__context__,";
             } else if ( call->name=="memzero" ) {
                 ss << "memset(&(";
+            } else if ( call->name=="static_assert" ) {
+                ss << "das_static_assert(";
             } else {
                 ss << call->name << "(";
             }

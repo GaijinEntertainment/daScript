@@ -9,7 +9,7 @@ def basic_goto()
     if i < 10
         goto label 0
         fail = true
-        static_assert(false,"unreachable code")
+        assert(false,"unreachable code")    // not a static assert without optimizations
     for t in range(10)
         assert(arr[t]==t)
     assert(!fail)

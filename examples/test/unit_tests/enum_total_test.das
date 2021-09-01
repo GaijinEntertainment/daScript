@@ -7,6 +7,9 @@ enum FooBar
 
 [export]
 def test()
-    static_assert(int(FooBar total)==2)
+    assert(int(FooBar total)==2)    // not a const
     return true
 
+[export]
+def main
+    test()
