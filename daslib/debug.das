@@ -498,10 +498,7 @@ class private DAgent: DapiDebugAgent
 
         for i in range(length(args) - 1)
             if args[i] == "--das-debug-path"
-                workingPaths |> push(args[i + 1])
-        let dasRoot = get_das_root()
-        workingPaths |> push(dasRoot |> join_path("daslib"))
-        workingPaths |> push(dasRoot |> join_path("src/builtin"))
+                self->addPath(args[i+1])
 
         walker = new DAStackWalker()
         unsafe
@@ -521,6 +518,18 @@ class private DAgent: DapiDebugAgent
             print("server failed to initialize\n")
             unsafe
                 delete server
+
+    def addPath(path: string)
+        if workingPaths |> find_index(path) < 0
+            workingPaths |> push(path)
+
+    def addPaths(paths: array<string>)
+        for path in paths
+            self->addPath(path)
+
+        let dasRoot = get_das_root()
+        self->addPath(dasRoot |> join_path("daslib"))
+        self->addPath(dasRoot |> join_path("src/builtin"))
 
     def override onUninstall(agent:DebugAgent?)
         if agent == thisAgent
@@ -866,10 +875,30 @@ class private DAServer: Server
         configurationDone = true
         self->sendSuccessResponse(seq, command, null)
 
+    def addPaths(data: JsonValue?)
+        if data == null || !(data is _object)
+            return
+        var resPaths: array<string>
+        defer_delete(resPaths)
+        let paths = data |> joj("paths")
+        if paths != null && paths is _array
+            let pathsList & = paths as _array
+            for it in pathsList
+                if it is _string
+                    resPaths |> push(it as _string)
+
+        let cwd = data |> jos("cwd", "")
+        if !empty(cwd)
+            resPaths |> push(cwd)
+        if length(resPaths) > 0
+            agent->addPaths(resPaths)
+
     def reqLaunch(seq: double; command: string; data: JsonValue?)
+        self->addPaths(data)
         self->sendSuccessResponse(seq, command, null)
 
     def reqAttach(seq: double; command: string; data: JsonValue?)
+        self->addPaths(data)
         self->sendSuccessResponse(seq, command, null)
 
     def reqDisconnect(seq: double; command: string; data: JsonValue?)
