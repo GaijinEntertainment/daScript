@@ -102,6 +102,13 @@ def private resolve_path(path: string; paths: array<string>): string
             return newPath
     return fix_path(path)
 
+def private resolve_path_cache(path: string; paths: array<string>; var cache: table<string; string>): string
+    let res = cache |> find(path)
+    if res != null
+        return *res
+    let absPath = resolve_path(path, paths)
+    cache[path] = absPath
+    return absPath
 
 def private bytes_hr(value : uint64)
     if value > uint64(1024 * 1024)
@@ -497,6 +504,8 @@ class private DAgent: DapiDebugAgent
     initialStrLimit = uint64(8 * 1024 * 1024)
     strLimit: uint64 = uint64(8 * 1024 * 1024)
 
+    pathsCache: table<string; string>
+
     def DAgent()
         let args <- get_command_line_arguments()
         waitConnection = args |> find_index("--das-wait-debugger") >= 0
@@ -525,7 +534,8 @@ class private DAgent: DapiDebugAgent
             workingPaths |> push(path)
 
     def setPaths(paths: array<string>)
-        workingPaths |> clear()
+        delete workingPaths
+        delete pathsCache
         for path in paths
             self->addPath(path)
 
@@ -562,7 +572,7 @@ class private DAgent: DapiDebugAgent
             return
         if !waitConnection && (!server.configurationDone || !server.threadsDone)
             return
-        let path = "{at.fileInfo.name}" |> resolve_path(workingPaths)
+        let path = "{at.fileInfo.name}" |> resolve_path_cache(workingPaths, pathsCache)
         self->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
         set_single_step(ctx,true)
 
@@ -582,7 +592,7 @@ class private DAgent: DapiDebugAgent
             return
 
         // unsafe
-        //     self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path(workingPaths)}:{int(at.line)}\n")
+        //     self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache)}:{int(at.line)}\n")
 
         if (uint(ctx.category) & (1u << 31u)) != 0u
             self->addContext(ctx)
@@ -596,7 +606,7 @@ class private DAgent: DapiDebugAgent
                 self->log("[Error] non debug context in single step {ctx.name}")
 
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
-            let file = string(at.fileInfo.name) |> resolve_path(workingPaths)
+            let file = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache)
             if ctxData.pauseRequested
                 self->sendStopped(ctx, ctxData, file, at, "pause", -1ul)
                 while ctxData.pauseRequested
