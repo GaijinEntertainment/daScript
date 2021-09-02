@@ -346,6 +346,7 @@ class private DAStackWalker: DapiStackWalker
 
     [[do_not_delete]] ctx: DAContext?
     [[do_not_delete]] workingPaths: array<string>?
+    [[do_not_delete]] pathsCache: table<string; string>?
 
     def DAStackWalker()
         dataWalker = new DAWalker()
@@ -389,7 +390,7 @@ class private DAStackWalker: DapiStackWalker
 
     def override onCallAt(pp:Prologue; info:FuncInfo; at:LineInfo): void
         // print("def {info.name} at {at}\n")
-        ctx.stack |> emplace([[DAStackFrame() name="def {info.name}", path="{at.fileInfo.name}" |> resolve_path(*workingPaths), line=at.line ]])
+        ctx.stack |> emplace([[DAStackFrame() name="def {info.name}", path="{at.fileInfo.name}" |> resolve_path_cache(*workingPaths, *pathsCache), line=at.line ]])
         self->collectGlobals()
 
     def override onCall(pp:Prologue; info:FuncInfo): void
@@ -499,12 +500,11 @@ class private DAgent: DapiDebugAgent
 
     waitConnection: bool = true
     workingPaths: array<string>
+    pathsCache: table<string; string>
 
     logStrMemory = false
     initialStrLimit = uint64(8 * 1024 * 1024)
     strLimit: uint64 = uint64(8 * 1024 * 1024)
-
-    pathsCache: table<string; string>
 
     def DAgent()
         let args <- get_command_line_arguments()
@@ -514,6 +514,7 @@ class private DAgent: DapiDebugAgent
         unsafe
             walkerAdapter <- make_stack_walker(walker)
             walker.workingPaths = addr(workingPaths)
+            walker.pathsCache = addr(pathsCache)
         self->startServer()
         self->addContext(this_context())
 
@@ -534,8 +535,8 @@ class private DAgent: DapiDebugAgent
             workingPaths |> push(path)
 
     def setPaths(paths: array<string>)
-        delete workingPaths
-        delete pathsCache
+        workingPaths |> clear()
+        pathsCache |> clear()
         for path in paths
             self->addPath(path)
 
@@ -903,22 +904,19 @@ class private DAServer: Server
         self->sendSuccessResponse(seq, command, null)
 
     def setPaths(data: JsonValue?)
-        if data == null || !(data is _object)
-            return
         var resPaths: array<string>
         defer_delete(resPaths)
-        let paths = data |> joj("paths")
-        if paths != null && paths is _array
-            let pathsList & = paths as _array
-            for it in pathsList
-                if it is _string
-                    resPaths |> push(it as _string)
-
-        let cwd = data |> jos("cwd", "")
-        if !empty(cwd)
-            resPaths |> push(cwd)
-        if length(resPaths) > 0
-            agent->setPaths(resPaths)
+        if data != null && data is _object
+            let paths = data |> joj("paths")
+            if paths != null && paths is _array
+                let pathsList & = paths as _array
+                for it in pathsList
+                    if it is _string
+                        resPaths |> push(it as _string)
+            let cwd = data |> jos("cwd", "")
+            if !empty(cwd)
+                resPaths |> push(cwd)
+        agent->setPaths(resPaths)
 
     def reqLaunch(seq: double; command: string; data: JsonValue?)
         self->setPaths(data)
