@@ -496,10 +496,6 @@ class private DAgent: DapiDebugAgent
         let args <- get_command_line_arguments()
         waitConnection = args |> find_index("--das-wait-debugger") >= 0
 
-        for i in range(length(args) - 1)
-            if args[i] == "--das-debug-path"
-                self->addPath(args[i+1])
-
         walker = new DAStackWalker()
         unsafe
             walkerAdapter <- make_stack_walker(walker)
@@ -523,13 +519,20 @@ class private DAgent: DapiDebugAgent
         if workingPaths |> find_index(path) < 0
             workingPaths |> push(path)
 
-    def addPaths(paths: array<string>)
+    def setPaths(paths: array<string>)
+        workingPaths |> clear()
         for path in paths
             self->addPath(path)
 
+        let args <- get_command_line_arguments()
+        for i in range(length(args) - 1)
+            if args[i] == "--das-debug-path"
+                self->addPath(args[i+1])
+
         let dasRoot = get_das_root()
-        self->addPath(dasRoot |> join_path("daslib"))
-        self->addPath(dasRoot |> join_path("src/builtin"))
+        if !empty(dasRoot) && dasRoot != "."
+            self->addPath(dasRoot |> join_path("daslib"))
+            self->addPath(dasRoot |> join_path("src/builtin"))
 
     def override onUninstall(agent:DebugAgent?)
         if agent == thisAgent
@@ -875,7 +878,7 @@ class private DAServer: Server
         configurationDone = true
         self->sendSuccessResponse(seq, command, null)
 
-    def addPaths(data: JsonValue?)
+    def setPaths(data: JsonValue?)
         if data == null || !(data is _object)
             return
         var resPaths: array<string>
@@ -891,14 +894,14 @@ class private DAServer: Server
         if !empty(cwd)
             resPaths |> push(cwd)
         if length(resPaths) > 0
-            agent->addPaths(resPaths)
+            agent->setPaths(resPaths)
 
     def reqLaunch(seq: double; command: string; data: JsonValue?)
-        self->addPaths(data)
+        self->setPaths(data)
         self->sendSuccessResponse(seq, command, null)
 
     def reqAttach(seq: double; command: string; data: JsonValue?)
-        self->addPaths(data)
+        self->setPaths(data)
         self->sendSuccessResponse(seq, command, null)
 
     def reqDisconnect(seq: double; command: string; data: JsonValue?)
