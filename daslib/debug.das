@@ -102,6 +102,13 @@ def private resolve_path(path: string; paths: array<string>): string
             return newPath
     return fix_path(path)
 
+def private resolve_path_cache(path: string; paths: array<string>; var cache: table<string; string>): string
+    let res = cache |> find(path)
+    if res != null
+        return *res
+    let absPath = resolve_path(path, paths)
+    cache[path] = absPath
+    return absPath
 
 def private bytes_hr(value : uint64)
     if value > uint64(1024 * 1024)
@@ -473,6 +480,11 @@ def private to_string(ctx: DAContext)
         str |> write(")")
 
 
+def private compare_path(p1, p2: string)
+    if p1 == p2
+        return true
+    return to_lower(p1) == to_lower(p2)
+
 class private DAgent: DapiDebugAgent
 
     walkerAdapter: smart_ptr<StackWalker>
@@ -492,13 +504,11 @@ class private DAgent: DapiDebugAgent
     initialStrLimit = uint64(8 * 1024 * 1024)
     strLimit: uint64 = uint64(8 * 1024 * 1024)
 
+    pathsCache: table<string; string>
+
     def DAgent()
         let args <- get_command_line_arguments()
         waitConnection = args |> find_index("--das-wait-debugger") >= 0
-
-        for i in range(length(args) - 1)
-            if args[i] == "--das-debug-path"
-                self->addPath(args[i+1])
 
         walker = new DAStackWalker()
         unsafe
@@ -523,13 +533,21 @@ class private DAgent: DapiDebugAgent
         if workingPaths |> find_index(path) < 0
             workingPaths |> push(path)
 
-    def addPaths(paths: array<string>)
+    def setPaths(paths: array<string>)
+        delete workingPaths
+        delete pathsCache
         for path in paths
             self->addPath(path)
 
+        let args <- get_command_line_arguments()
+        for i in range(length(args) - 1)
+            if args[i] == "--das-debug-path"
+                self->addPath(args[i+1])
+
         let dasRoot = get_das_root()
-        self->addPath(dasRoot |> join_path("daslib"))
-        self->addPath(dasRoot |> join_path("src/builtin"))
+        if !empty(dasRoot) && dasRoot != "."
+            self->addPath(dasRoot |> join_path("daslib"))
+            self->addPath(dasRoot |> join_path("src/builtin"))
 
     def override onUninstall(agent:DebugAgent?)
         if agent == thisAgent
@@ -554,7 +572,7 @@ class private DAgent: DapiDebugAgent
             return
         if !waitConnection && (!server.configurationDone || !server.threadsDone)
             return
-        let path = "{at.fileInfo.name}" |> resolve_path(workingPaths)
+        let path = "{at.fileInfo.name}" |> resolve_path_cache(workingPaths, pathsCache)
         self->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
         set_single_step(ctx,true)
 
@@ -574,7 +592,7 @@ class private DAgent: DapiDebugAgent
             return
 
         // unsafe
-        //     self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path(workingPaths)}:{int(at.line)}\n")
+        //     self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache)}:{int(at.line)}\n")
 
         if (uint(ctx.category) & (1u << 31u)) != 0u
             self->addContext(ctx)
@@ -588,7 +606,7 @@ class private DAgent: DapiDebugAgent
                 self->log("[Error] non debug context in single step {ctx.name}")
 
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
-            let file = string(at.fileInfo.name) |> resolve_path(workingPaths)
+            let file = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache)
             if ctxData.pauseRequested
                 self->sendStopped(ctx, ctxData, file, at, "pause", -1ul)
                 while ctxData.pauseRequested
@@ -617,7 +635,16 @@ class private DAgent: DapiDebugAgent
                     sleep(10u)
 
             // self->log("search break `{file}`:{at.line} - {inBreak}\n")
-            if key_exists(breakpoints, file)
+            var i = 0
+            while i < length(breakpoints)
+                var fileBr: string
+                for j, it in range(i + 1), keys(breakpoints)
+                    if j == i
+                        fileBr = it
+                        break
+                i += 1
+                if !compare_path(fileBr, file)
+                    continue
                 let brs = breakpoints |> find(file)
                 var brIdx = 0
                 while brs != null && brIdx < length(*brs)
@@ -875,7 +902,7 @@ class private DAServer: Server
         configurationDone = true
         self->sendSuccessResponse(seq, command, null)
 
-    def addPaths(data: JsonValue?)
+    def setPaths(data: JsonValue?)
         if data == null || !(data is _object)
             return
         var resPaths: array<string>
@@ -891,14 +918,14 @@ class private DAServer: Server
         if !empty(cwd)
             resPaths |> push(cwd)
         if length(resPaths) > 0
-            agent->addPaths(resPaths)
+            agent->setPaths(resPaths)
 
     def reqLaunch(seq: double; command: string; data: JsonValue?)
-        self->addPaths(data)
+        self->setPaths(data)
         self->sendSuccessResponse(seq, command, null)
 
     def reqAttach(seq: double; command: string; data: JsonValue?)
-        self->addPaths(data)
+        self->setPaths(data)
         self->sendSuccessResponse(seq, command, null)
 
     def reqDisconnect(seq: double; command: string; data: JsonValue?)
