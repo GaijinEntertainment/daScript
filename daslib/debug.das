@@ -473,6 +473,11 @@ def private to_string(ctx: DAContext)
         str |> write(")")
 
 
+def private compare_path(p1, p2: string)
+    if p1 == p2
+        return true
+    return to_lower(p1) == to_lower(p2)
+
 class private DAgent: DapiDebugAgent
 
     walkerAdapter: smart_ptr<StackWalker>
@@ -620,7 +625,16 @@ class private DAgent: DapiDebugAgent
                     sleep(10u)
 
             // self->log("search break `{file}`:{at.line} - {inBreak}\n")
-            if key_exists(breakpoints, file)
+            var i = 0
+            while i < length(breakpoints)
+                var fileBr: string
+                for j, it in range(i + 1), keys(breakpoints)
+                    if j == i
+                        fileBr = it
+                        break
+                i += 1
+                if !compare_path(fileBr, file)
+                    continue
                 let brs = breakpoints |> find(file)
                 var brIdx = 0
                 while brs != null && brIdx < length(*brs)
