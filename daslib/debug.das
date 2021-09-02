@@ -903,22 +903,19 @@ class private DAServer: Server
         self->sendSuccessResponse(seq, command, null)
 
     def setPaths(data: JsonValue?)
-        if data == null || !(data is _object)
-            return
         var resPaths: array<string>
         defer_delete(resPaths)
-        let paths = data |> joj("paths")
-        if paths != null && paths is _array
-            let pathsList & = paths as _array
-            for it in pathsList
-                if it is _string
-                    resPaths |> push(it as _string)
-
-        let cwd = data |> jos("cwd", "")
-        if !empty(cwd)
-            resPaths |> push(cwd)
-        if length(resPaths) > 0
-            agent->setPaths(resPaths)
+        if data != null && data is _object
+            let paths = data |> joj("paths")
+            if paths != null && paths is _array
+                let pathsList & = paths as _array
+                for it in pathsList
+                    if it is _string
+                        resPaths |> push(it as _string)
+            let cwd = data |> jos("cwd", "")
+            if !empty(cwd)
+                resPaths |> push(cwd)
+        agent->setPaths(resPaths)
 
     def reqLaunch(seq: double; command: string; data: JsonValue?)
         self->setPaths(data)
