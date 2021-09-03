@@ -20,7 +20,7 @@ namespace das
     struct PrologueAnnotation : ManagedStructureAnnotation<Prologue,false> {
         PrologueAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Prologue", ml) {
             addField<DAS_BIND_MANAGED_FIELD(info)>("info");
-            addField<DAS_BIND_MANAGED_FIELD(block)>("block");
+            addField<DAS_BIND_MANAGED_FIELD(block)>("_block");
             addField<DAS_BIND_MANAGED_FIELD(fileName)>("fileName");
             addField<DAS_BIND_MANAGED_FIELD(stackSize)>("stackSize");
             addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
