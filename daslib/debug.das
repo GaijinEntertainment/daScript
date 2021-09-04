@@ -302,6 +302,7 @@ struct private DAVariable
     name: string
     value: string
     _type: string
+    argAddr: uint64 = 0ul
     indexedVariables: uint
     children: array<DAVariable>?
 
@@ -320,6 +321,8 @@ def find_child_var(val: DAVariable; id: uint64; cb: block<(res:DAVariable): void
 struct private DAStackFrame
     name: string
     path: string
+    isBlock: bool = false
+    spAddr: uint64 = 0ul
     line: uint = 1u
     variables: array<DAVariable>
     arguments: array<DAVariable>
@@ -385,31 +388,48 @@ class private DAStackWalker: DapiStackWalker
 
     def override onCallAOT(pp:Prologue; fileName:string#): void
         // print("AOT {fileName}\n")
-        ctx.stack |> emplace([[DAStackFrame() name="aot {pp.info.name}", path = "{fileName}" ]])
-        self->collectGlobals()
+        let n = length(ctx.stack)
+        if n > 0
+            ctx.stack[n - 1].name = "def {pp.info.name} [AOT]"
+            ctx.stack[n - 1].path = "{fileName}"
+
+            self->collectGlobals()
 
     def override onCallAt(pp:Prologue; info:FuncInfo; at:LineInfo): void
         // print("def {info.name} at {at}\n")
-        ctx.stack |> emplace([[DAStackFrame() name="def {info.name}", path="{at.fileInfo.name}" |> resolve_path_cache(*workingPaths, *pathsCache), line=at.line ]])
-        self->collectGlobals()
+        let n = length(ctx.stack)
+        if n > 0
+            ctx.stack[n - 1].name = "def {info.name}"
+            ctx.stack[n - 1].path = "{at.fileInfo.name}" |> resolve_path_cache(*workingPaths, *pathsCache)
+            ctx.stack[n - 1].line = at.line
+            self->collectGlobals()
 
     def override onCall(pp:Prologue; info:FuncInfo): void
         // print("def {info.name}\n")
-        ctx.stack |> emplace([[DAStackFrame() name="def {info.name}" ]])
-        self->collectGlobals()
+        let n = length(ctx.stack)
+        if n > 0
+            ctx.stack[n - 1].name = "def {info.name}"
+            self->collectGlobals()
+
+    def override onBeforeCall(pp: Prologue; sp: void?): void
+        let iblock = intptr(pp._block)
+        let isBlock = (iblock & 1ul) != 0ul
+        ctx.stack |> emplace([[DAStackFrame() isBlock=isBlock, spAddr=intptr(sp) ]])
 
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
+        if !inScope
+            return
         let stackLen = length(ctx.stack)
         if stackLen > 0
             var frame & = ctx.stack[stackLen - 1]
             var ti = type_info(vinfo)
-            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti)]]
+            var variable = [[DAVariable uid=frame.varId++, argAddr=intptr(arg), name=vinfo.name, _type=describe(ti)]]
             if ti != null
                 dataWalker->startWalk(frame, variable) <| $
                     dataWalkerAdapter |> walk_data(arg, *ti)
 
             if variable.children == null
-                let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, ti, print_flags_debug): "<optimized>"
+                let value = !inScope ? "<uninitialized>" : arg != null ? sprint_data(arg, ti, print_flags_debug): "<optimized>"
                 variable.value = value
             elif empty(variable.value)
                 variable.value = variable._type
@@ -1002,18 +1022,31 @@ class private DAServer: Server
         agent->getContextData(ctxId) <| $(var ctxData: DAContext)
             let frameId = int(ini.frameId % double(MAX_STACK))
             if frameId >= 0 && frameId < length(ctxData.stack)
-                let line & = ctxData.stack[frameId]
-                if length(line.variables) > 0
+                var spAddr = ctxData.stack[frameId].spAddr
+                var vars = 0
+                var args = 0
+                var globs = 0
+                var idx = frameId
+                var first = true
+                while idx < length(ctxData.stack) && (vars == 0 || args == 0 || globs == 0)
+                    let line & = ctxData.stack[idx]
+                    idx += 1
+                    if first || line.spAddr == spAddr
+                        first = false
+                        vars += length(line.variables)
+                        args += length(line.arguments)
+                        globs += length(line.globals)
+                if vars > 0
                     res.scopes |> emplace([[Scope
                         name="Locals",
                         variablesReference=double(uint64(ini.frameId) * MAX_VARIABLES + LOCAL_VARS)
                     ]])
-                if length(line.arguments) > 0
+                if args > 0
                     res.scopes |> emplace([[Scope
                         name="Arguments",
                         variablesReference=double(uint64(ini.frameId) * MAX_VARIABLES + ARGUMENT_VARS)
                     ]])
-                if get_total_variables(*ctxData.ctx) > 0
+                if globs > 0
                     res.scopes |> emplace([[Scope
                         name="Globals",
                         variablesReference=double(uint64(ini.frameId) * MAX_VARIABLES + GLOBAL_VARS)
@@ -1031,34 +1064,47 @@ class private DAServer: Server
             let frameId = int(ctxAndFrame % MAX_STACK)
             if frameId >= 0 && frameId < length(ctxData.stack)
                 let kind = uint64(ini.variablesReference) % MAX_VARIABLES
-                let line & = ctxData.stack[frameId]
-                if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS
-                    let vars & = kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : line.globals
-                    let varsNum = length(vars)
-                    for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
-                        let v & = vars[idx]
-                        let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
-                        res.variables |> emplace([[Variable
-                            name=v.name,
-                            value=v.value,
-                            _type=v._type,
-                            indexedVariables=double(v.indexedVariables),
-                            variablesReference=double(ref)
-                        ]])
-                else
-                    line |> find_child_var(uint64(kind)) <| $(child)
-                        if child.children != null
-                            let varsNum = length(*child.children)
+                let spAddr = ctxData.stack[frameId].spAddr
+                // debug(ctxData.stack[frameId], "first line")
+                var idx = frameId
+                var first = true
+                var usedArgs: table<uint64; void?>
+                defer_delete(usedArgs)
+                while idx < length(ctxData.stack)
+                    let line & = ctxData.stack[idx]
+                    // debug(line, "line")
+                    idx += 1
+                    if first || line.spAddr == spAddr
+                        first = false
+                        if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS
+                            let vars & = kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : line.globals
+                            let varsNum = length(vars)
                             for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
-                                let v & = (*child.children)[idx]
-                                let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
-                                res.variables |> emplace([[Variable
-                                    name=v.name,
-                                    value=v.value,
-                                    _type=v._type,
-                                    indexedVariables=double(v.indexedVariables),
-                                    variablesReference=double(ref)
-                                ]])
+                                let v & = vars[idx]
+                                if v.argAddr == 0ul || !usedArgs |> key_exists(v.argAddr)
+                                    usedArgs[v.argAddr] = null
+                                    let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
+                                    res.variables |> emplace([[Variable
+                                        name=v.name,
+                                        value=v.value,
+                                        _type=v._type,
+                                        indexedVariables=double(v.indexedVariables),
+                                        variablesReference=double(ref)
+                                    ]])
+                        else
+                            line |> find_child_var(uint64(kind)) <| $(child)
+                                if child.children != null
+                                    let varsNum = length(*child.children)
+                                    for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
+                                        let v & = (*child.children)[idx]
+                                        let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
+                                        res.variables |> emplace([[Variable
+                                            name=v.name,
+                                            value=v.value,
+                                            _type=v._type,
+                                            indexedVariables=double(v.indexedVariables),
+                                            variablesReference=double(ref)
+                                        ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqContinue(seq: double; command: string; data: JsonValue?)
