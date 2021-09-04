@@ -27,6 +27,7 @@ let private
     LOCAL_VARS = 1ul
     ARGUMENT_VARS = 2ul
     GLOBAL_VARS = 3ul
+    BLOCKS_POOL = 100ul
 
     MAX_STACK = 1000ul
     MAX_VARIABLES = 100000ul
@@ -302,6 +303,7 @@ struct private DAVariable
     name: string
     value: string
     _type: string
+    argAddr: uint64 = 0ul
     indexedVariables: uint
     children: array<DAVariable>?
 
@@ -320,12 +322,14 @@ def find_child_var(val: DAVariable; id: uint64; cb: block<(res:DAVariable): void
 struct private DAStackFrame
     name: string
     path: string
+    isBlock: bool = false
+    spAddr: uint64 = 0ul
     line: uint = 1u
     variables: array<DAVariable>
     arguments: array<DAVariable>
     globals: array<DAVariable>
 
-    varId: uint64 = GLOBAL_VARS + 1ul
+    varId: uint64 = BLOCKS_POOL + 1ul
 
 
 def find_child_var(stack: DAStackFrame; id: uint64; cb: block<(res:DAVariable): void>)
@@ -385,31 +389,48 @@ class private DAStackWalker: DapiStackWalker
 
     def override onCallAOT(pp:Prologue; fileName:string#): void
         // print("AOT {fileName}\n")
-        ctx.stack |> emplace([[DAStackFrame() name="aot {pp.info.name}", path = "{fileName}" ]])
-        self->collectGlobals()
+        let n = length(ctx.stack)
+        if n > 0
+            ctx.stack[n - 1].name = "def {pp.info.name} [AOT]"
+            ctx.stack[n - 1].path = "{fileName}"
+
+            self->collectGlobals()
 
     def override onCallAt(pp:Prologue; info:FuncInfo; at:LineInfo): void
         // print("def {info.name} at {at}\n")
-        ctx.stack |> emplace([[DAStackFrame() name="def {info.name}", path="{at.fileInfo.name}" |> resolve_path_cache(*workingPaths, *pathsCache), line=at.line ]])
-        self->collectGlobals()
+        let n = length(ctx.stack)
+        if n > 0
+            ctx.stack[n - 1].name = "def {info.name}"
+            ctx.stack[n - 1].path = "{at.fileInfo.name}" |> resolve_path_cache(*workingPaths, *pathsCache)
+            ctx.stack[n - 1].line = at.line
+            self->collectGlobals()
 
     def override onCall(pp:Prologue; info:FuncInfo): void
         // print("def {info.name}\n")
-        ctx.stack |> emplace([[DAStackFrame() name="def {info.name}" ]])
-        self->collectGlobals()
+        let n = length(ctx.stack)
+        if n > 0
+            ctx.stack[n - 1].name = "def {info.name}"
+            self->collectGlobals()
+
+    def override onBeforeCall(pp: Prologue; sp: void?): void
+        let iblock = intptr(pp._block)
+        let isBlock = (iblock & 1ul) != 0ul
+        ctx.stack |> emplace([[DAStackFrame() isBlock=isBlock, spAddr=intptr(sp) ]])
 
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
+        if !inScope
+            return
         let stackLen = length(ctx.stack)
         if stackLen > 0
             var frame & = ctx.stack[stackLen - 1]
             var ti = type_info(vinfo)
-            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti)]]
+            var variable = [[DAVariable uid=frame.varId++, argAddr=intptr(arg), name=vinfo.name, _type=describe(ti)]]
             if ti != null
                 dataWalker->startWalk(frame, variable) <| $
                     dataWalkerAdapter |> walk_data(arg, *ti)
 
             if variable.children == null
-                let value = !inScope ? "<out of scope>" : arg != null ? sprint_data(arg, ti, print_flags_debug): "<optimized>"
+                let value = !inScope ? "<uninitialized>" : arg != null ? sprint_data(arg, ti, print_flags_debug): "<optimized>"
                 variable.value = value
             elif empty(variable.value)
                 variable.value = variable._type
@@ -1002,18 +1023,29 @@ class private DAServer: Server
         agent->getContextData(ctxId) <| $(var ctxData: DAContext)
             let frameId = int(ini.frameId % double(MAX_STACK))
             if frameId >= 0 && frameId < length(ctxData.stack)
-                let line & = ctxData.stack[frameId]
-                if length(line.variables) > 0
-                    res.scopes |> emplace([[Scope
-                        name="Locals",
-                        variablesReference=double(uint64(ini.frameId) * MAX_VARIABLES + LOCAL_VARS)
-                    ]])
-                if length(line.arguments) > 0
-                    res.scopes |> emplace([[Scope
-                        name="Arguments",
-                        variablesReference=double(uint64(ini.frameId) * MAX_VARIABLES + ARGUMENT_VARS)
-                    ]])
-                if get_total_variables(*ctxData.ctx) > 0
+                var spAddr = ctxData.stack[frameId].spAddr
+                var vars = 0
+                var args = 0
+                var globs = 0
+                var idx = frameId
+                var first = true
+                while idx < length(ctxData.stack)
+                    let line & = ctxData.stack[idx]
+                    if first || line.spAddr == spAddr
+                        globs += length(line.globals)
+                        if length(line.variables) > 0
+                            res.scopes |> emplace([[Scope
+                                name=first ? "Locals" : "Locals ({line.name})",
+                                variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + LOCAL_VARS)
+                            ]])
+                        if length(line.arguments) > 0
+                            res.scopes |> emplace([[Scope
+                                name=first ? "Arguments" : "Arguments ({line.name})",
+                                variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + ARGUMENT_VARS)
+                            ]])
+                        first = false
+                    idx += 1
+                if globs > 0
                     res.scopes |> emplace([[Scope
                         name="Globals",
                         variablesReference=double(uint64(ini.frameId) * MAX_VARIABLES + GLOBAL_VARS)
