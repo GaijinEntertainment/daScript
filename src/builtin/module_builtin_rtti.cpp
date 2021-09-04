@@ -629,7 +629,7 @@ namespace das {
     }
 
     void rtti_builtin_simulate ( const smart_ptr<Program> & program, bool useAot,
-            const TBlock<void,bool,Context *,string> & block, Context * context ) {
+            const TBlock<void,bool,Context *,string> & block, Context * context, LineInfoArg * lineinfo ) {
         TextWriter issues;
         Context ctx(program->getContextStackSize());
         bool failed = !program->simulate(ctx, issues);
@@ -644,14 +644,14 @@ namespace das {
                 issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
             string istr = issues.str();
-            das_invoke<void>::invoke<bool,Context *,const string &>(context,block,false,nullptr,istr);
+            das_invoke<void>::invoke<bool,Context *,const string &>(context,lineinfo,block,false,nullptr,istr);
         } else {
-            das_invoke<void>::invoke<bool,Context *,const string &>(context,block,true,&ctx,"");
+            das_invoke<void>::invoke<bool,Context *,const string &>(context,lineinfo,block,true,&ctx,"");
         }
     }
 
     void rtti_builtin_compile ( char * modName, char * str, const CodeOfPolicies & cop,
-            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context ) {
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         str = str ? str : ((char *)"");
         TextWriter issues;
         uint32_t str_len = stringLengthSafe(*context, str);
@@ -671,7 +671,7 @@ namespace das {
                     cast<smart_ptr<Program>>::from(program),
                     cast<string *>::from(&istr)
                 };
-                context->invoke(block, args, nullptr);
+                context->invoke(block, args, nullptr, at);
             } else {
                 string istr = issues.str();
                 vec4f args[3] = {
@@ -679,7 +679,7 @@ namespace das {
                     cast<smart_ptr<Program>>::from(program),
                     cast<string *>::from(&istr)
                 };
-                context->invoke(block, args, nullptr);
+                context->invoke(block, args, nullptr, at);
             }
         } else {
             context->throw_error("rtti_compile internal error, something went wrong");
@@ -694,23 +694,23 @@ namespace das {
         return Module::require(name);
     }
 
-    void rtti_builtin_program_for_each_module ( smart_ptr_raw<Program> program, const TBlock<void,Module *> & block, Context * context ) {
+    void rtti_builtin_program_for_each_module ( smart_ptr_raw<Program> program, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
         program->library.foreach([&](Module * pm) -> bool {
             vec4f args[1] = { cast<Module *>::from(pm) };
-            context->invoke(block, args, nullptr);
+            context->invoke(block, args, nullptr, at);
             return true;
         }, "*");
     }
 
-    void rtti_builtin_program_for_each_registered_module ( const TBlock<void,Module *> & block, Context * context ) {
+    void rtti_builtin_program_for_each_registered_module ( const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
         Module::foreach([&](Module * pm) -> bool {
             vec4f args[1] = { cast<Module *>::from(pm) };
-            context->invoke(block, args, nullptr);
+            context->invoke(block, args, nullptr, at);
             return true;
         });
     }
 
-    void rtti_builtin_module_for_each_enumeration ( Module * module, const TBlock<void,const EnumInfo> & block, Context * context ) {
+    void rtti_builtin_module_for_each_enumeration ( Module * module, const TBlock<void,const EnumInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : module->enumerations ) {
@@ -719,7 +719,7 @@ namespace das {
             vec4f args[1] = {
                 cast<EnumInfo *>::from(info)
             };
-            context->invoke(block, args, nullptr);
+            context->invoke(block, args, nullptr, at);
         }
     }
 
@@ -778,7 +778,7 @@ namespace das {
         return nada;
     }
 
-    void rtti_builtin_module_for_each_structure ( Module * module, const TBlock<void,const StructInfo> & block, Context * context ) {
+    void rtti_builtin_module_for_each_structure ( Module * module, const TBlock<void,const StructInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : module->structures ) {
@@ -787,11 +787,11 @@ namespace das {
             vec4f args[1] = {
                 cast<StructInfo *>::from(info)
             };
-            context->invoke(block, args, nullptr);
+            context->invoke(block, args, nullptr, at);
         }
     }
 
-    void rtti_builtin_structure_for_each_annotation ( const StructInfo & info, const Block & block, Context * context ) {
+    void rtti_builtin_structure_for_each_annotation ( const StructInfo & info, const Block & block, Context * context, LineInfoArg * at ) {
         if ( info.annotation_list ) {
             auto al = (const AnnotationList *) info.annotation_list;
             for ( const auto & adp : *al ) {
@@ -799,12 +799,12 @@ namespace das {
                     cast<Annotation *>::from(adp->annotation.get()),
                     cast<AnnotationArgumentList *>::from(&adp->arguments)
                 };
-                context->invoke(block, args, nullptr);
+                context->invoke(block, args, nullptr, at);
             }
         }
     }
 
-    void rtti_builtin_module_for_each_function ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context ) {
+    void rtti_builtin_module_for_each_function ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : module->functions ) {
@@ -813,11 +813,11 @@ namespace das {
             vec4f args[1] = {
                 cast<FuncInfo *>::from(info)
             };
-            context->invoke(block, args, nullptr);
+            context->invoke(block, args, nullptr, at);
         }
     }
 
-    void rtti_builtin_module_for_each_generic ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context ) {
+    void rtti_builtin_module_for_each_generic ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : module->generics ) {
@@ -826,11 +826,11 @@ namespace das {
             vec4f args[1] = {
                 cast<FuncInfo *>::from(info)
             };
-            context->invoke(block, args, nullptr);
+            context->invoke(block, args, nullptr, at);
         }
     }
 
-    void rtti_builtin_module_for_each_global ( Module * module, const TBlock<void,const VarInfo> & block, Context * context ) {
+    void rtti_builtin_module_for_each_global ( Module * module, const TBlock<void,const VarInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : module->globals ) {
@@ -839,21 +839,21 @@ namespace das {
             vec4f args[1] = {
                 cast<VarInfo *>::from(info)
             };
-            context->invoke(block, args, nullptr);
+            context->invoke(block, args, nullptr, at);
         }
     }
 
-    void rtti_builtin_module_for_each_annotation ( Module * module, const TBlock<void,const Annotation> & block, Context * context ) {
+    void rtti_builtin_module_for_each_annotation ( Module * module, const TBlock<void,const Annotation> & block, Context * context, LineInfoArg * at ) {
         for ( auto & it : module->handleTypes ) {
             vec4f args[1] = {
                 cast<Annotation*>::from(it.second.get())
             };
-            context->invoke(block, args, nullptr);
+            context->invoke(block, args, nullptr, at);
         }
     }
 
     void rtti_builtin_basic_struct_for_each_field ( const BasicStructureAnnotation & ann,
-        const TBlock<void,char *,char*,const TypeInfo,uint32_t> & block, Context * context ) {
+        const TBlock<void,char *,char*,const TypeInfo,uint32_t> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
         for ( auto & it : ann.fields ) {
@@ -865,7 +865,7 @@ namespace das {
                 cast<TypeInfo *>::from(info),
                 cast<uint32_t>::from(fld.offset)
             };
-            context->invoke(block, args, nullptr);
+            context->invoke(block, args, nullptr, at);
         }
     }
 
@@ -883,7 +883,7 @@ namespace das {
 #if !DAS_NO_FILEIO
 
     void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
-            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context ) {
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
         auto program = compileDaScript(modName, access, issues, *module_group, true, cop);
@@ -898,7 +898,7 @@ namespace das {
                     cast<smart_ptr<Program>>::from(program),
                     cast<string *>::from(&istr)
                 };
-                context->invoke(block, args, nullptr);
+                context->invoke(block, args, nullptr, at);
             } else {
                 string istr = issues.str();
                 vec4f args[3] = {
@@ -906,7 +906,7 @@ namespace das {
                     cast<smart_ptr<Program>>::from(program),
                     cast<string *>::from(&istr)
                 };
-                context->invoke(block, args, nullptr);
+                context->invoke(block, args, nullptr, at);
             }
         } else {
             context->throw_error("rtti_compile internal error, something went wrong");
@@ -931,11 +931,11 @@ namespace das {
     }
 
     void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies & cop,
-            const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context) {
+            const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * ) {
         context->throw_error("not supported with DAS_NO_FILEIO");
     }
 
-    bool introduceFile ( smart_ptr_raw<FileAccess>, char *, char *, Context * context ) {
+    bool introduceFile ( smart_ptr_raw<FileAccess>, char *, char *, Context * context, LineInfoArg * ) {
         context->throw_error("not supported with DAS_NO_FILEIO");
         return false;
     }

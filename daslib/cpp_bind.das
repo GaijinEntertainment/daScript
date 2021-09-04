@@ -39,7 +39,7 @@ def log_cpp_class_method_call ( cpp_file:file; name:string; fntype:TypeDeclPtr )
             fwrite(cpp_file, "{argtd}")
             if argT.isRefType
                 fwrite(cpp_file, " &")
-    fwrite(cpp_file, ">\n        (__context__,__funcCall__,\n          ")
+    fwrite(cpp_file, ">\n        (__context__,nullptr,__funcCall__,\n          ")
     for argN,argI in fntype.argNames,range(100500)
         if argI!=0
             fwrite(cpp_file, ",")

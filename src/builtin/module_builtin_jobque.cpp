@@ -93,14 +93,14 @@ namespace das {
         return ch->append(size);
     }
 
-    void withChannel ( const TBlock<void,Channel *> & blk, Context * context ) {
+    void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * at ) {
         Channel ch(context);
-        das_invoke<void>::invoke<Channel *>(context, blk, &ch);
+        das_invoke<void>::invoke<Channel *>(context, at, blk, &ch);
     }
 
-    void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context ) {
+    void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * at ) {
         Channel ch(context,count);
-        das_invoke<void>::invoke<Channel *>(context, blk, &ch);
+        das_invoke<void>::invoke<Channel *>(context, at, blk, &ch);
     }
 
     void waitForChannel ( Channel * status ) {
@@ -146,11 +146,11 @@ namespace das {
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
         memset ( ptr, 0, lambdaSize + 16 );
         ptr += 16;
-        das_invoke_function<void>::invoke(forkContext.get(), fn, ptr, lambda.capture);
+        das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
         g_jobQue->push([=]() mutable {
             Lambda flambda(ptr);
-            das_invoke_lambda<void>::invoke(forkContext.get(), flambda);
+            das_invoke_lambda<void>::invoke(forkContext.get(), lineinfo, flambda);
             das_delete<Lambda>::clear(forkContext.get(), flambda);
         }, 0, JobPriority::Default);
     }
@@ -162,7 +162,7 @@ namespace das {
         return g_jobQueShutdown;
     }
 
-    void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context ) {
+    void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context));
         forkContext->category.value |= uint32_t(ContextCategory::thread_clone);
@@ -170,12 +170,12 @@ namespace das {
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_thread");
         memset ( ptr, 0, lambdaSize + 16 );
         ptr += 16;
-        das_invoke_function<void>::invoke(forkContext.get(), fn, ptr, lambda.capture);
+        das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
         g_jobQueTotalThreads ++;
         thread([=]() mutable {
             Lambda flambda(ptr);
-            das_invoke_lambda<void>::invoke(forkContext.get(), flambda);
+            das_invoke_lambda<void>::invoke(forkContext.get(), lineinfo, flambda);
             das_delete<Lambda>::clear(forkContext.get(), flambda);
             g_jobQueTotalThreads --;
         }).detach();
@@ -188,7 +188,7 @@ namespace das {
         }
         {
             shared_ptr<JobQue> jq = g_jobQue;
-            context->invoke(block, nullptr, lineInfo);
+            context->invoke(block, nullptr, nullptr, lineInfo);
         }
         {
             lock_guard<mutex> guard(g_jobQueMutex);
@@ -200,7 +200,7 @@ namespace das {
         JobStatus status(total);
         vec4f args[1];
         args[0] = cast<JobStatus *>::from(&status);
-        context->invoke(block,args,lineInfo);
+        context->invoke(block,args,nullptr,lineInfo);
     }
 
     void waitForJob ( JobStatus * status ) {

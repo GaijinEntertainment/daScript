@@ -153,7 +153,7 @@ public:
   static __forceinline bool invoke_canVisitHandle ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     return das_invoke_function<bool>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_canVisitStructure ( void * self ) {
@@ -162,7 +162,7 @@ public:
   static __forceinline bool invoke_canVisitStructure ( Context * __context__, Func __funcCall__, void * self, void * const  ps, StructInfo const  & si ) {
     return das_invoke_function<bool>::invoke
       <void *,void * const ,StructInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,si);
   }
   static __forceinline Func get_beforeStructure ( void * self ) {
@@ -171,7 +171,7 @@ public:
   static __forceinline void invoke_beforeStructure ( Context * __context__, Func __funcCall__, void * self, void * const  ps, StructInfo const  & si ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,StructInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,si);
   }
   static __forceinline Func get_afterStructure ( void * self ) {
@@ -180,7 +180,7 @@ public:
   static __forceinline void invoke_afterStructure ( Context * __context__, Func __funcCall__, void * self, void * const  ps, StructInfo const  & si ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,StructInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,si);
   }
   static __forceinline Func get_afterStructureCancel ( void * self ) {
@@ -189,7 +189,7 @@ public:
   static __forceinline void invoke_afterStructureCancel ( Context * __context__, Func __funcCall__, void * self, void * const  ps, StructInfo const  & si ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,StructInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,si);
   }
   static __forceinline Func get_beforeStructureField ( void * self ) {
@@ -198,7 +198,7 @@ public:
   static __forceinline void invoke_beforeStructureField ( Context * __context__, Func __funcCall__, void * self, void * const  ps, StructInfo const  & si, void * const  pv, VarInfo const  & vi, bool last ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,StructInfo const  &,void * const ,VarInfo const  &,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,si,pv,vi,last);
   }
   static __forceinline Func get_afterStructureField ( void * self ) {
@@ -207,7 +207,7 @@ public:
   static __forceinline void invoke_afterStructureField ( Context * __context__, Func __funcCall__, void * self, void * const  ps, StructInfo const  & si, void * const  pv, VarInfo const  & vi, bool last ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,StructInfo const  &,void * const ,VarInfo const  &,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,si,pv,vi,last);
   }
   static __forceinline Func get_beforeTuple ( void * self ) {
@@ -216,7 +216,7 @@ public:
   static __forceinline void invoke_beforeTuple ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_afterTuple ( void * self ) {
@@ -225,7 +225,7 @@ public:
   static __forceinline void invoke_afterTuple ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_beforeTupleEntry ( void * self ) {
@@ -234,7 +234,7 @@ public:
   static __forceinline void invoke_beforeTupleEntry ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti, void * const  pv, TypeInfo const  & vi, bool last ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &,void * const ,TypeInfo const  &,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti,pv,vi,last);
   }
   static __forceinline Func get_afterTupleEntry ( void * self ) {
@@ -243,7 +243,7 @@ public:
   static __forceinline void invoke_afterTupleEntry ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti, void * const  pv, TypeInfo const  & vi, bool last ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &,void * const ,TypeInfo const  &,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti,pv,vi,last);
   }
   static __forceinline Func get_beforeVariant ( void * self ) {
@@ -252,7 +252,7 @@ public:
   static __forceinline void invoke_beforeVariant ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_afterVariant ( void * self ) {
@@ -261,7 +261,7 @@ public:
   static __forceinline void invoke_afterVariant ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_beforeArrayData ( void * self ) {
@@ -270,7 +270,7 @@ public:
   static __forceinline void invoke_beforeArrayData ( Context * __context__, Func __funcCall__, void * self, void * const  ps, uint32_t stride, uint32_t count, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,uint32_t,uint32_t,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,stride,count,ti);
   }
   static __forceinline Func get_afterArrayData ( void * self ) {
@@ -279,7 +279,7 @@ public:
   static __forceinline void invoke_afterArrayData ( Context * __context__, Func __funcCall__, void * self, void * const  ps, uint32_t stride, uint32_t count, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,uint32_t,uint32_t,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,stride,count,ti);
   }
   static __forceinline Func get_beforeArrayElement ( void * self ) {
@@ -288,7 +288,7 @@ public:
   static __forceinline void invoke_beforeArrayElement ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti, void * const  pe, uint32_t index, bool last ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &,void * const ,uint32_t,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti,pe,index,last);
   }
   static __forceinline Func get_afterArrayElement ( void * self ) {
@@ -297,7 +297,7 @@ public:
   static __forceinline void invoke_afterArrayElement ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti, void * const  pe, uint32_t index, bool last ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &,void * const ,uint32_t,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti,pe,index,last);
   }
   static __forceinline Func get_beforeDim ( void * self ) {
@@ -306,7 +306,7 @@ public:
   static __forceinline void invoke_beforeDim ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_afterDim ( void * self ) {
@@ -315,7 +315,7 @@ public:
   static __forceinline void invoke_afterDim ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_beforeArray ( void * self ) {
@@ -324,7 +324,7 @@ public:
   static __forceinline void invoke_beforeArray ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiArray const  & pa, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiArray const  &,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pa,ti);
   }
   static __forceinline Func get_afterArray ( void * self ) {
@@ -333,7 +333,7 @@ public:
   static __forceinline void invoke_afterArray ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiArray const  & pa, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiArray const  &,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pa,ti);
   }
   static __forceinline Func get_beforeTable ( void * self ) {
@@ -342,7 +342,7 @@ public:
   static __forceinline void invoke_beforeTable ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiTable const  &,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pa,ti);
   }
   static __forceinline Func get_beforeTableKey ( void * self ) {
@@ -351,7 +351,7 @@ public:
   static __forceinline void invoke_beforeTableKey ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pk, TypeInfo const  & ki, uint32_t index, bool last ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pa,ti,pk,ki,index,last);
   }
   static __forceinline Func get_afterTableKey ( void * self ) {
@@ -360,7 +360,7 @@ public:
   static __forceinline void invoke_afterTableKey ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pk, TypeInfo const  & ki, uint32_t index, bool last ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pa,ti,pk,ki,index,last);
   }
   static __forceinline Func get_beforeTableValue ( void * self ) {
@@ -369,7 +369,7 @@ public:
   static __forceinline void invoke_beforeTableValue ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pv, TypeInfo const  & kv, uint32_t index, bool last ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pa,ti,pv,kv,index,last);
   }
   static __forceinline Func get_afterTableValue ( void * self ) {
@@ -378,7 +378,7 @@ public:
   static __forceinline void invoke_afterTableValue ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pv, TypeInfo const  & kv, uint32_t index, bool last ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pa,ti,pv,kv,index,last);
   }
   static __forceinline Func get_afterTable ( void * self ) {
@@ -387,7 +387,7 @@ public:
   static __forceinline void invoke_afterTable ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiTable const  &,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pa,ti);
   }
   static __forceinline Func get_beforeRef ( void * self ) {
@@ -396,7 +396,7 @@ public:
   static __forceinline void invoke_beforeRef ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_afterRef ( void * self ) {
@@ -405,7 +405,7 @@ public:
   static __forceinline void invoke_afterRef ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_beforePtr ( void * self ) {
@@ -414,7 +414,7 @@ public:
   static __forceinline void invoke_beforePtr ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_afterPtr ( void * self ) {
@@ -423,7 +423,7 @@ public:
   static __forceinline void invoke_afterPtr ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_beforeHandle ( void * self ) {
@@ -432,7 +432,7 @@ public:
   static __forceinline void invoke_beforeHandle ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_afterHandle ( void * self ) {
@@ -441,7 +441,7 @@ public:
   static __forceinline void invoke_afterHandle ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,void * const ,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ps,ti);
   }
   static __forceinline Func get_beforeLambda ( void * self ) {
@@ -450,7 +450,7 @@ public:
   static __forceinline void invoke_beforeLambda ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiLambda & value, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiLambda &,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value,ti);
   }
   static __forceinline Func get_afterLambda ( void * self ) {
@@ -459,7 +459,7 @@ public:
   static __forceinline void invoke_afterLambda ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiLambda & value, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiLambda &,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value,ti);
   }
   static __forceinline Func get_beforeIterator ( void * self ) {
@@ -468,7 +468,7 @@ public:
   static __forceinline void invoke_beforeIterator ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiSequence & value, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiSequence &,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value,ti);
   }
   static __forceinline Func get_afterIterator ( void * self ) {
@@ -477,7 +477,7 @@ public:
   static __forceinline void invoke_afterIterator ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiSequence & value, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiSequence &,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value,ti);
   }
   static __forceinline Func get_Null ( void * self ) {
@@ -486,7 +486,7 @@ public:
   static __forceinline void invoke_Null ( Context * __context__, Func __funcCall__, void * self, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ti);
   }
   static __forceinline Func get_VoidPtr ( void * self ) {
@@ -495,7 +495,7 @@ public:
   static __forceinline void invoke_VoidPtr ( Context * __context__, Func __funcCall__, void * self, void * & value ) {
     das_invoke_function<void>::invoke
       <void *,void * &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Bool ( void * self ) {
@@ -504,7 +504,7 @@ public:
   static __forceinline void invoke_Bool ( Context * __context__, Func __funcCall__, void * self, bool & value ) {
     das_invoke_function<void>::invoke
       <void *,bool &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Int8 ( void * self ) {
@@ -513,7 +513,7 @@ public:
   static __forceinline void invoke_Int8 ( Context * __context__, Func __funcCall__, void * self, int8_t & value ) {
     das_invoke_function<void>::invoke
       <void *,int8_t &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_UInt8 ( void * self ) {
@@ -522,7 +522,7 @@ public:
   static __forceinline void invoke_UInt8 ( Context * __context__, Func __funcCall__, void * self, uint8_t & value ) {
     das_invoke_function<void>::invoke
       <void *,uint8_t &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Int16 ( void * self ) {
@@ -531,7 +531,7 @@ public:
   static __forceinline void invoke_Int16 ( Context * __context__, Func __funcCall__, void * self, int16_t & value ) {
     das_invoke_function<void>::invoke
       <void *,int16_t &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_UInt16 ( void * self ) {
@@ -540,7 +540,7 @@ public:
   static __forceinline void invoke_UInt16 ( Context * __context__, Func __funcCall__, void * self, uint16_t & value ) {
     das_invoke_function<void>::invoke
       <void *,uint16_t &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Int64 ( void * self ) {
@@ -549,7 +549,7 @@ public:
   static __forceinline void invoke_Int64 ( Context * __context__, Func __funcCall__, void * self, int64_t & value ) {
     das_invoke_function<void>::invoke
       <void *,int64_t &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_UInt64 ( void * self ) {
@@ -558,7 +558,7 @@ public:
   static __forceinline void invoke_UInt64 ( Context * __context__, Func __funcCall__, void * self, uint64_t & value ) {
     das_invoke_function<void>::invoke
       <void *,uint64_t &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_String ( void * self ) {
@@ -567,7 +567,7 @@ public:
   static __forceinline void invoke_String ( Context * __context__, Func __funcCall__, void * self, char * & value ) {
     das_invoke_function<void>::invoke
       <void *,char * &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Double ( void * self ) {
@@ -576,7 +576,7 @@ public:
   static __forceinline void invoke_Double ( Context * __context__, Func __funcCall__, void * self, double & value ) {
     das_invoke_function<void>::invoke
       <void *,double &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Float ( void * self ) {
@@ -585,7 +585,7 @@ public:
   static __forceinline void invoke_Float ( Context * __context__, Func __funcCall__, void * self, float & value ) {
     das_invoke_function<void>::invoke
       <void *,float &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Int ( void * self ) {
@@ -594,7 +594,7 @@ public:
   static __forceinline void invoke_Int ( Context * __context__, Func __funcCall__, void * self, int32_t & value ) {
     das_invoke_function<void>::invoke
       <void *,int32_t &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_UInt ( void * self ) {
@@ -603,7 +603,7 @@ public:
   static __forceinline void invoke_UInt ( Context * __context__, Func __funcCall__, void * self, uint32_t & value ) {
     das_invoke_function<void>::invoke
       <void *,uint32_t &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Bitfield ( void * self ) {
@@ -612,7 +612,7 @@ public:
   static __forceinline void invoke_Bitfield ( Context * __context__, Func __funcCall__, void * self, uint32_t & value, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
       <void *,uint32_t &,TypeInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value,ti);
   }
   static __forceinline Func get_Int2 ( void * self ) {
@@ -621,7 +621,7 @@ public:
   static __forceinline void invoke_Int2 ( Context * __context__, Func __funcCall__, void * self, int2 & value ) {
     das_invoke_function<void>::invoke
       <void *,int2 &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Int3 ( void * self ) {
@@ -630,7 +630,7 @@ public:
   static __forceinline void invoke_Int3 ( Context * __context__, Func __funcCall__, void * self, int3 & value ) {
     das_invoke_function<void>::invoke
       <void *,int3 &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Int4 ( void * self ) {
@@ -639,7 +639,7 @@ public:
   static __forceinline void invoke_Int4 ( Context * __context__, Func __funcCall__, void * self, int4 & value ) {
     das_invoke_function<void>::invoke
       <void *,int4 &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_UInt2 ( void * self ) {
@@ -648,7 +648,7 @@ public:
   static __forceinline void invoke_UInt2 ( Context * __context__, Func __funcCall__, void * self, uint2 & value ) {
     das_invoke_function<void>::invoke
       <void *,uint2 &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_UInt3 ( void * self ) {
@@ -657,7 +657,7 @@ public:
   static __forceinline void invoke_UInt3 ( Context * __context__, Func __funcCall__, void * self, uint3 & value ) {
     das_invoke_function<void>::invoke
       <void *,uint3 &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_UInt4 ( void * self ) {
@@ -666,7 +666,7 @@ public:
   static __forceinline void invoke_UInt4 ( Context * __context__, Func __funcCall__, void * self, uint4 & value ) {
     das_invoke_function<void>::invoke
       <void *,uint4 &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Float2 ( void * self ) {
@@ -675,7 +675,7 @@ public:
   static __forceinline void invoke_Float2 ( Context * __context__, Func __funcCall__, void * self, float2 & value ) {
     das_invoke_function<void>::invoke
       <void *,float2 &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Float3 ( void * self ) {
@@ -684,7 +684,7 @@ public:
   static __forceinline void invoke_Float3 ( Context * __context__, Func __funcCall__, void * self, float3 & value ) {
     das_invoke_function<void>::invoke
       <void *,float3 &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Float4 ( void * self ) {
@@ -693,7 +693,7 @@ public:
   static __forceinline void invoke_Float4 ( Context * __context__, Func __funcCall__, void * self, float4 & value ) {
     das_invoke_function<void>::invoke
       <void *,float4 &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_Range ( void * self ) {
@@ -702,7 +702,7 @@ public:
   static __forceinline void invoke_Range ( Context * __context__, Func __funcCall__, void * self, range & value ) {
     das_invoke_function<void>::invoke
       <void *,range &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_URange ( void * self ) {
@@ -711,7 +711,7 @@ public:
   static __forceinline void invoke_URange ( Context * __context__, Func __funcCall__, void * self, urange & value ) {
     das_invoke_function<void>::invoke
       <void *,urange &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_WalkBlock ( void * self ) {
@@ -720,7 +720,7 @@ public:
   static __forceinline void invoke_WalkBlock ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiBlock & value ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiBlock &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_WalkFunction ( void * self ) {
@@ -729,7 +729,7 @@ public:
   static __forceinline void invoke_WalkFunction ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiFunc & value ) {
     das_invoke_function<void>::invoke
       <void *,debugapi::DapiFunc &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_WalkEnumeration ( void * self ) {
@@ -738,7 +738,7 @@ public:
   static __forceinline void invoke_WalkEnumeration ( Context * __context__, Func __funcCall__, void * self, int32_t & value, EnumInfo const  & ei ) {
     das_invoke_function<void>::invoke
       <void *,int32_t &,EnumInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value,ei);
   }
   static __forceinline Func get_WalkEnumeration8 ( void * self ) {
@@ -747,7 +747,7 @@ public:
   static __forceinline void invoke_WalkEnumeration8 ( Context * __context__, Func __funcCall__, void * self, int8_t & value, EnumInfo const  & ei ) {
     das_invoke_function<void>::invoke
       <void *,int8_t &,EnumInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value,ei);
   }
   static __forceinline Func get_WalkEnumeration16 ( void * self ) {
@@ -756,7 +756,7 @@ public:
   static __forceinline void invoke_WalkEnumeration16 ( Context * __context__, Func __funcCall__, void * self, int16_t & value, EnumInfo const  & ei ) {
     das_invoke_function<void>::invoke
       <void *,int16_t &,EnumInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value,ei);
   }
   static __forceinline Func get_FakeContext ( void * self ) {
@@ -765,7 +765,7 @@ public:
   static __forceinline void invoke_FakeContext ( Context * __context__, Func __funcCall__, void * self, Context & value ) {
     das_invoke_function<void>::invoke
       <void *,Context &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,value);
   }
 };
@@ -806,7 +806,7 @@ public:
   static __forceinline void invoke_onInstall ( Context * __context__, Func __funcCall__, void * self, DebugAgent * const  agent ) {
     das_invoke_function<void>::invoke
       <void *,DebugAgent * const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,agent);
   }
   static __forceinline Func get_onUninstall ( void * self ) {
@@ -815,7 +815,7 @@ public:
   static __forceinline void invoke_onUninstall ( Context * __context__, Func __funcCall__, void * self, DebugAgent * const  agent ) {
     das_invoke_function<void>::invoke
       <void *,DebugAgent * const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,agent);
   }
   static __forceinline Func get_onCreateContext ( void * self ) {
@@ -824,7 +824,7 @@ public:
   static __forceinline void invoke_onCreateContext ( Context * __context__, Func __funcCall__, void * self, Context & ctx ) {
     das_invoke_function<void>::invoke
       <void *,Context &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ctx);
   }
   static __forceinline Func get_onDestroyContext ( void * self ) {
@@ -833,7 +833,7 @@ public:
   static __forceinline void invoke_onDestroyContext ( Context * __context__, Func __funcCall__, void * self, Context & ctx ) {
     das_invoke_function<void>::invoke
       <void *,Context &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ctx);
   }
   static __forceinline Func get_onSingleStep ( void * self ) {
@@ -842,7 +842,7 @@ public:
   static __forceinline void invoke_onSingleStep ( Context * __context__, Func __funcCall__, void * self, Context & ctx, LineInfo const  & at ) {
     das_invoke_function<void>::invoke
       <void *,Context &,LineInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ctx,at);
   }
   static __forceinline Func get_onInstrument ( void * self ) {
@@ -851,7 +851,7 @@ public:
   static __forceinline void invoke_onInstrument ( Context * __context__, Func __funcCall__, void * self, Context & ctx, LineInfo const  & at ) {
     das_invoke_function<void>::invoke
       <void *,Context &,LineInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ctx,at);
   }
   static __forceinline Func get_onInstrumentFunction ( void * self ) {
@@ -860,7 +860,7 @@ public:
   static __forceinline void invoke_onInstrumentFunction ( Context * __context__, Func __funcCall__, void * self, Context & ctx, SimFunction * const  fn, bool entering ) {
     das_invoke_function<void>::invoke
       <void *,Context &,SimFunction * const ,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ctx,fn,entering);
   }
   static __forceinline Func get_onBreakpoint ( void * self ) {
@@ -869,7 +869,7 @@ public:
   static __forceinline void invoke_onBreakpoint ( Context * __context__, Func __funcCall__, void * self, Context & ctx, LineInfo const  & at ) {
     das_invoke_function<void>::invoke
       <void *,Context &,LineInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,ctx,at);
   }
   static __forceinline Func get_onTick ( void * self ) {
@@ -878,7 +878,7 @@ public:
   static __forceinline void invoke_onTick ( Context * __context__, Func __funcCall__, void * self ) {
     das_invoke_function<void>::invoke
       <void *>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self);
   }
 };
@@ -925,7 +925,7 @@ public:
   static __forceinline bool invoke_canWalkArguments ( Context * __context__, Func __funcCall__, void * self ) {
     return das_invoke_function<bool>::invoke
       <void *>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self);
   }
   static __forceinline Func get_canWalkVariables ( void * self ) {
@@ -934,7 +934,7 @@ public:
   static __forceinline bool invoke_canWalkVariables ( Context * __context__, Func __funcCall__, void * self ) {
     return das_invoke_function<bool>::invoke
       <void *>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self);
   }
   static __forceinline Func get_canWalkOutOfScopeVariables ( void * self ) {
@@ -943,7 +943,7 @@ public:
   static __forceinline bool invoke_canWalkOutOfScopeVariables ( Context * __context__, Func __funcCall__, void * self ) {
     return das_invoke_function<bool>::invoke
       <void *>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self);
   }
   static __forceinline Func get_onBeforeCall ( void * self ) {
@@ -952,7 +952,7 @@ public:
   static __forceinline void invoke_onBeforeCall ( Context * __context__, Func __funcCall__, void * self, Prologue const  & pp, void * const  sp ) {
     das_invoke_function<void>::invoke
       <void *,Prologue const  &,void * const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pp,sp);
   }
   static __forceinline Func get_onCallAOT ( void * self ) {
@@ -961,7 +961,7 @@ public:
   static __forceinline void invoke_onCallAOT ( Context * __context__, Func __funcCall__, void * self, Prologue const  & pp, char * const  fileName ) {
     das_invoke_function<void>::invoke
       <void *,Prologue const  &,char * const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pp,fileName);
   }
   static __forceinline Func get_onCallAt ( void * self ) {
@@ -970,7 +970,7 @@ public:
   static __forceinline void invoke_onCallAt ( Context * __context__, Func __funcCall__, void * self, Prologue const  & pp, FuncInfo const  & info, LineInfo const  & at ) {
     das_invoke_function<void>::invoke
       <void *,Prologue const  &,FuncInfo const  &,LineInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pp,info,at);
   }
   static __forceinline Func get_onCall ( void * self ) {
@@ -979,7 +979,7 @@ public:
   static __forceinline void invoke_onCall ( Context * __context__, Func __funcCall__, void * self, Prologue const  & pp, FuncInfo const  & info ) {
     das_invoke_function<void>::invoke
       <void *,Prologue const  &,FuncInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pp,info);
   }
   static __forceinline Func get_onAfterPrologue ( void * self ) {
@@ -988,7 +988,7 @@ public:
   static __forceinline void invoke_onAfterPrologue ( Context * __context__, Func __funcCall__, void * self, Prologue const  & pp, void * const  sp ) {
     das_invoke_function<void>::invoke
       <void *,Prologue const  &,void * const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pp,sp);
   }
   static __forceinline Func get_onArgument ( void * self ) {
@@ -997,7 +997,7 @@ public:
   static __forceinline void invoke_onArgument ( Context * __context__, Func __funcCall__, void * self, FuncInfo const  & info, int32_t index, VarInfo const  & vinfo, float4 arg ) {
     das_invoke_function<void>::invoke
       <void *,FuncInfo const  &,int32_t,VarInfo const  &,float4>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,info,index,vinfo,arg);
   }
   static __forceinline Func get_onBeforeVariables ( void * self ) {
@@ -1006,7 +1006,7 @@ public:
   static __forceinline void invoke_onBeforeVariables ( Context * __context__, Func __funcCall__, void * self ) {
     das_invoke_function<void>::invoke
       <void *>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self);
   }
   static __forceinline Func get_onVariable ( void * self ) {
@@ -1015,7 +1015,7 @@ public:
   static __forceinline void invoke_onVariable ( Context * __context__, Func __funcCall__, void * self, FuncInfo const  & inf, LocalVariableInfo const  & vinfo, void * const  arg, bool inScope ) {
     das_invoke_function<void>::invoke
       <void *,FuncInfo const  &,LocalVariableInfo const  &,void * const ,bool>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,inf,vinfo,arg,inScope);
   }
   static __forceinline Func get_onAfterCall ( void * self ) {
@@ -1024,7 +1024,7 @@ public:
   static __forceinline bool invoke_onAfterCall ( Context * __context__, Func __funcCall__, void * self, Prologue const  & pp ) {
     return das_invoke_function<bool>::invoke
       <void *,Prologue const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,pp);
   }
 };

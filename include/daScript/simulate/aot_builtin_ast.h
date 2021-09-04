@@ -402,8 +402,8 @@ namespace das {
 
     int32_t any_array_size ( void * _arr );
     int32_t any_table_size ( void * _tab );
-    void any_array_foreach ( void * _arr, int stride, const TBlock<void,void *> & blk, Context * context );
-    void any_table_foreach ( void * _tab, int keyStride, int valueStride, const TBlock<void,void *,void *> & blk, Context * context );
+    void any_array_foreach ( void * _arr, int stride, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
+    void any_table_foreach ( void * _tab, int keyStride, int valueStride, const TBlock<void,void *,void *> & blk, Context * context, LineInfoArg * at );
 
     int32_t get_variant_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index );
     int32_t get_tuple_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index );
@@ -462,7 +462,7 @@ namespace das {
     __forceinline StructurePtr clone_structure ( const Structure * value ) { return value->clone(); }
     __forceinline VariablePtr clone_variable ( VariablePtr value ) { return value->clone(); }
     void forceAtRaw ( const smart_ptr_raw<Expression> & expr, const LineInfo & at );
-    void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context );
+    void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context, LineInfoArg * at );
     char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context );
     char * get_mangled_name_t ( smart_ptr_raw<TypeDecl> typ, Context * context );
     TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );

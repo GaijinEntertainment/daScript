@@ -47,7 +47,7 @@ namespace das {
 
     bool is_job_que_shutting_down();
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
-    void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context );
+    void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
     void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );
     int getTotalHwJobs( Context * context, LineInfoArg * at );
     int getTotalHwThreads ();
@@ -57,8 +57,8 @@ namespace das {
     void channelPush ( Channel * ch, void * data, Context * ctx );
     void * channelPop ( Channel * ch );
     int channelAppend ( Channel * ch, int size );
-    void withChannel ( const TBlock<void,Channel *> & blk, Context * context );
-    void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context );
+    void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
+    void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     void waitForChannel ( Channel * status );
     void notifyChannel ( Channel * status );
 }

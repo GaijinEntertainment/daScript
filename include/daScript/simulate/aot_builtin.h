@@ -36,7 +36,7 @@ namespace das {
     void builtin_array_lock ( const Array & arr, Context * context );
     void builtin_array_unlock ( const Array & arr, Context * context );
     void builtin_array_clear_lock ( const Array & arr, Context * );
-    void builtin_temp_array ( void * data, int size, const Block & block, Context * context );
+    void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * lineinfo );
     void builtin_make_temp_array ( Array & arr, void * data, int size );
     void builtin_array_free ( Array & dim, int szt, Context * __context__ );
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ );
@@ -66,8 +66,8 @@ namespace das {
     }
 
     void builtin_sort_string ( void * data, int32_t length );
-    void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context );
-    void builtin_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context );
+    void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
+    void builtin_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
 
 #if defined(_MSC_VER) && !defined(__clang__)
     __forceinline int32_t variant_index(const Variant & v) { return *(int32_t *)&v; }

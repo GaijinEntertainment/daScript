@@ -7,11 +7,11 @@ namespace das {
 
     char * builtin_das_root ( Context * context );
 
-    char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context );
+    char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * lineinfo );
     vec4f builtin_write_string ( Context & context, SimNode_CallBase * call, vec4f * args );
 
-    void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context );
-    char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context );
+    void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context, LineInfoArg * lineinfo );
+    char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context, LineInfoArg * lineinfo );
 
     char * builtin_string_escape ( const char *str, Context * context );
     char * builtin_string_unescape ( const char *str, Context * context );
@@ -53,8 +53,8 @@ namespace das {
     void write_string_char(StringBuilderWriter & writer, int32_t ch);
     void write_string_chars(StringBuilderWriter & writer, int32_t ch, int32_t count);
     void write_escape_string ( StringBuilderWriter & writer, char * str );
-    void builtin_string_split_by_char ( const char * str, const char * delim, const Block & sblk, Context * context );
-    void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context );
+    void builtin_string_split_by_char ( const char * str, const char * delim, const Block & sblk, Context * context, LineInfoArg * lineinfo );
+    void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context, LineInfoArg * lineinfo );
     char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context );
     char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context );
     char * builtin_string_rtrim ( char* s, Context * context );
@@ -79,7 +79,7 @@ namespace das {
     }
 
     template <typename TT>
-    char * builtin_build_string_T ( TT && block, Context * context ) {
+    char * builtin_build_string_T ( TT && block, Context * context, LineInfoArg * ) {
         StringBuilderWriter writer;
         block(writer);
         auto length = writer.tellp();

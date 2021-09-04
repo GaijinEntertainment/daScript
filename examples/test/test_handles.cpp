@@ -343,13 +343,13 @@ void testFields ( Context * ctx ) {
     assert(t==8);
 }
 
-void test_das_string(const Block & block, Context * context) {
+void test_das_string(const Block & block, Context * context, LineInfoArg * at) {
     string str = "test_das_string";
     string str2;
     vec4f args[2];
     args[0] = cast<void *>::from(&str);
     args[1] = cast<void *>::from(&str2);
-    context->invoke(block, args, nullptr);
+    context->invoke(block, args, nullptr, at);
     if (str != "out_of_it") context->throw_error("test string mismatch");
     if (str2 != "test_das_string") context->throw_error("test string clone mismatch");
 }
@@ -495,14 +495,14 @@ void builtin_printw(char * utf8string) {
 #endif
 
 bool tempArrayExample( const TArray<char *> & arr,
-    const TBlock<void, TTemporary<const TArray<char *>>> & blk, Context * context ) {
+    const TBlock<void, TTemporary<const TArray<char *>>> & blk, Context * context, LineInfoArg * at ) {
     vec4f args[1];
     args[0] = cast<void *>::from(&arr);
-    context->invoke(blk, args, nullptr);
+    context->invoke(blk, args, nullptr, at);
     return (arr.size == 1) && (strcmp(arr[0], "one") == 0);
 }
 
-void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * context) {
+void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * context, LineInfoArg * at) {
     Point3Array arr;
     for (int32_t x = 0; x != 10; ++x) {
         Point3 p;
@@ -513,10 +513,10 @@ void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * conte
     }
     vec4f args[1];
     args[0] = cast<Point3Array *>::from(&arr);
-    context->invoke(blk, args, nullptr);
+    context->invoke(blk, args, nullptr, at);
 }
 
-void testFooArray(const TBlock<void,FooArray> & blk, Context * context) {
+void testFooArray(const TBlock<void,FooArray> & blk, Context * context, LineInfoArg * at) {
     FooArray arr;
     for (int32_t x = 0; x != 10; ++x) {
         TestObjectFoo p;
@@ -527,13 +527,13 @@ void testFooArray(const TBlock<void,FooArray> & blk, Context * context) {
     }
     vec4f args[1];
     args[0] = cast<FooArray *>::from(&arr);
-    context->invoke(blk, args, nullptr);
+    context->invoke(blk, args, nullptr, at);
 }
 
-void tableMojo ( TTable<char *,int> & in, const TBlock<void,TTable<char *,int>> & block, Context * context ) {
+void tableMojo ( TTable<char *,int> & in, const TBlock<void,TTable<char *,int>> & block, Context * context, LineInfoArg * at ) {
     vec4f args[1];
     args[0] = cast<Table *>::from(&in);
-    context->invoke(block, args, nullptr);
+    context->invoke(block, args, nullptr, at);
 }
 
 class Point3ArrayAnnotation : public ManagedVectorAnnotation<Point3Array> {
@@ -562,10 +562,10 @@ struct EntityIdAnnotation final: das::ManagedValueAnnotation <EntityId> {
 
 void tempArrayAliasExample(const das::TArray<Point3> & arr,
     const das::TBlock<void, das::TTemporary<const das::TArray<Point3>>> & blk,
-    das::Context * context) {
+    das::Context * context, LineInfoArg * at) {
     vec4f args[1];
     args[0] = cast<void *>::from(&arr);
-    context->invoke(blk, args, nullptr);
+    context->invoke(blk, args, nullptr, at);
 }
 
 struct FancyClassAnnotation : ManagedStructureAnnotation <FancyClass> {

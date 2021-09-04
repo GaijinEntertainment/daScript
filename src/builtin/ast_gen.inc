@@ -25,7 +25,7 @@ public:
   static __forceinline smart_ptr<Expression> invoke_transform ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<ExprCallFunc> call, das::string & errors ) {
     return das_invoke_function<smart_ptr_raw<Expression>>::invoke
       <void *,smart_ptr_raw<ExprCallFunc>,das::string &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,call,errors).marshal();
   }
   static __forceinline Func get_apply ( void * self ) {
@@ -34,7 +34,7 @@ public:
   static __forceinline bool invoke_apply ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, ModuleGroup & group, AnnotationArgumentList const  & args, das::string & errors ) {
     return das_invoke_function<bool>::invoke
       <void *,smart_ptr_raw<Function>,ModuleGroup &,AnnotationArgumentList const  &,das::string &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,func,group,args,errors);
   }
   static __forceinline Func get_finish ( void * self ) {
@@ -43,7 +43,7 @@ public:
   static __forceinline bool invoke_finish ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, ModuleGroup & group, AnnotationArgumentList const  & args, AnnotationArgumentList const  & progArgs, das::string & errors ) {
     return das_invoke_function<bool>::invoke
       <void *,smart_ptr_raw<Function>,ModuleGroup &,AnnotationArgumentList const  &,AnnotationArgumentList const  &,das::string &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,func,group,args,progArgs,errors);
   }
   static __forceinline Func get_isCompatible ( void * self ) {
@@ -52,7 +52,7 @@ public:
   static __forceinline bool invoke_isCompatible ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, das::vector<smart_ptr<TypeDecl>> & types, AnnotationDeclaration const  & decl, das::string & errors ) {
     return das_invoke_function<bool>::invoke
       <void *,smart_ptr_raw<Function>,das::vector<smart_ptr<TypeDecl>> &,AnnotationDeclaration const  &,das::string &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,func,types,decl,errors);
   }
   static __forceinline Func get_isSpecialized ( void * self ) {
@@ -61,7 +61,7 @@ public:
   static __forceinline bool invoke_isSpecialized ( Context * __context__, Func __funcCall__, void * self ) {
     return das_invoke_function<bool>::invoke
       <void *>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self);
   }
 };
@@ -88,7 +88,7 @@ public:
   static __forceinline bool invoke_apply ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> st, ModuleGroup & group, AnnotationArgumentList const  & args, das::string & errors ) {
     return das_invoke_function<bool>::invoke
       <void *,smart_ptr_raw<Structure>,ModuleGroup &,AnnotationArgumentList const  &,das::string &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,st,group,args,errors);
   }
   static __forceinline Func get_finish ( void * self ) {
@@ -97,7 +97,7 @@ public:
   static __forceinline bool invoke_finish ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> st, ModuleGroup & group, AnnotationArgumentList const  & args, das::string & errors ) {
     return das_invoke_function<bool>::invoke
       <void *,smart_ptr_raw<Structure>,ModuleGroup &,AnnotationArgumentList const  &,das::string &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,st,group,args,errors);
   }
 };
@@ -122,7 +122,7 @@ public:
   static __forceinline bool invoke_apply ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Enumeration> st, ModuleGroup & group, AnnotationArgumentList const  & args, das::string & errors ) {
     return das_invoke_function<bool>::invoke
       <void *,smart_ptr_raw<Enumeration>,ModuleGroup &,AnnotationArgumentList const  &,das::string &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,st,group,args,errors);
   }
 };
@@ -147,7 +147,7 @@ public:
   static __forceinline bool invoke_apply ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod ) {
     return das_invoke_function<bool>::invoke
       <void *,smart_ptr_raw<Program> const ,Module * const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,prog,mod);
   }
 };
@@ -176,7 +176,7 @@ public:
   static __forceinline smart_ptr<Expression> invoke_visitExprIsVariant ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<ExprIsVariant> const  expr ) {
     return das_invoke_function<smart_ptr_raw<Expression>>::invoke
       <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprIsVariant> const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,prog,mod,expr).marshal();
   }
   static __forceinline Func get_visitExprAsVariant ( void * self ) {
@@ -185,7 +185,7 @@ public:
   static __forceinline smart_ptr<Expression> invoke_visitExprAsVariant ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<ExprAsVariant> const  expr ) {
     return das_invoke_function<smart_ptr_raw<Expression>>::invoke
       <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprAsVariant> const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,prog,mod,expr).marshal();
   }
   static __forceinline Func get_visitExprSafeAsVariant ( void * self ) {
@@ -194,7 +194,7 @@ public:
   static __forceinline smart_ptr<Expression> invoke_visitExprSafeAsVariant ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<ExprSafeAsVariant> const  expr ) {
     return das_invoke_function<smart_ptr_raw<Expression>>::invoke
       <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprSafeAsVariant> const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,prog,mod,expr).marshal();
   }
 };
@@ -221,7 +221,7 @@ public:
   static __forceinline bool invoke_accept ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, ExprReader * const  expr, int32_t ch, LineInfo const  & info ) {
     return das_invoke_function<bool>::invoke
       <void *,smart_ptr_raw<Program> const ,Module * const ,ExprReader * const ,int32_t,LineInfo const  &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,prog,mod,expr,ch,info);
   }
   static __forceinline Func get_visit ( void * self ) {
@@ -230,7 +230,7 @@ public:
   static __forceinline smart_ptr<Expression> invoke_visit ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<ExprReader> const  expr ) {
     return das_invoke_function<smart_ptr_raw<Expression>>::invoke
       <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprReader> const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,prog,mod,expr).marshal();
   }
 };
@@ -255,7 +255,7 @@ public:
   static __forceinline smart_ptr<Expression> invoke_visit ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<ExprCallMacro> const  expr ) {
     return das_invoke_function<smart_ptr_raw<Expression>>::invoke
       <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprCallMacro> const >
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,prog,mod,expr).marshal();
   }
 };
@@ -282,7 +282,7 @@ public:
   static __forceinline smart_ptr<Expression> invoke_getAstChange ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<ExprTypeInfo> const  expr, das::string & errors ) {
     return das_invoke_function<smart_ptr_raw<Expression>>::invoke
       <void *,smart_ptr_raw<ExprTypeInfo> const ,das::string &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,expr,errors).marshal();
   }
   static __forceinline Func get_getAstType ( void * self ) {
@@ -291,7 +291,7 @@ public:
   static __forceinline smart_ptr<TypeDecl> invoke_getAstType ( Context * __context__, Func __funcCall__, void * self, ModuleLibrary & lib, smart_ptr_raw<ExprTypeInfo> const  expr, das::string & errors ) {
     return das_invoke_function<smart_ptr_raw<TypeDecl>>::invoke
       <void *,ModuleLibrary &,smart_ptr_raw<ExprTypeInfo> const ,das::string &>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,lib,expr,errors).marshal();
   }
 };

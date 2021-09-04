@@ -849,10 +849,10 @@ namespace das
         str = bs ? bs : "";
     }
 
-    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context) {
+    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg * at) {
         vec4f args[1];
         args[0] = cast<const char *>::from(str.c_str());
-        context->invoke(block, args, nullptr);
+        context->invoke(block, args, nullptr, at);
     }
 
     char * builtin_string_clone ( const char *str, Context * context ) {
@@ -862,7 +862,7 @@ namespace das
         return context->stringHeap->allocateString(str, strLen);
     }
 
-    void builtin_temp_array ( void * data, int size, const Block & block, Context * context ) {
+    void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * at ) {
         Array arr;
         arr.data = (char *) data;
         arr.size = arr.capacity = size;
@@ -870,7 +870,7 @@ namespace das
         arr.flags = 0;
         vec4f args[1];
         args[0] = cast<Array &>::from(arr);
-        context->invoke(block, args, nullptr);
+        context->invoke(block, args, nullptr, at);
     }
 
     void builtin_make_temp_array ( Array & arr, void * data, int size ) {

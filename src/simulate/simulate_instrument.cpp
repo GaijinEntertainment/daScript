@@ -12,7 +12,7 @@ namespace das {
             if ( cmpBlk ) {
                 vec4f args[1];
                 args[0] = cast<LineInfo&>::from(info);
-                auto res = context->invoke(*cmpBlk, args, nullptr);
+                auto res = context->invoke(*cmpBlk, args, nullptr, nullptr);    // note: no line-info
                 return cast<bool>::to(res);
             } else {
                 return true;

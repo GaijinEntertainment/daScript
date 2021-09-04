@@ -17,7 +17,7 @@ namespace das
 
     // unspecified
 
-    void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context ) {
+    void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * at ) {
         if ( length<=1 ) return;
         vec4f bargs[2];
         context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
@@ -26,10 +26,10 @@ namespace das
               bargs[1] = cast<void *>::from(y);
               return code->evalBool(*context);
             });
-        });
+        }, at);
     }
 
-    void builtin_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context ) {
+    void builtin_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * at ) {
         if ( length<=1 ) return;
         vec4f bargs[2];
         if ( elementSize <= 4 ) {
@@ -39,7 +39,7 @@ namespace das
                     bargs[1] = v_ldu_x((const float *)y);
                     return code->evalBool(*context);
                 });
-            });
+            },at);
         } else if ( elementSize <= 8 ) {
             context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
                 das_qsort_r(anyData, length, elementSize, [&](const void * x, const void * y){
@@ -47,7 +47,7 @@ namespace das
                     bargs[1] = v_ldu_half(y);
                     return code->evalBool(*context);
                 });
-            });
+            }, at);
         } else {
             context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
                 das_qsort_r(anyData, length, elementSize, [&](const void * x, const void * y){
@@ -55,29 +55,29 @@ namespace das
                     bargs[1] = v_ldu((const float *)y);
                     return code->evalBool(*context);
                 });
-            });
+            }, at);
         }
     }
 
-    void builtin_sort_dim_any_cblock ( vec4f anything, int32_t elementSize, int32_t length, const Block & cmp, Context * context ) {
+    void builtin_sort_dim_any_cblock ( vec4f anything, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * at ) {
         auto anyData = cast<void *>::to(anything);
-        builtin_sort_any_cblock(anyData, elementSize, length, cmp, context);
+        builtin_sort_any_cblock(anyData, elementSize, length, cmp, context, at);
     }
 
-    void builtin_sort_dim_any_ref_cblock ( vec4f anything, int32_t elementSize, int32_t length, const Block & cmp, Context * context ) {
+    void builtin_sort_dim_any_ref_cblock ( vec4f anything, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * at ) {
         auto anyData = cast<void *>::to(anything);
-        builtin_sort_any_ref_cblock(anyData, elementSize, length, cmp, context);
+        builtin_sort_any_ref_cblock(anyData, elementSize, length, cmp, context, at);
     }
 
-    void builtin_sort_array_any_cblock ( Array & arr, int32_t elementSize, int32_t, const Block & cmp, Context * context ) {
+    void builtin_sort_array_any_cblock ( Array & arr, int32_t elementSize, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
         array_lock(*context,arr);
-        builtin_sort_any_cblock(arr.data, elementSize, arr.size, cmp, context);
+        builtin_sort_any_cblock(arr.data, elementSize, arr.size, cmp, context, at);
         array_unlock(*context,arr);
     }
 
-    void builtin_sort_array_any_ref_cblock ( Array & arr, int32_t elementSize, int32_t, const Block & cmp, Context * context ) {
+    void builtin_sort_array_any_ref_cblock ( Array & arr, int32_t elementSize, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
         array_lock(*context,arr);
-        builtin_sort_any_ref_cblock(arr.data, elementSize, arr.size, cmp, context);
+        builtin_sort_any_ref_cblock(arr.data, elementSize, arr.size, cmp, context, at);
         array_unlock(*context,arr);
     }
 

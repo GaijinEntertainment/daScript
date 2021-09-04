@@ -1034,7 +1034,7 @@ namespace das {
                     if ( fn->noAot ) {
                         auto mangledName = fn->getMangledName();
                         uint32_t hash = hash_blockz32((uint8_t *)mangledName.c_str());
-                        ss << "das_invoke_function<void>::invoke(__context__,Func(__context__->fnIdxByMangledName(/*"
+                        ss << "das_invoke_function<void>::invoke(__context__,nullptr,Func(__context__->fnIdxByMangledName(/*"
                             << mangledName << "*/ " << hash << "u)));\n";
                     } else {
                         ss << aotFuncName(fn.get()) << "(__context__);\n";
@@ -2774,7 +2774,7 @@ namespace das {
                     }
                     ss << ">";
                 }
-                ss << "(__context__,";
+                ss << "(__context__,nullptr,";
             } else if ( call->name=="memzero" ) {
                 ss << "memset(&(";
             } else if ( call->name=="static_assert" ) {
@@ -2966,10 +2966,10 @@ namespace das {
                                 ss << ",";
                             }
                         }
-                        ss << ">(__context__,";
+                        ss << ">(__context__,nullptr,";
                         ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u)),";
                     } else {
-                        ss << "(__context__,";
+                        ss << "(__context__,nullptr,";
                         ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u))";
                     }
                 } else {

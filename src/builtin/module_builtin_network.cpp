@@ -29,31 +29,31 @@ namespace das {
         virtual void onConnect() override {
             if ( fnOnConnect ) {
                 return das_invoke_function<void>::invoke<void *>
-                    (context,fnOnConnect,classPtr);
+                    (context,nullptr,fnOnConnect,classPtr);
             }
         }
         virtual void onDisconnect() override {
             if ( fnOnDisconnect ) {
                 return das_invoke_function<void>::invoke<void *>
-                    (context,fnOnDisconnect,classPtr);
+                    (context,nullptr,fnOnDisconnect,classPtr);
             }
         }
         virtual void onData ( char * buf, int size ) override {
             if ( fnOnData ) {
                 return das_invoke_function<void>::invoke<void *,char *,int32_t>
-                    (context,fnOnData,classPtr,buf,size);
+                    (context,nullptr,fnOnData,classPtr,buf,size);
             }
         }
         virtual void onError ( const char * msg, int code ) override {
             if ( fnOnError ) {
                 return das_invoke_function<void>::invoke<void *,const char *,int32_t>
-                    (context,fnOnError,classPtr,msg,code);
+                    (context,nullptr,fnOnError,classPtr,msg,code);
             }
         }
         virtual void onLog ( const char * msg ) override {
             if ( fnOnLog ) {
                 return das_invoke_function<void>::invoke<void *,const char *>
-                    (context,fnOnError,classPtr,msg);
+                    (context,nullptr,fnOnError,classPtr,msg);
             }
         }
         bool isValid() const { return pServer != nullptr; }

@@ -117,33 +117,36 @@ namespace das {
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context );
 
     struct CodeOfPolicies;
-    void rtti_builtin_compile(char * modName, char * str, const CodeOfPolicies & cop, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
-    void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop, const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context);
+    void rtti_builtin_compile(char * modName, char * str, const CodeOfPolicies & cop,
+        const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context, LineInfoArg * lineinfo);
+    void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
+        const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context, LineInfoArg * lineinfo);
 
-    void rtti_builtin_simulate ( const smart_ptr<Program> & program, bool useAot, const TBlock<void,bool,Context *,string> & block, Context * context );
+    void rtti_builtin_simulate ( const smart_ptr<Program> & program, bool useAot,
+        const TBlock<void,bool,Context *,string> & block, Context * context, LineInfoArg * lineinfo );
 
-    void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, Module *> & block, Context * context);
-    void rtti_builtin_program_for_each_registered_module(const TBlock<void, Module *> & block, Context * context);
+    void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, Module *> & block, Context * context, LineInfoArg * lineinfo);
+    void rtti_builtin_program_for_each_registered_module(const TBlock<void, Module *> & block, Context * context, LineInfoArg * lineinfo);
 
     Module * rtti_get_this_module(smart_ptr_raw<Program> prog);
     Module * rtti_get_builtin_module(const char * name);
 
-    void rtti_builtin_module_for_each_enumeration(Module * module, const TBlock<void, const EnumInfo> & block, Context * context);
-    void rtti_builtin_module_for_each_structure(Module * module, const TBlock<void, const StructInfo> & block, Context * context);
-    void rtti_builtin_module_for_each_function(Module * module, const TBlock<void, const FuncInfo> & block, Context * context);
-    void rtti_builtin_module_for_each_generic(Module * module, const TBlock<void, const FuncInfo> & block, Context * context);
-    void rtti_builtin_module_for_each_global(Module * module, const TBlock<void, const VarInfo> & block, Context * context);
-    void rtti_builtin_module_for_each_annotation(Module * module, const TBlock<void, const Annotation> & block, Context * context);
+    void rtti_builtin_module_for_each_enumeration(Module * module, const TBlock<void, const EnumInfo> & block, Context * context, LineInfoArg * lineinfo);
+    void rtti_builtin_module_for_each_structure(Module * module, const TBlock<void, const StructInfo> & block, Context * context, LineInfoArg * lineinfo);
+    void rtti_builtin_module_for_each_function(Module * module, const TBlock<void, const FuncInfo> & block, Context * context, LineInfoArg * lineinfo);
+    void rtti_builtin_module_for_each_generic(Module * module, const TBlock<void, const FuncInfo> & block, Context * context, LineInfoArg * lineinfo);
+    void rtti_builtin_module_for_each_global(Module * module, const TBlock<void, const VarInfo> & block, Context * context, LineInfoArg * lineinfo);
+    void rtti_builtin_module_for_each_annotation(Module * module, const TBlock<void, const Annotation> & block, Context * context, LineInfoArg * lineinfo);
 
     // note: this one is not TBlock, so that we don't have to include ast.h
-    void rtti_builtin_structure_for_each_annotation(const StructInfo & info, const Block & block, Context * context);
+    void rtti_builtin_structure_for_each_annotation(const StructInfo & info, const Block & block, Context * context, LineInfoArg * lineinfo);
 
     // if we are in the module, compiling macros
     bool is_compiling_macros_in_module ( char * name, Context * ctx );
 
     struct BasicStructureAnnotation;
     void rtti_builtin_basic_struct_for_each_field(const BasicStructureAnnotation & ann,
-        const TBlock<void, char *, char*, const TypeInfo, uint32_t> & block, Context * context);
+        const TBlock<void, char *, char*, const TypeInfo, uint32_t> & block, Context * context, LineInfoArg * lineinfo);
 
     LineInfo getCurrentLineInfo( LineInfoArg * lineInfo );
 }

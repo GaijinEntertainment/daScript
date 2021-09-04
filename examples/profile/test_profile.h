@@ -44,7 +44,7 @@ int testPrimes(int n);
 void testTryCatch(das::Context * context);
 int testTree();
 
-void testManagedInt(const das::TBlock<void, const das::vector<int32_t>> & blk, das::Context * context);
+void testManagedInt(const das::TBlock<void, const das::vector<int32_t>> & blk, das::Context * context, das::LineInfoArg * at);
 
 void updateObject(Object & obj);
 void updateTest(ObjectArray & objects);

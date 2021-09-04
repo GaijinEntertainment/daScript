@@ -265,11 +265,11 @@ namespace das
         return str ? atoi(str) : 0;
     }
 
-    char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context ) {
+    char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * at ) {
         StringBuilderWriter writer;
         vec4f args[1];
         args[0] = cast<StringBuilderWriter *>::from(&writer);
-        context->invoke(block, args, nullptr);
+        context->invoke(block, args, nullptr, at);
         auto length = writer.tellp();
         if ( length ) {
             return context->stringHeap->allocateString(writer.c_str(), length);
@@ -345,7 +345,7 @@ namespace das
         return words;
     }
 
-    void builtin_string_split_by_char ( const char * str, const char * delim, const Block & block, Context * context ) {
+    void builtin_string_split_by_char ( const char * str, const char * delim, const Block & block, Context * context, LineInfoArg * at ) {
         if ( !str ) str = "";
         if ( !delim ) delim = "";
         vector<const char *> tokens;
@@ -380,10 +380,10 @@ namespace das
         arr.lock = 1;
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
-        context->invoke(block, args, nullptr);
+        context->invoke(block, args, nullptr, at);
     }
 
-    void builtin_string_split ( const char * str, const char * delim, const Block & block, Context * context ) {
+    void builtin_string_split ( const char * str, const char * delim, const Block & block, Context * context, LineInfoArg * at ) {
         if ( !str ) str = "";
         if ( !delim ) delim = "";
         vector<const char *> tokens;
@@ -418,7 +418,7 @@ namespace das
         arr.lock = 1;
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
-        context->invoke(block, args, nullptr);
+        context->invoke(block, args, nullptr, at);
     }
 
     char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context ) {
@@ -534,7 +534,7 @@ namespace das
         }
     }
 
-    void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context ) {
+    void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context, LineInfoArg * at ) {
         if ( !str ) return;
         Array arr;
         arr.data = (char *) str;
@@ -542,10 +542,10 @@ namespace das
         arr.lock = 1;
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
-        context->invoke(block, args, nullptr);
+        context->invoke(block, args, nullptr, at);
     }
 
-    char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context ) {
+    char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context, LineInfoArg * at ) {
         if ( !str ) return nullptr;
         int32_t len = int32_t(strlen(str));
         char * cstr = context->stringHeap->allocateString(str, len);
@@ -556,7 +556,7 @@ namespace das
         arr.lock = 1;
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
-        context->invoke(block, args, nullptr);
+        context->invoke(block, args, nullptr, at);
         return cstr;
     }
 
@@ -572,11 +572,11 @@ namespace das
             addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
                 SideEffects::modifyExternal,"delete_string")->args({"str","context"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
-                SideEffects::modifyExternal,"builtin_build_string_T")->args({"block","context"})->setAotTemplate();
+                SideEffects::modifyExternal,"builtin_build_string_T")->args({"block","context","lineinfo"})->setAotTemplate();
             addExtern<DAS_BIND_FUN(builtin_string_peek)>(*this, lib, "peek_data",
-                SideEffects::modifyExternal,"builtin_string_peek")->args({"str","block","context"});
+                SideEffects::modifyExternal,"builtin_string_peek")->args({"str","block","context","lineinfo"});
             addExtern<DAS_BIND_FUN(builtin_string_peek_and_modify)>(*this, lib, "modify_data",
-                SideEffects::modifyExternal,"builtin_string_peek_and_modify")->args({"str","block","context"});
+                SideEffects::modifyExternal,"builtin_string_peek_and_modify")->args({"str","block","context","lineinfo"});
             addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
                 SideEffects::modifyExternal, "builtin_write_string")->args({"writer","anything"});
             addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char",
@@ -657,9 +657,9 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
                 SideEffects::none, "builtin_string_toupper_in_place")->arg("str")->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_string_split_by_char)>(*this, lib, "builtin_string_split_by_char",
-                SideEffects::modifyExternal, "builtin_string_split_by_char")->args({"str","delimiter","block","context"});
+                SideEffects::modifyExternal, "builtin_string_split_by_char")->args({"str","delimiter","block","context","lineinfo"});
             addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
-                SideEffects::modifyExternal, "builtin_string_split")->args({"str","delimiter","block","context"});
+                SideEffects::modifyExternal, "builtin_string_split")->args({"str","delimiter","block","context","lineinfo"});
             addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none, "string_to_int");
             addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none, "string_to_uint");
             addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none, "string_to_float");

@@ -187,7 +187,7 @@ namespace das {
         return feof(f);
     }
 
-    void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context) {
+    void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) {
         if ( !f ) context->throw_error("can't map NULL file");
         struct stat st;
         int fd = fileno((FILE *)f);
@@ -199,7 +199,7 @@ namespace das {
         arr.lock = 1;
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
-        context->invoke(blk, args, nullptr);
+        context->invoke(blk, args, nullptr, at);
         munmap(data, 0);
     }
 
@@ -266,7 +266,7 @@ namespace das {
 #endif
 
     // loads(file,block<data>)
-    vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args ) {
+    vec4f builtin_load ( Context & context, SimNode_CallBase * node, vec4f * args ) {
         auto fp = cast<FILE *>::to(args[0]);
         if ( !fp ) context.throw_error("can't load NULL");
         int32_t len = cast<int32_t>::to(args[1]);
@@ -278,7 +278,7 @@ namespace das {
         int32_t rlen = int32_t(fread(buf, 1, len, fp));
         if ( rlen != len ) {
             bargs[0] = v_zero();
-            context.invoke(*block, bargs, nullptr);
+            context.invoke(*block, bargs, nullptr, &node->debugInfo);
         }  else {
             buf[rlen] = 0;
             das::Array arr;
@@ -287,7 +287,7 @@ namespace das {
             arr.capacity = rlen;
             arr.lock = 1;
             bargs[0] = cast<das::Array*>::from(&arr);
-            context.invoke(*block, bargs, nullptr);
+            context.invoke(*block, bargs, nullptr, &node->debugInfo);
         }
         free(buf);
         return v_zero();
@@ -357,7 +357,7 @@ namespace das {
         }
     }
 
-     void builtin_dir ( const char * path, const Block & fblk, Context * context ) {
+     void builtin_dir ( const char * path, const Block & fblk, Context * context, LineInfoArg * at ) {
 #if defined(_MSC_VER)
         _finddata_t c_file;
         intptr_t hFile;
@@ -368,7 +368,7 @@ namespace das {
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };
-                context->invoke(fblk, args, nullptr);
+                context->invoke(fblk, args, nullptr, at);
             } while (_findnext(hFile, &c_file) == 0);
         }
         _findclose(hFile);
@@ -381,7 +381,7 @@ namespace das {
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };
-                context->invoke(fblk, args, nullptr);
+                context->invoke(fblk, args, nullptr, at);
             }
             closedir (dir);
         }

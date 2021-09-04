@@ -54,7 +54,7 @@ template <> struct das::das_alias<Point3> : das::das_alias_vec<Point3,float3> {}
 
 typedef das::vector<Point3> Point3Array;
 
-void testPoint3Array(const das::TBlock<void, const Point3Array> & blk, das::Context * context);
+void testPoint3Array(const das::TBlock<void, const Point3Array> & blk, das::Context * context, das::LineInfoArg * lineinfo);
 
 struct SomeDummyType {
     int32_t foo;
@@ -93,7 +93,7 @@ static_assert ( std::is_trivially_constructible<TestObjectFoo>::value, "this one
 
 typedef das::vector<TestObjectFoo> FooArray;
 
-void testFooArray(const das::TBlock<void, FooArray> & blk, das::Context * context);
+void testFooArray(const das::TBlock<void, FooArray> & blk, das::Context * context, das::LineInfoArg * lineinfo);
 
 __forceinline void set_foo_data (TestObjectFoo * obj, int32_t data ) { obj->fooData = data; }
 
@@ -132,7 +132,7 @@ struct TestObjectNotNullPtr {
 int *getPtr();
 
 void testFields ( das::Context * ctx );
-void test_das_string(const das::Block & block, das::Context * context);
+void test_das_string(const das::Block & block, das::Context * context, das::LineInfoArg * lineinfo);
 vec4f new_and_init ( das::Context & context, das::SimNode_CallBase * call, vec4f * );
 
 struct CppS1 {
@@ -159,7 +159,7 @@ uint32_t CheckEidHint ( TestObjectFoo & foo, char * const name, uint32_t hashHin
 
 __forceinline void complex_bind (const TestObjectFoo &,
                           const das::TBlock<void, das::TArray<TestObjectFoo>> &,
-                          das::Context *) {
+                          das::Context *, das::LineInfoArg *) {
     // THIS DOES ABSOLUTELY NOTHING, ITS HERE TO TEST BIND OF ARRAY INSIDE BLOCK
 }
 
@@ -172,11 +172,11 @@ void builtin_printw(char * utf8string);
 
 bool tempArrayExample(const das::TArray<char *> & arr,
     const das::TBlock<void, das::TTemporary<const das::TArray<char *>>> & blk,
-    das::Context * context);
+    das::Context * context, das::LineInfoArg * lineinfo);
 
 void tempArrayAliasExample(const das::TArray<Point3> & arr,
     const das::TBlock<void, das::TTemporary<const das::TArray<Point3>>> & blk,
-    das::Context * context);
+    das::Context * context, das::LineInfoArg * lineinfo);
 
 __forceinline TestObjectFoo & fooPtr2Ref(TestObjectFoo * pMat) {
     return *pMat;
@@ -217,7 +217,7 @@ __forceinline SampleVariant makeSampleS() {
 
 __forceinline int32_t testCallLine ( das::LineInfoArg * arg ) { return arg ? arg->line : 0; }
 
-void tableMojo ( das::TTable<char *,int> & in, const das::TBlock<void,das::TTable<char *,int>> & block, das::Context * context );
+void tableMojo ( das::TTable<char *,int> & in, const das::TBlock<void,das::TTable<char *,int>> & block, das::Context * context, das::LineInfoArg * lineinfo );
 
 struct EntityId {
     int32_t value;

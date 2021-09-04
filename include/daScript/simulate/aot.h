@@ -1798,42 +1798,42 @@ namespace das {
     template <typename ResType>
     struct das_invoke {
         // vector cast
-        static __forceinline ResType invoke ( Context * __context__, const Block & blk ) {
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Block & blk ) {
             using BlockFn = callable < ResType () >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 return (*fn) ();
             } else {
-                vec4f result = __context__->invoke(blk, nullptr, nullptr);
+                vec4f result = __context__->invoke(blk, nullptr, nullptr,__lineinfo__);
                 return cast<ResType>::to(result);
             }
         }
         template <typename ...ArgType>
-        static __forceinline ResType invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Block & blk, ArgType ...arg ) {
             using BlockFn = callable < ResType ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 return (*fn) ( forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<ArgType>::from(arg)... };
-                vec4f result = __context__->invoke(blk, arguments, nullptr);
+                vec4f result = __context__->invoke(blk, arguments, nullptr, __lineinfo__);
                 return cast<ResType>::to(result);
             }
         }
         // cmres
-        static __forceinline ResType invoke_cmres ( Context * __context__, const Block & blk ) {
+        static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Block & blk ) {
             using BlockFn = callable < ResType () >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 return (*fn) ();
             } else {
                 typename remove_const<ResType>::type result;
-                __context__->invoke(blk, nullptr, &result);
+                __context__->invoke(blk, nullptr, &result, __lineinfo__);
                 return result;
             }
         }
         template <typename ...ArgType>
-        static __forceinline ResType invoke_cmres ( Context * __context__, const Block & blk, ArgType ...arg ) {
+        static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Block & blk, ArgType ...arg ) {
             using BlockFn = callable < ResType ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
@@ -1841,47 +1841,47 @@ namespace das {
             } else {
                 vec4f arguments [] = { cast<ArgType>::from(arg)... };
                 typename remove_const<ResType>::type result;
-                __context__->invoke(blk, arguments, &result);
+                __context__->invoke(blk, arguments, &result, __lineinfo__);
                 return result;
             }
         }
         template <typename BLK, typename ...ArgType>
-        static __forceinline ResType invoke_cmres ( Context *, const BLK & blk, ArgType ...arg ) {
+        static __forceinline ResType invoke_cmres ( Context *, LineInfo *, const BLK & blk, ArgType ...arg ) {
             return blk(forward<ArgType>(arg)...);
         }
     };
 
     template <>
     struct das_invoke<void> {
-        static __forceinline void invoke ( Context * __context__, const Block & blk ) {
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Block & blk ) {
             using BlockFn = callable < void () >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 (*fn) ();
             } else {
-                __context__->invoke(blk, nullptr, nullptr);
+                __context__->invoke(blk, nullptr, nullptr, __lineinfo__);
             }
         }
         template <typename ...ArgType>
-        static __forceinline void invoke ( Context * __context__, const Block & blk, ArgType ...arg ) {
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Block & blk, ArgType ...arg ) {
             using BlockFn = callable < void ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
                 (*fn) ( forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<ArgType>::from(arg)... };
-                __context__->invoke(blk, arguments, nullptr);
+                __context__->invoke(blk, arguments, nullptr, __lineinfo__);
             }
         }
         template <typename BLK, typename ...ArgType>
-        static __forceinline void invoke ( Context *, const BLK & blk, ArgType ...arg ) {
+        static __forceinline void invoke ( Context *, LineInfo *, const BLK & blk, ArgType ...arg ) {
             return blk(forward<ArgType>(arg)...);
         }
     };
 
     template <typename ResType>
     struct das_invoke_function {
-        static __forceinline ResType invoke ( Context * __context__, const Func & blk ) {
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
@@ -1889,12 +1889,12 @@ namespace das {
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
                 return (*fnPtr) ( __context__ );
             } else {
-                vec4f result = __context__->callOrFastcall(simFunc, nullptr, 0);
+                vec4f result = __context__->callOrFastcall(simFunc, nullptr, __lineinfo__);
                 return cast<ResType>::to(result);
             }
         }
         template <typename ...ArgType>
-        static __forceinline ResType invoke ( Context * __context__, const Func & blk, ArgType ...arg ) {
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
@@ -1903,11 +1903,11 @@ namespace das {
                 return (*fnPtr) ( __context__, forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<ArgType>::from(arg)... };
-                vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
+                vec4f result = __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
                 return cast<ResType>::to(result);
             }
         }
-        static __forceinline ResType invoke_cmres ( Context * __context__, const Func & blk ) {
+        static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
@@ -1916,12 +1916,12 @@ namespace das {
                 return (*fnPtr) ( __context__ );
             } else {
                 typename remove_const<ResType>::type result;
-                __context__->callWithCopyOnReturn(simFunc, nullptr, &result, 0);
+                __context__->callWithCopyOnReturn(simFunc, nullptr, &result, __lineinfo__);
                 return result;
             }
         }
         template <typename ...ArgType>
-        static __forceinline ResType invoke_cmres ( Context * __context__, const Func & blk, ArgType ...arg ) {
+        static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if ( simFunc->aotFunction ) {
@@ -1931,7 +1931,7 @@ namespace das {
             } else {
                 if (!simFunc) __context__->throw_error("invoke null function");
                 typename remove_const<ResType>::type result;
-                __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
+                __context__->callWithCopyOnReturn(simFunc, arguments, &result, __lineinfo__);
                 return result;
             }
         }
@@ -1939,23 +1939,23 @@ namespace das {
 
     template <>
     struct das_invoke_function<void> {
-        static __forceinline void invoke ( Context * __context__, const Func & blk ) {
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            __context__->callOrFastcall(simFunc, nullptr, 0);
+            __context__->callOrFastcall(simFunc, nullptr, __lineinfo__);
         }
         template <typename ...ArgType>
-        static __forceinline void invoke ( Context * __context__, const Func & blk, ArgType ...arg ) {
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             SimFunction * simFunc = __context__->getFunction(blk.index-1);
             if (!simFunc) __context__->throw_error("invoke null function");
-            __context__->callOrFastcall(simFunc, arguments, 0);
+            __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
         }
     };
 
     template <typename ResType>
     struct das_invoke_lambda {
-        static __forceinline ResType invoke ( Context * __context__, const Lambda & blk ) {
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
             int32_t * fnIndex = (int32_t *)blk.capture;
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
@@ -1967,12 +1967,12 @@ namespace das {
             } else {
                 vec4f arguments[1];
                 arguments[0] = cast<Lambda>::from(blk);
-                vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
+                vec4f result = __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
                 return cast<ResType>::to(result);
             }
         }
         template <typename ...ArgType>
-        static __forceinline ResType invoke ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
             int32_t * fnIndex = (int32_t *)blk.capture;
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
@@ -1983,11 +1983,11 @@ namespace das {
                 return (*fnPtr) ( __context__, blk.capture, forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
-                vec4f result = __context__->callOrFastcall(simFunc, arguments, 0);
+                vec4f result = __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
                 return cast<ResType>::to(result);
             }
         }
-        static __forceinline ResType invoke_cmres ( Context * __context__, const Lambda & blk ) {
+        static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
             int32_t * fnIndex = (int32_t *)blk.capture;
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
@@ -2000,12 +2000,12 @@ namespace das {
                 typename remove_const<ResType>::type result;
                 vec4f arguments[1];
                 arguments[0] = cast<Lambda>::from(blk);
-                __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
+                __context__->callWithCopyOnReturn(simFunc, arguments, &result, __lineinfo__);
                 return result;
             }
         }
         template <typename ...ArgType>
-        static __forceinline ResType invoke_cmres ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
+        static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
             int32_t * fnIndex = (int32_t *)blk.capture;
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
@@ -2017,7 +2017,7 @@ namespace das {
             } else {
                 vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
                 typename remove_const<ResType>::type result;
-                __context__->callWithCopyOnReturn(simFunc, arguments, &result, 0);
+                __context__->callWithCopyOnReturn(simFunc, arguments, &result, __lineinfo__);
                 return result;
             }
         }
@@ -2025,7 +2025,7 @@ namespace das {
 
     template <>
     struct das_invoke_lambda<void> {
-        static __forceinline void invoke ( Context * __context__, const Lambda & blk ) {
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
             int32_t * fnIndex = (int32_t *)blk.capture;
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
@@ -2037,11 +2037,11 @@ namespace das {
             } else {
                 vec4f arguments[1];
                 arguments[0] = cast<Lambda>::from(blk);
-                __context__->callOrFastcall(simFunc, arguments, 0);
+                __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
             }
         }
         template <typename ...ArgType>
-        static __forceinline void invoke ( Context * __context__, const Lambda & blk, ArgType ...arg ) {
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
             int32_t * fnIndex = (int32_t *)blk.capture;
             if (!fnIndex) __context__->throw_error("invoke null lambda");
             SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
@@ -2052,7 +2052,7 @@ namespace das {
                 (*fnPtr) ( __context__, blk.capture, forward<ArgType>(arg)... );
             } else {
                 vec4f arguments [] = { cast<void *>::from(blk.capture), (cast<ArgType>::from(arg))... };
-                __context__->callOrFastcall(simFunc, arguments, 0);
+                __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
             }
         }
     };
@@ -2291,11 +2291,11 @@ namespace das {
     }
 
     template <typename TT>
-    void peek_das_string_T(const string & str, TT && block, Context *) {
+    void peek_das_string_T(const string & str, TT && block, Context *, LineInfoArg *) {
         block((char *)str.c_str());
     }
 
-    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context);
+    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg *);
 
     char * builtin_string_clone ( const char *str, Context * context );
 
@@ -2477,19 +2477,19 @@ namespace das {
     template <typename CompareFn, typename TT>
     struct scblk {
         template <int dimSize>
-        static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t, CompareFn && cmp, Context * context ) {
+        static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
             sort(arr.data, arr.data + dimSize, cmp);
         }
         template <int dimSize>
-        static __forceinline void srtr ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context ) {
-            srt(arr,elemSize,length,forward<CompareFn>(cmp),context);
+        static __forceinline void srtr ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+            srt(arr,elemSize,length,forward<CompareFn>(cmp),context,lineinfo);
         }
     };
 
     template <typename TT>
     struct scblk < const Block &,TT > {
         template <int dimSize>
-        static __forceinline void srtr ( TDim<TT,dimSize> & arr, int32_t, int32_t length, const Block & cmp, Context * context ) {
+        static __forceinline void srtr ( TDim<TT,dimSize> & arr, int32_t, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
             vec4f bargs[2];
             auto data = (TT *) arr.data;
             context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
@@ -2498,10 +2498,10 @@ namespace das {
                     bargs[1] = cast<TT>::from(y);
                     return code->evalBool(*context);
                 });
-            });
+            },lineinfo);
         }
         template <int dimSize>
-        static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t length, const Block & cmp, Context * context ) {
+        static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
             vec4f bargs[2];
             auto data = (TT *) arr.data;
             context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
@@ -2510,22 +2510,22 @@ namespace das {
                     bargs[1] = cast<const TT &>::from(y);
                     return code->evalBool(*context);
                 });
-            });
+            },lineinfo);
         }
     };
 
     template <typename CompareFn, typename TT, int32_t dimSize>
-    __forceinline void builtin_sort_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context ) {
-        scblk<CompareFn,TT>::srt(arr,elemSize,length,forward<CompareFn>(cmp),context);
+    __forceinline void builtin_sort_dim_any_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        scblk<CompareFn,TT>::srt(arr,elemSize,length,forward<CompareFn>(cmp),context,lineinfo);
     }
 
     template <typename CompareFn, typename TT, int32_t dimSize>
-    __forceinline void builtin_sort_dim_any_ref_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context ) {
-        scblk<CompareFn,TT>::srtr(arr,elemSize,length,forward<CompareFn>(cmp),context);
+    __forceinline void builtin_sort_dim_any_ref_cblock_T ( TDim<TT,dimSize> & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        scblk<CompareFn,TT>::srtr(arr,elemSize,length,forward<CompareFn>(cmp),context,lineinfo);
     }
 
     template <typename TT>
-    void builtin_sort_cblock ( vec4f arr, int32_t, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context ) {
+    void builtin_sort_cblock ( vec4f arr, int32_t, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
         vec4f bargs[2];
         auto data = cast<TT *>::to(arr);
         context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
@@ -2534,7 +2534,7 @@ namespace das {
                 bargs[1] = cast<TT>::from(y);
                 return code->evalBool(*context);
             });
-        });
+        },lineinfo);
     }
 
     template <typename CompareFn, typename TT>
@@ -2542,21 +2542,21 @@ namespace das {
 
     template <typename CompareFn, typename TT>
     struct scblk_array {
-        static __forceinline void srt ( Array & arr, int32_t, int32_t, CompareFn && cmp, Context * context ) {
+        static __forceinline void srt ( Array & arr, int32_t, int32_t, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
             if ( arr.size<=1 ) return;
             array_lock(*context, arr);
             auto sdata = (TT *) arr.data;
             das::sort(sdata, sdata + arr.size, cmp);
             array_unlock(*context, arr);
         }
-        static __forceinline void srtr ( Array & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context ) {
-            srt(arr,elemSize,length,forward<CompareFn>(cmp),context);
+        static __forceinline void srtr ( Array & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+            srt(arr,elemSize,length,forward<CompareFn>(cmp),context,lineinfo);
         }
     };
 
     template <typename TT>
     struct scblk_array < const Block &,TT > {
-        static __forceinline void srtr ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context ) {
+        static __forceinline void srtr ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
             if ( arr.size<=1 ) return;
             vec4f bargs[2];
             auto data = (TT *) arr.data;
@@ -2567,10 +2567,10 @@ namespace das {
                     bargs[1] = cast<TT>::from(y);
                     return code->evalBool(*context);
                 });
-            });
+            },lineinfo);
             array_unlock(*context, arr);
         }
-        static __forceinline void srt ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context ) {
+        static __forceinline void srt ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
             if ( arr.size<=1 ) return;
             vec4f bargs[2];
             auto data = (TT *) arr.data;
@@ -2581,24 +2581,24 @@ namespace das {
                     bargs[1] = cast<const TT &>::from(y);
                     return code->evalBool(*context);
                 });
-            });
+            },lineinfo);
             array_unlock(*context, arr);
         }
     };
 
     template <typename TT>
-    void builtin_sort_cblock_array ( Array & arr, int32_t elemSize, int32_t elemCount, const TBlock<bool,TT,TT> & cmp, Context * context ) {
-        scblk_array<const Block &,TT>::srtr(arr,elemSize,elemCount,cmp,context);
+    void builtin_sort_cblock_array ( Array & arr, int32_t elemSize, int32_t elemCount, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
+        scblk_array<const Block &,TT>::srtr(arr,elemSize,elemCount,cmp,context,lineinfo);
     }
 
     template <typename CompareFn, typename TT>
-    __forceinline void builtin_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context ) {
-        scblk_array<CompareFn,TT>::srt(arr,elemSize,elemCount,forward<CompareFn>(cmp),context);
+    __forceinline void builtin_sort_array_any_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        scblk_array<CompareFn,TT>::srt(arr,elemSize,elemCount,forward<CompareFn>(cmp),context,lineinfo);
     }
 
     template <typename CompareFn, typename TT>
-    __forceinline void builtin_sort_array_any_ref_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context ) {
-        scblk_array<CompareFn,TT>::srtr(arr,elemSize,elemCount,forward<CompareFn>(cmp),context);
+    __forceinline void builtin_sort_array_any_ref_cblock_T ( TArray<TT> & arr, int32_t elemSize, int32_t elemCount, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        scblk_array<CompareFn,TT>::srtr(arr,elemSize,elemCount,forward<CompareFn>(cmp),context,lineinfo);
     }
 
     __forceinline vec4f cvt_float4 ( int2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }

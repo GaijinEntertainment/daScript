@@ -262,7 +262,7 @@ namespace das {
         arr.lock = 1;
         arr.flags = 0;
         vec4f arg = cast<char *>::from((char *)&arr);
-        context.invoke(*block, &arg, nullptr);
+        context.invoke(*block, &arg, nullptr, &call->debugInfo);
         return v_zero();
     }
 

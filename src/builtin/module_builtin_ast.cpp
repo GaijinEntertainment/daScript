@@ -926,12 +926,12 @@ namespace das {
         }
     };
 
-    void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context ) {
+    void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context, LineInfoArg * at ) {
         AstContext astc = generateAstContext(prog,expr.get());
         vec4f args[2];
         args[0] = cast<bool>::from ( astc.valid );
         args[1] = astc.valid ? cast<AstContext&>::from(astc) : v_zero();
-        context->invoke(block, args, nullptr );
+        context->invoke(block, args, nullptr, at);
     }
 
     // TYPE STUFF
@@ -1326,25 +1326,25 @@ namespace das {
 #define IMPL_PREVISIT1(WHAT,WHATTYPE) \
     if ( FN_PREVISIT(WHAT) ) { \
         das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>> \
-            (context,FN_PREVISIT(WHAT),classPtr,expr); \
+            (context,nullptr,FN_PREVISIT(WHAT),classPtr,expr); \
     }
 
 #define IMPL_PREVISIT2(WHAT,WHATTYPE,ARG1T,ARG1) \
     if ( FN_PREVISIT(WHAT) ) { \
         das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T> \
-            (context,FN_PREVISIT(WHAT),classPtr,expr,ARG1); \
+            (context,nullptr,FN_PREVISIT(WHAT),classPtr,expr,ARG1); \
     }
 
 #define IMPL_PREVISIT3(WHAT,WHATTYPE,ARG1T,ARG1,ARG2T,ARG2) \
     if ( FN_PREVISIT(WHAT) ) { \
         das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T> \
-            (context,FN_PREVISIT(WHAT),classPtr,expr,ARG1,ARG2); \
+            (context,nullptr,FN_PREVISIT(WHAT),classPtr,expr,ARG1,ARG2); \
     }
 
 #define IMPL_PREVISIT4(WHAT,WHATTYPE,ARG1T,ARG1,ARG2T,ARG2,ARG3T,ARG3) \
     if ( FN_PREVISIT(WHAT) ) { \
         das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
-            (context,FN_PREVISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3); \
+            (context,nullptr,FN_PREVISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3); \
     }
 
 #define IMPL_PREVISIT(WHAT) IMPL_PREVISIT1(WHAT,WHAT)
@@ -1352,31 +1352,31 @@ namespace das {
 #define IMPL_VISIT_VOID1(WHAT,WHATTYPE) \
     if ( FN_VISIT(WHAT) ) { \
         das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>> \
-            (context,FN_VISIT(WHAT),classPtr,expr); \
+            (context,nullptr,FN_VISIT(WHAT),classPtr,expr); \
     }
 
 #define IMPL_VISIT_VOID2(WHAT,WHATTYPE,ARG1T,ARG1) \
     if ( FN_VISIT(WHAT) ) { \
         das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1); \
+            (context,nullptr,FN_VISIT(WHAT),classPtr,expr,ARG1); \
     }
 
 #define IMPL_VISIT_VOID3(WHAT,WHATTYPE,ARG1T,ARG1,ARG2T,ARG2) \
     if ( FN_VISIT(WHAT) ) { \
         das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2); \
+            (context,nullptr,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2); \
     }
 
 #define IMPL_VISIT_VOID4(WHAT,WHATTYPE,ARG1T,ARG1,ARG2T,ARG2,ARG3T,ARG3) \
     if ( FN_VISIT(WHAT) ) { \
         das_invoke_function<void>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3); \
+            (context,nullptr,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3); \
     }
 
 #define IMPL_VISIT1(WHAT,WHATTYPE,RETTYPE,RETVALUE) \
     if ( FN_VISIT(WHAT) ) { \
         return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>> \
-            (context,FN_VISIT(WHAT),classPtr,expr).marshal(RETVALUE); \
+            (context,nullptr,FN_VISIT(WHAT),classPtr,expr).marshal(RETVALUE); \
     } else { \
         return RETVALUE; \
     }
@@ -1384,7 +1384,7 @@ namespace das {
 #define IMPL_VISIT2(WHAT,WHATTYPE,RETTYPE,RETVALUE,ARG1T,ARG1) \
     if ( FN_VISIT(WHAT) ) { \
         return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1).marshal(RETVALUE); \
+            (context,nullptr,FN_VISIT(WHAT),classPtr,expr,ARG1).marshal(RETVALUE); \
     } else { \
         return RETVALUE; \
     }
@@ -1392,7 +1392,7 @@ namespace das {
 #define IMPL_VISIT3(WHAT,WHATTYPE,RETTYPE,RETVALUE,ARG1T,ARG1,ARG2T,ARG2) \
     if ( FN_VISIT(WHAT) ) { \
         return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2).marshal(RETVALUE); \
+            (context,nullptr,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2).marshal(RETVALUE); \
     } else { \
         return RETVALUE; \
     }
@@ -1400,7 +1400,7 @@ namespace das {
 #define IMPL_VISIT4(WHAT,WHATTYPE,RETTYPE,RETVALUE,ARG1T,ARG1,ARG2T,ARG2,ARG3T,ARG3) \
     if ( FN_VISIT(WHAT) ) { \
         return das_invoke_function<smart_ptr_raw<RETTYPE>>::invoke<void *,smart_ptr_raw<WHATTYPE>,ARG1T,ARG2T,ARG3T> \
-            (context,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3).marshal(RETVALUE); \
+            (context,nullptr,FN_VISIT(WHAT),classPtr,expr,ARG1,ARG2,ARG3).marshal(RETVALUE); \
     } else { \
         return RETVALUE; \
     }
@@ -1604,7 +1604,7 @@ namespace das {
     void VisitorAdapter::visitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last )  {
         if ( FN_VISIT(StructureField) ) {
             das_invoke_function<void>::invoke<void *,StructurePtr,Structure::FieldDeclaration&,bool>
-                (context,FN_VISIT(StructureField),classPtr,expr,decl,last);
+                (context,nullptr,FN_VISIT(StructureField),classPtr,expr,decl,last);
         }
     }
     StructurePtr VisitorAdapter::visit ( Structure * expr )
@@ -1650,7 +1650,7 @@ namespace das {
     void VisitorAdapter::visitBlockFinal ( ExprBlock * expr )  {
         if ( FN_VISIT(ExprBlockFinal) ) {
             das_invoke_function<void>::invoke<void *,smart_ptr_raw<ExprBlock>>
-                (context,FN_VISIT(ExprBlockFinal),classPtr,expr);
+                (context,nullptr,FN_VISIT(ExprBlockFinal),classPtr,expr);
         }
     }
     void VisitorAdapter::preVisitBlockFinalExpression ( ExprBlock * expr, Expression * bexpr )
@@ -2453,24 +2453,24 @@ namespace das {
         return td->getTupleFieldOffset(index);
     }
 
-    void any_table_foreach ( void * _tab, int keyStride, int valueStride, const TBlock<void,void *,void *> & blk, Context * context ) {
+    void any_table_foreach ( void * _tab, int keyStride, int valueStride, const TBlock<void,void *,void *> & blk, Context * context, LineInfoArg * at ) {
         auto tab = (Table *) _tab;
         if ( !tab->data ) return;
         char * values = tab->data;
         char * keys = tab->keys;
         for ( uint32_t index=0; index!=tab->capacity; index++, keys+=keyStride, values+=valueStride ) {
             if ( tab->hashes[index] > HASH_KILLED32 ) {
-                das_invoke<void>::invoke<void *,void *>(context,blk,(void*)keys,(void*)values);
+                das_invoke<void>::invoke<void *,void *>(context,at,blk,(void*)keys,(void*)values);
             }
         }
     }
 
-    void any_array_foreach ( void * _arr, int stride, const TBlock<void,void *> & blk, Context * context ) {
+    void any_array_foreach ( void * _arr, int stride, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
         auto arr = (Array *) _arr;
         if ( !arr->data ) return;
         char * values = arr->data;
         for ( uint32_t index=0; index!=arr->size; index++, values+=stride ) {
-            das_invoke<void>::invoke<void *>(context,blk,(void*)values);
+            das_invoke<void>::invoke<void *>(context,at,blk,(void*)values);
         }
     }
 
@@ -2482,39 +2482,39 @@ namespace das {
         return int32_t(((Table *) _tab)->size);
     }
 
-    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDeclPtr> & block, Context * context ) {
+    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDeclPtr> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->aliasTypes ) {
-            das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,block,td.first.c_str(),td.second);
+            das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,at,block,td.first.c_str(),td.second);
         }
     }
 
-    void for_each_enumeration ( Module * mod, const TBlock<void,EnumerationPtr> & block, Context * context ) {
+    void for_each_enumeration ( Module * mod, const TBlock<void,EnumerationPtr> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->enumerations ) {
-            das_invoke<void>::invoke<EnumerationPtr>(context,block,td.second);
+            das_invoke<void>::invoke<EnumerationPtr>(context,at,block,td.second);
         }
     }
 
-    void for_each_structure ( Module * mod, const TBlock<void,StructurePtr> & block, Context * context ) {
+    void for_each_structure ( Module * mod, const TBlock<void,StructurePtr> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->structures ) {
-            das_invoke<void>::invoke<StructurePtr>(context,block,td.second);
+            das_invoke<void>::invoke<StructurePtr>(context,at,block,td.second);
         }
     }
 
-    void for_each_generic ( Module * mod, const TBlock<void,FunctionPtr> & block, Context * context ) {
+    void for_each_generic ( Module * mod, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->generics ) {
-            das_invoke<void>::invoke<FunctionPtr>(context,block,td.second);
+            das_invoke<void>::invoke<FunctionPtr>(context,at,block,td.second);
         }
     }
 
-    void for_each_global ( Module * mod, const TBlock<void,VariablePtr> & block, Context * context ) {
+    void for_each_global ( Module * mod, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->globals ) {
-            das_invoke<void>::invoke<VariablePtr>(context,block,td.second);
+            das_invoke<void>::invoke<VariablePtr>(context,at,block,td.second);
         }
     }
 
-    void for_each_call_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context ) {
+    void for_each_call_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->callThis ) {
-            das_invoke<void>::invoke<const char *>(context,block,td.first.c_str());
+            das_invoke<void>::invoke<const char *>(context,at,block,td.first.c_str());
         }
     }
 
@@ -2527,10 +2527,10 @@ namespace das {
     }
 
     void builtin_structure_for_each_field ( const BasicStructureAnnotation & ann,
-        const TBlock<void,char *,char*,TypeDeclPtr,uint32_t> & block, Context * context ) {
+        const TBlock<void,char *,char*,TypeDeclPtr,uint32_t> & block, Context * context, LineInfoArg * at ) {
         for ( auto & it : ann.fields ) {
             const auto & fld = it.second;
-            das_invoke<void>::invoke<const char *,const char *,TypeDeclPtr,uint32_t>(context,block,
+            das_invoke<void>::invoke<const char *,const char *,TypeDeclPtr,uint32_t>(context,at,block,
                 it.first.c_str(), fld.cppName.c_str(),fld.decl,fld.offset);
         }
     }

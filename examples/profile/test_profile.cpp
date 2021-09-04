@@ -15,14 +15,14 @@
 
 using namespace das;
 
-void testManagedInt(const TBlock<void,const vector<int32_t>> & blk, Context * context) {
+void testManagedInt(const TBlock<void,const vector<int32_t>> & blk, Context * context, LineInfoArg * at) {
     vector<int32_t> arr;
     for (int32_t x = 0; x != 10; ++x) {
         arr.push_back(x);
     }
     vec4f args[1];
     args[0] = cast<vector<int32_t> *>::from(&arr);
-    context->invoke(blk, args, nullptr);
+    context->invoke(blk, args, nullptr, at);
 }
 
 ___noinline void updateObject ( Object & obj ) {
@@ -353,7 +353,7 @@ uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsCom
                 return;
             }
         }
-    }); // TODO: line?
+    }, nullptr); // TODO: line?
     return totalComponents;
 }
 

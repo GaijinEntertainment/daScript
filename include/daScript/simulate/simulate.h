@@ -481,7 +481,7 @@ namespace das
 #pragma warning(disable:4324)
 #endif
 
-        __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres, LineInfo * line = nullptr ) {
+        __forceinline vec4f invoke(const Block &block, vec4f * args, void * cmres, LineInfo * line ) {
             char * EP, *SP;
             vec4f * TBA = nullptr;
             char * STB = stack.bottom();
@@ -528,7 +528,7 @@ namespace das
 #endif
 
         template <typename Fn>
-        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, LineInfo * line = nullptr);
+        vec4f invokeEx(const Block &block, vec4f * args, void * cmres, Fn && when, LineInfo * line);
 
         template <typename Fn>
         vec4f callEx(const SimFunction * fn, vec4f *args, void * cmres, LineInfo * line, Fn && when) {
