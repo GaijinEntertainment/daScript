@@ -11,7 +11,7 @@ namespace das {
     public:
         virtual void preVisit ( ExprLet * expr ) override {
             for ( const auto & var : expr->variables) {
-                locals.push_back(make_tuple(var,expr->visibility,false));
+                locals.push_back(make_tuple(var,expr->visibility,bool(var->type->ref)));
             }
         }
         virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool ) override {
