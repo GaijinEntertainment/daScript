@@ -73,6 +73,7 @@ namespace das {
         AllocateStack( const ProgramPtr & prog, TextWriter & ls ) : logs(ls) {
             program = prog;
             log = prog->options.getBoolOption("log_stack");
+            log_var_scope = prog->options.getBoolOption("log_var_scope");
             optimize = prog->getOptimize();
             if( log ) {
                 logs << "\nSTACK INFORMATION:\n";
@@ -86,6 +87,7 @@ namespace das {
         vector<ExprBlock *>     blocks;
         vector<ExprBlock *>     scopes;
         bool                    log = false;
+        bool                    log_var_scope = false;
         bool                    optimize = false;
         TextWriter &            logs;
         bool                    inStruct = false;
@@ -355,6 +357,9 @@ namespace das {
                 if ( log ) {
                     logs << "\t" << var->stackTop << "\t" << sz
                         << "\tlet " << var->name << ", line " << var->at.line << "\n";
+                    if ( log_var_scope ) {
+                        logs <<"\t\t\t\t" << expr->visibility.describe(true) << "\n";
+                    }
                 }
             }
             for ( auto blk = scopes.rbegin(); blk!=scopes.rend(); ++blk ) {
