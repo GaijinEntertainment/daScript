@@ -2607,6 +2607,13 @@ namespace das {
     __forceinline vec4f cvt_float4 ( uint2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
     __forceinline vec4f cvt_float4 ( uint3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
     __forceinline vec4f cvt_float4 ( uint4 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+
+    __forceinline vec4f cvt_int4 ( float2 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
+    __forceinline vec4f cvt_int4 ( float3 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
+    __forceinline vec4f cvt_int4 ( float4 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
+    __forceinline vec4f cvt_uint4 ( float2 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
+    __forceinline vec4f cvt_uint4 ( float3 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
+    __forceinline vec4f cvt_uint4 ( float4 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
 }
 
 #if defined(_MSC_VER)

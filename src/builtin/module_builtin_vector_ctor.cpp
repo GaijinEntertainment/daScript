@@ -191,6 +191,36 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         }
     };
 
+    struct SimNode_Float4ToInt4 : SimNode_CallBase {
+        SimNode_Float4ToInt4(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Float4ToInt4);
+            V_SUB(arguments[0]);
+            V_END();
+        }
+        virtual vec4f eval(Context & context) override {
+            DAS_PROFILE_NODE
+            vec4f f4 = arguments[0]->eval(context);
+            return v_cast_vec4f(v_cvt_vec4i(f4));
+        }
+    };
+
+    struct SimNode_Float4ToUInt4 : SimNode_CallBase {
+        SimNode_Float4ToUInt4(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(Float4ToUInt4);
+            V_SUB(arguments[0]);
+            V_END();
+        }
+        virtual vec4f eval(Context & context) override {
+            DAS_PROFILE_NODE
+            vec4f f4 = arguments[0]->eval(context);
+            return v_cast_vec4f(v_cvt_vec4i(f4));
+        }
+    };
+
     void Module_BuiltIn::addVectorCtor(ModuleLibrary & lib) {
         // float2
         ADD_VEC_CTOR_1(float2,"v_splats");
@@ -210,21 +240,27 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         // int2
         ADD_VEC_CTOR_1(int2,"int2");
         ADD_VEC_CTOR_2(int2,"int2");
+        addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int2, float2>>("int2",lib,"cvt_int4",false) );
         // int3
         ADD_VEC_CTOR_1(int3,"int3");
         ADD_VEC_CTOR_3(int3,"int3");
+        addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int3, float3>>("int3",lib,"cvt_int4",false) );
         // int4
         ADD_VEC_CTOR_1(int4,"int4");
         ADD_VEC_CTOR_4(int4,"int4");
+        addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int4, float4>>("int4",lib,"cvt_int4",false) );
         // uint2
         ADD_VEC_CTOR_1(uint2,"uint2");
         ADD_VEC_CTOR_2(uint2,"uint2");
+        addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint2,float2>>("uint2",lib,"cvt_uint4",false) );
         // uint3
         ADD_VEC_CTOR_1(uint3,"uint3");
         ADD_VEC_CTOR_3(uint3,"uint3");
+        addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint3,float3>>("uint3",lib,"cvt_uint4",false) );
         // uint4
         ADD_VEC_CTOR_1(uint4,"uint4");
         ADD_VEC_CTOR_4(uint4,"uint4");
+        addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint4,float4>>("uint4",lib,"cvt_uint4",false) );
         // range
         ADD_RANGE_CTOR_1(range,"range");
         ADD_VEC_CTOR_2(range,"range");

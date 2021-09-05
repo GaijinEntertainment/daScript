@@ -77,6 +77,12 @@ def test_cvt(a,b,c,d:int)
     assert(float2(uint2(a,b))    ==float2(a,b))
     assert(float3(uint3(a,b,c))  ==float3(a,b,c))
     assert(float4(uint4(a,b,c,d))==float4(a,b,c,d))
+    assert(int2(float2(a,b))     ==int2(a,b))
+    assert(int3(float3(a,b,c))   ==int3(a,b,c))
+    assert(int4(float4(a,b,c,d)) ==int4(a,b,c,d))
+    assert(uint2(float2(a,b))    ==uint2(a,b))
+    assert(uint3(float3(a,b,c))  ==uint3(a,b,c))
+    assert(uint4(float4(a,b,c,d))==uint4(a,b,c,d))
 
 [export]
 def test
