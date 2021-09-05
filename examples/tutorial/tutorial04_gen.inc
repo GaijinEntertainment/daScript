@@ -19,7 +19,7 @@ public:
   static __forceinline void invoke_update ( Context * __context__, Func __funcCall__, void * self, float dt ) {
     das_invoke_function<void>::invoke
       <void *,float>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self,dt);
   }
   static __forceinline Func get_get_position ( void * self ) {
@@ -28,7 +28,7 @@ public:
   static __forceinline float3 invoke_get_position ( Context * __context__, Func __funcCall__, void * self ) {
     return das_invoke_function<float3>::invoke
       <void *>
-        (__context__,__funcCall__,
+        (__context__,nullptr,__funcCall__,
           self);
   }
 };
