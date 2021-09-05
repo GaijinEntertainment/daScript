@@ -103,11 +103,20 @@ def private resolve_path(path: string; paths: array<string>): string
             return newPath
     return fix_path(path)
 
-def private resolve_path_cache(path: string; paths: array<string>; var cache: table<string; string>): string
+def private resolve_path(path: string; paths: array<string>; aliases: table<string; string>): string
+    if path |> empty()
+        return path
+    for k, v in keys(aliases), values(aliases)
+        if path |> starts_with(k)
+            let fixedPath = v |> join_path <| slice(path, length(k))
+            return fixedPath |> resolve_path(paths)
+    return path |> resolve_path(paths)
+
+def private resolve_path_cache(path: string; paths: array<string>; aliases: table<string; string>; var cache: table<string; string>): string
     let res = cache |> find(path)
     if res != null
         return *res
-    let absPath = resolve_path(path, paths)
+    let absPath = resolve_path(path, paths, aliases)
     cache[path] = absPath
     return absPath
 
@@ -350,6 +359,7 @@ class private DAStackWalker: DapiStackWalker
 
     [[do_not_delete]] ctx: DAContext?
     [[do_not_delete]] workingPaths: array<string>?
+    [[do_not_delete]] pathAliases: table<string; string>?
     [[do_not_delete]] pathsCache: table<string; string>?
 
     def DAStackWalker()
@@ -401,7 +411,7 @@ class private DAStackWalker: DapiStackWalker
         let n = length(ctx.stack)
         if n > 0
             ctx.stack[n - 1].name = "def {info.name}"
-            ctx.stack[n - 1].path = "{at.fileInfo.name}" |> resolve_path_cache(*workingPaths, *pathsCache)
+            ctx.stack[n - 1].path = "{at.fileInfo.name}" |> resolve_path_cache(*workingPaths, *pathAliases, *pathsCache)
             ctx.stack[n - 1].line = at.line
             self->collectGlobals()
 
@@ -521,6 +531,7 @@ class private DAgent: DapiDebugAgent
 
     waitConnection: bool = true
     workingPaths: array<string>
+    pathAliases: table<string; string>
     pathsCache: table<string; string>
 
     logStrMemory = false
@@ -535,6 +546,7 @@ class private DAgent: DapiDebugAgent
         unsafe
             walkerAdapter <- make_stack_walker(walker)
             walker.workingPaths = addr(workingPaths)
+            walker.pathAliases = addr(pathAliases)
             walker.pathsCache = addr(pathsCache)
         self->startServer()
         self->addContext(this_context())
@@ -555,7 +567,7 @@ class private DAgent: DapiDebugAgent
         if workingPaths |> find_index(path) < 0
             workingPaths |> push(path)
 
-    def setPaths(paths: array<string>)
+    def setPaths(paths: array<string>; aliases: table<string; string>)
         workingPaths |> clear()
         pathsCache |> clear()
         for path in paths
@@ -570,6 +582,10 @@ class private DAgent: DapiDebugAgent
         if !empty(dasRoot) && dasRoot != "."
             self->addPath(dasRoot |> join_path("daslib"))
             self->addPath(dasRoot |> join_path("src/builtin"))
+
+        pathAliases |> clear()
+        for k, v in keys(aliases), values(aliases)
+            pathAliases[k] = v
 
     def override onUninstall(agent:DebugAgent?)
         if agent == thisAgent
@@ -594,7 +610,7 @@ class private DAgent: DapiDebugAgent
             return
         if !waitConnection && (!server.configurationDone || !server.threadsDone)
             return
-        let path = "{at.fileInfo.name}" |> resolve_path_cache(workingPaths, pathsCache)
+        let path = "{at.fileInfo.name}" |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
         self->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
         set_single_step(ctx,true)
 
@@ -614,7 +630,7 @@ class private DAgent: DapiDebugAgent
             return
 
         // unsafe
-        //     self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache)}:{int(at.line)}\n")
+        //     self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache, pathAliases)}:{int(at.line)}\n")
 
         if (uint(ctx.category) & (1u << 31u)) != 0u
             self->addContext(ctx)
@@ -628,7 +644,7 @@ class private DAgent: DapiDebugAgent
                 self->log("[Error] non debug context in single step {ctx.name}")
 
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
-            let file = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache)
+            let file = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
             if ctxData.pauseRequested
                 self->sendStopped(ctx, ctxData, file, at, "pause", -1ul)
                 while ctxData.pauseRequested
@@ -926,7 +942,9 @@ class private DAServer: Server
 
     def setPaths(data: JsonValue?)
         var resPaths: array<string>
+        var pathAliases: table<string; string>
         defer_delete(resPaths)
+        defer_delete(pathAliases)
         if data != null && data is _object
             let paths = data |> joj("paths")
             if paths != null && paths is _array
@@ -937,7 +955,13 @@ class private DAServer: Server
             let cwd = data |> jos("cwd", "")
             if !empty(cwd)
                 resPaths |> push(cwd)
-        agent->setPaths(resPaths)
+            let aliases = data |> joj("pathAliases")
+            if aliases != null && aliases is _object
+                let aliasesList & = aliases as _object
+                for k, v in keys(aliasesList), values(aliasesList)
+                    if v is _string
+                        pathAliases[k] = v as _string
+        agent->setPaths(resPaths, pathAliases)
 
     def reqLaunch(seq: double; command: string; data: JsonValue?)
         self->setPaths(data)
