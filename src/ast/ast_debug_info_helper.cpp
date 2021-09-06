@@ -116,7 +116,6 @@ namespace das {
         if ( it!=smn2s.end() ) return it->second;
         StructInfo * sti = debugInfo->makeNode<StructInfo>();
         sti->name = debugInfo->allocateName(st.name);
-        sti->module_name = debugInfo->allocateName(st.module->name);
         sti->count = (uint32_t) st.fields.size();
         sti->size = st.getSizeOf();
         sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
@@ -127,6 +126,7 @@ namespace das {
         }
         sti->initializer = -1;
         if ( st.module ) {
+            sti->module_name = debugInfo->allocateName(st.module->name);
             if ( auto fn = st.module->findFunction(st.name) ) {
                 sti->initializer = fn->index;
             }
@@ -169,14 +169,14 @@ namespace das {
             info->enumType = nullptr;
         }
         info->flags = 0;
-        if (type->ref)
+        if (type->ref) {
             info->flags |= TypeInfo::flag_ref;
-        if (type->ref)
             info->flags |= TypeInfo::flag_refValue;
-        if (type->isRefType())
+        }
+        if (type->isRefType()) {
             info->flags |= TypeInfo::flag_refType;
-        if ( type->isRefType() )
             info->flags &= ~TypeInfo::flag_ref;
+        }
         if (type->canCopy())
             info->flags |= TypeInfo::flag_canCopy;
         if (type->isPod())
