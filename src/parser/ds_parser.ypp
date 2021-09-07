@@ -2015,8 +2015,9 @@ global_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
-    |   global_variable_declaration_list[list] let_variable_declaration[decl] {
+    |   global_variable_declaration_list[list] optional_field_annotation[ann] let_variable_declaration[decl] {
         $$ = $list;
+        $decl->annotation = $ann;
         $list->push_back($decl);
     }
     ;
@@ -2061,7 +2062,7 @@ global_let
         }
         deleteVariableDeclarationList($list);
     }
-    |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] { das_force_oxford_comma=true; } let_variable_declaration[decl] {
+    |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] { das_force_oxford_comma=true; } optional_field_annotation[ann] let_variable_declaration[decl] {
         auto pDecl = $decl;
         if ( pDecl->pTypeDecl ) {
             for ( const auto & name_at : *pDecl->pNameList ) {
@@ -2081,6 +2082,10 @@ global_let
                 }
                 pVar->global_shared = $glob_shar;
                 pVar->private_variable = !$pub_var;
+                if ( $ann ) {
+                    pVar->annotation = move(*$ann);
+                    delete $ann;
+                }
                 if ( !g_Program->addVariable(pVar) )
                     das_yyerror("global variable is already declared " + name_at.first,name_at.second,
                         CompilationError::global_variable_already_declared);

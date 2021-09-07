@@ -166,13 +166,11 @@ namespace das {
             ss << (that->isClass ? "class " : "struct ");
             ss << (that->privateStructure ? "private " : "public ") << that->name << "\n";
         }
-        virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
-            Visitor::preVisitStructureField(that, decl, last);
-            ss << "\t";
-            if ( decl.annotation.size() ) {
+        void outputVariableAnnotation ( const AnnotationArgumentList & annotation ) {
+            if ( annotation.size() ) {
                 ss << "[";
                 int ai = 0;
-                for ( auto & arg : decl.annotation ) {
+                for ( auto & arg : annotation ) {
                     if ( ai++ ) ss << ",";
                     ss << arg.name << "=";
                     switch ( arg.type ) {
@@ -185,6 +183,11 @@ namespace das {
                 }
                 ss << "] ";
             }
+        }
+        virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
+            Visitor::preVisitStructureField(that, decl, last);
+            ss << "\t";
+            outputVariableAnnotation(decl.annotation);
             ss << decl.name << " : " << decl.type->describe();
             if ( decl.parentType ) {
                 ss << " /* from " << that->parent->name << " */";
@@ -211,6 +214,7 @@ namespace das {
                 << (var->global_shared ? " shared" : "")
                 << (var->private_variable ? " private" : "")
                 << "\n\t";
+            outputVariableAnnotation(var->annotation);
             if ( var->isAccessUnused() ) ss << " /*unused*/ ";
             if ( printVarAccess && !var->access_ref ) ss << "$";
             if ( printVarAccess && !var->access_pass ) ss << "%";

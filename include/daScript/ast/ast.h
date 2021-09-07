@@ -305,6 +305,12 @@ namespace das
         virtual bool finalize ( ExprBlock * block, ModuleGroup & libGroup,
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
+        virtual bool patch ( const FunctionPtr &, ModuleGroup &,
+                               const AnnotationArgumentList &,
+                               const AnnotationArgumentList &, string & ) { return true; }
+        virtual bool lint ( const FunctionPtr &, ModuleGroup &,
+                               const AnnotationArgumentList &,
+                               const AnnotationArgumentList &, string & ) { return true; }
         virtual void complete ( Context * ) { }
         virtual bool simulate ( Context *, SimFunction * ) { return true; }
         virtual bool verifyCall ( ExprCallFunc * /*call*/, const AnnotationArgumentList & /*args*/, string & /*err*/ ) { return true; }
@@ -1099,6 +1105,7 @@ namespace das
         bool addGeneric ( const FunctionPtr & fn );
         Module * addModule ( const string & name );
         void finalizeAnnotations();
+        void patchAnnotations();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
         void inferTypesDirty(TextWriter & logs, bool verbose);
         void lint ( ModuleGroup & libGroup );

@@ -1152,6 +1152,7 @@ namespace das {
     ExpressionPtr ExprInvoke::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprInvoke>(expr);
         ExprLooksLikeCall::clone(cexpr);
+        cexpr->isInvokeMethod = isInvokeMethod;
         return cexpr;
     }
 
@@ -2780,18 +2781,20 @@ namespace das {
         // globals
         vis.preVisitGlobalLetBody(this);
         for ( auto & var : thisModule->globalsInOrder ) {
-            vis.preVisitGlobalLet(var);
-            if ( var->type ) {
-                vis.preVisit(var->type.get());
-                var->type = var->type->visit(vis);
-                var->type = vis.visit(var->type.get());
+            if ( vis.canVisitGlobalVariable(var.get()) ) {
+                vis.preVisitGlobalLet(var);
+                if ( var->type ) {
+                    vis.preVisit(var->type.get());
+                    var->type = var->type->visit(vis);
+                    var->type = vis.visit(var->type.get());
+                }
+                if ( var->init ) {
+                    vis.preVisitGlobalLetInit(var, var->init.get());
+                    var->init = var->init->visit(vis);
+                    var->init = vis.visitGlobalLetInit(var, var->init.get());
+                }
+                var = vis.visitGlobalLet(var);
             }
-            if ( var->init ) {
-                vis.preVisitGlobalLetInit(var, var->init.get());
-                var->init = var->init->visit(vis);
-                var->init = vis.visitGlobalLetInit(var, var->init.get());
-            }
-            var = vis.visitGlobalLet(var);
         }
         vis.visitGlobalLetBody(this);
         // generics

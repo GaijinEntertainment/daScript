@@ -112,6 +112,22 @@ def private add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:
 def add_global_var ( mod:Module?; vname:string; vat:LineInfo; var value:ExpressionPtr )
     add_global_var_any(mod, vname, vat, TypeDeclFlags removeConstant, value, false)
 
+def add_global_var ( mod:Module?; vname:string; var typ:TypeDeclPtr; vat:LineInfo; priv:bool; blk:block<(var v : VariablePtr):void> )
+    var vvar <- new [[Variable() at=vat,
+        name:=vname,
+        _type <- typ
+    ]]
+    vvar.flags |= VariableFlags generated
+    if priv
+        vvar.flags |= VariableFlags private_variable
+    invoke(blk, vvar)
+    if !add_variable(mod, vvar)
+        panic("can't add global variable {vname}")
+
+def add_global_var ( mod:Module?; vname:string; var typ:TypeDeclPtr; vat:LineInfo; priv:bool )
+    add_global_var(mod,vname,typ,vat,priv) <| $ ( var v )
+        pass
+
 def add_global_let ( mod:Module?; vname:string; vat:LineInfo; var value:ExpressionPtr )
     add_global_var_any(mod, vname, vat, TypeDeclFlags constant, value, false)
 

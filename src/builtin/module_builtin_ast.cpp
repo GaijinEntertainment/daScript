@@ -630,6 +630,7 @@ namespace das {
             :  AstExprLikeCallAnnotation<ExprInvoke> ("ExprInvoke", ml) {
             addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
             addField<DAS_BIND_MANAGED_FIELD(doesNotNeedSp)>("doesNotNeedSp");
+            addField<DAS_BIND_MANAGED_FIELD(isInvokeMethod)>("isInvokeMethod");
         }
     };
 
@@ -1446,6 +1447,7 @@ namespace das {
         IMPL_ADAPT(ExprLet);
         IMPL_ADAPT(ExprLetVariable);
         IMPL_ADAPT(ExprLetVariableInit);
+        fnCanVisitGlobalVariable = adapt("canVisitGlobalVariable",pClass,info);
         IMPL_ADAPT(GlobalLet);
         IMPL_ADAPT(GlobalLetVariable);
         IMPL_ADAPT(GlobalLetVariableInit);
@@ -1668,6 +1670,14 @@ namespace das {
     ExpressionPtr VisitorAdapter::visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init )
         { IMPL_VISIT3(ExprLetVariableInit,ExprLet,Expression,init,VariablePtr,var,ExpressionPtr,init); }
 // global let
+    bool VisitorAdapter::canVisitGlobalVariable ( Variable * var ) {
+        if ( fnCanVisitGlobalVariable ) {
+            return das_invoke_function<bool>::invoke<void *,Variable *>
+                (context,nullptr,fnCanVisitGlobalVariable,classPtr,var);
+        } else {
+            return true;
+        }
+    }
     void VisitorAdapter::preVisitGlobalLetBody ( Program * expr )
         { IMPL_PREVISIT1(GlobalLet,Program); }
     void VisitorAdapter::visitGlobalLetBody ( Program * expr )
@@ -1909,6 +1919,24 @@ namespace das {
                                const AnnotationArgumentList & progArgs, string & errors ) override {
             if ( auto fnFinish = get_finish(classPtr) ) {
                 return invoke_finish(context,fnFinish,classPtr,func,group,args,progArgs,errors);
+            } else {
+                return true;
+            }
+        }
+        virtual bool lint ( const FunctionPtr & func, ModuleGroup & group,
+                               const AnnotationArgumentList & args,
+                               const AnnotationArgumentList & progArgs, string & errors ) override {
+            if ( auto fnLint = get_lint(classPtr) ) {
+                return invoke_lint(context,fnLint,classPtr,func,group,args,progArgs,errors);
+            } else {
+                return true;
+            }
+        }
+        virtual bool patch ( const FunctionPtr & func, ModuleGroup & group,
+                               const AnnotationArgumentList & args,
+                               const AnnotationArgumentList & progArgs, string & errors ) override {
+            if ( auto fnPatch = get_patch(classPtr) ) {
+                return invoke_patch(context,fnPatch,classPtr,func,group,args,progArgs,errors);
             } else {
                 return true;
             }

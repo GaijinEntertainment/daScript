@@ -228,6 +228,7 @@ namespace das {
         auto pInvoke = new ExprInvoke(at, "invoke");
         auto pAt = make_smart<ExprField>(at, a->clone(), b);
         pInvoke->arguments.push_back(pAt);
+        pInvoke->isInvokeMethod = true;
         auto pCast = make_smart<ExprCast>();
         pCast->at = at;
         pCast->castType = make_smart<TypeDecl>(Type::autoinfer);

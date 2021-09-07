@@ -45,6 +45,7 @@ namespace das {
         DECL_VISIT(ExprLet);
         DECL_VISIT(ExprLetVariable);
         DECL_VISIT(ExprLetVariableInit);
+        Func fnCanVisitGlobalVariable;
         DECL_VISIT(GlobalLet);
         DECL_VISIT(GlobalLetVariable);
         DECL_VISIT(GlobalLetVariableInit);
@@ -221,6 +222,7 @@ namespace das {
         virtual void preVisitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override;
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override;
     // global let
+        virtual bool canVisitGlobalVariable ( Variable * var ) override;
         virtual void preVisitGlobalLetBody ( Program * expr ) override;
         virtual void visitGlobalLetBody ( Program * expr ) override;
         virtual void preVisitGlobalLet ( const VariablePtr & expr ) override;

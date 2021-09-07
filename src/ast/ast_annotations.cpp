@@ -100,4 +100,19 @@ namespace das
         FinAnnotationVisitor fin(this);
         visit(fin);
     }
+
+    void Program::patchAnnotations() {
+        for ( auto & fni : thisModule->functions ) {
+            auto fn = fni.second;
+            for ( auto & ann : fn->annotations ) {
+                if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                    auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                    string err;
+                    if ( !fann->patch(fn, *thisModuleGroup, ann->arguments, options, err) ) {
+                        error("function annotation patch failed\n", err, "", fn->at, CompilationError::annotation_failed );
+                    }
+                }
+            }
+        }
+    }
 }

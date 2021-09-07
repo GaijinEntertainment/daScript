@@ -369,6 +369,15 @@ namespace das {
                         fn->at, CompilationError::not_all_paths_return_value);
                 }
             }
+            for ( auto & ann : fn->annotations ) {
+                if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                    auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                    string err;
+                    if ( !fann->lint(fn, *program->thisModuleGroup, ann->arguments, program->options, err) ) {
+                        program->error("function annotation lint failed\n", err, "", fn->at, CompilationError::annotation_failed );
+                    }
+                }
+            }
         }
         virtual FunctionPtr visit ( Function * fn ) override {
             func = nullptr;

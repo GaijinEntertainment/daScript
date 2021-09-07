@@ -4,17 +4,21 @@ protected:
     __fn_transform = 0,
     __fn_apply = 1,
     __fn_finish = 2,
-    __fn_isCompatible = 3,
-    __fn_isSpecialized = 4,
+    __fn_patch = 3,
+    __fn_lint = 4,
+    __fn_isCompatible = 5,
+    __fn_isSpecialized = 6,
   };
 protected:
-  static int _das_class_method_offset[5];
+  static int _das_class_method_offset[7];
 public:
   AstFunctionAnnotation_Adapter ( const StructInfo * info ) {
     if ( _das_class_method_offset[0]==0 ) {
       _das_class_method_offset[__fn_transform] = adapt_field_offset("transform",info);
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
       _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
+      _das_class_method_offset[__fn_patch] = adapt_field_offset("patch",info);
+      _das_class_method_offset[__fn_lint] = adapt_field_offset("lint",info);
       _das_class_method_offset[__fn_isCompatible] = adapt_field_offset("isCompatible",info);
       _das_class_method_offset[__fn_isSpecialized] = adapt_field_offset("isSpecialized",info);
     }
@@ -46,6 +50,24 @@ public:
         (__context__,nullptr,__funcCall__,
           self,func,group,args,progArgs,errors);
   }
+  static __forceinline Func get_patch ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_patch]);
+  }
+  static __forceinline bool invoke_patch ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, ModuleGroup & group, AnnotationArgumentList const  & args, AnnotationArgumentList const  & progArgs, das::string & errors ) {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<Function>,ModuleGroup &,AnnotationArgumentList const  &,AnnotationArgumentList const  &,das::string &>
+        (__context__,nullptr,__funcCall__,
+          self,func,group,args,progArgs,errors);
+  }
+  static __forceinline Func get_lint ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_lint]);
+  }
+  static __forceinline bool invoke_lint ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, ModuleGroup & group, AnnotationArgumentList const  & args, AnnotationArgumentList const  & progArgs, das::string & errors ) {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<Function>,ModuleGroup &,AnnotationArgumentList const  &,AnnotationArgumentList const  &,das::string &>
+        (__context__,nullptr,__funcCall__,
+          self,func,group,args,progArgs,errors);
+  }
   static __forceinline Func get_isCompatible ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_isCompatible]);
   }
@@ -65,7 +87,7 @@ public:
           self);
   }
 };
-int AstFunctionAnnotation_Adapter::_das_class_method_offset[5];
+int AstFunctionAnnotation_Adapter::_das_class_method_offset[7];
 
 class AstStructureAnnotation_Adapter {
 protected:

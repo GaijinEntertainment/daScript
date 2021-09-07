@@ -919,6 +919,7 @@ namespace das
         bool isCopyOrMove() const;
         uint32_t    stackTop = 0;
         bool        doesNotNeedSp = false;
+        bool        isInvokeMethod = false;
     };
 
     struct ExprAssert : ExprLikeCall<ExprAssert> {
