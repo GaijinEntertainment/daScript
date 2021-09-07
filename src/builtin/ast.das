@@ -111,6 +111,7 @@ class AstVisitor
     def abstract visitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool) : void
     def abstract visitStructure(str:StructurePtr) : StructurePtr
 // function
+    def abstract canVisitFunction(arg:Function?) : bool
     def abstract preVisitFunction(fun:FunctionPtr) : void
     def abstract visitFunction(fun:FunctionPtr) : FunctionPtr
     def abstract preVisitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;lastArg:bool) : void

@@ -32,6 +32,7 @@ namespace das {
         DECL_VISIT(EnumerationValue);
         DECL_VISIT(Structure);
         DECL_VISIT(StructureField);
+        Func fnCanVisitFunction;
         DECL_VISIT(Function);
         DECL_VISIT(FunctionArgument);
         DECL_VISIT(FunctionArgumentInit);
@@ -192,6 +193,7 @@ namespace das {
         virtual void visitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last ) override;
         virtual StructurePtr visit ( Structure * expr ) override;
     // function
+        virtual bool canVisitFunction ( Function * fun ) override;
         virtual void preVisit ( Function * expr ) override;
         virtual FunctionPtr visit ( Function * expr ) override;
         virtual void preVisitArgument ( Function * expr, const VariablePtr & var, bool lastArg ) override;
@@ -468,6 +470,7 @@ namespace das {
     char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context );
     char * get_mangled_name_t ( smart_ptr_raw<TypeDecl> typ, Context * context );
     TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );
+    void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {
@@ -483,3 +486,4 @@ namespace das {
         }
     };
 }
+

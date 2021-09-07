@@ -1174,7 +1174,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(atDecl)>("atDecl");
             addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
             // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useFunctions");
-            // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useGlobalVariables");
+            // addField<DAS_BIND_MANAGED_FIELD(useGlobalVariables)>("useGlobalVariables");
             // use global v
             addFieldEx ( "flags", "flags",
                 offsetof(Function, flags), makeFunctionFlags() );
@@ -1434,6 +1434,7 @@ namespace das {
         IMPL_ADAPT(EnumerationValue);
         IMPL_ADAPT(Structure);
         IMPL_ADAPT(StructureField);
+        fnCanVisitFunction = adapt("canVisitFunction",pClass,info);
         IMPL_ADAPT(Function);
         IMPL_ADAPT(FunctionArgument);
         IMPL_ADAPT(FunctionArgumentInit);
@@ -1612,7 +1613,14 @@ namespace das {
     StructurePtr VisitorAdapter::visit ( Structure * expr )
         { IMPL_VISIT(Structure); }
 // function
-    void VisitorAdapter::preVisit ( Function * expr )
+    bool VisitorAdapter::canVisitFunction ( Function * fun ) {
+        if ( fnCanVisitFunction ) {
+            return das_invoke_function<bool>::invoke<void *,Function *>
+                (context,nullptr,fnCanVisitFunction,classPtr,fun);
+        } else {
+            return true;
+        }
+    }    void VisitorAdapter::preVisit ( Function * expr )
         { IMPL_PREVISIT(Function); }
     FunctionPtr VisitorAdapter::visit ( Function * expr )
         { IMPL_VISIT(Function); }
@@ -2823,9 +2831,10 @@ namespace das {
                 SideEffects::accessExternal, "astVisitExpression");
             addExtern<DAS_BIND_FUN(forceAtRaw)>(*this, lib,  "force_at",
                 SideEffects::accessExternal, "forceAtRaw");
-
             addExtern<DAS_BIND_FUN(parseMangledNameFn)>(*this, lib,  "parse_mangled_name",
                 SideEffects::none, "parseMangledNameFn");
+            addExtern<DAS_BIND_FUN(collectDependencies)>(*this, lib,  "collect_dependencies",
+                SideEffects::invoke, "collectDependencies");
             // function annotation
             addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeFunctionAnnotation)>(*this, lib,  "make_function_annotation",

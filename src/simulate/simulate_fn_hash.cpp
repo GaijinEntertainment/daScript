@@ -160,9 +160,54 @@ namespace das {
             });
             return vec;
         }
+        using VarAndName = pair<const Variable *,string>;
+        vector<VarAndName> getStableVariableDependencies() {
+            vector<VarAndName> vec;
+            vec.reserve(variables.size());
+            for ( const auto & it : variables ) {
+                vec.emplace_back(make_pair(it,it->getMangledName()));
+            }
+            stable_sort(vec.begin(), vec.end(), [&](const VarAndName & a, const VarAndName & b){
+                return a.second < b.second;
+            });
+            return vec;
+        }
         das_hash_set<const Function *> functions;
         das_hash_set<const Variable *> variables;
     };
+
+    void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line ) {
+        DependencyCollector collector;
+        collector.collect(fun.get());
+        auto vecFunc = collector.getStableDependencies();
+        auto vecVars = collector.getStableVariableDependencies();
+        vector<const Function *> tfun;
+        tfun.reserve(vecFunc.size());
+        for ( auto & fn : vecFunc ) {
+            tfun.push_back(fn.first);
+        }
+        vector<const Variable *> tvar;
+        tvar.reserve(vecVars.size());
+        for ( auto & fn : vecVars ) {
+            tvar.push_back(fn.first);
+        }
+        Array afun, avar;
+        memset(&afun, 0, sizeof(afun));
+        if ( tfun.size() ) {
+            afun.data = (char *) tfun.data();
+            afun.capacity = afun.size = uint32_t(tfun.size());
+            afun.lock = 1;
+        }
+        if ( tvar.size() ) {
+            avar.data = (char *) tvar.data();
+            avar.capacity = avar.size = uint32_t(tvar.size());
+            avar.lock = 1;
+        }
+        vec4f args[2];
+        args[0] = cast<Array &>::from(afun);
+        args[1] = cast<Array &>::from(avar);
+        context->invoke(block, args, nullptr, line);
+    }
 
     uint64_t getFunctionAotHash ( const Function * fun ) {
         DependencyCollector collector;

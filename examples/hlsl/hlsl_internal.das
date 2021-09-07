@@ -38,7 +38,7 @@ class HlslShader : AstFunctionAnnotation
             peek(glob.name) <| $ ( gname )
                 if gname == argName as tString
                     glob.init <- new [[ExprConstString() at=func.at,
-                        value:=generate_hlsl("{func.name}", err),
+                        value:=generate_hlsl(func, err),
                         _type <- new [[TypeDecl() at=func.at, baseType=Type tString]]
                     ]]
         if !err |> empty()
@@ -50,15 +50,32 @@ class HlslShader : AstFunctionAnnotation
 class HlslPixelShader : HlslShader {}
 
 let private supported_structure_field_annotations <- {{
-    "POSITION" => Type tBool;
-    "NORMAL" => Type tBool;
-    "TEXCOORD" => Type tBool
+    "POSITION"  => Type tBool;
+    "NORMAL"    => Type tBool;
+    "TEXCOORD"  => Type tBool
+}}
+
+let private hlsl_types <- {{
+    Type tString    => "string";    // NOTE - this is temporary until we remove non hlsl-related goo
+
+    Type tFloat     => "float";
+    Type tFloat2    => "float2";
+    Type tFloat3    => "float3";
+    Type tFloat4    => "float4";
+    Type tInt       => "int";
+    Type tInt2      => "int2";
+    Type tInt3      => "int3";
+    Type tInt4      => "int4";
+    Type tBool      => "bool";
+    Type tVoid      => "void"
 }}
 
 class HlslExport : AstVisitor
     errors : array<string>
     writer : StringBuilderWriter?
     tab : int = 0
+    depFun : table<uint64;bool>
+    depVar : table<uint64;bool>
     def HlslExport ( var w : StringBuilderWriter )
         unsafe
             writer = addr(w)
@@ -68,13 +85,19 @@ class HlslExport : AstVisitor
     def error ( txt:string; at:LineInfo )
         let fname = at.fileInfo!=null ? "{at.fileInfo.name} " : ""
         errors |> push("\tHLSL: {txt} at {fname}line {int(at.line)}")
-// program
-    def override preVisitProgram(prog:ProgramPtr)
-        *writer |> write("// program\n")
-    def override visitProgram(prog:ProgramPtr)
-        *writer |> write("// end program\n")
-    def override preVisitProgramBody(prog:ProgramPtr)
-        *writer |> write("// program body\n")
+// HLSL TYPE
+    def describe_hlsl_type ( t : TypeDeclPtr )
+        let st = build_string() <| $ ( var tw )
+            if t.flags.ref
+                tw |> write("& ")
+            if t.baseType==Type tStructure
+                tw |> write("{t.structType.name}")
+            elif hlsl_types |> key_exists(t.baseType)
+                tw |> write(hlsl_types?[t.baseType] ?? "error")
+            else
+                self->error ("unsupported type {t.baseType}", t.at)
+                tw |> write("error")
+        return st
 // type
     ET : bool = false
     def override preVisitTypeDecl(typ:TypeDeclPtr)
@@ -87,7 +110,7 @@ class HlslExport : AstVisitor
         return typ
 // alias
     def override preVisitAlias(typ:TypeDeclPtr;name:das_string)
-        *writer |> write("typedef\n\t{name} = {describe([decl=typ])}\n\n")
+        *writer |> write("typedef\n\t{name} = {self->describe_hlsl_type(typ)}\n\n")
 // enumeration
     def override preVisitEnumeration(enu:EnumerationPtr)
         *writer |> write("enum {enu.name} : {das_to_string(enu.baseType)}\n")
@@ -119,7 +142,7 @@ class HlslExport : AstVisitor
         *writer |> write("\t")
         //if decl.annotation.length != 0
         //    *writer |> write("[{describe(decl.annotation)}] ")
-        *writer |> write("{describe([decl=decl._type])} {decl.name}")
+        *writer |> write("{self->describe_hlsl_type(decl._type)} {decl.name}")
         if isCBuffer
             var poffset = find_arg("packoffset", decl.annotation)
             if poffset is tString
@@ -141,10 +164,21 @@ class HlslExport : AstVisitor
         *writer |> write("};\n\n")
         return str
 // function
+    def override canVisitFunction(arg:Function?):bool
+        if !depFun |> key_exists(intptr(arg))
+            return false
+        return true
     def override preVisitFunction(fun:FunctionPtr)
-        *writer |> write("{describe([decl=fun.result])} {fun.name} ( ")
+        *writer |> write("{self->describe_hlsl_type(fun.result)} {fun.name} ( ")
     def override preVisitFunctionBody(fun:FunctionPtr)
-        *writer |> write(" )\n")
+        *writer |> write(" )")
+        for ann in fun.annotations
+            peek(ann.annotation.name) <| $ ( aname )
+                if aname=="pixel_shader" // TODO: other ann
+                    let argo = find_arg("output",ann.arguments)
+                    if argo is tString
+                        *writer |> write(" : {argo as tString}")
+        *writer |> write("\n")
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
         *writer |> write("\n")
         return fun
@@ -155,7 +189,7 @@ class HlslExport : AstVisitor
             *writer |> write("var ")
         if arg.isAccessUnused
             *writer |> write(" /*unsued*/ ")
-        *writer |> write("{arg.name} : {describe([decl=arg._type])}")
+        *writer |> write("{arg.name} : {self->describe_hlsl_type(arg._type)}")
     def override visitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;last:bool)
         if !last
             *writer |> write("; ")
@@ -172,12 +206,12 @@ class HlslExport : AstVisitor
                         *writer |> write("[{describe(arg.annotation)}] ")
                     if arg._type.flags.constant
                         *writer |> write("var ")
-                    *writer |> write("{arg.name} : {describe([decl=arg._type])}")
+                    *writer |> write("{arg.name} : {self->describe_hlsl_type(arg._type)}")
                     if argIndex != blk.arguments.length-1
                         *writer |> write("; ")
                 *writer |> write(")")
                 if blk.returnType!=null
-                    *writer |> write(":{describe([decl=blk.returnType])}")
+                    *writer |> write(":{self->describe_hlsl_type(blk.returnType)}")
                 *writer |> write("\n")
         *writer |> write("{repeat("\t",tab)}\{\n")
         tab ++
@@ -201,7 +235,7 @@ class HlslExport : AstVisitor
         return expr
 // let
     def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool)
-        *writer |> write("{describe([decl=arg._type])} {arg.name}")
+        *writer |> write("{self->describe_hlsl_type(arg._type)} {arg.name}")
     def override visitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool)
         if !lastArg
             *writer |> write(";")
@@ -212,12 +246,17 @@ class HlslExport : AstVisitor
         *writer |> write(" = ")
 // global let
     def override canVisitGlobalVariable(arg:Variable?):bool
+        if !depVar |> key_exists(intptr(arg))
+            return false
         if !(find_arg("cbuffer",arg.annotation) is nothing)
             return false
         return true
     def override preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool)
-        *writer |> write("{describe([decl=arg._type])} {arg.name}")
+        *writer |> write("{self->describe_hlsl_type(arg._type)} {arg.name}")
     def override visitGlobalLetVariable(arg:VariablePtr;lastArg:bool)
+        let reg = find_arg("register", arg.annotation)
+        if reg is tString
+            *writer |> write(": register({reg as tString})")
         *writer |> write(";\n\n")
         return arg
     def override preVisitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr)
@@ -236,7 +275,7 @@ class HlslExport : AstVisitor
         return elem
 // new
     def override preVisitExprNew(expr:smart_ptr<ExprNew>)
-        *writer |> write("new {describe(expr.typeexpr)}")
+        *writer |> write("new {self->describe_hlsl_type(expr.typeexpr)}")
         if expr.initializer
             *writer |> write("(")
     def override visitExprNew(expr:smart_ptr<ExprNew>) : ExpressionPtr
@@ -668,11 +707,16 @@ class HlslExport : AstVisitor
             *writer |> write("bitfield({expr.value})")
 
 
-def generate_hlsl(fnMain:string; var errors:array<string> )
+def generate_hlsl(fnMain:FunctionPtr; var errors:array<string> )
     var st = build_string() <| $ (var writer)
         var astVisitor = new HlslExport(writer)
         var astVisitorAdapter <- make_visitor(*astVisitor)
-        visit(compiling_program(), astVisitorAdapter)
+        collect_dependencies(fnMain) <| $ ( vfun, vvar )
+            for f in vfun
+                astVisitor.depFun[intptr(f)] = true
+            for v in vvar
+                astVisitor.depVar[intptr(v)] = true
+            visit(compiling_program(), astVisitorAdapter)
         errors <- astVisitor.errors
         astVisitorAdapter := null
         unsafe
