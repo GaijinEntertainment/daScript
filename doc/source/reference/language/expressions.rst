@@ -258,7 +258,7 @@ daScript supports pipe operators. Pipe operator is similar to 'call' expression 
 ::
 
     def addX(a, b)
-        assert(b == 2 | b == 3)
+        assert(b == 2 || b == 3)
         return a + b
     def test
         let t = 12 |> addX(2) |> addX(3)
