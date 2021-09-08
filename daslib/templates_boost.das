@@ -125,7 +125,7 @@ def add_global_var ( mod:Module?; vname:string; var typ:TypeDeclPtr; vat:LineInf
         panic("can't add global variable {vname}")
 
 def add_global_var ( mod:Module?; vname:string; var typ:TypeDeclPtr; vat:LineInfo; priv:bool )
-    add_global_var(mod,vname,typ,vat,priv) <| $ ( var v )
+    add_global_var(mod,vname,typ,vat,priv) <| $ [unused_argument(v)]( var v )
         pass
 
 def add_global_let ( mod:Module?; vname:string; vat:LineInfo; var value:ExpressionPtr )

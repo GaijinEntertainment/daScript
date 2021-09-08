@@ -12,7 +12,7 @@ namespace das {
             if ( cmpBlk ) {
                 vec4f args[1];
                 args[0] = cast<LineInfo&>::from(info);
-                auto res = context->invoke(*cmpBlk, args, nullptr, nullptr);    // note: no line-info
+                auto res = blkContext->invoke(*cmpBlk, args, nullptr, blkLine);    // note: no line-info
                 return cast<bool>::to(res);
             } else {
                 return true;
@@ -53,14 +53,18 @@ namespace das {
         }
         Context * context = nullptr;
         const Block * cmpBlk = nullptr;
+        Context * blkContext = nullptr;
+        LineInfo * blkLine = nullptr;
         bool isInstrumenting = true;
         bool anyLine = false;
     };
 
-    void Context::instrumentContextNode ( const Block & blk, bool isInstrumenting ) {
+    void Context::instrumentContextNode ( const Block & blk, bool isInstrumenting, Context * context, LineInfo * line ) {
         SimInstVisitor instrument;
         instrument.context = this;
         instrument.cmpBlk = &blk;
+        instrument.blkContext = context;
+        instrument.blkLine = line;
         instrument.isInstrumenting = isInstrumenting;
         runVisitor(&instrument);
     }

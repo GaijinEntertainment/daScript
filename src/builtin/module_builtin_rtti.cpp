@@ -917,7 +917,7 @@ namespace das {
         return get_file_access(pak);
     }
 
-    bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context ) {
+    bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * ) {
         if ( !str ) context->throw_error("can't introduce empty file");
         uint32_t str_len = stringLengthSafe(*context, str);
         auto fileInfo = make_unique<FileInfo>(str, str_len);

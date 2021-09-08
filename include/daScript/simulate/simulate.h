@@ -570,7 +570,7 @@ namespace das
         void relocateCode();
         void collectStringHeap(LineInfo * at);
         void instrumentFunction ( int index, bool isInstrumenting );
-        void instrumentContextNode ( const Block & blk, bool isInstrumenting );
+        void instrumentContextNode ( const Block & blk, bool isInstrumenting, Context * context, LineInfo * line );
         void clearInstruments();
         void runVisitor ( SimVisitor * vis ) const;
 
