@@ -606,6 +606,12 @@ class private DAgent: DapiDebugAgent
                 if !ctx.ctx.category.debug_context
                     *ctx.ctx |> set_single_step(true)
 
+    def reqResume(var exclude: DAContext)
+        if use_instruments()
+            for ctx in contexts
+                if ctx.id != exclude.id && !ctx.ctx.category.debug_context
+                    *ctx.ctx |> set_single_step(false)
+
     def onBreakpointsChanged(): void
         if !use_instruments()
             return
@@ -677,6 +683,7 @@ class private DAgent: DapiDebugAgent
                 self->sendStopped(ctx, ctxData, file, at, "pause", -1ul)
                 while ctxData.pauseRequested
                     tick_debugger()
+                self->reqResume(ctxData)
 
             if ctxData.stepInRequested
                 ctxData.stepInRequested = false
