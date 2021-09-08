@@ -175,9 +175,10 @@ namespace das
         int32_t * pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
         if ( !first(r.from,r_to) ) goto loopend;
-        { SimNode * __restrict pbody = list[0];
+        {
         for (int32_t i = r.from; i != r_to; ++i) {
             *pi = i;
+            SimNode * pbody = list[0];   // note: instruments
             DAS_SINGLE_STEP(context,pbody->debugInfo,true);
             pbody->eval(context);
             DAS_PROCESS_LOOP1_FLAGS(continue);
@@ -195,9 +196,10 @@ namespace das
         int32_t * pi = (int32_t *)(context.stack.sp() + stackTop[0]);
         int32_t r_to = r.to;
         if ( !first(r.from,r_to) ) goto loopend;
-        { SimNode * __restrict pbody = list[0];
+        {
         for (int32_t i = r.from; i != r_to; ++i) {
             *pi = i;
+            SimNode * pbody = list[0];   // note: instruments
             DAS_SINGLE_STEP(context,pbody->debugInfo,true);
             pbody->eval(context);
         } }
