@@ -76,15 +76,26 @@ class HlslExport : AstVisitor
     tab : int = 0
     depFun : table<uint64;bool>
     depVar : table<uint64;bool>
+    trackLine : int = 0
+    trackFile : string
     def HlslExport ( var w : StringBuilderWriter )
         unsafe
             writer = addr(w)
     // TODO: fixme
-    def newLine()
-        *writer |> write("\n")
+    def newLine(count:int)
+        for t in range(count)
+            *writer |> write("\n")
+        trackLine += count
     def error ( txt:string; at:LineInfo )
         let fname = at.fileInfo!=null ? "{at.fileInfo.name} " : ""
         errors |> push("\tHLSL: {txt} at {fname}line {int(at.line)}")
+    def line(at:LineInfo)
+        if at.fileInfo!=null
+            peek(at.fileInfo.name) <| $ ( atname )
+                if trackLine!=int(at.line) || trackFile!=atname
+                    trackLine = int(at.line)
+                    trackFile := atname
+                    *writer |> write("#line {trackLine} \"{trackFile}\"\n")
 // HLSL TYPE
     def describe_hlsl_type ( t : TypeDeclPtr )
         let st = build_string() <| $ ( var tw )
@@ -110,17 +121,19 @@ class HlslExport : AstVisitor
         return typ
 // alias
     def override preVisitAlias(typ:TypeDeclPtr;name:das_string)
-        *writer |> write("typedef\n\t{name} = {self->describe_hlsl_type(typ)}\n\n")
+        *writer |> write("typedef\n\t{name} = {self->describe_hlsl_type(typ)}")
+        self->newLine(2)
 // enumeration
     def override preVisitEnumeration(enu:EnumerationPtr)
-        *writer |> write("enum {enu.name} : {das_to_string(enu.baseType)}\n")
+        *writer |> write("enum {enu.name} : {das_to_string(enu.baseType)}")
+        self->newLine(1)
     def override preVisitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool)
         *writer |> write("\t{name} =")
     def override visitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool)
-        *writer |> write("\n")
+        self->newLine(1)
         return value
     def override visitEnumeration(enu:EnumerationPtr)
-        *writer |> write("\n")
+        self->newLine(1)
         return enu
 // structure
     isCBuffer : bool
@@ -131,14 +144,22 @@ class HlslExport : AstVisitor
         for ann in str.annotations
             if "{ann.annotation.name}"=="cbuffer"
                 isCBuffer = true
+                self->line(str.at)
                 *writer |> write("cbuffer {str.name}")
                 var reg =  find_arg("register",ann.arguments)
                 if reg is tString
                     *writer |> write(" : register({reg as tString})")
-                *writer |> write("\n\{\n")
+                self->newLine(1)
+                *writer |> write("\{")
+                self->newLine(1)
         if !isCBuffer
-            *writer |> write("struct {str.name}\n\{\n")
+            self->line(str.at)
+            *writer |> write("struct {str.name}")
+            self->newLine(1)
+            *writer |> write("\{")
+            self->newLine(1)
     def override preVisitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool)
+        self->line(decl.at)
         *writer |> write("\t")
         //if decl.annotation.length != 0
         //    *writer |> write("[{describe(decl.annotation)}] ")
@@ -159,9 +180,11 @@ class HlslExport : AstVisitor
         if decl.init != null
             self->error("structure initialization is not supported", decl.init.at)
     def override visitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool)
-        *writer |> write(";\n")
+        *writer |> write(";")
+        self->newLine(1)
     def override visitStructure(str:StructurePtr) : StructurePtr
-        *writer |> write("};\n\n")
+        *writer |> write("};")
+        self->newLine(2)
         return str
 // function
     def override canVisitFunction(arg:Function?):bool
@@ -169,6 +192,7 @@ class HlslExport : AstVisitor
             return false
         return true
     def override preVisitFunction(fun:FunctionPtr)
+        self->line(fun.at)
         *writer |> write("{self->describe_hlsl_type(fun.result)} {fun.name} ( ")
     def override preVisitFunctionBody(fun:FunctionPtr)
         *writer |> write(" )")
@@ -178,9 +202,9 @@ class HlslExport : AstVisitor
                     let argo = find_arg("output",ann.arguments)
                     if argo is tString
                         *writer |> write(" : {argo as tString}")
-        *writer |> write("\n")
+        self->newLine(1)
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
-        *writer |> write("\n")
+        self->newLine(1)
         return fun
     def override preVisitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;last:bool)
         if arg.annotation.length != 0
@@ -212,29 +236,34 @@ class HlslExport : AstVisitor
                 *writer |> write(")")
                 if blk.returnType!=null
                     *writer |> write(":{self->describe_hlsl_type(blk.returnType)}")
-                *writer |> write("\n")
-        *writer |> write("{repeat("\t",tab)}\{\n")
+                self->newLine(1)
+        *writer |> write("{repeat("\t",tab)}\{")
+        self->newLine(1)
         tab ++
     def override visitExprBlock(blk:smart_ptr<ExprBlock>) : ExpressionPtr
         tab --
-        *writer |> write("{repeat("\t",tab)}\}\n")
+        *writer |> write("{repeat("\t",tab)}\}")
+        self->newLine(1)
         return blk
     def override preVisitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
+        self->line(expr.at)
         *writer |> write("{repeat("\t",tab)}")
     def override visitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
         *writer |> write(";")
-        self->newLine()
+        self->newLine(1)
         return expr
     def override visitExprBlockFinal(blk:smart_ptr<ExprBlock>)
-        *writer |> write("{repeat("\t",tab-1)}\} finally \{\n")
+        *writer |> write("{repeat("\t",tab-1)}\} finally \{")
+        self->newLine(1)
     def override preVisitExprBlockFinalExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
         *writer |> write("{repeat("\t",tab)}")
     def override visitExprBlockFinalExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr)
         *writer |> write(";")
-        self->newLine()
+        self->newLine(1)
         return expr
 // let
     def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool)
+        self->line(arg.at)
         *writer |> write("{self->describe_hlsl_type(arg._type)} {arg.name}")
     def override visitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool)
         if !lastArg
@@ -252,12 +281,14 @@ class HlslExport : AstVisitor
             return false
         return true
     def override preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool)
+        self->line(arg.at)
         *writer |> write("{self->describe_hlsl_type(arg._type)} {arg.name}")
     def override visitGlobalLetVariable(arg:VariablePtr;lastArg:bool)
         let reg = find_arg("register", arg.annotation)
         if reg is tString
             *writer |> write(": register({reg as tString})")
-        *writer |> write(";\n\n")
+        *writer |> write(";")
+        self->newLine(2)
         return arg
     def override preVisitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr)
         // if arg.flags.init_via_move
@@ -385,28 +416,31 @@ class HlslExport : AstVisitor
     def override preVisitExprWith(expr:smart_ptr<ExprWith>)
         *writer |> write("with ")
     def override preVisitExprWithBody(expr:smart_ptr<ExprWith>;right:ExpressionPtr)
-        *writer |> write("\n")
+        self->newLine(1)
 // while
     def override preVisitExprWhile(expr:smart_ptr<ExprWhile>)
         *writer |> write("while ")
     def override preVisitExprWhileBody(expr:smart_ptr<ExprWhile>;right:ExpressionPtr)
-        *writer |> write("\n")
+        self->newLine(1)
 // try-catch
     def override preVisitExprTryCatch(expr:smart_ptr<ExprTryCatch>)
-        *writer |> write("try\n")
+        *writer |> write("try")
+        self->newLine(1)
     def override preVisitExprTryCatchCatch(expr:smart_ptr<ExprTryCatch>;right:ExpressionPtr)
-        *writer |> write("{repeat("\t",tab)}recover\n")
+        *writer |> write("{repeat("\t",tab)}recover")
+        self->newLine(1)
 // if-then-else
     def override preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>)
         *writer |> write("if ")
     def override preVisitExprIfThenElseIfBlock(expr:smart_ptr<ExprIfThenElse>;ifBlock:ExpressionPtr)
-        *writer |> write("\n")
+        self->newLine(1)
     def override preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr)
         *writer |> write("{repeat("\t",tab)}")
         if elseBlock.__rtti=="ExprIfThenElse"
             *writer |> write("else ")
         else
-            *writer |> write("else\n")
+            *writer |> write("else")
+            self->newLine(1)
 // for
     def override preVisitExprFor(expr:smart_ptr<ExprFor>)
         *writer |> write("for ")
@@ -417,7 +451,7 @@ class HlslExport : AstVisitor
             *writer |> write(",")
         return source
     def override preVisitExprForBody(expr:smart_ptr<ExprFor>)
-        *writer |> write("\n")
+        self->newLine(1)
 // make variant
     def override preVisitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>)
         *writer |> write("[[")
