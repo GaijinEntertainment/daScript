@@ -775,7 +775,7 @@ namespace debugapi {
         return cast<void *>::from(ctx->getVariable(vidx));
     }
 
-    void instrument_context ( Context & ctx, bool isInstrumenting, const TBlock<bool,LineInfo> & blk, Context * context, LineInfo * line ) {
+    void instrument_context ( Context & ctx, bool isInstrumenting, const TBlock<bool,LineInfo> & blk, Context * context, LineInfoArg * line ) {
         ctx.instrumentContextNode(blk, isInstrumenting, context, line);
     }
 
