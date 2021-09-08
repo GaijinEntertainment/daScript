@@ -597,6 +597,15 @@ class private DAgent: DapiDebugAgent
         else
             print("{msg}\n")
 
+    def reqPause(var ctx: DAContext)
+        ctx |> reset_debug_flags()
+        ctx.pauseRequested = true
+
+        if use_instruments()
+            for ctx in contexts
+                if !ctx.ctx.category.debug_context
+                    *ctx.ctx |> set_single_step(true)
+
     def onBreakpointsChanged(): void
         if !use_instruments()
             return
@@ -1164,8 +1173,7 @@ class private DAServer: Server
         var ini <- PauseArguments(data)
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
-            ctx |> reset_debug_flags()
-            ctx.pauseRequested = true
+            agent->reqPause(ctx)
         self->sendSuccessResponse(seq, command, null)
 
     def reqStepIn(seq: double; command: string; data: JsonValue?)
