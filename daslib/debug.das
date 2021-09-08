@@ -705,6 +705,7 @@ class private DAgent: DapiDebugAgent
                 self->sendStopped(ctx, ctxData, file, at, "step", -1ul)
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debugger()
+                ctxData.continueRequested = false
 
             if use_instruments()
                 ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
