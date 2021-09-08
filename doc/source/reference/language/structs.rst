@@ -200,7 +200,7 @@ It is unsafe to 'cast' to cast base struct to it's derived child::
 
     var f3d: Foo3D = Foo3D()
     def foo(foo: Foo)
-      (cast<Foo3d> foo).z = 5  // error, won't compile
+      (cast<Foo3D> foo).z = 5  // error, won't compile
 
 if needed, the upcast can be used with unsafe keyword::
 
@@ -211,7 +211,7 @@ if needed, the upcast can be used with unsafe keyword::
 
     def setY(foo: Foo; y: int)  // Warning! Can make awful things to your app if its not really Foo2
       unsafe
-        (upcast<Foo3d> foo).y = y
+        (upcast<Foo2> foo).y = y
 
 As the example above is very dangerous, and in order to make it safer, you can modify it to following::
 
@@ -226,7 +226,7 @@ As the example above is very dangerous, and in order to make it safer, you can m
     [unsafe]
     def setY(foo: Foo; y: int)  // this won't do anything really bad, but will panic on wrong reference
         if foo.typeTag == hash("Foo2")
-            (cast<Foo3d> foo).y = y
+            (cast<Foo2> foo).y = y
         else
             assert(0, "Not Foo2 type references was passed")
 
