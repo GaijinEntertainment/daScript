@@ -60,9 +60,9 @@ Structure fields are also initialized as zero by default, regardless of 'initial
 
 Structure field types are inferred, where possible::
 
-	struct Foo
-		x = 1	// inferred as int
-		y = 2.0	// inferred as float
+    struct Foo
+        x = 1    // inferred as int
+        y = 2.0    // inferred as float
 
 Explicit structure initialization during creation will leave all uninitialized members zeroed::
 
@@ -79,9 +79,9 @@ Post construction initialization only needs to specify overwritten fields::
 
 the previous code example is a syntactic sugar for::
 
-	let fPostConstruction: Foo
-	fPostConstruction.x = 13
-	fPostConstruction.y = 2
+    let fPostConstruction: Foo
+    fPostConstruction.x = 13
+    fPostConstruction.y = 2
 
 --------------------------
 Structure Function Members
@@ -199,34 +199,36 @@ It is safe to use 'cast' keyword to cast derived structure instance to reference
 It is unsafe to 'cast' to cast base struct to it's derived child::
 
     var f3d: Foo3D = Foo3D()
-    def foo(foo: Foo)
-      (cast<Foo3D> foo).z = 5  // error, won't compile
+    def foo(var foo: Foo)
+        (cast<Foo3D> foo).z = 5  // error, won't compile
 
 if needed, the upcast can be used with unsafe keyword::
 
     struct Foo
-      x: int
-    struct Foo2
-      y: int
+        x: int
 
-    def setY(foo: Foo; y: int)  // Warning! Can make awful things to your app if its not really Foo2
-      unsafe
-        (upcast<Foo2> foo).y = y
+    struct Foo2:Foo
+        y: int
+
+    def setY(var foo: Foo; y: int)  // Warning! Can make awful things to your app if its not really Foo2
+        unsafe
+            (upcast<Foo2> foo).y = y
 
 As the example above is very dangerous, and in order to make it safer, you can modify it to following::
 
     struct Foo
-      x: int
-      typeTag: uint = hash("Foo")
+        x: int
+        typeTag: uint = hash("Foo")
 
-    struct Foo2
-      y: int
-      typeTag: uint = hash("Foo2")
+    struct Foo2:Foo
+        y: int
+        override typeTag: uint = hash("Foo2")
 
-    [unsafe]
-    def setY(foo: Foo; y: int)  // this won't do anything really bad, but will panic on wrong reference
-        if foo.typeTag == hash("Foo2")
-            (cast<Foo2> foo).y = y
-        else
-            assert(0, "Not Foo2 type references was passed")
+    def setY(var foo: Foo; y: int)  // this won't do anything really bad, but will panic on wrong reference
+        unsafe
+            if foo.typeTag == hash("Foo2")
+                (upcast<Foo2> foo).y = y
+                print("Foo2 type references was passed\n")
+            else
+                assert(false, "Not Foo2 type references was passed\n")
 
