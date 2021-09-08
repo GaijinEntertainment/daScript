@@ -572,11 +572,6 @@ class private DAgent: DapiDebugAgent
         for path in paths
             self->addPath(path)
 
-        let args <- get_command_line_arguments()
-        for i in range(length(args) - 1)
-            if args[i] == "--das-debug-path"
-                self->addPath(args[i+1])
-
         let dasRoot = get_das_root()
         if !empty(dasRoot) && dasRoot != "."
             self->addPath(dasRoot |> join_path("daslib"))
@@ -605,9 +600,6 @@ class private DAgent: DapiDebugAgent
     def onBreakpointsChanged(): void
         if !use_instruments()
             return
-        for ctx in contexts
-            *ctx.ctx |> set_single_step(false)
-            tick_debugger()
 
         for ctx in contexts
             *ctx.ctx |> clear_instruments()
@@ -1255,7 +1247,7 @@ def private start_agent(force:bool = false): bool
         print(use_instruments() ? "dap: install debug agent (with instruments)\n" : "dap: install debug agent\n")
     else
         print("dap: debug agent already exists\n")
-    set_single_step(this_context(), wait_debugger())
+    set_single_step(this_context(), !use_instruments() || wait_debugger())
     return true
 
 
@@ -1263,7 +1255,7 @@ def private start_agent(force:bool = false): bool
 def private auto_start_debug()
     if !is_in_debug_agent_creation()
         this_context().category |= bitfield(1u << 31u) // TODO:
-        set_single_step(this_context(), wait_debugger())
+        set_single_step(this_context(), !use_instruments() || wait_debugger())
         if !has_debug_agent_context("debug")
             if start_agent()
                 new_thread <| @
