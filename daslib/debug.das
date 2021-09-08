@@ -572,11 +572,6 @@ class private DAgent: DapiDebugAgent
         for path in paths
             self->addPath(path)
 
-        let args <- get_command_line_arguments()
-        for i in range(length(args) - 1)
-            if args[i] == "--das-debug-path"
-                self->addPath(args[i+1])
-
         let dasRoot = get_das_root()
         if !empty(dasRoot) && dasRoot != "."
             self->addPath(dasRoot |> join_path("daslib"))
