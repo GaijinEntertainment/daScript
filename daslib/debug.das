@@ -626,25 +626,12 @@ class private DAgent: DapiDebugAgent
                 return false
 
     def override onInstrument(var ctx: Context; at: LineInfo): void
-        if at.fileInfo == null
-            return
-        if server == null
-            return
-        if !waitConnection && (!server.configurationDone || !server.threadsDone)
-            return
-        let path = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
-        self->log("{ctx} instrument breakpoint at {path}:{int(at.line)}\n")
-
-        self->addContext(ctx)
-        self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
-            ctx |> set_single_step(true)
-            self->sendStopped(ctx, ctxData, path, at, "breakpoint", -1ul)
-            while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
-                tick_debugger()
-            ctxData.continueRequested = false
-            ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
+        self->onPause(ctx, at, "breakpoint")
 
     def override onBreakpoint(var ctx: Context; at:LineInfo): void
+        self->onPause(ctx, at, "breakpoint")
+
+    def onPause(var ctx: Context; at:LineInfo; reason: string): void
         if at.fileInfo == null
             return
         if server == null
@@ -652,12 +639,12 @@ class private DAgent: DapiDebugAgent
         if !waitConnection && (!server.configurationDone || !server.threadsDone)
             return
         let path = "{at.fileInfo.name}" |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
-        self->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
+        self->log("{ctx} `{reason}` breakpoint at {path}:{int(at.line)}\n")
 
         self->addContext(ctx)
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             ctx |> set_single_step(true)
-            self->sendStopped(ctx, ctxData, path, at, "pause", -1ul)
+            self->sendStopped(ctx, ctxData, path, at, reason, -1ul)
             while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debugger()
             ctxData.continueRequested = false
