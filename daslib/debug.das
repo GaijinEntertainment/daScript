@@ -1255,7 +1255,7 @@ def private start_agent(force:bool = false): bool
         print(use_instruments() ? "dap: install debug agent (with instruments)\n" : "dap: install debug agent\n")
     else
         print("dap: debug agent already exists\n")
-    set_single_step(this_context(), wait_debugger())
+    set_single_step(this_context(), !use_instruments() || wait_debugger())
     return true
 
 
@@ -1263,7 +1263,7 @@ def private start_agent(force:bool = false): bool
 def private auto_start_debug()
     if !is_in_debug_agent_creation()
         this_context().category |= bitfield(1u << 31u) // TODO:
-        set_single_step(this_context(), wait_debugger())
+        set_single_step(this_context(), !use_instruments() || wait_debugger())
         if !has_debug_agent_context("debug")
             if start_agent()
                 new_thread <| @
