@@ -539,8 +539,7 @@ class private DAgent: DapiDebugAgent
     strLimit: uint64 = uint64(8 * 1024 * 1024)
 
     def DAgent()
-        let args <- get_command_line_arguments()
-        waitConnection = args |> find_index("--das-wait-debugger") >= 0
+        waitConnection = wait_debugger()
 
         walker = new DAStackWalker()
         unsafe
@@ -603,7 +602,49 @@ class private DAgent: DapiDebugAgent
         else
             print("{msg}\n")
 
-    def override onBreakpoint(var ctx:Context; at:LineInfo): void
+    def onBreakpointsChanged(): void
+        if !use_instruments()
+            return
+        for ctx in contexts
+            *ctx.ctx |> set_single_step(false)
+            tick_debugger()
+
+        for ctx in contexts
+            *ctx.ctx |> clear_instruments()
+            *ctx.ctx |> instrument_node(true) <| $(ati)
+                if ati.fileInfo == null
+                    return false
+                let file = string(ati.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
+                for fileBr, brs in keys(breakpoints), values(breakpoints)
+                    if compare_path(fileBr, file)
+                        for br in brs
+                            if br.line == ati.line
+                                // print("set br at {file}: {br.line}\n")
+                                return true
+                        break
+                return false
+
+    def override onInstrument(var ctx: Context; at: LineInfo): void
+        if at.fileInfo == null
+            return
+        if server == null
+            return
+        if !waitConnection && (!server.configurationDone || !server.threadsDone)
+            return
+        let path = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
+        self->log("{ctx} instrument breakpoint at {path}:{int(at.line)}\n")
+
+        self->addContext(ctx)
+        self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
+            ctx |> set_single_step(true)
+            self->sendStopped(ctx, ctxData, path, at, "breakpoint", -1ul)
+            while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
+                tick_debugger()
+                sleep(10u)
+            ctxData.continueRequested = false
+            ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
+
+    def override onBreakpoint(var ctx: Context; at:LineInfo): void
         if at.fileInfo == null
             return
         if server == null
@@ -612,25 +653,26 @@ class private DAgent: DapiDebugAgent
             return
         let path = "{at.fileInfo.name}" |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
         self->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
-        set_single_step(ctx,true)
 
         self->addContext(ctx)
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
+            ctx |> set_single_step(true)
             self->sendStopped(ctx, ctxData, path, at, "pause", -1ul)
-            ctxData.continueRequested = false
             while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debugger()
                 sleep(10u)
             ctxData.continueRequested = false
+            ctx |> set_single_step(!use_instruments() || ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
 
-    def override onSingleStep(var ctx:Context; at:LineInfo): void
+    def override onSingleStep(var ctx: Context; at: LineInfo): void
         if at.fileInfo == null
             return
         if server == null
             return
 
         // unsafe
-        //     self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache, pathAliases)}:{int(at.line)}\n")
+            // self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache, pathAliases)}:{int(at.line)}\n")
+            // print("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache, pathAliases)}:{int(at.line)}\n")
 
         if (uint(ctx.category) & (1u << 31u)) != 0u
             self->addContext(ctx)
@@ -641,7 +683,8 @@ class private DAgent: DapiDebugAgent
                     tick_debugger()
                     sleep(10u)
             else
-                self->log("[Error] non debug context in single step {ctx.name}")
+                self->log("[E] non debug context in single step {ctx.name}")
+            ctx |> set_single_step(!use_instruments())
 
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             let file = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
@@ -654,14 +697,10 @@ class private DAgent: DapiDebugAgent
             if ctxData.stepInRequested
                 ctxData.stepInRequested = false
                 self->sendStopped(ctx, ctxData, file, at, "step", -1ul)
-                ctxData.continueRequested = false
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debugger()
                     sleep(10u)
                 ctxData.continueRequested = false
-
-            if ctxData.stepInRequested
-                return
 
             if ctxData.stepRequestedStack > 0
                 if stack_depth(*ctxData.ctx) > ctxData.stepRequestedStack
@@ -672,6 +711,9 @@ class private DAgent: DapiDebugAgent
                     tick_debugger()
                     sleep(10u)
 
+            if use_instruments()
+                ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
+                return
             // self->log("search break `{file}`:{at.line} - {inBreak}\n")
             var i = 0
             while i < length(breakpoints)
@@ -1011,6 +1053,7 @@ class private DAServer: Server
                 ]])
                 agent.breakpointId += 1ul
             agent.breakpoints[path] <- breaks
+        agent->onBreakpointsChanged()
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqThreads(seq: double; command: string; data: JsonValue?)
@@ -1209,10 +1252,10 @@ def private start_debug_agent(ctx: Context)
 def private start_agent(force:bool = false): bool
     if force || !has_debug_agent_context("debug")
         fork_debug_agent_context(@@start_debug_agent)
-        print("dap: install debug agent\n")
+        print(use_instruments() ? "dap: install debug agent (with instruments)\n" : "dap: install debug agent\n")
     else
         print("dap: debug agent already exists\n")
-    set_single_step(this_context(), true)
+    set_single_step(this_context(), wait_debugger())
     return true
 
 
@@ -1220,7 +1263,7 @@ def private start_agent(force:bool = false): bool
 def private auto_start_debug()
     if !is_in_debug_agent_creation()
         this_context().category |= bitfield(1u << 31u) // TODO:
-        set_single_step(this_context(), true)
+        set_single_step(this_context(), wait_debugger())
         if !has_debug_agent_context("debug")
             if start_agent()
                 new_thread <| @
@@ -1230,3 +1273,12 @@ def private auto_start_debug()
                     while !is_job_que_shutting_down()
                         tick_debugger()
                         sleep(10u)
+
+
+def private use_instruments()
+    let args <- get_command_line_arguments()
+    return args |> find_index("--das-debug-instruments") >= 0
+
+def private wait_debugger(): bool
+    let args <- get_command_line_arguments()
+    return args |> find_index("--das-wait-debugger") >= 0
