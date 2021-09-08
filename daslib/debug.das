@@ -605,9 +605,6 @@ class private DAgent: DapiDebugAgent
     def onBreakpointsChanged(): void
         if !use_instruments()
             return
-        for ctx in contexts
-            *ctx.ctx |> set_single_step(false)
-            tick_debugger()
 
         for ctx in contexts
             *ctx.ctx |> clear_instruments()
