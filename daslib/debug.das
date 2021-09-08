@@ -641,7 +641,6 @@ class private DAgent: DapiDebugAgent
             self->sendStopped(ctx, ctxData, path, at, "breakpoint", -1ul)
             while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debugger()
-                sleep(10u)
             ctxData.continueRequested = false
             ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
 
@@ -661,7 +660,6 @@ class private DAgent: DapiDebugAgent
             self->sendStopped(ctx, ctxData, path, at, "pause", -1ul)
             while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debugger()
-                sleep(10u)
             ctxData.continueRequested = false
             ctx |> set_single_step(!use_instruments() || ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
 
@@ -682,7 +680,6 @@ class private DAgent: DapiDebugAgent
             if (uint(ctx.category) & (1u << 31u)) != 0u
                 while !server.configurationDone || !server.threadsDone
                     tick_debugger()
-                    sleep(10u)
             else
                 self->log("[E] non debug context in single step {ctx.name}")
             ctx |> set_single_step(!use_instruments())
@@ -693,14 +690,12 @@ class private DAgent: DapiDebugAgent
                 self->sendStopped(ctx, ctxData, file, at, "pause", -1ul)
                 while ctxData.pauseRequested
                     tick_debugger()
-                    sleep(10u)
 
             if ctxData.stepInRequested
                 ctxData.stepInRequested = false
                 self->sendStopped(ctx, ctxData, file, at, "step", -1ul)
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debugger()
-                    sleep(10u)
                 ctxData.continueRequested = false
 
             if ctxData.stepRequestedStack > 0
@@ -710,7 +705,6 @@ class private DAgent: DapiDebugAgent
                 self->sendStopped(ctx, ctxData, file, at, "step", -1ul)
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debugger()
-                    sleep(10u)
 
             if use_instruments()
                 ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
@@ -738,7 +732,6 @@ class private DAgent: DapiDebugAgent
                     ctxData.continueRequested = false
                     while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                         tick_debugger()
-                        sleep(10u)
                     ctxData.continueRequested = false
                     break
 
@@ -1242,6 +1235,7 @@ class private DAServer: Server
 
 def private tick_debugger()
     tick_debug_agent("debug")
+    sleep(10u)
 
 [export,unused_argument(ctx)]
 def private start_debug_agent(ctx: Context)
@@ -1272,7 +1266,6 @@ def private auto_start_debug()
                     this_context().name := "tick thread"
                     while !is_job_que_shutting_down()
                         tick_debugger()
-                        sleep(10u)
 
 
 def private use_instruments()
