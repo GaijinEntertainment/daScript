@@ -597,6 +597,21 @@ class private DAgent: DapiDebugAgent
         else
             print("{msg}\n")
 
+    def reqPause(var ctx: DAContext)
+        ctx |> reset_debug_flags()
+        ctx.pauseRequested = true
+
+        if use_instruments()
+            for ctx in contexts
+                if !ctx.ctx.category.debug_context
+                    *ctx.ctx |> set_single_step(true)
+
+    def reqResume(var exclude: DAContext)
+        if use_instruments()
+            for ctx in contexts
+                if ctx.id != exclude.id && !ctx.ctx.category.debug_context
+                    *ctx.ctx |> set_single_step(false)
+
     def onBreakpointsChanged(): void
         if !use_instruments()
             return
@@ -617,26 +632,12 @@ class private DAgent: DapiDebugAgent
                 return false
 
     def override onInstrument(var ctx: Context; at: LineInfo): void
-        if at.fileInfo == null
-            return
-        if server == null
-            return
-        if !waitConnection && (!server.configurationDone || !server.threadsDone)
-            return
-        let path = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
-        self->log("{ctx} instrument breakpoint at {path}:{int(at.line)}\n")
-
-        self->addContext(ctx)
-        self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
-            ctx |> set_single_step(true)
-            self->sendStopped(ctx, ctxData, path, at, "breakpoint", -1ul)
-            while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
-                tick_debugger()
-                sleep(10u)
-            ctxData.continueRequested = false
-            ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
+        self->onPause(ctx, at, "breakpoint")
 
     def override onBreakpoint(var ctx: Context; at:LineInfo): void
+        self->onPause(ctx, at, "breakpoint")
+
+    def onPause(var ctx: Context; at:LineInfo; reason: string): void
         if at.fileInfo == null
             return
         if server == null
@@ -644,15 +645,14 @@ class private DAgent: DapiDebugAgent
         if !waitConnection && (!server.configurationDone || !server.threadsDone)
             return
         let path = "{at.fileInfo.name}" |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
-        self->log("{ctx} breakpoint at {path}:{int(at.line)}\n")
+        self->log("{ctx} `{reason}` breakpoint at {path}:{int(at.line)}\n")
 
         self->addContext(ctx)
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             ctx |> set_single_step(true)
-            self->sendStopped(ctx, ctxData, path, at, "pause", -1ul)
+            self->sendStopped(ctx, ctxData, path, at, reason, -1ul)
             while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debugger()
-                sleep(10u)
             ctxData.continueRequested = false
             ctx |> set_single_step(!use_instruments() || ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
 
@@ -673,7 +673,6 @@ class private DAgent: DapiDebugAgent
             if (uint(ctx.category) & (1u << 31u)) != 0u
                 while !server.configurationDone || !server.threadsDone
                     tick_debugger()
-                    sleep(10u)
             else
                 self->log("[E] non debug context in single step {ctx.name}")
             ctx |> set_single_step(!use_instruments())
@@ -684,14 +683,13 @@ class private DAgent: DapiDebugAgent
                 self->sendStopped(ctx, ctxData, file, at, "pause", -1ul)
                 while ctxData.pauseRequested
                     tick_debugger()
-                    sleep(10u)
+                self->reqResume(ctxData)
 
             if ctxData.stepInRequested
                 ctxData.stepInRequested = false
                 self->sendStopped(ctx, ctxData, file, at, "step", -1ul)
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debugger()
-                    sleep(10u)
                 ctxData.continueRequested = false
 
             if ctxData.stepRequestedStack > 0
@@ -701,7 +699,7 @@ class private DAgent: DapiDebugAgent
                 self->sendStopped(ctx, ctxData, file, at, "step", -1ul)
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debugger()
-                    sleep(10u)
+                ctxData.continueRequested = false
 
             if use_instruments()
                 ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
@@ -729,7 +727,6 @@ class private DAgent: DapiDebugAgent
                     ctxData.continueRequested = false
                     while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                         tick_debugger()
-                        sleep(10u)
                     ctxData.continueRequested = false
                     break
 
@@ -1164,8 +1161,7 @@ class private DAServer: Server
         var ini <- PauseArguments(data)
         defer_delete(ini)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
-            ctx |> reset_debug_flags()
-            ctx.pauseRequested = true
+            agent->reqPause(ctx)
         self->sendSuccessResponse(seq, command, null)
 
     def reqStepIn(seq: double; command: string; data: JsonValue?)
@@ -1234,6 +1230,7 @@ class private DAServer: Server
 
 def private tick_debugger()
     tick_debug_agent("debug")
+    sleep(10u)
 
 [export,unused_argument(ctx)]
 def private start_debug_agent(ctx: Context)
@@ -1264,7 +1261,6 @@ def private auto_start_debug()
                     this_context().name := "tick thread"
                     while !is_job_que_shutting_down()
                         tick_debugger()
-                        sleep(10u)
 
 
 def private use_instruments()
