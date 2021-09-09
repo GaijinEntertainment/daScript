@@ -614,9 +614,27 @@ class private DAgent: DapiDebugAgent
                 if ctx.id != exclude.id && !ctx.ctx.category.debug_context
                     *ctx.ctx |> set_single_step(false)
 
-    def onBreakpointsChanged(): void
+    def onBreakpointsChanged(ini: SetBreakpointsArguments): SetBreakpointsResponse
+        let path = ini.source.path
+        var res: SetBreakpointsResponse
+        if key_exists(breakpoints, path)
+            delete breakpoints[path]
+        breakpoints |> erase(path)
+        if length(ini.breakpoints) >= 0
+            var breaks <- [[array<DABreakpoint>]]
+            for b in ini.breakpoints
+                breaks |> emplace([[DABreakpoint line=uint(b.line), id=breakpointId ]])
+                res.breakpoints |> emplace([[Breakpoint
+                    verified=!withInstruments,
+                    id=double(breakpointId),
+                    source=ini.source,
+                    line=b.line
+                ]])
+                breakpointId += 1ul
+            breakpoints[path] <- breaks
+
         if !withInstruments
-            return
+            return <- res
 
         for ctx in contexts
             *ctx.ctx |> clear_instruments()
@@ -629,9 +647,13 @@ class private DAgent: DapiDebugAgent
                         for br in brs
                             if br.line == ati.line
                                 // print("set br at {file}: {br.line}\n")
+                                if file == fileBr
+                                    for resBr in res.breakpoints
+                                        resBr.verified ||= uint(resBr.line) == br.line
                                 return true
                         break
                 return false
+        return <- res
 
     def override onInstrument(var ctx: Context; at: LineInfo): void
         self->onPause(ctx, at, "breakpoint")
@@ -1025,26 +1047,8 @@ class private DAServer: Server
     def reqSetBreakpoints(seq: double; command: string; data: JsonValue?)
         var ini <- SetBreakpointsArguments(data)
         defer_delete(ini)
-        var res: SetBreakpointsResponse
+        var res <- agent->onBreakpointsChanged(ini)
         defer_delete(res)
-        let path = ini.source.path
-        if key_exists(agent.breakpoints, path)
-            delete agent.breakpoints[path]
-        agent.breakpoints |> erase(path)
-        if length(ini.breakpoints) >= 0
-            var breaks <- [[array<DABreakpoint>]]
-            for b in ini.breakpoints
-                breaks |> emplace([[DABreakpoint line=uint(b.line), id=agent.breakpointId ]])
-                res.breakpoints |> emplace([[Breakpoint
-                    verified=true,
-                    id=double(agent.breakpointId),
-                    source=ini.source,
-                    line=b.line,
-                    message="breakpoint #{int(agent.breakpointId)} {path}:{int(b.line)}"
-                ]])
-                agent.breakpointId += 1ul
-            agent.breakpoints[path] <- breaks
-        agent->onBreakpointsChanged()
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqThreads(seq: double; command: string; data: JsonValue?)
