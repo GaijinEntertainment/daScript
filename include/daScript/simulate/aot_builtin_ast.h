@@ -449,6 +449,7 @@ namespace das {
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
     void forEachGenericFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
     bool addModuleFunction ( Module * module, FunctionPtr & func, Context * context );
+    bool addModuleGeneric ( Module * module, FunctionPtr & func, Context * context );
     bool addModuleVariable ( Module * module, VariablePtr & var, Context * );
     bool addModuleStructure ( Module * module, StructurePtr & stru, Context * );
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );

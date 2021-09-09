@@ -2351,6 +2351,11 @@ namespace das {
         return module->addFunction(func, true);
     }
 
+    bool addModuleGeneric ( Module * module, FunctionPtr & _func, Context * ) {
+        FunctionPtr func = move(_func);
+        return module->addGeneric(func, true);
+    }
+
     bool addModuleVariable ( Module * module, VariablePtr & _var, Context * ) {
         VariablePtr var = move(_var);
         return module->addVariable(move(var), true);
@@ -2843,6 +2848,8 @@ namespace das {
                 SideEffects::modifyExternal, "addModuleFunctionAnnotation");
             addExtern<DAS_BIND_FUN(addModuleFunction)>(*this, lib, "add_function",
                 SideEffects::modifyExternal, "addModuleFunction");
+            addExtern<DAS_BIND_FUN(addModuleGeneric)>(*this, lib, "add_generic",
+                SideEffects::modifyExternal, "addModuleGeneric");
             addExtern<DAS_BIND_FUN(addFunctionFunctionAnnotation)>(*this, lib,  "add_function_annotation",
                 SideEffects::modifyExternal, "addFunctionFunctionAnnotation");
             addExtern<DAS_BIND_FUN(addAndApplyFunctionAnnotation)>(*this, lib,  "add_function_annotation",

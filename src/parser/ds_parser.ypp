@@ -325,6 +325,7 @@
 %type <s>               function_name
 %type <s>               optional_structure_parent
 %type <s>               require_module_name
+%type <s>               annotation_argument_name
 %type <aa>              annotation_argument
 %type <aa>              annotation_argument_value
 %type <aaList>          annotation_argument_list
@@ -809,15 +810,20 @@ annotation_argument_value_list
     }
     ;
 
+annotation_argument_name
+    :   NAME[name]  { $$ = $name; }
+    |   DAS_TYPE    { $$ = new string("type"); }
+    ;
+
 annotation_argument
-    :   NAME[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value,tokAt(@name)); delete $value; delete $name; }
-    |   NAME[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value,tokAt(@name)); delete $value; delete $name; }
-    |   NAME[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value,tokAt(@name)); delete $name; }
-    |   NAME[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value),tokAt(@name)); delete $name; }
-    |   NAME[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true,tokAt(@name)); delete $name; }
-    |   NAME[name] '=' DAS_FALSE                { $$ = new AnnotationArgument(*$name,false,tokAt(@name)); delete $name; }
-    |   NAME[name]                              { $$ = new AnnotationArgument(*$name,true,tokAt(@name)); delete $name; }
-    |   NAME[name] '=' '(' annotation_argument_value_list[values] ')' {
+    :   annotation_argument_name[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value,tokAt(@name)); delete $value; delete $name; }
+    |   annotation_argument_name[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value,tokAt(@name)); delete $value; delete $name; }
+    |   annotation_argument_name[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value,tokAt(@name)); delete $name; }
+    |   annotation_argument_name[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value),tokAt(@name)); delete $name; }
+    |   annotation_argument_name[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true,tokAt(@name)); delete $name; }
+    |   annotation_argument_name[name] '=' DAS_FALSE                { $$ = new AnnotationArgument(*$name,false,tokAt(@name)); delete $name; }
+    |   annotation_argument_name[name]                              { $$ = new AnnotationArgument(*$name,true,tokAt(@name)); delete $name; }
+    |   annotation_argument_name[name] '=' '(' annotation_argument_value_list[values] ')' {
         { $$ = new AnnotationArgument(*$name,$values,tokAt(@name)); delete $name; }
     }
     ;
