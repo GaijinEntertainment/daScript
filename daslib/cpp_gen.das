@@ -33,6 +33,17 @@ var blocked_functions : array<string> <-  [{string []
     "__security_check_cookie"
 }];
 
+var blocked_functions_table : table<string;bool>
+
+var blocked_defines : array<string> <- [{string []
+    "true";
+    "false"
+}]
+
+var blocked_defines_table : table<string;bool>
+
+var is_function_blocked : lambda<(name:string):bool>
+
 var cmres_functions : array<string>
 
 var allow_extern_c = false
@@ -196,6 +207,9 @@ def onNamespace(var root)
     name_stack |> pop()
 
 def onEnum(var root)
+    if !root |> key_exists("name")
+        print("enum 'name' missing in {root}\n")
+        return
     let name = root["name"] as _string
     let fullName = getCppName(name)
     if root |> key_exists("scopedEnumTag")
@@ -587,8 +601,10 @@ def isBlockedFun(fn)
     for fa in fn.args
         if fa.atype |> isBlockedType
             return true
-    for bf in blocked_functions
-        if bf == fn.cppName
+    if blocked_functions_table |> key_exists(fn.cppName)
+        return true
+    if is_function_blocked!=null
+        if invoke(is_function_blocked, fn.cppName)
             return true
     return false
 
@@ -596,6 +612,14 @@ def qType2FnType(st)
     let ob = find(st,"(")
     assert(ob!=-1)
     return slice(st,0,ob) + "(*)" + slice(st,ob)
+
+def getFunRetType(fn)
+    let ob = find(fn.ftype,"(")
+    assert(ob!=-1)
+    var cppResType = slice(fn.ftype,0,ob)
+    while cppResType |> ends_with(" ")
+        cppResType = slice(cppResType, 0, -1)
+    return cppResType
 
 def isRefFun(fn)
     let ob = find(fn.ftype,"(")
@@ -696,10 +720,14 @@ def getDefinePrefix(xname:string)
             return pn
     return "GLOBAL_NAMESPACE"
 
+var gen_fn_callback : lambda<(fn:ClangFunc):void>
+
 def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
     var bind_enchantation = ""
     var cpp_enchantation = ""
     var using_mname = ""
+    if gen_fn_callback != null
+        invoke(gen_fn_callback, fn)
     if fn.isMethod
         if castbind
             print("warning: skipping methods {fn.cppName}, multiple definitions will requre clang ast bindging\n")
@@ -784,6 +812,9 @@ def genBindings(hf,df,mf_enum,df_enum,mf_ann,df_ann,df_method:FILE const?)
     closeSplitFile()
 
 def bindHeaders ( fname, outprefix:string )
+    delete blocked_functions_table
+    for fn in blocked_functions
+        blocked_functions_table[fn] = true
     for enk,env in keys(ex_enums),values(ex_enums)
         rev_enums[env.name] = enk
     fopen(fname, "rb") <| $ ( f )
@@ -820,6 +851,9 @@ def genDefineConstants(fname,prefix:string)
 
 
 def genDefineConstants(fnames:array<string>; prefix:string)
+    delete blocked_defines_table
+    for bd in blocked_defines
+        blocked_defines_table[bd] = true
     var reg_def_hex <- %regex~#define\s+(\w+)\s+(0x[0-9A-Za-z]+)%%
     var reg_def_dec <- %regex~#define\s+(\w+)\s+(\d+)%%
     fopen("{prefix}.const_inc","wb") <| $(hf)
@@ -835,11 +869,13 @@ def genDefineConstants(fnames:array<string>; prefix:string)
                     ofs[r.x] = true
                     let DEF = regex_group(reg_def_hex,1,data)
                     let VAL = regex_group(reg_def_hex,2,data)
-                    fprint(hf,"addConstant(*this,\"{DEF}\",uint32_t({VAL}));\n")
+                    if !blocked_defines_table |> key_exists(DEF)
+                        fprint(hf,"addConstant(*this,\"{DEF}\",uint32_t({VAL}));\n")
                     return true
                 regex_foreach(reg_def_dec,data) <| $ ( r )
                     if ! ofs |> key_exists(r.x)
                         let DEF = regex_group(reg_def_dec,1,data)
                         let VAL = regex_group(reg_def_dec,2,data)
-                        fprint(hf,"addConstant(*this,\"{DEF}\",int32_t({VAL}));\n")
+                        if !blocked_defines_table |> key_exists(DEF)
+                            fprint(hf,"addConstant(*this,\"{DEF}\",int32_t({VAL}));\n")
                     return true
