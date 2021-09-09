@@ -530,6 +530,7 @@ class private DAgent: DapiDebugAgent
     contextId: uint64 = 1ul
 
     waitConnection: bool = true
+    withInstruments: bool = false
     workingPaths: array<string>
     pathAliases: table<string; string>
     pathsCache: table<string; string>
@@ -540,6 +541,7 @@ class private DAgent: DapiDebugAgent
 
     def DAgent()
         waitConnection = wait_debugger()
+        withInstruments = use_instruments()
 
         walker = new DAStackWalker()
         unsafe
@@ -601,19 +603,19 @@ class private DAgent: DapiDebugAgent
         ctx |> reset_debug_flags()
         ctx.pauseRequested = true
 
-        if use_instruments()
+        if withInstruments
             for ctx in contexts
                 if !ctx.ctx.category.debug_context
                     *ctx.ctx |> set_single_step(true)
 
     def reqResume(var exclude: DAContext)
-        if use_instruments()
+        if withInstruments
             for ctx in contexts
                 if ctx.id != exclude.id && !ctx.ctx.category.debug_context
                     *ctx.ctx |> set_single_step(false)
 
     def onBreakpointsChanged(): void
-        if !use_instruments()
+        if !withInstruments
             return
 
         for ctx in contexts
@@ -654,7 +656,7 @@ class private DAgent: DapiDebugAgent
             while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debugger()
             ctxData.continueRequested = false
-            ctx |> set_single_step(!use_instruments() || ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
+            ctx |> set_single_step(!withInstruments || ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
 
     def override onSingleStep(var ctx: Context; at: LineInfo): void
         if at.fileInfo == null
@@ -675,7 +677,7 @@ class private DAgent: DapiDebugAgent
                     tick_debugger()
             else
                 self->log("[E] non debug context in single step {ctx.name}")
-            ctx |> set_single_step(!use_instruments())
+            ctx |> set_single_step(!withInstruments)
 
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             let file = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
@@ -701,7 +703,7 @@ class private DAgent: DapiDebugAgent
                     tick_debugger()
                 ctxData.continueRequested = false
 
-            if use_instruments()
+            if withInstruments
                 ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
                 return
             // self->log("search break `{file}`:{at.line} - {inBreak}\n")
