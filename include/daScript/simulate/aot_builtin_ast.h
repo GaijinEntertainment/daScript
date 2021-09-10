@@ -30,6 +30,7 @@ namespace das {
         DECL_VISIT(Alias);
         DECL_VISIT(Enumeration);
         DECL_VISIT(EnumerationValue);
+        Func fnCanVisitStructure;
         DECL_VISIT(Structure);
         DECL_VISIT(StructureField);
         Func fnCanVisitFunction;
@@ -188,6 +189,7 @@ namespace das {
         virtual void preVisitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last ) override;
         virtual ExpressionPtr visitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last ) override;
     // structure
+        virtual bool canVisitStructure ( Structure * fun ) override;
         virtual void preVisit ( Structure * expr ) override;
         virtual void preVisitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last ) override;
         virtual void visitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last ) override;

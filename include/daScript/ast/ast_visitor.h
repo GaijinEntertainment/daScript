@@ -23,6 +23,7 @@ namespace das {
         virtual ~Visitor() {}
     public:
         // what do we visit
+        virtual bool canVisitStructure ( Structure * st ) { return true; }
         virtual bool canVisitGlobalVariable ( Variable * fun ) { return true; }
         virtual bool canVisitFunction ( Function * fun ) { return true; }
         virtual bool canVisitStructureFieldInit ( Structure * var ) { return true; }

@@ -2759,13 +2759,15 @@ namespace das {
         // structures
         for ( auto & ist : thisModule->structuresInOrder ) {
             Structure * pst = ist.get();
-            StructurePtr pstn = visitStructure(vis, pst);
-            if ( pstn.get() != pst ) {
-                assert(pstn->name==pst->name);
-                auto istm = thisModule->structures.find(pst->name);
-                assert ( istm!=thisModule->structures.end() );
-                istm->second = pstn;
-                ist = pstn;
+            if ( vis.canVisitStructure(pst) ) {
+                StructurePtr pstn = visitStructure(vis, pst);
+                if ( pstn.get() != pst ) {
+                    assert(pstn->name==pst->name);
+                    auto istm = thisModule->structures.find(pst->name);
+                    assert ( istm!=thisModule->structures.end() );
+                    istm->second = pstn;
+                    ist = pstn;
+                }
             }
         }
         // aliases

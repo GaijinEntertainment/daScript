@@ -1432,6 +1432,7 @@ namespace das {
         IMPL_ADAPT(Alias);
         IMPL_ADAPT(Enumeration);
         IMPL_ADAPT(EnumerationValue);
+        fnCanVisitStructure = adapt("canVisitStructure",pClass,info);
         IMPL_ADAPT(Structure);
         IMPL_ADAPT(StructureField);
         fnCanVisitFunction = adapt("canVisitFunction",pClass,info);
@@ -1600,6 +1601,14 @@ namespace das {
     ExpressionPtr VisitorAdapter::visitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last )
         { IMPL_VISIT4(EnumerationValue,Enumeration,Expression,value,const string &,name,ExpressionPtr,value,bool,last); }
 // structure
+    bool VisitorAdapter::canVisitStructure ( Structure * var ) {
+        if ( fnCanVisitStructure ) {
+            return das_invoke_function<bool>::invoke<void *,Structure *>
+                (context,nullptr,fnCanVisitStructure,classPtr,var);
+        } else {
+            return true;
+        }
+    }
     void VisitorAdapter::preVisit ( Structure * expr )
         { IMPL_PREVISIT(Structure); }
     void VisitorAdapter::preVisitStructureField ( Structure * expr, Structure::FieldDeclaration & decl, bool last )

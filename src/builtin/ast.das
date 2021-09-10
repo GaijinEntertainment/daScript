@@ -106,6 +106,7 @@ class AstVisitor
     def abstract visitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool) : ExpressionPtr
     def abstract visitEnumeration(enu:EnumerationPtr) : EnumerationPtr
 // structure
+    def abstract canVisitStructure(arg:Structure?) : bool
     def abstract preVisitStructure(str:StructurePtr) : void
     def abstract preVisitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool) : void
     def abstract visitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool) : void

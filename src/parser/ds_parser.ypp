@@ -813,6 +813,7 @@ annotation_argument_value_list
 annotation_argument_name
     :   NAME[name]  { $$ = $name; }
     |   DAS_TYPE    { $$ = new string("type"); }
+    |   DAS_IN      { $$ = new string("in"); }
     ;
 
 annotation_argument
