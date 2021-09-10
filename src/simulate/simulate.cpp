@@ -715,7 +715,7 @@ namespace das
     };
 
     static std::recursive_mutex g_DebugAgentMutex;
-    static das_map<string, DebugAgentInstance>   g_DebugAgents;
+    static das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
     static bool                  g_isInDebugAgentCreation;
 
     template <typename TT>
@@ -1231,7 +1231,7 @@ namespace das
                ap.second.debugAgent->onUninstall(pAgent.get());
            }
         });
-        das_map<string,DebugAgentInstance> agents;
+        das_safe_map<string,DebugAgentInstance> agents;
         {
             std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
             swap(agents, g_DebugAgents);
