@@ -1,0 +1,34 @@
+
+IF (NOT DAS_STBIMAGE_INCLUDED)
+    SET(DAS_STBIMAGE_INCLUDED TRUE)
+    MESSAGE(STATUS "dasStbImage module included.")
+
+	SET(DAS_STBIMAGE_DIR ${CMAKE_SOURCE_DIR}/modules/dasStbImage)
+
+    LIST(APPEND CMAKE_MODULE_PATH ${DAS_STBIMAGE_DIR})
+
+	# libDasModuleStbImage
+	SET(DAS_STBIMAGE_MODULE_SRC
+		${DAS_STBIMAGE_DIR}/src/dasStbImage.h
+		${DAS_STBIMAGE_DIR}/src/dasStbImage.cpp
+	)
+
+	ADD_MODULE_LIB(libDasModuleStbImage)
+	ADD_MODULE_CPP(StbImage)
+	# ADD_MODULE_NATIVE(STBIMAGE_boost)
+	ADD_LIBRARY(libDasModuleStbImage ${DAS_STBIMAGE_MODULE_SRC} ${DAS_STBIMAGE_MODULE_PLATFORM_SRC})
+	TARGET_LINK_LIBRARIES(libDasModuleStbImage ${STBIMAGE_LIBRARIES})
+	ADD_DEPENDENCIES(libDasModuleStbImage libDaScript)
+	TARGET_INCLUDE_DIRECTORIES(libDasModuleStbImage PUBLIC ${STBIMAGE_INCLUDE_DIR})
+
+	IF(LINUX_GTK)
+		find_package(PkgConfig REQUIRED)
+		pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+		include_directories(${GTK3_INCLUDE_DIRS})
+		link_directories(${GTK3_LIBRARY_DIRS})
+		add_definitions(${GTK3_CFLAGS_OTHER})
+		TARGET_LINK_LIBRARIES(libDasModuleStbImage ${GTK3_LIBRARIES})
+	ENDIF()
+
+	SETUP_CPP11(libDasModuleStbImage)
+ENDIF()
