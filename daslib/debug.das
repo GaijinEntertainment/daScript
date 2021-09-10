@@ -781,19 +781,17 @@ class private DAgent: DapiDebugAgent
 
     [unused_argument(category)] def override onVariable(var ctx: Context; category, name: string; info: TypeInfo; data: void?): void
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
-            let stackLen = length(ctxData.stack)
-            if stackLen > 0
-                var frame & = ctxData.stack[stackLen - 1]
-                var variable = [[DAVariable uid=0ul, argAddr=intptr(data), name=name, _type=describe(info)]]
-                walker.dataWalker->startWalk(frame, variable) <| $
-                    walker.dataWalkerAdapter |> walk_data(data, info)
-                if variable.children == null
-                    unsafe
-                        variable.value = sprint_data(data, addr(info), print_flags_debug)
-                if empty(variable.value)
-                    variable.value = variable._type
-
-                state |> emplace(variable)
+            var frame <- DAStackFrame()
+            defer_delete(frame)
+            var variable = [[DAVariable uid=0ul, argAddr=intptr(data), name=name, _type=describe(info)]]
+            walker.dataWalker->startWalk(frame, variable) <| $
+                walker.dataWalkerAdapter |> walk_data(data, info)
+            if variable.children == null
+                unsafe
+                    variable.value = sprint_data(data, addr(info), print_flags_debug)
+            if empty(variable.value)
+                variable.value = variable._type
+            state |> emplace(variable)
 
     def sendStopped(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo; reason: string; brId: uint64)
         self->log("<< stopped `{reason}` at {path}:{int(at.line)}")
@@ -1265,18 +1263,16 @@ class private DAServer: Server
         }}))
 
 def private tick_debugger()
-    tick_debug_agent("debug")
+    tick_debug_agent("~debug")
     sleep(10u)
 
 [export,unused_argument(ctx)]
 def private start_debug_agent(ctx: Context)
-    install_new_debug_agent(new DAgent(), "debug")
-    this_context().name := "_debug"
-
+    install_new_debug_agent(new DAgent(), "~debug")
 
 [export]
 def private start_agent(force:bool = false): bool
-    if force || !has_debug_agent_context("debug")
+    if force || !has_debug_agent_context("~debug")
         fork_debug_agent_context(@@start_debug_agent)
         print(use_instruments() ? "dap: install debug agent (with instruments)\n" : "dap: install debug agent\n")
     else
@@ -1290,7 +1286,7 @@ def private auto_start_debug()
     if !is_in_debug_agent_creation()
         this_context().category |= bitfield(1u << 31u) // TODO:
         set_single_step(this_context(), !use_instruments() || wait_debugger())
-        if !has_debug_agent_context("debug")
+        if !has_debug_agent_context("~debug")
             if start_agent()
                 new_thread <| @
                     this_context().category &= ~bitfield(1u << 31u) // TODO:
