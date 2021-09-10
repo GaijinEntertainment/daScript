@@ -203,6 +203,7 @@ namespace das
         virtual void onBreakpoint ( Context *, const LineInfo & ) {}
         virtual void onVariable ( Context *, const char *, const char *, TypeInfo *, void * ) {}
         virtual void onTick () {}
+        virtual void onCollect ( Context * ) {}
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
 
@@ -674,6 +675,7 @@ namespace das
     };
 
     void tickDebugAgent ( );
+    void collectDebugAgentState ( Context & ctx );
     void tickSpecificDebugAgent ( const char * name );
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
     void shutdownDebugAgent();

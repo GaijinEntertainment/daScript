@@ -1165,6 +1165,12 @@ namespace das
         });
     }
 
+    void collectDebugAgentState ( Context & ctx ) {
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onCollect( &ctx );
+        });
+    }
+
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(*at, "need to specify category");
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);

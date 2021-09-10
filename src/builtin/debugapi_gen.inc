@@ -784,9 +784,10 @@ protected:
     __fn_onBreakpoint = 7,
     __fn_onVariable = 8,
     __fn_onTick = 9,
+    __fn_onCollect = 10,
   };
 protected:
-  static int _das_class_method_offset[10];
+  static int _das_class_method_offset[11];
 public:
   DapiDebugAgent_Adapter ( const StructInfo * info ) {
     if ( _das_class_method_offset[0]==0 ) {
@@ -800,6 +801,7 @@ public:
       _das_class_method_offset[__fn_onBreakpoint] = adapt_field_offset("onBreakpoint",info);
       _das_class_method_offset[__fn_onVariable] = adapt_field_offset("onVariable",info);
       _das_class_method_offset[__fn_onTick] = adapt_field_offset("onTick",info);
+      _das_class_method_offset[__fn_onCollect] = adapt_field_offset("onCollect",info);
     }
   }
   static __forceinline Func get_onInstall ( void * self ) {
@@ -892,8 +894,17 @@ public:
         (__context__,nullptr,__funcCall__,
           self);
   }
+  static __forceinline Func get_onCollect ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onCollect]);
+  }
+  static __forceinline void invoke_onCollect ( Context * __context__, Func __funcCall__, void * self, Context & ctx ) {
+    das_invoke_function<void>::invoke
+      <void *,Context &>
+        (__context__,nullptr,__funcCall__,
+          self,ctx);
+  }
 };
-int DapiDebugAgent_Adapter::_das_class_method_offset[10];
+int DapiDebugAgent_Adapter::_das_class_method_offset[11];
 
 class DapiStackWalker_Adapter {
 protected:

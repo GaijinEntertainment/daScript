@@ -118,6 +118,13 @@ namespace debugapi {
                 context->unlock();
             }
         }
+        virtual void onCollect ( Context * ctx ) override {
+            if ( auto fnOnCollect = get_onCollect(classPtr) ) {
+                context->lock();
+                invoke_onCollect(context,fnOnCollect,classPtr,*ctx);
+                context->unlock();
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;
@@ -819,6 +826,8 @@ namespace debugapi {
                 SideEffects::modifyExternal, "tickDebugAgent");
             addExtern<DAS_BIND_FUN(tickSpecificDebugAgent)>(*this, lib,  "tick_debug_agent",
                 SideEffects::modifyExternal, "tickSpecificDebugAgent");
+            addExtern<DAS_BIND_FUN(collectDebugAgentState)>(*this, lib,  "collect_debug_agent_state",
+                SideEffects::modifyExternal, "collectDebugAgentState");
             addExtern<DAS_BIND_FUN(installDebugAgent)>(*this, lib,  "install_debug_agent",
                 SideEffects::modifyExternal, "installDebugAgent");
             addExtern<DAS_BIND_FUN(getDebugAgentContext), SimNode_ExtFuncCallRef>(*this, lib,  "get_debug_agent_context",

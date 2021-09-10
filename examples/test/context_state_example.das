@@ -40,9 +40,11 @@ class SampleDebugAgent : DapiDebugAgent
             delete walker
     def override onBreakpoint ( var ctx:Context; at:LineInfo ) : void
         print("{ctx} {ctx.name} : breakpoint at line {int(at.line)}\n")
+        collect_debug_agent_state(ctx)
         set_single_step(ctx,true)
     def override onSingleStep ( var ctx:Context; at:LineInfo ) : void
         print("{ctx} {ctx.name} : step at {int(at.line)}\n")
+        collect_debug_agent_state(ctx)
         walk_stack(walker_adapter,ctx,at)
     def override onVariable ( var ctx:Context; category,name:string; info:TypeInfo; data:void? ) : void
         unsafe
@@ -61,12 +63,14 @@ def report_to_debugger( var ctx:Context; category,name:string; value:auto(TT) )
         report_context_state(ctx, category, name, addr(tinfo), pdata)
 
 class ContextStateAgent : DapiDebugAgent
-    def override onSingleStep ( var ctx:Context; at:LineInfo ) : void
+    def override onCollect(var ctx: Context): void
         let sdepth = stack_depth(ctx)
+        print("onCollect, sending depth {sdepth}\n")
         report_to_debugger(ctx, "Context info", "Stack depth", sdepth)
 
 [export]
 def context_state_agent ( ctx : Context )
+    print("insall debug agent - context goo\n")
     assert(this_context().category.debug_context)
     install_new_debug_agent(new ContextStateAgent(), "context_state")
 
@@ -77,7 +81,7 @@ def foo(var x:int&)
 [export]
 def main
     this_context().name := "stackwalk main context"
-    fork_debug_agent_context(@@debug_agent)
+    // fork_debug_agent_context(@@debug_agent)
     fork_debug_agent_context(@@context_state_agent)
 	var x = 5
 	breakpoint()
@@ -88,4 +92,7 @@ def main
         foo(x)
     var z = 13
     z ++
+
+options debugger
+require daslib/debug
 
