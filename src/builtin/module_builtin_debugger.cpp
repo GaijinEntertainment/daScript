@@ -104,6 +104,13 @@ namespace debugapi {
                 context->unlock();
             }
         }
+        virtual void onVariable ( Context * ctx, const char * category, const char * name, TypeInfo * info, void * data ) override {
+            if ( auto fnOnVariable = get_onVariable(classPtr) ) {
+                context->lock();
+                invoke_onVariable(context,fnOnVariable,classPtr,*ctx,(char *)category,(char *)name,*info,data);
+                context->unlock();
+            }
+        }
         virtual void onTick () override {
             if ( auto fnOnTick = get_onTick(classPtr) ) {
                 context->lock();
@@ -826,6 +833,8 @@ namespace debugapi {
                 SideEffects::modifyExternal, "debuggerSetContextSingleStep");
             addExtern<DAS_BIND_FUN(debuggerStackWalk)>(*this, lib, "stackwalk",
                 SideEffects::modifyExternal, "debuggerStackWalk");
+            addExtern<DAS_BIND_FUN(dapiReportContextState)>(*this, lib, "report_context_state",
+                SideEffects::modifyExternal, "dapiReportContextState");
             // instrumentation
             addExtern<DAS_BIND_FUN(instrument_context)>(*this, lib,  "instrument_node",
                 SideEffects::modifyExternal, "instrument_context");

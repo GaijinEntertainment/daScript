@@ -15,6 +15,7 @@ class DapiDebugAgent
     def abstract onInstrument ( var ctx:Context; at:LineInfo ) : void
     def abstract onInstrumentFunction ( var ctx:Context; fn:SimFunction?; entering:bool ) : void
     def abstract onBreakpoint ( var ctx:Context; at:LineInfo ) : void
+    def abstract onVariable ( var ctx:Context; category,name:string; info:TypeInfo; data:void? ) : void
     def abstract onTick : void
     [[do_not_delete]] thisAgent:DebugAgent?
 

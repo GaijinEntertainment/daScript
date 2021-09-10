@@ -201,6 +201,7 @@ namespace das
         virtual void onInstrument ( Context *, const LineInfo & ) {}
         virtual void onInstrumentFunction ( Context *, SimFunction *, bool ) {}
         virtual void onBreakpoint ( Context *, const LineInfo & ) {}
+        virtual void onVariable ( Context *, const char *, const char *, TypeInfo *, void * ) {}
         virtual void onTick () {}
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
@@ -225,6 +226,7 @@ namespace das
     void dapiStackWalk ( StackWalkerPtr walker, Context & context, const LineInfo & at );
     int32_t dapiStackDepth ( Context & context );
     void dumpTrackingLeaks();
+    void dapiReportContextState ( Context & ctx, const char * category, const char * name, const TypeInfo * info, void * data );
 
     typedef shared_ptr<Context> ContextPtr;
 

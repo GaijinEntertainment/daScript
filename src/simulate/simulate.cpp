@@ -734,6 +734,12 @@ namespace das
         }
     }
 
+    void dapiReportContextState ( Context & ctx, const char * category, const char * name, const TypeInfo * info, void * data ) {
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onVariable(&ctx,category,name,(TypeInfo*)info,data);
+        });
+    }
+
     Context::Context(uint32_t stackSize, bool ph) : stack(stackSize) {
         code = make_shared<NodeAllocator>();
         constStringHeap = make_shared<ConstStringAllocator>();
