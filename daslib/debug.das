@@ -27,6 +27,7 @@ let private
     LOCAL_VARS = 1ul
     ARGUMENT_VARS = 2ul
     GLOBAL_VARS = 3ul
+    STATE_VARS = 4ul
     BLOCKS_POOL = 100ul
 
     MAX_STACK = 1000ul
@@ -337,6 +338,7 @@ struct private DAStackFrame
     variables: array<DAVariable>
     arguments: array<DAVariable>
     globals: array<DAVariable>
+    state: array<DAVariable>
 
     varId: uint64 = BLOCKS_POOL + 1ul
 
@@ -349,6 +351,9 @@ def find_child_var(stack: DAStackFrame; id: uint64; cb: block<(res:DAVariable): 
         if c |> find_child_var(id, cb)
             return
     for c in stack.globals
+        if c |> find_child_var(id, cb)
+            return
+    for c in stack.state
         if c |> find_child_var(id, cb)
             return
 
@@ -534,6 +539,8 @@ class private DAgent: DapiDebugAgent
     workingPaths: array<string>
     pathAliases: table<string; string>
     pathsCache: table<string; string>
+
+    state: array<DAVariable>
 
     logStrMemory = false
     initialStrLimit = uint64(8 * 1024 * 1024)
@@ -767,6 +774,26 @@ class private DAgent: DapiDebugAgent
                 ctxData.stack[j].line = ctxData.stack[q].line
             ctxData.stack[0].path = path
             ctxData.stack[0].line = at.line
+
+            ctxData.stack[0].state <- state
+            for v in ctxData.stack[0].state
+                v.uid = ctxData.stack[0].varId ++
+
+    [unused_argument(category)] def override onVariable(var ctx: Context; category, name: string; info: TypeInfo; data: void?): void
+        self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
+            let stackLen = length(ctxData.stack)
+            if stackLen > 0
+                var frame & = ctxData.stack[stackLen - 1]
+                var variable = [[DAVariable uid=0ul, argAddr=intptr(data), name=name, _type=describe(info)]]
+                walker.dataWalker->startWalk(frame, variable) <| $
+                    walker.dataWalkerAdapter |> walk_data(data, info)
+                if variable.children == null
+                    unsafe
+                        variable.value = sprint_data(data, addr(info), print_flags_debug)
+                if empty(variable.value)
+                    variable.value = variable._type
+
+                state |> emplace(variable)
 
     def sendStopped(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo; reason: string; brId: uint64)
         self->log("<< stopped `{reason}` at {path}:{int(at.line)}")
@@ -1086,8 +1113,6 @@ class private DAServer: Server
             let frameId = int(ini.frameId % double(MAX_STACK))
             if frameId >= 0 && frameId < length(ctxData.stack)
                 var spAddr = ctxData.stack[frameId].spAddr
-                var vars = 0
-                var args = 0
                 var globs = 0
                 var idx = frameId
                 var first = true
@@ -1104,6 +1129,11 @@ class private DAServer: Server
                             res.scopes |> emplace([[Scope
                                 name=first ? "Arguments" : "Arguments ({line.name})",
                                 variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + ARGUMENT_VARS)
+                            ]])
+                        if length(line.state) > 0
+                            res.scopes |> emplace([[Scope
+                                name=first ? "State" : "State ({line.name})",
+                                variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + STATE_VARS)
                             ]])
                         first = false
                     idx += 1
@@ -1126,8 +1156,8 @@ class private DAServer: Server
             if frameId >= 0 && frameId < length(ctxData.stack)
                 let kind = uint64(ini.variablesReference) % MAX_VARIABLES
                 let line & = ctxData.stack[frameId]
-                if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS
-                    let vars & = kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : line.globals
+                if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS || kind == STATE_VARS
+                    let vars & = kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : kind == GLOBAL_VARS ? line.globals : line.state
                     let varsNum = length(vars)
                     for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
                         let v & = vars[idx]
@@ -1241,6 +1271,7 @@ def private tick_debugger()
 [export,unused_argument(ctx)]
 def private start_debug_agent(ctx: Context)
     install_new_debug_agent(new DAgent(), "debug")
+    this_context().name := "_debug"
 
 
 [export]
