@@ -530,6 +530,7 @@ class private DAgent: DapiDebugAgent
     contextId: uint64 = 1ul
 
     waitConnection: bool = true
+    withInstruments: bool = false
     workingPaths: array<string>
     pathAliases: table<string; string>
     pathsCache: table<string; string>
@@ -540,6 +541,7 @@ class private DAgent: DapiDebugAgent
 
     def DAgent()
         waitConnection = wait_debugger()
+        withInstruments = use_instruments()
 
         walker = new DAStackWalker()
         unsafe
@@ -601,20 +603,38 @@ class private DAgent: DapiDebugAgent
         ctx |> reset_debug_flags()
         ctx.pauseRequested = true
 
-        if use_instruments()
+        if withInstruments
             for ctx in contexts
                 if !ctx.ctx.category.debug_context
                     *ctx.ctx |> set_single_step(true)
 
     def reqResume(var exclude: DAContext)
-        if use_instruments()
+        if withInstruments
             for ctx in contexts
                 if ctx.id != exclude.id && !ctx.ctx.category.debug_context
                     *ctx.ctx |> set_single_step(false)
 
-    def onBreakpointsChanged(): void
-        if !use_instruments()
-            return
+    def onBreakpointsChanged(ini: SetBreakpointsArguments): SetBreakpointsResponse
+        let path = ini.source.path
+        var res: SetBreakpointsResponse
+        if key_exists(breakpoints, path)
+            delete breakpoints[path]
+        breakpoints |> erase(path)
+        if length(ini.breakpoints) >= 0
+            var breaks <- [[array<DABreakpoint>]]
+            for b in ini.breakpoints
+                breaks |> emplace([[DABreakpoint line=uint(b.line), id=breakpointId ]])
+                res.breakpoints |> emplace([[Breakpoint
+                    verified=!withInstruments,
+                    id=double(breakpointId),
+                    source=ini.source,
+                    line=b.line
+                ]])
+                breakpointId += 1ul
+            breakpoints[path] <- breaks
+
+        if !withInstruments
+            return <- res
 
         for ctx in contexts
             *ctx.ctx |> clear_instruments()
@@ -627,9 +647,13 @@ class private DAgent: DapiDebugAgent
                         for br in brs
                             if br.line == ati.line
                                 // print("set br at {file}: {br.line}\n")
+                                if file == fileBr
+                                    for resBr in res.breakpoints
+                                        resBr.verified ||= uint(resBr.line) == br.line
                                 return true
                         break
                 return false
+        return <- res
 
     def override onInstrument(var ctx: Context; at: LineInfo): void
         self->onPause(ctx, at, "breakpoint")
@@ -654,7 +678,7 @@ class private DAgent: DapiDebugAgent
             while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debugger()
             ctxData.continueRequested = false
-            ctx |> set_single_step(!use_instruments() || ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
+            ctx |> set_single_step(!withInstruments || ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
 
     def override onSingleStep(var ctx: Context; at: LineInfo): void
         if at.fileInfo == null
@@ -675,7 +699,7 @@ class private DAgent: DapiDebugAgent
                     tick_debugger()
             else
                 self->log("[E] non debug context in single step {ctx.name}")
-            ctx |> set_single_step(!use_instruments())
+            ctx |> set_single_step(!withInstruments)
 
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             let file = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
@@ -701,7 +725,7 @@ class private DAgent: DapiDebugAgent
                     tick_debugger()
                 ctxData.continueRequested = false
 
-            if use_instruments()
+            if withInstruments
                 ctx |> set_single_step(ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
                 return
             // self->log("search break `{file}`:{at.line} - {inBreak}\n")
@@ -1023,26 +1047,8 @@ class private DAServer: Server
     def reqSetBreakpoints(seq: double; command: string; data: JsonValue?)
         var ini <- SetBreakpointsArguments(data)
         defer_delete(ini)
-        var res: SetBreakpointsResponse
+        var res <- agent->onBreakpointsChanged(ini)
         defer_delete(res)
-        let path = ini.source.path
-        if key_exists(agent.breakpoints, path)
-            delete agent.breakpoints[path]
-        agent.breakpoints |> erase(path)
-        if length(ini.breakpoints) >= 0
-            var breaks <- [[array<DABreakpoint>]]
-            for b in ini.breakpoints
-                breaks |> emplace([[DABreakpoint line=uint(b.line), id=agent.breakpointId ]])
-                res.breakpoints |> emplace([[Breakpoint
-                    verified=true,
-                    id=double(agent.breakpointId),
-                    source=ini.source,
-                    line=b.line,
-                    message="breakpoint #{int(agent.breakpointId)} {path}:{int(b.line)}"
-                ]])
-                agent.breakpointId += 1ul
-            agent.breakpoints[path] <- breaks
-        agent->onBreakpointsChanged()
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqThreads(seq: double; command: string; data: JsonValue?)
