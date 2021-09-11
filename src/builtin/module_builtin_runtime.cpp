@@ -711,6 +711,7 @@ namespace das
         if ( !ctx->thisProgram ) return false;
         if ( !ctx->thisProgram->isCompilingMacros ) return false;
         if ( ctx->thisProgram->thisModule->name != to_rts(name) ) return false;
+        if ( isInDebugAgentCreation() ) return false;
         return true;
     }
 
