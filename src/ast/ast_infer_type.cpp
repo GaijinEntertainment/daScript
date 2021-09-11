@@ -6041,8 +6041,12 @@ namespace das {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
                             expr->name = das_to_string(aliasT->baseType);
-                            if ( aliasT->baseType==Type::tBitfield )
-                            expr->aliasSubstitution = aliasT;
+                            if ( aliasT->baseType==Type::tBitfield ) {
+                                expr->aliasSubstitution = aliasT;
+                            }
+                            reportAstChanged();
+                        } else if ( aliasT->isStructure() ) {
+                            expr->name = aliasT->structType->name;
                             reportAstChanged();
                         } else {
                             reportMissing(expr, types, "no matching functions or generics ", true);
