@@ -199,7 +199,7 @@ class DAWalker: DapiDataWalker
         if n > 0
             var v & = varsStack[n - 1]
             if v.children != null && length(*v.children) <= previewChildrenNum
-                v.value = join(*v.children)
+                v.value = join_with_names(*v.children)
             elif empty(v.value)
                 v.value = v._type
 
@@ -210,7 +210,7 @@ class DAWalker: DapiDataWalker
         if n > 0
             var v & = varsStack[n - 1]
             if v.children != null && length(*v.children) <= previewChildrenNum
-                v.value = join(*v.children)
+                v.value = join_with_names(*v.children)
             elif empty(v.value)
                 v.value = v._type
 
@@ -285,8 +285,6 @@ class DAWalker: DapiDataWalker
             if v.children == null
                 unsafe
                     v.value = sprint_data(pv, addr(kv), print_flags_debug)
-            elif length(*v.children) > 0 && length(*v.children) <= previewChildrenNum
-                v.value = "[{int64(pa.size)}] {join(*v.children)}"
             elif empty(v.value)
                 v.value = v._type
         self->popStack()
@@ -296,7 +294,7 @@ class DAWalker: DapiDataWalker
         if n > 0
             var v & = varsStack[n - 1]
             if v.children != null && length(*v.children) > 0 && length(*v.children) <= previewChildrenNum
-                v.value = "[{int64(pa.size)}] {join(*v.children)}"
+                v.value = "[{int64(pa.size)}] {join_with_names(*v.children)}"
             elif empty(v.value)
                 v.value = "[{int64(pa.size)}] {v._type}"
 
@@ -342,6 +340,17 @@ struct private DAVariable
     _type: string
     indexedVariables: uint
     children: array<DAVariable>?
+
+def join_with_names(a: array<DAVariable>): string
+    return build_string() <| $(str)
+        var first = true
+        for child in a
+            if !first
+                str |> write(", ")
+            first = false
+            str |> write(child.name)
+            str |> write(": ")
+            str |> write(child.value)
 
 
 def join(a: array<DAVariable>): string
@@ -812,11 +821,11 @@ class private DAgent: DapiDebugAgent
 
             collect_debug_agent_state(ctx)
 
-    [unused_argument(category)] def override onVariable(var ctx: Context; category, name: string; info: TypeInfo; data: void?): void
+    def override onVariable(var ctx: Context; category, name: string; info: TypeInfo; data: void?): void
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             let stackLen = length(ctxData.stack)
             if  stackLen > 0
-                var frame & = ctxData.stack[stackLen-1]
+                var frame & = ctxData.stack[0]
                 var variable = [[DAVariable uid=frame.varId++, name=name, _type=describe(info)]]
                 walker.dataWalker->startWalk(frame, variable) <| $
                     walker.dataWalkerAdapter |> walk_data(data, info)
