@@ -1172,8 +1172,8 @@ class private DAServer: Server
                             variablesReference=double(ref)
                         ]])
                 elif kind >= STATE_VARS && kind <= BLOCKS_POOL
-                    for idx, state in iter_range(line.state), line.state
-                        if uint64(idx) + STATE_VARS == kind
+                    for state in line.state
+                        if state.uid == kind
                             for v in state.vars
                                 let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
                                 res.variables |> emplace([[Variable
