@@ -28,7 +28,7 @@ let private
     ARGUMENT_VARS = 2ul
     GLOBAL_VARS = 3ul
     STATE_VARS = 4ul
-    BLOCKS_POOL = 100ul
+    BLOCKS_POOL = 1000ul
 
     MAX_STACK = 1000ul
     MAX_VARIABLES = 100000ul
@@ -338,7 +338,7 @@ struct private DAStackFrame
     variables: array<DAVariable>
     arguments: array<DAVariable>
     globals: array<DAVariable>
-    state: array<DAVariable>
+    state: array<tuple<uid: uint64; name:string; vars:array<DAVariable>>>
 
     varId: uint64 = BLOCKS_POOL + 1ul
 
@@ -354,8 +354,9 @@ def find_child_var(stack: DAStackFrame; id: uint64; cb: block<(res:DAVariable): 
         if c |> find_child_var(id, cb)
             return
     for c in stack.state
-        if c |> find_child_var(id, cb)
-            return
+        for v in c.vars
+            if v |> find_child_var(id, cb)
+                return
 
 
 class private DAStackWalker: DapiStackWalker
@@ -539,8 +540,6 @@ class private DAgent: DapiDebugAgent
     workingPaths: array<string>
     pathAliases: table<string; string>
     pathsCache: table<string; string>
-
-    state: array<DAVariable>
 
     logStrMemory = false
     initialStrLimit = uint64(8 * 1024 * 1024)
@@ -775,25 +774,27 @@ class private DAgent: DapiDebugAgent
             ctxData.stack[0].path = path
             ctxData.stack[0].line = at.line
 
-            delete state
             collect_debug_agent_state(ctx)
 
-            ctxData.stack[0].state <- state
-            for v in ctxData.stack[0].state
-                v.uid = ctxData.stack[0].varId ++
-
     [unused_argument(category)] def override onVariable(var ctx: Context; category, name: string; info: TypeInfo; data: void?): void
-        var frame <- DAStackFrame()
-        defer_delete(frame)
-        var variable = [[DAVariable uid=0ul, argAddr=intptr(data), name=name, _type=describe(info)]]
-        walker.dataWalker->startWalk(frame, variable) <| $
-            walker.dataWalkerAdapter |> walk_data(data, info)
-        if variable.children == null
-            unsafe
-                variable.value = sprint_data(data, addr(info), print_flags_debug)
-        if empty(variable.value)
-            variable.value = variable._type
-        state |> emplace(variable)
+        self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
+            let stackLen = length(ctxData.stack)
+            if  stackLen > 0
+                var frame & = ctxData.stack[stackLen-1]
+                var variable = [[DAVariable uid=0ul, argAddr=intptr(data), name=name, _type=describe(info)]]
+                walker.dataWalker->startWalk(frame, variable) <| $
+                    walker.dataWalkerAdapter |> walk_data(data, info)
+                if variable.children == null
+                    unsafe
+                        variable.value = sprint_data(data, addr(info), print_flags_debug)
+                if empty(variable.value)
+                    variable.value = variable._type
+
+                for s in frame.state
+                    if s.name == category
+                        s.vars |> emplace(variable)
+                        return
+                frame.state |> emplace <| [[auto STATE_VARS+uint64(length(frame.state)), category, [{auto[] variable}] ]]
 
     def sendStopped(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo; reason: string; brId: uint64)
         self->log("<< stopped `{reason}` at {path}:{int(at.line)}")
@@ -1131,10 +1132,11 @@ class private DAServer: Server
                                 variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + ARGUMENT_VARS)
                             ]])
                         if length(line.state) > 0
-                            res.scopes |> emplace([[Scope
-                                name=first ? "State" : "State ({line.name})",
-                                variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + STATE_VARS)
-                            ]])
+                            for i, state in iter_range(line.state), line.state
+                                res.scopes |> emplace([[Scope
+                                    name=state.name,
+                                    variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + STATE_VARS + uint64(i))
+                                ]])
                         first = false
                     idx += 1
                 if globs > 0
@@ -1156,8 +1158,8 @@ class private DAServer: Server
             if frameId >= 0 && frameId < length(ctxData.stack)
                 let kind = uint64(ini.variablesReference) % MAX_VARIABLES
                 let line & = ctxData.stack[frameId]
-                if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS || kind == STATE_VARS
-                    let vars & = kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : kind == GLOBAL_VARS ? line.globals : line.state
+                if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS
+                    let vars & = kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : line.globals
                     let varsNum = length(vars)
                     for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
                         let v & = vars[idx]
@@ -1169,6 +1171,19 @@ class private DAServer: Server
                             indexedVariables=double(v.indexedVariables),
                             variablesReference=double(ref)
                         ]])
+                elif kind >= STATE_VARS && kind <= BLOCKS_POOL
+                    for idx, state in iter_range(line.state), line.state
+                        if uint64(idx) + STATE_VARS == kind
+                            for v in state.vars
+                                let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
+                                res.variables |> emplace([[Variable
+                                    name=v.name,
+                                    value=v.value,
+                                    _type=v._type,
+                                    indexedVariables=double(v.indexedVariables),
+                                    variablesReference=double(ref)
+                                ]])
+                            break
                 else
                     line |> find_child_var(uint64(kind)) <| $(child)
                         if child.children != null
