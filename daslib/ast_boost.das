@@ -164,24 +164,28 @@ def setup_tag_annotation(name,tag:string; classPtr)
     apply_tag_annotation(tag, ann)
     this_module() |> add_function_annotation(ann)
 
-def find_unique_function ( mod : Module?; name : string )
+def find_unique_function ( mod : Module?; name : string; canfail:bool = false )
     var res : FunctionPtr
     var count = 0
     for_each_function(mod, name) <| $ ( func )
         res <- func
         count ++
     if count > 1
-        panic("more than one function encountered")
+        if !canfail
+            panic("more than one function encountered")
+        return [[FunctionPtr]]
     return res
 
-def find_unique_generic ( mod : Module?; name : string )
+def find_unique_generic ( mod : Module?; name : string; canfail:bool = false )
     var res : FunctionPtr
     var count = 0
     for_each_generic(mod, name) <| $ ( func )
         res <- func
         count ++
     if count > 1
-        panic("more than one generic function encountered")
+        if !canfail
+            panic("more than one generic function encountered")
+        return [[FunctionPtr]]
     return res
 
 def setup_macro(name: string; at:LineInfo) : ExprBlock?

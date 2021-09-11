@@ -307,7 +307,7 @@ namespace das
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
         virtual bool patch ( const FunctionPtr &, ModuleGroup &,
                                const AnnotationArgumentList &,
-                               const AnnotationArgumentList &, string & ) { return true; }
+                               const AnnotationArgumentList &, string &, bool & ) { return true; }
         virtual bool lint ( const FunctionPtr &, ModuleGroup &,
                                const AnnotationArgumentList &,
                                const AnnotationArgumentList &, string & ) { return true; }
@@ -1105,7 +1105,7 @@ namespace das
         bool addGeneric ( const FunctionPtr & fn );
         Module * addModule ( const string & name );
         void finalizeAnnotations();
-        void patchAnnotations();
+        bool patchAnnotations();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
         void inferTypesDirty(TextWriter & logs, bool verbose);
         void lint ( ModuleGroup & libGroup );

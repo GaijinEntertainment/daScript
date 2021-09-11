@@ -1951,9 +1951,9 @@ namespace das {
         }
         virtual bool patch ( const FunctionPtr & func, ModuleGroup & group,
                                const AnnotationArgumentList & args,
-                               const AnnotationArgumentList & progArgs, string & errors ) override {
+                               const AnnotationArgumentList & progArgs, string & errors, bool & astChanged ) override {
             if ( auto fnPatch = get_patch(classPtr) ) {
-                return invoke_patch(context,fnPatch,classPtr,func,group,args,progArgs,errors);
+                return invoke_patch(context,fnPatch,classPtr,func,group,args,progArgs,errors,astChanged);
             } else {
                 return true;
             }

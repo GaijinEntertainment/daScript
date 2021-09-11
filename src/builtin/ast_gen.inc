@@ -53,11 +53,11 @@ public:
   static __forceinline Func get_patch ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_patch]);
   }
-  static __forceinline bool invoke_patch ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, ModuleGroup & group, AnnotationArgumentList const  & args, AnnotationArgumentList const  & progArgs, das::string & errors ) {
+  static __forceinline bool invoke_patch ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, ModuleGroup & group, AnnotationArgumentList const  & args, AnnotationArgumentList const  & progArgs, das::string & errors, bool & astChanged ) {
     return das_invoke_function<bool>::invoke
-      <void *,smart_ptr_raw<Function>,ModuleGroup &,AnnotationArgumentList const  &,AnnotationArgumentList const  &,das::string &>
+      <void *,smart_ptr_raw<Function>,ModuleGroup &,AnnotationArgumentList const  &,AnnotationArgumentList const  &,das::string &,bool &>
         (__context__,nullptr,__funcCall__,
-          self,func,group,args,progArgs,errors);
+          self,func,group,args,progArgs,errors,astChanged);
   }
   static __forceinline Func get_lint ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_lint]);

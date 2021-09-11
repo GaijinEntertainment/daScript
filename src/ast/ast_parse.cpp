@@ -318,7 +318,12 @@ namespace das {
             program->isCompiling = false;
             return program;
         } else {
-            program->inferTypes(logs, libGroup);
+            restartInfer: program->inferTypes(logs, libGroup);
+            if ( !program->failed() ) {
+                if ( program->patchAnnotations() ) {
+                    goto restartInfer;
+                }
+            }
             if ( !program->failed() ) {
                 program->lint(libGroup);
                 program->foldUnsafe();
@@ -331,8 +336,6 @@ namespace das {
                     program->verifyAndFoldContracts();
                 if (!program->failed())
                     program->markOrRemoveUnusedSymbols(exportAll || program->thisModule->isModule);
-                if (!program->failed())
-                    program->patchAnnotations();
                 if (!program->failed())
                     program->allocateStack(logs);
                 if (!program->failed())
