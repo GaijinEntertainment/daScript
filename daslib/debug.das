@@ -693,8 +693,8 @@ class private DAgent: DapiDebugAgent
             return
 
         // unsafe
-            // self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache, pathAliases)}:{int(at.line)}\n")
-            // print("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathsCache, pathAliases)}:{int(at.line)}\n")
+            // self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n")
+            // print("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n")
 
         if (uint(ctx.category) & (1u << 31u)) != 0u
             self->addContext(ctx)
@@ -781,7 +781,7 @@ class private DAgent: DapiDebugAgent
             let stackLen = length(ctxData.stack)
             if  stackLen > 0
                 var frame & = ctxData.stack[stackLen-1]
-                var variable = [[DAVariable uid=0ul, argAddr=intptr(data), name=name, _type=describe(info)]]
+                var variable = [[DAVariable uid=frame.varId++, argAddr=intptr(data), name=name, _type=describe(info)]]
                 walker.dataWalker->startWalk(frame, variable) <| $
                     walker.dataWalkerAdapter |> walk_data(data, info)
                 if variable.children == null
