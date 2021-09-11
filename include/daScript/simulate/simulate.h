@@ -49,6 +49,7 @@ namespace das
     ,   debug_context =     (1<<0)
     ,   thread_clone =      (1<<1)
     ,   job_clone =         (1<<2)
+    ,   opengl =            (1<<3)
     };
 
     struct GlobalVariable {
