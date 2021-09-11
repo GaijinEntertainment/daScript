@@ -132,7 +132,7 @@ void das_get_root ( char * root, int maxbuf ) {
 
 das_program * das_program_compile ( char * program_file, das_file_access * access, das_text_writer * tout, das_module_group * libgroup ) {
     auto program = compileDaScript(program_file,
-        (FsFileAccess *) access,
+        (FileAccess *) access,
         *((TextWriter *) tout),
         *((ModuleGroup *) libgroup));
     return (das_program *) program.orphan();

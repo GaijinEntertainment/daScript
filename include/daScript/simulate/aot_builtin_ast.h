@@ -34,6 +34,7 @@ namespace das {
         DECL_VISIT(Structure);
         DECL_VISIT(StructureField);
         Func fnCanVisitFunction;
+        Func fnCanVisitArgumentInit;
         DECL_VISIT(Function);
         DECL_VISIT(FunctionArgument);
         DECL_VISIT(FunctionArgumentInit);
@@ -196,6 +197,7 @@ namespace das {
         virtual StructurePtr visit ( Structure * expr ) override;
     // function
         virtual bool canVisitFunction ( Function * fun ) override;
+        virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) override;
         virtual void preVisit ( Function * expr ) override;
         virtual FunctionPtr visit ( Function * expr ) override;
         virtual void preVisitArgument ( Function * expr, const VariablePtr & var, bool lastArg ) override;

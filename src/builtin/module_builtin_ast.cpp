@@ -1436,6 +1436,7 @@ namespace das {
         IMPL_ADAPT(Structure);
         IMPL_ADAPT(StructureField);
         fnCanVisitFunction = adapt("canVisitFunction",pClass,info);
+        fnCanVisitArgumentInit = adapt("canVisitFunctionArgumentInit",pClass,info);
         IMPL_ADAPT(Function);
         IMPL_ADAPT(FunctionArgument);
         IMPL_ADAPT(FunctionArgumentInit);
@@ -1629,7 +1630,16 @@ namespace das {
         } else {
             return true;
         }
-    }    void VisitorAdapter::preVisit ( Function * expr )
+    }
+    bool VisitorAdapter::canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) {
+        if ( fnCanVisitArgumentInit ) {
+            return das_invoke_function<bool>::invoke<void *,Function *,VariablePtr,ExpressionPtr>
+                (context,nullptr,fnCanVisitArgumentInit,classPtr,fun,var,init);
+        } else {
+            return true;
+        }
+    }
+    void VisitorAdapter::preVisit ( Function * expr )
         { IMPL_PREVISIT(Function); }
     FunctionPtr VisitorAdapter::visit ( Function * expr )
         { IMPL_VISIT(Function); }
