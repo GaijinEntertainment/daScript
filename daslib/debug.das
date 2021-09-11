@@ -586,6 +586,8 @@ class private DAgent: DapiDebugAgent
     pathAliases: table<string; string>
     pathsCache: table<string; string>
 
+    collectingAgentData: bool = false
+
     logStrMemory = false
     initialStrLimit = uint64(8 * 1024 * 1024)
     strLimit: uint64 = uint64(8 * 1024 * 1024)
@@ -819,7 +821,10 @@ class private DAgent: DapiDebugAgent
             ctxData.stack[0].path = path
             ctxData.stack[0].line = at.line
 
-            collect_debug_agent_state(ctx)
+            if !collectingAgentData
+                collectingAgentData = true
+                collect_debug_agent_state(ctx)
+                collectingAgentData = false
 
     def override onVariable(var ctx: Context; category, name: string; info: TypeInfo; data: void?): void
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
