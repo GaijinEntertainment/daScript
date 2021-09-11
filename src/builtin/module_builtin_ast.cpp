@@ -1958,6 +1958,15 @@ namespace das {
                 return true;
             }
         }
+        virtual bool fixup ( const FunctionPtr & func, ModuleGroup & group,
+                               const AnnotationArgumentList & args,
+                               const AnnotationArgumentList & progArgs, string & errors ) override {
+            if ( auto fnFixup = get_fixup(classPtr) ) {
+                return invoke_fixup(context,fnFixup,classPtr,func,group,args,progArgs,errors);
+            } else {
+                return true;
+            }
+        }
         virtual bool apply ( ExprBlock *, ModuleGroup &,
                             const AnnotationArgumentList &, string & err ) override {
             err = "not a block annotation";

@@ -308,6 +308,9 @@ namespace das
         virtual bool patch ( const FunctionPtr &, ModuleGroup &,
                                const AnnotationArgumentList &,
                                const AnnotationArgumentList &, string &, bool & ) { return true; }
+        virtual bool fixup ( const FunctionPtr &, ModuleGroup &,
+                               const AnnotationArgumentList &,
+                               const AnnotationArgumentList &, string & ) { return true; }
         virtual bool lint ( const FunctionPtr &, ModuleGroup &,
                                const AnnotationArgumentList &,
                                const AnnotationArgumentList &, string & ) { return true; }
@@ -1106,6 +1109,7 @@ namespace das
         Module * addModule ( const string & name );
         void finalizeAnnotations();
         bool patchAnnotations();
+        void fixupAnnotations();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
         void inferTypesDirty(TextWriter & logs, bool verbose);
         void lint ( ModuleGroup & libGroup );

@@ -337,6 +337,8 @@ namespace das {
                 if (!program->failed())
                     program->markOrRemoveUnusedSymbols(exportAll || program->thisModule->isModule);
                 if (!program->failed())
+                    program->fixupAnnotations();
+                if (!program->failed())
                     program->allocateStack(logs);
                 if (!program->failed())
                     program->finalizeAnnotations();

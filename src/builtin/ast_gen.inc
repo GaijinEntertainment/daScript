@@ -5,12 +5,13 @@ protected:
     __fn_apply = 1,
     __fn_finish = 2,
     __fn_patch = 3,
-    __fn_lint = 4,
-    __fn_isCompatible = 5,
-    __fn_isSpecialized = 6,
+    __fn_fixup = 4,
+    __fn_lint = 5,
+    __fn_isCompatible = 6,
+    __fn_isSpecialized = 7,
   };
 protected:
-  static int _das_class_method_offset[7];
+  static int _das_class_method_offset[8];
 public:
   AstFunctionAnnotation_Adapter ( const StructInfo * info ) {
     if ( _das_class_method_offset[0]==0 ) {
@@ -18,6 +19,7 @@ public:
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
       _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
       _das_class_method_offset[__fn_patch] = adapt_field_offset("patch",info);
+      _das_class_method_offset[__fn_fixup] = adapt_field_offset("fixup",info);
       _das_class_method_offset[__fn_lint] = adapt_field_offset("lint",info);
       _das_class_method_offset[__fn_isCompatible] = adapt_field_offset("isCompatible",info);
       _das_class_method_offset[__fn_isSpecialized] = adapt_field_offset("isSpecialized",info);
@@ -59,6 +61,15 @@ public:
         (__context__,nullptr,__funcCall__,
           self,func,group,args,progArgs,errors,astChanged);
   }
+  static __forceinline Func get_fixup ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_fixup]);
+  }
+  static __forceinline bool invoke_fixup ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, ModuleGroup & group, AnnotationArgumentList const  & args, AnnotationArgumentList const  & progArgs, das::string & errors ) {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<Function>,ModuleGroup &,AnnotationArgumentList const  &,AnnotationArgumentList const  &,das::string &>
+        (__context__,nullptr,__funcCall__,
+          self,func,group,args,progArgs,errors);
+  }
   static __forceinline Func get_lint ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_lint]);
   }
@@ -87,7 +98,7 @@ public:
           self);
   }
 };
-int AstFunctionAnnotation_Adapter::_das_class_method_offset[7];
+int AstFunctionAnnotation_Adapter::_das_class_method_offset[8];
 
 class AstStructureAnnotation_Adapter {
 protected:
