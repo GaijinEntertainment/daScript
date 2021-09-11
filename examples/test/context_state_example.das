@@ -58,8 +58,10 @@ def debug_agent ( ctx : Context )
 
 def report_to_debugger( var ctx:Context; category,name:string; value:auto(TT) )
     unsafe
-        let tinfo = typeinfo(rtti_typeinfo type<TT>)
+        let tinfo = typeinfo(rtti_typeinfo value)
         let pdata = addr(value)
+        print("send {category} {name}\n")
+        debug(tinfo)
         report_context_state(ctx, category, name, addr(tinfo), pdata)
 
 class ContextStateAgent : DapiDebugAgent
@@ -67,6 +69,12 @@ class ContextStateAgent : DapiDebugAgent
         let sdepth = stack_depth(ctx)
         print("onCollect, sending depth {sdepth}\n")
         report_to_debugger(ctx, "Context info", "Stack depth", sdepth)
+        var foo : array<bool>
+        for x in range(5)
+            foo |> push((x & 1)!=0)
+        report_to_debugger(ctx, "Context info", "Random foo", foo)
+        var bar : bool[4]
+        report_to_debugger(ctx, "Context info", "Random bar", bar)
 
 [export]
 def context_state_agent ( ctx : Context )
@@ -81,7 +89,7 @@ def foo(var x:int&)
 [export]
 def main
     this_context().name := "stackwalk main context"
-    // fork_debug_agent_context(@@debug_agent)
+    fork_debug_agent_context(@@debug_agent)
     fork_debug_agent_context(@@context_state_agent)
 	var x = 5
 	breakpoint()
