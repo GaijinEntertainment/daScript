@@ -82,6 +82,10 @@ namespace das {
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = INADDR_ANY;
         address.sin_port = htons(uint16_t(port) );
+#if defined(__APPLE__)
+        int val = 1;
+        setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+#endif
     	if ( ::bind(server_fd, (struct sockaddr *)&address,sizeof(address))<0 ) {
             onError("can't bind", errno);
             closesocket(server_fd);
