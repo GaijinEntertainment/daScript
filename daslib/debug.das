@@ -821,11 +821,11 @@ class private DAgent: DapiDebugAgent
 
             collect_debug_agent_state(ctx)
 
-    [unused_argument(category)] def override onVariable(var ctx: Context; category, name: string; info: TypeInfo; data: void?): void
+    def override onVariable(var ctx: Context; category, name: string; info: TypeInfo; data: void?): void
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             let stackLen = length(ctxData.stack)
             if  stackLen > 0
-                var frame & = ctxData.stack[stackLen-1]
+                var frame & = ctxData.stack[0]
                 var variable = [[DAVariable uid=frame.varId++, name=name, _type=describe(info)]]
                 walker.dataWalker->startWalk(frame, variable) <| $
                     walker.dataWalkerAdapter |> walk_data(data, info)
