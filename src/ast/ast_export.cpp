@@ -63,11 +63,11 @@ namespace das {
                 return true;
             }, "*");
         }
-        void markUsedFunctions( ModuleLibrary & lib, bool forceAll ){
+        void markUsedFunctions( ModuleLibrary & lib, bool forceAll, bool initThis ){
             lib.foreach([&](Module * pm) {
                 for (const auto & it : pm->functions) {
                     auto fn = it.second;
-                    if ( forceAll || fn->exports || fn->init || fn->shutdown ) {
+                    if ( forceAll || fn->exports || fn->init || fn->shutdown || (fn->macroInit && initThis) ) {
                         propagateFunctionUse(fn);
                     }
                 }
@@ -226,12 +226,12 @@ namespace das {
         }
     }
 
-    void Program::markSymbolUse(bool builtInSym) {
+    void Program::markSymbolUse(bool builtInSym, bool forceAll, bool initThis) {
         clearSymbolUse();
         MarkSymbolUse vis(builtInSym);
         visit(vis);
-        vis.markUsedFunctions(library, false);
-        vis.markVarsUsed(library, false);
+        vis.markUsedFunctions(library, forceAll, initThis);
+        vis.markVarsUsed(library, forceAll);
     }
 
     void Program::markOrRemoveUnusedSymbols(bool forceAll) {
@@ -239,7 +239,7 @@ namespace das {
         clearSymbolUse();
         MarkSymbolUse vis(false);
         visit(vis);
-        vis.markUsedFunctions(library, forceAll);
+        vis.markUsedFunctions(library, forceAll, false);
         vis.markVarsUsed(library, forceAll);
         if ( options.getBoolOption("remove_unused_symbols",true) ) {
             ClearUnusedSymbols cvis;

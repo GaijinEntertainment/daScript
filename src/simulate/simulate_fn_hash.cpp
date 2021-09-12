@@ -179,7 +179,7 @@ namespace das {
     extern ProgramPtr g_Program;
 
     void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line ) {
-        g_Program->markSymbolUse(false);
+        g_Program->markSymbolUse(false, false, false);
         DependencyCollector collector;
         collector.collect(fun.get());
         auto vecFunc = collector.getStableDependencies();

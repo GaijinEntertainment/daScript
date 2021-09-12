@@ -352,6 +352,8 @@ namespace das {
             sort(program->errors.begin(), program->errors.end());
             program->isCompiling = false;
             if ( program->needMacroModule ) {
+                program->markSymbolUse(false, false, true);
+                program->allocateStack(logs);
                 program->makeMacroModule(logs);
             }
             if ( program->options.getBoolOption("log_compile_time",false) ) {
