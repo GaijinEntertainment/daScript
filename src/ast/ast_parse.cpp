@@ -356,7 +356,7 @@ namespace das {
             }
             if ( program->options.getBoolOption("log_compile_time",false) ) {
                 auto dt = get_time_usec(time0) / 1000000.;
-                logs << "compiler took " << dt << "\n";
+                logs << "compiler took " << dt << ", " << fileName << "\n";
             }
             return program;
         }
@@ -368,6 +368,7 @@ namespace das {
                                 ModuleGroup & libGroup,
                                 bool exportAll,
                                 CodeOfPolicies policies ) {
+        auto time0 = ref_time_ticks();
         ReuseGuard<TypeDecl> rguard;
         vector<ModuleInfo> req;
         vector<string> missing, circular, notAllowed;
@@ -437,6 +438,10 @@ namespace das {
             if ( !res->failed() ) {
                 uint32_t hf = hash_blockz32((uint8_t *)fileName.c_str());
                 res->thisNamespace = "_anon_" + to_string(hf);
+            }
+            if ( res->options.getBoolOption("log_total_compile_time",false) ) {
+                auto dt = get_time_usec(time0) / 1000000.;
+                logs << "compiler took " << dt << "\n";
             }
             return res;
         } else {

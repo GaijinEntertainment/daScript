@@ -2714,7 +2714,11 @@ namespace das
         isCompilingMacros = false;
     }
 
+    extern "C" int64_t ref_time_ticks ();
+    extern "C" int get_time_usec (int64_t reft);
+
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
+        auto time0 = ref_time_ticks();
         isSimulating = true;
         context.thisProgram = this;
         context.persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
@@ -2884,6 +2888,7 @@ namespace das
         }
         // run init script and restart
         if ( !folding ) {
+            auto time1 = ref_time_ticks();
             if (!context.runWithCatch([&]() {
                 if ( context.stack.size() && context.stack.size()>globalInitStackSize ) {
                     context.runInitScript();
@@ -2899,6 +2904,10 @@ namespace das
             })) {
                 string exc = context.getException();
                 error("exception during init script", exc, "", LineInfo(), CompilationError::cant_initialize);
+            }
+            if ( options.getBoolOption("log_total_compile_time",false) ) {
+                auto dt = get_time_usec(time1) / 1000000.;
+                logs << "init script took " << dt << "\n";
             }
         }
         context.restart();
@@ -2937,6 +2946,10 @@ namespace das
                     fann->complete(&context);
                 }
             }
+        }
+        if ( options.getBoolOption("log_total_compile_time",false) ) {
+            auto dt = get_time_usec(time0) / 1000000.;
+            logs << "simulate (including init script) took " << dt << "\n";
         }
         return errors.size() == 0;
     }

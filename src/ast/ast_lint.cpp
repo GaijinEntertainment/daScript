@@ -465,6 +465,7 @@ namespace das {
         "log_infer_passes",             Type::tBool,
         "log_require",                  Type::tBool,
         "log_compile_time",             Type::tBool,
+        "log_total_compile_time",       Type::tBool,
         "log_generics",                 Type::tBool,
         "log_mn_hash",                  Type::tBool,
         "log_gmn_hash",                 Type::tBool,
