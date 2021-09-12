@@ -690,6 +690,8 @@ class private DAgent: DapiDebugAgent
             return <- res
 
         for ctx in contexts
+            if ctx.ctx.category.debug_context
+                continue
             *ctx.ctx |> clear_instruments()
             *ctx.ctx |> instrument_node(true) <| $(ati)
                 if ati.fileInfo == null
