@@ -593,6 +593,11 @@ namespace das {
         DAS_ASSERTF(module, "module not found? or you have forgotten to NEED_MODULE(Module_BuiltIn) be called first");
         if ( module ) {
             if ( find(modules.begin(),modules.end(),module)==modules.end() ) {
+                for ( auto dep : module->requireModule ) {
+                    if ( dep.first != module ) {
+                        addModule ( dep.first );
+                    }
+                }
                 modules.push_back(module);
                 module->addPrerequisits(*this);
                 return true;

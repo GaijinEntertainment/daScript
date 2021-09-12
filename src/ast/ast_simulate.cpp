@@ -2587,6 +2587,7 @@ namespace das
         pCall->debugInfo = expr->at;
         DAS_ASSERTF((func->builtIn || func->index>=0), "calling function which is not used. how?");
         pCall->fnPtr = context.getFunction(func->index);
+        DAS_ASSERTF((func->builtIn || pCall->fnPtr), "calling function which null. how?");
         pCall->fnIndex = func->index;
         if ( int nArg = (int) expr->arguments.size() ) {
             pCall->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
