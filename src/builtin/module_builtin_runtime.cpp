@@ -57,7 +57,7 @@ namespace das
     struct MacroFunctionAnnotation : MarkFunctionAnnotation {
         MacroFunctionAnnotation() : MarkFunctionAnnotation("_macro") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
-            func->init = true;
+            func->macroInit = true;
             g_Program->needMacroModule = true;
             return true;
         };

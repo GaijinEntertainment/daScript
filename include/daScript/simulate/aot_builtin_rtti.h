@@ -119,6 +119,8 @@ namespace das {
     struct CodeOfPolicies;
     void rtti_builtin_compile(char * modName, char * str, const CodeOfPolicies & cop,
         const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context, LineInfoArg * lineinfo);
+    void rtti_builtin_compile_ex ( char * modName, char * str, const CodeOfPolicies & cop, bool exportAll,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at );
     void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
         const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context, LineInfoArg * lineinfo);
 

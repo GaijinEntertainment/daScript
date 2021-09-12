@@ -251,6 +251,10 @@ namespace das {
         ContextAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Context", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addFieldEx("category", "category", offsetof(Context, category), makeContextCategoryFlags());
+            addProperty<DAS_BIND_MANAGED_PROP(getTotalFunctions)>("totalFunctions",
+                "getTotalFunctions");
+            addProperty<DAS_BIND_MANAGED_PROP(getTotalVariables)>("totalVariables",
+                "getTotalVariables");
         }
         virtual void walk ( das::DataWalker & walker, void * data ) override {
             if ( !walker.reading ) {
@@ -652,6 +656,11 @@ namespace das {
 
     void rtti_builtin_compile ( char * modName, char * str, const CodeOfPolicies & cop,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
+        return rtti_builtin_compile_ex(modName, str, cop, true, block, context, at);
+    }
+
+    void rtti_builtin_compile_ex ( char * modName, char * str, const CodeOfPolicies & cop, bool exportAll,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         str = str ? str : ((char *)"");
         TextWriter issues;
         uint32_t str_len = stringLengthSafe(*context, str);
@@ -659,7 +668,7 @@ namespace das {
         auto fileInfo = make_unique<FileInfo>((char *) str, uint32_t(str_len));
         access->setFileInfo(modName, move(fileInfo));
         ModuleGroup dummyLibGroup;
-        auto program = parseDaScript(modName, access, issues, dummyLibGroup, true, false, cop);
+        auto program = parseDaScript(modName, access, issues, dummyLibGroup, exportAll, false, cop);
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {
@@ -1090,6 +1099,8 @@ namespace das {
                 SideEffects::modifyExternal, "rtti_get_builtin_module");
             addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "compile",
                 SideEffects::modifyExternal, "rtti_builtin_compile");
+            addExtern<DAS_BIND_FUN(rtti_builtin_compile_ex)>(*this, lib, "compile",
+                SideEffects::modifyExternal, "rtti_builtin_compile_ex");
             addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
                 SideEffects::modifyExternal, "rtti_builtin_compile_file");
             addExtern<DAS_BIND_FUN(rtti_builtin_simulate)>(*this, lib, "simulate",

@@ -82,7 +82,7 @@ namespace das {
             fni->fields[i] = makeVariableDebugInfo(*fn.arguments[i]);
         }
         fni->flags = 0;
-        if ( fn.init ) fni->flags |= FuncInfo::flag_init;
+        if ( fn.init || fn.macroInit ) fni->flags |= FuncInfo::flag_init;
         if ( fn.shutdown ) fni->flags |= FuncInfo::flag_shutdown;
         if ( fn.builtIn ) fni->flags |= FuncInfo::flag_builtin;
         if ( fn.privateFunction ) fni->flags |= FuncInfo::flag_private;

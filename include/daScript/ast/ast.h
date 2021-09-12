@@ -704,6 +704,7 @@ namespace das
                 bool    isTypeConstructor : 1;
                 bool    shutdown : 1;
                 bool    anyTemplate : 1;
+                bool    macroInit : 1;
             };
             uint32_t flags = 0;
         };

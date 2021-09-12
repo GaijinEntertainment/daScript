@@ -107,7 +107,7 @@ def override_method ( var str:StructurePtr; name,funcName:string ) : bool
 class MacroMacro : AstFunctionAnnotation
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         compiling_program().flags |= ProgramFlags needMacroModule
-        func.flags |= FunctionFlags init
+        func.flags |= FunctionFlags macroInit
         var blk <- new [[ExprBlock() at=func.at]]
         var ifm <- new [[ExprCall() at=func.at, name:="is_compiling_macros"]]
         var ife <- new [[ExprIfThenElse() at=func.at, cond<-ifm, if_true<-func.body]]
@@ -194,7 +194,7 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
     if fn == null
         fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
         fn.flags |= FunctionFlags generated
-        fn.flags |= FunctionFlags init
+        fn.flags |= FunctionFlags macroInit
         fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
         var blk <- new [[ExprBlock() at=at]]
         var iblk <- new [[ExprBlock() at=at]]
