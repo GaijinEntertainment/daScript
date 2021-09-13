@@ -163,7 +163,9 @@ namespace das
 #if DAS_ENABLE_EXCEPTIONS
     class dasException : public runtime_error {
     public:
-        dasException ( const char * why ) : runtime_error(why) {}
+        dasException ( const char * why, const LineInfo & at ) : runtime_error(why), exceptionAt(at) {}
+    public:
+        LineInfo exceptionAt;
     };
 #endif
 
@@ -631,6 +633,7 @@ namespace das
         void *          abiCMRES;
     public:
         const char *    exception = nullptr;
+        LineInfo        exceptionAt;
         string          lastError;
 #if !DAS_ENABLE_EXCEPTIONS
         jmp_buf *       throwBuf = nullptr;

@@ -1277,8 +1277,7 @@ namespace das
         va_start (args, message);
         vsnprintf (buffer,PRINT_BUFFER_SIZE,message, args);
         va_end (args);
-        lastError = at.describe() + ": " + buffer;
-        throw_fatal_error(lastError.c_str(), at);
+        throw_fatal_error(buffer, at);
     }
 
     void Context::throw_error_ex ( const char * message, ... ) {
@@ -1288,8 +1287,7 @@ namespace das
         va_start (args, message);
         vsnprintf (buffer,PRINT_BUFFER_SIZE,message, args);
         va_end (args);
-        lastError = buffer;
-        throw_fatal_error(lastError.c_str(), LineInfo());
+        throw_fatal_error(buffer, LineInfo());
     }
 
     void Context::throw_error ( const char * message ) {
@@ -1298,9 +1296,10 @@ namespace das
 
     void Context::throw_fatal_error ( const char * message, const LineInfo & at ) {
         exception = message;
+        exceptionAt = at;
 #if DAS_ENABLE_EXCEPTIONS
         if ( breakOnException ) breakPoint(at, "exception", message);
-        throw dasException(message ? message : "");
+        throw dasException(message ? message : "", at);
 #else
         if ( throwBuf ) {
             if ( breakOnException ) breakPoint(at, "exception", message);
@@ -1308,7 +1307,8 @@ namespace das
         } else {
             to_err("\nunhandled exception\n");
             if ( exception ) {
-                to_err(exception);
+                string msg = exceptionAt.describe() + ": " + exception;
+                to_err(msg.c_str());
                 to_err("\n");
             }
             stackWalk(nullptr, false, false);
@@ -1322,14 +1322,15 @@ namespace das
 
     void Context::rethrow () {
 #if DAS_ENABLE_EXCEPTIONS
-        throw dasException(exception ? exception : "");
+        throw dasException(exception ? exception : "", exceptionAt);
 #else
         if ( throwBuf ) {
             longjmp(*throwBuf,1);
         } else {
             to_err("\nunhandled exception\n");
             if ( exception ) {
-                to_err(exception);
+                string msg = exceptionAt.describe() + ": " + exception;
+                to_err(msg.c_str());
                 to_err("\n");
             }
             stackWalk(nullptr, false, false);
