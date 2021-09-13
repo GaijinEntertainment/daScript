@@ -22,6 +22,8 @@ struct ExEnum
     removePrefix : bool = true
     isFlags : bool = false
 
+var extra_args = ""
+
 var local_type_names : array<string>
 
 var blocked_type_names : array<string>
@@ -43,6 +45,8 @@ var blocked_defines : array<string> <- [{string []
 var blocked_defines_table : table<string;bool>
 
 var is_function_blocked : lambda<(name:string):bool>
+
+var is_const_blocked : lambda<(name:string):bool>
 
 var cmres_functions : array<string>
 
@@ -764,6 +768,10 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
             fprint(df,"\"arg{fn.isMethod ? argi+1 : argi}\"")
         else
             fprint(df,"\"{arg.name}\"")
+    if !extra_args |> empty
+        if length(fn.args) > 0
+            fprint(df,",")
+        fprint(df,extra_args)
     fprint(df,"\})\n")
     var rtype : string
     var qargs <- parseQualArgs(fn.ftype, rtype)
@@ -870,12 +878,14 @@ def genDefineConstants(fnames:array<string>; prefix:string)
                     let DEF = regex_group(reg_def_hex,1,data)
                     let VAL = regex_group(reg_def_hex,2,data)
                     if !blocked_defines_table |> key_exists(DEF)
-                        fprint(hf,"addConstant(*this,\"{DEF}\",uint32_t({VAL}));\n")
+                        if is_const_blocked==null || !invoke(is_const_blocked,DEF)
+                            fprint(hf,"addConstant(*this,\"{DEF}\",uint32_t({VAL}));\n")
                     return true
                 regex_foreach(reg_def_dec,data) <| $ ( r )
                     if ! ofs |> key_exists(r.x)
                         let DEF = regex_group(reg_def_dec,1,data)
                         let VAL = regex_group(reg_def_dec,2,data)
                         if !blocked_defines_table |> key_exists(DEF)
-                            fprint(hf,"addConstant(*this,\"{DEF}\",int32_t({VAL}));\n")
+                            if is_const_blocked==null || !invoke(is_const_blocked,DEF)
+                                fprint(hf,"addConstant(*this,\"{DEF}\",int32_t({VAL}));\n")
                     return true

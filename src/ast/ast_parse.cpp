@@ -351,10 +351,12 @@ namespace das {
             g_Program.reset();
             sort(program->errors.begin(), program->errors.end());
             program->isCompiling = false;
-            if ( program->needMacroModule ) {
-                program->markSymbolUse(false, false, true);
-                program->allocateStack(logs);
-                program->makeMacroModule(logs);
+            if ( !program->failed() ) {
+                if ( program->needMacroModule ) {
+                    program->markSymbolUse(false, false, true);
+                    program->allocateStack(logs);
+                    program->makeMacroModule(logs);
+                }
             }
             if ( program->options.getBoolOption("log_compile_time",false) ) {
                 auto dt = get_time_usec(time0) / 1000000.;
