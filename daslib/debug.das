@@ -711,12 +711,12 @@ class private DAgent: DapiDebugAgent
         return <- res
 
     def override onInstrument(var ctx: Context; at: LineInfo): void
-        self->onPause(ctx, at, "breakpoint")
+        self->onPause(ctx, at, "breakpoint", "")
 
     def override onBreakpoint(var ctx: Context; at:LineInfo; reason:string): void
-        self->onPause(ctx, at, reason)
+        self->onPause(ctx, at, reason, reason)
 
-    def onPause(var ctx: Context; at:LineInfo; reason: string): void
+    def onPause(var ctx: Context; at:LineInfo; reason, text: string): void
         if at.fileInfo == null
             return
         if server == null
@@ -729,7 +729,7 @@ class private DAgent: DapiDebugAgent
         self->addContext(ctx)
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             ctx |> set_single_step(true)
-            self->sendStopped(ctx, ctxData, path, at, reason, -1ul)
+            self->sendStopped(ctx, ctxData, path, at, reason, text, -1ul)
             while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debugger()
             ctxData.continueRequested = false
@@ -759,14 +759,14 @@ class private DAgent: DapiDebugAgent
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             let file = string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
             if ctxData.pauseRequested
-                self->sendStopped(ctx, ctxData, file, at, "pause", -1ul)
+                self->sendStopped(ctx, ctxData, file, at, "pause", "", -1ul)
                 while ctxData.pauseRequested
                     tick_debugger()
                 self->reqResume(ctxData)
 
             if ctxData.stepInRequested
                 ctxData.stepInRequested = false
-                self->sendStopped(ctx, ctxData, file, at, "step", -1ul)
+                self->sendStopped(ctx, ctxData, file, at, "step", "", -1ul)
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debugger()
                 ctxData.continueRequested = false
@@ -775,7 +775,7 @@ class private DAgent: DapiDebugAgent
                 if stack_depth(*ctxData.ctx) > ctxData.stepRequestedStack
                     return
                 ctxData.stepRequestedStack = 0
-                self->sendStopped(ctx, ctxData, file, at, "step", -1ul)
+                self->sendStopped(ctx, ctxData, file, at, "step", "", -1ul)
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debugger()
                 ctxData.continueRequested = false
@@ -801,7 +801,7 @@ class private DAgent: DapiDebugAgent
                     // self->log("search break `{file}` {brs} in {file}\n")
                     if br.line != uint(at.line)
                         continue
-                    self->sendStopped(ctx, ctxData, file, at, "breakpoint", br.id)
+                    self->sendStopped(ctx, ctxData, file, at, "breakpoint", "", br.id)
 
                     ctxData.continueRequested = false
                     while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
@@ -848,11 +848,11 @@ class private DAgent: DapiDebugAgent
                         return
                 frame.state |> emplace <| [[auto STATE_VARS+uint64(length(frame.state)), category, [{auto[] variable}] ]]
 
-    def sendStopped(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo; reason: string; brId: uint64)
+    def sendStopped(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo; reason, text: string; brId: uint64)
         self->log("<< stopped `{reason}` at {path}:{int(at.line)}")
 
         self->nextStep(ctx, ctxData, path, at)
-        server->sendStopped(ctxData, reason, brId)
+        server->sendStopped(ctxData, reason, text, brId)
 
     def override onTick()
         if server != null
@@ -1323,9 +1323,10 @@ class private DAServer: Server
             self->send(reinterpret<uint8?> packStr, length(packStr))
             delete data
 
-    def sendStopped(ctx: DAContext; reason: string; brId: uint64)
+    def sendStopped(ctx: DAContext; reason, text: string; brId: uint64)
         self->sendEvent("stopped", JV({{
             "reason"=>JV(reason);
+            "text"=>empty(text) ? JV(null) : JV(text);
             "threadId"=>JV(double(ctx.id));
             "allThreadsStopped"=>JV(false);
             "hitBreakpointIds"=>brId == -1ul ? null : JV([{auto[] JV(brId)}])
