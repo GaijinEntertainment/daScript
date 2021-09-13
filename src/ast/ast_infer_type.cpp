@@ -6271,6 +6271,9 @@ namespace das {
                         error("can't move from a constant value " + describeType(decl->value->type), "", "",
                             decl->value->at, CompilationError::cant_move);
                     }
+                    if ( !decl->moveSemantics && !field->type->ref ) {
+                        decl->value = Expression::autoDereference(decl->value);
+                    }
                 } else {
                     error("field not found, " + decl->name, "", "",
                         decl->at, CompilationError::cant_get_field);
@@ -6292,6 +6295,9 @@ namespace das {
                     } else if (decl->moveSemantics && decl->value->type->isConst()) {
                         error("can't move from a constant value " + describeType(decl->value->type), "", "",
                             decl->value->at, CompilationError::cant_move);
+                    }
+                    if ( !decl->moveSemantics && !fldt->ref ) {
+                        decl->value = Expression::autoDereference(decl->value);
                     }
                 } else {
                     error("annotation field not found, " + decl->name, "", "",
@@ -6519,7 +6525,8 @@ namespace das {
                 auto initl = static_cast<ExprMakeLocal *>(init);
                 expr->initAllFields &= initl->initAllFields;
             }
-            return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
+
+            return Expression::autoDereference(Visitor::visitMakeTupleIndex(expr, index, init, lastField));
         }
         virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
             for ( auto & val : expr->values ) {
@@ -6713,7 +6720,7 @@ namespace das {
                 auto initl = static_cast<ExprMakeLocal *>(init);
                 expr->initAllFields &= initl->initAllFields;
             }
-            return Visitor::visitMakeArrayIndex(expr,index,init,last);
+            return Expression::autoDereference( Visitor::visitMakeArrayIndex(expr,index,init,last) );
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
             if ( expr->makeType && expr->makeType->isExprType() ) {
