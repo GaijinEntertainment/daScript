@@ -8,8 +8,8 @@ require debugapi
 class SampleDebugAgent : DapiDebugAgent
     def SampleDebugAgent
         pass
-    def override onBreakpoint ( var ctx:Context; at:LineInfo; reason:string ) : void
-        print("{ctx} {ctx.name} : breakpoint at line {int(at.line)}, {reason}\n")
+    def override onBreakpoint ( var ctx:Context; at:LineInfo; reason,text:string ) : void
+        print("{ctx} {ctx.name} : breakpoint at line {int(at.line)}, {reason}, {text}\n")
         instrument_node(ctx, true) <| $ ( ati )
             if ati.fileInfo == at.fileInfo
                 if ati.line == at.line + 2u

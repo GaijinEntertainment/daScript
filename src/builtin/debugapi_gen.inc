@@ -870,11 +870,11 @@ public:
   static __forceinline Func get_onBreakpoint ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onBreakpoint]);
   }
-  static __forceinline void invoke_onBreakpoint ( Context * __context__, Func __funcCall__, void * self, Context & ctx, LineInfo const  & at, char * const  reason ) {
+  static __forceinline void invoke_onBreakpoint ( Context * __context__, Func __funcCall__, void * self, Context & ctx, LineInfo const  & at, char * const  reason, char * const  text ) {
     das_invoke_function<void>::invoke
-      <void *,Context &,LineInfo const  &,char * const >
+      <void *,Context &,LineInfo const  &,char * const ,char * const >
         (__context__,nullptr,__funcCall__,
-          self,ctx,at,reason);
+          self,ctx,at,reason,text);
   }
   static __forceinline Func get_onVariable ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onVariable]);

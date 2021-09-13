@@ -1244,11 +1244,11 @@ namespace das
         }
     }
 
-    void Context::breakPoint(const LineInfo & at, const char * reason) {
+    void Context::breakPoint(const LineInfo & at, const char * reason, const char * text) {
         if ( debugger ) {
             bool any = false;
             for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-                pAgent->onBreakpoint(this, at, reason);
+                pAgent->onBreakpoint(this, at, reason, text);
                 any = true;
             });
             if ( any ) return;
@@ -1299,11 +1299,11 @@ namespace das
     void Context::throw_fatal_error ( const char * message, const LineInfo & at ) {
         exception = message;
 #if DAS_ENABLE_EXCEPTIONS
-        if ( breakOnException ) breakPoint(at, "exception");
+        if ( breakOnException ) breakPoint(at, "exception", message);
         throw dasException(message ? message : "");
 #else
         if ( throwBuf ) {
-            if ( breakOnException ) breakPoint(at, "exception");
+            if ( breakOnException ) breakPoint(at, "exception", message);
             longjmp(*throwBuf,1);
         } else {
             to_err("\nunhandled exception\n");
@@ -1312,7 +1312,7 @@ namespace das
                 to_err("\n");
             }
             stackWalk(nullptr, false, false);
-            breakPoint(at, "exception");
+            breakPoint(at, "exception", message);
         }
 #endif
 #if !defined(_MSC_VER) || (_MSC_VER>1900)

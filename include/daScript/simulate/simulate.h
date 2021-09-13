@@ -201,7 +201,7 @@ namespace das
         virtual void onSingleStep ( Context *, const LineInfo & ) {}
         virtual void onInstrument ( Context *, const LineInfo & ) {}
         virtual void onInstrumentFunction ( Context *, SimFunction *, bool ) {}
-        virtual void onBreakpoint ( Context *, const LineInfo &, const char * ) {}
+        virtual void onBreakpoint ( Context *, const LineInfo &, const char *, const char * ) {}
         virtual void onVariable ( Context *, const char *, const char *, TypeInfo *, void * ) {}
         virtual void onTick () {}
         virtual void onCollect ( Context * ) {}
@@ -356,7 +356,7 @@ namespace das
 
         virtual void to_out ( const char * message );   // output to stdout or equivalent
         virtual void to_err ( const char * message );   // output to stderr or equivalent
-        virtual void breakPoint(const LineInfo & info, const char * reason = "breakpoint"); // what to do in case of breakpoint
+        virtual void breakPoint(const LineInfo & info, const char * reason = "breakpoint", const char * text = ""); // what to do in case of breakpoint
 
         __forceinline vec4f * abiArguments() {
             return abiArg;

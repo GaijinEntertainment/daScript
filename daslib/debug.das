@@ -713,8 +713,8 @@ class private DAgent: DapiDebugAgent
     def override onInstrument(var ctx: Context; at: LineInfo): void
         self->onPause(ctx, at, "breakpoint", "")
 
-    def override onBreakpoint(var ctx: Context; at:LineInfo; reason:string): void
-        self->onPause(ctx, at, reason, reason)
+    def override onBreakpoint(var ctx: Context; at:LineInfo; reason, text:string): void
+        self->onPause(ctx, at, reason, text)
 
     def onPause(var ctx: Context; at:LineInfo; reason, text: string): void
         if at.fileInfo == null

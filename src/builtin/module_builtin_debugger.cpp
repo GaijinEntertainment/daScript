@@ -97,10 +97,10 @@ namespace debugapi {
                 context->unlock();
             }
         }
-        virtual void onBreakpoint ( Context * ctx, const LineInfo & at, const char * reason ) override {
+        virtual void onBreakpoint ( Context * ctx, const LineInfo & at, const char * reason, const char * text ) override {
             if ( auto fnOnBreakpoint = get_onBreakpoint(classPtr) ) {
                 context->lock();
-                invoke_onBreakpoint(context,fnOnBreakpoint,classPtr,*ctx,at,(char *)reason);
+                invoke_onBreakpoint(context,fnOnBreakpoint,classPtr,*ctx,at,(char *)reason,(char *)text);
                 context->unlock();
             }
         }
