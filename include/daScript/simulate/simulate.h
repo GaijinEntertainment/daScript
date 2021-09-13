@@ -201,7 +201,7 @@ namespace das
         virtual void onSingleStep ( Context *, const LineInfo & ) {}
         virtual void onInstrument ( Context *, const LineInfo & ) {}
         virtual void onInstrumentFunction ( Context *, SimFunction *, bool ) {}
-        virtual void onBreakpoint ( Context *, const LineInfo & ) {}
+        virtual void onBreakpoint ( Context *, const LineInfo &, const char * ) {}
         virtual void onVariable ( Context *, const char *, const char *, TypeInfo *, void * ) {}
         virtual void onTick () {}
         virtual void onCollect ( Context * ) {}
@@ -310,6 +310,7 @@ namespace das
         DAS_NORETURN_PREFIX void throw_error ( const char * message ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN_SUFFIX;
+        DAS_NORETURN_PREFIX void throw_fatal_error ( const char * message, const LineInfo & at ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void rethrow () DAS_NORETURN_SUFFIX;
 
         __forceinline SimFunction * getFunction ( int index ) const {
@@ -353,9 +354,9 @@ namespace das
         void runInitScript ();
         bool runShutdownScript ();
 
-        virtual void to_out ( const char * message );           // output to stdout or equivalent
-        virtual void to_err ( const char * message );           // output to stderr or equivalent
-        virtual void breakPoint(const LineInfo & info);         // what to do in case of breakpoint
+        virtual void to_out ( const char * message );   // output to stdout or equivalent
+        virtual void to_err ( const char * message );   // output to stderr or equivalent
+        virtual void breakPoint(const LineInfo & info, const char * reason = "breakpoint"); // what to do in case of breakpoint
 
         __forceinline vec4f * abiArguments() {
             return abiArg;
@@ -620,6 +621,7 @@ namespace das
         uint32_t                        insideContext = 0;
         bool                            ownStack = false;
         bool                            shutdown = false;
+        bool                            breakOnException = false;
     public:
         string                          name;
         Bitfield                        category = 0;

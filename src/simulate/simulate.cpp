@@ -1244,11 +1244,11 @@ namespace das
         }
     }
 
-    void Context::breakPoint(const LineInfo & at) {
+    void Context::breakPoint(const LineInfo & at, const char * reason) {
         if ( debugger ) {
             bool any = false;
             for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-                pAgent->onBreakpoint(this, at);
+                pAgent->onBreakpoint(this, at, reason);
                 any = true;
             });
             if ( any ) return;
@@ -1278,7 +1278,7 @@ namespace das
         vsnprintf (buffer,PRINT_BUFFER_SIZE,message, args);
         va_end (args);
         lastError = at.describe() + ": " + buffer;
-        throw_error(lastError.c_str());
+        throw_fatal_error(lastError.c_str(), at);
     }
 
     void Context::throw_error_ex ( const char * message, ... ) {
@@ -1289,15 +1289,21 @@ namespace das
         vsnprintf (buffer,PRINT_BUFFER_SIZE,message, args);
         va_end (args);
         lastError = buffer;
-        throw_error(lastError.c_str());
+        throw_fatal_error(lastError.c_str(), LineInfo());
     }
 
     void Context::throw_error ( const char * message ) {
+        throw_fatal_error(message, LineInfo());
+    }
+
+    void Context::throw_fatal_error ( const char * message, const LineInfo & at ) {
         exception = message;
 #if DAS_ENABLE_EXCEPTIONS
+        if ( breakOnException ) breakPoint(at, "exception");
         throw dasException(message ? message : "");
 #else
         if ( throwBuf ) {
+            if ( breakOnException ) breakPoint(at, "exception");
             longjmp(*throwBuf,1);
         } else {
             to_err("\nunhandled exception\n");
@@ -1306,7 +1312,7 @@ namespace das
                 to_err("\n");
             }
             stackWalk(nullptr, false, false);
-            os_debug_break();
+            breakPoint(at, "exception");
         }
 #endif
 #if !defined(_MSC_VER) || (_MSC_VER>1900)

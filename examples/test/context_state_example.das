@@ -38,8 +38,8 @@ class SampleDebugAgent : DapiDebugAgent
         unsafe
             delete walker_adapter
             delete walker
-    def override onBreakpoint ( var ctx:Context; at:LineInfo ) : void
-        print("{ctx} {ctx.name} : breakpoint at line {int(at.line)}\n")
+    def override onBreakpoint ( var ctx:Context; at:LineInfo; reason:string ) : void
+        print("{ctx} {ctx.name} : breakpoint at line {int(at.line)}, {reason}\n")
         collect_debug_agent_state(ctx)
         set_single_step(ctx,true)
     def override onSingleStep ( var ctx:Context; at:LineInfo ) : void
