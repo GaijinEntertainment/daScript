@@ -134,7 +134,7 @@ class DAWalker: DapiDataWalker
     varsStack: array<DAVariable?>
     [[do_not_delete]] frame: DAStackFrame?
     visited: array<tuple<ps: void?; hash: uint>>
-    previewChildrenNum = 5
+    inlinePreviewLimit: int = 50
 
     def startWalk(var f: DAStackFrame; var v: DAVariable; cb: block<(): void>)
         unsafe
@@ -198,9 +198,9 @@ class DAWalker: DapiDataWalker
         let n = length(varsStack)
         if n > 0
             var v & = varsStack[n - 1]
-            if v.children != null && length(*v.children) <= previewChildrenNum
-                v.value = join_with_names(*v.children)
-            elif empty(v.value)
+            if v.children != null
+                v.value = join_with_names(*v.children, inlinePreviewLimit)
+            if empty(v.value)
                 v.value = v._type
 
     def override afterStructureCancel(ps: void?; si: StructInfo): void
@@ -209,9 +209,9 @@ class DAWalker: DapiDataWalker
         let n = length(varsStack)
         if n > 0
             var v & = varsStack[n - 1]
-            if v.children != null && length(*v.children) <= previewChildrenNum
-                v.value = join_with_names(*v.children)
-            elif empty(v.value)
+            if v.children != null
+                v.value = join_with_names(*v.children, inlinePreviewLimit)
+            if empty(v.value)
                 v.value = v._type
 
     def override beforeArrayData(ps: void?; stride: uint; count: uint; ti:TypeInfo): void
@@ -246,9 +246,11 @@ class DAWalker: DapiDataWalker
         let n = length(varsStack)
         if n > 0
             var v & = varsStack[n - 1]
-            if v.children != null && length(*v.children) <= previewChildrenNum
-                v.value = "[{int64(count)}] {join(*v.children)}"
-            elif empty(v.value)
+            if v.children != null
+                let preview = join(*v.children, inlinePreviewLimit - 5)
+                if !empty(preview)
+                    v.value = "[{int64(count)}] {preview}"
+            if empty(v.value)
                 v.value = "[{int64(count)}] {v._type}"
 
     def override beforeTable(pa: DapiTable; ti: TypeInfo): void
@@ -293,9 +295,11 @@ class DAWalker: DapiDataWalker
         let n = length(varsStack)
         if n > 0
             var v & = varsStack[n - 1]
-            if v.children != null && length(*v.children) > 0 && length(*v.children) <= previewChildrenNum
-                v.value = "[{int64(pa.size)}] {join_with_names(*v.children)}"
-            elif empty(v.value)
+            if v.children != null
+                let preview = join_with_names(*v.children, inlinePreviewLimit - 5)
+                if !empty(preview)
+                    v.value = "[{int64(pa.size)}] {preview}"
+            if empty(v.value)
                 v.value = "[{int64(pa.size)}] {v._type}"
 
     tupleIndex: int = 0
@@ -328,9 +332,9 @@ class DAWalker: DapiDataWalker
         let n = length(varsStack)
         if n > 0
             var v & = varsStack[n - 1]
-            if v.children != null && length(*v.children) > 0 && length(*v.children) <= previewChildrenNum
-                v.value = join(*v.children)
-            elif empty(v.value)
+            if v.children != null
+                v.value = join(*v.children, inlinePreviewLimit)
+            if empty(v.value)
                 v.value = v._type
 
 struct private DAVariable
@@ -341,24 +345,38 @@ struct private DAVariable
     indexedVariables: uint
     children: array<DAVariable>?
 
-def join_with_names(a: array<DAVariable>): string
+def join_with_names(a: array<DAVariable>; limit: int): string
     return build_string() <| $(str)
         var first = true
-        for child in a
+        var len = limit
+        let n = length(a)
+        for child, idx in a, range(n)
+            len -= length(child.name) + length(child.value) + 2
             if !first
+                if len <= 3 && idx < n - 1
+                    str |> write(",..")
+                    break
                 str |> write(", ")
+                len -= 2
             first = false
             str |> write(child.name)
             str |> write(": ")
             str |> write(child.value)
 
 
-def join(a: array<DAVariable>): string
+def join(a: array<DAVariable>; limit: int): string
     return build_string <| $(str)
         var first = true
-        for v in a
+        let n = length(a)
+        var len = limit
+        for v, idx in a, range(n)
+            len -= length(v.value)
             if !first
+                if len <= 3 && idx < n - 1
+                    str |> write(",..")
+                    break
                 str |> write(", ")
+                len -= 2
             first = false
             str |> write(v.value)
 
@@ -1101,12 +1119,18 @@ class private DAServer: Server
                         pathAliases[k] = v as _string
         agent->setPaths(resPaths, pathAliases)
 
+    def setInlinePreviewLimit(data: JsonValue?)
+        let limit = data |> jon("inlinePreviewLimit", double(agent.walker.dataWalker.inlinePreviewLimit))
+        agent.walker.dataWalker.inlinePreviewLimit = int(limit)
+
     def reqLaunch(seq: double; command: string; data: JsonValue?)
         self->setPaths(data)
+        self->setInlinePreviewLimit(data)
         self->sendSuccessResponse(seq, command, null)
 
     def reqAttach(seq: double; command: string; data: JsonValue?)
         self->setPaths(data)
+        self->setInlinePreviewLimit(data)
         self->sendSuccessResponse(seq, command, null)
 
     def reqDisconnect(seq: double; command: string; data: JsonValue?)
