@@ -714,6 +714,9 @@ class private DAgent: DapiDebugAgent
         self->onPause(ctx, at, "breakpoint", "")
 
     def override onBreakpoint(var ctx: Context; at:LineInfo; reason, text:string): void
+        if reason == "exception"
+            self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
+                ctxData |> reset_debug_flags()
         self->onPause(ctx, at, reason, text)
 
     def onPause(var ctx: Context; at:LineInfo; reason, text: string): void
