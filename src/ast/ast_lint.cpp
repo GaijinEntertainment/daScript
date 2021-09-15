@@ -243,7 +243,7 @@ namespace das {
                 if ( ann->rtti_isFunctionAnnotation() ) {
                     auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann);
                     string err;
-                    if ( !fnAnn->verifyCall(expr, annDecl->arguments, err) ) {
+                    if ( !fnAnn->verifyCall(expr, annDecl->arguments, program->options, err) ) {
                         program->error("call annotated by " + fnAnn->name + " failed", err, "",
                                        expr->at, CompilationError::annotation_failed);
                     }

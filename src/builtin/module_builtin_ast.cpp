@@ -1995,6 +1995,14 @@ namespace das {
                 return nullptr;
             }
         }
+        virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args,
+                const AnnotationArgumentList & progArgs, string & err ) override {
+            if ( auto fnTransform = get_verifyCall(classPtr) ) {
+                return invoke_verifyCall(context,fnTransform,classPtr,call,args,progArgs,err);
+            } else {
+                return true;
+            }
+        }
         virtual bool isSpecialized () const override {
             if ( auto fnIsSpecialized = get_isSpecialized(classPtr) ) {
                 return invoke_isSpecialized(context,fnIsSpecialized,classPtr);

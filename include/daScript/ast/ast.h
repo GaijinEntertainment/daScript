@@ -316,7 +316,8 @@ namespace das
                                const AnnotationArgumentList &, string & ) { return true; }
         virtual void complete ( Context * ) { }
         virtual bool simulate ( Context *, SimFunction * ) { return true; }
-        virtual bool verifyCall ( ExprCallFunc * /*call*/, const AnnotationArgumentList & /*args*/, string & /*err*/ ) { return true; }
+        virtual bool verifyCall ( ExprCallFunc * /*call*/, const AnnotationArgumentList & /*args*/,
+            const AnnotationArgumentList & /*progArgs */, string & /*err*/ ) { return true; }
         virtual ExpressionPtr transformCall ( ExprCallFunc * /*call*/, string & /*err*/ ) { return nullptr; }
         virtual string aotName ( ExprCallFunc * call );
         virtual string aotArgumentPrefix ( ExprCallFunc * /*call*/, int /*argIndex*/ ) { return ""; }

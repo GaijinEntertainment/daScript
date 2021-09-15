@@ -265,7 +265,8 @@ namespace das
             return true;
         }
         // [local_only ()]
-        virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args, string & err ) override {
+        virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args,
+                const AnnotationArgumentList &, string & err ) override {
             if ( !call->func ) {
                 err = "unknown function";
                 return false;
