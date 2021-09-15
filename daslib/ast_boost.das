@@ -518,6 +518,18 @@ def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:stri
     arguments[argIdx].sValue := val
     return argIdx
 
+def get_for_source_index(expr:smart_ptr<ExprFor>; svar:VariablePtr)
+    for v,t in expr.iteratorVariables,range(100500)
+        if v==svar
+            return t
+    return -1
+
+def get_for_source_index(expr:smart_ptr<ExprFor>; source:ExpressionPtr)
+    for s,t in expr.sources,range(100500)
+        if s==source
+            return t
+    return -1
+
 [_macro]
 def private setup
     if is_compiling_macros_in_module("ast_boost")
