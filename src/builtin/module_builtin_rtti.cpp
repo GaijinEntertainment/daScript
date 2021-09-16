@@ -243,7 +243,7 @@ namespace das {
     TypeDeclPtr makeContextCategoryFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "context_category_flags";
-        ft->argNames = { "debug_context", "thread_clone", "job_clone", "opengl" };
+        ft->argNames = { "debug_context", "thread_clone", "job_clone", "opengl", "deugger_attached", "debugger_tick" };
         return ft;
     }
 
