@@ -562,8 +562,7 @@ def private reset_debug_flags(var ctx: DAContext)
 
 def private to_string(ctx: DAContext)
     return build_string() <| $(str)
-        let stoppable = (uint(ctx.ctx.category) & (1u << 31u)) != 0u
-        if stoppable
+        if ctx.ctx.category.debugger_attached
             str |> write("*")
         let ctxNameLen = length(ctx.ctx.name)
         if ctxNameLen > 0
@@ -610,7 +609,7 @@ class private DAgent: DapiDebugAgent
     initialStrLimit = uint64(8 * 1024 * 1024)
     strLimit: uint64 = uint64(8 * 1024 * 1024)
 
-    def DAgent()
+    def DAgent(var ctx: Context)
         waitConnection = wait_debugger()
         withInstruments = use_instruments()
 
@@ -621,6 +620,7 @@ class private DAgent: DapiDebugAgent
             walker.pathAliases = addr(pathAliases)
             walker.pathsCache = addr(pathsCache)
         self->startServer()
+        self->addContext(ctx)
         self->addContext(this_context())
 
     def startServer()
@@ -708,7 +708,7 @@ class private DAgent: DapiDebugAgent
             return <- res
 
         for ctx in contexts
-            if ctx.ctx.category.debug_context
+            if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick
                 continue
             *ctx.ctx |> clear_instruments()
             *ctx.ctx |> instrument_node(true) <| $(ati)
@@ -766,11 +766,11 @@ class private DAgent: DapiDebugAgent
             // self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n")
             // print("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n")
 
-        if (uint(ctx.category) & (1u << 31u)) != 0u
+        if ctx.category.debugger_attached
             self->addContext(ctx)
 
         if waitConnection && (!server.configurationDone || !server.threadsDone)
-            if (uint(ctx.category) & (1u << 31u)) != 0u
+            if ctx.category.debugger_attached
                 while !server.configurationDone || !server.threadsDone
                     tick_debugger()
             else
@@ -906,9 +906,13 @@ class private DAgent: DapiDebugAgent
                     print("dap: DOWN string heap limit: {bytes_hr(strLimit)}\n")
 
     def override onCreateContext(var ctx: Context): void
+        // unsafe
+        //     print("dap: context created {intptr(addr(ctx))} `{ctx.name}`")
         self->addContext(ctx)
 
     def override onDestroyContext(var ctx: Context): void
+        // unsafe
+        //     print("dap: context destroyed {intptr(addr(ctx))} `{ctx.name}`")
         self->removeContext(ctx)
 
     def getContextDataFor(var ctx: Context; cb: block<(var ctx: DAContext): void>): bool
@@ -934,6 +938,8 @@ class private DAgent: DapiDebugAgent
         return -1
 
     def addContext(var ctx: Context): bool
+        // unsafe
+        //     print("dap: add context {intptr(addr(ctx))}")
         let idx = self->getContextIdx(ctx)
         if idx >= 0
             return false
@@ -941,9 +947,9 @@ class private DAgent: DapiDebugAgent
             contexts |> emplace([[DAContext at=ctx_at(ctx), id=contextId, ctx=addr(ctx)]], 0)
         contextId += 1ul
         contexts |> sort <| $(a, b: DAContext)
-            let aid = uint(a.ctx.category) & ~(1u << 31u)
-            let bid = uint(b.ctx.category) & ~(1u << 31u)
-            return aid < bid
+            let aid = uint(a.ctx.category)
+            let bid = uint(b.ctx.category)
+            return aid > bid
         // TODO: send `threads` event
         return true
 
@@ -1364,8 +1370,8 @@ def private tick_debugger()
     sleep(10u)
 
 [export,unused_argument(ctx)]
-def private start_debug_agent(ctx: Context)
-    install_new_debug_agent(new DAgent(), "~debug")
+def private start_debug_agent(var ctx: Context)
+    install_new_debug_agent(new DAgent(ctx), "~debug")
 
 [export]
 def private start_agent(force:bool = false): bool
@@ -1381,12 +1387,13 @@ def private start_agent(force:bool = false): bool
 [init,export]
 def private auto_start_debug()
     if !is_in_debug_agent_creation()
-        this_context().category |= bitfield(1u << 31u) // TODO:
+        this_context().category |= context_category_flags debugger_attached
         set_single_step(this_context(), !use_instruments() || wait_debugger())
         if !has_debug_agent_context("~debug")
             if start_agent()
                 new_thread <| @
-                    this_context().category &= ~bitfield(1u << 31u) // TODO:
+                    this_context().category &= ~context_category_flags debugger_attached
+                    this_context().category |= context_category_flags debugger_tick
                     set_single_step(this_context(), false)
                     this_context().name := "tick thread"
                     while !is_job_que_shutting_down()
