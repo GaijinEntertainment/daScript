@@ -243,9 +243,16 @@ namespace das {
     TypeDeclPtr makeContextCategoryFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "context_category_flags";
-        ft->argNames = { "debug_context", "thread_clone", "job_clone", "opengl", "deugger_attached", "debugger_tick" };
+        ft->argNames = { "debug_context", "thread_clone", "job_clone", "opengl", "debugger_tick", "debugger_attached" };
         return ft;
     }
+
+    template <>
+    struct typeFactory<ContextCategory> {
+        static TypeDeclPtr make(const ModuleLibrary &) {
+            return makeContextCategoryFlags();
+        }
+    };
 
     struct ContextAnnotation : ManagedStructureAnnotation<Context,false> {
         ContextAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Context", ml) {
@@ -1030,6 +1037,7 @@ namespace das {
             lib.addBuiltInModule();
             // flags
             addAlias(makeProgramFlags());
+            addAlias(makeContextCategoryFlags());
             // enums
             addEnumeration(make_smart<EnumerationCompilationError>());
             // type annotations
