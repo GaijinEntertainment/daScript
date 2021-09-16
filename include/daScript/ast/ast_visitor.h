@@ -26,10 +26,12 @@ namespace das {
         virtual bool canVisitStructure ( Structure * st ) { return true; }
         virtual bool canVisitGlobalVariable ( Variable * fun ) { return true; }
         virtual bool canVisitFunction ( Function * fun ) { return true; }
+        virtual bool canVisitEnumeration ( Enumeration * en ) { return true; }
         virtual bool canVisitStructureFieldInit ( Structure * var ) { return true; }
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) { return true; }
         virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) { return true; }
         virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) { return true; }
+        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * expr ) { return true; }
         virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) { return true; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) { return false; }
         // WHOLE PROGRAM

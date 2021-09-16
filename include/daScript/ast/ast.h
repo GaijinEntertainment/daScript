@@ -1141,6 +1141,8 @@ namespace das
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
         StructurePtr visitStructure(Visitor & vis, Structure *);
         EnumerationPtr visitEnumeration(Visitor & vis, Enumeration *);
+        void visitModule(Visitor & vis, Module * thatModule, bool visitGenerics = false);
+        void visitModulesInOrder(Visitor & vis, bool visitGenerics = false);
         void visit(Visitor & vis, bool visitGenerics = false);
         void setPrintFlags();
         void aotCpp ( Context & context, TextWriter & logs );

@@ -489,6 +489,7 @@ namespace das {
         AstExprMakeStructAnnotation(ModuleLibrary & ml)
             :  AstExprMakeLocalAnnotation<ExprMakeStruct> ("ExprMakeStruct", ml) {
             addField<DAS_BIND_MANAGED_FIELD(structs)>("structs");
+            addField<DAS_BIND_MANAGED_FIELD(block)>("_block","block");
             this->addFieldEx ( "makeStructFlags", "makeStructFlags", offsetof(ExprMakeStruct, makeStructFlags), makeExprMakeStructFlags() );
         }
     };
@@ -1430,6 +1431,7 @@ namespace das {
         IMPL_ADAPT(TypeDecl);
         IMPL_ADAPT(Expression);
         IMPL_ADAPT(Alias);
+        fnCanVisitEnumeration = adapt("canVisitEnumeration",pClass,info);
         IMPL_ADAPT(Enumeration);
         IMPL_ADAPT(EnumerationValue);
         fnCanVisitStructure = adapt("canVisitStructure",pClass,info);
@@ -1499,6 +1501,8 @@ namespace das {
         FN_PREVISIT(ExprForBody) = adapt("preVisitExprForBody",pClass,info);
         IMPL_ADAPT(ExprMakeVariant);
         IMPL_ADAPT(ExprMakeVariantField);
+        fnCanVisitMakeStructBody = adapt("canVisitMakeStructBody",pClass,info);
+        fnCanVisitMakeStructBlock = adapt("canVisitMakeStructBlock",pClass,info);
         IMPL_ADAPT(ExprMakeStruct);
         IMPL_ADAPT(ExprMakeStructIndex);
         IMPL_ADAPT(ExprMakeStructField);
@@ -1593,6 +1597,15 @@ namespace das {
     TypeDeclPtr VisitorAdapter::visitAlias ( TypeDecl * expr, const string & name )
         { IMPL_VISIT2(Alias,TypeDecl,TypeDecl,expr,const string &,name); }
 // enumeration
+    bool VisitorAdapter::canVisitEnumeration ( Enumeration * enu ) {
+        if ( fnCanVisitEnumeration ) {
+            return das_invoke_function<bool>::invoke<void *,Enumeration *>
+                (context,nullptr,fnCanVisitEnumeration,classPtr,enu);
+        } else {
+            return true;
+        }
+    }
+
     void VisitorAdapter::preVisit ( Enumeration * expr )
         { IMPL_PREVISIT(Enumeration); }
     EnumerationPtr VisitorAdapter::visit ( Enumeration * expr )
@@ -1824,6 +1837,22 @@ namespace das {
     MakeFieldDeclPtr VisitorAdapter::visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last)
         { IMPL_VISIT4(ExprMakeVariantField,ExprMakeVariant,MakeFieldDecl,decl,int,index,MakeFieldDeclPtr,decl,bool,last); }
 // make structure
+    bool VisitorAdapter::canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) {
+        if ( fnCanVisitMakeStructBlock ) {
+            return das_invoke_function<bool>::invoke<void *,smart_ptr<ExprMakeStruct>,ExpressionPtr>
+                (context,nullptr,fnCanVisitMakeStructBlock,classPtr,expr,blk);
+        } else {
+            return true;
+        }
+    }
+    bool VisitorAdapter::canVisitMakeStructureBody ( ExprMakeStruct * expr ) {
+        if ( fnCanVisitMakeStructBody ) {
+            return das_invoke_function<bool>::invoke<void *,smart_ptr<ExprMakeStruct>>
+                (context,nullptr,fnCanVisitMakeStructBody,classPtr,expr);
+        } else {
+            return true;
+        }
+    }
     IMPL_BIND_EXPR(ExprMakeStruct);
     void VisitorAdapter::preVisitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last )
         { IMPL_PREVISIT3(ExprMakeStructIndex,ExprMakeStruct,int,index,bool,last); }
@@ -2466,6 +2495,14 @@ namespace das {
         program->visit(*adapter);
     }
 
+    void astVisitModulesInOrder ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(*line_info, "adapter is required");
+        if (!program)
+            context->throw_error_at(*line_info, "program is required");
+        program->visitModulesInOrder(*adapter);
+    }
+
     void astVisitFunction ( smart_ptr_raw<Function> func, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(*line_info, "adapter is required");
@@ -2866,6 +2903,8 @@ namespace das {
                 SideEffects::accessExternal, "forEachGenericFunction");
             addExtern<DAS_BIND_FUN(astVisit)>(*this, lib,  "visit",
                 SideEffects::accessExternal, "astVisit");
+            addExtern<DAS_BIND_FUN(astVisitModulesInOrder)>(*this, lib,  "visit_modules",
+                SideEffects::accessExternal, "astVisitModules");
             addExtern<DAS_BIND_FUN(astVisitFunction)>(*this, lib,  "visit",
                 SideEffects::accessExternal, "astVisitFunction");
             addExtern<DAS_BIND_FUN(astVisitExpression)>(*this, lib,  "visit",

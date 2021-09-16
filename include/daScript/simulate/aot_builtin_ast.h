@@ -28,6 +28,7 @@ namespace das {
         DECL_VISIT(TypeDecl);
         DECL_VISIT(Expression);
         DECL_VISIT(Alias);
+        Func fnCanVisitEnumeration;
         DECL_VISIT(Enumeration);
         DECL_VISIT(EnumerationValue);
         Func fnCanVisitStructure;
@@ -97,6 +98,8 @@ namespace das {
         Func FN_PREVISIT(ExprForBody);
         DECL_VISIT(ExprMakeVariant);
         DECL_VISIT(ExprMakeVariantField);
+        Func fnCanVisitMakeStructBody;
+        Func fnCanVisitMakeStructBlock;
         DECL_VISIT(ExprMakeStruct);
         DECL_VISIT(ExprMakeStructIndex);
         DECL_VISIT(ExprMakeStructField);
@@ -185,6 +188,7 @@ namespace das {
         virtual void preVisitAlias ( TypeDecl * expr, const string & name ) override;
         virtual TypeDeclPtr visitAlias ( TypeDecl * expr, const string & name ) override;
     // enumeration
+        virtual bool canVisitEnumeration ( Enumeration * en ) override;
         virtual void preVisit ( Enumeration * expr ) override;
         virtual EnumerationPtr visit ( Enumeration * expr ) override;
         virtual void preVisitEnumerationValue ( Enumeration * expr, const string & name, Expression * value, bool last ) override;
@@ -309,6 +313,8 @@ namespace das {
         virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override;
         virtual MakeFieldDeclPtr visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last) override;
     // make structure
+        virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) override;
+        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * expr );
         IMPL_BIND_EXPR(ExprMakeStruct);
         virtual void preVisitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last ) override;
         virtual void visitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last ) override;
@@ -436,6 +442,7 @@ namespace das {
     Module * thisModule ( Context * context, LineInfoArg * lineinfo );
     smart_ptr_raw<Program> thisProgram ( Context * context );
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
+    void astVisitModulesInOrder ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
     void astVisitFunction ( smart_ptr_raw<Function> func, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
     void astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
     PassMacroPtr makePassMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );

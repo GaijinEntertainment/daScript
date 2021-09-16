@@ -103,6 +103,7 @@ class AstVisitor
     def abstract preVisitAlias(typ:TypeDeclPtr;name:das_string) : void
     def abstract visitAlias(typ:TypeDeclPtr;name:das_string) : TypeDeclPtr
 // enumeration
+    def abstract canVisitEnumeration(arg:Enumeration?) : bool
     def abstract preVisitEnumeration(enu:EnumerationPtr) : void
     def abstract preVisitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool) : void
     def abstract visitEnumerationValue(enu:EnumerationPtr;name:das_string;value:ExpressionPtr;last:bool) : ExpressionPtr
@@ -249,6 +250,8 @@ class AstVisitor
     def abstract preVisitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
     def abstract visitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
 // make structure
+    def abstract canVisitMakeStructBody(expr:smart_ptr<ExprMakeStruct>) : bool
+    def abstract canVisitMakeStructBlock(expr:smart_ptr<ExprMakeStruct>;blk:ExpressionPtr) : bool
     def abstract preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : void
     def abstract visitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : ExpressionPtr
     def abstract preVisitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool) : void

@@ -2298,19 +2298,21 @@ namespace das {
             makeType = makeType->visit(vis);
             makeType = vis.visit(makeType.get());
         }
-        for ( int index=0; index != int(structs.size()); ++index ) {
-            vis.preVisitMakeStructureIndex(this, index, index==int(structs.size()-1));
-            auto & fields = structs[index];
-            for ( auto it = fields->begin(); it != fields->end(); ) {
-                auto & field = *it;
-                vis.preVisitMakeStructureField(this, index, field.get(), field==fields->back());
-                field->value = field->value->visit(vis);
-                if ( field ) {
-                    field = vis.visitMakeStructureField(this, index, field.get(), field==fields->back());
+        if ( vis.canVisitMakeStructureBody(this) ) {
+            for ( int index=0; index != int(structs.size()); ++index ) {
+                vis.preVisitMakeStructureIndex(this, index, index==int(structs.size()-1));
+                auto & fields = structs[index];
+                for ( auto it = fields->begin(); it != fields->end(); ) {
+                    auto & field = *it;
+                    vis.preVisitMakeStructureField(this, index, field.get(), field==fields->back());
+                    field->value = field->value->visit(vis);
+                    if ( field ) {
+                        field = vis.visitMakeStructureField(this, index, field.get(), field==fields->back());
+                    }
+                    if ( field ) ++it; else it = fields->erase(it);
                 }
-                if ( field ) ++it; else it = fields->erase(it);
+                vis.visitMakeStructureIndex(this, index, index==int(structs.size()-1));
             }
-            vis.visitMakeStructureIndex(this, index, index==int(structs.size()-1));
         }
         if ( block && vis.canVisitMakeStructureBlock(this, block.get()) ) {
             vis.preVisitMakeStructureBlock(this, block.get());
@@ -2749,29 +2751,44 @@ namespace das {
         return vis.visit(penum);
     }
 
-    void Program::visit(Visitor & vis, bool visitGenerics ) {
-        // before program
+    void Program::visitModulesInOrder(Visitor & vis, bool visitGenerics) {
         vis.preVisitProgram(this);
+        library.foreach([&](Module * pm) -> bool {
+            visitModule(vis, pm, visitGenerics);
+            return true;
+        }, "*");
+        vis.visitProgram(this);
+    }
+
+    void Program::visit(Visitor & vis, bool visitGenerics ) {
+        vis.preVisitProgram(this);
+        visitModule(vis, thisModule.get(), visitGenerics);
+        vis.visitProgram(this);
+    }
+
+    void Program::visitModule(Visitor & vis, Module * thatModule, bool visitGenerics) {
         // enumerations
-        for ( auto & ite : thisModule->enumerations ) {
-            ite.second = visitEnumeration(vis, ite.second.get());
+        for ( auto & ite : thatModule->enumerations ) {
+            if ( vis.canVisitEnumeration(ite.second.get()) ) {
+                ite.second = visitEnumeration(vis, ite.second.get());
+            }
         }
         // structures
-        for ( auto & ist : thisModule->structuresInOrder ) {
+        for ( auto & ist : thatModule->structuresInOrder ) {
             Structure * pst = ist.get();
             if ( vis.canVisitStructure(pst) ) {
                 StructurePtr pstn = visitStructure(vis, pst);
                 if ( pstn.get() != pst ) {
                     assert(pstn->name==pst->name);
-                    auto istm = thisModule->structures.find(pst->name);
-                    assert ( istm!=thisModule->structures.end() );
+                    auto istm = thatModule->structures.find(pst->name);
+                    assert ( istm!=thatModule->structures.end() );
                     istm->second = pstn;
                     ist = pstn;
                 }
             }
         }
         // aliases
-        for ( auto & als : thisModule->aliasTypes ) {
+        for ( auto & als : thatModule->aliasTypes ) {
             vis.preVisitAlias(als.second.get(), als.first);
             vis.preVisit(als.second.get());
             als.second = als.second->visit(vis);
@@ -2782,7 +2799,7 @@ namespace das {
         vis.preVisitProgramBody(this);
         // globals
         vis.preVisitGlobalLetBody(this);
-        for ( auto & var : thisModule->globalsInOrder ) {
+        for ( auto & var : thatModule->globalsInOrder ) {
             if ( vis.canVisitGlobalVariable(var.get()) ) {
                 vis.preVisitGlobalLet(var);
                 if ( var->type ) {
@@ -2801,14 +2818,14 @@ namespace das {
         vis.visitGlobalLetBody(this);
         // generics
         if ( visitGenerics ) {
-            for ( auto & fn : thisModule->generics ) {
+            for ( auto & fn : thatModule->generics ) {
                 if ( !fn.second->builtIn ) {
                     fn.second = fn.second->visit(vis);
                 }
             }
         }
         // functions
-        for ( auto & fn : thisModule->functions ) {
+        for ( auto & fn : thatModule->functions ) {
             if ( !fn.second->builtIn ) {
                 if ( vis.canVisitFunction(fn.second.get()) ) {
                     auto res = fn.second->visit(vis);
@@ -2816,8 +2833,6 @@ namespace das {
                 }
             }
         }
-        // done
-        vis.visitProgram(this);
     }
 
     bool Program::getOptimize() const {
