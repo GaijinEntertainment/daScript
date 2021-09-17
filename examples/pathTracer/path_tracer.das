@@ -199,27 +199,37 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
         return false
     return true
 
-def trace(ray:Ray;depth:int;var inoutRayCount:int&;var doMaterialE:bool = true)
-    var rec : Hit
-    var id = 0
-    ++inoutRayCount
-    if ray|>hitWorld(kMinT,kMaxT,rec,id)
-        // return s_SphereMats[id].albedo  // TODO: we need this for the GLSL version
-        var scattered : Ray
-        var attenuation : float3
-        var lightE : float3
-        let mat : Material & = s_SphereMats[id]
-        var matE = mat.emissive
-        if depth<kMaxDepth && mat|>scatter(ray,rec,attenuation,scattered,lightE,inoutRayCount)
-            if !doMaterialE
-                matE = float3(0)
-            doMaterialE = mat.mtype != Type Lambert
-            return  mad ( attenuation, trace(scattered,depth+1,inoutRayCount,doMaterialE), matE + lightE )
+def trace(r:Ray;var inoutRayCount:int&)
+    var ray = r
+    var col = float3(0.)
+    var curAtten = float3(1.)
+    var doMaterialE = true
+    for depth in range(kMaxDepth)
+        var rec : Hit
+        var id = 0
+        ++inoutRayCount
+        if ray|>hitWorld(kMinT,kMaxT,rec,id)
+            var scattered : Ray
+            var attenuation : float3
+            var lightE : float3
+            let mat : Material & = s_SphereMats[id]
+            var matE = mat.emissive
+            if mat|>scatter(ray,rec,attenuation,scattered,lightE,inoutRayCount)
+                if !doMaterialE
+                    matE = float3(0)
+                doMaterialE = mat.mtype != Type Lambert
+                col += curAtten * (matE + lightE)
+                curAtten *= attenuation
+                ray = scattered
+            else
+                col += curAtten * matE
+                break
         else
-            return matE
-    else
-        let t = mad(ray.dir,0.5,float3(1.))
-        return  lerp(0.3*float3(1.), 0.3*float3(0.5, 0.7, 1.0), t)
+            let t = mad(ray.dir,0.5,float3(1.))
+            let skyCol = lerp(0.3*float3(1.), 0.3*float3(0.5, 0.7, 1.0), t)
+            col += curAtten * skyCol
+            break
+    return col
 
 def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;var backbuffer:array<float3>;cam:Camera)
     let invWH = float(1) / float2(screenWidth, screenHeight)
@@ -232,7 +242,7 @@ def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;var backbuffer:array
             var col = float3(0)
             for s in range(DO_SAMPLES_PER_PIXEL)
                 let uv = (float2(x,y) + random_float4(RAND_SEED).xy) * invWH
-                col += cam |> getRay(uv.x,uv.y) |> trace(0, rayCount)
+                col += cam |> getRay(uv.x,uv.y) |> trace(rayCount)
             col *= 1. / float(DO_SAMPLES_PER_PIXEL)
             backbuffer[backbufferIdx] = lerp(col, backbuffer[backbufferIdx], lerpFac)
             backbufferIdx ++
@@ -249,7 +259,7 @@ def draw_ray(x,y,screenWidth,screenHeight:int)
     var col = float3(0)
     for s in range(DO_SAMPLES_PER_PIXEL)
         let uv = (float2(x,y) + random_float4(RAND_SEED).xy) * invWH
-        col += cam |> getRay(uv.x,uv.y) |> trace(0, rayCount)
+        col += cam |> getRay(uv.x,uv.y) |> trace(rayCount)
     col *= 1. / float(DO_SAMPLES_PER_PIXEL)
     return col
 

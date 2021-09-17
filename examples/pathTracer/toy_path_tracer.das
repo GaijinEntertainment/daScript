@@ -23,9 +23,9 @@ let USE_MODE = Mode JobQue
 
 [export]
 def main
-    let width = 256
-    let height = 256
-    let kFrameCount = 16
+    let width = 512
+    let height = 512
+    let kFrameCount = 1
     var backbuffer : array<float3>
     resize(backbuffer,width*height)
     print("\ntracing...\n")

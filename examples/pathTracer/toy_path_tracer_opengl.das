@@ -10,6 +10,9 @@ require daslib/tga
 
 require path_tracer
 
+let TRACE_WIDTH = 1024
+let TRACE_HEIGHT = 1024
+
 var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_color : float3
 var [[in, location=2]] v_texcoord : float2
@@ -33,7 +36,7 @@ def ps_effect
 def compute_effect
     let storePos = int2(gl_GlobalInvocationID.xy)
     random_seed2D(RAND_SEED,storePos)
-    let rgb = draw_ray(storePos.x,255-storePos.y,256,256)
+    let rgb = draw_ray(storePos.x,TRACE_HEIGHT-storePos.y,TRACE_WIDTH,TRACE_HEIGHT)
     let srgb = linear_to_RGB(rgb)
     imageStore(c_destTex,storePos, float4(srgb.x, srgb.y, srgb.z, 1.0))
 
@@ -71,7 +74,7 @@ def create_gl_objects
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, effect_indices, GL_STATIC_DRAW)
     glGenTextures(1, safe_addr(texture))
     glBindTexture(GL_TEXTURE_2D, texture)
-    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 256, 256 );
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, TRACE_WIDTH, TRACE_HEIGHT );
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
 
@@ -82,11 +85,12 @@ def main
     defer <|
         glfwTerminate()
     glfwInitOpenGL(4,3)
-    var window = glfwCreateWindow(512, 512, "Path tracer", null, null)
+    var window = glfwCreateWindow(TRACE_WIDTH, TRACE_HEIGHT, "Path tracer", null, null)
     if window==null
 		panic("can't create window")
     defer <|
         glfwDestroyWindow(window)
+    glfwSetWindowSize(window,TRACE_WIDTH,TRACE_HEIGHT)
     glfwMakeContextCurrent(window)
     create_gl_objects()
     f_tex.texture = 0
@@ -99,7 +103,7 @@ def main
         c_destTex.texture = 0
         compute_effect_bind_uniform(compute_program)
         glBindImageTexture(0u, texture, 0, false, 0, GL_WRITE_ONLY, GL_RGBA8)
-        glDispatchCompute(16u,16u,1u)
+        glDispatchCompute(uint(TRACE_WIDTH/16),uint(TRACE_HEIGHT/16),1u)
 
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
 
