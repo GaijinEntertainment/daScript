@@ -19,7 +19,7 @@ enum Mode
     Threads
     SimulateGpu
 
-let USE_MODE = Mode SimulateGpu
+let USE_MODE = Mode JobQue
 
 [export]
 def main

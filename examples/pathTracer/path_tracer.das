@@ -204,6 +204,7 @@ def trace(ray:Ray;depth:int;var inoutRayCount:int&;var doMaterialE:bool = true)
     var id = 0
     ++inoutRayCount
     if ray|>hitWorld(kMinT,kMaxT,rec,id)
+        // return s_SphereMats[id].albedo  // TODO: we need this for the GLSL version
         var scattered : Ray
         var attenuation : float3
         var lightE : float3

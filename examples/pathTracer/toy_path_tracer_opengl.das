@@ -82,7 +82,7 @@ def main
     defer <|
         glfwTerminate()
     glfwInitOpenGL(4,3)
-    var window = glfwCreateWindow(1280, 720, "Hello compute shader", null, null)
+    var window = glfwCreateWindow(512, 512, "Path tracer", null, null)
     if window==null
 		panic("can't create window")
     defer <|
