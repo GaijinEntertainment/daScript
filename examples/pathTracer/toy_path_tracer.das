@@ -23,8 +23,8 @@ let USE_MODE = Mode JobQue
 
 [export]
 def main
-    let width = 512
-    let height = 512
+    let width = 1024
+    let height = 1024
     let kFrameCount = 1
     var backbuffer : array<float3>
     resize(backbuffer,width*height)

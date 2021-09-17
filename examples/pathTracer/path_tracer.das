@@ -149,11 +149,12 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
         let target = rec.pos + rec.normal + random_unit_vector(RAND_SEED)
         scattered = [[Ray orig=rec.pos, dir=normalize(target - rec.pos)]]
         attenuation = mat.albedo
-        let s : Sphere & = s_Spheres[LIGHT_SPHERE_ID]
-        let sw = normalize(s.center-rec.pos)
+        let sc = s_Spheres[LIGHT_SPHERE_ID].center
+        let sw = normalize(sc-rec.pos)
         let su = normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
         let sv = cross(sw,su)
-        let cosAMax = sqrt(saturate(1.-s.radius*s.radius*inv_distance_sq(rec.pos,s.center)))
+        let sr = s_Spheres[LIGHT_SPHERE_ID].radius
+        let cosAMax = sqrt(saturate(1.-sr*sr*inv_distance_sq(rec.pos,sc)))
         let eps = random_float4(RAND_SEED)
         let cosA = mad(eps.x,cosAMax,1.) - eps.x
         let sinA = sqrt ( 1. - cosA*cosA )
@@ -212,12 +213,11 @@ def trace(r:Ray;var inoutRayCount:int&)
             var scattered : Ray
             var attenuation : float3
             var lightE : float3
-            let mat : Material & = s_SphereMats[id]
-            var matE = mat.emissive
-            if mat|>scatter(ray,rec,attenuation,scattered,lightE,inoutRayCount)
+            var matE = s_SphereMats[id].emissive
+            if s_SphereMats[id] |>scatter(ray,rec,attenuation,scattered,lightE,inoutRayCount)
                 if !doMaterialE
                     matE = float3(0)
-                doMaterialE = mat.mtype != Type Lambert
+                doMaterialE = s_SphereMats[id].mtype != Type Lambert
                 col += curAtten * (matE + lightE)
                 curAtten *= attenuation
                 ray = scattered
