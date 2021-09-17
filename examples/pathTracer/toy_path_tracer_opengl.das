@@ -20,7 +20,8 @@ var [[inout]] f_color : float3
 var [[inout]] f_texcoord : float2
 var [[out]] f_outputColor : float4
 var [[uniform]] f_tex : sampler2D
-var [[uniform, format=rgba8, binding=0]] c_destTex : image2D
+var [[uniform, format=rgba32f, binding=0]] c_destTex : image2D
+var [[uniform]] c_frame : int = 0
 
 [vertex_program(name="VERTEX_SRC",version=330)]
 def vs_effect
@@ -35,10 +36,22 @@ def ps_effect
 [compute_program(name="COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
 def compute_effect
     let storePos = int2(gl_GlobalInvocationID.xy)
-    random_seed2D(RAND_SEED,storePos)
+    random_seed2D(RAND_SEED,storePos,c_frame)
+    random_float4(RAND_SEED)
     let rgb = draw_ray(storePos.x,TRACE_HEIGHT-storePos.y,TRACE_WIDTH,TRACE_HEIGHT)
     let srgb = linear_to_RGB(rgb)
-    imageStore(c_destTex,storePos, float4(srgb.x, srgb.y, srgb.z, 1.0))
+    if true
+        var nrgb : float4
+        if c_frame==0
+            nrgb = srgb
+        else
+            let orgb = imageLoad(c_destTex, storePos)
+            barrier()
+            let wf = float(c_frame)
+            nrgb = (orgb*wf + srgb) / (wf + 1.)
+        imageStore(c_destTex,storePos, nrgb)
+    else
+        imageStore(c_destTex,storePos, srgb)
 
 var compute_program, display_program : uint
 var vao : uint
@@ -74,9 +87,10 @@ def create_gl_objects
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, effect_indices, GL_STATIC_DRAW)
     glGenTextures(1, safe_addr(texture))
     glBindTexture(GL_TEXTURE_2D, texture)
-    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, TRACE_WIDTH, TRACE_HEIGHT );
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA32F), TRACE_WIDTH, TRACE_HEIGHT, 0, GL_RGBA, GL_FLOAT, null)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+
 
 [export]
 def main
@@ -84,7 +98,7 @@ def main
 		panic("can't init glfw")
     defer <|
         glfwTerminate()
-    glfwInitOpenGL(4,3)
+    glfwInitOpenGL(4,3,true)
     var window = glfwCreateWindow(TRACE_WIDTH, TRACE_HEIGHT, "Path tracer", null, null)
     if window==null
 		panic("can't create window")
@@ -92,6 +106,7 @@ def main
         glfwDestroyWindow(window)
     glfwSetWindowSize(window,TRACE_WIDTH,TRACE_HEIGHT)
     glfwMakeContextCurrent(window)
+    glSetBreakOnOpenGLError(true)
     create_gl_objects()
     f_tex.texture = 0
     while glfwWindowShouldClose(window)==0
@@ -102,8 +117,9 @@ def main
         glUseProgram(compute_program)
         c_destTex.texture = 0
         compute_effect_bind_uniform(compute_program)
-        glBindImageTexture(0u, texture, 0, false, 0, GL_WRITE_ONLY, GL_RGBA8)
+        glBindImageTexture(0u, texture, 0, false, 0, GL_WRITE_ONLY, GL_RGBA32UI)
         glDispatchCompute(uint(TRACE_WIDTH/16),uint(TRACE_HEIGHT/16),1u)
+        c_frame++
 
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
 

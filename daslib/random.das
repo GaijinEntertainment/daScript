@@ -10,9 +10,9 @@ let LCG_IRAND_MAX_FLT = 1.0f / float(LCG_RAND_MAX)
 def random_seed ( seed:int )
     return int4(seed,seed+1,seed+2,seed+3)
 
-def random_seed2D(var seed:int4&; co:int2)
+def random_seed2D(var seed:int4&; co:int2; cf:int=0)
     let prnd = sin(dot(float2(co.xy),float2(12.9898,78.233))) * 43758.5453
-    seed = random_seed(int(prnd))
+    seed = random_seed(int(prnd)+cf)
     return random_float4(seed)
 
 def random_int ( var seed:int4& )
