@@ -657,8 +657,8 @@ namespace das {
             addExtern<DAS_BIND_FUN(sincosD)>(*this, lib, "sincos", SideEffects::modifyArgument, "sincosD")->args({"x","s","c"});
             addExternEx<float3(float3,float3),DAS_BIND_FUN(reflect)>(*this, lib, "reflect",
                 SideEffects::none, "reflect")->args({"v","n"});
-            addExternEx<bool(float3,float3,float,float3&),DAS_BIND_FUN(refract)>(*this, lib, "refract",
-                SideEffects::modifyArgument, "refract")->args({"v","n","nint","outRefracted"});
+            addExternEx<float3(float3,float3,float),DAS_BIND_FUN(refract)>(*this, lib, "refract",
+                SideEffects::none, "refract")->args({"v","n","nint"});
             addFunctionCommonConversion<int, float>  (*this, lib);
             addFunctionCommonConversion<int, double>  (*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);

@@ -13,20 +13,24 @@ require daslib/jobque_boost
 require daslib/tga
 require daslib/random
 
-let
-    USE_JOB_QUE = true
-    USE_THREADS = false
+enum Mode
+    SingleThread
+    JobQue
+    Threads
+    SimulateGpu
+
+let USE_MODE = Mode SimulateGpu
 
 [export]
 def main
-    let width = 320
-    let height = 240
+    let width = 256
+    let height = 256
     let kFrameCount = 16
     var backbuffer : array<float3>
     resize(backbuffer,width*height)
     print("\ntracing...\n")
     var i = 0
-    if USE_JOB_QUE
+    if USE_MODE == Mode JobQue
         with_job_que <|
             var t0 = ref_time_ticks()
             var totalRays = 0
@@ -39,7 +43,6 @@ def main
                 with_job_status(height) <| $ ( status )
                     for y in range(height)
                         new_job <| @
-                            prepare()
                             var rayCount = 0
                             draw(i, width, height, y, y+1, *pbb, rayCount)
                             *ptr += rayCount
@@ -49,7 +52,7 @@ def main
             var dt = get_time_usec(t0)
             var sec = double(dt)/1000000.0lf
             print("{totalRays} in {sec} sec, {format("%.3f",double(totalRays)/double(dt))} mrays/sec\n")
-    elif USE_THREADS
+    elif USE_MODE == Mode Threads
         var t0 = ref_time_ticks()
         var totalRays = 0
         profile(kFrameCount,"ray-trace frame (with THREADS)") <|
@@ -65,7 +68,6 @@ def main
                     let yMin = c * chunk
                     let yMax = min((c + 1)*chunk, height)
                     new_thread <| @
-                        prepare()
                         var rayCount = 0
                         draw(i, width, height, yMin, yMax, *pbb, rayCount)
                         *ptr += rayCount
@@ -75,8 +77,13 @@ def main
         var dt = get_time_usec(t0)
         var sec = double(dt)/1000000.0lf
         print("{totalRays} in {sec} sec, {format("%.3f",double(totalRays)/double(dt))} mrays/sec\n")
+    elif USE_MODE == Mode SimulateGpu
+        profile(kFrameCount,"ray-trace frame via per ray prep") <|
+            for y in range(height)
+                for x in range(width)
+                    random_seed2D(RAND_SEED,int2(x,y))
+                    backbuffer[y*width+x] = draw_ray(x,y,width,height)
     else
-        prepare()
         profile(kFrameCount,"ray-trace frame") <|
             var rayCount = 0
             draw(i, width, height, 0, height, backbuffer, rayCount)

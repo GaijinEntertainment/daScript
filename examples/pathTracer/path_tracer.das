@@ -18,8 +18,7 @@ let
     kMaxT = 1.0e7f
     kMaxDepth = 10
 
-var
-    RAND_SEED : int4
+var RAND_SEED : int4
 
 def schlick(cosine,ri:float)
     var r0 = (1. - ri) / (1. + ri)
@@ -90,24 +89,21 @@ struct Material
     roughness : float
     ri : float
 
-let
-    TOTAL_SPHERES = 9
+let TOTAL_SPHERES = 9
 
-var
-    s_Spheres = [[Sphere[TOTAL_SPHERES]
-        center = float3(0.,-100.5,-1.), radius = 100.;
-        center = float3(2.,0.,-1.),     radius = 0.5;
-        center = float3(0.,0.,-1.),     radius = 0.5;
-        center = float3(-2.,0.,-1.),    radius = 0.5;
-        center = float3(2.,0.,1.),      radius = 0.5;
-        center = float3(0.,0.,1.),      radius = 0.5;
-        center = float3(-2.,0.,1.),     radius = 0.5;
-        center = float3(0.5,1.,0.5),    radius = 0.5;
-        center = float3(-1.5,1.5,0.),   radius = 0.3
+var s_Spheres = [[Sphere[TOTAL_SPHERES]
+        center = float3(0.,-100.5,-1.), radius = 100.,  radius2=100.0*100., iRadius = 1. / 100.;
+        center = float3(2.,0.,-1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
+        center = float3(0.,0.,-1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
+        center = float3(-2.,0.,-1.),    radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
+        center = float3(2.,0.,1.),      radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
+        center = float3(0.,0.,1.),      radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
+        center = float3(-2.,0.,1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
+        center = float3(0.5,1.,0.5),    radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
+        center = float3(-1.5,1.5,0.),   radius = 0.3,   radius2=0.3*0.3,    iRadius = 1. / .3
     ]]
 
-let
-    s_SphereMats = [[Material[TOTAL_SPHERES]
+let s_SphereMats = [[Material[TOTAL_SPHERES]
         mtype = Type Lambert,    albedo = float3(0.8, 0.8, 0.8), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;
         mtype = Type Lambert,    albedo = float3(0.8, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;
         mtype = Type Lambert,    albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;
@@ -182,12 +178,14 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
         var refr : float3
         var reflProb : float
         if dot(r_in.dir,rec.normal)>0.
-            if refract(r_in.dir,-rec.normal,mat.ri,refr)
+            refr = refract(r_in.dir,-rec.normal,mat.ri)
+            if length_sq(refr) > 0.
                 reflProb = schlick(mat.ri * dot(r_in.dir, rec.normal),mat.ri)
             else
                 reflProb = 1.
         else
-            if refract(r_in.dir,rec.normal,1.0/mat.ri,refr)
+            refr = refract(r_in.dir,rec.normal,1.0/mat.ri)
+            if length_sq(refr) > 0.
                 reflProb = schlick(-dot(r_in.dir, rec.normal),mat.ri)
             else
                 reflProb = 1.
@@ -239,6 +237,21 @@ def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;var backbuffer:array
             backbufferIdx ++
     return rayCount
 
+def draw_ray(x,y,screenWidth,screenHeight:int)
+    var rayCount = 0
+    let lookfrom = float3(0,2,3)
+    let lookat = float3(0)
+    let distToFocus = 3.
+    let aperture = 0.1
+    let cam = Camera(lookfrom,lookat,float3(0,1,0),60.,float(screenWidth)/float(screenHeight),aperture,distToFocus)
+    let invWH = float(1) / float2(screenWidth, screenHeight)
+    var col = float3(0)
+    for s in range(DO_SAMPLES_PER_PIXEL)
+        let uv = (float2(x,y) + random_float4(RAND_SEED).xy) * invWH
+        col += cam |> getRay(uv.x,uv.y) |> trace(0, rayCount)
+    col *= 1. / float(DO_SAMPLES_PER_PIXEL)
+    return col
+
 def draw(frameCount,screenWidth,screenHeight,ymin,ymax:int;var backbuffer:array<float3>;var outRayCount:int&)
     var rayCount = 0
     let lookfrom = float3(0,2,3)
@@ -249,8 +262,4 @@ def draw(frameCount,screenWidth,screenHeight,ymin,ymax:int;var backbuffer:array<
     rayCount += trace(screenWidth,screenHeight,frameCount,ymin,ymax,backbuffer,cam)
     outRayCount = rayCount
 
-def prepare
-    for sph in s_Spheres
-        sph.radius2 = sph.radius * sph.radius
-        sph.iRadius = 1. / sph.radius
 

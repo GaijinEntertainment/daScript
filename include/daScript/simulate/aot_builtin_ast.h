@@ -413,6 +413,7 @@ namespace das {
     char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context );
     char * ast_das_to_string ( Type bt, Context * context );
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context );
+    int64_t ast_find_enum_value ( EnumerationPtr enu, const char * value );
 
     int32_t any_array_size ( void * _arr );
     int32_t any_table_size ( void * _tab );

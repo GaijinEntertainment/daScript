@@ -6,6 +6,9 @@ require math
 
 require daslib/safe_addr
 require daslib/random
+require daslib/tga
+
+require path_tracer
 
 var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_color : float3
@@ -26,13 +29,13 @@ def vs_effect
 def ps_effect
     f_outputColor = texture(f_tex,f_texcoord) // * float4(f_color.x, f_color.y, f_color.z, 1.0)
 
-var RAND_SEED : int4
-
 [compute_program(name="COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
 def compute_effect
     let storePos = int2(gl_GlobalInvocationID.xy)
     random_seed2D(RAND_SEED,storePos)
-    imageStore(c_destTex,storePos, random_float4(RAND_SEED))
+    let rgb = draw_ray(storePos.x,255-storePos.y,256,256)
+    let srgb = linear_to_RGB(rgb)
+    imageStore(c_destTex,storePos, float4(srgb.x, srgb.y, srgb.z, 1.0))
 
 var compute_program, display_program : uint
 var vao : uint
