@@ -136,6 +136,3 @@ def main
 
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
-
-options debugger
-require daslib/debug
