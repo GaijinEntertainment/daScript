@@ -270,7 +270,6 @@ src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_das.cpp
 src/builtin/module_builtin_math.cpp
-src/builtin/module_builtin_random.cpp
 src/builtin/module_builtin_string.cpp
 src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
@@ -428,7 +427,6 @@ include/daScript/simulate/aot_library.h
 include/daScript/simulate/aot_builtin.h
 include/daScript/simulate/aot_builtin_math.h
 include/daScript/simulate/aot_builtin_matrix.h
-include/daScript/simulate/aot_builtin_random.h
 include/daScript/simulate/aot_builtin_time.h
 include/daScript/simulate/aot_builtin_string.h
 include/daScript/simulate/aot_builtin_fio.h
@@ -506,6 +504,7 @@ DAS_AOT("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
 DAS_AOT("daslib/regex.das" AOT_GENERATED_SRC dasAotStub dasAot)
 DAS_AOT("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
 DAS_AOT("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
+DAS_AOT("daslib/random.das" AOT_GENERATED_SRC dasAotStub dasAot)
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 

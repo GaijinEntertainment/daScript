@@ -1,4 +1,4 @@
-require random
+require daslib/random
 
 var
     seed : int4

@@ -8,7 +8,7 @@
 
 options persistent_heap = true
 
-require random
+require daslib/random
 require testProfile
 
 struct Node

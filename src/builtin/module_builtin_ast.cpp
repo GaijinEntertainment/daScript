@@ -1584,8 +1584,8 @@ namespace das {
         { IMPL_PREVISIT(Program); }
     void VisitorAdapter::visitProgram ( Program * expr )
         { IMPL_VISIT_VOID(Program); }
-    void VisitorAdapter::preVisitProgramBody ( Program * expr )
-        { IMPL_PREVISIT1(ProgramBody,Program); }
+    void VisitorAdapter::preVisitProgramBody ( Program * expr, Module * mod )
+        { IMPL_PREVISIT2(ProgramBody,Program,Module *,mod); }
 // type
     void VisitorAdapter::preVisit ( TypeDecl * expr )
         { IMPL_PREVISIT(TypeDecl); }

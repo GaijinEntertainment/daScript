@@ -1002,7 +1002,7 @@ namespace das {
             return Visitor::visit(that);
         }
     // program body
-        virtual void preVisitProgramBody ( Program * prog ) override {
+        virtual void preVisitProgramBody ( Program * prog, Module * ) override {
             // functions
             ss << "\n";
             for ( auto & fnI : prog->thisModule->functions ) {

@@ -5,8 +5,9 @@
 module path_tracer
 
 require math
-require random
 require strings
+
+require daslib/random
 
 let
     DO_SAMPLES_PER_PIXEL = 4

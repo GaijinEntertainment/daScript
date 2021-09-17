@@ -2753,10 +2753,10 @@ namespace das {
 
     void Program::visitModulesInOrder(Visitor & vis, bool visitGenerics) {
         vis.preVisitProgram(this);
-        library.foreach([&](Module * pm) -> bool {
+        library.foreach_in_order([&](Module * pm) -> bool {
             visitModule(vis, pm, visitGenerics);
             return true;
-        }, "*");
+        }, thisModule.get());
         vis.visitProgram(this);
     }
 
@@ -2796,7 +2796,7 @@ namespace das {
             if ( als.second ) als.second = vis.visitAlias(als.second.get(), als.first);
         }
         // real things
-        vis.preVisitProgramBody(this);
+        vis.preVisitProgramBody(this,thatModule);
         // globals
         vis.preVisitGlobalLetBody(this);
         for ( auto & var : thatModule->globalsInOrder ) {

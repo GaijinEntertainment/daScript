@@ -180,7 +180,7 @@ namespace das {
     // whole program
         virtual void preVisitProgram ( Program * expr ) override;
         virtual void visitProgram ( Program * expr ) override;
-        virtual void preVisitProgramBody ( Program * expr ) override;
+        virtual void preVisitProgramBody ( Program * expr, Module * mod ) override;
     // type
         virtual void preVisit ( TypeDecl * expr ) override;
         virtual TypeDeclPtr visit ( TypeDecl * expr ) override;

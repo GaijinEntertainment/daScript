@@ -54,7 +54,7 @@ namespace das {
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
         virtual StructurePtr visit ( Structure * var ) { return var; }
         // REAL THINGS (AFTER STRUCTS AND ENUMS)
-        virtual void preVisitProgramBody ( Program * prog ) {}
+        virtual void preVisitProgramBody ( Program * prog, Module * mod ) {}
         // FUNCTON
         virtual void preVisit ( Function * ) {}
         virtual FunctionPtr visit ( Function * that ) { return that; }

@@ -7,11 +7,11 @@ module tpt
 require path_tracer
 
 require math
-require random
 require strings
 require stbimage
 require daslib/jobque_boost
 require daslib/tga
+require daslib/random
 
 let
     USE_JOB_QUE = true
