@@ -34,8 +34,8 @@ def random_unit_vector ( var seed:int4& )
     let z = zz.x * 2. - 1.
     let a = zz.y * ( 2. * PI )
     let r = sqrt(1. - z*z)
-    let x = sin(a)
-    let y = cos(a)
+    var x, y : float
+    sincos(a, x, y)
     return float3( r * x, r * y, z )
 
 def random_in_unit_sphere ( var seed:int4& )
