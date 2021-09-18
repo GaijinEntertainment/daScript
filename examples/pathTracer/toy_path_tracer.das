@@ -93,10 +93,6 @@ def main
     pixels |> reserve(width*height)
     for y in range(height)
         for x in range(width)
-            pixels |> push <| linear_to_SRGB(backbuffer[x + (height-1-y)*width])
+            pixels |> push <| linear_to_SRGB(backbuffer[x + (height-1-y)*width].zyx)
     unsafe
         stbi_write_png( "{get_das_root()}/examples/pathTracer/path_tracer.png", width, height, 4, addr(pixels[0]), width*4  )
-
-
-options debugger
-require daslib/debug

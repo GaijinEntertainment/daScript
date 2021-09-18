@@ -10,7 +10,7 @@ require strings
 require daslib/random
 
 let
-    DO_SAMPLES_PER_PIXEL = 4
+    DO_SAMPLES_PER_PIXEL = 32
     LIGHT_SPHERE_ID = 8
 
 let

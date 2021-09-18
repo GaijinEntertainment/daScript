@@ -40,12 +40,6 @@ def linear_to_SRGB ( color : float3 )
     x = max(1.055 * pow(x, float4(0.416666667)) - float4(0.055), float4(0));
     return pack_float_to_byte(x.zyxw * float4(255.0))
 
-def linear_to_RGB ( color : float3 )
-    var x = float4(color.x, color.y, color.z, 1.0)
-    x = max(x, float4(0));
-    x = max(1.055 * pow(x, float4(0.416666667)) - float4(0.055), float4(0));
-    return x.zyxw
-
 def save_TGA ( fileName : string; width,height:int; arr:array<float3> )
     if width * height != length(arr)
         return false

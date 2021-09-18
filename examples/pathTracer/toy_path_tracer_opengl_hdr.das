@@ -40,7 +40,7 @@ def ps_effect
     let color = texture(f_tex,f_texcoord)
     let bloom = texture(f_bloom,f_texcoord)
     let res = bloom + color
-    f_outputColor = linear_to_RGB(res.xyz).xyzz
+    f_outputColor = linear_to_RGB(res.xyz).zyxx
 
 [compute_program(name="COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
 def compute_effect
@@ -236,6 +236,3 @@ def main
         // swap buffers
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
-
-options debugger
-require daslib/debug
