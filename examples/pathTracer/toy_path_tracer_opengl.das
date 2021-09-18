@@ -85,12 +85,12 @@ def create_gl_objects
     glGenBuffers(1, safe_addr(ebo))
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, effect_indices, GL_STATIC_DRAW)
+    // image TRACE_WIDTH*TRACE_HEIGHT RGBA32F
     glGenTextures(1, safe_addr(texture))
     glBindTexture(GL_TEXTURE_2D, texture)
     glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA32F), TRACE_WIDTH, TRACE_HEIGHT, 0, GL_RGBA, GL_FLOAT, null)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
-
 
 [export]
 def main
@@ -98,7 +98,7 @@ def main
 		panic("can't init glfw")
     defer <|
         glfwTerminate()
-    glfwInitOpenGL(4,3,true)
+    glfwInitOpenGL(4,3)
     var window = glfwCreateWindow(TRACE_WIDTH, TRACE_HEIGHT, "Path tracer", null, null)
     if window==null
 		panic("can't create window")
@@ -106,33 +106,27 @@ def main
         glfwDestroyWindow(window)
     glfwSetWindowSize(window,TRACE_WIDTH,TRACE_HEIGHT)
     glfwMakeContextCurrent(window)
-    glSetBreakOnOpenGLError(true)
     create_gl_objects()
-    f_tex.texture = 0
     while glfwWindowShouldClose(window)==0
         glfwPollEvents()
         var display_w, display_h : int
         glfwGetFramebufferSize(window, display_w, display_h)
-
+        // copmute next iteration of tracing
         glUseProgram(compute_program)
-        c_destTex.texture = 0
+        c_destTex.texture2D = texture
         compute_effect_bind_uniform(compute_program)
-        glBindImageTexture(0u, texture, 0, false, 0, GL_WRITE_ONLY, GL_RGBA32UI)
         glDispatchCompute(uint(TRACE_WIDTH/16),uint(TRACE_HEIGHT/16),1u)
-        c_frame++
-
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
-
+        c_frame++
+        // display it
         glViewport(0, 0, display_w, display_h)
         glUseProgram(display_program)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
-        bind_vertex_buffer(type<EffectVertex>)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-        f_tex.texture = 0
-        bind_texture_2d(0, texture)
+        f_tex.texture2D = texture
         vs_effect_bind_uniform(display_program)
         ps_effect_bind_uniform(display_program)
+        bind_vertex_buffer(vbo, type<EffectVertex>)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
-
+        // swap buffers
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
