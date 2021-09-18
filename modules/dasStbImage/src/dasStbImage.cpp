@@ -46,7 +46,7 @@ public:
                 ->args({"filename","x","y","comp","data"});;
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
-        tw << "#include \"modules/dasStbImage/src/dasStbImage.h\"\n";
+        tw << "#include \"../modules/dasStbImage/src/dasStbImage.h\"\n";
         return ModuleAotType::cpp;
     }
 };

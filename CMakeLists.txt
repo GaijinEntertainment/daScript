@@ -146,10 +146,17 @@ FILE(WRITE ${DAS_MODULES_RESOLVE_INC}.temp "")
 FILE(WRITE ${DAS_MODULES_NEED_INC}.temp "")
 
 SET(DAS_MODULES_LIBS)
+SET(DAS_ALL_EXAMPLES)
 FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" "modules/*")
 FOREACH(_module ${_modules})
     MACRO(ADD_MODULE_LIB lib)
+        MESSAGE("REGISTER DAS MODULE ${lib}")
         LIST(APPEND DAS_MODULES_LIBS ${lib})
+    ENDMACRO()
+
+    MACRO(ADD_EXAMPLE tgt)
+        MESSAGE("EXAMPLE ${tgt}")
+        LIST(APPEND DAS_ALL_EXAMPLES ${tgt})
     ENDMACRO()
 
     FUNCTION(ADD_MODULE_CPP cpp)
@@ -161,6 +168,12 @@ FOREACH(_module ${_modules})
     ENDFUNCTION()
 
     INCLUDE(modules/${_module}/CMakeLists.txt OPTIONAL)
+ENDFOREACH()
+
+FOREACH(_example ${DAS_ALL_EXAMPLES})
+    MESSAGE("adding to ${_example} ${DAS_MODULES_LIBS}")
+    TARGET_LINK_LIBRARIES(${_example} ${DAS_MODULES_LIBS})
+    ADD_DEPENDENCIES(${_example} ${DAS_MODULES_LIBS})
 ENDFOREACH()
 
 ADD_CUSTOM_COMMAND(
@@ -491,8 +504,8 @@ ${DAS_MODULES_NEED_INC}
 SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
 
 add_executable(dasAot ${DASAOT_MAIN_SRC} )
-TARGET_LINK_LIBRARIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser  need_and_resolve ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser libDasModuleStdDlg Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser libDasModuleStdDlg need_and_resolve ${DAS_MODULES_LIBS})
 SETUP_CPP11(dasAot)
 SETUP_LTO(dasAot)
 

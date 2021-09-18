@@ -320,6 +320,18 @@ namespace das {
         static __forceinline TT * cast ( const QQ & expr ) {
             return const_cast<TT *>(reinterpret_cast<const TT *>(&expr));
         }
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4312)   // reinterpret_cast used between related classes
+#endif
+        static __forceinline TT * cast ( int32_t value ) { return (TT *) value; }
+        static __forceinline TT * cast ( uint32_t value ) { return (TT *) value; }
+        static __forceinline TT * cast ( int64_t value ) { return (TT *) value; }
+        static __forceinline TT * cast ( uint64_t value ) { return (TT *) value; }
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
     };
 
     template <typename TT>
