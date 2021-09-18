@@ -14,8 +14,7 @@ let TRACE_WIDTH = 1024
 let TRACE_HEIGHT = 1024
 
 var [[in, location=0]] v_position : float2
-var [[in, location=1]] v_color : float3
-var [[in, location=2]] v_texcoord : float2
+var [[in, location=1]] v_texcoord : float2
 var [[inout]] f_color : float3
 var [[inout]] f_texcoord : float2
 var [[out]] f_outputColor : float4
@@ -25,13 +24,17 @@ var [[uniform]] c_frame : int = 0
 
 [vertex_program(name="VERTEX_SRC",version=330)]
 def vs_effect
-    f_color = v_color
     f_texcoord = v_texcoord
     gl_Position = float4(v_position.x, v_position.y, 0.0, 1.0)
 
+def linear_to_RGB ( color : float3 )
+    var x = float4(color.x, color.y, color.z, 1.0)
+    x = max(x, float4(0));
+    return max(1.055 * pow(x, float4(0.416666667)) - float4(0.055), float4(0));
+
 [fragment_program(name="FRAGMENT_SRC",version=330)]
 def ps_effect
-    f_outputColor = texture(f_tex,f_texcoord) // * float4(f_color.x, f_color.y, f_color.z, 1.0)
+    f_outputColor = linear_to_RGB(texture(f_tex,f_texcoord).xyz)
 
 [compute_program(name="COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
 def compute_effect
@@ -39,16 +42,12 @@ def compute_effect
     random_seed2D(RAND_SEED,storePos,c_frame)
     random_float4(RAND_SEED)
     let rgb = draw_ray(storePos.x,TRACE_HEIGHT-storePos.y,TRACE_WIDTH,TRACE_HEIGHT)
-    let srgb = linear_to_RGB(rgb)
     if true
-        var nrgb : float4
-        if c_frame==0
-            nrgb = srgb
-        else
+        var nrgb = rgb.zyxx
+        if c_frame!=0
             let orgb = imageLoad(c_destTex, storePos)
-            barrier()
             let wf = float(c_frame)
-            nrgb = (orgb*wf + srgb) / (wf + 1.)
+            nrgb = (orgb*wf + nrgb) / (wf + 1.)
         imageStore(c_destTex,storePos, nrgb)
     else
         imageStore(c_destTex,storePos, srgb)
@@ -62,14 +61,13 @@ var texture : uint
 [vertex_buffer]
 struct EffectVertex
     [[type=GL_FLOAT, size=2, normalized=false]] xy  : float2
-    [[type=GL_FLOAT, size=3, normalized=false]] rgb : float3
     [[type=GL_FLOAT, size=2, normalized=false]] uv  : float2
 
 let effect_vertices = [[EffectVertex
-        xy=float2(-1.0, 1.0), rgb=float3(0.0,0.0,0.0), uv=float2(0.0,0.0);
-        xy=float2( 1.0, 1.0), rgb=float3(1.0,1.0,0.0), uv=float2(1.0,0.0);
-        xy=float2( 1.0,-1.0), rgb=float3(1.0,0.0,0.0), uv=float2(1.0,1.0);
-        xy=float2(-1.0,-1.0), rgb=float3(1.0,1.0,0.0), uv=float2(0.0,1.0)
+        xy=float2(-1.0, 1.0), uv=float2(0.0,0.0);
+        xy=float2( 1.0, 1.0), uv=float2(1.0,0.0);
+        xy=float2( 1.0,-1.0), uv=float2(1.0,1.0);
+        xy=float2(-1.0,-1.0), uv=float2(0.0,1.0)
 ]]
 
 let effect_indices = [[int 0; 1; 2; 2; 3; 0]]
