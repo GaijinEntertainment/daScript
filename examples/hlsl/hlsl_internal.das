@@ -14,8 +14,10 @@ require daslib/strings_boost
 class HlslCBuffer : AstStructureAnnotation
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         for field in st.fields
-            add_global_var(compiling_module(),"{field.name}", clone_type(field._type), field.at, true) <| $ ( var vvar )
+            if !add_global_var(compiling_module(),"{field.name}", clone_type(field._type), field.at, true) <| $ ( var vvar )
                 vvar.annotation |> add_annotation_argument("cbuffer", "{st.name}")
+                errors := "can't add global variable {field.name}"
+                return false
         return true
 
 class HlslShader : AstFunctionAnnotation
@@ -25,7 +27,9 @@ class HlslShader : AstFunctionAnnotation
         if !(argName is tString)
             errors := "name must be string constant"
             return false
-        add_global_var(compiling_module(),"{argName}", new [[TypeDecl() at=func.at, baseType=Type tString]], func.at, false)
+        if !add_global_var(compiling_module(),"{argName}", new [[TypeDecl() at=func.at, baseType=Type tString]], func.at, false)
+            errors := "can't add global variable {argName}"
+            return false
         return true
     def override patch ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)

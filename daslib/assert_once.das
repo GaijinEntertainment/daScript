@@ -21,7 +21,9 @@ def public assert_once ( expr:bool; message:string="" ) {}
 class AssertOnceMacro : AstFunctionAnnotation
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         var once_name = make_unique_private_name("__assert_once",call.at)
-        compiling_module() |> add_global_private_var(once_name, call.at) <| quote(true)
+        if !compiling_module() |> add_global_private_var(once_name, call.at) <| quote(true)
+            errors := "can't add global variable {once_name}"
+            return [[ExpressionPtr]]
         // if ..
         var qblock <- quote() <|
             if __assert_once_I && !expr

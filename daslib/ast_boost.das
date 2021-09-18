@@ -206,7 +206,7 @@ def setup_macro(name: string; at:LineInfo) : ExprBlock?
         emplace(blk.list,ife)
         fn.body <- blk
         if !(compiling_module() |> add_function(fn))
-            panic("can't setup")
+            panic("failed to setup macro, can't add function {fn.name}")
         return res
     else
         if fn.body.__rtti != "ExprBlock"
@@ -230,7 +230,8 @@ class SetupAnyAnnotation : AstStructureAnnotation
         if argName is nothing
             name = "{st.name}"
         elif !(argName is tString)
-            panic("name must be string")
+            errors := "name must be string"
+            return false
         else
             name = argName as tString
         var blk <- setup_macro("__setup_macros", st.at)
@@ -275,9 +276,11 @@ class TagFunctionMacro : SetupAnyAnnotation
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         let argTag = find_arg("tag", args)
         if argTag is nothing
-            panic("missing tag argument")
+            errors := "missing tag argument"
+            return false
         elif !(argTag is tString)
-            panic("tag must be string")
+            errors := "tag must be string"
+            return false
         tag = argTag as tString
         return SetupAnyAnnotation`apply(cast<SetupAnyAnnotation> self,st,group,args,errors)
 

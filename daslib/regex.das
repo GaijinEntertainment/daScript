@@ -624,7 +624,6 @@ def private re_match2_plus ( var regex:Regex; var node:ReNode?; str:uint8? ) : u
 def private re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {str}\n")
-    panic("oi")
     var nsub = node.subexpr
     if !is_char_in_set(int(*str),node.cset)
         return null

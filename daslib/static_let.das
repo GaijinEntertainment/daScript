@@ -26,8 +26,7 @@ def private make_shutdown_function ( varname:string; at:LineInfo )
     delv.genFlags |= ExprGenFlags alwaysSafe
     emplace(blk.list,delv)
     fn.body <- blk
-    if !(compiling_module() |> add_function(fn))
-        panic("can't setup")
+    return compiling_module() |> add_function(fn)
 
 [tag_function_macro(tag="static_let_tag")]
 class StaticLetMacro : AstFunctionAnnotation
@@ -58,7 +57,9 @@ class StaticLetMacro : AstFunctionAnnotation
                         errors := "can't add global variable {new_name}"
                         return [[ExpressionPtr]]
                     if "{call.name}"=="static_let_finalize"
-                        make_shutdown_function(new_name,vvar.at)
+                        if !make_shutdown_function(new_name,vvar.at)
+                            errors := "can't add shutdown function {new_name}"
+                            return [[ExpressionPtr]]
             var success = true
             compiling_program() |> get_ast_context(call) <| $(valid, astc)
                 if !valid
