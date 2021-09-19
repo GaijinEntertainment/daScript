@@ -454,6 +454,7 @@ namespace das {
                     resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
                     resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
                     resT->temporary = (resT->temporary | decl->temporary) & !decl->removeTemporary;
+                    resT->implicit = (resT->implicit | decl->implicit);
                     resT->dim = decl->dim;
                     resT->alias.clear();
                     return resT;
@@ -3516,6 +3517,11 @@ namespace das {
                 if ( seT->isConst() ) {
                     error("can't index in the constant table, use find instead", "", "",
                         expr->index->at, CompilationError::invalid_table_type);
+                    return Visitor::visit(expr);
+                }
+                if ( ixT->temporary && seT->firstType->isTempType() ) {
+                    error("can't index with the temporary key", "", "",
+                        expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
                 expr->type = make_smart<TypeDecl>(*seT->secondType);

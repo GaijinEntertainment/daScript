@@ -166,6 +166,8 @@ namespace das {
             auto debugInfo = helpA.debugInfo;
             sti = debugInfo->template makeNode<StructInfo>();
             sti->name = debugInfo->allocateName(name);
+            // flags
+            sti->flags = 0;
             // count fields
             sti->count = 0;
             for ( auto & fi : fields ) {

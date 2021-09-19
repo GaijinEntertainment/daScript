@@ -464,6 +464,7 @@ namespace das {
         StructInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("StructInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(module_name)>("module_name");
+            addField<DAS_BIND_MANAGED_FIELD(flags)>("flags");
             addField<DAS_BIND_MANAGED_FIELD(size)>("size");
             addField<DAS_BIND_MANAGED_FIELD(initializer)>("initializer");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");

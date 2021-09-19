@@ -22,6 +22,10 @@ namespace das {
     }
 
     void DataWalker::walk_struct ( char * ps, StructInfo * si ) {
+        if ( ps && (si->flags & StructInfo::flag_class) ) {
+            auto ti = *(TypeInfo **) ps;
+            si = ti->structType;
+        }
         if ( canVisitStructure(ps, si) ) {
             beforeStructure(ps, si);
             if ( cancel ) {

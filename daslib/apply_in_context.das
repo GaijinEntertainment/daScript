@@ -27,6 +27,11 @@ class AppendCondAnnotation : AstFunctionAnnotation
         errors := "invalid argument type {argv.name}"
         return false
 
+    for arg in func.arguments
+      if is_temp_type(arg._type,true) && !(arg._type.flags.temporary || arg._type.flags._implicit)
+        errors := "argument {arg.name} needs to be temporary or implicit, i.e. {describe(arg._type)}# or {describe(arg._type)} implicit"
+        return false
+
     let resName = "__res__"
     let ctxCloneFnName = "CONTEXT_CLONE`{func.name}"
     let at = func.at

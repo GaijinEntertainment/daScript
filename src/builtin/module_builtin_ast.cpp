@@ -2687,6 +2687,10 @@ namespace das {
         return expr->rtti_isCallLikeExpr();
     }
 
+    bool isTempType ( TypeDeclPtr ptr, bool refMatters ) {
+        return ptr->isTempType(refMatters);
+    }
+
     ExpressionPtr makeCall ( const LineInfo & at, const char * name ) {
         name = name ? name : "";
         return g_Program->makeCall(at, name);
@@ -3014,6 +3018,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(clone_variable)>(*this, lib,  "clone_variable",
                 SideEffects::none, "clone_variable");
             // type
+            addExtern<DAS_BIND_FUN(isTempType)>(*this, lib,  "is_temp_type",
+                SideEffects::none, "isTempType")
+                    ->args({"type","refMatters"});
             addExtern<DAS_BIND_FUN(isSameAstType)>(*this, lib,  "is_same_type",
                 SideEffects::none, "isSameAstType");
             addExtern<DAS_BIND_FUN(clone_type)>(*this, lib,  "clone_type",

@@ -88,13 +88,13 @@ def empty(a:array<auto>) : bool
 
 // table
 
-def find(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):void>)
+def find(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
 
-def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):void>)
+def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
@@ -104,21 +104,21 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(p:valT?):
     else
         return false
 
-def find(Tab:table<auto(keyT);auto(valT)>;at:keyT):valT const?
+def find(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):valT const?
     unsafe
         return reinterpret<valT const?>(__builtin_table_find(Tab,at))
 
-def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT):valT const?#
+def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT implicit):valT const?#
     unsafe
         return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
 
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(var p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
 
-def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:block<(var p:valT?):void>)
+def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(var p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
@@ -126,13 +126,13 @@ def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT;blk:blo
         __builtin_table_unlock(Tab)
 
 [unsafe_operation]
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT):valT?
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):valT?
     return __builtin_table_find(Tab,at)
 
-def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
+def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):bool
     return __builtin_table_erase(Tab,at)
 
-def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT):bool
+def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):bool
     return __builtin_table_key_exists(Tab,at)
 
 def binary_save(obj; subexpr:block<(data:array<uint8>):void>)

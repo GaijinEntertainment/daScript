@@ -247,8 +247,12 @@ namespace das
     };
 
     struct StructInfo {
+        enum {
+            flag_class =    (1<<0)
+        };
         char *      name;
         char *      module_name;
+        uint32_t    flags;
         VarInfo **  fields;
         uint32_t    count;
         uint32_t    size;

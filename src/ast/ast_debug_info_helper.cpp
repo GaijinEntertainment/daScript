@@ -116,6 +116,8 @@ namespace das {
         if ( it!=smn2s.end() ) return it->second;
         StructInfo * sti = debugInfo->makeNode<StructInfo>();
         sti->name = debugInfo->allocateName(st.name);
+        sti->flags = 0;
+        if ( st.isClass ) sti->flags |= StructInfo::flag_class;
         sti->count = (uint32_t) st.fields.size();
         sti->size = st.getSizeOf();
         sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
