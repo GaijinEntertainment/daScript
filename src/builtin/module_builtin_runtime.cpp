@@ -405,8 +405,9 @@ namespace das
         context->collectStringHeap(info);
     }
 
-    void string_heap_report ( Context * context ) {
+    void string_heap_report ( Context * context, LineInfoArg * info ) {
         context->stringHeap->report();
+        context->reportStringHeap(info);
     }
 
     void heap_report ( Context * context ) {

@@ -277,9 +277,7 @@ namespace das {
             tout << "big stuff:\n";
             for ( auto it : model.bigStuff ) {
                 char * ch = (char *)it.first;
-                strncpy(buf,ch,32);
-                buf[32] = 0;
-                tout << "\t" << presentStr(buf,ch,32) << " size " << it.second << " bytes\n";
+                tout << "\t" << presentStr(buf,ch,32) << " size " << it.second << " bytes, at 0x" << uint64_t(ch) << "\n";
                 totalBigStuff += it.second;
             }
             tout << " big stuff total size:" << (totalBigStuff + 1023) / 1024 << " kb\n";
