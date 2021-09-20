@@ -410,8 +410,17 @@ namespace das
         context->reportStringHeap(info);
     }
 
-    void heap_report ( Context * context ) {
+    void heap_collect ( Context * context, LineInfoArg * info ) {
+        context->collectHeap(info);
+    }
+
+    void heap_report ( Context * context, LineInfoArg * info ) {
         context->heap->report();
+        context->reportHeap(info);
+    }
+
+    void memory_report ( Context * context, LineInfoArg * info ) {
+        context->reportAnyHeap(info,true,true,false);
     }
 
     void builtin_table_lock ( const Table & arr, Context * context ) {
@@ -982,13 +991,16 @@ namespace das
                 SideEffects::modifyExternal, "string_heap_bytes_allocated");
         addExtern<DAS_BIND_FUN(string_heap_depth)>(*this, lib, "string_heap_depth",
                 SideEffects::modifyExternal, "string_heap_depth");
-        auto shc = addExtern<DAS_BIND_FUN(string_heap_collect)>(*this, lib, "string_heap_collect",
-                SideEffects::modifyExternal, "string_heap_collect");
-        shc->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(string_heap_collect)>(*this, lib, "string_heap_collect",
+                SideEffects::modifyExternal, "string_heap_collect")->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(heap_collect)>(*this, lib, "heap_collect",
+                SideEffects::modifyExternal, "heap_collect")->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(string_heap_report)>(*this, lib, "string_heap_report",
                 SideEffects::modifyExternal, "string_heap_report");
-       addExtern<DAS_BIND_FUN(heap_report)>(*this, lib, "heap_report",
+        addExtern<DAS_BIND_FUN(heap_report)>(*this, lib, "heap_report",
                 SideEffects::modifyExternal, "heap_report");
+        addExtern<DAS_BIND_FUN(memory_report)>(*this, lib, "memory_report",
+                SideEffects::modifyExternal, "memory_report");
         // binary serializer
         addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",
             SideEffects::modifyArgumentAndExternal, "_builtin_binary_load");

@@ -110,6 +110,9 @@ namespace das {
         __forceinline char * top() const {                // top of the stack
             return stack + stackSize;
         }
+        __forceinline bool is_stack_ptr ( char * p ) const {
+            return (stack<=p) && (p<=(stack + stackSize));
+        }
     protected:
         char *      stack = nullptr;
         char *      evalTop = nullptr;

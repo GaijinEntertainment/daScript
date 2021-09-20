@@ -249,6 +249,7 @@ namespace das
     struct StructInfo {
         enum {
             flag_class =    (1<<0)
+        ,   flag_lambda =   (1<<1)
         };
         char *      name;
         char *      module_name;

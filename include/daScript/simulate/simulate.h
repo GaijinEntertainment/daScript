@@ -577,6 +577,9 @@ namespace das
         void relocateCode();
         void collectStringHeap(LineInfo * at);
         void reportStringHeap(LineInfo * at);
+        void collectHeap(LineInfo * at);
+        void reportHeap(LineInfo * at);
+        void reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly);
         void instrumentFunction ( int index, bool isInstrumenting );
         void instrumentContextNode ( const Block & blk, bool isInstrumenting, Context * context, LineInfo * line );
         void clearInstruments();
@@ -609,6 +612,9 @@ namespace das
         }
 
         __forceinline void setSingleStep ( bool step ) { singleStepMode = step; }
+
+        __forceinline bool isGlobalPtr ( char * ptr ) const { return globals<=ptr && ptr<(globals+globalsSize); }
+        __forceinline bool isSharedPtr ( char * ptr ) const { return shared<=ptr && ptr<(shared+sharedSize); }
 
     public:
         uint64_t *                      annotationData = nullptr;

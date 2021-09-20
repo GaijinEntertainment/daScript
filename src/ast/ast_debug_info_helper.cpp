@@ -118,6 +118,7 @@ namespace das {
         sti->name = debugInfo->allocateName(st.name);
         sti->flags = 0;
         if ( st.isClass ) sti->flags |= StructInfo::flag_class;
+        if ( st.isLambda ) sti->flags |= StructInfo::flag_lambda;
         sti->count = (uint32_t) st.fields.size();
         sti->size = st.getSizeOf();
         sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );

@@ -24,6 +24,11 @@ namespace das {
     int32_t heap_depth ( Context * context );
     uint64_t string_heap_bytes_allocated ( Context * context );
     int32_t string_heap_depth ( Context * context );
+    void string_heap_collect ( Context * context, LineInfoArg * info );
+    void string_heap_report ( Context * context, LineInfoArg * info );
+    void heap_collect ( Context * context, LineInfoArg * info );
+    void heap_report ( Context * context, LineInfoArg * info );
+    void memory_report ( Context * context, LineInfoArg * info );
     void builtin_table_lock ( const Table & arr, Context * context );
     void builtin_table_unlock ( const Table & arr, Context * context );
     void builtin_table_clear_lock ( const Table & arr, Context * context );
