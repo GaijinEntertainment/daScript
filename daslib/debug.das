@@ -1400,9 +1400,10 @@ def private auto_start_debug()
                         tick_debugger()
 
 
-def private use_instruments()
+def private use_instruments() // or stepping debugger
     let args <- get_command_line_arguments()
-    return args |> find_index("--das-debug-instruments") >= 0
+    return args |> find_index("--das-stepping-debugger") < 0
+
 
 def private wait_debugger(): bool
     let args <- get_command_line_arguments()
