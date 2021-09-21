@@ -21,7 +21,6 @@ namespace das
         bool reportStringHeap = true;
         bool reportHeap = true;
         bool heapOnly = false;
-        Context * context = nullptr;
         using loop_point = pair<void *,uint32_t>;
         vector<loop_point> visited;
         vector<loop_point> visited_handles;
@@ -370,9 +369,6 @@ namespace das
         for ( int i=0; i!=totalVariables; ++i ) {
             auto & pv = globalVariables[i];
             if ( pv.shared ) continue;
-            if ( strcmp(pv.name,"g_instructionsByCategory")==0 ) {
-                printf("");
-            }
             walker.prepare(pv.name);
             walker.walk(globals + pv.offset, pv.debugInfo);
         }
