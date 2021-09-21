@@ -21,6 +21,7 @@ namespace das
         bool reportStringHeap = true;
         bool reportHeap = true;
         bool heapOnly = false;
+        bool errorsOnly = false;
         using loop_point = pair<void *,uint32_t>;
         vector<loop_point> visited;
         vector<loop_point> visited_handles;
@@ -28,6 +29,7 @@ namespace das
         vector<string>      keys;
         vector<PtrRange>    ptrRangeStack;
         PtrRange            currentRange;
+        TextPrinter         tp;
         void prepare ( const string & walk_from ) {
             DAS_ASSERT(keys.size()==0);
             DAS_ASSERT(ptrRangeStack.size()==0);
@@ -56,43 +58,57 @@ namespace das
             currentRange = ptrRangeStack.back();
             ptrRangeStack.pop_back();
         }
-        void describe_ptr ( TextPrinter & tp, char * pa, int tsize, bool isHandle = false ) {
-            tp << " " << tsize <<  " bytes, at 0x" << HEX << uint64_t(pa) << DEC << " ";
+        bool describe_ptr ( char * pa, int tsize, bool isHandle = false ) {
             auto ssize = (tsize+15) & ~15;
+            bool show = !errorsOnly;
             if ( context->stack.is_stack_ptr(pa) ) {
-                tp << "STACK";
+                if ( show ) tp << "\tSTACK";
             } else if ( context->isGlobalPtr(pa) ) {
-                tp << "GLOBAL";
+                if ( show ) tp << "\tGLOBAL";
             } else if ( context->isSharedPtr(pa) ) {
-                tp << "SHAREDGLOBAL";
+                if ( show ) tp << "\tSHAREDGLOBAL";
             } else if ( context->heap->isOwnPtr(pa, ssize) ) {
-                tp << "HEAP";
-            } else if ( context->stringHeap->isOwnPtr(pa, ssize) ) {
-                tp << "STRINGHEAP";
-            } else if ( context->constStringHeap->isOwnPtr(pa) ) {
-                tp << "CONSTSTRINGHEAP";
-            } else if  ( context->code->isOwnPtr(pa) ) {
-                tp << "CODE";
-            } else if ( context->debugInfo->isOwnPtr(pa) ) {
-                tp << "DEBUGINFO";
-            } else if ( isHandle ) {
-                tp << "HANDLED";
-            } else {
-                tp << "!!!UNCATEGORIZED!!!";
-            }
-            if ( pa==nullptr ) {
-                tp << " NULL";
-            } else {
-                auto bpa = (uint8_t *) pa;
-                tp << HEX;
-                char tohex[] = "0123456789abcdef";
-                for ( int i=0; i<8; ++i ) {
-                    auto t = bpa[i];
-                    tp << " " << tohex[t>>4] << tohex[t&15];
+                if ( context->heap->isValidPtr(pa, ssize) ) {
+                    if ( show ) tp << "\tHEAP";
+                } else {
+                    tp << "\tHEAP FREE!!!";
+                    show = true;
                 }
-                tp << DEC;
+            } else if ( context->stringHeap->isOwnPtr(pa, ssize) ) {
+                if ( context->stringHeap->isValidPtr(pa, ssize) ) {
+                    if ( show ) tp << "\tSTRINGHEAP";
+                } else {
+                    tp << "\tSTRINGHEAP FREE!!!";
+                    show = true;
+                }
+            } else if ( context->constStringHeap->isOwnPtr(pa) ) {
+                if ( show ) tp << "\tCONSTSTRINGHEAP";
+            } else if  ( context->code->isOwnPtr(pa) ) {
+                if ( show ) tp << "\tCODE";
+            } else if ( context->debugInfo->isOwnPtr(pa) ) {
+                if ( show ) tp << "\tDEBUGINFO";
+            } else if ( isHandle ) {
+                if ( show ) tp << "\tHANDLED";
+            } else {
+                tp << "UNCATEGORIZED!!!";
+                show = true;
             }
-            tp << "\n";
+            if ( show ) {
+                tp << " " << tsize <<  " bytes, at 0x" << HEX << uint64_t(pa) << DEC << " ";
+                if ( pa==nullptr ) {
+                    tp << "= NULL";
+                } else {
+                    auto bpa = (uint8_t *) pa;
+                    tp << HEX;
+                    char tohex[] = "0123456789abcdef";
+                    for ( int i=0; i<8; ++i ) {
+                        auto t = bpa[i];
+                        tp << " " << tohex[t>>4] << tohex[t&15];
+                    }
+                    tp << DEC;
+                }
+            }
+            return show;
         }
         virtual void beforeHandle ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforeHandle(pa, ti);
@@ -101,10 +117,10 @@ namespace das
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
-                TextPrinter tp;
-                ReportHistory(tp);
-                tp << "HANDLE " << getTypeInfoMangledName(ti);
-                describe_ptr(tp, pa, tsize, true);
+                if ( describe_ptr(pa, tsize, true) ) {
+                    ReportHistory();
+                    tp << " HANDLE " << getTypeInfoMangledName(ti) << "\n";
+                }
             }
             pushRange(rdata);
         }
@@ -119,10 +135,10 @@ namespace das
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
-                TextPrinter tp;
-                ReportHistory(tp);
-                tp << "DIM " << getTypeInfoMangledName(ti);
-                describe_ptr(tp, pa, tsize, (ti->flags & TypeInfo::flag_isHandled)!=0);
+                if ( describe_ptr(pa, tsize, (ti->flags & TypeInfo::flag_isHandled)!=0) ) {
+                    ReportHistory();
+                    tp << "DIM " << getTypeInfoMangledName(ti) << "\n";
+                }
             }
             pushRange(rdata);
         }
@@ -137,10 +153,10 @@ namespace das
             char * pa = PA->data;
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
-                TextPrinter tp;
-                ReportHistory(tp);
-                tp << "ARRAY " << getTypeInfoMangledName(ti);
-                describe_ptr(tp, pa, tsize);
+                if ( describe_ptr(pa, tsize) ) {
+                    ReportHistory();
+                    tp << "ARRAY " << getTypeInfoMangledName(ti) << "\n";
+                }
             }
             pushRange(rdata);
         }
@@ -155,10 +171,10 @@ namespace das
             char * pa = PT->data;
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
-                TextPrinter tp;
-                ReportHistory(tp);
-                tp << "TABLE " << getTypeInfoMangledName(ti);
-                describe_ptr(tp, pa, int(tsize));
+                if ( describe_ptr(pa, int(tsize)) ) {
+                    ReportHistory();
+                    tp << "TABLE " << getTypeInfoMangledName(ti) << "\n";
+                }
             }
             pushRange(rdata);
         }
@@ -172,10 +188,10 @@ namespace das
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
-                TextPrinter tp;
-                ReportHistory(tp);
-                tp << "& " << getTypeInfoMangledName(ti);
-                describe_ptr(tp, pa, tsize);
+                if ( describe_ptr(pa, tsize) ) {
+                    ReportHistory();
+                    tp << "& " << getTypeInfoMangledName(ti) << "\n";
+                }
             }
             pushRange(rdata);
         }
@@ -189,10 +205,10 @@ namespace das
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && !isVoid(ti->firstType) && markRange(rdata) ) {
-                TextPrinter tp;
-                ReportHistory(tp);
-                tp << "? " << getTypeInfoMangledName(ti);
-                describe_ptr(tp, pa, tsize);
+                if ( describe_ptr(pa, tsize) ) {
+                    ReportHistory();
+                    tp << "? " << getTypeInfoMangledName(ti);
+                }
             }
             pushRange(rdata);
         }
@@ -211,10 +227,10 @@ namespace das
             }
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
-                TextPrinter tp;
-                ReportHistory(tp);
-                tp << "STRUCTURE " << si->module_name << "::" << si->name;
-                describe_ptr(tp, pa, tsize);
+                if ( describe_ptr(pa, tsize) ) {
+                    ReportHistory();
+                    tp << "STRUCTURE " << si->module_name << "::" << si->name << "\n";
+                }
             }
             pushRange(rdata);
         }
@@ -238,10 +254,10 @@ namespace das
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
-                TextPrinter tp;
-                ReportHistory(tp);
-                tp << "VARIANT " << getTypeInfoMangledName(ti);
-                describe_ptr(tp, pa, tsize);
+                if ( describe_ptr(pa, tsize) ) {
+                    ReportHistory();
+                    tp << "VARIANT " << getTypeInfoMangledName(ti) << "\n";
+                }
             }
             pushRange(rdata);
         }
@@ -256,10 +272,10 @@ namespace das
             DAS_ASSERT(tsize==uint32_t(getTypeSize(si)));
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
-                TextPrinter tp;
-                ReportHistory(tp);
-                tp << "TUPLE " << getTypeInfoMangledName(si);
-                describe_ptr(tp, pa, tsize);
+                if ( describe_ptr(pa, tsize) ) {
+                    ReportHistory();
+                    tp << "TUPLE " << getTypeInfoMangledName(si) << "\n";
+                }
             }
             pushRange(rdata);
         }
@@ -325,19 +341,26 @@ namespace das
             if ( !reportStringHeap ) return;
             if ( !st ) return;
             if ( context->constStringHeap->isOwnPtr(st) ) return;
-            TextPrinter tp;
-            ReportHistory(tp);
+            bool show = !errorsOnly;
             char buf[32];
             uint32_t len = uint32_t(strlen(st)) + 1;
             len = (len + 15) & ~15;
             if ( context->stringHeap->isOwnPtr(st,len) ) {
-                tp << "STRING = ";
+                if ( context->stringHeap->isValidPtr(st,len) ) {
+                    if ( show ) tp << "\t\tSTRING ";
+                } else {
+                    tp << "\t\tSTRING FREE!!! ";
+                    show = true;
+                }
             } else {
-                tp << "STRING TEMP!!! = ";
+                if ( show ) tp << "\t\tSTRING#!!! ";
             }
-            tp << presentStr(buf, st, 32) << ", at 0x" << HEX << uint64_t(st) << DEC << "\n";
+            if ( show ) {
+                ReportHistory();
+                tp << presentStr(buf, st, 32) << ", at 0x" << HEX << uint64_t(st) << DEC << "\n";
+            }
         }
-        void ReportHistory ( TextPrinter & tp ) {
+        void ReportHistory ( void ) {
             tp << "\t";
             for (size_t i=0; i!=history.size(); ++i ) {
                 if ( i!=0 && (history[i].empty() || history[i][0]!='[') ) tp << ".";
@@ -347,7 +370,7 @@ namespace das
         }
     };
 
-    void Context::reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly) {
+    void Context::reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly) {
         TextPrinter tp;
         // now
         HeapReporter walker;
@@ -355,6 +378,7 @@ namespace das
         walker.reportStringHeap = sth;
         walker.reportHeap = rgh;
         walker.heapOnly = rghOnly;
+        walker.errorsOnly = errorsOnly;
         // mark globals
         if ( sharedOwner ) {
             tp << "SHARED GLOBALS:\n";
@@ -430,6 +454,7 @@ namespace das
         using loop_point = pair<void *,uint32_t>;
         vector<loop_point> visited;
         vector<loop_point> visited_handles;
+        das_set<char *> failed;
         virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
             return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
                     return t.first==ps && t.second==info->hash;
@@ -458,7 +483,12 @@ namespace das
             if ( context->constStringHeap->isOwnPtr(st) ) return;
             uint32_t len = uint32_t(strlen(st)) + 1;
             len = (len + 15) & ~15;
-            context->stringHeap->mark(st, len);
+            if ( !context->stringHeap->isOwnPtr(st, len) ) return;
+            if ( context->stringHeap->isValidPtr(st, len) ) {
+                context->stringHeap->mark(st, len);
+            } else {
+                failed.insert(st);
+            }
         }
     };
 
@@ -527,6 +557,18 @@ namespace das
         }
         // sweep
         stringHeap->sweep();
+        // report errors
+        heap->sweep();
+        if ( !walker.failed.empty() ) {
+            reportAnyHeap(at, true, false, false, true);
+            TextWriter tw;
+            tw << "string GC failed on the following dangling pointers:" << HEX;
+            for ( auto f : walker.failed ) {
+                tw << " " << uint64_t(f);
+            }
+            auto etext = stringHeap->allocateString(tw.str());
+            throw_error_at(*at, etext);
+        }
     }
 
     struct GcMarkAnyHeap : DataWalker {
@@ -537,6 +579,7 @@ namespace das
         vector<loop_point> visited_handles;
         vector<PtrRange>    ptrRangeStack;
         PtrRange            currentRange;
+        das_set<char *>     failed;
         void prepare() {
             currentRange.clear();
         }
@@ -545,7 +588,12 @@ namespace das
                 int ssize = int(r.to-r.from);
                 ssize = (ssize + 15) & ~15;
                 if ( context->heap->isOwnPtr(r.from, ssize) ) {
-                    context->heap->mark(r.from, ssize);
+                    if ( context->heap->isValidPtr(r.from, ssize) ) {
+                        context->heap->mark(r.from, ssize);
+                    } else {
+                        context->heap->isValidPtr(r.from, ssize);
+                        failed.insert(r.from);
+                    }
                 }
             }
             ptrRangeStack.push_back(currentRange);
@@ -666,7 +714,12 @@ namespace das
             if ( context->constStringHeap->isOwnPtr(st) ) return;
             uint32_t len = uint32_t(strlen(st)) + 1;
             len = (len + 15) & ~15;
-            context->stringHeap->mark(st, len);
+            if ( !context->stringHeap->isOwnPtr(st, len) ) return;
+            if ( context->stringHeap->isValidPtr(st, len) ) {
+                context->stringHeap->mark(st, len);
+            } else {
+                failed.insert(st);
+            }
         }
     };
 
@@ -741,7 +794,18 @@ namespace das
         }
         // sweep
         if ( sheap ) stringHeap->sweep();
+        // report errors
         heap->sweep();
+        if ( !walker.failed.empty() ) {
+            reportAnyHeap(at, sheap, true, true, true);
+            TextWriter tw;
+            tw << "GC failed on the following dangling pointers:" << HEX;
+            for ( auto f : walker.failed ) {
+                tw << " " << uint64_t(f);
+            }
+            auto etext = stringHeap->allocateString(tw.str());
+            throw_error_at(*at, etext);
+        }
     }
 }
 

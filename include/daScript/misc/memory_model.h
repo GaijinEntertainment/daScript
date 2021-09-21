@@ -19,6 +19,7 @@ namespace das {
             totalBytes = total * size;
             data = (char*) das_aligned_alloc16(totalBytes);
             bits = (uint32_t*) das_aligned_alloc16(total / 32 * 4);
+            gc_bits = nullptr;
             reset();    // this reset before next
             next = n;
         }
@@ -33,8 +34,30 @@ namespace das {
             allocated = 0;
             if ( next ) next->reset();
         }
+        void beforeGC() {
+            gc_bits = (uint32_t*) das_aligned_alloc16(total / 32 * 4);
+            memset ( gc_bits, 0, total / 32 * 4);
+            look = 0;
+            gc_allocated = 0;
+            if ( next ) next->beforeGC();
+        }
+        void afterGC() {
+            memcpy ( bits, gc_bits, total / 32 * 4 );
+            das_aligned_free16 ( gc_bits );
+            gc_bits = nullptr;
+            allocated = gc_allocated;
+        }
         __forceinline bool isOwnPtr ( char * ptr ) const {
             return (ptr>=data) && (ptr<data+totalBytes);
+        }
+        __forceinline bool isAllocatedPtr ( char * ptr ) {
+            ptrdiff_t idx = (ptr - data) / size;
+            DAS_ASSERT ( idx>=0 && idx<ptrdiff_t(total) );
+            uint32_t uidx = uint32_t(idx);
+            uint32_t i = uidx >> 5;
+            uint32_t j = uidx & 31;
+            uint32_t b = bits[i];
+            return ((b & (1u<<j))!=0);
         }
         __forceinline char * allocate ( ) {
             if ( allocated == total ) return nullptr;
@@ -74,19 +97,21 @@ namespace das {
             uint32_t uidx = uint32_t(idx);
             uint32_t i = uidx >> 5;
             uint32_t j = uidx & 31;
-            uint32_t b = bits[i];
+            uint32_t b = gc_bits[i];
             if ( !(b & (1u<<j)) ) {
-                bits[i] = b | (1u<<j);
-                allocated ++;
+                gc_bits[i] = b | (1u<<j);
+                gc_allocated ++;
             }
         }
         char *      data = nullptr;
         uint32_t *  bits = nullptr;
+        uint32_t *  gc_bits = nullptr;
         uint32_t    total = 0;
         uint32_t    size = 0;
         uint32_t    totalBytes = 0;
         uint32_t    look = 0;
         uint32_t    allocated = 0;
+        uint32_t    gc_allocated = 0;
         Deck *      next = nullptr;
     };
 
@@ -154,7 +179,7 @@ namespace das {
         }
         void beforeGC() {
             for ( int i=0; i!=DAS_MAX_SHOE_CUNKS; ++i ) {
-                if ( chunks[i] ) chunks[i]->reset();
+                if ( chunks[i] ) chunks[i]->beforeGC();
             }
         }
         bool isOwnPtr ( char * ptr, uint32_t size ) const {
@@ -163,6 +188,16 @@ namespace das {
             for ( auto ch = chunks[si]; ch; ch=ch->next ) {
                 if ( ch->isOwnPtr(ptr) ) {
                     return true;
+                }
+            }
+            return false;
+        }
+        bool isAllocatedPtr ( char * ptr, uint32_t size ) const {
+            DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
+            uint32_t si = (size >> 4) - 1;
+            for ( auto ch = chunks[si]; ch; ch=ch->next ) {
+                if ( ch->isOwnPtr(ptr) ) {
+                    return ch->isAllocatedPtr(ptr);
                 }
             }
             return false;
@@ -224,6 +259,9 @@ namespace das {
         __forceinline int depth() const { return shoe.depth(); }
         __forceinline bool isOwnPtr( char * ptr, uint32_t size ) const {
             return ((size<=DAS_MAX_SHOE_ALLOCATION) && shoe.isOwnPtr(ptr,size)) || (bigStuff.find(ptr)!=bigStuff.end());
+        }
+        __forceinline bool isAllocatedPtr( char * ptr, uint32_t size ) const {
+            return ((size<=DAS_MAX_SHOE_ALLOCATION) && shoe.isAllocatedPtr(ptr,size)) || (bigStuff.find(ptr)!=bigStuff.end());
         }
         uint32_t bytesAllocated() const { return totalAllocated; }
         uint32_t maxBytesAllocated() const { return maxAllocated; }

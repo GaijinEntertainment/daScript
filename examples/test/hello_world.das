@@ -1,28 +1,19 @@
-options log
-
 options persistent_heap
 options persistent_string_heap
+options gc
 
-class Foo
+struct Foo
     a : int
 
-class Bar : Foo
-    b : int
+struct Bar
+    p : Foo?
 
 [export]
 def main
-    print("sizeof(Foo)=={typeinfo(sizeof type<Foo>)}\n")
-    print("sizeof(Bar)=={typeinfo(sizeof type<Bar>)}\n")
-    var p : Foo? = new Bar()
-    print("p = {p}\n")
-    memory_report()
+    var f = new [[Foo]]
+    var a = new [[Bar p=f]]
     unsafe
-        delete p
-    memory_report()
-    p = new Bar()
-    print("p = {p}\n")
-    memory_report()
-    p = null
+        delete f
     unsafe
         heap_collect(true)
-    memory_report()
+

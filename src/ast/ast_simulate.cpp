@@ -1110,7 +1110,7 @@ namespace das
         auto blk = static_pointer_cast<ExprBlock>(block);
         uint32_t argSp = blk->stackTop;
         auto info = context.thisHelper->makeInvokeableTypeDebugInfo(blk->makeBlockType(),blk->at);
-        if ( context.thisProgram->getDebugger() ) {
+        if ( context.thisProgram->getDebugger() || context.thisProgram->options.getBoolOption("gc",false) ) {
             context.thisHelper->appendLocalVariables(info, (Expression *)this);
         }
         return context.code->makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp,stackTop,info);
@@ -2781,6 +2781,7 @@ namespace das
         context.totalVariables = totalVariables;
         context.functions = (SimFunction *) context.code->allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
+        auto debuggerOrGC = getDebugger()  || context.thisProgram->options.getBoolOption("gc",false);
         if ( totalFunctions ) {
             for (auto & pm : library.modules) {
                 for (auto & it : pm->functions) {
@@ -2793,7 +2794,7 @@ namespace das
                     gfun.mangledName = context.code->allocateName(mangledName);
                     gfun.code = pfun->simulate(context);
                     gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
-                    if ( getDebugger() ) {
+                    if ( debuggerOrGC ) {
                         helper.appendLocalVariables(gfun.debugInfo, pfun->body);
                     }
                     gfun.stackSize = pfun->totalStackSize;

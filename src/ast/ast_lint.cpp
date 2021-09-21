@@ -449,6 +449,7 @@ namespace das {
         "persistent_string_heap",       Type::tBool,
         "heap_size_hint",               Type::tInt,
         "string_heap_size_hint",        Type::tInt,
+        "gc",                           Type::tBool,
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,

@@ -28,7 +28,7 @@ namespace das {
     void string_heap_report ( Context * context, LineInfoArg * info );
     void heap_collect ( bool stringHeap, Context * context, LineInfoArg * info );
     void heap_report ( Context * context, LineInfoArg * info );
-    void memory_report ( Context * context, LineInfoArg * info );
+    void memory_report ( bool errorsOnly, Context * context, LineInfoArg * info );
     void builtin_table_lock ( const Table & arr, Context * context );
     void builtin_table_unlock ( const Table & arr, Context * context );
     void builtin_table_clear_lock ( const Table & arr, Context * context );

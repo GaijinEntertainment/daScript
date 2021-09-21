@@ -407,7 +407,7 @@ namespace das
 
     void string_heap_report ( Context * context, LineInfoArg * info ) {
         context->stringHeap->report();
-        context->reportAnyHeap(info, true, false, false);
+        context->reportAnyHeap(info, true, false, false, false);
     }
 
     void heap_collect ( bool sheap, Context * context, LineInfoArg * info ) {
@@ -416,13 +416,13 @@ namespace das
 
     void heap_report ( Context * context, LineInfoArg * info ) {
         context->heap->report();
-        context->reportAnyHeap(info, false, true, true);
+        context->reportAnyHeap(info, false, true, true, false);
     }
 
-    void memory_report ( Context * context, LineInfoArg * info ) {
+    void memory_report ( bool errOnly, Context * context, LineInfoArg * info ) {
         context->stringHeap->report();
         context->heap->report();
-        context->reportAnyHeap(info,true,true,false);
+        context->reportAnyHeap(info,true,true,false,errOnly);
     }
 
     void builtin_table_lock ( const Table & arr, Context * context ) {

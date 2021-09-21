@@ -177,6 +177,7 @@ namespace das {
 #if !DAS_TRACK_ALLOCATIONS
         for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {   // we re-track all small allocations
             for ( auto ch=shoe.chunks[si]; ch; ch=ch->next ) {
+                ch->afterGC();
                 uint32_t utotal = ch->total / 32;
                 for ( uint32_t i=0; i!=utotal; ++i ) {
                     uint32_t b = ch->bits[i];
