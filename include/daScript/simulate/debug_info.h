@@ -190,6 +190,7 @@ namespace das
             flag_hasInitValue = 1<<9,
             flag_isSmartPtr = 1<<10,
             flag_isSmartPtrNative = 1<<11,
+            flag_isHandled = 1<<12,
         };
         Type                type;
         StructInfo *        structType;

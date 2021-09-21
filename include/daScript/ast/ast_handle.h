@@ -455,6 +455,7 @@ namespace das
                 dimType->ref = 0;
                 dimType->dim.push_back(1);
                 ati = helpA.makeTypeInfo(nullptr, dimType);
+                ati->flags |= TypeInfo::flag_isHandled;
             }
             auto pVec = (VectorType *)vec;
             auto atit = *ati;

@@ -99,8 +99,7 @@ namespace das
             DataWalker::beforeHandle(pa, ti);
             visited_handles.emplace_back(make_pair(pa,ti->hash));
             auto tsize = ti->size;
-            auto tdsize = getTypeSize(ti);
-            DAS_ASSERT(tsize==tdsize);
+            DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
                 TextPrinter tp;
@@ -118,13 +117,13 @@ namespace das
         virtual void beforeDim ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforeDim(pa,ti);
             auto tsize = ti->size;
-            DAS_ASSERT(tsize==getTypeSize(ti));
+            DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
                 TextPrinter tp;
                 ReportHistory(tp);
                 tp << "DIM " << getTypeInfoMangledName(ti);
-                describe_ptr(tp, pa, tsize);
+                describe_ptr(tp, pa, tsize, (ti->flags & TypeInfo::flag_isHandled)!=0);
             }
             pushRange(rdata);
         }
@@ -171,7 +170,7 @@ namespace das
         virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforeRef(pa, ti);
             auto tsize = ti->size;
-            DAS_ASSERT(tsize==getTypeSize(ti));
+            DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
                 TextPrinter tp;
@@ -188,7 +187,7 @@ namespace das
         virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforePtr(pa, ti);
             auto tsize = ti->size;
-            DAS_ASSERT(tsize==getTypeSize(ti));
+            DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && !isVoid(ti->firstType) && markRange(rdata) ) {
                 TextPrinter tp;
@@ -237,7 +236,7 @@ namespace das
             DataWalker::beforeTuple(ps, ti);
             char * pa = ps;
             auto tsize = ti->size;
-            DAS_ASSERT(tsize==getTypeSize(ti));
+            DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
                 TextPrinter tp;
@@ -255,7 +254,7 @@ namespace das
             DataWalker::beforeTuple(ps, si);
             char * pa = ps;
             auto tsize = si->size;
-            DAS_ASSERT(tsize==getTypeSize(si));
+            DAS_ASSERT(tsize==uint32_t(getTypeSize(si)));
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
                 TextPrinter tp;
@@ -330,7 +329,14 @@ namespace das
             TextPrinter tp;
             ReportHistory(tp);
             char buf[32];
-            tp << "STRING = " << presentStr(buf, st, 32) << ", at 0x" << HEX << uint64_t(st) << DEC << "\n";
+            uint32_t len = uint32_t(strlen(st)) + 1;
+            len = (len + 15) & ~15;
+            if ( context->stringHeap->isOwnPtr(st,len) ) {
+                tp << "STRING = ";
+            } else {
+                tp << "STRING TEMP!!! = ";
+            }
+            tp << presentStr(buf, st, 32) << ", at 0x" << HEX << uint64_t(st) << DEC << "\n";
         }
         void ReportHistory ( TextPrinter & tp ) {
             tp << "\t";

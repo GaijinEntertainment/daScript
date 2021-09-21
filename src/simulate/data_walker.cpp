@@ -72,7 +72,7 @@ namespace das {
             if ( cancel ) return;
             afterTupleEntry(ps, ti, pf, vi, last);
             if ( cancel ) return;
-            fieldOffset += getTypeSize(vi);
+            fieldOffset += vi->size;
         }
         afterTuple(ps, ti);
     }
@@ -126,7 +126,7 @@ namespace das {
         } else {
             copyInfo.dim = nullptr;
         }
-        uint32_t stride = getTypeSize(&copyInfo);
+        uint32_t stride = copyInfo.size;
         uint32_t count = ti->dim[0];
         walk_array(pa, stride, count, &copyInfo);
         if ( cancel ) return;
@@ -134,8 +134,8 @@ namespace das {
     }
 
     void DataWalker::walk_table ( Table * tab, TypeInfo * info ) {
-        int keySize = getTypeSize(info->firstType);
-        int valueSize = getTypeSize(info->secondType);
+        int keySize = info->firstType->size;
+        int valueSize = info->secondType->size;
         uint32_t count = 0;
         for ( uint32_t i=0; i!=tab->capacity; ++i ) {
             if ( tab->hashes[i] > HASH_KILLED32 ) {
@@ -180,7 +180,7 @@ namespace das {
             auto arr = (Array *) pa;
             beforeArray(arr, info);
             if ( cancel ) return;
-            walk_array(arr->data, getTypeSize(info->firstType), arr->size, info->firstType);
+            walk_array(arr->data, info->firstType->size, arr->size, info->firstType);
             if ( cancel ) return;
             afterArray(arr, info);
         } else if ( info->type==Type::tTable ) {
