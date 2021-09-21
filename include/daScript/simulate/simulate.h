@@ -639,7 +639,6 @@ namespace das
     public:
         const char *    exception = nullptr;
         LineInfo        exceptionAt;
-        string          lastError;
 #if !DAS_ENABLE_EXCEPTIONS
         jmp_buf *       throwBuf = nullptr;
 #endif

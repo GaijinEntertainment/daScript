@@ -259,6 +259,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addFieldEx("category", "category", offsetof(Context, category), makeContextCategoryFlags());
             addField<DAS_BIND_MANAGED_FIELD(breakOnException)>("breakOnException");
+            addField<DAS_BIND_MANAGED_FIELD(exception)>("exception");
+            addField<DAS_BIND_MANAGED_FIELD(exceptionAt)>("exceptionAt");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalFunctions)>("totalFunctions",
                 "getTotalFunctions");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalVariables)>("totalVariables",
