@@ -137,7 +137,8 @@ namespace das {
                     return;
                 }
             }
-            DAS_ASSERT(0 && "not a chunk pointer");
+            DAS_FATAL_LOG("deleting %p %i, which is not a chunk pointer (or chunk size mismatch)\n", ptr, size);
+            DAS_VERIFYF(false, "not a valid chunk pointer");
         }
         bool mark ( char * ptr, uint32_t size ) {
             size = (size + 15) & ~15;

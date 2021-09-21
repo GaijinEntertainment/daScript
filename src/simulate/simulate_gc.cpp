@@ -7,16 +7,17 @@ namespace das
 {
     char * presentStr ( char * buf, char * ch, int size );
 
+    struct PtrRange {
+        char * from = nullptr;
+        char * to = nullptr;
+        PtrRange () {}
+        PtrRange ( char * F, size_t size ) : from(F), to(F+size) {}
+        void clear() { from = to = nullptr; }
+        __forceinline bool empty() const { return from==to; }
+        __forceinline bool contains ( const PtrRange & r ) { return !empty() && !r.empty() && from<=r.from && to>=r.to; }
+    };
+
     struct HeapReporter : DataWalker {
-        struct PtrRange {
-            char * from = nullptr;
-            char * to = nullptr;
-            PtrRange () {}
-            PtrRange ( char * F, size_t size ) : from(F), to(F+size) {}
-            void clear() { from = to = nullptr; }
-            bool empty() const { return from==nullptr; }
-            bool contains ( const PtrRange & r ) { return !empty() && !r.empty() && from<=r.from && to>=r.to; }
-        };
         bool reportStringHeap = true;
         bool reportHeap = true;
         bool heapOnly = false;
@@ -80,12 +81,26 @@ namespace das
             } else {
                 tp << "!!!UNCATEGORIZED!!!";
             }
+            if ( pa==nullptr ) {
+                tp << " NULL";
+            } else {
+                auto bpa = (uint8_t *) pa;
+                tp << HEX;
+                char tohex[] = "0123456789abcdef";
+                for ( int i=0; i<8; ++i ) {
+                    auto t = bpa[i];
+                    tp << " " << tohex[t>>4] << tohex[t&15];
+                }
+                tp << DEC;
+            }
             tp << "\n";
         }
         virtual void beforeHandle ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforeHandle(pa, ti);
             visited_handles.emplace_back(make_pair(pa,ti->hash));
-            auto tsize = getTypeSize(ti);
+            auto tsize = ti->size;
+            auto tdsize = getTypeSize(ti);
+            DAS_ASSERT(tsize==tdsize);
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
                 TextPrinter tp;
@@ -102,7 +117,8 @@ namespace das
         }
         virtual void beforeDim ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforeDim(pa,ti);
-            auto tsize = getTypeSize(ti);
+            auto tsize = ti->size;
+            DAS_ASSERT(tsize==getTypeSize(ti));
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
                 TextPrinter tp;
@@ -118,7 +134,8 @@ namespace das
         }
         virtual void beforeArray ( Array * PA, TypeInfo * ti ) override {
             DataWalker::beforeArray(PA,ti);
-            auto tsize = getTypeSize(ti->firstType) * PA->capacity;
+            auto tsize = ti->firstType->size * PA->capacity;
+            DAS_ASSERT(tsize==getTypeSize(ti->firstType)*PA->capacity);
             char * pa = PA->data;
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
@@ -135,7 +152,8 @@ namespace das
         }
         virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
             DataWalker::beforeTable(PT, ti);
-            auto tsize = (getTypeSize(ti->firstType) + getTypeSize(ti->secondType) + sizeof(uint32_t)) * PT->capacity;
+            auto tsize = (ti->firstType->size + ti->secondType->size + sizeof(uint32_t)) * PT->capacity;
+            DAS_ASSERT(tsize==(getTypeSize(ti->firstType)+getTypeSize(ti->secondType)+sizeof(uint32_t))*PT->capacity);
             char * pa = PT->data;
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
@@ -152,7 +170,8 @@ namespace das
         }
         virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforeRef(pa, ti);
-            auto tsize = getTypeSize(ti);
+            auto tsize = ti->size;
+            DAS_ASSERT(tsize==getTypeSize(ti));
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
                 TextPrinter tp;
@@ -168,7 +187,8 @@ namespace das
         }
         virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforePtr(pa, ti);
-            auto tsize = getTypeSize(ti);
+            auto tsize = ti->size;
+            DAS_ASSERT(tsize==getTypeSize(ti));
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && !isVoid(ti->firstType) && markRange(rdata) ) {
                 TextPrinter tp;
@@ -216,7 +236,8 @@ namespace das
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
             DataWalker::beforeTuple(ps, ti);
             char * pa = ps;
-            auto tsize = getTypeSize(ti);
+            auto tsize = ti->size;
+            DAS_ASSERT(tsize==getTypeSize(ti));
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
                 TextPrinter tp;
@@ -233,7 +254,8 @@ namespace das
         virtual void beforeTuple ( char * ps, TypeInfo * si ) override {
             DataWalker::beforeTuple(ps, si);
             char * pa = ps;
-            auto tsize = getTypeSize(si);
+            auto tsize = si->size;
+            DAS_ASSERT(tsize==getTypeSize(si));
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
                 TextPrinter tp;
@@ -401,13 +423,6 @@ namespace das
         }
     }
 
-    void Context::reportStringHeap ( LineInfo * at ) {
-        reportAnyHeap(at, true, false, false);
-    }
-
-    void Context::reportHeap ( LineInfo * at ) {
-        reportAnyHeap(at, false, true, true);
-    }
     struct GcMarkStringHeap : DataWalker {
         Context * context = nullptr;
         using loop_point = pair<void *,uint32_t>;
@@ -437,12 +452,8 @@ namespace das
         }
         virtual void String ( char * & st ) override {
             DataWalker::String(st);
-            if ( !st ) {
-                return;
-            }
-            if ( context->constStringHeap->isOwnPtr(st) ) {     // not a const string
-                return;
-            }
+            if ( !st ) return;
+            if ( context->constStringHeap->isOwnPtr(st) ) return;
             uint32_t len = uint32_t(strlen(st)) + 1;
             len = (len + 15) & ~15;
             context->stringHeap->mark(st, len);
@@ -516,7 +527,219 @@ namespace das
         stringHeap->sweep();
     }
 
-    void Context::collectHeap ( LineInfo * at ) {
+    struct GcMarkAnyHeap : DataWalker {
+        bool markStringHeap = true;
+        Context * context = nullptr;
+        using loop_point = pair<void *,uint32_t>;
+        vector<loop_point> visited;
+        vector<loop_point> visited_handles;
+        vector<PtrRange>    ptrRangeStack;
+        PtrRange            currentRange;
+        void prepare() {
+            currentRange.clear();
+        }
+        void markAndPushRange ( const PtrRange & r ) {
+            if ( !r.empty() && !currentRange.contains(r) ) {
+                int ssize = int(r.to-r.from);
+                ssize = (ssize + 15) & ~15;
+                if ( context->heap->isOwnPtr(r.from, ssize) ) {
+                    context->heap->mark(r.from, ssize);
+                }
+            }
+            ptrRangeStack.push_back(currentRange);
+            currentRange = r;
+        }
+        bool isVoid ( TypeInfo * ti ) {
+            return ti==nullptr || (ti->dimSize==0 && ti->type==Type::tVoid);
+        }
+        void popRange() {
+            currentRange = ptrRangeStack.back();
+            ptrRangeStack.pop_back();
+        }
+        virtual void beforeHandle ( char * pa, TypeInfo * ti ) override {
+            DataWalker::beforeHandle(pa, ti);
+            visited_handles.emplace_back(make_pair(pa,ti->hash));
+            PtrRange rdata(pa, ti->size);
+            markAndPushRange(rdata);
+        }
+        virtual void afterHandle ( char * pa, TypeInfo * ti ) override {
+            popRange();
+            visited_handles.pop_back();
+            DataWalker::afterHandle(pa, ti);
+        }
+        virtual void beforeDim ( char * pa, TypeInfo * ti ) override {
+            DataWalker::beforeDim(pa,ti);
+            PtrRange rdata(pa, ti->size);
+            markAndPushRange(rdata);
+        }
+        virtual void afterDim ( char * pa, TypeInfo * ti ) override {
+            popRange();
+            DataWalker::afterDim(pa,ti);
+        }
+        virtual void beforeArray ( Array * PA, TypeInfo * ti ) override {
+            DataWalker::beforeArray(PA,ti);
+            PtrRange rdata(PA->data, ti->firstType->size * PA->capacity);
+            markAndPushRange(rdata);
+        }
+        virtual void afterArray ( Array * pa, TypeInfo * ti ) override {
+            popRange();
+            DataWalker::afterArray(pa,ti);
+        }
+        virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
+            DataWalker::beforeTable(PT, ti);
+            PtrRange rdata(PT->data, (ti->firstType->size+ti->secondType->size+sizeof(uint32_t))*PT->capacity);
+            markAndPushRange(rdata);
+        }
+        virtual void afterTable ( Table * pa, TypeInfo * ti ) override {
+            popRange();
+            DataWalker::afterTable(pa, ti);
+        }
+        virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
+            DataWalker::beforeRef(pa, ti);
+            PtrRange rdata(pa, ti->size);
+            markAndPushRange(rdata);
+        }
+        virtual void afterRef ( char * pa, TypeInfo * ti ) override {
+            popRange();
+            DataWalker::afterRef(pa, ti);
+        }
+        virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
+            DataWalker::beforePtr(pa, ti);
+            PtrRange rdata(pa, ti->size);
+            markAndPushRange(rdata);
+        }
+        virtual void afterPtr ( char * pa, TypeInfo * ti ) override {
+            popRange();
+            DataWalker::afterPtr(pa, ti);
+        }
+        virtual void beforeStructure ( char * pa, StructInfo * ti ) override {
+            DataWalker::beforeStructure(pa, ti);
+            visited.emplace_back(make_pair(pa,ti->hash));
+            auto tsize = ti->size;
+            if ( ti->flags & StructInfo::flag_lambda ) {
+                pa -= 16;
+                tsize += 16;
+            }
+            PtrRange rdata(pa, tsize);
+            markAndPushRange(rdata);
+        }
+        virtual void afterStructure ( char * ps, StructInfo * si ) override {
+            popRange();
+            visited.pop_back();
+            DataWalker::afterStructure(ps,si);
+        }
+        virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
+            DataWalker::beforeTuple(ps, ti);
+            char * pa = ps;
+            PtrRange rdata(pa, ti->size);
+            markAndPushRange(rdata);
+        }
+        virtual void afterVariant ( char * ps, TypeInfo * ti ) override {
+            popRange();
+            DataWalker::afterVariant(ps,ti);
+        }
+        virtual void beforeTuple ( char * pa, TypeInfo * ti ) override {
+            DataWalker::beforeTuple(pa, ti);
+            PtrRange rdata(pa, ti->size);
+            markAndPushRange(rdata);
+        }
+        virtual void afterTuple ( char * ps, TypeInfo * si ) override {
+            popRange();
+            DataWalker::afterTuple(ps,si);
+        }
+        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
+            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+                    return t.first==ps && t.second==info->hash;
+                }) == visited.end();
+        }
+        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
+            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+                    return t.first==ps && t.second==info->hash;
+                }) == visited.end();
+        }
+        virtual void String ( char * & st ) override {
+            DataWalker::String(st);
+            if ( !markStringHeap ) return;
+            if ( !st ) return;
+            if ( context->constStringHeap->isOwnPtr(st) ) return;
+            uint32_t len = uint32_t(strlen(st)) + 1;
+            len = (len + 15) & ~15;
+            context->stringHeap->mark(st, len);
+        }
+    };
+
+    void Context::collectHeap ( LineInfo * at, bool sheap ) {
+        // clean up, so that all small allocations are marked as 'free'
+        if ( sheap && !stringHeap->mark() ) return;
+        if ( !heap->mark() ) return;
+        // now
+        GcMarkAnyHeap walker;
+        walker.markStringHeap = sheap;
+        walker.context = this;
+        // mark globals
+        if ( sharedOwner ) {
+            for ( int i=0; i!=totalVariables; ++i ) {
+                auto & pv = globalVariables[i];
+                if ( !pv.shared ) continue;
+                walker.prepare();
+                walker.walk(shared + pv.offset, pv.debugInfo);
+            }
+        }
+        for ( int i=0; i!=totalVariables; ++i ) {
+            auto & pv = globalVariables[i];
+            if ( pv.shared ) continue;
+            walker.prepare();
+            walker.walk(globals + pv.offset, pv.debugInfo);
+        }
+        // mark stack
+        char * sp = stack.ap();
+        const LineInfo * lineAt = at;
+        while (  sp < stack.top() ) {
+            Prologue * pp = (Prologue *) sp;
+            Block * block = nullptr;
+            FuncInfo * info = nullptr;
+            char * SP = sp;
+            if ( pp->info ) {
+                intptr_t iblock = intptr_t(pp->block);
+                if ( iblock & 1 ) {
+                    block = (Block *) (iblock & ~1);
+                    info = block->info;
+                    SP = stack.bottom() + block->stackOffset;
+                } else {
+                    info = pp->info;
+                }
+            }
+            if ( info ) {
+                for ( uint32_t i = 0; i != info->count; ++i ) {
+                    walker.prepare();
+                    walker.walk(pp->arguments[i], info->fields[i]);
+                }
+                if ( info->locals ) {
+                    for ( uint32_t i = 0; i != info->localCount; ++i ) {
+                        auto lv = info->locals[i];
+                        bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
+                        if ( !inScope ) continue;
+                        char * addr = nullptr;
+                        if ( lv->cmres ) {
+                            addr = (char *)pp->cmres;
+                        } else if ( lv->isRefValue( ) ) {
+                            addr = SP + lv->stackTop;
+                        } else {
+                            addr = SP + lv->stackTop;
+                        }
+                        if ( addr ) {
+                            walker.prepare();
+                            walker.walk(addr, lv);
+                        }
+                    }
+                }
+            }
+            lineAt = info ? pp->line : nullptr;
+            sp += info ? info->stackSize : pp->stackSize;
+        }
+        // sweep
+        if ( sheap ) stringHeap->sweep();
+        heap->sweep();
     }
 }
 

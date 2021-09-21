@@ -1,34 +1,28 @@
-require rtti
-require debugapi
-require jobque
-require daslib/apply_in_context
+options log
 
-// debug server
+options persistent_heap
+options persistent_string_heap
 
-var value = 0
+class Foo
+    a : int
 
-[export]
-def debug_agent ( ctx : Context )
-    print("from debugger\n")
-    install_new_debug_agent(new DapiDebugAgent(), "sample") // note - no install = no category
-    value = 13
-
-[apply_in_context(sample)]
-def get_value() : int
-    return value
-
-[apply_in_context(sample)]
-def cache_resource_server ( ctx:Context; fun:function ) : bool
-    print("cache: in the server on {this_context()}\n")
-    unsafe
-        ctx |> invoke_in_context(fun)
-    return true
-
-// client
+class Bar : Foo
+    b : int
 
 [export]
 def main
-    fork_debug_agent_context(@@debug_agent)
-    cache_resource_server(this_context()) <| @@ ()
-        print("it called me back on {this_context()}\n")
-    print("value = {get_value()}\n")
+    print("sizeof(Foo)=={typeinfo(sizeof type<Foo>)}\n")
+    print("sizeof(Bar)=={typeinfo(sizeof type<Bar>)}\n")
+    var p : Foo? = new Bar()
+    print("p = {p}\n")
+    memory_report()
+    unsafe
+        delete p
+    memory_report()
+    p = new Bar()
+    print("p = {p}\n")
+    memory_report()
+    p = null
+    unsafe
+        heap_collect(true)
+    memory_report()

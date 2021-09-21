@@ -314,7 +314,7 @@ namespace das {
         virtual MakeFieldDeclPtr visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last) override;
     // make structure
         virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) override;
-        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * expr );
+        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * expr ) override;
         IMPL_BIND_EXPR(ExprMakeStruct);
         virtual void preVisitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last ) override;
         virtual void visitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool last ) override;

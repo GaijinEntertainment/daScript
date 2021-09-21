@@ -407,19 +407,21 @@ namespace das
 
     void string_heap_report ( Context * context, LineInfoArg * info ) {
         context->stringHeap->report();
-        context->reportStringHeap(info);
+        context->reportAnyHeap(info, true, false, false);
     }
 
-    void heap_collect ( Context * context, LineInfoArg * info ) {
-        context->collectHeap(info);
+    void heap_collect ( bool sheap, Context * context, LineInfoArg * info ) {
+        context->collectHeap(info, sheap);
     }
 
     void heap_report ( Context * context, LineInfoArg * info ) {
         context->heap->report();
-        context->reportHeap(info);
+        context->reportAnyHeap(info, false, true, true);
     }
 
     void memory_report ( Context * context, LineInfoArg * info ) {
+        context->stringHeap->report();
+        context->heap->report();
         context->reportAnyHeap(info,true,true,false);
     }
 
@@ -1082,6 +1084,8 @@ namespace das
         idpss->firstArgReturnType = true;
         idpss->noPointerCast = true;
         addExtern<DAS_BIND_FUN(i_das_ptr_diff)>(*this, lib, "i_das_ptr_diff", SideEffects::none, "i_das_ptr_diff");
+        // rtti
+        addExtern<DAS_BIND_FUN(class_rtti_size)>(*this, lib, "class_rtti_size", SideEffects::none, "class_rtti_size");
         // profile
         addExtern<DAS_BIND_FUN(builtin_profile)>(*this,lib,"profile", SideEffects::modifyExternal, "builtin_profile");
         // das string binding

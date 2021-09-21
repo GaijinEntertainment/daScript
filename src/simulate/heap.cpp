@@ -31,12 +31,30 @@ namespace das {
         return allocateString ( str.c_str(), uint32_t(str.length()) );
     }
 
+    bool PersistentHeapAllocator::mark() {
+        model.shoe.beforeGC();
+        return true;
+    }
+
+    void PersistentHeapAllocator::mark ( char * ptr, uint32_t len ) {
+        auto it = model.bigStuff.find(ptr);                  // not a big allocation
+        if ( it != model.bigStuff.end() ) {
+            it->second |= DAS_PAGE_GC_MASK;
+            return;
+        }
+        if ( len < DAS_MAX_SHOE_ALLOCATION ) {              // not a small allocation
+            if ( model.shoe.mark(ptr,len) ) {
+                return;
+            }
+        }
+    }
+
     void PersistentHeapAllocator::report() {
         TextPrinter tout;
         for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {
             if ( model.shoe.chunks[si] ) tout << "decks of size " << int((si+1)<<4) << "\n";
             for ( auto ch=model.shoe.chunks[si]; ch; ch=ch->next ) {
-                tout << HEX << "\t" << "[" << uint64_t(ch->data) << ".." << (uint64_t(ch->data)+ch->size) << ")\n" << DEC;
+                tout << HEX << "\t" << "[" << uint64_t(ch->data) << ".." << (uint64_t(ch->data)+(ch->size*ch->total)) << ")\n" << DEC;
                 tout << "\t" << ch->allocated << " of " << ch->total << ", " << (ch->allocated*ch->size) << " of " << ch->totalBytes << " bytes\n";
             }
         }
@@ -258,7 +276,7 @@ namespace das {
             for ( auto ch=model.shoe.chunks[si]; ch; ch=ch->next ) {
                 bytesInDeck += ch->totalBytes;
                 totalChunks ++;
-                tout << "\t" << HEX << "[" << uint64_t(ch->data) << ".." << (uint64_t(ch->data)+ch->size) << ")\n" << DEC;
+                tout << "\t" << HEX << "[" << uint64_t(ch->data) << ".." << (uint64_t(ch->data)+(ch->size*ch->total)) << ")\n" << DEC;
                 tout << "\t" << ch->allocated << " of " << ch->total << ", " << (ch->allocated*ch->size) << " of " << ch->totalBytes << " bytes\n";
                 uint32_t utotal = ch->total / 32;
                 for ( uint32_t i=0; i!=utotal; ++i ) {

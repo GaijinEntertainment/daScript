@@ -576,9 +576,7 @@ namespace das
 
         void relocateCode();
         void collectStringHeap(LineInfo * at);
-        void reportStringHeap(LineInfo * at);
-        void collectHeap(LineInfo * at);
-        void reportHeap(LineInfo * at);
+        void collectHeap(LineInfo * at, bool stringHeap);
         void reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly);
         void instrumentFunction ( int index, bool isInstrumenting );
         void instrumentContextNode ( const Block & blk, bool isInstrumenting, Context * context, LineInfo * line );

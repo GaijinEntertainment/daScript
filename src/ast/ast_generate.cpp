@@ -330,7 +330,18 @@ namespace das {
         auto ifb = make_smart<ExprBlock>();
         ifb->at = at;
         if ( ptrType->firstType && ptrType->firstType->isClass() ) {
-            auto invk = new ExprInvoke(at, "invoke");
+            auto sizvar = make_smart<ExprLet>();              // let __size = class_rtti_size(__this)
+            auto vsiz = make_smart<Variable>();
+            vsiz->at = at;
+            vsiz->name = "__size";
+            vsiz->type = make_smart<TypeDecl>(Type::autoinfer);
+            auto crs = make_smart<ExprCall>(at,"class_rtti_size");
+            crs->arguments.push_back(make_smart<ExprVar>(at,"__this"));
+            vsiz->init = crs;
+            //vsiz->init = make_sm
+            sizvar->variables.push_back(vsiz);
+            ifb->list.push_back(sizvar);
+            auto invk = new ExprInvoke(at, "invoke");           // invoke(__this,__this.__finalize)
             auto THISA = make_smart<ExprVar>(at, "__this");
             auto pAt = make_smart<ExprField>(at, THISA, "__finalize");
             invk->arguments.push_back(pAt);
@@ -342,16 +353,22 @@ namespace das {
             pCast->subexpr->alwaysSafe = true;
             invk->arguments.push_back(pCast);
             ifb->list.push_back(invk);
+            auto THISA1 = make_smart<ExprVar>(at, "__this");    // delete /*native*/ this, __size
+            auto delit1 = make_smart<ExprDelete>(at, THISA1);
+            delit1->native = true;
+            delit1->sizeexpr = make_smart<ExprVar>(at,"__size");
+            ifb->list.push_back(delit1);
+
         } else {
-            auto THISA = make_smart<ExprVar>(at, "__this");    // delete * this
+            auto THISA = make_smart<ExprVar>(at, "__this");     // delete * this
             auto THISR = make_smart<ExprPtr2Ref>(at, THISA);
             auto delit = make_smart<ExprDelete>(at, THISR);
             ifb->list.push_back(delit);
+            auto THISA1 = make_smart<ExprVar>(at, "__this");    // delete /*native*/ this
+            auto delit1 = make_smart<ExprDelete>(at, THISA1);
+            delit1->native = true;
+            ifb->list.push_back(delit1);
         }
-        auto THISA1 = make_smart<ExprVar>(at, "__this");   // delete /*native*/ this
-        auto delit1 = make_smart<ExprDelete>(at, THISA1);
-        delit1->native = true;
-        ifb->list.push_back(delit1);
         auto THISB = make_smart<ExprVar>(at, "__this");    // *THIS = null
         auto NULLP = make_smart<ExprConstPtr>(at);
         auto SETB = make_smart<ExprCopy>(at, THISB, NULLP);

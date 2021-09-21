@@ -230,6 +230,7 @@ namespace das {
             }
         }
         auto mangledName = type->getMangledName();
+        info->size = type->getSizeOf();
         info->hash = hash_blockz32((uint8_t *)mangledName.c_str());
         debugInfo->lookup[info->hash] = info;
         return info;

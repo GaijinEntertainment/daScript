@@ -115,6 +115,20 @@ namespace das
         return v_zero();
     }
 
+    vec4f SimNode_DeleteClassPtr::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        auto pStruct = (char **) subexpr->evalPtr(context);
+        pStruct = pStruct + total - 1;
+        auto sizeOf = sizeexpr->evalInt(context);
+        for ( uint32_t i=0; i!=total; ++i, pStruct-- ) {
+            if ( *pStruct ) {
+                context.heap->free(*pStruct, sizeOf);
+                *pStruct = nullptr;
+            }
+        }
+        return v_zero();
+    }
+
     vec4f SimNode_DeleteLambda::eval ( Context & context ) {
         DAS_PROFILE_NODE
         auto pLambda = (Lambda *) subexpr->evalPtr(context);

@@ -203,6 +203,7 @@ namespace das
         uint32_t            dimSize;
         uint32_t *          dim;
         uint32_t            flags;
+        uint32_t            size;
         uint32_t            hash;
         __forceinline bool isRef() const { return flags & flag_ref; }
         __forceinline bool isRefType() const { return flags & flag_refType; }
@@ -226,7 +227,7 @@ namespace das
         VarInfo() = default;
         VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name,
                 TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, char ** _argNames, uint32_t _argCount,
-                uint32_t _dimSize, uint32_t * _dim, uint32_t _flags,
+                uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size,
                 uint32_t _hash, const char * _name, uint32_t _offset ) {
                 type               = _type;
                 structType         = _structType;
@@ -240,6 +241,7 @@ namespace das
                 dimSize            = _dimSize;
                 dim                = _dim;
                 flags              = _flags;
+                size               = _size;
                 hash               = _hash;
                 name               = (char *) _name;
                 offset             = _offset;

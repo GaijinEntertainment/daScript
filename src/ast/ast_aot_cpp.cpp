@@ -649,6 +649,7 @@ namespace das {
                 ss << "nullptr";
             }
             ss << ", " << info->flags;
+            ss << ", " << info->size;
             ss << ", 0x" << HEX << info->hash << DEC;
         }
 
@@ -2358,6 +2359,10 @@ namespace das {
             }
             ss <<  describeCppType(edel->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes);
             ss << ">::clear(__context__,";
+        }
+        // DELETE
+        virtual void preVisitDeleteSizeExpression ( ExprDelete *, Expression * ) override {
+            ss << ",";
         }
         virtual ExpressionPtr visit ( ExprDelete * edel ) override {
             ss << ")";

@@ -1271,6 +1271,9 @@ namespace das {
         static __forceinline void clear ( Context * __context__, TT * ptr ) {
             __context__->heap->free((char *)ptr, sizeof(TT));
         }
+        static __forceinline void clear ( Context * __context__, TT * ptr, int sizeOf ) {
+            __context__->heap->free((char *)ptr, sizeOf);
+        }
     };
 
     template <typename TT>
@@ -1312,6 +1315,12 @@ namespace das {
                 ptr = nullptr;
             }
         }
+        static __forceinline void clear ( Context *, TT * & ptr, int ) {
+            if ( ptr ) {
+                das_aligned_free16(ptr);
+                ptr = nullptr;
+            }
+        }
     };
 
     template <typename TT>
@@ -1321,6 +1330,10 @@ namespace das {
     struct das_delete<TT *> {
         static __forceinline void clear ( Context * __context__, TT * & ptr ) {
             das_delete_ptr<TT *>::clear(__context__,ptr);
+            ptr = nullptr;
+        }
+        static __forceinline void clear ( Context * __context__, TT * & ptr, int sizeOf ) {
+            das_delete_ptr<TT *>::clear(__context__,ptr,sizeOf);
             ptr = nullptr;
         }
     };
@@ -2634,6 +2647,10 @@ namespace das {
     __forceinline vec4f cvt_pass ( uint3 i ) { return i; }
     __forceinline vec4f cvt_pass ( uint4 i ) { return i; }
 
+    __forceinline int32_t class_rtti_size ( void * ptr ) {
+       auto pti = (TypeInfo **)ptr;
+       return (**pti).size;
+    }
 }
 
 #if defined(_MSC_VER)

@@ -3102,6 +3102,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprDelete * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            if ( expr->sizeexpr && !expr->sizeexpr->type ) return Visitor::visit(expr);
             // lets see if there is clone operator already (a user operator can ignore all the rules bellow)
             if ( !expr->native ) {
                 auto fnList = getFinalizeFunc(expr->subexpr->type);
@@ -3117,6 +3118,14 @@ namespace das {
                     } else {
                         return Visitor::visit(expr);
                     }
+                }
+            }
+            // size
+            if ( expr->sizeexpr ) {
+                expr->sizeexpr = Expression::autoDereference(expr->sizeexpr);
+                if ( !expr->sizeexpr->type->isSimpleType(Type::tInt) ) {
+                    error("can't delete, expecting size to be int and not " + describeType(expr->sizeexpr->type), "", "",
+                      expr->at, CompilationError::bad_delete);
                 }
             }
             // infer

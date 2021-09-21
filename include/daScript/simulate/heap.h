@@ -200,8 +200,8 @@ namespace das {
         virtual uint64_t totalAlignedMemoryAllocated() const override { return model.totalAlignedMemoryAllocated(); }
         virtual void reset() override { model.reset(); }
         virtual void report() override;
-        virtual bool mark() override { return false; }
-        virtual void mark ( char *, uint32_t ) override { DAS_ASSERT(0 && "not supported"); }
+        virtual bool mark() override;
+        virtual void mark ( char * ptr, uint32_t size ) override;
         virtual void sweep() override { model.sweep(); }
         virtual bool isOwnPtr ( char * ptr, uint32_t size ) override { return model.isOwnPtr(ptr,size); }
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
@@ -267,7 +267,7 @@ namespace das {
         virtual uint64_t totalAlignedMemoryAllocated() const override { return model.totalAlignedMemoryAllocated(); }
         virtual void reset() override { model.reset(); }
         virtual void forEachString ( const callable<void (const char *)> & fn ) override ;
-        virtual void report() override ;
+        virtual void report() override;
         virtual bool mark() override;
         virtual void mark ( char * ptr, uint32_t size ) override;
         virtual void sweep() override;

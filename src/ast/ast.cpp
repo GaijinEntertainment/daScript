@@ -1256,6 +1256,10 @@ namespace das {
         if ( subexpr ) {
             subexpr = subexpr->visit(vis);
         }
+        if ( sizeexpr ) {
+            vis.preVisitDeleteSizeExpression(this, sizeexpr.get());
+            sizeexpr = sizeexpr->visit(vis);
+        }
         return vis.visit(this);
     }
 
@@ -1263,6 +1267,7 @@ namespace das {
         auto cexpr = clonePtr<ExprDelete>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
+        cexpr->sizeexpr = sizeexpr ? sizeexpr->clone() : nullptr;
         cexpr->native = native;
         return cexpr;
     }

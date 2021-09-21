@@ -115,6 +115,7 @@ namespace das {
         if ( cancel ) return;
         TypeInfo copyInfo = *ti;
         DAS_ASSERT(copyInfo.dimSize);
+        copyInfo.size = ti->dim[0] ? copyInfo.size / ti->dim[0] : copyInfo.size;
         copyInfo.dimSize --;
         vector<uint32_t> udim;
         if ( copyInfo.dimSize ) {

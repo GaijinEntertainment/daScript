@@ -183,6 +183,10 @@ namespace das {
                     for ( uint32_t j=0; j!=32; ++j ) {          // TODO: this is COUNTBITS * size
                         if ( b & (1<<j) ) {
                             totalAllocated += ch->size;
+                        } else {
+#if DAS_SANITIZER
+                            memset ( ch->data + (i*32+j)*ch->size, 0xcd, ch->size );
+#endif
                         }
                     }
                 }
@@ -195,6 +199,9 @@ namespace das {
                 totalAllocated += it->second;
                 ++ it;
             } else {
+#if DAS_SANITIZER
+                memset ( it->first, 0xcd, it->second );
+#endif
                 das_aligned_free16(it->first);
                 it = bigStuff.erase(it);
             }

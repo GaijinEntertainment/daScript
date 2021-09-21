@@ -165,6 +165,16 @@ namespace das {
         V_ARG(total);
         V_ARG(structSize);
         V_ARG(persistent);
+        V_ARG(isLambda);
+        V_SUB(subexpr);
+        V_END();
+    }
+
+    SimNode * SimNode_DeleteClassPtr::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(DeleteClassPtr);
+        V_ARG(total);
+        V_SUB(sizeexpr);
         V_SUB(subexpr);
         V_END();
     }

@@ -453,12 +453,14 @@ namespace das
             if ( !ati ) {
                 auto dimType = make_smart<TypeDecl>(*vecType);
                 dimType->ref = 0;
-                dimType->dim.push_back(1234);
+                dimType->dim.push_back(1);
                 ati = helpA.makeTypeInfo(nullptr, dimType);
             }
             auto pVec = (VectorType *)vec;
-            ati->dim[ati->dimSize - 1] = uint32_t(pVec->size());
-            walker.walk_dim((char *)pVec->data(), ati);
+            auto atit = *ati;
+            atit.dim[atit.dimSize - 1] = uint32_t(pVec->size());
+            atit.size = int(ati->size * pVec->size());
+            walker.walk_dim((char *)pVec->data(), &atit);
         }
         virtual bool isYetAnotherVectorTemplate() const override { return true; }
         TypeDeclPtr                vecType;

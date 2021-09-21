@@ -804,6 +804,9 @@ namespace das {
             ss << "delete ";
             if ( edel->native ) ss << "/*native*/ ";
         }
+        virtual void preVisitDeleteSizeExpression ( ExprDelete *, Expression * ) override {
+            ss << ", rtti.size = ";
+        }
     // cast
         virtual void preVisit ( ExprCast * expr ) override {
             Visitor::preVisit(expr);
