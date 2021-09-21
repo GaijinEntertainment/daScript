@@ -580,15 +580,21 @@ namespace das {
             }
             if ( expr->cond->noSideEffects ) {
                 if ( expr->if_false ) {
-                    auto ifeb = static_pointer_cast<ExprBlock>(expr->if_false);
-                    if ( !ifeb->list.size() && !ifeb->finalList.size() ) {
-                        expr->if_false = nullptr;
-                        reportFolding();
+                    if ( expr->if_false->rtti_isBlock() ) {
+                        auto ifeb = static_pointer_cast<ExprBlock>(expr->if_false);
+                        if ( !ifeb->list.size() && !ifeb->finalList.size() ) {
+                            expr->if_false = nullptr;
+                            reportFolding();
+                        }
                     }
-                    auto ifb = static_pointer_cast<ExprBlock>(expr->if_true);
-                    if ( !ifb->list.size() && !ifeb->list.size() && !ifb->finalList.size() && !ifeb->finalList.size()) {
-                        reportFolding();
-                        return nullptr;
+                }
+                if ( !expr->if_false ) {
+                    if ( expr->if_true->rtti_isBlock() ) {
+                        auto ifb = static_pointer_cast<ExprBlock>(expr->if_true);
+                        if ( !ifb->list.size() && !ifb->finalList.size() ) {
+                            reportFolding();
+                            return nullptr;
+                        }
                     }
                 }
             }
