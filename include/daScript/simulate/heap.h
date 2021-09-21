@@ -232,7 +232,7 @@ namespace das {
         virtual void mark ( char *, uint32_t ) override { DAS_ASSERT(0 && "not supported"); }
         virtual void sweep() override { DAS_ASSERT(0 && "not supported"); }
         virtual bool isOwnPtr ( char * ptr, uint32_t ) override { return model.isOwnPtr(ptr); }
-        virtual bool isValidPtr ( char *, uint32_t ) override { DAS_ASSERT(0 && "we should not be here"); return true; }
+        virtual bool isValidPtr ( char *, uint32_t ) override { return true; }
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
         virtual int32_t getInitialSize() const override { return model.initialSize; }
         virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
@@ -303,7 +303,7 @@ namespace das {
         virtual void mark ( char *, uint32_t ) override { DAS_ASSERT(0 && "not supported"); }
         virtual void sweep() override { DAS_ASSERT(0 && "not supported"); }
         virtual bool isOwnPtr ( char * ptr, uint32_t ) override { return model.isOwnPtr(ptr); }
-        virtual bool isValidPtr ( char *, uint32_t ) override { DAS_ASSERT(0 && "we should not be here"); return true; }
+        virtual bool isValidPtr ( char *, uint32_t ) override { return true; }
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
         virtual int32_t getInitialSize() const override { return model.initialSize; }
         virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
