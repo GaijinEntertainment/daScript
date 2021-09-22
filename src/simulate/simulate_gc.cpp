@@ -344,8 +344,8 @@ namespace das
             if ( context->constStringHeap->isOwnPtr(st) ) return;
             bool show = !errorsOnly;
             char buf[32];
-            uint32_t len = uint32_t(strlen(st)) + 1;
-            len = (len + 15) & ~15;
+            uint32_t ulen = uint32_t(strlen(st)) + 1;
+            uint32_t len = (ulen + 15) & ~15;
             if ( context->stringHeap->isOwnPtr(st,len) ) {
                 if ( context->stringHeap->isValidPtr(st,len) ) {
                     if ( show ) tp << "\t\tSTRING ";
@@ -358,7 +358,7 @@ namespace das
             }
             if ( show ) {
                 ReportHistory();
-                tp << presentStr(buf, st, 32) << ", at 0x" << HEX << uint64_t(st) << DEC << "\n";
+                tp << presentStr(buf, st, 32) << ", len=" << ulen  << "(" << len << ") at 0x" << HEX << uint64_t(st) << DEC << "\n";
             }
         }
         void ReportHistory ( void ) {
@@ -565,7 +565,6 @@ namespace das
         // sweep
         stringHeap->sweep();
         // report errors
-        heap->sweep();
         if ( !walker.failed.empty() ) {
             reportAnyHeap(at, true, false, false, true);
             TextWriter tw;

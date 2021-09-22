@@ -42,7 +42,7 @@ namespace das {
             it->second |= DAS_PAGE_GC_MASK;
             return;
         }
-        if ( len < DAS_MAX_SHOE_ALLOCATION ) {              // not a small allocation
+        if ( len <= DAS_MAX_SHOE_ALLOCATION ) {              // not a small allocation
             if ( model.shoe.mark(ptr,len) ) {
                 return;
             }
@@ -242,7 +242,7 @@ namespace das {
             it->second |= DAS_PAGE_GC_MASK;
             return;
         }
-        if ( len < DAS_MAX_SHOE_ALLOCATION ) {              // not a small allocation
+        if ( len <= DAS_MAX_SHOE_ALLOCATION ) {              // not a small allocation
             if ( model.shoe.mark(ptr,len) ) {
                 return;
             }

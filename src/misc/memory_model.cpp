@@ -61,7 +61,7 @@ namespace das {
         totalAllocated += size;
         maxAllocated = das::max(maxAllocated, totalAllocated);
 #if !DAS_TRACK_ALLOCATIONS
-        if ( size >= DAS_MAX_SHOE_ALLOCATION ) {
+        if ( size > DAS_MAX_SHOE_ALLOCATION ) {
 #endif
             char * ptr = (char *) das_aligned_alloc16(size);
             bigStuff[ptr] = size;
@@ -93,7 +93,7 @@ namespace das {
         memset(ptr, 0xcd, size);
 #endif
 #if !DAS_TRACK_ALLOCATIONS
-        if ( size < DAS_MAX_SHOE_ALLOCATION ) {
+        if ( size <= DAS_MAX_SHOE_ALLOCATION ) {
             shoe.free(ptr, size);
             totalAllocated -= size;
             return true;

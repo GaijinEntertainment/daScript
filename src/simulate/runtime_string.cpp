@@ -23,6 +23,7 @@ namespace das
         } else if ( char * sAB = (char * ) context.stringHeap->allocateString(nullptr, commonLength) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
+            context.stringHeap->recognize(sAB);
             return cast<char *>::from(sAB);
         } else {
             context.throw_error_at(at ? *at : LineInfo(), "can't add two strings, out of heap");

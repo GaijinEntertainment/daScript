@@ -420,8 +420,10 @@ namespace das
     }
 
     void memory_report ( bool errOnly, Context * context, LineInfoArg * info ) {
+        /*
         context->stringHeap->report();
         context->heap->report();
+        */
         context->reportAnyHeap(info,true,true,false,errOnly);
     }
 
