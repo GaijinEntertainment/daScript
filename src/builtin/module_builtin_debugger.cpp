@@ -726,14 +726,17 @@ namespace debugapi {
         }
         invCtx->lock();
         vec4f res;
-        if ( !invCtx->ownStack ) {
-            StackAllocator sharedStack(8*1024);
-            SharedStackGuard guard(*invCtx, sharedStack);
-            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-        } else {
-            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-        }
+        invCtx->runWithCatch([&](){
+            if ( !invCtx->ownStack ) {
+                StackAllocator sharedStack(8*1024);
+                SharedStackGuard guard(*invCtx, sharedStack);
+                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+            } else {
+                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+            }
+        });
         invCtx->unlock();
+        if ( invCtx->exception ) context.throw_error_at(invCtx->exceptionAt, invCtx->exception);
         return res;
     }
 
@@ -748,14 +751,17 @@ namespace debugapi {
         }
         invCtx->lock();
         vec4f res;
-        if ( !invCtx->ownStack ) {
-            StackAllocator sharedStack(8*1024);
-            SharedStackGuard guard(*invCtx, sharedStack);
-            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-        } else {
-            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-        }
+        invCtx->runWithCatch([&](){
+            if ( !invCtx->ownStack ) {
+                StackAllocator sharedStack(8*1024);
+                SharedStackGuard guard(*invCtx, sharedStack);
+                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+            } else {
+                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+            }
+        });
         invCtx->unlock();
+        if ( invCtx->exception ) context.throw_error_at(invCtx->exceptionAt, invCtx->exception);
         return res;
     }
 
@@ -771,14 +777,17 @@ namespace debugapi {
         }
         invCtx->lock();
         vec4f res;
-        if ( !invCtx->ownStack ) {
-            StackAllocator sharedStack(8*1024);
-            SharedStackGuard guard(*invCtx, sharedStack);
-            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-        } else {
-            res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-        }
+        invCtx->runWithCatch([&](){
+            if ( !invCtx->ownStack ) {
+                StackAllocator sharedStack(8*1024);
+                SharedStackGuard guard(*invCtx, sharedStack);
+                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+            } else {
+                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+            }
+        });
         invCtx->unlock();
+        if ( invCtx->exception ) context.throw_error_at(invCtx->exceptionAt, invCtx->exception);
         return res;
     }
 
