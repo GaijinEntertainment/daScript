@@ -401,8 +401,8 @@ namespace das
         return (int32_t) context->stringHeap->depth();
     }
 
-    void string_heap_collect ( Context * context, LineInfoArg * info ) {
-        context->collectStringHeap(info);
+    void string_heap_collect ( bool validate, Context * context, LineInfoArg * info ) {
+        context->collectStringHeap(info,validate);
     }
 
     void string_heap_report ( Context * context, LineInfoArg * info ) {
@@ -410,8 +410,8 @@ namespace das
         context->reportAnyHeap(info, true, false, false, false);
     }
 
-    void heap_collect ( bool sheap, Context * context, LineInfoArg * info ) {
-        context->collectHeap(info, sheap);
+    void heap_collect ( bool sheap, bool validate, Context * context, LineInfoArg * info ) {
+        context->collectHeap(info, sheap, validate);
     }
 
     void heap_report ( Context * context, LineInfoArg * info ) {
@@ -993,10 +993,17 @@ namespace das
                 SideEffects::modifyExternal, "string_heap_bytes_allocated");
         addExtern<DAS_BIND_FUN(string_heap_depth)>(*this, lib, "string_heap_depth",
                 SideEffects::modifyExternal, "string_heap_depth");
-        addExtern<DAS_BIND_FUN(string_heap_collect)>(*this, lib, "string_heap_collect",
-                SideEffects::modifyExternal, "string_heap_collect")->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(heap_collect)>(*this, lib, "heap_collect",
-                SideEffects::modifyExternal, "heap_collect")->unsafeOperation = true;
+        auto shcol = addExtern<DAS_BIND_FUN(string_heap_collect)>(*this, lib, "string_heap_collect",
+                SideEffects::modifyExternal, "string_heap_collect")
+                    ->args({"validate","context","at"});
+        shcol->unsafeOperation = true;
+        shcol->arguments[0]->init = make_smart<ExprConstBool>(false);
+        auto hcol = addExtern<DAS_BIND_FUN(heap_collect)>(*this, lib, "heap_collect",
+                SideEffects::modifyExternal, "heap_collect")
+                    ->args({"string_heap","validate","context","at"});
+        hcol->unsafeOperation = true;
+        hcol->arguments[0]->init = make_smart<ExprConstBool>(true);
+        hcol->arguments[1]->init = make_smart<ExprConstBool>(false);
         addExtern<DAS_BIND_FUN(string_heap_report)>(*this, lib, "string_heap_report",
                 SideEffects::modifyExternal, "string_heap_report");
         addExtern<DAS_BIND_FUN(heap_report)>(*this, lib, "heap_report",

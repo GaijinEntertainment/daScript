@@ -3,6 +3,7 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_print.h"
+
 namespace das
 {
     char * presentStr ( char * buf, char * ch, int size );
@@ -455,6 +456,7 @@ namespace das
         vector<loop_point> visited;
         vector<loop_point> visited_handles;
         das_set<char *> failed;
+        bool validate = false;
         virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
             return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
                     return t.first==ps && t.second==info->hash;
@@ -484,20 +486,25 @@ namespace das
             uint32_t len = uint32_t(strlen(st)) + 1;
             len = (len + 15) & ~15;
             if ( !context->stringHeap->isOwnPtr(st, len) ) return;
-            if ( context->stringHeap->isValidPtr(st, len) ) {
-                context->stringHeap->mark(st, len);
+            if ( validate ) {
+                if ( context->stringHeap->isValidPtr(st, len) ) {
+                    context->stringHeap->mark(st, len);
+                } else {
+                    failed.insert(st);
+                }
             } else {
-                failed.insert(st);
+                context->stringHeap->mark(st, len);
             }
         }
     };
 
-    void Context::collectStringHeap ( LineInfo * at ) {
+    void Context::collectStringHeap ( LineInfo * at, bool validate ) {
         // clean up, so that all small allocations are marked as 'free'
         if ( !stringHeap->mark() ) return;
         // now
         GcMarkStringHeap walker;
         walker.context = this;
+        walker.validate = validate;
         // mark globals
         if ( sharedOwner ) {
             for ( int i=0; i!=totalVariables; ++i ) {
@@ -580,6 +587,7 @@ namespace das
         vector<PtrRange>    ptrRangeStack;
         PtrRange            currentRange;
         das_set<char *>     failed;
+        bool                validate = false;
         void prepare() {
             currentRange.clear();
         }
@@ -715,15 +723,19 @@ namespace das
             uint32_t len = uint32_t(strlen(st)) + 1;
             len = (len + 15) & ~15;
             if ( !context->stringHeap->isOwnPtr(st, len) ) return;
-            if ( context->stringHeap->isValidPtr(st, len) ) {
-                context->stringHeap->mark(st, len);
+            if ( validate ) {
+                if ( context->stringHeap->isValidPtr(st, len) ) {
+                    context->stringHeap->mark(st, len);
+                } else {
+                    failed.insert(st);
+                }
             } else {
-                failed.insert(st);
+                context->stringHeap->mark(st, len);
             }
         }
     };
 
-    void Context::collectHeap ( LineInfo * at, bool sheap ) {
+    void Context::collectHeap ( LineInfo * at, bool sheap, bool validate ) {
         // clean up, so that all small allocations are marked as 'free'
         if ( sheap && !stringHeap->mark() ) return;
         if ( !heap->mark() ) return;
@@ -731,6 +743,7 @@ namespace das
         GcMarkAnyHeap walker;
         walker.markStringHeap = sheap;
         walker.context = this;
+        walker.validate = validate;
         // mark globals
         if ( sharedOwner ) {
             for ( int i=0; i!=totalVariables; ++i ) {
