@@ -44,7 +44,7 @@ namespace das
     #define WARN_SLOW_CAST(TYPE)
     // #define WARN_SLOW_CAST(TYPE)    DAS_ASSERTF(0, "internal perofrmance issue, casting eval to eval##TYPE" );
 
-    StackAllocator *SharedStackGuard::lastContextStack = nullptr;
+    thread_local StackAllocator *SharedStackGuard::lastContextStack = nullptr;
 
     SimNode * SimNode::copyNode ( Context &, NodeAllocator * code ) {
         auto prefix = ((NodePrefix *)this) - 1;

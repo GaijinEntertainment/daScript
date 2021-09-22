@@ -696,7 +696,7 @@ namespace das
 
     class SharedStackGuard {
     public:
-        static StackAllocator *lastContextStack;
+        thread_local static StackAllocator *lastContextStack;
         SharedStackGuard() = delete;
         SharedStackGuard(const SharedStackGuard &) = delete;
         SharedStackGuard & operator = (const SharedStackGuard &) = delete;
