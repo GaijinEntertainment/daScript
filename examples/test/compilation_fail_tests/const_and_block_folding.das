@@ -1,3 +1,5 @@
+expect 40209:2
+
 //options log_optimization_passes=true
 // options log=true
 
@@ -45,7 +47,7 @@ def test:bool
     // static_assert(false,"this static assert always fails")
     let x,y:int = 3
     x
-    x + y
-    hash(x) + hash(y)
+    x + y                   // 40209: top level no side effect operation +
+    hash(x) + hash(y)       // 40209: top level no side effect operation +
     return true
 

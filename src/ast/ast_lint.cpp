@@ -422,6 +422,16 @@ namespace das {
                 }
             }
         }
+        virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
+            Visitor::preVisitBlockExpression(block, expr);
+            if ( expr->rtti_isOp2() ) {
+                auto op2 = static_cast<ExprOp2 *>(expr);
+                if ( op2->func && op2->func->builtIn && op2->func->sideEffectFlags==0 ) {
+                    program->error("top level no side effect operation " + op2->op, "", "",
+                        expr->at, CompilationError::top_level_no_sideeffect_operation);
+                }
+            }
+        }
     public:
         ProgramPtr program;
         Function * func = nullptr;

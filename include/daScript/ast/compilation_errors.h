@@ -146,6 +146,7 @@ namespace das
     ,   unused_function_argument                =   40206       // def foo ( a ) ..... /* no a here */
     ,   unsafe_function                         =   40207       // [unsafe] when code of policies prohibits
     ,   unused_block_argument                   =   40208       // foo() <| $ ( a ) ..... /* no a here */
+    ,   top_level_no_sideeffect_operation       =   40209       // a == b
 
     ,   too_many_infer_passes                   =   41000
 
