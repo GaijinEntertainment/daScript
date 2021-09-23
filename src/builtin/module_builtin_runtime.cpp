@@ -1011,7 +1011,8 @@ namespace das
         addExtern<DAS_BIND_FUN(heap_report)>(*this, lib, "heap_report",
                 SideEffects::modifyExternal, "heap_report");
         addExtern<DAS_BIND_FUN(memory_report)>(*this, lib, "memory_report",
-                SideEffects::modifyExternal, "memory_report");
+                SideEffects::modifyExternal, "memory_report")
+                ->arg("errorsOnly");
         // binary serializer
         addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",
             SideEffects::modifyArgumentAndExternal, "_builtin_binary_load");
