@@ -3,6 +3,9 @@ daScript - high-performance statically strong typed scripting language
 
 ### What's new
 
+9/23/2021
+  * stb_truetupe integrated. opengl_ttf wrapper under dasGlfw helps with rendering as well (see 06_hello_ttf example)
+
 9/22/2021
   * readme started somewhere around 'have functional GC'
   * lint - top level no-side-effect operator based expressions are now prohibited, i.e a == b is now a compilation error
