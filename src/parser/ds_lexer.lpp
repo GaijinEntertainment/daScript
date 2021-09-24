@@ -386,12 +386,33 @@ void YYNEWLINE() {
 <normal>\'\\r\'                         das_yylval.i = 13; return INTEGER;
 <normal>\'\\\\'                         das_yylval.i = '\\'; return INTEGER;
 <normal>\'.\'                           das_yylval.i = int32_t(yytext[1]); return INTEGER;
-<normal>[0-9]+(u|U)(l|L)                return sscanf(yytext, "%" SCNu64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
-<normal>[0-9]+(l|L)                     return sscanf(yytext, "%" SCNi64, &das_yylval.i64)!=1 ? LEXER_ERROR : LONG_INTEGER;
-<normal>[0-9]+(u|U)                     return sscanf(yytext, "%u",  &das_yylval.ui)!=1 ? LEXER_ERROR : UNSIGNED_INTEGER;
+<normal>[0-9]+(u|U)(l|L)                {
+        char * endtext = nullptr;
+        das_yylval.ui64 = strtoull(yytext,&endtext,10);
+        return ( endtext!=(yytext+strlen(yytext)-2) ) ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+    }
+<normal>[0-9]+(l|L)                     {
+        char * endtext = nullptr;
+        das_yylval.i64 = strtoll(yytext,&endtext,10);
+        return ( endtext!=(yytext+strlen(yytext)-1) ) ? LEXER_ERROR : LONG_INTEGER;
+    }
+<normal>[0-9]+(u|U)                     {
+        char * endtext = nullptr;
+        uint64_t uint_const = strtoull(yytext,&endtext,10);
+        if ( endtext!=(yytext+strlen(yytext)-1) ) {
+            return LEXER_ERROR;
+        } else {
+            if ( uint_const>UINT32_MAX ) {
+                das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+            }
+            das_yylval.ui = uint32_t(uint_const);
+            return UNSIGNED_INTEGER;
+        }
+    }
 <normal>[0-9]+                          {
-        int64_t int_const;
-        if ( sscanf(yytext, "%" SCNi64,  &int_const)!=1 ) {
+        char * endtext = nullptr;
+        int64_t int_const = strtoll(yytext,&endtext,10);
+        if ( endtext!=(yytext+strlen(yytext)) ) {
             return LEXER_ERROR;
         } else {
             if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
