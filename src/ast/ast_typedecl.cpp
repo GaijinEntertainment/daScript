@@ -1584,15 +1584,10 @@ namespace das
     }
 
     bool TypeDecl::isSimpleType() const {
-        if (    baseType==Type::none
-            ||  baseType==Type::tVoid
-            ||  baseType==Type::tStructure
-            ||  baseType==Type::tPointer
-            ||  baseType==Type::tEnumeration )
-            return false;
-        if ( dim.size() )
-            return false;
-        return true;
+        if ( baseType==Type::none || baseType==Type::tVoid
+            || baseType==Type::autoinfer || baseType==Type::alias
+            || baseType==Type::anyArgument ) return false;
+        return !isRefType();
     }
 
     bool TypeDecl::isCtorType() const {
@@ -1769,14 +1764,12 @@ namespace das
     }
 
     bool TypeDecl::isRefType() const {
-        if ( baseType==Type::tHandle ) {
-            return annotation->isRefType();
-        }
+        if ( dim.size() ) return true;
+        if ( baseType==Type::tHandle ) return annotation->isRefType();
         return baseType==Type::tTuple || baseType==Type::tVariant ||
                 baseType==Type::tStructure || baseType==Type::tArray ||
                 baseType==Type::tTable || baseType==Type::tBlock ||
-                baseType==Type::tIterator
-                || dim.size();
+                baseType==Type::tIterator;
     }
 
     bool TypeDecl::isTempType(bool refMatters) const {

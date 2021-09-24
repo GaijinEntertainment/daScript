@@ -3,6 +3,9 @@ daScript - high-performance statically strong typed scripting language
 
 ### What's new
 
+9/24/2021
+  * bug fixed - value[] arrays were considered value types due to the bug. additional cleanup of 'isSimpleType' function without arguments, which was only used in the dereferencing test.
+
 9/23/2021
   * stb_truetupe integrated. opengl_ttf wrapper under dasGlfw helps with rendering as well (see 06_hello_ttf example)
 

@@ -1854,8 +1854,8 @@ namespace das {
                 tw << *expr->subexpr;
                 error("can only dereference a reference", tw.str(), "",
                     expr->at, CompilationError::invalid_type);
-            } else if ( !expr->subexpr->type->isSimpleType() && !expr->subexpr->type->isPointer() && !expr->subexpr->type->isEnum() ) {
-                error("can only dereference a simple type, not a " + describeType(expr->subexpr->type),  "", "",
+            } else if ( !expr->subexpr->type->isSimpleType() ) {
+                error("can only dereference value types, not a " + describeType(expr->subexpr->type),  "", "",
                     expr->at, CompilationError::invalid_type);
             } else {
                 expr->type = make_smart<TypeDecl>(*expr->subexpr->type);
