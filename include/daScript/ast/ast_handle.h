@@ -96,6 +96,7 @@ namespace das
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool rtti_isBasicStructureAnnotation() const override { return true; }
         virtual bool isRefType() const override { return true; }
+        virtual int32_t getGcFlags(das_set<Structure *> &, das_set<Annotation *> &) const;
         virtual TypeDeclPtr makeFieldType(const string & na, bool isConst) const override;
         virtual TypeDeclPtr makeSafeFieldType(const string & na, bool isConst) const override;
         virtual SimNode * simulateGetField(const string & na, Context & context,
@@ -384,6 +385,9 @@ namespace das
                 vecType->ref = true;
         }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
+        virtual int32_t getGcFlags(das_set<Structure *> & dep, das_set<Annotation *> & depA) const {
+            return vecType->gcFlags(dep,depA);
+        }
         virtual size_t getSizeOf() const override { return sizeof(VectorType); }
         virtual size_t getAlignOf() const override { return alignof(VectorType); }
         virtual bool isRefType() const override { return true; }

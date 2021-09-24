@@ -353,6 +353,7 @@ namespace das
             p->cppName = cppName;
             return p;
         }
+        virtual int32_t getGcFlags(das_set<Structure *> &, das_set<Annotation *> &) const { return 0; }
         virtual bool canAot(das_set<Structure *> &) const { return true; }
         virtual bool canMove() const {
             return !hasNonTrivialCopy();

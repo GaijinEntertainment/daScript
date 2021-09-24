@@ -10,6 +10,16 @@ namespace das {
         mlib = nullptr;
     }
 
+    int32_t BasicStructureAnnotation::getGcFlags(das_set<Structure *> & dep, das_set<Annotation *> & depA) const {
+        int32_t gcf = 0;
+        for ( auto & it : fields ) {
+            auto & sfield = it.second;
+            if ( sfield.constDecl ) gcf |= sfield.constDecl->gcFlags(dep,depA);
+            if ( sfield.decl )      gcf |= sfield.decl->gcFlags(dep,depA);
+        }
+        return gcf;
+    }
+
     TypeDeclPtr BasicStructureAnnotation::makeFieldType ( const string & na, bool isConst ) const {
         auto it = fields.find(na);
         if ( it!=fields.end() ) {

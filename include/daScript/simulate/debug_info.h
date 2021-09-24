@@ -191,6 +191,8 @@ namespace das
             flag_isSmartPtr = 1<<10,
             flag_isSmartPtrNative = 1<<11,
             flag_isHandled = 1<<12,
+            flag_heapGC = 1<<13,
+            flag_stringHeapGC = 1<<14,
         };
         Type                type;
         StructInfo *        structType;
@@ -251,8 +253,10 @@ namespace das
 
     struct StructInfo {
         enum {
-            flag_class =    (1<<0)
-        ,   flag_lambda =   (1<<1)
+            flag_class =        (1<<0)
+        ,   flag_lambda =       (1<<1)
+        ,   flag_heapGC =       (1<<2)
+        ,   flag_stringHeapGC = (1<<3)
         };
         char *      name;
         char *      module_name;

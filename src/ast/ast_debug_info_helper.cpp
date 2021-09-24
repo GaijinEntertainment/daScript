@@ -119,6 +119,10 @@ namespace das {
         sti->flags = 0;
         if ( st.isClass ) sti->flags |= StructInfo::flag_class;
         if ( st.isLambda ) sti->flags |= StructInfo::flag_lambda;
+        auto tdecl = TypeDecl((Structure *)&st);
+        auto gcf = tdecl.gcFlags();
+        if ( gcf & TypeDecl::gcFlag_heap ) sti->flags |= StructInfo::flag_heapGC;
+        if ( gcf & TypeDecl::gcFlag_stringHeap ) sti->flags |= StructInfo::flag_stringHeapGC;
         sti->count = (uint32_t) st.fields.size();
         sti->size = st.getSizeOf();
         sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
@@ -197,6 +201,11 @@ namespace das {
             if ( type->smartPtrNative )
                 info->flags |= TypeInfo::flag_isSmartPtrNative;
         }
+        auto gcf = type->gcFlags();
+        if ( gcf & TypeDecl::gcFlag_heap )
+            info->flags |= TypeInfo::flag_heapGC;
+        if ( gcf & TypeDecl::gcFlag_stringHeap )
+            info->flags |= TypeInfo::flag_stringHeapGC;
         if ( type->firstType ) {
             info->firstType = makeTypeInfo(nullptr, type->firstType);
         } else {

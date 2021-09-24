@@ -860,6 +860,51 @@ namespace das
         return false;
     }
 
+    int32_t TypeDecl::gcFlags() const {
+        das_set<Structure *> dep;
+        das_set<Annotation *> depA;
+        return gcFlags(dep,depA);
+    }
+
+    int32_t TypeDecl::gcFlags(das_set<Structure *> & dep, das_set<Annotation *> & depA) const {
+        int32_t gcf = 0;
+        if ( baseType==Type::tStructure ) {
+            if ( structType ) {
+                if (dep.find(structType) != dep.end()) return 0;
+                dep.insert(structType);
+                if ( structType->isLambda ) {
+                    gcf |= gcFlag_heap;
+                    gcf |= gcFlag_stringHeap;
+                }
+                for ( auto fld : structType->fields ) {
+                    gcf |= fld.type->gcFlags(dep,depA);
+                }
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( const auto & arg : argTypes ) {
+                gcf |= arg->gcFlags(dep,depA);
+            }
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            gcf |= gcFlag_heap;
+            if ( firstType ) gcf |= firstType->gcFlags(dep,depA);
+            if ( secondType ) gcf |= secondType->gcFlags(dep,depA);
+        } else if ( baseType==Type::tHandle ) {
+            if (depA.find(annotation) != depA.end()) return 0;
+            depA.insert(annotation);
+            auto ann = static_cast<TypeAnnotation *>(annotation);
+            gcf |= ann->getGcFlags(dep,depA);
+        } else if ( baseType==Type::tString ) {
+            gcf |= gcFlag_stringHeap;
+        } else if ( baseType==Type::tPointer ) {
+            gcf |= gcFlag_heap;
+            if ( firstType ) gcf |= firstType->gcFlags(dep,depA);
+        } else if ( baseType==Type::tLambda || baseType==Type::tIterator ) {
+            gcf |= gcFlag_heap;
+            gcf |= gcFlag_stringHeap;
+        }
+        return gcf;
+    }
+
     bool TypeDecl::isLocal() const {
         das_set<Structure *> dep;
         return isLocal(dep);

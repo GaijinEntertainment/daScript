@@ -29,6 +29,8 @@ namespace das {
     // helpers
         void error ( const char * message );
     // data structures
+        virtual bool canVisitArray ( Array * ar, TypeInfo * ti ) { return true; }
+        virtual bool canVisitArrayData ( TypeInfo * ti ) { return true; }
         virtual bool canVisitHandle ( char * ps, TypeInfo * ti ) { return true; }
         virtual bool canVisitStructure ( char * ps, StructInfo * si ) { return true; }
         virtual void beforeStructure ( char * ps, StructInfo * si ) {}

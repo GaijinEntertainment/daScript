@@ -94,6 +94,7 @@ namespace das {
     }
 
     void DataWalker::walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) {
+        if ( !canVisitArrayData(ti) ) return;
         char * pe = pa;
         beforeArrayData(pa, stride, count, ti);
         if ( cancel ) return;
@@ -178,11 +179,13 @@ namespace das {
             walk_dim(pa, info);
         } else if ( info->type==Type::tArray ) {
             auto arr = (Array *) pa;
-            beforeArray(arr, info);
-            if ( cancel ) return;
-            walk_array(arr->data, info->firstType->size, arr->size, info->firstType);
-            if ( cancel ) return;
-            afterArray(arr, info);
+            if ( canVisitArray(arr,info) ) {
+                beforeArray(arr, info);
+                if ( cancel ) return;
+                walk_array(arr->data, info->firstType->size, arr->size, info->firstType);
+                if ( cancel ) return;
+                afterArray(arr, info);
+            }
         } else if ( info->type==Type::tTable ) {
             auto tab = (Table *) pa;
             beforeTable(tab, info);

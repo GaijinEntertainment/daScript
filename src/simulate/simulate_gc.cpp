@@ -31,6 +31,8 @@ namespace das
         vector<PtrRange>    ptrRangeStack;
         PtrRange            currentRange;
         TextPrinter         tp;
+        int32_t             gcFlags = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
+        int32_t             gcAlways = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
         void prepare ( const string & walk_from ) {
             DAS_ASSERT(keys.size()==0);
             DAS_ASSERT(ptrRangeStack.size()==0);
@@ -39,7 +41,7 @@ namespace das
             currentRange.clear();
         }
         bool markRange ( const PtrRange & r ) {
-            if ( currentRange.empty() ) return false;
+            if ( currentRange.empty() ) return true;
             if ( currentRange.contains(r) ) return false;
             if ( heapOnly ) {
                 int ssize = int(r.to-r.from);
@@ -111,6 +113,16 @@ namespace das
             }
             return show;
         }
+        void describeInfo ( TypeInfo * ti ) {
+            if ( ti->flags & (TypeInfo::flag_stringHeapGC || TypeInfo::flag_heapGC) ) tp << " ";
+            if ( ti->flags & TypeInfo::flag_stringHeapGC ) tp << "<S>";
+            if ( ti->flags & TypeInfo::flag_heapGC ) tp << "<H>";
+        }
+        void describeStructInfo ( StructInfo * ti ) {
+            if ( ti->flags & (StructInfo::flag_stringHeapGC || StructInfo::flag_heapGC) ) tp << " ";
+            if ( ti->flags & StructInfo::flag_stringHeapGC ) tp << "<S>";
+            if ( ti->flags & StructInfo::flag_heapGC ) tp << "<H>";
+        }
         virtual void beforeHandle ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforeHandle(pa, ti);
             visited_handles.emplace_back(make_pair(pa,ti->hash));
@@ -119,6 +131,7 @@ namespace das
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
                 if ( describe_ptr(pa, tsize, true) ) {
+                    describeInfo(ti);
                     ReportHistory();
                     tp << " HANDLE " << getTypeInfoMangledName(ti) << "\n";
                 }
@@ -137,6 +150,7 @@ namespace das
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
                 if ( describe_ptr(pa, tsize, (ti->flags & TypeInfo::flag_isHandled)!=0) ) {
+                    describeInfo(ti);
                     ReportHistory();
                     tp << "DIM " << getTypeInfoMangledName(ti) << "\n";
                 }
@@ -147,6 +161,9 @@ namespace das
             popRange();
             DataWalker::afterDim(pa,ti);
         }
+        virtual bool canVisitArrayData ( TypeInfo * ti ) override {
+            return (ti->flags | gcAlways) & gcFlags;
+        }
         virtual void beforeArray ( Array * PA, TypeInfo * ti ) override {
             DataWalker::beforeArray(PA,ti);
             auto tsize = ti->firstType->size * PA->capacity;
@@ -155,6 +172,7 @@ namespace das
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
                 if ( describe_ptr(pa, tsize) ) {
+                    describeInfo(ti);
                     ReportHistory();
                     tp << "ARRAY " << getTypeInfoMangledName(ti) << "\n";
                 }
@@ -173,6 +191,7 @@ namespace das
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
                 if ( describe_ptr(pa, int(tsize)) ) {
+                    describeInfo(ti);
                     ReportHistory();
                     tp << "TABLE " << getTypeInfoMangledName(ti) << "\n";
                 }
@@ -190,6 +209,7 @@ namespace das
             PtrRange rdata(pa, tsize );
             if ( reportHeap && tsize && markRange(rdata) ) {
                 if ( describe_ptr(pa, tsize) ) {
+                    describeInfo(ti);
                     ReportHistory();
                     tp << "& " << getTypeInfoMangledName(ti) << "\n";
                 }
@@ -207,6 +227,7 @@ namespace das
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && !isVoid(ti->firstType) && markRange(rdata) ) {
                 if ( describe_ptr(pa, tsize) ) {
+                    describeInfo(ti);
                     ReportHistory();
                     tp << "? " << getTypeInfoMangledName(ti);
                 }
@@ -229,6 +250,7 @@ namespace das
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
                 if ( describe_ptr(pa, tsize) ) {
+                    describeStructInfo(si);
                     ReportHistory();
                     tp << "STRUCTURE " << si->module_name << "::" << si->name << "\n";
                 }
@@ -249,13 +271,14 @@ namespace das
             DataWalker::afterStructureField(ps,si,pv,vi,last);
         }
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
-            DataWalker::beforeTuple(ps, ti);
+            DataWalker::beforeVariant(ps, ti);
             char * pa = ps;
             auto tsize = ti->size;
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
                 if ( describe_ptr(pa, tsize) ) {
+                    describeInfo(ti);
                     ReportHistory();
                     tp << "VARIANT " << getTypeInfoMangledName(ti) << "\n";
                 }
@@ -266,6 +289,25 @@ namespace das
             popRange();
             DataWalker::afterVariant(ps,ti);
         }
+        virtual void beforeLambda ( Lambda * ps, TypeInfo * ti ) override {
+            DataWalker::beforeLambda(ps, ti);
+            char * pa = (char *)ps;
+            auto tsize = ti->size;
+            DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
+            PtrRange rdata(pa, tsize);
+            if ( reportHeap && tsize && markRange(rdata) ) {
+                if ( describe_ptr(pa, tsize) ) {
+                    describeInfo(ti);
+                    ReportHistory();
+                    tp << "LAMBDA " << getTypeInfoMangledName(ti) << "\n";
+                }
+            }
+            pushRange(rdata);
+        }
+        virtual void afterLambda ( Lambda * ps, TypeInfo * ti ) override {
+            popRange();
+            DataWalker::afterLambda(ps,ti);
+        }
         virtual void beforeTuple ( char * ps, TypeInfo * si ) override {
             DataWalker::beforeTuple(ps, si);
             char * pa = ps;
@@ -274,6 +316,7 @@ namespace das
             PtrRange rdata(pa, tsize);
             if ( reportHeap && tsize && markRange(rdata) ) {
                 if ( describe_ptr(pa, tsize) ) {
+                    describeInfo(si);
                     ReportHistory();
                     tp << "TUPLE " << getTypeInfoMangledName(si) << "\n";
                 }
@@ -333,6 +376,7 @@ namespace das
                 }) == visited.end();
         }
         virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
+            if ( !((info->flags | gcAlways) & gcFlags) ) return false;
             return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
                     return t.first==ps && t.second==info->hash;
                 }) == visited.end();
@@ -386,16 +430,20 @@ namespace das
             for ( int i=0; i!=totalVariables; ++i ) {
                 auto & pv = globalVariables[i];
                 if ( !pv.shared ) continue;
-                walker.prepare(pv.name);
-                walker.walk(shared + pv.offset, pv.debugInfo);
+                if ( (pv.debugInfo->flags | walker.gcAlways) & walker.gcFlags ) {
+                    walker.prepare(pv.name);
+                    walker.walk(shared + pv.offset, pv.debugInfo);
+                }
             }
         }
         tp << "GLOBALS:\n";
         for ( int i=0; i!=totalVariables; ++i ) {
             auto & pv = globalVariables[i];
             if ( pv.shared ) continue;
-            walker.prepare(pv.name);
-            walker.walk(globals + pv.offset, pv.debugInfo);
+            if ( (pv.debugInfo->flags | walker.gcAlways) & walker.gcFlags ) {
+                walker.prepare(pv.name);
+                walker.walk(globals + pv.offset, pv.debugInfo);
+            }
         }
         // mark stack
         char * sp = stack.ap();
@@ -420,8 +468,10 @@ namespace das
                 if ( info->count ) {
                     tp << "ARGUMENTS:\n";
                     for ( uint32_t i = 0; i != info->count; ++i ) {
-                        walker.prepare(info->fields[i]->name);
-                        walker.walk(pp->arguments[i], info->fields[i]);
+                        if ( (info->fields[i]->flags | walker.gcAlways) & walker.gcFlags ) {
+                            walker.prepare(info->fields[i]->name);
+                            walker.walk(pp->arguments[i], info->fields[i]);
+                        }
                     }
                 }
                 if ( info->locals ) {
@@ -439,8 +489,10 @@ namespace das
                             addr = SP + lv->stackTop;
                         }
                         if ( addr ) {
-                            walker.prepare(string("FUNCTION: ")+info->name+" LOCAL:"+lv->name);
-                            walker.walk(addr, lv);
+                            if ( (lv->flags | walker.gcAlways) & walker.gcFlags ) {
+                                walker.prepare(lv->name);
+                                walker.walk(addr, lv);
+                            }
                         }
                     }
                 }
@@ -458,11 +510,13 @@ namespace das
         das_set<char *> failed;
         bool validate = false;
         virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
+            if ( !(info->flags & StructInfo::flag_stringHeapGC) ) return false;
             return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
                     return t.first==ps && t.second==info->hash;
                 }) == visited.end();
         }
         virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
+            if ( !(info->flags & TypeInfo::flag_stringHeapGC) ) return false;
             return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
                     return t.first==ps && t.second==info->hash;
                 }) == visited.end();
@@ -478,6 +532,9 @@ namespace das
         }
         virtual void afterHandle ( char *, TypeInfo * ) override {
             visited_handles.pop_back();
+        }
+        virtual bool canVisitArrayData ( TypeInfo * ti ) override {
+            return (ti->flags & TypeInfo::flag_stringHeapGC);
         }
         virtual void String ( char * & st ) override {
             DataWalker::String(st);
@@ -587,8 +644,16 @@ namespace das
         PtrRange            currentRange;
         das_set<char *>     failed;
         bool                validate = false;
+        int32_t             gcFlags = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
+        int32_t             gcStructFlags = StructInfo::flag_stringHeapGC | StructInfo::flag_heapGC;
         void prepare() {
             currentRange.clear();
+            gcFlags = TypeInfo::flag_heapGC;
+            gcStructFlags = StructInfo::flag_heapGC;
+            if ( markStringHeap ) {
+                gcFlags |= TypeInfo::flag_stringHeapGC;
+                gcStructFlags |= StructInfo::flag_stringHeapGC;
+            }
         }
         void markAndPushRange ( const PtrRange & r ) {
             if ( !r.empty() && !currentRange.contains(r) ) {
@@ -632,6 +697,9 @@ namespace das
         virtual void afterDim ( char * pa, TypeInfo * ti ) override {
             popRange();
             DataWalker::afterDim(pa,ti);
+        }
+        virtual bool canVisitArrayData ( TypeInfo * ti ) override {
+            return ti->flags & gcFlags;
         }
         virtual void beforeArray ( Array * PA, TypeInfo * ti ) override {
             DataWalker::beforeArray(PA,ti);
@@ -686,7 +754,7 @@ namespace das
             DataWalker::afterStructure(ps,si);
         }
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
-            DataWalker::beforeTuple(ps, ti);
+            DataWalker::beforeVariant(ps, ti);
             char * pa = ps;
             PtrRange rdata(pa, ti->size);
             markAndPushRange(rdata);
@@ -694,6 +762,16 @@ namespace das
         virtual void afterVariant ( char * ps, TypeInfo * ti ) override {
             popRange();
             DataWalker::afterVariant(ps,ti);
+        }
+        virtual void beforeLambda ( Lambda * ps, TypeInfo * ti ) override {
+            DataWalker::beforeLambda(ps, ti);
+            char * pa = (char *) ps;
+            PtrRange rdata(pa, ti->size);
+            markAndPushRange(rdata);
+        }
+        virtual void afterLambda ( Lambda * ps, TypeInfo * ti ) override {
+            popRange();
+            DataWalker::afterLambda(ps,ti);
         }
         virtual void beforeTuple ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforeTuple(pa, ti);
@@ -705,11 +783,13 @@ namespace das
             DataWalker::afterTuple(ps,si);
         }
         virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
+            if ( !(info->flags & gcStructFlags) ) return false;
             return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
                     return t.first==ps && t.second==info->hash;
                 }) == visited.end();
         }
         virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
+            if ( !(info->flags & gcFlags) ) return false;
             return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
                     return t.first==ps && t.second==info->hash;
                 }) == visited.end();

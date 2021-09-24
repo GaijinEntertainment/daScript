@@ -39,10 +39,15 @@ namespace das {
         enum class DescribeExtra     { no, yes };
         enum class DescribeContracts { no, yes };
         enum class DescribeModule    { no, yes };
+        enum {
+            gcFlag_heap = (1<<0),
+            gcFlag_stringHeap = (1<<1)
+        };
         TypeDecl() = default;
         TypeDecl(const TypeDecl & decl);
         TypeDecl & operator = (const TypeDecl & decl) = delete;
         TypeDecl(Type tt) : baseType(tt) {}
+        TypeDecl(Structure * sp) : baseType(Type::tStructure), structType(sp) {}
         TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp.get()) {}
         TypeDecl(const EnumerationPtr & ep);
         TypeDeclPtr visit ( Visitor & vis );
@@ -141,6 +146,8 @@ namespace das {
         bool isLocal( das_set<Structure*> & dep ) const;
         bool hasClasses() const;
         bool hasClasses( das_set<Structure*> & dep ) const;
+        int32_t gcFlags() const;
+        int32_t gcFlags( das_set<Structure *> & dep, das_set<Annotation *> & depA ) const;
         bool hasNonTrivialCtor() const;
         bool hasNonTrivialCtor( das_set<Structure*> & dep ) const;
         bool hasNonTrivialDtor() const;
