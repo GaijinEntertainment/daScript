@@ -872,10 +872,7 @@ namespace das
             if ( structType ) {
                 if (dep.find(structType) != dep.end()) return 0;
                 dep.insert(structType);
-                if ( structType->isLambda ) {
-                    gcf |= gcFlag_heap;
-                    gcf |= gcFlag_stringHeap;
-                }
+                if ( structType->isLambda ) gcf |= gcFlag_heap;
                 for ( auto fld : structType->fields ) {
                     gcf |= fld.type->gcFlags(dep,depA);
                 }

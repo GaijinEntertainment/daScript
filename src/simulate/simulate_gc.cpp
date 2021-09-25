@@ -220,24 +220,6 @@ namespace das
             popRange();
             DataWalker::afterRef(pa, ti);
         }
-        virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
-            DataWalker::beforePtr(pa, ti);
-            auto tsize = ti->size;
-            DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
-            PtrRange rdata(pa, tsize);
-            if ( reportHeap && tsize && !isVoid(ti->firstType) && markRange(rdata) ) {
-                if ( describe_ptr(pa, tsize) ) {
-                    describeInfo(ti);
-                    ReportHistory();
-                    tp << "? " << getTypeInfoMangledName(ti);
-                }
-            }
-            pushRange(rdata);
-        }
-        virtual void afterPtr ( char * pa, TypeInfo * ti ) override {
-            popRange();
-            DataWalker::afterPtr(pa, ti);
-        }
         virtual void beforeStructure ( char * ps, StructInfo * si ) override {
             DataWalker::beforeStructure(ps, si);
             visited.emplace_back(make_pair(ps,si->hash));
@@ -288,25 +270,6 @@ namespace das
         virtual void afterVariant ( char * ps, TypeInfo * ti ) override {
             popRange();
             DataWalker::afterVariant(ps,ti);
-        }
-        virtual void beforeLambda ( Lambda * ps, TypeInfo * ti ) override {
-            DataWalker::beforeLambda(ps, ti);
-            char * pa = (char *)ps;
-            auto tsize = ti->size;
-            DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
-            PtrRange rdata(pa, tsize);
-            if ( reportHeap && tsize && markRange(rdata) ) {
-                if ( describe_ptr(pa, tsize) ) {
-                    describeInfo(ti);
-                    ReportHistory();
-                    tp << "LAMBDA " << getTypeInfoMangledName(ti) << "\n";
-                }
-            }
-            pushRange(rdata);
-        }
-        virtual void afterLambda ( Lambda * ps, TypeInfo * ti ) override {
-            popRange();
-            DataWalker::afterLambda(ps,ti);
         }
         virtual void beforeTuple ( char * ps, TypeInfo * si ) override {
             DataWalker::beforeTuple(ps, si);
@@ -728,15 +691,6 @@ namespace das
             popRange();
             DataWalker::afterRef(pa, ti);
         }
-        virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
-            DataWalker::beforePtr(pa, ti);
-            PtrRange rdata(pa, ti->size);
-            markAndPushRange(rdata);
-        }
-        virtual void afterPtr ( char * pa, TypeInfo * ti ) override {
-            popRange();
-            DataWalker::afterPtr(pa, ti);
-        }
         virtual void beforeStructure ( char * pa, StructInfo * ti ) override {
             DataWalker::beforeStructure(pa, ti);
             visited.emplace_back(make_pair(pa,ti->hash));
@@ -762,16 +716,6 @@ namespace das
         virtual void afterVariant ( char * ps, TypeInfo * ti ) override {
             popRange();
             DataWalker::afterVariant(ps,ti);
-        }
-        virtual void beforeLambda ( Lambda * ps, TypeInfo * ti ) override {
-            DataWalker::beforeLambda(ps, ti);
-            char * pa = (char *) ps;
-            PtrRange rdata(pa, ti->size);
-            markAndPushRange(rdata);
-        }
-        virtual void afterLambda ( Lambda * ps, TypeInfo * ti ) override {
-            popRange();
-            DataWalker::afterLambda(ps,ti);
         }
         virtual void beforeTuple ( char * pa, TypeInfo * ti ) override {
             DataWalker::beforeTuple(pa, ti);
