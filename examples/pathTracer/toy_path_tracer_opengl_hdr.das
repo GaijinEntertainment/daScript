@@ -141,6 +141,7 @@ def create_gl_objects
     glGenBuffers(1, safe_addr(vbo))
     glBindBuffer(GL_ARRAY_BUFFER, vbo)
     glBufferData(GL_ARRAY_BUFFER, effect_vertices, GL_STATIC_DRAW)
+    bind_vertex_buffer(null, type<EffectVertex>)
     glGenBuffers(1, safe_addr(ebo))
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, effect_indices, GL_STATIC_DRAW)
@@ -230,7 +231,6 @@ def main
         f_bloom.texture2D = c_bloom_vtex.texture2D
         vs_effect_bind_uniform(display_program)
         ps_effect_bind_uniform(display_program)
-        bind_vertex_buffer(vbo, type<EffectVertex>)
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
         // swap buffers
