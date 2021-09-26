@@ -401,6 +401,7 @@ namespace das {
 
     typedef MatrixAnnotation<float4,4> float4x4_ann;
     typedef MatrixAnnotation<float3,4> float3x4_ann;
+    typedef MatrixAnnotation<float3,3> float3x3_ann;
 
     template <typename MatT>
     struct SimNode_MatrixCtor : SimNode_CallBase {
@@ -427,12 +428,59 @@ namespace das {
         }
     }
 
+    float3x3 float3x3_from_float44 ( const float4x4 & mat ) {
+        float3x3 res;
+        res.m[0] = vec4f(mat.m[0]);
+        res.m[1] = vec4f(mat.m[1]);
+        res.m[2] = vec4f(mat.m[2]);
+        return res;
+    }
+
+    float3x3 float3x3_from_float34 ( const float3x4 & mat ) {
+        float3x3 res;
+        res.m[0] = vec4f(mat.m[0]);
+        res.m[1] = vec4f(mat.m[1]);
+        res.m[2] = vec4f(mat.m[2]);
+        return res;
+    }
+
+    float3x4 float3x4_from_float44 ( const float4x4 & mat ) {
+        float3x4 res;
+        res.m[0] = vec4f(mat.m[0]);
+        res.m[1] = vec4f(mat.m[1]);
+        res.m[2] = vec4f(mat.m[2]);
+        res.m[3] = vec4f(mat.m[3]);
+        return res;
+    }
+
     void float4x4_identity ( float4x4 & mat ) {
         matrix_identity<4,4>((float*)&mat);
     }
 
     void float3x4_identity ( float3x4 & mat ) {
         matrix_identity<4,3>((float*)&mat);
+    }
+
+    void float3x3_identity ( float3x3 & mat ) {
+        matrix_identity<3,3>((float*)&mat);
+    }
+
+    float4x4 float4x4_identity_m ( void ) {
+        float4x4 mat;
+        matrix_identity<4,4>((float*)&mat);
+        return mat;
+    }
+
+    float3x4 float3x4_identity_m ( void ) {
+        float3x4 mat;
+        matrix_identity<4,3>((float*)&mat);
+        return mat;
+    }
+
+    float3x3 float3x3_identity_m ( void ) {
+        float3x3 mat;
+        matrix_identity<3,3>((float*)&mat);
+        return mat;
     }
 
     float4x4 float4x4_translation(float3 xyz) {
@@ -463,6 +511,14 @@ namespace das {
         return reinterpret_cast<float4x4&>(res);;
     }
 
+    float3x3 float3x3_mul(const float3x3 &a, const float3x3 &b) {
+        mat33f va,vb,res;
+        memcpy(&va,&a,sizeof(float3x3));
+        memcpy(&vb,&b,sizeof(float3x3));
+        v_mat33_mul(res,va,vb);
+        return reinterpret_cast<float3x3&>(res);;
+    }
+
     float4x4 float4x4_transpose ( const float4x4 & src ) {
         mat44f res;
         memcpy ( &res, &src, sizeof(float4x4) );
@@ -484,6 +540,13 @@ namespace das {
         memcpy(&mat, &src, sizeof(float4x4));
         v_mat44_inverse(invMat, mat);
         return reinterpret_cast<float4x4&>(invMat);;
+    }
+
+    float3x3 float3x3_inverse( const float3x3 & src) {
+        mat33f mat, invMat;
+        memcpy(&mat, &src, sizeof(float3x3));
+        v_mat33_inverse(invMat, mat);
+        return reinterpret_cast<float3x3&>(invMat);;
     }
 
     float4x4 float4x4_orthonormal_inverse( const float4x4 & src) {
@@ -667,12 +730,16 @@ namespace das {
             // structure annotations
             addAnnotation(make_smart<float4x4_ann>());
             addAnnotation(make_smart<float3x4_ann>());
+            addAnnotation(make_smart<float3x3_ann>());
             // c-tor
+            addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float3x3>,float3x3 > >("float3x3",lib) );
             addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float3x4>,float3x4 > >("float3x4",lib) );
             addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
             // 4x4
             addExtern<DAS_BIND_FUN(float4x4_identity)>(*this, lib, "identity",
                 SideEffects::modifyArgument, "float4x4_identity")->arg("x");
+            addExtern<DAS_BIND_FUN(float4x4_identity_m), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "identity4x4",
+                SideEffects::none,"float4x4_identity_m");
             addExtern<DAS_BIND_FUN(float4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation",
                  SideEffects::none, "float_4x4_translation")->arg("xyz");
             addExtern<DAS_BIND_FUN(float4x4_transpose), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "transpose",
@@ -694,8 +761,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(float4x4_nequ)>(*this, lib, "!=",
                 SideEffects::none, "float4x4_nequ")->args({"x","y"});
             // 3x4
+            addExtern<DAS_BIND_FUN(float3x4_from_float44), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "float3x4",
+                SideEffects::none,"float3x4_from_float44");
             addExtern<DAS_BIND_FUN(float3x4_identity)>(*this, lib, "identity",
                 SideEffects::modifyArgument,"float3x4_identity")->arg("x");
+            addExtern<DAS_BIND_FUN(float3x4_identity_m), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "identity3x4",
+                SideEffects::none,"float3x4_identity_m");
             addExtern<DAS_BIND_FUN(float3x4_mul), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "*",
                 SideEffects::none,"float3x4_mul")->args({"x","y"});
             addExtern<DAS_BIND_FUN(float3x4_mul_vec3p), SimNode_ExtFuncCall>(*this, lib, "*",
@@ -710,6 +781,11 @@ namespace das {
                 "orthonormal_inverse", SideEffects::none, "float4x4_orthonormal_inverse")->arg("m");
             addExtern<DAS_BIND_FUN(rotate)>(*this, lib, "rotate",
                 SideEffects::none, "rotate")->args({"x","y"});
+            addExtern<DAS_BIND_FUN(float3x4_equ)>(*this, lib, "==",
+                SideEffects::none, "float3x4_equ")->args({"x","y"});
+            addExtern<DAS_BIND_FUN(float3x4_nequ)>(*this, lib, "!=",
+                SideEffects::none, "float3x4_nequ")->args({"x","y"});
+            // quat
             addExtern<DAS_BIND_FUN(un_quat_from_unit_arc)>(*this, lib, "un_quat_from_unit_arc",
                 SideEffects::none, "un_quat_from_unit_arc")->args({"v0","v1"});
             addExtern<DAS_BIND_FUN(un_quat_from_unit_vec_ang)>(*this, lib, "un_quat_from_unit_vec_ang",
@@ -722,6 +798,23 @@ namespace das {
                 SideEffects::none, "quat_mul_vec")->args({"q","v"});
             addExtern<DAS_BIND_FUN(quat_conjugate)>(*this, lib, "quat_conjugate",
                 SideEffects::none, "quat_conjugate")->arg("q");
+            // 3x3
+            addExtern<DAS_BIND_FUN(float3x3_from_float44), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "float3x3",
+                SideEffects::none,"float3x3_from_float44");
+            addExtern<DAS_BIND_FUN(float3x3_from_float34), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "float3x3",
+                SideEffects::none,"float3x3_from_float34");
+            addExtern<DAS_BIND_FUN(float3x3_identity)>(*this, lib, "identity",
+                SideEffects::modifyArgument,"float3x3_identity")->arg("x");
+            addExtern<DAS_BIND_FUN(float3x3_identity_m), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "identity3x3",
+                SideEffects::none,"float3x3_identity_m");
+            addExtern<DAS_BIND_FUN(float3x3_mul), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "*",
+                SideEffects::none,"float3x3_mul")->args({"x", "y"});
+            addExtern<DAS_BIND_FUN(float3x3_mul_vec3), SimNode_ExtFuncCall>(*this, lib, "*",
+                SideEffects::none,"float3x3_mul_vec3")->args({"x","y"});
+            addExtern<DAS_BIND_FUN(float3x3_equ)>(*this, lib, "==",
+                SideEffects::none, "float3x3_equ")->args({"x","y"});
+            addExtern<DAS_BIND_FUN(float3x3_nequ)>(*this, lib, "!=",
+                SideEffects::none, "float3x3_nequ")->args({"x","y"});
             // packing
             addExtern<DAS_BIND_FUN(pack_float_to_byte)>(*this, lib, "pack_float_to_byte",
                 SideEffects::none,"pack_float_to_byte")->arg("x");
@@ -741,3 +834,4 @@ REGISTER_MODULE_IN_NAMESPACE(Module_Math,das);
 
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(float4x4, das::float4x4)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(float3x4, das::float3x4)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(float3x3, das::float3x3)

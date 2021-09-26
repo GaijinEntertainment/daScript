@@ -3,6 +3,9 @@ daScript - high-performance statically strong typed scripting language
 
 ### What's new
 
+9/25/2021
+  * misc - float3x3 matrix type introduced. basic operations provided.
+
 9/24/2021
   * bug fixed - value[] arrays were considered value types due to the bug. additional cleanup of 'isSimpleType' function without arguments, which was only used in the dereferencing test.
   * bug fixed - numbers which look like octal in C++ were not parsing correctly. a = 08 was parsing as 0. now its 8.

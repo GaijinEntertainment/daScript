@@ -14,6 +14,7 @@ namespace das {
 
     typedef Matrix<float4,4> float4x4;
     typedef Matrix<float3,4> float3x4;
+    typedef Matrix<float3,3> float3x3;
 
     template <typename VecT, int rowC>
     struct typeName<Matrix<VecT,rowC>> {
@@ -26,6 +27,6 @@ namespace das {
 // use MAKE_TYPE_FACTORY out of namespaces. Some compilers are not happy otherwise
 
 MAKE_EXTERNAL_TYPE_FACTORY(float4x4, das::float4x4)
-
 MAKE_EXTERNAL_TYPE_FACTORY(float3x4, das::float3x4)
+MAKE_EXTERNAL_TYPE_FACTORY(float3x3, das::float3x3)
 
