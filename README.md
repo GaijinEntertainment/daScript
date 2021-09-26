@@ -3,6 +3,9 @@ daScript - high-performance statically strong typed scripting language
 
 ### What's new
 
+9/26/2021
+  * bug fixed - integer vector division and modulo operations now cause proper 'division by zero' exceptions. unused components of the vector no longer cause said exceptions.
+
 9/25/2021
   * misc - float3x3 matrix type introduced. basic operations provided.
 

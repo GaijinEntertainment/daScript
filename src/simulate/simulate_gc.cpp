@@ -114,12 +114,12 @@ namespace das
             return show;
         }
         void describeInfo ( TypeInfo * ti ) {
-            if ( ti->flags & (TypeInfo::flag_stringHeapGC || TypeInfo::flag_heapGC) ) tp << " ";
+            if ( ti->flags & (TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC) ) tp << " ";
             if ( ti->flags & TypeInfo::flag_stringHeapGC ) tp << "<S>";
             if ( ti->flags & TypeInfo::flag_heapGC ) tp << "<H>";
         }
         void describeStructInfo ( StructInfo * ti ) {
-            if ( ti->flags & (StructInfo::flag_stringHeapGC || StructInfo::flag_heapGC) ) tp << " ";
+            if ( ti->flags & (StructInfo::flag_stringHeapGC | StructInfo::flag_heapGC) ) tp << " ";
             if ( ti->flags & StructInfo::flag_stringHeapGC ) tp << "<S>";
             if ( ti->flags & StructInfo::flag_heapGC ) tp << "<H>";
         }
