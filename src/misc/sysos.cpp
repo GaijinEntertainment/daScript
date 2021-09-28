@@ -9,6 +9,9 @@
         size_t getExecutablePathName(char* pathName, size_t pathNameCapacity) {
             return GetModuleFileNameA(NULL, pathName, (DWORD)pathNameCapacity);
         }
+        char * getEnvVar ( const char * name ) {
+            return ::getenv(name);
+        }
     }
 #elif defined(__linux__)
     #include <unistd.h>
@@ -17,6 +20,9 @@
             size_t pathNameSize = readlink("/proc/self/exe", pathName, pathNameCapacity - 1);
             pathName[pathNameSize] = '\0';
             return pathNameSize;
+        }
+        char * getEnvVar ( const char * name ) {
+            return ::getenv(name);
         }
     }
 #elif defined(__APPLE__)
@@ -38,6 +44,9 @@
             }
             return 0;
         }
+        char * getEnvVar ( const char * name ) {
+            return ::getenv(name);
+        }
     }
 #else
     namespace das {
@@ -45,6 +54,9 @@
             DAS_FATAL_LOG("platforms without getExecutablePathName should not use default getDasRoot");
             DAS_FATAL_ERROR;
             return 0;
+        }
+        char * getEnvVar ( const char * name ) {
+            return nullptr;
         }
     }
 #endif
@@ -81,21 +93,28 @@ namespace das {
 
     string getDasRoot ( void ) {
         if ( g_dasRoot.empty() ) {
-            string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
-            auto np = efp.find_last_of("\\/");
-            if ( np != string::npos ) {
-                auto ep = get_prefix(efp);          // remove file name
-                auto suffix = get_suffix(ep);
-                if ( suffix != "bin" ) {
-                    ep = get_prefix(ep);            // remove debug
-                }
-                if ( get_suffix(ep)!="bin" ) {
-                    g_dasRoot = ".";
-                } else {
-                    g_dasRoot = get_prefix(ep);     // remove bin
+            if ( auto droot = getEnvVar("DASROOT") ) {
+                g_dasRoot = droot;
+                while ( !empty(g_dasRoot) && (g_dasRoot.back()=='/' || g_dasRoot.back()=='\\') ) {
+                    g_dasRoot.pop_back();
                 }
             } else {
-                g_dasRoot = ".";
+                string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
+                auto np = efp.find_last_of("\\/");
+                if ( np != string::npos ) {
+                    auto ep = get_prefix(efp);          // remove file name
+                    auto suffix = get_suffix(ep);
+                    if ( suffix != "bin" ) {
+                        ep = get_prefix(ep);            // remove debug
+                    }
+                    if ( get_suffix(ep)!="bin" ) {
+                        g_dasRoot = ".";
+                    } else {
+                        g_dasRoot = get_prefix(ep);     // remove bin
+                    }
+                } else {
+                    g_dasRoot = ".";
+                }
             }
         }
         return g_dasRoot;

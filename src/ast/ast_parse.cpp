@@ -160,6 +160,8 @@ namespace das {
         }
     }
 
+    char * getEnvVar ( const char * name );
+
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           vector<ModuleInfo> & req,
@@ -252,7 +254,10 @@ namespace das {
             return true;
         } else {
             if ( log ) {
-                *log << string(tab,'\t') << "in " << fileName << " - NOT FOUND\n";
+                *log << string(tab,'\t') << "in " << fileName << " - FILE NOT FOUND\n";
+                if ( !getEnvVar("DASROOT") ) {
+                    *log << string(tab+1,'\t') << "Environment variable DASROOT is not set.\n";
+                }
             }
             missing.push_back(fileName);
             return false;
