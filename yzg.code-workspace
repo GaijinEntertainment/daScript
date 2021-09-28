@@ -60,7 +60,8 @@
 			"random": "cpp",
 			"bitset": "cpp",
 			"fstream": "cpp",
-			"sstream": "cpp"
+			"sstream": "cpp",
+			"xlocmes": "cpp"
 		},
 		"dascript.experimental": true,
 		"dascript.hovers.verbose": true

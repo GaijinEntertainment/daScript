@@ -164,8 +164,13 @@ FOREACH(_module ${_modules})
     ENDFUNCTION()
 
     FUNCTION(ADD_MODULE_NATIVE native)
-        FILE(APPEND ${DAS_MODULES_RESOLVE_INC}.temp "NATIVE_MODULE(${_module}, ${native});\n")
+        FILE(APPEND ${DAS_MODULES_RESOLVE_INC}.temp "NATIVE_MODULE(\"daslib\",\"daslib\", ${_module}, ${native});\n")
     ENDFUNCTION()
+
+    FUNCTION(ADD_MODULE_DAS category subfolder native)
+        FILE(APPEND ${DAS_MODULES_RESOLVE_INC}.temp "NATIVE_MODULE(${category}, ${subfolder}, ${_module}, ${native});\n")
+    ENDFUNCTION()
+
 
     INCLUDE(modules/${_module}/CMakeLists.txt OPTIONAL)
 ENDFOREACH()

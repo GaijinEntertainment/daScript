@@ -17,7 +17,6 @@ namespace das {
         FsFileAccess ( const string & pak, const FileAccessPtr & access );
         virtual das::FileInfo * getNewFileInfo(const das::string & fileName) override;
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const override;
-        string daslibPath;
     };
 #endif
 }

@@ -41,12 +41,10 @@ namespace das {
 
     FsFileAccess::FsFileAccess()
         : ModuleFileAccess() {
-        daslibPath = getDasRoot() + "/daslib";
     }
 
     FsFileAccess::FsFileAccess ( const string & pak, const FileAccessPtr & access )
         : ModuleFileAccess (pak, access) {
-         daslibPath = getDasRoot() + "/daslib";
     }
 
     das::FileInfo * FsFileAccess::getNewFileInfo(const das::string & fileName) {
@@ -63,22 +61,20 @@ namespace das {
         auto np = req.find_first_of("./");
         if ( np != string::npos ) {
             string top = req.substr(0,np);
-            if ( top == "daslib" ) {
-                ModuleInfo info;
-                info.moduleName = req.substr(np+1);
-                info.fileName = daslibPath + "/" + info.moduleName + ".das";
-
-                #define NATIVE_MODULE(dir_name, das_name) \
-                    if ( info.moduleName == #das_name ) { \
-                        info.fileName = daslibPath + "/../modules/" + #dir_name + "/daslib/" + #das_name + ".das"; \
-                    }
-
-                #include "modules/external_resolve.inc"
-
-                #undef NATIVE_MODULE
-
-                return info;
+            string mod_name = req.substr(np+1);
+            ModuleInfo info;
+            if ( top=="daslib" ) {
+                info.moduleName = mod_name;
+                info.fileName = getDasRoot() + "/daslib/" + info.moduleName + ".das";
             }
+            #define NATIVE_MODULE(category, subdir_name, dir_name, das_name) \
+                if ( top==#category && mod_name==#das_name ) { \
+                    info.moduleName = mod_name; \
+                    info.fileName = getDasRoot() + "/modules/" + #dir_name + "/" + #subdir_name + "/" + #das_name + ".das"; \
+                }
+            #include "modules/external_resolve.inc"
+            #undef NATIVE_MODULE
+            return info;
         }
         return FileAccess::getModuleInfo(req, from);
     }
