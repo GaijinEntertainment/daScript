@@ -215,6 +215,30 @@ def StepOutArguments(data: JsonValue?)
     return <- [[StepOutArguments threadId=jon(data, "threadId") ]]
 
 
+// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Evaluate
+struct EvaluateArguments
+    expression: string
+    frameId: double
+    context: string
+
+def EvaluateArguments(data: JsonValue?)
+    return <- [[EvaluateArguments frameId=jon(data, "frameId"), expression=jos(data, "expression"), context=jos(data, "context")]]
+
+
+struct EvaluateResponse
+    result: string
+    _type: string
+    variablesReference: double
+    indexedVariables: double
+
+def JV(data: EvaluateResponse)
+    return JV({{
+        "result"=>JV(data.result);
+        "variablesReference"=>JV(data.variablesReference);
+        "indexedVariables"=>data.indexedVariables > 0lf ? JV(data.indexedVariables) : JV(null);
+        "type"=>JV(data._type)
+    }})
+
 
 
 def joj(val : JsonValue?; id : string) : JsonValue?

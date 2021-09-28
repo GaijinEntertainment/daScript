@@ -422,6 +422,22 @@ def find_child_var(stack: DAStackFrame; id: uint64; cb: block<(res:DAVariable): 
                 return
 
 
+def find_child_var(stack: DAStackFrame; cb: block<(res:DAVariable; idx: uint64): bool>): bool
+    for c in stack.variables
+        if cb |> invoke(c, LOCAL_VARS)
+            return true
+    for c in stack.arguments
+        if cb |> invoke(c, ARGUMENT_VARS)
+            return true
+    for c in stack.globals
+        if cb |> invoke(c, GLOBAL_VARS)
+            return true
+    for idx, c in iter_range(stack.state), stack.state
+        for v in c.vars
+            if cb |> invoke(v, STATE_VARS + uint64(idx))
+                return true
+    return false
+
 class private DAStackWalker: DapiStackWalker
     dataWalkerAdapter: smart_ptr<DataWalker>
     dataWalker: DAWalker?
@@ -1076,6 +1092,8 @@ class private DAServer: Server
                         self->reqNext(seq, command, arguments)
                     elif command == "stepOut"
                         self->reqStepOut(seq, command, arguments)
+                    elif command == "evaluate"
+                        self->reqEvaluate(seq, command, arguments)
                     else
                         self->log("[Error] unknown request message\n{write_json(msg)}\n")
             else
@@ -1326,6 +1344,35 @@ class private DAServer: Server
             ctx.stepInRequested = ctx.stepRequestedStack == 0
         self->sendSuccessResponse(seq, command, null)
 
+    def reqEvaluate(seq: double; command: string; data: JsonValue?)
+        var ini <- EvaluateArguments(data)
+        defer_delete(ini)
+        var found = false
+        let ctxId = uint64(ini.frameId / double(MAX_STACK))
+        agent->getContextData(ctxId) <| $(var ctxData: DAContext)
+            let frameId = int(ini.frameId % double(MAX_STACK))
+            if frameId >= 0 && frameId < length(ctxData.stack)
+                var spAddr = ctxData.stack[frameId].spAddr
+                var idx = frameId
+                var first = true
+                while !found && idx < length(ctxData.stack)
+                    let line & = ctxData.stack[idx]
+                    if first || line.spAddr == spAddr
+                        found = line |> find_child_var() <| $(child, varIdx)
+                            if child.name == ini.expression
+                                var res = [[EvaluateResponse
+                                    result=child.value,
+                                    _type=child._type,
+                                    indexedVariables=double(child.indexedVariables),
+                                    variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + varIdx)]]
+                                self->sendSuccessResponse(seq, command, JV(res))
+                                delete res
+                                return true
+                            return false
+                        first = false
+                    idx += 1
+        if !found
+            self->sendSuccessResponse(seq, command, null)
 
     def log(msg: string)
         // print("{msg}\n")
