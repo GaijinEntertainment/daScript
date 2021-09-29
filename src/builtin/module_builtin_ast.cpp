@@ -2887,184 +2887,259 @@ namespace das {
             addExpressionAnnotation(make_smart<AstExprCallMacroAnnotation>(lib))->from("ExprLooksLikeCall");
             // vector functions for custom containers
             addExtern<DAS_BIND_FUN(mks_vector_emplace)>(*this, lib, "emplace",
-                SideEffects::modifyArgument, "mks_vector_emplace")->generated = true;
+                SideEffects::modifyArgument, "mks_vector_emplace")
+                    ->args({"vec","value"})->generated = true;
             addExtern<DAS_BIND_FUN(mks_vector_pop)>(*this, lib, "pop",
-                SideEffects::modifyArgument, "mks_vector_pop")->generated = true;
+                SideEffects::modifyArgument, "mks_vector_pop")
+                    ->arg("vec")->generated = true;
             addExtern<DAS_BIND_FUN(mks_vector_clear)>(*this, lib, "clear",
-                SideEffects::modifyArgument, "mks_vector_clear")->generated = true;
+                SideEffects::modifyArgument, "mks_vector_clear")
+                    ->arg("vec")->generated = true;
             addExtern<DAS_BIND_FUN(mks_vector_resize)>(*this, lib, "resize",
-                SideEffects::modifyArgument, "mks_vector_resize")->generated = true;
+                SideEffects::modifyArgument, "mks_vector_resize")
+                    ->args({"vec","newSize"})->generated = true;
             // visitor
             addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
-                SideEffects::modifyExternal, "makeVisitor");
+                SideEffects::modifyExternal, "makeVisitor")
+                    ->args({"class","info","context"});
             addExtern<DAS_BIND_FUN(thisProgram)>(*this, lib,  "this_program",
-                SideEffects::accessExternal, "thisProgram");
+                SideEffects::accessExternal, "thisProgram")
+                    ->arg("context");
             addExtern<DAS_BIND_FUN(thisModule)>(*this, lib,  "this_module",
-                SideEffects::accessExternal, "thisModule");
+                SideEffects::accessExternal, "thisModule")
+                    ->args({"context","line"});
             addExtern<DAS_BIND_FUN(compileProgram)>(*this, lib,  "compiling_program",
-                SideEffects::accessExternal, "compileProgram");
+                SideEffects::accessExternal, "compileProgram")
+                    ->arg("context");
             addExtern<DAS_BIND_FUN(compileModule)>(*this, lib,  "compiling_module",
-                SideEffects::accessExternal, "compileModule");
+                SideEffects::accessExternal, "compileModule")
+                    ->arg("context");;
             addExtern<DAS_BIND_FUN(forEachFunction)>(*this, lib,  "for_each_function",
-                SideEffects::accessExternal, "forEachFunction");
+                SideEffects::accessExternal, "forEachFunction")
+                    ->args({"module","name","block","context","line"});
             addExtern<DAS_BIND_FUN(forEachGenericFunction)>(*this, lib,  "for_each_generic",
-                SideEffects::accessExternal, "forEachGenericFunction");
+                SideEffects::accessExternal, "forEachGenericFunction")
+                    ->args({"module","name","block","context","line"});
             addExtern<DAS_BIND_FUN(astVisit)>(*this, lib,  "visit",
-                SideEffects::accessExternal, "astVisit");
+                SideEffects::accessExternal, "astVisit")
+                    ->args({"program","adapter","context","line"});
             addExtern<DAS_BIND_FUN(astVisitModulesInOrder)>(*this, lib,  "visit_modules",
-                SideEffects::accessExternal, "astVisitModules");
+                SideEffects::accessExternal, "astVisitModules")
+                    ->args({"program","adapter","context","line"});
             addExtern<DAS_BIND_FUN(astVisitFunction)>(*this, lib,  "visit",
-                SideEffects::accessExternal, "astVisitFunction");
+                SideEffects::accessExternal, "astVisitFunction")
+                    ->args({"function","adapter","context","line"});
             addExtern<DAS_BIND_FUN(astVisitExpression)>(*this, lib,  "visit",
-                SideEffects::accessExternal, "astVisitExpression");
+                SideEffects::accessExternal, "astVisitExpression")
+                    ->args({"expression","adapter","context","line"});
             addExtern<DAS_BIND_FUN(forceAtRaw)>(*this, lib,  "force_at",
-                SideEffects::accessExternal, "forceAtRaw");
+                SideEffects::accessExternal, "forceAtRaw")
+                    ->args({"expression","at"});
             addExtern<DAS_BIND_FUN(parseMangledNameFn)>(*this, lib,  "parse_mangled_name",
-                SideEffects::none, "parseMangledNameFn");
+                SideEffects::none, "parseMangledNameFn")
+                    ->args({"txt","lib","thisModule","context","line"});
             addExtern<DAS_BIND_FUN(collectDependencies)>(*this, lib,  "collect_dependencies",
-                SideEffects::invoke, "collectDependencies");
+                SideEffects::invoke, "collectDependencies")
+                    ->args({"function","block","context","line"});;
             // function annotation
             addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeFunctionAnnotation)>(*this, lib,  "make_function_annotation",
-                SideEffects::modifyExternal, "makeFunctionAnnotation");
+                SideEffects::modifyExternal, "makeFunctionAnnotation")
+                    ->args({"name","class","info","context"});
             addExtern<DAS_BIND_FUN(addModuleFunctionAnnotation)>(*this, lib,  "add_function_annotation",
-                SideEffects::modifyExternal, "addModuleFunctionAnnotation");
+                SideEffects::modifyExternal, "addModuleFunctionAnnotation")
+                    ->args({"module","annotation","context"});
             addExtern<DAS_BIND_FUN(addModuleFunction)>(*this, lib, "add_function",
-                SideEffects::modifyExternal, "addModuleFunction");
+                SideEffects::modifyExternal, "addModuleFunction")
+                    ->args({"module","function","context"});
             addExtern<DAS_BIND_FUN(addModuleGeneric)>(*this, lib, "add_generic",
-                SideEffects::modifyExternal, "addModuleGeneric");
+                SideEffects::modifyExternal, "addModuleGeneric")
+                    ->args({"module","function","context"});
             addExtern<DAS_BIND_FUN(addFunctionFunctionAnnotation)>(*this, lib,  "add_function_annotation",
-                SideEffects::modifyExternal, "addFunctionFunctionAnnotation");
+                SideEffects::modifyExternal, "addFunctionFunctionAnnotation")
+                    ->args({"function","annotation","context"});
             addExtern<DAS_BIND_FUN(addAndApplyFunctionAnnotation)>(*this, lib,  "add_function_annotation",
-                SideEffects::modifyExternal, "addAndApplyFunctionAnnotation");
+                SideEffects::modifyExternal, "addAndApplyFunctionAnnotation")
+                    ->args({"function","annotation","context"});
             // variables
             addExtern<DAS_BIND_FUN(addModuleVariable)>(*this, lib, "add_variable",
-                SideEffects::modifyExternal, "addModuleVariable");
+                SideEffects::modifyExternal, "addModuleVariable")
+                    ->args({"module","variable","context"});
             // structure annotation
             addAnnotation(make_smart<AstStructureAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeStructureAnnotation)>(*this, lib,  "make_structure_annotation",
-                SideEffects::modifyExternal, "makeStructureAnnotation");
+                SideEffects::modifyExternal, "makeStructureAnnotation")
+                    ->args({"name","class","info","context"});
             addExtern<DAS_BIND_FUN(addModuleStructureAnnotation)>(*this, lib,  "add_structure_annotation",
-                SideEffects::modifyExternal, "addModuleStructureAnnotation");
+                SideEffects::modifyExternal, "addModuleStructureAnnotation")
+                    ->args({"module","annotation","context"});
             addExtern<DAS_BIND_FUN(addStructureStructureAnnotation)>(*this, lib,  "add_structure_annotation",
-                SideEffects::modifyExternal, "addStructureStructureAnnotation");
+                SideEffects::modifyExternal, "addStructureStructureAnnotation")
+                    ->args({"structure","annotation","context"});
             addExtern<DAS_BIND_FUN(addModuleStructure)>(*this, lib, "add_structure",
-                SideEffects::modifyExternal, "addModuleStructure");
+                SideEffects::modifyExternal, "addModuleStructure")
+                    ->args({"module","structure","context"});
             addExtern<DAS_BIND_FUN(clone_structure)>(*this, lib,  "clone_structure",
-                SideEffects::none, "clone_structure");
+                SideEffects::none, "clone_structure")
+                    ->arg("structure");
             // enumeration annotation
             addAnnotation(make_smart<AstEnumerationAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeEnumerationAnnotation)>(*this, lib,  "make_enumeration_annotation",
-                SideEffects::modifyExternal, "makeEnumerationAnnotation");
+                SideEffects::modifyExternal, "makeEnumerationAnnotation")
+                    ->args({"name","class","info","context"});
             addExtern<DAS_BIND_FUN(addModuleEnumerationAnnotation)>(*this, lib,  "add_enumeration_annotation",
-                SideEffects::modifyExternal, "addModuleEnumerationAnnotation");
+                SideEffects::modifyExternal, "addModuleEnumerationAnnotation")
+                    ->args({"module","annotation","context"});
             addExtern<DAS_BIND_FUN(addEnumerationEntry)>(*this, lib,  "add_enumeration_entry",
-                SideEffects::modifyExternal, "addEnumerationEntry");
+                SideEffects::modifyExternal, "addEnumerationEntry")
+                    ->args({"enum","name"});
             // pass macro
             addAnnotation(make_smart<AstPassMacroAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makePassMacro)>(*this, lib,  "make_pass_macro",
-                SideEffects::modifyExternal, "makePassMacro");
+                SideEffects::modifyExternal, "makePassMacro")
+                    ->args({"name","class","info","context"});
             addExtern<DAS_BIND_FUN(addModuleInferDirtyMacro)>(*this, lib,  "add_dirty_infer_macro",
-                SideEffects::modifyExternal, "addModuleInferDirtyMacro");
+                SideEffects::modifyExternal, "addModuleInferDirtyMacro")
+                    ->args({"module","annotation","context"});
             // reader macro
             addExtern<DAS_BIND_FUN(makeReaderMacro)>(*this, lib,  "make_reader_macro",
-                SideEffects::modifyExternal, "makeReaderMacro");
+                SideEffects::modifyExternal, "makeReaderMacro")
+                    ->args({"name","class","info","context"});
             addExtern<DAS_BIND_FUN(addModuleReaderMacro)>(*this, lib,  "add_reader_macro",
-                SideEffects::modifyExternal, "addModuleReaderMacro");
+                SideEffects::modifyExternal, "addModuleReaderMacro")
+                    ->args({"module","annotation","context"});
             // call macro
             addExtern<DAS_BIND_FUN(makeCallMacro)>(*this, lib,  "make_call_macro",
-                SideEffects::modifyExternal, "makeCallMacro");
+                SideEffects::modifyExternal, "makeCallMacro")
+                    ->args({"name","class","info","context"});
             addExtern<DAS_BIND_FUN(addModuleCallMacro)>(*this, lib,  "add_call_macro",
-                SideEffects::modifyExternal, "addModuleCallMacro");
+                SideEffects::modifyExternal, "addModuleCallMacro")
+                    ->args({"module","annotation","context"});
             addExtern<DAS_BIND_FUN(for_each_call_macro)>(*this, lib,  "for_each_call_macro",
-                SideEffects::modifyExternal, "for_each_call_macro");
+                SideEffects::modifyExternal, "for_each_call_macro")
+                    ->args({"module","block","context","line"});
             // type info macro
             addExtern<DAS_BIND_FUN(makeTypeInfoMacro)>(*this, lib,  "make_typeinfo_macro",
-                SideEffects::modifyExternal, "makeTypeInfoMacro");
+                SideEffects::modifyExternal, "makeTypeInfoMacro")
+                    ->args({"name","class","info","context"});
             addExtern<DAS_BIND_FUN(addModuleTypeInfoMacro)>(*this, lib,  "add_typeinfo_macro",
-                SideEffects::modifyExternal, "addModuleTypeInfoMacro");
+                SideEffects::modifyExternal, "addModuleTypeInfoMacro")
+                    ->args({"module","annotation","context"});
             // variant macro
             addAnnotation(make_smart<AstVariantMacroAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeVariantMacro)>(*this, lib,  "make_variant_macro",
-                SideEffects::modifyExternal, "makeVariantMacro");
+                SideEffects::modifyExternal, "makeVariantMacro")
+                    ->args({"name","class","info","context"});
             addExtern<DAS_BIND_FUN(addModuleVariantMacro)>(*this, lib,  "add_variant_macro",
-                SideEffects::modifyExternal, "addModuleVariantMacro");
+                SideEffects::modifyExternal, "addModuleVariantMacro")
+                    ->args({"module","annotation","context"});
             // helper functions
             addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "describe_typedecl",
-                SideEffects::none, "ast_describe_typedecl");
+                SideEffects::none, "ast_describe_typedecl")
+                    ->args({"type","extra","contracts","module","context"});
             addExtern<DAS_BIND_FUN(ast_describe_typedecl_cpp)>(*this, lib,  "describe_typedecl_cpp",
-                SideEffects::none, "ast_describe_typedecl_cpp");
+                SideEffects::none, "ast_describe_typedecl_cpp")
+                    ->args({"type","substitueRef","skipRef","skipConst","redundantConst","context"});
             addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "describe_expression",
-                SideEffects::none, "describe_expression");
+                SideEffects::none, "describe_expression")
+                    ->args({"expression","context"});
             addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "describe_function",
-                SideEffects::none, "describe_function");
+                SideEffects::none, "describe_function")
+                    ->args({"function","context"});
             addExtern<DAS_BIND_FUN(ast_find_bitfield_name)>(*this, lib,  "find_bitfield_name",
-                SideEffects::none, "find_bitfield_name");
+                SideEffects::none, "find_bitfield_name")
+                    ->args({"bit","value","context"});
             addExtern<DAS_BIND_FUN(ast_find_enum_value)>(*this, lib,  "find_enum_value",
-                SideEffects::none, "find_enum_value");
+                SideEffects::none, "find_enum_value")
+                    ->args({"enum","value"});
             addExtern<DAS_BIND_FUN(get_mangled_name)>(*this, lib,  "get_mangled_name",
-                SideEffects::none, "get_mangled_name");
+                SideEffects::none, "get_mangled_name")
+                    ->args({"function","context"});
             addExtern<DAS_BIND_FUN(get_mangled_name_t)>(*this, lib,  "get_mangled_name",
-                SideEffects::none, "get_mangled_name_t");
+                SideEffects::none, "get_mangled_name_t")
+                    ->args({"type","context"});
             // type conversion functions
             addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
-                SideEffects::none, "das_to_string");
+                SideEffects::none, "das_to_string")
+                    ->args({"type","context"});
             // clone
             addExtern<DAS_BIND_FUN(clone_expression)>(*this, lib,  "clone_expression",
-                SideEffects::none, "clone_expression");
+                SideEffects::none, "clone_expression")
+                    ->arg("expression");
             addExtern<DAS_BIND_FUN(clone_function)>(*this, lib,  "clone_function",
-                SideEffects::none, "clone_function");
+                SideEffects::none, "clone_function")
+                    ->arg("function");
             addExtern<DAS_BIND_FUN(clone_variable)>(*this, lib,  "clone_variable",
-                SideEffects::none, "clone_variable");
+                SideEffects::none, "clone_variable")
+                    ->arg("variable");
             // type
             addExtern<DAS_BIND_FUN(isTempType)>(*this, lib,  "is_temp_type",
                 SideEffects::none, "isTempType")
                     ->args({"type","refMatters"});
             addExtern<DAS_BIND_FUN(isSameAstType)>(*this, lib,  "is_same_type",
-                SideEffects::none, "isSameAstType");
+                SideEffects::none, "isSameAstType")
+                    ->args({"type1","type2","refMatters","constMatters","tempMatters"});
             addExtern<DAS_BIND_FUN(clone_type)>(*this, lib,  "clone_type",
-                SideEffects::none, "clone_type");
+                SideEffects::none, "clone_type")
+                    ->arg("type");
             addExtern<DAS_BIND_FUN(get_variant_field_offset)>(*this, lib,  "get_variant_field_offset",
-                SideEffects::none, "get_variant_field_offset");
+                SideEffects::none, "get_variant_field_offset")
+                    ->args({"variant","index"});
             addExtern<DAS_BIND_FUN(get_tuple_field_offset)>(*this, lib,  "get_tuple_field_offset",
-                SideEffects::none, "get_tuple_field_offset");
+                SideEffects::none, "get_tuple_field_offset")
+                    ->args({"typle","index"});;
             addExtern<DAS_BIND_FUN(any_table_foreach)>(*this, lib,  "any_table_foreach",
-                SideEffects::modifyArgumentAndExternal, "any_table_foreach");
+                SideEffects::modifyArgumentAndExternal, "any_table_foreach")
+                    ->args({"table","keyStride","valueStride","block","context","line"});
             addExtern<DAS_BIND_FUN(any_array_foreach)>(*this, lib,  "any_array_foreach",
-                SideEffects::modifyArgumentAndExternal, "any_array_foreach");
+                SideEffects::modifyArgumentAndExternal, "any_array_foreach")
+                    ->args({"array","stride","block","context","line"});
             addExtern<DAS_BIND_FUN(any_array_size)>(*this, lib,  "any_array_size",
-                SideEffects::none, "any_array_size");
+                SideEffects::none, "any_array_size")
+                    ->arg("array");
             addExtern<DAS_BIND_FUN(any_table_size)>(*this, lib,  "any_table_size",
-                SideEffects::none, "any_table_size");
+                SideEffects::none, "any_table_size")
+                    ->arg("table");
             // module
             addExtern<DAS_BIND_FUN(for_each_typedef)>(*this, lib,  "for_each_typedef",
-                SideEffects::modifyExternal, "for_each_typedef");
+                SideEffects::modifyExternal, "for_each_typedef")
+                    ->args({"module","block","context","line"});
             addExtern<DAS_BIND_FUN(for_each_enumeration)>(*this, lib,  "for_each_enumeration",
-                SideEffects::modifyExternal, "for_each_enumeration");
+                SideEffects::modifyExternal, "for_each_enumeration")
+                    ->args({"module","block","context","line"});
             addExtern<DAS_BIND_FUN(for_each_structure)>(*this, lib,  "for_each_structure",
-                SideEffects::modifyExternal, "for_each_structure");
+                SideEffects::modifyExternal, "for_each_structure")
+                    ->args({"module","block","context","line"});
             addExtern<DAS_BIND_FUN(for_each_generic)>(*this, lib,  "for_each_generic",
-                SideEffects::modifyExternal, "for_each_generic");
+                SideEffects::modifyExternal, "for_each_generic")
+                    ->args({"module","block","context","line"});
             addExtern<DAS_BIND_FUN(for_each_global)>(*this, lib,  "for_each_global",
-                SideEffects::modifyExternal, "for_each_global");
+                SideEffects::modifyExternal, "for_each_global")
+                    ->args({"module","block","context","line"});
             addExtern<DAS_BIND_FUN(builtin_structure_for_each_field)>(*this, lib,  "for_each_field",
-                SideEffects::modifyExternal, "builtin_structure_for_each_field");
+                SideEffects::modifyExternal, "builtin_structure_for_each_field")
+                    ->args({"annotation","block","context","line"});
             // context
             addAnnotation(make_smart<AstContextAnnotation>(lib));
             addExtern<DAS_BIND_FUN(getAstContext)>(*this, lib,  "get_ast_context",
-                SideEffects::modifyExternal, "get_ast_context");
+                SideEffects::modifyExternal, "get_ast_context")
+                    ->args({"program","expression","block","context","line"});
             // code generation
             addExtern<DAS_BIND_FUN(makeClone)>(*this, lib,  "make_clone_structure",
-                SideEffects::none, "makeClone");
+                SideEffects::none, "makeClone")
+                    ->arg("structure");
             // expression generation
             addExtern<DAS_BIND_FUN(isExprLikeCall)>(*this, lib,  "is_expr_like_call",
-                SideEffects::none, "isExprLikeCall");
+                SideEffects::none, "isExprLikeCall")
+                    ->arg("expression");
             addExtern<DAS_BIND_FUN(makeCall)>(*this, lib,  "make_call",
-                SideEffects::none, "makeCall");
+                SideEffects::none, "makeCall")
+                    ->args({"at","name"});
             // errors
             addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
-                SideEffects::modifyArgumentAndExternal, "ast_error");
+                SideEffects::modifyArgumentAndExternal, "ast_error")
+                    ->args({"porogram","at","message","context","line"});;
             // add builtin module
             compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
             // lets make sure its all aot ready
