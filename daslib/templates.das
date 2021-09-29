@@ -60,9 +60,8 @@ class TemplateMacro : AstFunctionAnnotation
                 return [[ExpressionPtr]]
             var argExpr := newcall.arguments[argidx]
             if (argExpr is ExprRef2Value)
-                unsafe
-                    let r2v = reinterpret<ExprRef2Value?> newcall.arguments[argidx]
-                    argExpr := r2v.subexpr
+                let r2v = newcall.arguments[argidx] as ExprRef2Value
+                argExpr := r2v.subexpr
             if !(argExpr is ExprTypeDecl)
                 errors := "template argument must be type<...> and not {describe(newcall.arguments[argidx])}. {newcall.arguments[argidx].__rtti}"
                 fclone := [[FunctionPtr]]

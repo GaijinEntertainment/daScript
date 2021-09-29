@@ -19,13 +19,13 @@ def lpipe_expr ( var fnCall:ExpressionPtr; var arg:ExpressionPtr ) : ExpressionP
             pCall.arguments |> emplace(arg)
         return fnCall
     elif fnCall is ExprVar
+        var pVar = fnCall as ExprVar
+        var pCall <- make_call(pVar.at, "{pVar.name}")
         unsafe
-            var pVar = reinterpret<ExprVar?> fnCall
-            var pCall <- make_call(pVar.at, "{pVar.name}")
             delete fnCall
             var pCallFunc = reinterpret<ExprLooksLikeCall?> pCall
             pCallFunc.arguments |> emplace(arg)
-            return pCall
+        return pCall
     else
         unsafe
             delete arg
@@ -46,26 +46,25 @@ class LpipeMacro : AstCallMacro
             if astc.scopes.length<=0
                 macro_error(prog,call.at,"missing scope")
                 return
-            unsafe
-                var blk = reinterpret<ExprBlock?> astc.scopes[astc.scopes.length-1]
-                var eidx = -1
-                for i,expr in range(100500),blk.list
-                    if expr==call
-                        eidx = i
-                        break
-                if eidx==-1
-                    macro_error(prog,call.at,"can't find lpipe in the block")
-                    return
-                if eidx==0
-                    macro_error(prog,call.at,"can't pipe first expression in the block")
-                    return
-                let pidx = eidx - 1
-                var pipe <- lpipe_expr(blk.list[pidx], clone_expression(call.arguments[0]) )
-                if pipe==null
-                    macro_error(prog,call.at,"can only pipe to a function call")
-                    return
-                blk.list[pidx] <- pipe
-                blk.list[eidx] := null
+            var blk = astc.scopes[astc.scopes.length-1] as ExprBlock
+            var eidx = -1
+            for i,expr in range(100500),blk.list
+                if expr==call
+                    eidx = i
+                    break
+            if eidx==-1
+                macro_error(prog,call.at,"can't find lpipe in the block")
+                return
+            if eidx==0
+                macro_error(prog,call.at,"can't pipe first expression in the block")
+                return
+            let pidx = eidx - 1
+            var pipe <- lpipe_expr(blk.list[pidx], clone_expression(call.arguments[0]) )
+            if pipe==null
+                macro_error(prog,call.at,"can only pipe to a function call")
+                return
+            blk.list[pidx] <- pipe
+            blk.list[eidx] := null
             success = true
         if !success
             return [[ExpressionPtr]]

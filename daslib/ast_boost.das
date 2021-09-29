@@ -286,15 +286,65 @@ class TagFunctionMacro : SetupAnyAnnotation
         tag = argTag as tString
         return SetupAnyAnnotation`apply(cast<SetupAnyAnnotation> self,st,group,args,errors)
 
+def public panic_expr_as : void?
+    panic("invalid 'as' expression or null pointer dereference")
+    return null
+
+def private makeAsOrSafeAs ( expr; var enull:ExpressionPtr )
+    var vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
+    var cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
+    var cond <- new [[ExprOp2() at=expr.at, op:="==", left<-vdr, right<-cna]]
+    var ctype <- new [[TypeDecl() at=expr.at,
+        baseType=Type tPointer,
+        firstType <- new [[TypeDecl() at=expr.at,baseType=Type alias,alias:=expr.name]]
+    ]]
+    var esub <- clone_expression(expr.value)
+    if expr.value._type.baseType==Type tPointer
+        var neqz <- new [[ExprOp2() at=expr.at, op:="!=",
+            left <-clone_expression(expr.value),
+            right <-new [[ExprConstPtr() at=expr.at]]
+        ]]
+        var nand <- new [[ExprOp2() at=expr.at, op:="&&",
+            left <- neqz,
+            right <- cond
+        ]]
+        cond <- nand
+    else
+        var nsub <- new [[ExprRef2Ptr() at=expr.at,
+            subexpr<-esub,
+            genFlags = ExprGenFlags alwaysSafe
+        ]]
+        esub <- nsub
+    var vcast <- new [[ExprCast() at=expr.at,
+        subexpr <- esub,
+        castType <- ctype,
+        castFlags = ExprCastFlags reinterpretCast,
+        genFlags = ExprGenFlags alwaysSafe
+    ]]
+    var tri <- new [[ExprOp3() at=expr.at, op:="?",
+        subexpr <- cond,
+        left <- vcast,
+        right <- enull
+    ]]
+    return tri
+
 // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
 // if value is ast::Expr*
 class BetterRttiVisitor : AstVariantMacro
-    def override visitExprIsVariant(prog:ProgramPtr; mod:Module?;expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
+    def override visitExprIsVariant ( prog:ProgramPtr; mod:Module?;expr:smart_ptr<ExprIsVariant> ) : ExpressionPtr
         if isExpression(expr.value._type)
             var vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
             var cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
             var veq <- new [[ExprOp2() at=expr.at, op:="==", left<-vdr, right<-cna]]
             return veq
+        return [[ExpressionPtr]]
+    def override visitExprAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant> ) : ExpressionPtr
+        if isExpression(expr.value._type)
+            return makeAsOrSafeAs(expr, new [[ExprCall() at=expr.at, name:="panic_expr_as"]])
+        return [[ExpressionPtr]]
+    def override visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr
+        if isExpression(expr.value._type)
+            return makeAsOrSafeAs(expr, new [[ExprConstPtr() at=expr.at]])
         return [[ExpressionPtr]]
 
 def private walk_and_convert_array ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr

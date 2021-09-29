@@ -51,9 +51,7 @@ class AppendCondAnnotation : AstFunctionAnnotation
     unsafe
       ctxFn.body <- move_unquote_block(ctxQblock)
 
-    var ctxFnBlock: ExprBlock?
-    unsafe
-      ctxFnBlock = reinterpret<ExprBlock?> ctxFn.body
+    var ctxFnBlock = ctxFn.body as ExprBlock
     ctxFnBlock.blockFlags ^= ExprBlockFlags isClosure
 
     var callInCtx <- new [[ExprCall() at=at, name:=ctxCloneFnName]]

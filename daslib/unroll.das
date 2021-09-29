@@ -20,10 +20,9 @@ class private RemoveDerefVisitor : AstVisitor
         vname = n
     def override visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
         if expr.subexpr is ExprVar
-            unsafe
-                let vvar = reinterpret<ExprVar?> expr.subexpr
-                if "{vvar.name}"==vname
-                    return clone_expression(expr.subexpr)
+            let vvar = expr.subexpr as ExprVar
+            if "{vvar.name}"==vname
+                return clone_expression(expr.subexpr)
         return expr
 
 def remove_deref ( varname : string; var expr:smart_ptr<Expression> )

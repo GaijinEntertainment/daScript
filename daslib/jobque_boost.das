@@ -26,15 +26,11 @@ class private NewJobMacro : AstFunctionAnnotation
         if !call.arguments[0] is ExprAscend
             compiling_program() |>macro_error(call.at,"expecting lambda declaration, ExprAscend")
             return [[ExpressionPtr]]
-        var asc : ExprAscend?
-        unsafe
-            asc = reinterpret<ExprAscend?> call.arguments[0]
+        var asc = call.arguments[0] as ExprAscend
         if !asc.subexpr is ExprMakeStruct
             compiling_program() |>macro_error(call.at,"expecting lambda declaration, ExprMakeStruct")
             return [[ExpressionPtr]]
-        var mks : ExprMakeStruct?
-        unsafe
-            mks = reinterpret<ExprMakeStruct?> asc.subexpr
+        var mks = asc.subexpr as ExprMakeStruct
         if mks._type==null || mks._type.baseType!=Type tStructure
             compiling_program() |>macro_error(call.at,"expecting lambda declaration, not a structure")
             return [[ExpressionPtr]]

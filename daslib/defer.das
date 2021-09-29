@@ -29,9 +29,7 @@ class DeferMacro : AstFunctionAnnotation
                 compiling_program() |>macro_error(call.at,"defer needs to be in the scope")
                 success = false
             else
-                var scope : ExprBlock?
-                unsafe
-                    scope = reinterpret<ExprBlock?>(astc.scopes[astc.scopes.length-1])
+                var scope = astc.scopes[astc.scopes.length-1] as ExprBlock
                 var c_arg <- clone_expression(call.arguments[0])
                 var from_block <- move_unquote_block(c_arg)
                 from_block.blockFlags ^= ExprBlockFlags isClosure
@@ -55,9 +53,7 @@ class DeferDeleteMacro : AstCallMacro
                 compiling_program() |>macro_error(call.at,"defer_delete needs to be in the scope")
                 success = false
             else
-                var scope : ExprBlock?
-                unsafe
-                    scope = reinterpret<ExprBlock?>(astc.scopes[astc.scopes.length-1])
+                var scope = astc.scopes[astc.scopes.length-1] as ExprBlock
                 var e_del <- new [[ExprDelete() at=call.at,
                     subexpr <- clone_expression(call.arguments[0])
                 ]]

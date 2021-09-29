@@ -44,9 +44,7 @@ class ApplyMacro : AstCallMacro
                 vlet.variables[0]._type.flags |= TypeDeclFlags removeConstant
             // { somecall(ptr,...) }
             var eblk <- new [[ExprBlock() at=expr.at]]
-            var fcall : ExprCall?
-            unsafe
-                fcall = reinterpret<ExprCall?>(expr.arguments[1])
+            var fcall = expr.arguments[1] as ExprCall
             // note: this can be clone+push(ecall.arguments,arg,1) but we are not bining 'push at' yet
             var ecall <- new [[ExprCall() at=fcall.at, name:=fcall.name]]
             ecall.arguments |> emplace_new() <| new [[ExprPtr2Ref() at=expr.at,
