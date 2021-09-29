@@ -4,6 +4,8 @@
 #include "daScript/misc/sysos.h"
 #include "daScript/ast/ast.h"
 
+#define DASLIB_MODULE_NAME  "daslib"
+
 namespace das {
 #if !DAS_NO_FILEIO
 
@@ -63,18 +65,19 @@ namespace das {
             string top = req.substr(0,np);
             string mod_name = req.substr(np+1);
             ModuleInfo info;
-            if ( top=="daslib" ) {
+            if ( top==DASLIB_MODULE_NAME ) {
                 info.moduleName = mod_name;
-                info.fileName = getDasRoot() + "/daslib/" + info.moduleName + ".das";
+                info.fileName = getDasRoot() + "/" + DASLIB_MODULE_NAME + "/" + info.moduleName + ".das";
+                return info;
             }
             #define NATIVE_MODULE(category, subdir_name, dir_name, das_name) \
                 if ( top==#category && mod_name==#das_name ) { \
                     info.moduleName = mod_name; \
                     info.fileName = getDasRoot() + "/modules/" + #dir_name + "/" + #subdir_name + "/" + #das_name + ".das"; \
+                    return info; \
                 }
             #include "modules/external_resolve.inc"
             #undef NATIVE_MODULE
-            return info;
         }
         return FileAccess::getModuleInfo(req, from);
     }

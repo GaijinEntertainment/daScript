@@ -93,28 +93,21 @@ namespace das {
 
     string getDasRoot ( void ) {
         if ( g_dasRoot.empty() ) {
-            if ( auto droot = getEnvVar("DASROOT") ) {
-                g_dasRoot = droot;
-                while ( !empty(g_dasRoot) && (g_dasRoot.back()=='/' || g_dasRoot.back()=='\\') ) {
-                    g_dasRoot.pop_back();
+            string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
+            auto np = efp.find_last_of("\\/");
+            if ( np != string::npos ) {
+                auto ep = get_prefix(efp);          // remove file name
+                auto suffix = get_suffix(ep);
+                if ( suffix != "bin" ) {
+                    ep = get_prefix(ep);            // remove debug
+                }
+                if ( get_suffix(ep)!="bin" ) {
+                    g_dasRoot = ".";
+                } else {
+                    g_dasRoot = get_prefix(ep);     // remove bin
                 }
             } else {
-                string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
-                auto np = efp.find_last_of("\\/");
-                if ( np != string::npos ) {
-                    auto ep = get_prefix(efp);          // remove file name
-                    auto suffix = get_suffix(ep);
-                    if ( suffix != "bin" ) {
-                        ep = get_prefix(ep);            // remove debug
-                    }
-                    if ( get_suffix(ep)!="bin" ) {
-                        g_dasRoot = ".";
-                    } else {
-                        g_dasRoot = get_prefix(ep);     // remove bin
-                    }
-                } else {
-                    g_dasRoot = ".";
-                }
+                g_dasRoot = ".";
             }
         }
         return g_dasRoot;

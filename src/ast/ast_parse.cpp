@@ -160,7 +160,6 @@ namespace das {
         }
     }
 
-    char * getEnvVar ( const char * name );
     string getDasRoot ( void );
 
     bool getPrerequisits ( const string & fileName,
@@ -255,11 +254,8 @@ namespace das {
             return true;
         } else {
             if ( log ) {
-                *log << string(tab,'\t') << "in " << fileName << " - FILE NOT FOUND\n";
-                *log << string(tab+1,'\t') << "getDasRoot()=`" << getDasRoot() << "`\n";
-                if ( !getEnvVar("DASROOT") ) {
-                    *log << string(tab+1,'\t') << "Environment variable DASROOT is not set.\n";
-                }
+                *log    << string(tab,'\t') << "in " << fileName << " - FILE NOT FOUND\n"
+                        << string(tab+1,'\t') << "getDasRoot()=`" << getDasRoot() << "`\n";
             }
             missing.push_back(fileName);
             return false;
