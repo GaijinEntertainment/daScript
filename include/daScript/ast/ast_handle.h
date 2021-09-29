@@ -519,28 +519,38 @@ namespace das
         static void init ( Module * mod, const ModuleLibrary & lib, bool canCopy, bool canMove ) {
             if ( canMove ) {
                 addExtern<DAS_BIND_FUN((das_vector_emplace<TT>))>(*mod, lib, "emplace",
-                    SideEffects::modifyArgument, "das_vector_emplace")->generated = true;
+                    SideEffects::modifyArgument, "das_vector_emplace")
+                        ->args({"vec","value","at"})->generated = true;
                 addExtern<DAS_BIND_FUN((das_vector_emplace_back<TT>))>(*mod, lib, "emplace",
-                    SideEffects::modifyArgument, "das_vector_emplace_back")->generated = true;
+                    SideEffects::modifyArgument, "das_vector_emplace_back")
+                        ->args({"vec","value"})->generated = true;
             }
             if ( canCopy ) {
                 addExtern<DAS_BIND_FUN((das_vector_push_value<TT>))>(*mod, lib, "push",
-                    SideEffects::modifyArgument, "das_vector_push_value")->generated = true;
+                    SideEffects::modifyArgument, "das_vector_push_value")
+                        ->args({"vec","value","at","context"})->generated = true;
                 addExtern<DAS_BIND_FUN((das_vector_push_back_value<TT>))>(*mod, lib, "push",
-                    SideEffects::modifyArgument, "das_vector_push_back_value")->generated = true;
+                    SideEffects::modifyArgument, "das_vector_push_back_value")
+                        ->args({"vec","value"})->generated = true;
             }
             addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
-                SideEffects::modifyArgument, "das_vector_pop")->generated = true;
+                SideEffects::modifyArgument, "das_vector_pop")
+                    ->arg("vec")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_clear<TT>)>(*mod, lib, "clear",
-                SideEffects::modifyArgument, "das_vector_clear")->generated = true;
+                SideEffects::modifyArgument, "das_vector_clear")
+                    ->arg("vec")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_resize<TT>)>(*mod, lib, "resize",
-                SideEffects::modifyArgument, "das_vector_resize")->generated = true;
+                SideEffects::modifyArgument, "das_vector_resize")
+                    ->args({"vec","newSize"})->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_erase<TT>)>(*mod, lib, "erase",
-                SideEffects::modifyArgument, "das_vector_erase")->generated = true;
+                SideEffects::modifyArgument, "das_vector_erase")
+                    ->args({"vec","index","context"})->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
-                SideEffects::none, "das_vector_each")->generated = true;
+                SideEffects::none, "das_vector_each")
+                    ->args({"vec","context"})->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each_const<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
-                SideEffects::none, "das_vector_each_const")->generated = true;
+                SideEffects::none, "das_vector_each_const")
+                    ->args({"vec","context"})->generated = true;
         }
     };
 

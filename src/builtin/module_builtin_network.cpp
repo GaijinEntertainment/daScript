@@ -127,19 +127,26 @@ namespace das {
             // sever
             addAnnotation(make_smart<ServerAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeServer)>(*this, lib,  "make_server",
-                SideEffects::modifyArgumentAndExternal, "makeServer");
+                SideEffects::modifyArgumentAndExternal, "makeServer")
+                    ->args({"class","info","context"});
             addExtern<DAS_BIND_FUN(server_init)>(*this, lib,  "server_init",
-                SideEffects::modifyArgumentAndExternal, "server_init");
+                SideEffects::modifyArgumentAndExternal, "server_init")
+                    ->args({"server","port","context"});
             addExtern<DAS_BIND_FUN(server_is_open)>(*this, lib,  "server_is_open",
-                SideEffects::modifyArgumentAndExternal, "server_is_open");
+                SideEffects::modifyArgumentAndExternal, "server_is_open")
+                    ->args({"server","context"});
             addExtern<DAS_BIND_FUN(server_is_connected)>(*this, lib,  "server_is_connected",
-                SideEffects::modifyArgumentAndExternal, "server_is_connected");
+                SideEffects::modifyArgumentAndExternal, "server_is_connected")
+                    ->args({"server","context"});
             addExtern<DAS_BIND_FUN(server_tick)>(*this, lib,  "server_tick",
-                SideEffects::modifyArgumentAndExternal, "server_tick");
+                SideEffects::modifyArgumentAndExternal, "server_tick")
+                    ->args({"server","context"});
             addExtern<DAS_BIND_FUN(server_send)>(*this, lib,  "server_send",
-                SideEffects::modifyArgumentAndExternal, "server_send");
+                SideEffects::modifyArgumentAndExternal, "server_send")
+                    ->args({"server","data","size","context"});
             addExtern<DAS_BIND_FUN(server_restore)>(*this, lib,  "server_restore",
-                SideEffects::modifyArgumentAndExternal, "server_restore");
+                SideEffects::modifyArgumentAndExternal, "server_restore")
+                    ->args({"server","class","info","context"});
             // add builtin module
             compileBuiltinModule("network.das",network_das,sizeof(network_das));
         }

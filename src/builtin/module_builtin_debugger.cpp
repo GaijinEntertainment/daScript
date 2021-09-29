@@ -802,8 +802,8 @@ namespace debugapi {
         ctx.instrumentContextNode(blk, isInstrumenting, context, line);
     }
 
-    void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, LineInfoArg * arg ) {
-        if ( !fn ) ctx.throw_error_at(*arg, "expecting function");
+    void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, Context * context, LineInfoArg * arg ) {
+        if ( !fn ) context->throw_error_at(*arg, "expecting function");
         ctx.instrumentFunction(fn.index-1, isInstrumenting);
     }
 
@@ -830,55 +830,76 @@ namespace debugapi {
             addAnnotation(make_smart<AstStackWalkerAnnotation>(lib));
             // debug agent
             addExtern<DAS_BIND_FUN(makeDebugAgent)>(*this, lib,  "make_debug_agent",
-                SideEffects::modifyExternal, "makeDebugAgent");
+                SideEffects::modifyExternal, "makeDebugAgent")
+                    ->args({"class","info","context"});
             addExtern<DAS_BIND_FUN(tickDebugAgent)>(*this, lib,  "tick_debug_agent",
                 SideEffects::modifyExternal, "tickDebugAgent");
             addExtern<DAS_BIND_FUN(tickSpecificDebugAgent)>(*this, lib,  "tick_debug_agent",
-                SideEffects::modifyExternal, "tickSpecificDebugAgent");
+                SideEffects::modifyExternal, "tickSpecificDebugAgent")
+                    ->arg("agent");
             addExtern<DAS_BIND_FUN(collectDebugAgentState)>(*this, lib,  "collect_debug_agent_state",
-                SideEffects::modifyExternal, "collectDebugAgentState");
+                SideEffects::modifyExternal, "collectDebugAgentState")
+                    ->arg("context");
             addExtern<DAS_BIND_FUN(installDebugAgent)>(*this, lib,  "install_debug_agent",
-                SideEffects::modifyExternal, "installDebugAgent");
+                SideEffects::modifyExternal, "installDebugAgent")
+                    ->args({"agent","category","line","context"});
             addExtern<DAS_BIND_FUN(getDebugAgentContext), SimNode_ExtFuncCallRef>(*this, lib,  "get_debug_agent_context",
-                SideEffects::modifyExternal, "getDebugAgentContext");
+                SideEffects::modifyExternal, "getDebugAgentContext")
+                    ->args({"category","line","context"});
             addExtern<DAS_BIND_FUN(hasDebugAgentContext)>(*this, lib,  "has_debug_agent_context",
-                SideEffects::modifyExternal, "hasDebugAgentContext");
+                SideEffects::modifyExternal, "hasDebugAgentContext")
+                    ->args({"category","line","context"});;
             addExtern<DAS_BIND_FUN(forkDebugAgentContext)>(*this, lib,  "fork_debug_agent_context",
-                SideEffects::modifyExternal, "forkDebugAgentContext");
+                SideEffects::modifyExternal, "forkDebugAgentContext")
+                    ->args({"function","context","line"});;
             addExtern<DAS_BIND_FUN(isInDebugAgentCreation)>(*this, lib, "is_in_debug_agent_creation",
                 SideEffects::accessExternal, "isInDebugAgentCreation");
             addExtern<DAS_BIND_FUN(debuggerSetContextSingleStep)>(*this, lib,  "set_single_step",
-                SideEffects::modifyExternal, "debuggerSetContextSingleStep");
+                SideEffects::modifyExternal, "debuggerSetContextSingleStep")
+                    ->args({"context","enabled"});
             addExtern<DAS_BIND_FUN(debuggerStackWalk)>(*this, lib, "stackwalk",
-                SideEffects::modifyExternal, "debuggerStackWalk");
+                SideEffects::modifyExternal, "debuggerStackWalk")
+                    ->args({"context","line"});
             addExtern<DAS_BIND_FUN(dapiReportContextState)>(*this, lib, "report_context_state",
-                SideEffects::modifyExternal, "dapiReportContextState");
+                SideEffects::modifyExternal, "dapiReportContextState")
+                    ->args({"context","category","name","info","data"});
             // instrumentation
             addExtern<DAS_BIND_FUN(instrument_context)>(*this, lib,  "instrument_node",
-                SideEffects::modifyExternal, "instrument_context");
+                SideEffects::modifyExternal, "instrument_context")
+                    ->args({"context","isInstrumenting","block","context","line"});
             addExtern<DAS_BIND_FUN(instrument_function)>(*this, lib,  "instrument_function",
-                SideEffects::modifyExternal, "instrument_function");
+                SideEffects::modifyExternal, "instrument_function")
+                    ->args({"context","function","isInstrumenting","context","line"});;
             addExtern<DAS_BIND_FUN(instrument_all_functions)>(*this, lib,  "instrument_all_functions",
-                SideEffects::modifyExternal, "instrument_all_functions");
+                SideEffects::modifyExternal, "instrument_all_functions")
+                    ->arg("context");
             addExtern<DAS_BIND_FUN(clear_instruments)>(*this, lib,  "clear_instruments",
-                SideEffects::modifyExternal, "clear_instruments");
+                SideEffects::modifyExternal, "clear_instruments")
+                    ->arg("context");
             // data walker
             addExtern<DAS_BIND_FUN(makeDataWalker)>(*this, lib,  "make_data_walker",
-                SideEffects::modifyExternal, "makeDataWalker");
+                SideEffects::modifyExternal, "makeDataWalker")
+                    ->args({"class","info","context"});
             addExtern<DAS_BIND_FUN(dapiWalkData)>(*this, lib,  "walk_data",
-                SideEffects::modifyExternal, "dapiWalkData");
+                SideEffects::modifyExternal, "dapiWalkData")
+                    ->args({"walker","data","info"});
             addExtern<DAS_BIND_FUN(dapiWalkDataV)>(*this, lib,  "walk_data",
-                SideEffects::modifyExternal, "dapiWalkDataV");
+                SideEffects::modifyExternal, "dapiWalkDataV")
+                    ->args({"walker","data","info"});
             // stack walker
             addExtern<DAS_BIND_FUN(makeStackWalker)>(*this, lib,  "make_stack_walker",
-                SideEffects::modifyExternal, "makeStackWalker");
+                SideEffects::modifyExternal, "makeStackWalker")
+                    ->args({"class","info","context"});
             addExtern<DAS_BIND_FUN(dapiStackWalk)>(*this, lib,  "walk_stack",
-                SideEffects::modifyExternal, "dapiStackWalk");
+                SideEffects::modifyExternal, "dapiStackWalk")
+                    ->args({"walker","context","line"});
             addExtern<DAS_BIND_FUN(dapiStackDepth)>(*this, lib,  "stack_depth",
-                SideEffects::modifyExternal, "dapiStacDepth");
+                SideEffects::modifyExternal, "dapiStacDepth")
+                    ->arg("context");
             // global variable
             addInterop<get_global_variable,void *,vec4f,const char *>(*this,lib,"get_context_global_variable",
-                SideEffects::accessExternal,"get_global_variable")->unsafeOperation = true;
+                SideEffects::accessExternal,"get_global_variable")
+                    ->args({"context","name"})->unsafeOperation = true;
             // pinvoke
             addInterop<pinvoke_impl,void,vec4f,const char *>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;

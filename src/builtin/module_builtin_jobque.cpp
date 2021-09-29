@@ -235,38 +235,52 @@ namespace das {
             // channel
             addAnnotation(make_smart<ChannelAnnotation>(lib));
             addExtern<DAS_BIND_FUN(channelPush)>(*this, lib,  "_builtin_channel_push",
-                SideEffects::modifyArgumentAndExternal, "channelPush");
+                SideEffects::modifyArgumentAndExternal, "channelPush")
+                    ->args({"channel","data","context"});
             addExtern<DAS_BIND_FUN(channelPop)>(*this, lib,  "_builtin_channel_pop",
-                SideEffects::modifyArgumentAndExternal, "channelPop");
+                SideEffects::modifyArgumentAndExternal, "channelPop")
+                    ->arg("channel");
             addExtern<DAS_BIND_FUN(channelAppend)>(*this, lib, "append",
-                SideEffects::modifyArgument, "channelAppend");
+                SideEffects::modifyArgument, "channelAppend")
+                    ->args({"channel","size"});
             addExtern<DAS_BIND_FUN(withChannel)>(*this, lib,  "with_channel",
-                SideEffects::invoke, "withChannel");
+                SideEffects::invoke, "withChannel")
+                    ->args({"block","context","line"});
             addExtern<DAS_BIND_FUN(withChannelEx)>(*this, lib,  "with_channel",
-                SideEffects::invoke, "withChannelEx");
+                SideEffects::invoke, "withChannelEx")
+                    ->args({"count","block","context","line"});
             addExtern<DAS_BIND_FUN(waitForChannel)>(*this, lib,  "join",
-                SideEffects::modifyExternal, "waitForChannel");
+                SideEffects::modifyExternal, "waitForChannel")
+                    ->arg("channel");
             addExtern<DAS_BIND_FUN(notifyChannel)>(*this, lib,  "notify",
-                SideEffects::modifyExternal, "notifyChannel");
+                SideEffects::modifyExternal, "notifyChannel")
+                    ->arg("channel");
             // job
             addAnnotation(make_smart<JobStatusAnnotation>(lib));
             addExtern<DAS_BIND_FUN(withJobStatus)>(*this, lib,  "with_job_status",
-                SideEffects::modifyExternal, "withJobStatus");
+                SideEffects::modifyExternal, "withJobStatus")
+                    ->args({"total","block","context","line"});
             addExtern<DAS_BIND_FUN(waitForJob)>(*this, lib,  "join",
-                SideEffects::modifyExternal, "waitForJob");
+                SideEffects::modifyExternal, "waitForJob")
+                    ->arg("job");
             addExtern<DAS_BIND_FUN(notifyJob)>(*this, lib,  "notify",
-                SideEffects::modifyExternal, "notifyJob");
+                SideEffects::modifyExternal, "notifyJob")
+                    ->arg("job");
             // fork \ invoke \ etc
             addExtern<DAS_BIND_FUN(new_job_invoke)>(*this, lib,  "new_job_invoke",
-                SideEffects::modifyExternal, "new_job_invoke");
+                SideEffects::modifyExternal, "new_job_invoke")
+                    ->args({"lambda","function","lambdaSize","context","line"});
             addExtern<DAS_BIND_FUN(withJobQue)>(*this, lib,  "with_job_que",
-                SideEffects::modifyExternal, "withJobQue");
+                SideEffects::modifyExternal, "withJobQue")
+                    ->args({"block","context","line"});
             addExtern<DAS_BIND_FUN(getTotalHwJobs)>(*this, lib,  "get_total_hw_jobs",
-                SideEffects::accessExternal, "getTotalHwJobs");
+                SideEffects::accessExternal, "getTotalHwJobs")
+                    ->args({"context","line"});
             addExtern<DAS_BIND_FUN(getTotalHwThreads)>(*this, lib,  "get_total_hw_threads",
                 SideEffects::accessExternal, "getTotalHwThreads");
             addExtern<DAS_BIND_FUN(new_thread_invoke)>(*this, lib,  "new_thread_invoke",
-                SideEffects::modifyExternal, "new_thread_invoke");
+                SideEffects::modifyExternal, "new_thread_invoke")
+                    ->args({"lambda","function","lambdaSize","context","line"});
             addExtern<DAS_BIND_FUN(is_job_que_shutting_down)>(*this, lib,  "is_job_que_shutting_down",
                 SideEffects::modifyExternal, "is_job_que_shutting_down");
         }

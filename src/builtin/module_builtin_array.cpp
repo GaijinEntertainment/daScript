@@ -55,19 +55,45 @@ namespace das {
 
     void Module_BuiltIn::addArrayTypes(ModuleLibrary & lib) {
         // array functions
-        addExtern<DAS_BIND_FUN(builtin_array_clear)>(*this, lib, "clear", SideEffects::modifyArgument, "builtin_array_clear");
-        addExtern<DAS_BIND_FUN(builtin_array_size)>(*this, lib, "length", SideEffects::none, "builtin_array_size");
-        addExtern<DAS_BIND_FUN(builtin_array_capacity)>(*this, lib, "capacity", SideEffects::none, "builtin_array_capacity");
+        addExtern<DAS_BIND_FUN(builtin_array_clear)>(*this, lib, "clear",
+            SideEffects::modifyArgument, "builtin_array_clear")
+                ->args({"array","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_size)>(*this, lib, "length",
+            SideEffects::none, "builtin_array_size")
+                ->arg("array");
+        addExtern<DAS_BIND_FUN(builtin_array_capacity)>(*this, lib, "capacity",
+            SideEffects::none, "builtin_array_capacity")
+                ->arg("array");
         // array built-in functions
-        addExtern<DAS_BIND_FUN(builtin_array_resize)>(*this, lib, "__builtin_array_resize", SideEffects::modifyArgument, "builtin_array_resize");
-        addExtern<DAS_BIND_FUN(builtin_array_reserve)>(*this, lib, "__builtin_array_reserve", SideEffects::modifyArgument, "builtin_array_reserve");
-        addExtern<DAS_BIND_FUN(builtin_array_push)>(*this, lib, "__builtin_array_push", SideEffects::modifyArgument, "builtin_array_push");
-        addExtern<DAS_BIND_FUN(builtin_array_push_zero)>(*this, lib, "__builtin_array_push_zero", SideEffects::modifyArgument, "builtin_array_push_zero");
-        addExtern<DAS_BIND_FUN(builtin_array_push_back)>(*this, lib, "__builtin_array_push_back", SideEffects::modifyArgument, "builtin_array_push_back");
-        addExtern<DAS_BIND_FUN(builtin_array_push_back_zero)>(*this, lib, "__builtin_array_push_back_zero", SideEffects::modifyArgument, "builtin_array_push_back_zero");
-        addExtern<DAS_BIND_FUN(builtin_array_erase)>(*this, lib, "__builtin_array_erase", SideEffects::modifyArgument, "builtin_array_erase");
-        addExtern<DAS_BIND_FUN(builtin_array_lock)>(*this, lib, "__builtin_array_lock", SideEffects::modifyArgumentAndExternal, "builtin_array_lock");
-        addExtern<DAS_BIND_FUN(builtin_array_unlock)>(*this, lib, "__builtin_array_unlock", SideEffects::modifyArgumentAndExternal, "builtin_array_unlock");
-        addExtern<DAS_BIND_FUN(builtin_array_clear_lock)>(*this, lib, "__builtin_array_clear_lock", SideEffects::modifyArgumentAndExternal, "builtin_array_clear_lock");
+        addExtern<DAS_BIND_FUN(builtin_array_resize)>(*this, lib, "__builtin_array_resize",
+            SideEffects::modifyArgument, "builtin_array_resize")
+                ->args({"array","newSize","stride","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_reserve)>(*this, lib, "__builtin_array_reserve",
+            SideEffects::modifyArgument, "builtin_array_reserve")
+                ->args({"array","newSize","stride","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_push)>(*this, lib, "__builtin_array_push",
+            SideEffects::modifyArgument, "builtin_array_push")
+                ->args({"array","index","stride","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_push_zero)>(*this, lib, "__builtin_array_push_zero",
+            SideEffects::modifyArgument, "builtin_array_push_zero")
+                ->args({"array","index","stride","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_push_back)>(*this, lib, "__builtin_array_push_back",
+            SideEffects::modifyArgument, "builtin_array_push_back")
+                ->args({"array","stride","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_push_back_zero)>(*this, lib, "__builtin_array_push_back_zero",
+            SideEffects::modifyArgument, "builtin_array_push_back_zero")
+                ->args({"array","stride","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_erase)>(*this, lib, "__builtin_array_erase",
+            SideEffects::modifyArgument, "builtin_array_erase")
+                ->args({"array","index","stride","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_lock)>(*this, lib, "__builtin_array_lock",
+            SideEffects::modifyArgumentAndExternal, "builtin_array_lock")
+                ->args({"array","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_unlock)>(*this, lib, "__builtin_array_unlock",
+            SideEffects::modifyArgumentAndExternal, "builtin_array_unlock")
+                ->args({"array","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_clear_lock)>(*this, lib, "__builtin_array_clear_lock",
+            SideEffects::modifyArgumentAndExternal, "builtin_array_clear_lock")
+                ->args({"array","context"});
     }
 }

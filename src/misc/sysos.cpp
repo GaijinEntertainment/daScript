@@ -9,9 +9,6 @@
         size_t getExecutablePathName(char* pathName, size_t pathNameCapacity) {
             return GetModuleFileNameA(NULL, pathName, (DWORD)pathNameCapacity);
         }
-        char * getEnvVar ( const char * name ) {
-            return ::getenv(name);
-        }
     }
 #elif defined(__linux__)
     #include <unistd.h>
@@ -20,9 +17,6 @@
             size_t pathNameSize = readlink("/proc/self/exe", pathName, pathNameCapacity - 1);
             pathName[pathNameSize] = '\0';
             return pathNameSize;
-        }
-        char * getEnvVar ( const char * name ) {
-            return ::getenv(name);
         }
     }
 #elif defined(__APPLE__)
@@ -44,9 +38,6 @@
             }
             return 0;
         }
-        char * getEnvVar ( const char * name ) {
-            return ::getenv(name);
-        }
     }
 #else
     namespace das {
@@ -54,9 +45,6 @@
             DAS_FATAL_LOG("platforms without getExecutablePathName should not use default getDasRoot");
             DAS_FATAL_ERROR;
             return 0;
-        }
-        char * getEnvVar ( const char * name ) {
-            return nullptr;
         }
     }
 #endif

@@ -416,30 +416,72 @@ namespace das {
             addAnnotation(make_smart<FileAnnotation>(lib));
             addAnnotation(make_smart<FStatAnnotation>(lib));
             // file io
-            addExtern<DAS_BIND_FUN(builtin_fopen)>(*this, lib, "fopen", SideEffects::modifyExternal, "builtin_fopen");
-            addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose", SideEffects::modifyExternal, "builtin_fclose");
-            addExtern<DAS_BIND_FUN(builtin_fprint)>(*this, lib, "fprint", SideEffects::modifyExternal, "builtin_fprint");
-            addExtern<DAS_BIND_FUN(builtin_fread)>(*this, lib, "fread", SideEffects::modifyExternal, "builtin_fread");
-            addExtern<DAS_BIND_FUN(builtin_map_file)>(*this, lib, "fmap", SideEffects::modifyExternal, "builtin_map_file");
-            addExtern<DAS_BIND_FUN(builtin_fgets)>(*this, lib, "fgets", SideEffects::modifyExternal, "builtin_fgets");
-            addExtern<DAS_BIND_FUN(builtin_fwrite)>(*this, lib, "fwrite", SideEffects::modifyExternal, "builtin_fwrite");
-            addExtern<DAS_BIND_FUN(builtin_feof)>(*this, lib, "feof", SideEffects::modifyExternal, "builtin_feof");
+            addExtern<DAS_BIND_FUN(builtin_fopen)>(*this, lib, "fopen",
+                SideEffects::modifyExternal, "builtin_fopen")
+                    ->args({"name","mode"});
+            addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose",
+                SideEffects::modifyExternal, "builtin_fclose")
+                    ->args({"file","context"});
+            addExtern<DAS_BIND_FUN(builtin_fprint)>(*this, lib, "fprint",
+                SideEffects::modifyExternal, "builtin_fprint")
+                    ->args({"file","text","context"});
+            addExtern<DAS_BIND_FUN(builtin_fread)>(*this, lib, "fread",
+                SideEffects::modifyExternal, "builtin_fread")
+                    ->args({"file","context"});;
+            addExtern<DAS_BIND_FUN(builtin_map_file)>(*this, lib, "fmap",
+                SideEffects::modifyExternal, "builtin_map_file")
+                    ->args({"file","block","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_fgets)>(*this, lib, "fgets",
+                SideEffects::modifyExternal, "builtin_fgets")
+                    ->args({"file","context"});
+            addExtern<DAS_BIND_FUN(builtin_fwrite)>(*this, lib, "fwrite",
+                SideEffects::modifyExternal, "builtin_fwrite")
+                    ->args({"file","text","context"});
+            addExtern<DAS_BIND_FUN(builtin_feof)>(*this, lib, "feof",
+                SideEffects::modifyExternal, "builtin_feof")
+                    ->arg("file");
             // builtin file functions
-            addInterop<builtin_read,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_read",SideEffects::modifyExternal, "builtin_read");
-            addInterop<builtin_write,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_write",SideEffects::modifyExternal, "builtin_write");
-            addInterop<builtin_load,void,const FILE*,int32_t,const Block &>(*this, lib, "_builtin_load",das::SideEffects::modifyExternal, "builtin_load");
-            addExtern<DAS_BIND_FUN(builtin_dirname)>(*this, lib, "dir_name", SideEffects::none, "builtin_dirname");
-            addExtern<DAS_BIND_FUN(builtin_basename)>(*this, lib, "base_name", SideEffects::none, "builtin_basename");
-            addExtern<DAS_BIND_FUN(builtin_fstat)>(*this, lib, "fstat", SideEffects::modifyExternal, "builtin_fstat");
-            addExtern<DAS_BIND_FUN(builtin_stat)>(*this, lib, "stat", SideEffects::modifyExternal, "builtin_stat");
-            addExtern<DAS_BIND_FUN(builtin_dir)>(*this, lib, "builtin_dir", SideEffects::modifyExternal, "builtin_dir");
-            addExtern<DAS_BIND_FUN(builtin_mkdir)>(*this, lib, "mkdir", SideEffects::modifyExternal, "builtin_mkdir");
-            addExtern<DAS_BIND_FUN(builtin_stdin)>(*this, lib, "fstdin", SideEffects::modifyExternal, "builtin_stdin");
-            addExtern<DAS_BIND_FUN(builtin_stdout)>(*this, lib, "fstdout", SideEffects::modifyExternal, "builtin_stdout");
-            addExtern<DAS_BIND_FUN(builtin_stderr)>(*this, lib, "fstderr", SideEffects::modifyExternal, "builtin_stderr");
-            addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep", SideEffects::modifyExternal, "builtin_sleep");
-            addExtern<DAS_BIND_FUN(getchar)>(*this, lib, "getchar", SideEffects::modifyExternal, "getchar");
-            addExtern<DAS_BIND_FUN(builtin_exit)>(*this, lib, "exit", SideEffects::modifyExternal, "builtin_exit")->unsafeOperation = true;
+            addInterop<builtin_read,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_read",
+                SideEffects::modifyExternal, "builtin_read")
+                    ->args({"file","buffer","length"});
+            addInterop<builtin_write,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_write",
+                SideEffects::modifyExternal, "builtin_write")
+                    ->args({"file","buffer","length"});
+            addInterop<builtin_load,void,const FILE*,int32_t,const Block &>(*this, lib, "_builtin_load",
+                das::SideEffects::modifyExternal, "builtin_load")
+                    ->args({"file","length","block"});
+            addExtern<DAS_BIND_FUN(builtin_dirname)>(*this, lib, "dir_name",
+                SideEffects::none, "builtin_dirname")
+                    ->args({"name","context"});
+            addExtern<DAS_BIND_FUN(builtin_basename)>(*this, lib, "base_name",
+                SideEffects::none, "builtin_basename")
+                    ->args({"name","context"});
+            addExtern<DAS_BIND_FUN(builtin_fstat)>(*this, lib, "fstat",
+                SideEffects::modifyExternal, "builtin_fstat")
+                    ->args({"file","stat","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_stat)>(*this, lib, "stat",
+                SideEffects::modifyExternal, "builtin_stat")
+                    ->args({"file","stat"});
+            addExtern<DAS_BIND_FUN(builtin_dir)>(*this, lib, "builtin_dir",
+                SideEffects::modifyExternal, "builtin_dir")
+                    ->args({"path","block","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_mkdir)>(*this, lib, "mkdir",
+                SideEffects::modifyExternal, "builtin_mkdir")
+                    ->arg("path");
+            addExtern<DAS_BIND_FUN(builtin_stdin)>(*this, lib, "fstdin",
+                SideEffects::modifyExternal, "builtin_stdin");
+            addExtern<DAS_BIND_FUN(builtin_stdout)>(*this, lib, "fstdout",
+                SideEffects::modifyExternal, "builtin_stdout");
+            addExtern<DAS_BIND_FUN(builtin_stderr)>(*this, lib, "fstderr",
+                SideEffects::modifyExternal, "builtin_stderr");
+            addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep",
+                SideEffects::modifyExternal, "builtin_sleep")
+                    ->arg("msec");
+            addExtern<DAS_BIND_FUN(getchar)>(*this, lib, "getchar",
+                SideEffects::modifyExternal, "getchar");
+            addExtern<DAS_BIND_FUN(builtin_exit)>(*this, lib, "exit",
+                SideEffects::modifyExternal, "builtin_exit")
+                    ->arg("exitCode")->unsafeOperation = true;
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
             // lets verify all names
