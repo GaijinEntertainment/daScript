@@ -17,7 +17,7 @@ Context * get_context( int stackSize = 0 ) {
     return new Context(stackSize);
 }
 
-Context * get_clone_context( Context * ctx ) {
-    return new Context(*ctx);
+Context * get_clone_context( Context * ctx, uint32_t category ) {
+    return new Context(*ctx, category);
 }
 
