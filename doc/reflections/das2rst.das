@@ -29,6 +29,7 @@ require daslib/is_local
 require daslib/safe_addr
 require daslib/static_let
 require daslib/lpipe
+require daslib/random
 
 def document_module_math(root:string)
     var mod = get_module("math")

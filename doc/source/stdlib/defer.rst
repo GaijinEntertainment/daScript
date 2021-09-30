@@ -33,7 +33,7 @@ Call macros
 Uncategorized
 +++++++++++++
 
-.. _function-_at_defer_c__c_defer__hh_const_hh__hh_block_hh__c_void:
+.. _function-_at_defer_c__c_defer_C1_ls_v_gr__builtin_:
 
 .. das:function:: defer(blk: block<void> const)
 

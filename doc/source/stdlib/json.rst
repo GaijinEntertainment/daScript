@@ -95,7 +95,7 @@ JsonValue fields are
 Uncategorized
 +++++++++++++
 
-.. _function-_at_json_c__c_JV__hh_array_hh__hh_ptr_hh_JsonValue:
+.. _function-_at_json_c__c_JV_1_ls_1_ls_S_ls_JsonValue_gr__gr_?_gr_A:
 
 .. das:function:: JV(v: array<json::JsonValue?>)
 
@@ -110,67 +110,7 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 |function-json-JV|
 
-.. _function-_at_json_c__c_JV__hh_const_hh__hh_ptr_hh_void:
-
-.. das:function:: JV(v: void? const)
-
-JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+v       +void? const  +
-+--------+-------------+
-
-
-|function-json-JV|
-
-.. _function-_at_json_c__c_JV__hh_const_hh_bool:
-
-.. das:function:: JV(v: bool const)
-
-JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+v       +bool const   +
-+--------+-------------+
-
-
-|function-json-JV|
-
-.. _function-_at_json_c__c_JV__hh_const_hh_double:
-
-.. das:function:: JV(v: double const)
-
-JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+v       +double const +
-+--------+-------------+
-
-
-|function-json-JV|
-
-.. _function-_at_json_c__c_JV__hh_const_hh_string:
-
-.. das:function:: JV(v: string const)
-
-JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+v       +string const +
-+--------+-------------+
-
-
-|function-json-JV|
-
-.. _function-_at_json_c__c_JV__hh_table_hh_string_hh__hh_ptr_hh_JsonValue:
+.. _function-_at_json_c__c_JV_1_ls_s_gr_2_ls_1_ls_S_ls_JsonValue_gr__gr_?_gr_T:
 
 .. das:function:: JV(v: table<string;json::JsonValue?>)
 
@@ -185,7 +125,67 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 |function-json-JV|
 
-.. _function-_at_json_c__c_read_json__hh_const_hh__hh_array_hh_uint8__hh_ref_hh_string:
+.. _function-_at_json_c__c_JV_C1_ls_v_gr_?:
+
+.. das:function:: JV(v: void? const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++v       +void? const  +
++--------+-------------+
+
+
+|function-json-JV|
+
+.. _function-_at_json_c__c_JV_Cb:
+
+.. das:function:: JV(v: bool const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++v       +bool const   +
++--------+-------------+
+
+
+|function-json-JV|
+
+.. _function-_at_json_c__c_JV_Cd:
+
+.. das:function:: JV(v: double const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++v       +double const +
++--------+-------------+
+
+
+|function-json-JV|
+
+.. _function-_at_json_c__c_JV_Cs:
+
+.. das:function:: JV(v: string const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++v       +string const +
++--------+-------------+
+
+
+|function-json-JV|
+
+.. _function-_at_json_c__c_read_json_C1_ls_u8_gr_A_&s:
 
 .. das:function:: read_json(text: array<uint8> const; error: string&)
 
@@ -202,7 +202,7 @@ read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 |function-json-read_json|
 
-.. _function-_at_json_c__c_read_json__hh_const_hh__hh_implicit_hh_string__hh_ref_hh_string:
+.. _function-_at_json_c__c_read_json_CIs_&s:
 
 .. das:function:: read_json(text: string const implicit; error: string&)
 
@@ -219,7 +219,7 @@ read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 |function-json-read_json|
 
-.. _function-_at_json_c__c_write_json__hh_const_hh__hh_ptr_hh_JsonValue:
+.. _function-_at_json_c__c_write_json_C1_ls_S_ls_JsonValue_gr__gr_?:
 
 .. das:function:: write_json(val: json::JsonValue? const)
 

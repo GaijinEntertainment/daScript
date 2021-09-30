@@ -23,25 +23,10 @@ Function annotations
 Safe temporary address
 ++++++++++++++++++++++
 
-  *  :ref:`safe_addr (x:auto(T) const& =const) : T -&? const# <function-_at_safe_addr_c__c_safe_addr__hh_const_hh__hh_ref_hh__hh_explicitconst_hh__hh_auto_hh_T>` 
-  *  :ref:`safe_addr (x:auto(T)& =const -const) : T -&?# <function-_at_safe_addr_c__c_safe_addr__hh_ref_hh__hh_explicitconst_hh__hh_auto_hh_T>` 
+  *  :ref:`safe_addr (x:auto(T)& =const -const) : T -&?# <function-_at_safe_addr_c__c_safe_addr_&_eq_Y_ls_T_gr_.>` 
+  *  :ref:`safe_addr (x:auto(T) const& =const) : T -&? const# <function-_at_safe_addr_c__c_safe_addr_C&_eq_Y_ls_T_gr_.>` 
 
-.. _function-_at_safe_addr_c__c_safe_addr__hh_const_hh__hh_ref_hh__hh_explicitconst_hh__hh_auto_hh_T:
-
-.. das:function:: safe_addr(x: auto(T) const& =const)
-
-safe_addr returns T? const#
-
-+--------+---------------+
-+argument+argument type  +
-+========+===============+
-+x       +auto(T) const&!+
-+--------+---------------+
-
-
-|function-safe_addr-safe_addr|
-
-.. _function-_at_safe_addr_c__c_safe_addr__hh_ref_hh__hh_explicitconst_hh__hh_auto_hh_T:
+.. _function-_at_safe_addr_c__c_safe_addr_&_eq_Y_ls_T_gr_.:
 
 .. das:function:: safe_addr(x: auto(T)& =const)
 
@@ -52,6 +37,21 @@ safe_addr returns T?#
 +========+=============+
 +x       +auto(T)&!    +
 +--------+-------------+
+
+
+|function-safe_addr-safe_addr|
+
+.. _function-_at_safe_addr_c__c_safe_addr_C&_eq_Y_ls_T_gr_.:
+
+.. das:function:: safe_addr(x: auto(T) const& =const)
+
+safe_addr returns T? const#
+
++--------+---------------+
++argument+argument type  +
++========+===============+
++x       +auto(T) const&!+
++--------+---------------+
 
 
 |function-safe_addr-safe_addr|

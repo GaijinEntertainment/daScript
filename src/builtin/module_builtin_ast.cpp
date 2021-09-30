@@ -2389,6 +2389,7 @@ namespace das {
     }
 
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo ) {
+        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
         vec4f args[1];
         if ( builtin_empty(name) ) {
             const auto & fnbn = module->functions;
@@ -2410,6 +2411,7 @@ namespace das {
     }
 
     void forEachGenericFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo ) {
+        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
         vec4f args[1];
         if ( builtin_empty(name) ) {
             const auto & fnbn = module->generics;

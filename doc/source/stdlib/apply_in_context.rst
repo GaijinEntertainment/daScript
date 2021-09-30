@@ -2,7 +2,7 @@
 .. _stdlib_apply_in_context:
 
 ================================
-Corss-context evaluation helpers
+Cross-context evaluation helpers
 ================================
 
 .. include:: detail/apply_in_context.rst

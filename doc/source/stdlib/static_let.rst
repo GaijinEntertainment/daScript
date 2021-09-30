@@ -23,10 +23,10 @@ Function annotations
 Static variable declarations
 ++++++++++++++++++++++++++++
 
-  *  :ref:`static_let (blk:block\<\> const) : void <function-_at_static_let_c__c_static_let__hh_const_hh__hh_block>` 
-  *  :ref:`static_let_finalize (blk:block\<\> const) : void <function-_at_static_let_c__c_static_let_finalize__hh_const_hh__hh_block>` 
+  *  :ref:`static_let (blk:block\<\> const) : void <function-_at_static_let_c__c_static_let_C_builtin_>` 
+  *  :ref:`static_let_finalize (blk:block\<\> const) : void <function-_at_static_let_c__c_static_let_finalize_C_builtin_>` 
 
-.. _function-_at_static_let_c__c_static_let__hh_const_hh__hh_block:
+.. _function-_at_static_let_c__c_static_let_C_builtin_:
 
 .. das:function:: static_let(blk: block<> const)
 
@@ -39,7 +39,7 @@ Static variable declarations
 
 |function-static_let-static_let|
 
-.. _function-_at_static_let_c__c_static_let_finalize__hh_const_hh__hh_block:
+.. _function-_at_static_let_c__c_static_let_finalize_C_builtin_:
 
 .. das:function:: static_let_finalize(blk: block<> const)
 

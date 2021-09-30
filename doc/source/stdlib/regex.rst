@@ -174,7 +174,7 @@ Regex fields are
 Uncategorized
 +++++++++++++
 
-.. _function-_at_regex_c__c_debug_set__hh_const_hh_uint_hh_8:
+.. _function-_at_regex_c__c_debug_set_C[8]Y_ls_CharSet_gr_u:
 
 .. das:function:: debug_set(cset: CharSet)
 
@@ -187,7 +187,7 @@ Uncategorized
 
 |function-regex-debug_set|
 
-.. _function-_at_regex_c__c_is_valid_Regex:
+.. _function-_at_regex_c__c_is_valid_S_ls_Regex_gr_:
 
 .. das:function:: is_valid(re: Regex)
 
@@ -202,7 +202,7 @@ is_valid returns bool
 
 |function-regex-is_valid|
 
-.. _function-_at_regex_c__c_re_early_out_uint_hh_8__hh_const_hh__hh_ptr_hh_ReNode:
+.. _function-_at_regex_c__c_re_early_out_[8]Y_ls_CharSet_gr_u_C1_ls_S_ls_ReNode_gr__gr_?:
 
 .. das:function:: re_early_out(cset: CharSet; node: regex::ReNode? const)
 
@@ -219,7 +219,7 @@ re_early_out returns bool
 
 |function-regex-re_early_out|
 
-.. _function-_at_regex_c__c_regex_compile__hh_const_hh_string:
+.. _function-_at_regex_c__c_regex_compile_Cs:
 
 .. das:function:: regex_compile(expr: string const)
 
@@ -234,7 +234,7 @@ regex_compile returns  :ref:`regex::Regex <struct-regex-Regex>`
 
 |function-regex-regex_compile|
 
-.. _function-_at_regex_c__c_regex_compile_Regex:
+.. _function-_at_regex_c__c_regex_compile_S_ls_Regex_gr_:
 
 .. das:function:: regex_compile(re: Regex)
 
@@ -249,7 +249,7 @@ regex_compile returns  :ref:`regex::Regex <struct-regex-Regex>`
 
 |function-regex-regex_compile|
 
-.. _function-_at_regex_c__c_regex_compile_Regex__hh_const_hh_string:
+.. _function-_at_regex_c__c_regex_compile_S_ls_Regex_gr__Cs:
 
 .. das:function:: regex_compile(re: Regex; expr: string const)
 
@@ -266,7 +266,7 @@ regex_compile returns bool
 
 |function-regex-regex_compile|
 
-.. _function-_at_regex_c__c_regex_debug__hh_const_hh_Regex:
+.. _function-_at_regex_c__c_regex_debug_CS_ls_Regex_gr_:
 
 .. das:function:: regex_debug(regex: Regex const)
 
@@ -279,7 +279,7 @@ regex_compile returns bool
 
 |function-regex-regex_debug|
 
-.. _function-_at_regex_c__c_regex_foreach_Regex__hh_const_hh_string__hh_const_hh__hh_block_hh__hh_const_hh_range_hh__rq_at_hh__c_bool:
+.. _function-_at_regex_c__c_regex_foreach_S_ls_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cr_gr_1_ls_b_gr__builtin_:
 
 .. das:function:: regex_foreach(regex: Regex; str: string const; blk: block<(at:range const):bool> const)
 
@@ -296,7 +296,7 @@ regex_compile returns bool
 
 |function-regex-regex_foreach|
 
-.. _function-_at_regex_c__c_regex_group__hh_const_hh_Regex__hh_const_hh_int__hh_const_hh_string:
+.. _function-_at_regex_c__c_regex_group_CS_ls_Regex_gr__Ci_Cs:
 
 .. das:function:: regex_group(regex: Regex const; index: int const; match: string const)
 
@@ -315,7 +315,7 @@ regex_group returns string
 
 |function-regex-regex_group|
 
-.. _function-_at_regex_c__c_regex_match_Regex__hh_const_hh_string__hh_const_hh_int:
+.. _function-_at_regex_c__c_regex_match_S_ls_Regex_gr__Cs_Ci:
 
 .. das:function:: regex_match(regex: Regex; str: string const; offset: int const)
 

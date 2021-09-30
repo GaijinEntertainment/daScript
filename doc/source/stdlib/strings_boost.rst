@@ -18,7 +18,7 @@ All functions and symbols are in "strings_boost" module, use require to get acce
 Uncategorized
 +++++++++++++
 
-.. _function-_at_strings_boost_c__c_split__hh_const_hh_string__hh_const_hh_string:
+.. _function-_at_strings_boost_c__c_split_Cs_Cs:
 
 .. das:function:: split(text: string const; delim: string const)
 
@@ -35,7 +35,7 @@ split returns array<string>
 
 |function-strings_boost-split|
 
-.. _function-_at_strings_boost_c__c_split_by_chars__hh_const_hh_string__hh_const_hh_string:
+.. _function-_at_strings_boost_c__c_split_by_chars_Cs_Cs:
 
 .. das:function:: split_by_chars(text: string const; delim: string const)
 
@@ -52,7 +52,7 @@ split_by_chars returns array<string>
 
 |function-strings_boost-split_by_chars|
 
-.. _function-_at_strings_boost_c__c_wide__hh_const_hh_string__hh_const_hh_int:
+.. _function-_at_strings_boost_c__c_wide_Cs_Ci:
 
 .. das:function:: wide(text: string const; width: int const)
 
@@ -69,7 +69,7 @@ wide returns string
 
 |function-strings_boost-wide|
 
-.. _function-_at_strings_boost_c__c_eq__hh_const_hh__hh_handle_hh_das_string__hh_const_hh_string:
+.. _function-_at_strings_boost_c__c_eq_CH_ls__builtin__c__c_das_string_gr__Cs:
 
 .. das:function:: eq(b: das_string const; a: string const)
 
@@ -86,7 +86,7 @@ eq returns auto
 
 |function-strings_boost-eq|
 
-.. _function-_at_strings_boost_c__c_eq__hh_const_hh_string__hh_const_hh__hh_handle_hh_das_string:
+.. _function-_at_strings_boost_c__c_eq_Cs_CH_ls__builtin__c__c_das_string_gr_:
 
 .. das:function:: eq(a: string const; b: das_string const)
 
@@ -103,7 +103,7 @@ eq returns auto
 
 |function-strings_boost-eq|
 
-.. _function-_at_strings_boost_c__c_is_character_at__hh_const_hh__hh_temporary_hh__hh_array_hh_uint8__hh_const_hh_int__hh_const_hh_int:
+.. _function-_at_strings_boost_c__c_is_character_at_C_hh_1_ls_u8_gr_A_Ci_Ci:
 
 .. das:function:: is_character_at(foo: array<uint8> const#; idx: int const; ch: int const)
 
@@ -122,7 +122,7 @@ is_character_at returns auto
 
 |function-strings_boost-is_character_at|
 
-.. _function-_at_strings_boost_c__c_join__hh_const_hh__hh_auto__hh_const_hh_string:
+.. _function-_at_strings_boost_c__c_join_C._Cs:
 
 .. das:function:: join(it: auto const; separator: string const)
 
@@ -139,7 +139,7 @@ join returns auto
 
 |function-strings_boost-join|
 
-.. _function-_at_strings_boost_c__c_split__hh_const_hh_string__hh_const_hh_string__hh_const_hh__hh_block_hh__hh_const_hh__hh_temporary_hh__hh_array_hh_string_hh__rq_arg_hh__c__hh_auto:
+.. _function-_at_strings_boost_c__c_split_Cs_Cs_CN_ls_arg_gr_0_ls_C_hh_1_ls_s_gr_A_gr_1_ls_._gr__builtin_:
 
 .. das:function:: split(text: string const; delim: string const; blk: block<(arg:array<string> const#):auto> const)
 
@@ -158,7 +158,7 @@ split returns auto
 
 |function-strings_boost-split|
 
-.. _function-_at_strings_boost_c__c_split_by_chars__hh_const_hh_string__hh_const_hh_string__hh_const_hh__hh_block_hh__hh_const_hh__hh_temporary_hh__hh_array_hh_string_hh__rq_arg_hh__c__hh_auto:
+.. _function-_at_strings_boost_c__c_split_by_chars_Cs_Cs_CN_ls_arg_gr_0_ls_C_hh_1_ls_s_gr_A_gr_1_ls_._gr__builtin_:
 
 .. das:function:: split_by_chars(text: string const; delim: string const; blk: block<(arg:array<string> const#):auto> const)
 

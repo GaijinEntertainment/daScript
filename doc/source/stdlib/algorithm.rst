@@ -13,7 +13,7 @@ Miscelanious algorithms
 Uncategorized
 +++++++++++++
 
-.. _function-_at_algorithm_c__c_combine__hh_const_hh__hh_array_hh__hh_auto_hh_TT__hh_const_hh__hh_array_hh__hh_auto_hh_TT:
+.. _function-_at_algorithm_c__c_combine_C1_ls_Y_ls_TT_gr_._gr_A_C1_ls_Y_ls_TT_gr_._gr_A:
 
 .. das:function:: combine(a: array<auto(TT)> const; b: array<auto(TT)> const)
 
@@ -30,7 +30,7 @@ combine returns auto
 
 |function-algorithm-combine|
 
-.. _function-_at_algorithm_c__c_reverse__hh_array_hh__hh_auto:
+.. _function-_at_algorithm_c__c_reverse_1_ls_._gr_A:
 
 .. das:function:: reverse(a: array<auto>)
 
