@@ -68,6 +68,7 @@ class AstFunctionAnnotation
 class AstStructureAnnotation
     def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
     def abstract finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+    def abstract patch ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
 
 class AstPassMacro
     def abstract apply ( prog:ProgramPtr; mod:Module? ) : bool
@@ -591,9 +592,27 @@ def add_new_typeinfo_macro ( name:string; someClassPtr )
     unsafe
         delete ann
 
-def add_new_pass_macro ( name:string; someClassPtr )
+def add_new_infer_macro ( name:string; someClassPtr )
+    var ann <- make_pass_macro(name, someClassPtr)
+    this_module() |> add_infer_macro(ann)
+    unsafe
+        delete ann
+
+def add_new_dirty_infer_macro ( name:string; someClassPtr )
     var ann <- make_pass_macro(name, someClassPtr)
     this_module() |> add_dirty_infer_macro(ann)
+    unsafe
+        delete ann
+
+def add_new_lint_macro ( name:string; someClassPtr )
+    var ann <- make_pass_macro(name, someClassPtr)
+    this_module() |> add_lint_macro(ann)
+    unsafe
+        delete ann
+
+def add_new_optimization_macro ( name:string; someClassPtr )
+    var ann <- make_pass_macro(name, someClassPtr)
+    this_module() |> add_optimization_macro(ann)
     unsafe
         delete ann
 

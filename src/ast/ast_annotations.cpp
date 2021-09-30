@@ -116,6 +116,19 @@ namespace das
                 }
             }
         }
+        for ( auto & sti : thisModule->structures ) {
+            auto st = sti.second;
+            for ( auto & ann : st->annotations ) {
+                if ( ann->annotation->rtti_isStructureAnnotation() ) {
+                    auto sann = static_pointer_cast<StructureAnnotation>(ann->annotation);
+                    string err;
+                    if ( !sann->patch(st, *thisModuleGroup, ann->arguments, err, astChanged) ) {
+                        error("structure annotation patch failed\n", err, "", st->at, CompilationError::annotation_failed );
+                    }
+                    if ( astChanged ) goto done;
+                }
+            }
+        }
     done:;
         return astChanged;
     }

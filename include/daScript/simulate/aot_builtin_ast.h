@@ -448,7 +448,10 @@ namespace das {
     void astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
     PassMacroPtr makePassMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     smart_ptr<VisitorAdapter> makeVisitor ( const void * pClass, const StructInfo * info, Context * context );
+    void addModuleInferMacro ( Module * module, PassMacroPtr & _newM, Context * );
     void addModuleInferDirtyMacro ( Module * module, PassMacroPtr & newM, Context * context );
+    void addModuleLintMacro ( Module * module, PassMacroPtr & _newM, Context * );
+    void addModuleOptimizationMacro ( Module * module, PassMacroPtr & _newM, Context * );
     VariantMacroPtr makeVariantMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleVariantMacro ( Module * module, VariantMacroPtr & newM, Context * context );
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & ann, Context * context );
@@ -485,7 +488,10 @@ namespace das {
     TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );
     void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line );
     bool isExprLikeCall ( const ExpressionPtr & expr );
+    bool isExprConst ( const ExpressionPtr & expr );
     bool isTempType ( TypeDeclPtr ptr, bool refMatters );
+    float4 evalSingleExpression ( const ExpressionPtr & expr, bool & ok );
+    ExpressionPtr makeCall ( const LineInfo & at, const char * name );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {

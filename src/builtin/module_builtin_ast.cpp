@@ -2078,6 +2078,14 @@ namespace das {
                 return true;
             }
         }
+        virtual bool patch (const StructurePtr & st, ModuleGroup & group,
+            const AnnotationArgumentList & args, string & errors, bool & astChanged ) override {
+            if ( auto fnPatch = get_patch(classPtr) ) {
+                return invoke_patch(context,fnPatch,classPtr,st,group,args,errors,astChanged);
+            } else {
+                return true;
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;
@@ -2310,9 +2318,24 @@ namespace das {
         module->variantMacros.push_back(newM);
     }
 
+    void addModuleInferMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
+        PassMacroPtr newM = move(_newM);
+        module->macros.push_back(newM);
+    }
+
     void addModuleInferDirtyMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
         PassMacroPtr newM = move(_newM);
         module->inferMacros.push_back(newM);
+    }
+
+    void addModuleLintMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
+        PassMacroPtr newM = move(_newM);
+        module->lintMacros.push_back(newM);
+    }
+
+    void addModuleOptimizationMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
+        PassMacroPtr newM = move(_newM);
+        module->optimizationMacros.push_back(newM);
     }
 
     EnumerationAnnotationPtr makeEnumerationAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
@@ -2687,6 +2710,10 @@ namespace das {
         return expr->rtti_isCallLikeExpr();
     }
 
+    bool isExprConst ( const ExpressionPtr & expr ) {
+        return expr->rtti_isConstant();
+    }
+
     bool isTempType ( TypeDeclPtr ptr, bool refMatters ) {
         return ptr->isTempType(refMatters);
     }
@@ -2694,6 +2721,16 @@ namespace das {
     ExpressionPtr makeCall ( const LineInfo & at, const char * name ) {
         name = name ? name : "";
         return g_Program->makeCall(at, name);
+    }
+
+    float4 evalSingleExpression ( const ExpressionPtr & expr, bool & ok ) {
+        ok = true;
+        das::Context ctx;
+        auto node = expr->simulate(ctx);
+        ctx.restart();
+        vec4f result = ctx.evalWithCatch(node);
+        if ( ctx.getException() ) ok = false;
+        return result;
     }
 
     class Module_Ast : public Module {
@@ -2999,8 +3036,19 @@ namespace das {
             addExtern<DAS_BIND_FUN(makePassMacro)>(*this, lib,  "make_pass_macro",
                 SideEffects::modifyExternal, "makePassMacro")
                     ->args({"name","class","info","context"});
+            addExtern<DAS_BIND_FUN(addModuleInferMacro)>(*this, lib,  "add_infer_macro",
+                SideEffects::modifyExternal, "addModuleInferMacro")
+                    ->args({"module","annotation","context"});
             addExtern<DAS_BIND_FUN(addModuleInferDirtyMacro)>(*this, lib,  "add_dirty_infer_macro",
                 SideEffects::modifyExternal, "addModuleInferDirtyMacro")
+                    ->args({"module","annotation","context"});
+            // lint macro
+            addExtern<DAS_BIND_FUN(addModuleLintMacro)>(*this, lib,  "add_lint_macro",
+                SideEffects::modifyExternal, "addModuleLintMacro")
+                    ->args({"module","annotation","context"});
+            // lint macro
+            addExtern<DAS_BIND_FUN(addModuleOptimizationMacro)>(*this, lib,  "add_optimization_macro",
+                SideEffects::modifyExternal, "addModuleOptimizationMacro")
                     ->args({"module","annotation","context"});
             // reader macro
             addExtern<DAS_BIND_FUN(makeReaderMacro)>(*this, lib,  "make_reader_macro",
@@ -3133,9 +3181,15 @@ namespace das {
             addExtern<DAS_BIND_FUN(isExprLikeCall)>(*this, lib,  "is_expr_like_call",
                 SideEffects::none, "isExprLikeCall")
                     ->arg("expression");
+            addExtern<DAS_BIND_FUN(isExprConst)>(*this, lib,  "is_expr_const",
+                SideEffects::none, "isExprConst")
+                    ->arg("expression");
             addExtern<DAS_BIND_FUN(makeCall)>(*this, lib,  "make_call",
                 SideEffects::none, "makeCall")
                     ->args({"at","name"});
+            addExtern<DAS_BIND_FUN(evalSingleExpression)>(*this, lib, "eval_single_expression",
+                SideEffects::none, "evalSingleExpression")
+                    ->args({"expr","ok"})->unsafeOperation = true;
             // errors
             addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
                 SideEffects::modifyArgumentAndExternal, "ast_error")

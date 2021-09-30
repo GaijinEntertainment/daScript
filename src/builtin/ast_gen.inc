@@ -116,14 +116,16 @@ protected:
   enum {
     __fn_apply = 0,
     __fn_finish = 1,
+    __fn_patch = 2,
   };
 protected:
-  static int _das_class_method_offset[2];
+  static int _das_class_method_offset[3];
 public:
   AstStructureAnnotation_Adapter ( const StructInfo * info ) {
     if ( _das_class_method_offset[0]==0 ) {
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
       _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
+      _das_class_method_offset[__fn_patch] = adapt_field_offset("patch",info);
     }
   }
   static __forceinline Func get_apply ( void * self ) {
@@ -144,8 +146,17 @@ public:
         (__context__,nullptr,__funcCall__,
           self,st,group,args,errors);
   }
+  static __forceinline Func get_patch ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_patch]);
+  }
+  static __forceinline bool invoke_patch ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> st, ModuleGroup & group, AnnotationArgumentList const  & args, das::string & errors, bool & astChanged ) {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<Structure>,ModuleGroup &,AnnotationArgumentList const  &,das::string &,bool &>
+        (__context__,nullptr,__funcCall__,
+          self,st,group,args,errors,astChanged);
+  }
 };
-int AstStructureAnnotation_Adapter::_das_class_method_offset[2];
+int AstStructureAnnotation_Adapter::_das_class_method_offset[3];
 
 class AstEnumerationAnnotation_Adapter {
 protected:

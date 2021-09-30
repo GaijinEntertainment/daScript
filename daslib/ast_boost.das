@@ -269,6 +269,18 @@ class SetupCallMacro : SetupAnyAnnotation
 class SetupTypeInfoMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_typeinfo_macro"
 
+class SetupInferMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_infer_macro"
+
+class SetupDirtyInferMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_dirty_infer_macro"
+
+class SetupLintMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_lint_macro"
+
+class SetupOptimizationMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_optimization_macro"
+
 class TagFunctionMacro : SetupAnyAnnotation
     override annotation_function_call : string = "setup_tag_annotation"
     tag : string
@@ -600,4 +612,9 @@ def private setup
         add_new_structure_annotation("variant_macro",new SetupVariantMacro())
         add_new_structure_annotation("tag_structure",new TagStructureAnnotation())
         add_new_structure_annotation("tag_function_macro",new TagFunctionMacro())
+        add_new_structure_annotation("infer_macro",new SetupInferMacro())
+        add_new_structure_annotation("dirty_infer_macro",new SetupDirtyInferMacro())
+        add_new_structure_annotation("optimization_macro",new SetupOptimizationMacro())
+        add_new_structure_annotation("lint_macro",new SetupLintMacro())
         add_new_variant_macro("better_rtti_in_expr", new BetterRttiVisitor())
+
