@@ -600,18 +600,17 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_from_array)>(*this, lib, "string",
                 SideEffects::none, "builtin_string_from_array")->args({"bytes","context"});
             // dup
-            auto bsd = addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
-                                                            SideEffects::modifyArgumentAndExternal, "builtin_strdup");
-            bsd->unsafeOperation = true;
+            addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
+                SideEffects::modifyArgumentAndExternal, "builtin_strdup")->arg("anything")->unsafeOperation = true;
             // regular string
             addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at",
                 SideEffects::none, "get_character_at")->args({"str","idx","context"});
             addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat",
                 SideEffects::none, "get_character_uat")->args({"str","idx"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat",
-                SideEffects::none, "string_repeat");
+                SideEffects::none, "string_repeat")->args({"str","count","context"});
             addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char",
-                SideEffects::none, "to_string_char");
+                SideEffects::none, "to_string_char")->args({"char","context"});
             addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with",
                 SideEffects::none, "builtin_string_endswith")->args({"str","cmp","context"});
             addExtern<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
@@ -643,15 +642,17 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
                 SideEffects::modifyArgumentAndExternal, "builtin_append_char_to_string")->args({"str","ch"});
             addExtern<DAS_BIND_FUN(builtin_resize_string)>(*this, lib, "resize",
-                SideEffects::modifyArgumentAndExternal, "builtin_resize_string");
+                SideEffects::modifyArgumentAndExternal, "builtin_resize_string")->args({"str","new_length"});
             addExtern<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
                 SideEffects::none, "builtin_ext_string_length")->arg("str");
             addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper",
                 SideEffects::none, "builtin_string_toupper")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower",
                 SideEffects::none, "builtin_string_tolower")->args({"str","context"});
-            addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty", SideEffects::none, "builtin_empty");
-            addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty", SideEffects::none, "builtin_empty_das_string");
+            addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty",
+                SideEffects::none, "builtin_empty")->arg("str");
+            addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty",
+                SideEffects::none, "builtin_empty_das_string")->arg("str");
             addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place",
                 SideEffects::none, "builtin_string_tolower_in_place")->arg("str")->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
@@ -660,34 +661,54 @@ namespace das
                 SideEffects::modifyExternal, "builtin_string_split_by_char")->args({"str","delimiter","block","context","lineinfo"});
             addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
                 SideEffects::modifyExternal, "builtin_string_split")->args({"str","delimiter","block","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int", SideEffects::none, "string_to_int");
-            addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint", SideEffects::none, "string_to_uint");
-            addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float", SideEffects::none, "string_to_float");
-            addExtern<DAS_BIND_FUN(string_to_double)>(*this, lib, "double", SideEffects::none, "string_to_double");
-            addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int", SideEffects::none, "fast_to_int");
-            addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float", SideEffects::none, "fast_to_float");
-            addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape", SideEffects::none, "builtin_string_escape");
-            addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape", SideEffects::none, "builtin_string_unescape");
-            addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace", SideEffects::none, "builtin_string_replace");
-            addExtern<DAS_BIND_FUN(builtin_string_rtrim)>(*this, lib, "rtrim", SideEffects::none, "builtin_string_rtrim");
+            addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int",
+                SideEffects::none, "string_to_int")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint",
+                SideEffects::none, "string_to_uint")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float",
+                SideEffects::none, "string_to_float")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(string_to_double)>(*this, lib, "double",
+                SideEffects::none, "string_to_double")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int",
+                SideEffects::none, "fast_to_int")->arg("value");
+            addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float",
+                SideEffects::none, "fast_to_float")->arg("value");
+            addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
+                SideEffects::none, "builtin_string_escape")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",
+                SideEffects::none, "builtin_string_unescape")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace",
+                SideEffects::none, "builtin_string_replace")->args({"str","toSearch","replace","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_rtrim)>(*this, lib, "rtrim",
+            SideEffects::none, "builtin_string_rtrim")->args({"str","context"});
             // format
-            addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format", SideEffects::none, "format<int32_t>");
-            addExtern<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format", SideEffects::none, "format<uint32_t>");
-            addExtern<DAS_BIND_FUN(format<int64_t>)> (*this, lib, "format", SideEffects::none, "format<int64_t>");
-            addExtern<DAS_BIND_FUN(format<uint64_t>)>(*this, lib, "format", SideEffects::none, "format<uint64_t>");
-            addExtern<DAS_BIND_FUN(format<float>)>   (*this, lib, "format", SideEffects::none, "format<float>");
-            addExtern<DAS_BIND_FUN(format<double>)>  (*this, lib, "format", SideEffects::none, "format<double>");
+            addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format",
+                SideEffects::none, "format<int32_t>")->args({"format","value","context"});
+            addExtern<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format",
+                SideEffects::none, "format<uint32_t>")->args({"format","value","context"});
+            addExtern<DAS_BIND_FUN(format<int64_t>)> (*this, lib, "format",
+                SideEffects::none, "format<int64_t>")->args({"format","value","context"});
+            addExtern<DAS_BIND_FUN(format<uint64_t>)>(*this, lib, "format",
+                SideEffects::none, "format<uint64_t>")->args({"format","value","context"});
+            addExtern<DAS_BIND_FUN(format<float>)>   (*this, lib, "format",
+                SideEffects::none, "format<float>")->args({"format","value","context"});
+            addExtern<DAS_BIND_FUN(format<double>)>  (*this, lib, "format",
+                SideEffects::none, "format<double>")->args({"format","value","context"});
             // queries
-            addExtern<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha", SideEffects::none, "is_alpha");
-            addExtern<DAS_BIND_FUN(is_new_line)> (*this, lib, "is_new_line", SideEffects::none, "is_new_line");
-            addExtern<DAS_BIND_FUN(is_white_space)> (*this, lib, "is_white_space", SideEffects::none, "is_white_space");
-            addExtern<DAS_BIND_FUN(is_number)> (*this, lib, "is_number", SideEffects::none, "is_number");
+            addExtern<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha",
+                SideEffects::none, "is_alpha")->arg("Character");
+            addExtern<DAS_BIND_FUN(is_new_line)> (*this, lib, "is_new_line",
+                SideEffects::none, "is_new_line")->arg("Character");
+            addExtern<DAS_BIND_FUN(is_white_space)> (*this, lib, "is_white_space",
+                SideEffects::none, "is_white_space")->arg("Character");
+            addExtern<DAS_BIND_FUN(is_number)> (*this, lib, "is_number",
+                SideEffects::none, "is_number")->arg("Character");
             // bitset helpers
             addExtern<DAS_BIND_FUN(is_char_in_set)>(*this, lib, "is_char_in_set",
-                SideEffects::none,"is_char_in_set");
+                SideEffects::none,"is_char_in_set")->args({"Character","Charset"});
             // string buffer
             addExtern<DAS_BIND_FUN(builtin_reserve_string_buffer)>(*this, lib, "reserve_string_buffer",
-                SideEffects::none,"builtin_reserve_string_buffer");
+                SideEffects::none,"builtin_reserve_string_buffer")->args({"str","length","context"});
             // lets make sure its all aot ready
             verifyAotReady();
         }
