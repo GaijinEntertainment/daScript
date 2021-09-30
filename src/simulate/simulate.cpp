@@ -765,7 +765,7 @@ namespace das
         });
     }
 
-    Context::Context(const Context & ctx): stack(ctx.stack.size()) {
+    Context::Context(const Context & ctx, uint32_t category_): stack(ctx.stack.size()) {
         persistent = ctx.persistent;
         code = ctx.code;
         constStringHeap = ctx.constStringHeap;
@@ -773,6 +773,7 @@ namespace das
         thisProgram = ctx.thisProgram;
         thisHelper = ctx.thisHelper;
         name = "clone of " + ctx.name;
+        category.value = category_;
         ownStack = (ctx.stack.size() != 0);
         if ( persistent ) {
             heap = make_smart<PersistentHeapAllocator>();
@@ -1221,7 +1222,7 @@ namespace das
     }
 }
 
-das::Context* get_clone_context( das::Context * ctx );//link time resolved dependencies
+das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
 
 namespace das
 {
@@ -1231,8 +1232,7 @@ namespace das
         shared_ptr<Context> forkContext;
         bool realPersistent = context->persistent;
         context->persistent = true;
-        forkContext.reset(get_clone_context(context));
-        forkContext->category.value |= uint32_t(ContextCategory::debug_context);
+        forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::debug_context)));
         context->persistent = realPersistent;
         g_isInDebugAgentCreation = false;
         vec4f args[1];

@@ -243,7 +243,8 @@ namespace das
         friend class Program;
     public:
         Context(uint32_t stackSize = 16*1024, bool ph = false);
-        Context(const Context &);
+        Context(const Context &, uint32_t category_);
+        Context(const Context &) = delete;
         Context & operator = (const Context &) = delete;
         virtual ~Context();
 
