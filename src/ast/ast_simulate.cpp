@@ -55,7 +55,7 @@ namespace das
 
     SimNode * makeLocalCMResCopy(const LineInfo & at, Context & context, uint32_t offset, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
-        assert ( rightType.canCopy() &&
+        DAS_ASSERT ( rightType.canCopy() &&
                 "we are calling makeLocalCMResCopy on a type, which can't be copied."
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
@@ -128,7 +128,7 @@ namespace das
 
     SimNode * makeLocalRefCopy(const LineInfo & at, Context & context, uint32_t stackTop, uint32_t offset, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
-        assert ( rightType.canCopy() &&
+        DAS_ASSERT ( rightType.canCopy() &&
                 "we are calling makeLocalRefCopy on a type, which can't be copied."
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
@@ -203,7 +203,7 @@ namespace das
 
     SimNode * makeLocalCopy(const LineInfo & at, Context & context, uint32_t stackTop, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
-        assert ( rightType.canCopy() &&
+        DAS_ASSERT ( rightType.canCopy() &&
                 "we are calling makeLocalCopy on a type, which can't be copied."
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
@@ -245,7 +245,7 @@ namespace das
 
     SimNode * makeCopy(const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
-        assert ( rightType.canCopy() &&
+        DAS_ASSERT ( rightType.canCopy() &&
                 "we are calling makeCopy on a type, which can't be copied."
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
@@ -338,15 +338,15 @@ namespace das
             return nullptr;
         }
         if ( fastCall ) {
-            assert(totalStackSize == sizeof(Prologue) && "function can't allocate stack");
-            assert((result->isWorkhorseType() || result->isVoid()) && "fastcall can only return a workhorse type");
-            assert(body->rtti_isBlock() && "function must contain a block");
+            DAS_ASSERT(totalStackSize == sizeof(Prologue) && "function can't allocate stack");
+            DAS_ASSERT((result->isWorkhorseType() || result->isVoid()) && "fastcall can only return a workhorse type");
+            DAS_ASSERT(body->rtti_isBlock() && "function must contain a block");
             auto block = static_pointer_cast<ExprBlock>(body);
-            assert(block->list.size()==1 && "fastcall is only one expr in a function body");
+            DAS_ASSERT(block->list.size()==1 && "fastcall is only one expr in a function body");
             if ( block->list.back()->rtti_isReturn() ) {
-                assert(block->list.back()->rtti_isReturn() && "fastcall body expr is return");
+                DAS_ASSERT(block->list.back()->rtti_isReturn() && "fastcall body expr is return");
                 auto retE = static_pointer_cast<ExprReturn>(block->list.back());
-                assert(retE->subexpr && "fastcall must return a value");
+                DAS_ASSERT(retE->subexpr && "fastcall must return a value");
                 return retE->subexpr->simulate(context);
             } else {
                 return block->list.back()->simulate(context);
@@ -400,7 +400,7 @@ namespace das
         int index = 0;
         for ( const auto & decl : variants ) {
             auto fieldVariant = makeType->findArgumentIndex(decl->name);
-            assert(fieldVariant!=-1 && "should have failed in type infer otherwise");
+            DAS_ASSERT(fieldVariant!=-1 && "should have failed in type infer otherwise");
             auto fieldType = makeType->argTypes[fieldVariant];
             if ( decl->value->rtti_isMakeLocal() ) {
                 auto fieldOffset = makeType->getVariantFieldOffset(fieldVariant);
@@ -446,7 +446,7 @@ namespace das
         // now fields
         for ( const auto & decl : variants ) {
             auto fieldVariant = makeType->findArgumentIndex(decl->name);
-            assert(fieldVariant!=-1 && "should have failed in type infer otherwise");
+            DAS_ASSERT(fieldVariant!=-1 && "should have failed in type infer otherwise");
             // lets set variant index
             uint32_t voffset = extraOffset + index*stride;
             auto vconst = make_smart<ExprConstInt>(at, int32_t(fieldVariant));
@@ -573,7 +573,7 @@ namespace das
                 auto & fields = structs[index];
                 for ( const auto & decl : *fields ) {
                     auto field = makeType->structType->findField(decl->name);
-                    assert(field && "should have failed in type infer otherwise");
+                    DAS_ASSERT(field && "should have failed in type infer otherwise");
                     uint32_t offset =  extraOffset + index*stride + field->offset;
                     SimNode * cpy;
                     if ( decl->value->rtti_isMakeLocal() ) {
@@ -981,7 +981,7 @@ namespace das
     }
 
     SimNode * ExprAddr::simulate (Context & context) const {
-        assert(func->index>=0 && "how, we specified in the unused");
+        DAS_ASSERT(func->index>=0 && "how, we specified in the unused");
         Func fn; fn.index = func->index + 1;
         vec4f cval = v_zero();
         memcpy (&cval, &fn, sizeof(Func));
@@ -1262,7 +1262,7 @@ namespace das
                 return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, false, false);
             } else {
                 auto ann = subexpr->type->firstType->annotation;
-                assert(ann->canDeletePtr() && "has to be able to delete ptr");
+                DAS_ASSERT(ann->canDeletePtr() && "has to be able to delete ptr");
                 auto resN = ann->simulateDeletePtr(context, at, sube, total);
                 if ( !resN ) {
                     context.thisProgram->error("integration error, simulateDelete returned null", "", "",
@@ -1272,7 +1272,7 @@ namespace das
             }
         } else if ( subexpr->type->baseType==Type::tHandle ) {
             auto ann = subexpr->type->annotation;
-            assert(ann->canDelete() && "has to be able to delete");
+            DAS_ASSERT(ann->canDelete() && "has to be able to delete");
             auto resN =  ann->simulateDelete(context, at, sube, total);
             if ( !resN ) {
                 context.thisProgram->error("integration error, simulateDelete returned null", "", "",
@@ -1322,7 +1322,7 @@ namespace das
     SimNode * ExprNew::simulate (Context & context) const {
         SimNode * newNode;
         if ( typeexpr->baseType == Type::tHandle ) {
-            assert(typeexpr->annotation->canNew() && "how???");
+            DAS_ASSERT(typeexpr->annotation->canNew() && "how???");
             newNode = typeexpr->annotation->simulateGetNew(context, at);
             if ( !newNode ) {
                 context.thisProgram->error("integration error, simulateGetNew returned null", "", "",
@@ -1976,7 +1976,7 @@ namespace das
                 }
             }
         } else {
-            assert(variable->index >= 0 && "using variable which is not used. how?");
+            DAS_ASSERT(variable->index >= 0 && "using variable which is not used. how?");
             uint32_t mnh = variable->getMangledNameHash();
             if ( variable->global_shared ) {
                 if ( r2v ) {
@@ -2398,7 +2398,7 @@ namespace das
             auto flagsE = body->getEvalFlags();
             bool NF = flagsE == 0;
             SimNode_ForBase * result;
-            assert(body->rtti_isBlock() && "there would be internal error otherwise");
+            DAS_ASSERT(body->rtti_isBlock() && "there would be internal error otherwise");
             auto subB = static_pointer_cast<ExprBlock>(body);
             bool loop1 = (subB->list.size() == 1);
 #if DAS_DEBUGGER
@@ -2416,7 +2416,7 @@ namespace das
                         result = (SimNode_ForBase *)context.code->makeNodeUnrollNZ_FOR<SimNodeDebug_ForFixedArray>(total, at);
                     }
                 } else if ( rangeBase ) {
-                    assert(total==1 && "simple range on 1 loop only");
+                    DAS_ASSERT(total==1 && "simple range on 1 loop only");
                     bool isSigned = sources[0]->type->baseType == Type::tRange;
                     if ( NF ) {
                         if (loop1) {
@@ -2452,7 +2452,7 @@ namespace das
                         result = (SimNode_ForBase *)context.code->makeNodeUnrollNZ_FOR<SimNode_ForFixedArray>(total, at);
                     }
                 } else if ( rangeBase ) {
-                    assert(total==1 && "simple range on 1 loop only");
+                    DAS_ASSERT(total==1 && "simple range on 1 loop only");
                     bool isSigned = sources[0]->type->baseType == Type::tRange;
                     if ( NF ) {
                         if (loop1) {

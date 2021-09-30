@@ -1310,7 +1310,8 @@ namespace das
     }
 
     void Context::throw_fatal_error ( const char * message, const LineInfo & at ) {
-        exception = message;
+        exceptionMessage = message;
+        exception = exceptionMessage.c_str();
         exceptionAt = at;
 #if DAS_ENABLE_EXCEPTIONS
         if ( breakOnException ) breakPoint(at, "exception", message);

@@ -86,6 +86,7 @@ namespace das {
         bool isIndex() const;
         bool isInteger() const;
         bool isNumeric() const;
+        bool isNumericStorage() const;
         bool isNumericComparable() const;
         bool isPointer() const;
         bool isVoidPointer() const;

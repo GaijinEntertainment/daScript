@@ -4563,17 +4563,26 @@ namespace das {
                         }
                     } else {
                         if ( verbose ) {
-                            TextWriter tw;
-                            tw << "\t" << *expr->left << " " << expr->op << " " << das_to_string(expr->left->type->baseType) << " (" << *expr->right << ")\n";
-                            tw << "\t" << das_to_string(expr->right->type->baseType) << "(" << *expr->left << ") " << expr->op << " " << *expr->right << "\n";
-                            error("numeric operator " + expr->op + " type mismatch. both sides have to be of the same type. " +
-                                das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType)
-                                + " is not defined", "", "try one of the following\n" + tw.str(),
-                                expr->at, CompilationError::operator_not_found);
+                            if ( expr->left->type->baseType != expr->right->type->baseType ) {
+                                TextWriter tw;
+                                tw << "\t" << *expr->left << " " << expr->op << " " << das_to_string(expr->left->type->baseType) << " (" << *expr->right << ")\n";
+                                tw << "\t" << das_to_string(expr->right->type->baseType) << "(" << *expr->left << ") " << expr->op << " " << *expr->right << "\n";
+                                error("numeric operator " + expr->op + " type mismatch. both sides have to be of the same type. " +
+                                    das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType)
+                                        + " is not defined", "", "try one of the following\n" + tw.str(),
+                                        expr->at, CompilationError::operator_not_found);
+                            } else if ( expr->left->type->isNumericStorage()  ) {
+                                error("numeric operator " + expr->op + " is not defined for storage types (int8,uint8,int16,uint16).",
+                                    "\t" + das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType),
+                                        "", expr->at, CompilationError::operator_not_found);
+                            } else {
+                                error("numeric operator " + expr->op + " type mismatch.",
+                                    "\t" + das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType),
+                                        "", expr->at, CompilationError::operator_not_found);
+                            }
                         } else {
-                            error("numeric operator " + expr->op + " type mismatch. both sides have to be of the same type. ", "" , "",
+                            error("numeric operator " + expr->op + " type mismatch.", "" , "",
                                 expr->at, CompilationError::operator_not_found);
-
                         }
                     }
                 } else if (functions.size() == 0) {

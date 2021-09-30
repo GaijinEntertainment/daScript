@@ -641,6 +641,7 @@ namespace das
         vec4f *         abiArg;
         void *          abiCMRES;
     public:
+        string          exceptionMessage;
         const char *    exception = nullptr;
         LineInfo        exceptionAt;
 #if !DAS_ENABLE_EXCEPTIONS

@@ -1961,6 +1961,19 @@ namespace das
         return false;
     }
 
+    bool TypeDecl::isNumericStorage() const {
+        if (dim.size() != 0) return false;
+        switch (baseType) {
+        case Type::tInt8:
+        case Type::tUInt8:
+        case Type::tInt16:
+        case Type::tUInt16:
+            return true;
+        default:;
+        }
+        return false;
+    }
+
     bool TypeDecl::isNumericComparable() const {
         if (dim.size() != 0) return false;
         switch (baseType) {
