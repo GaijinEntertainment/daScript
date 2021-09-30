@@ -356,9 +356,12 @@ namespace das {
             program->isCompiling = false;
             if ( !program->failed() ) {
                 if ( program->needMacroModule ) {
-                    program->markSymbolUse(false, false, true);
-                    program->allocateStack(logs);
-                    program->makeMacroModule(logs);
+                    if (!program->failed())
+                        program->markSymbolUse(false, false, true);
+                    if (!program->failed())
+                        program->allocateStack(logs);
+                    if (!program->failed())
+                        program->makeMacroModule(logs);
                 }
             }
             if ( program->options.getBoolOption("log_compile_time",false) ) {
@@ -427,6 +430,11 @@ namespace das {
                 }
             }
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, false, policies);
+            if ( !res->failed() ) {
+                if ( res->options.getBoolOption("log_symbol_use") ) {
+                    res->markSymbolUse(false, false, false, &logs);
+                }
+            }
             /*
             if ( res->promoteToBuiltin ) {
                 res->thisModule->promoteToBuiltin(access);

@@ -28,9 +28,19 @@ namespace das {
     public:
         MarkSymbolUse ( bool bid ) : builtInDependencies(bid) {
         }
+        __forceinline void push ( const string & text ) {
+            if ( !tw ) return;
+            *tw << string(logTab,'\t') << text << "\n";
+            logTab ++;
+        }
+        __forceinline void pop () {
+            if ( !tw ) return;
+            logTab --;
+        }
         void propageteVarUse(const VariablePtr & var) {
             assert(var);
             if (var->used) return;
+            push(var->getMangledName());
             var->used = true;
             for (const auto & gv : var->useGlobalVariables) {
                 propageteVarUse(gv);
@@ -38,11 +48,13 @@ namespace das {
             for (const auto & it : var->useFunctions) {
                 propagateFunctionUse(it);
             }
+            pop();
         }
         void propagateFunctionUse(const FunctionPtr & fn) {
             assert(fn);
             if (fn->used) return;
             if (fn->builtIn) return;
+            push(fn->getMangledName());
             fn->used = true;
             for (const auto & gv : fn->useGlobalVariables) {
                 propageteVarUse(gv);
@@ -50,6 +62,7 @@ namespace das {
             for (const auto & it : fn->useFunctions) {
                 propagateFunctionUse(it);
             }
+            pop();
         }
         void markVarsUsed( ModuleLibrary & lib, bool forceAll ){
             lib.foreach([&](Module * pm) {
@@ -101,6 +114,9 @@ namespace das {
         FunctionPtr func;
         Variable *  gVar = nullptr;
         bool        builtInDependencies;
+        int         logTab = 0;
+    public:
+        TextWriter * tw = nullptr;
     protected:
         // global variable declaration
         virtual void preVisitGlobalLet(const VariablePtr & var) override {
@@ -226,9 +242,10 @@ namespace das {
         }
     }
 
-    void Program::markSymbolUse(bool builtInSym, bool forceAll, bool initThis) {
+    void Program::markSymbolUse(bool builtInSym, bool forceAll, bool initThis, TextWriter * logs) {
         clearSymbolUse();
         MarkSymbolUse vis(builtInSym);
+        vis.tw = logs;
         visit(vis);
         vis.markUsedFunctions(library, forceAll, initThis);
         vis.markVarsUsed(library, forceAll);

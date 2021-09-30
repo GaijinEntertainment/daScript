@@ -1129,7 +1129,7 @@ namespace das
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
         void optimize(TextWriter & logs, ModuleGroup & libGroup);
-        void markSymbolUse(bool builtInSym, bool forceAll, bool initThis);
+        void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, TextWriter * logs = nullptr);
         void clearSymbolUse();
         void markOrRemoveUnusedSymbols(bool forceAll = false);
         void allocateStack(TextWriter & logs);
