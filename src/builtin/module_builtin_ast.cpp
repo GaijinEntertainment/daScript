@@ -1233,14 +1233,20 @@ namespace das {
 
     struct SimNode_AstGetTypeDecl : SimNode_CallBase {
         DAS_PTR_NODE;
-        SimNode_AstGetTypeDecl ( const LineInfo & at, const TypeDeclPtr & d )
+        SimNode_AstGetTypeDecl ( const LineInfo & at, const TypeDeclPtr & d, char * dE )
             : SimNode_CallBase(at) {
             typeExpr = d.get();
+            descr = dE;
+        }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            auto that = (SimNode_AstGetTypeDecl *) SimNode::copyNode(context, code);
+            that->descr = code->allocateName(descr);
+            return that;
         }
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(AstGetTypeDecl);
-            V_ARG(typeExpr->getMangledName().c_str());
+            V_ARG(descr);
             V_END();
         }
         __forceinline char * compute(Context &) {
@@ -1248,18 +1254,25 @@ namespace das {
             return (char *) typeExpr;
         }
         TypeDecl *  typeExpr;   // requires RTTI
+        char *      descr;
     };
 
     struct SimNode_AstGetFunction : SimNode_CallBase {
         DAS_PTR_NODE;
-        SimNode_AstGetFunction ( const LineInfo & at, Function * f )
+        SimNode_AstGetFunction ( const LineInfo & at, Function * f, char * dE )
             : SimNode_CallBase(at) {
             func = f;
+            descr = dE;
+        }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
+            auto that = (SimNode_AstGetFunction *) SimNode::copyNode(context, code);
+            that->descr = code->allocateName(descr);
+            return that;
         }
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(AstGetTypeDecl);
-            V_ARG(func->getMangledName().c_str());
+            V_ARG(descr);
             V_END();
         }
         __forceinline char * compute(Context &) {
@@ -1267,6 +1280,7 @@ namespace das {
             return (char *) func;
         }
         Function *  func;   // requires RTTI
+        char *      descr;
     };
 
     struct AstTypeDeclMacro : TypeInfoMacro {
@@ -1276,7 +1290,8 @@ namespace das {
         }
         virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) override {
             auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
-            return context->code->makeNode<SimNode_AstGetTypeDecl>(expr->at, exprTypeInfo->typeexpr);
+            char * descr = context->code->allocateName(exprTypeInfo->typeexpr->getMangledName());
+            return context->code->makeNode<SimNode_AstGetTypeDecl>(expr->at, exprTypeInfo->typeexpr, descr);
         }
         virtual bool noAot ( const ExpressionPtr & ) const override {
             return true;
@@ -1292,7 +1307,8 @@ namespace das {
             auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
             if ( exprTypeInfo->subexpr && exprTypeInfo->subexpr->rtti_isAddr() ) {
                 auto exprAddr = static_pointer_cast<ExprAddr>(exprTypeInfo->subexpr);
-                return context->code->makeNode<SimNode_AstGetFunction>(expr->at, exprAddr->func);
+                char * descr = context->code->allocateName(exprAddr->func->getMangledName());
+                return context->code->makeNode<SimNode_AstGetFunction>(expr->at, exprAddr->func, descr);
             } else {
                 errors = "ast_expression requires @@func expression";
                 return nullptr;

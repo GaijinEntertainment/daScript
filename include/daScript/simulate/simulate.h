@@ -46,10 +46,13 @@ namespace das
 
     enum class ContextCategory : uint32_t {
         none =              0
-    ,   debug_context =     (1<<0)
-    ,   thread_clone =      (1<<1)
-    ,   job_clone =         (1<<2)
-    ,   opengl =            (1<<3)
+    ,   dead =              (1<<0)
+    ,   debug_context =     (1<<1)
+    ,   thread_clone =      (1<<2)
+    ,   job_clone =         (1<<3)
+    ,   opengl =            (1<<4)
+    ,   debugger_tick =     (1<<5)
+    ,   debugger_attached = (1<<6)
     };
 
     struct GlobalVariable {

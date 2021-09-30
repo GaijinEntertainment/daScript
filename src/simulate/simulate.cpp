@@ -835,6 +835,7 @@ namespace das
 
     Context::~Context() {
         // unregister
+        category.value |= uint32_t(ContextCategory::dead);
         // register
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             pAgent->onDestroyContext(this);
