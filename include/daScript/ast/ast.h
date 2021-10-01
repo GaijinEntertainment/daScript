@@ -11,6 +11,10 @@
 #include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/aot_library.h"
 
+#ifndef DAS_ALLOW_ANNOTATION_LOOKUP
+#define DAS_ALLOW_ANNOTATION_LOOKUP     1
+#endif
+
 namespace das
 {
     class Function;
@@ -969,6 +973,7 @@ namespace das
         void foreach_in_order ( const callable<bool (Module * module)> & func, Module * thisM ) const;
         vector<TypeDeclPtr> findAlias ( const string & name, Module * inWhichModule ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name, Module * inWhichModule ) const;
+        vector<AnnotationPtr> findStaticAnnotation ( const string & name ) const;
         vector<TypeInfoMacroPtr> findTypeInfoMacro ( const string & name, Module * inWhichModule ) const;
         vector<EnumerationPtr> findEnum ( const string & name, Module * inWhichModule ) const;
         vector<StructurePtr> findStructure ( const string & name, Module * inWhichModule ) const;

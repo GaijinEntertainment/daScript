@@ -731,10 +731,35 @@ namespace das {
         return t;
     }
 
+    vector<AnnotationPtr> ModuleLibrary::findStaticAnnotation ( const string & name ) const {
+        vector<AnnotationPtr> ptr;
+        string moduleName, annName;
+        splitTypeName(name, moduleName, annName);
+        Module::foreach([&](Module * pm) -> bool {
+            if ( auto pp = pm->findAnnotation(annName) )
+                ptr.push_back(pp);
+            return true;
+        });
+        return ptr;
+    }
+
     TypeDeclPtr ModuleLibrary::makeHandleType ( const string & name ) const {
         auto t = make_smart<TypeDecl>(Type::tHandle);
         auto handles = findAnnotation(name,nullptr);
+#if DAS_ALLOW_ANNOTATION_LOOKUP
+        bool need_require = false;
+        if ( handles.size()==0 ) {
+            handles = findStaticAnnotation(name);
+            need_require = true;
+        }
+#endif
         if ( handles.size()==1 ) {
+#if DAS_ALLOW_ANNOTATION_LOOKUP
+            if ( need_require ) {
+                ModuleLibrary * THAT = (ModuleLibrary *) this;
+                THAT->addModule(handles.back()->module);
+            }
+#endif
             if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
                 t->annotation = static_cast<TypeAnnotation*>(handles.back().get());
             } else {
@@ -744,10 +769,25 @@ namespace das {
             }
         } else if ( handles.size()==0 ) {
             DAS_FATAL_LOG("makeHandleType(%s) failed, missing annotation\n", name.c_str());
+#if DAS_ALLOW_ANNOTATION_LOOKUP
+            DAS_FATAL_LOG("NEED_MODULE(Module_<name>) with %s needs to be before this module binding.\n", name.c_str());
+            DAS_FATAL_LOG("Explicit lib.addModule(require(\"<name>\")); would be preferable.\n");
+#else
+            DAS_FATAL_LOG("In the bound module missing is lib.addModule(require(\"module-name\")) which contains module-name::%s\n", name.c_str());
+            Module::foreach([&](Module * mod){
+                if ( mod->findAnnotation(name) ) {
+                    DAS_FATAL_LOG("\tLikely candidate is lib.addModule(require(\"%s\"));\n", mod->name.c_str());
+                }
+                return true;
+            });
+#endif
             DAS_FATAL_ERROR;
             return nullptr;
         } else {
             DAS_FATAL_LOG("makeHandleType(%s) failed, duplicate annotation\n", name.c_str());
+            for ( auto & h : handles ) {
+                DAS_FATAL_LOG("\t%s::%s\n", h->name.c_str(), name.c_str());
+            }
             DAS_FATAL_ERROR;
             return nullptr;
         }
