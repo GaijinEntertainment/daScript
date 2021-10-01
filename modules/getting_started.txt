@@ -9,6 +9,9 @@ git submodule update
 make sure conan is visible from the command line, i.e. path to python scripts is there
 pip will warn you during install and give the correct path
 
+run connan in necessary submodules.
+i.e. conan install . in dasImGui, dasGlfw, and anywhere else with connan files.
+
 IF U NEED VULKAN
 
 3. cd modules\dasVulkan			
