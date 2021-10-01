@@ -342,12 +342,18 @@ namespace das
             DAS_ASSERT((result->isWorkhorseType() || result->isVoid()) && "fastcall can only return a workhorse type");
             DAS_ASSERT(body->rtti_isBlock() && "function must contain a block");
             auto block = static_pointer_cast<ExprBlock>(body);
-            DAS_ASSERT(block->list.size()==1 && "fastcall is only one expr in a function body");
+            if ( block->list.size()==0 ) {
+                DAS_ASSERT(block->inFunction && block->inFunction->result->isVoid() && "only void function produces fastcall NOP");
+                return context.code->makeNode<SimNode_NOP>(block->at);
+            }
             if ( block->list.back()->rtti_isReturn() ) {
                 DAS_ASSERT(block->list.back()->rtti_isReturn() && "fastcall body expr is return");
                 auto retE = static_pointer_cast<ExprReturn>(block->list.back());
-                DAS_ASSERT(retE->subexpr && "fastcall must return a value");
-                return retE->subexpr->simulate(context);
+                if ( retE->subexpr ) {
+                    return retE->subexpr->simulate(context);
+                } else {
+                    return context.code->makeNode<SimNode_NOP>(retE->at);
+                }
             } else {
                 return block->list.back()->simulate(context);
             }
@@ -1590,6 +1596,10 @@ namespace das
     SimNode * ExprBlock::simulate (Context & context) const {
         das_map<int32_t,uint32_t> ofsmap;
         vector<SimNode *> simlist = collectExpressions(context, list, &ofsmap);
+        // wow, such empty
+        if ( finalList.size()==0 && simlist.size()==0 ) {
+            return context.code->makeNode<SimNode_NOP>(at);
+        }
         // we memzero block's stack memory, if there is a finally section
         // bad scenario we fight is ( in scope X ; return ; in scope Y )
         if ( finalList.size() ) {

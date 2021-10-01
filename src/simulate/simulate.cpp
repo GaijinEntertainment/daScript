@@ -96,6 +96,10 @@ namespace das
         return cast<char *>::to(eval(context));
     }
 
+    vec4f SimNode_NOP::eval ( Context & context ) {
+        return v_zero();
+    }
+
     vec4f SimNode_DeleteStructPtr::eval ( Context & context ) {
         DAS_PROFILE_NODE
         auto pStruct = (char **) subexpr->evalPtr(context);

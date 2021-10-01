@@ -193,6 +193,14 @@ namespace das {
         SimSource   subexpr;
     };
 
+    // NOP
+
+    struct SimNode_NOP : SimNode {
+        SimNode_NOP ( const LineInfo & s ) : SimNode(s) {}
+        virtual vec4f eval ( Context & context ) override;
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+    };
+
     // Delete structures
     struct SimNode_DeleteStructPtr : SimNode_Delete {
         SimNode_DeleteStructPtr ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t ss, bool ps, bool isL )
