@@ -45,7 +45,7 @@
 #   define DAS_YYDEBUG 0
 #  endif
 # else /* ! defined YYDEBUG */
-#  define DAS_YYDEBUG 1
+#  define DAS_YYDEBUG 0
 # endif /* ! defined YYDEBUG */
 #endif  /* ! defined DAS_YYDEBUG */
 #if DAS_YYDEBUG

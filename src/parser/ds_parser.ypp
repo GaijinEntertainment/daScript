@@ -87,7 +87,7 @@
 
 %locations
 %verbose
-%debug
+// %debug
 
 %define parse.error verbose
 
@@ -2128,7 +2128,7 @@ enum_list
 
 
 single_alias
-    :   NAME[name] '=' type_declaration[tdecl] ';' {
+    :   NAME[name] '=' type_declaration[tdecl] {
         das_checkName(*$name,tokAt(@name));
         $tdecl->alias = *$name;
         if ( !g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
@@ -2140,12 +2140,13 @@ single_alias
     ;
 
 alias_list
-    :   single_alias
-    |   alias_list single_alias
+    :   single_alias ';'
+    |   alias_list single_alias ';'
     ;
 
 alias_declaration
     :   DAS_TYPEDEF '{' alias_list '}'
+    |   DAS_TYPEDEF single_alias
     ;
 
 optional_public_or_private_enum

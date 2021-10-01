@@ -3993,8 +3993,6 @@ void yyfree (void * ptr )
 #line 679 "ds_lexer.lpp"
 
 
-extern int das_yydebug;
-
 void das_yybegin_reader ( void ) {
     BEGIN(reader);
 }
@@ -4003,11 +4001,17 @@ void das_yyend_reader ( void ) {
     BEGIN(normal);
 }
 
+#if DAS_YYDEBUG
+extern int das_yydebug;
+#endif
+
 void das_yybegin(const char * str) {
     g_thisStructure = nullptr;
     das_module_alias.clear();
     das_already_include.clear();
+#if DAS_YYDEBUG
     das_yydebug = 0;
+#endif
     yylineno = 1;
     das_tab_size = das_def_tab_size;
     das_line_no.clear();

@@ -348,8 +348,6 @@ bool run_module_test ( const string & path, const string & main, bool usePak ) {
     }
 }
 
-extern int das_yydebug;
-
 int main( int argc, char * argv[] ) {
     if ( argc>2 ) {
         tout << "daScriptTest [pathToDasRoot]\n";
