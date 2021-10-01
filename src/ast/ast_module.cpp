@@ -593,7 +593,7 @@ namespace das {
     }
 
     bool ModuleLibrary::addModule ( Module * module ) {
-        DAS_ASSERTF(module, "module not found? or you have forgotten to NEED_MODULE(Module_<name>) be called first before3 addModule(require(<name>))");
+        DAS_ASSERTF(module, "module not found? or you have forgotten to NEED_MODULE(Module_<name>) be called first before addModule(require(<name>))");
         if ( module ) {
             if ( find(modules.begin(),modules.end(),module)==modules.end() ) {
                 for ( auto dep : module->requireModule ) {
