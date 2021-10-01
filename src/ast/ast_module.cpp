@@ -586,11 +586,14 @@ namespace das {
     // MODULE LIBRARY
 
     void ModuleLibrary::addBuiltInModule () {
-        addModule(Module::require("$"));
+        Module * module = Module::require("$");
+        DAS_ASSERTF(module, "builtin module not found? or you have forgotten to NEED_MODULE(Module_BuiltIn) be called first");
+        if (module)
+            addModule(module);
     }
 
     bool ModuleLibrary::addModule ( Module * module ) {
-        DAS_ASSERTF(module, "module not found? or you have forgotten to NEED_MODULE(Module_BuiltIn) be called first");
+        DAS_ASSERTF(module, "module not found? or you have forgotten to NEED_MODULE(Module_<name>) be called first before3 addModule(require(<name>))");
         if ( module ) {
             if ( find(modules.begin(),modules.end(),module)==modules.end() ) {
                 for ( auto dep : module->requireModule ) {
