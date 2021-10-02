@@ -195,6 +195,8 @@ namespace das
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else if ( rightType.isPointer() && rightType.smartPtr ) {
             return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
+        } else if ( rightType.isLambda() ) {
+            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
         } else {
             DAS_ASSERTF(0, "we are calling makeLocalMove where expression on a right is not a referece."
                         "we should not be here, script compiler should have caught this during compilation."

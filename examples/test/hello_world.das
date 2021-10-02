@@ -12,6 +12,35 @@ struct Foo
 
 [export]
 def main
+    // test_create_delete()
+    test_update();
+
+def test_update
+    print("TEST UPDATE\n")
+    static_let <|
+        var migr : EntityId
+    print("before:\n")
+    create_entity <| @ ( eid, cmp )
+        cmp |> set("pos", float3(1,2,3))
+        cmp |> set("vel", float3(0.,-9.8,0.))
+        migr = eid
+    commit()
+    debug_dump()
+    print("after add:\n")
+    migr |> update_entity <| @ ( eid, cmp )
+        cmp |> set("color", float4(1,0,0,1))
+        migr = eid
+    commit()
+    debug_dump()
+    print("after remove:\n")
+    migr |> update_entity <| @ ( eid, cmp )
+        cmp |> remove("vel")
+        migr = eid
+    commit()
+    debug_dump()
+
+def test_create_delete
+    print("TEST CREATE-DELETE\n")
     print("creating:\n")
     create_entity <| @ ( eid, cmp )
         print("eid = {eid}\n")
@@ -43,9 +72,5 @@ def main
     commit()
     debug_dump()
 
-
 options debugger
 require daslib/debug
-
-
-

@@ -35,7 +35,6 @@ struct private Archetype
     hash : ComponentHash
     components : array<Component>
     entities : array<EntityId>
-    componentsLookup : table<ComponentHash;int>
     size : int
 
 struct public ComponentValue
@@ -47,6 +46,7 @@ typedef ComponentMap = array<ComponentValue>
 
 var private allArchetypes : table<ComponentHash; Archetype>
 var private deferCreateEntity : array<lambda<(eid:EntityId; var cmp:ComponentMap):void>>
+var private deferUpdateEntity : array<tuple<eid:EntityId; update:lambda<(eid:EntityId; var cmp:ComponentMap):void>>>
 var private deferDeleteEntity : array<EntityId>
 var private lastEntityId : uint
 var private entityFreeList : array<EntityId>
@@ -87,7 +87,6 @@ def private create_archetype ( var arch:Archetype; cmp:ComponentMap )
     assert(length(arch.components)==0 && length(arch.entities)==0)
     for kv in cmp
         let chash = hash(kv.name)
-        arch.componentsLookup[chash] = length(arch.components)
         arch.components |> emplace <| [[Component
             name=kv.name,
             hash=chash,
@@ -104,22 +103,70 @@ def private create_entity ( var arch:Archetype; eid:EntityId; cmp:ComponentMap )
     arch.entities |> push(eid)
     return eidx
 
+def private remove_entity ( var arch:Archetype; di:int )
+    arch.size --
+    if di!=arch.size    // copy last one in the hole
+        var eid_last = arch.entities[arch.size]
+        arch.entities[di] = eid_last
+        entityLookup[eid_last.id].index = di
+        for c in arch.components
+            unsafe
+                memcpy ( addr(c.data[di*c.stride]), addr(c.data[arch.size*c.stride]), c.stride )
+    arch.entities |> pop    // trim the tail
+    for c in arch.components
+        c.data |> resize ( arch.size * c.stride )
+
+def private cmp_archetype_hash ( cmp:ComponentMap )
+    var ahash : ComponentHash
+    for kv in cmp
+        ahash = (ahash<<<2u) ^ hash(kv.name)
+    return ahash
+
+def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+    var cmp : ComponentMap
+    var lookup & = entityLookup[eid.id]
+    if lookup.generation == eid.generation
+        var arch & = allArchetypes[lookup.archetype]
+        let eidx = entityLookup[eid.id].index
+        cmp |> reserve ( length(arch.components) )
+        for c in arch.components
+            var value = [[ComponentValue name=c.name, info=c.info]]
+            unsafe
+                memcpy ( addr(value.data), addr(c.data[eidx*c.stride]), c.stride)
+            cmp |> push(value)
+        var old_ahash = arch.hash
+        invoke(blk, eid, cmp)
+        if length(cmp)==0
+            panic("can't migrate to an empty entity")
+        var new_ahash = cmp_archetype_hash(cmp)
+        if old_ahash == new_ahash
+            pass
+        else
+            arch |> remove_entity ( eidx )
+            with_archetype(new_ahash) <| $ ( var narch; isNew )
+                if isNew
+                    narch |> create_archetype(cmp)
+                let neidx = narch |> create_entity(eid, cmp)
+                entityLookup[eid.id] = [[auto eid.generation,new_ahash,neidx]]
+
 def private create_entity_imm ( blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var cmp : ComponentMap
     let eid = new_entity_id()
     invoke(blk, eid, cmp)
     if length(cmp)==0            // question: shoulw we allow empty entities?
         panic("can't create empty entity")
-    var ahash : ComponentHash
-    for kv in cmp
-        ahash = (ahash<<<2u) ^ hash(kv.name)
+    var ahash = cmp_archetype_hash(cmp)
     with_archetype(ahash) <| $ ( var arch; isNew )
         if isNew
             arch |> create_archetype(cmp)
         let eidx = arch |> create_entity(eid,cmp)
         entityLookup[eid.id] = [[auto eid.generation,ahash,eidx]]
 
-def public create_entity ( blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+def public update_entity ( eid:EntityId; var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+    var t <- [[auto eid, blk]]
+    deferUpdateEntity |> emplace(t)
+
+def public create_entity ( var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     deferCreateEntity |> emplace(blk)
 
 def public delete_entity ( eid:EntityId )
@@ -129,27 +176,13 @@ def private delete_entities ( var arch:Archetype; var indices:array<int> )
     sort(indices)
     let li = length(indices)
     for i in range(li)
-        arch.size --
         var di = indices[li-i-1]
         var eid = arch.entities[di]
         entityLookup[eid.id].generation = 0
         entityFreeList |> push(eid)
-        if di!=arch.size    // copy last one in the hole
-            var eid_last = arch.entities[arch.size]
-            arch.entities[di] = eid_last
-            entityLookup[eid_last.id].index = di
-            for c in arch.components
-                unsafe
-                    memcpy ( addr(c.data[di*c.stride]), addr(c.data[arch.size*c.stride]), c.stride )
-        arch.entities |> pop    // trim the tail
-        for c in arch.components
-            c.data |> resize ( arch.size * c.stride )
+        remove_entity ( arch, di )
 
 def public commit
-    // create new ones
-    for dc in deferCreateEntity
-        create_entity_imm(dc)
-    delete deferCreateEntity
     // delete old ones
     var d2a : table<ComponentHash; array<int>>
     for eid in deferDeleteEntity
@@ -162,6 +195,13 @@ def public commit
         allArchetypes[arch] |> delete_entities(a)
     delete d2a
     delete deferDeleteEntity
+    // update
+    for du in deferUpdateEntity
+        update_entity_imm(du.eid, du.update)
+    // create new ones
+    for dc in deferCreateEntity
+        create_entity_imm(dc)
+    delete deferCreateEntity
 
 def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
     concept_assert((typeinfo(is_pod value) || typeinfo(is_string value))
@@ -176,3 +216,9 @@ def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
         cmp[idx] = cv           // overwrite
     else
         cmp |> push(cv, idx)    // insert new one
+
+def public remove ( var cmp:ComponentMap; name:string )
+    let idx = lower_bound(cmp) <| $ ( kv )
+        return kv.name < name
+    if idx<length(cmp) && cmp[idx].name==name
+        cmp |> erase(idx)
