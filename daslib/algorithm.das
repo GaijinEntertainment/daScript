@@ -19,3 +19,55 @@ def combine ( a,b:array<auto(TT)> )
     for t in b
         c |> push(t)
     return <- c
+
+def lower_bound ( a:array<auto(TT)>; f,l:int; val : TT - const - & )
+    assert(f>=0 && f<length(a),"lower bound first out of range")
+    assert(l>=f && l<=length(a),"lower bound last out of range")
+    var count = l - f
+    var first = f
+    while count > 0
+        let step = count / 2
+        let it = first + step
+        if a[it] < val
+            first += step + 1
+            count -= step + 1
+        else
+            count = step
+    return first
+
+def lower_bound ( a:array<auto(TT)>; val : TT - const - & )
+    return lower_bound(a,0,length(a),val)
+
+def lower_bound ( a:array<auto(TT)>; f, l : int; val : TT - const - &; less : block<(a,b:TT-const-&):bool> )
+    assert(f>=0 && f<length(a),"lower bound first out of range")
+    assert(l>=f && l<=length(a),"lower bound last out of range")
+    var count = l - f
+    var first = f
+    while count > 0
+        let step = count / 2
+        let it = first + step
+        if invoke(less,a[it],val)
+            first += step + 1
+            count -= step + 1
+        else
+            count = step
+    return first
+
+def lower_bound ( a:array<auto(TT)>; val : TT - const - &; less : block<(a,b:TT-const-&):bool> )
+    return lower_bound(a, 0, length(a), val, less )
+
+def binary_search ( a:array<auto(TT)>; val : TT - const - & )
+    let first = lower_bound(a, val)
+    return (first!=length(a)) && (!(val<a[first]))
+
+def binary_search ( a:array<auto(TT)>; f, last : int; val : TT - const - & )
+    let first = lower_bound(a, f, last, val)
+    return (first!=last) && (!(val<a[first]))
+
+def binary_search ( a:array<auto(TT)>; val : TT - const - &; less : block<(a,b:TT-const-&):bool> )
+    let first = lower_bound(a, val, less)
+    return (first!=length(a)) && (!(val<a[first]))
+
+def binary_search ( a:array<auto(TT)>; f, last : int; val : TT - const - &; less : block<(a,b:TT-const-&):bool> )
+    let first = lower_bound(a, f, last, val, less)
+    return (first!=last) && (!(val<a[first]))
