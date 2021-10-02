@@ -163,8 +163,7 @@ def private create_entity_imm ( blk : lambda<(eid:EntityId; var cmp:ComponentMap
         entityLookup[eid.id] = [[auto eid.generation,ahash,eidx]]
 
 def public update_entity ( eid:EntityId; var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
-    var t <- [[auto eid, blk]]
-    deferUpdateEntity |> emplace(t)
+    deferUpdateEntity |> emplace([[auto eid, blk]])
 
 def public create_entity ( var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     deferCreateEntity |> emplace(blk)
