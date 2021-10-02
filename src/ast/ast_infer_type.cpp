@@ -2728,6 +2728,11 @@ namespace das {
                 } else if ( expr->trait=="undecorated_typename" ) {
                     reportAstChanged();
                     return make_smart<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no, TypeDecl::DescribeModule::no));
+                } else if ( expr->trait=="stripped_typename" ) {
+                    reportAstChanged();
+                    auto ctype = make_smart<TypeDecl>(*expr->typeexpr);
+                    ctype->constant = false; ctype->temporary = false; ctype->ref = false;
+                    return make_smart<ExprConstString>(expr->at, ctype->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no, TypeDecl::DescribeModule::yes));
                 } else if ( expr->trait=="fulltypename" ) {
                     reportAstChanged();
                     return make_smart<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::yes));

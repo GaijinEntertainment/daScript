@@ -42,22 +42,24 @@ struct public ComponentValue
     info : TypeInfo const?
     data : float4
 
+typedef DeferEval = lambda<():void>
+
+struct private DeferAction
+    eid : EntityId
+    action : DeferEval
+
 typedef ComponentMap = array<ComponentValue>
 
 var private allArchetypes : table<ComponentHash; Archetype>
-var private deferCreateEntity : array<lambda<(eid:EntityId; var cmp:ComponentMap):void>>
-var private deferUpdateEntity : array<tuple<eid:EntityId; update:lambda<(eid:EntityId; var cmp:ComponentMap):void>>>
-var private deferDeleteEntity : array<EntityId>
+var private deferActions : array<DeferAction>
 var private lastEntityId : uint
 var private entityFreeList : array<EntityId>
 var private entityLookup : array<tuple<generation:int;archetype:ComponentHash;index:int>>
 var private componentTypeCheck : table<string; TypeInfo const?>
 
 def restart
+    delete deferActions
     delete allArchetypes
-    delete deferCreateEntity
-    delete deferUpdateEntity
-    delete deferDeleteEntity
     delete entityFreeList
     delete entityLookup
     delete componentTypeCheck
@@ -181,46 +183,36 @@ def private create_entity_imm ( blk : lambda<(eid:EntityId; var cmp:ComponentMap
         entityLookup[eid.id] = [[auto eid.generation,ahash,eidx]]
     delete cmp
 
-def public update_entity ( eid:EntityId; var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
-    deferUpdateEntity |> emplace([[auto eid, blk]])
-
-def public create_entity ( var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
-    deferCreateEntity |> emplace(blk)
-
-def public delete_entity ( eid:EntityId )
-    deferDeleteEntity |> push(eid)
-
-def private delete_entities ( var arch:Archetype; var indices:array<int> )
-    sort(indices)
-    let li = length(indices)
-    for i in range(li)
-        var di = indices[li-i-1]
-        var eid = arch.entities[di]
+def private delete_entity_imm ( eid:EntityId )
+    var lookup & = entityLookup[eid.id]
+    if lookup.generation == eid.generation
+        var arch & = allArchetypes[lookup.archetype]
+        let di = entityLookup[eid.id].index
         entityLookup[eid.id].generation = 0
         entityFreeList |> push(eid)
-        remove_entity ( arch, di )
+        arch |> remove_entity(di)
+
+def public update_entity ( entityid:EntityId; var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+    var eid = entityid
+    var deval <- @ <| [[<-blk]]
+        update_entity_imm(eid,blk)
+    deferActions |> emplace([[DeferAction action<-deval]])
+
+def public create_entity ( var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+    var deval <- @ <| [[<-blk]]
+        create_entity_imm(blk)
+    deferActions |> emplace([[DeferAction action<-deval]])
+
+def public delete_entity ( entityid:EntityId )
+    var eid = entityid
+    var deval <- @ <|
+        delete_entity_imm(eid)
+    deferActions |> emplace([[DeferAction action<-deval]])
 
 def public commit
-    // delete old ones
-    var d2a : table<ComponentHash; array<int>>
-    for eid in deferDeleteEntity
-        var lookup & = entityLookup[eid.id]
-        if lookup.generation == eid.generation
-            var arch & = allArchetypes[lookup.archetype]
-            let index = entityLookup[eid.id].index
-            d2a[lookup.archetype] |> push(index)
-    for arch,a in keys(d2a),values(d2a)
-        allArchetypes[arch] |> delete_entities(a)
-    delete d2a
-    delete deferDeleteEntity
-    // update
-    for du in deferUpdateEntity
-        update_entity_imm(du.eid, du.update)
-    delete deferUpdateEntity
-    // create new ones
-    for dc in deferCreateEntity
-        create_entity_imm(dc)
-    delete deferCreateEntity
+    for da in deferActions
+        da.action |> invoke
+    delete deferActions
 
 def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y )
