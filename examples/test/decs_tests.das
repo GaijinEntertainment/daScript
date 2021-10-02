@@ -115,6 +115,12 @@ def test_update
         migr = eid
     commit()
     debug_dump()
+    print("without change:\n")
+    migr |> update_entity <| @ ( eid, cmp )
+        print("nothing\n")
+        migr = eid
+    commit()
+    debug_dump()
 
 def test_create_delete
     print("\n\nTEST CREATE-DELETE\n")

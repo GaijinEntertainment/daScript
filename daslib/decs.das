@@ -55,7 +55,6 @@ enum private ReqLookup
 var private requestLookup : table<uint64; ReqLookup>
 var private allArchetypes : table<ComponentHash; Archetype>
 var private deferActions : array<DeferAction>
-var private lastEntityId : uint
 var private entityFreeList : array<EntityId>
 var private entityLookup : array<tuple<generation:int;archetype:ComponentHash;index:int>>
 var private componentTypeCheck : table<string; TypeInfo const?>
@@ -67,7 +66,6 @@ def restart
     delete entityLookup
     delete componentTypeCheck
     delete requestLookup
-    lastEntityId = 0u
 
 def private new_entity_id()
     var eid : EntityId
@@ -75,8 +73,8 @@ def private new_entity_id()
         eid = entityFreeList[length(entityFreeList)-1]
         entityFreeList |> pop
     else
+        eid.id = uint(length(entityLookup))
         entityLookup |> push([[auto 0,0u,0]])
-        eid.id = lastEntityId++
     eid.generation ++
     return eid
 
@@ -229,30 +227,33 @@ def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iter
     return <- repeat_ref(value,arch.size)
 
 def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
-    var cmp : ComponentMap
     var lookup & = entityLookup[eid.id]
-    if lookup.generation == eid.generation
-        var arch & = allArchetypes[lookup.archetype]
-        let eidx = entityLookup[eid.id].index
-        cmp |> reserve ( length(arch.components) )
-        for c in arch.components
-            var value = [[ComponentValue name=c.name, info=c.info]]
+    if lookup.generation != eid.generation
+        return
+    var cmp : ComponentMap
+    var arch & = allArchetypes[lookup.archetype]
+    let eidx = entityLookup[eid.id].index
+    cmp |> reserve ( length(arch.components) )
+    for c in arch.components
+        var value = [[ComponentValue name=c.name, info=c.info]]
+        unsafe
+            memcpy ( addr(value.data), addr(c.data[eidx*c.stride]), c.stride)
+        cmp |> push(value)
+    var old_ahash = arch.hash
+    invoke(blk, eid, cmp)
+    cmp |> set("eid", eid)  // necessary?
+    var new_ahash = cmp_archetype_hash(cmp)
+    if old_ahash == new_ahash
+        for c,comp in arch.components,cmp
             unsafe
-                memcpy ( addr(value.data), addr(c.data[eidx*c.stride]), c.stride)
-            cmp |> push(value)
-        var old_ahash = arch.hash
-        invoke(blk, eid, cmp)
-        cmp |> set("eid", eid)  // necessary?
-        var new_ahash = cmp_archetype_hash(cmp)
-        if old_ahash == new_ahash
-            pass
-        else
-            arch |> remove_entity ( eidx )
-            with_archetype(new_ahash) <| $ ( var narch; isNew )
-                if isNew
-                    narch |> create_archetype(cmp)
-                let neidx = narch |> create_entity(eid, cmp)
-                entityLookup[eid.id] = [[auto eid.generation,new_ahash,neidx]]
+                memcpy ( addr(c.data[eidx*c.stride]), addr(comp.data), c.stride )
+    else
+        arch |> remove_entity ( eidx )
+        with_archetype(new_ahash) <| $ ( var narch; isNew )
+            if isNew
+                narch |> create_archetype(cmp)
+            let neidx = narch |> create_entity(eid, cmp)
+            entityLookup[eid.id] = [[auto eid.generation,new_ahash,neidx]]
     delete cmp
 
 def private create_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
