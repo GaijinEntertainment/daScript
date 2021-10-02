@@ -43,7 +43,7 @@ def test_query
     // query 2
     var total2 = 0
     var erq2 <- [[EcsRequest
-        req <- [{string "pos"; "vel"; "col"}]
+        req <- [{string "pos"; "col"}]
     ]]
     erq2 |> for_each_archetype <| $ ( arch )
         for col,pos in get(arch,"col",type<uint>),get_ro(arch,"pos",type<float3>)
