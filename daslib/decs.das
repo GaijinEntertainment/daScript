@@ -7,6 +7,7 @@ module decs shared public
 require daslib/templates
 
 require daslib/rtti public
+require daslib/algorithm
 
 [template(atype)]
 def decs_array ( atype:auto(TT); src:array<uint8> )
@@ -18,9 +19,6 @@ def decs_array ( atype:auto(TT); src:array<uint8> )
     return <- dest
 
 typedef ComponentHash = uint
-
-def component_hash ( name:string; info:TypeInfo const? ) : ComponentHash
-    return hash(name) ^ (info.hash)
 
 struct private Component
     name : string
@@ -41,10 +39,11 @@ struct private Archetype
     size : int
 
 struct public ComponentValue
+    name : string
     info : TypeInfo const?
     data : float4
 
-typedef ComponentMap = table<string; ComponentValue>
+typedef ComponentMap = array<ComponentValue>
 
 var private allArchetypes : table<ComponentHash; Archetype>
 var private deferCreateEntity : array<lambda<(eid:EntityId; var cmp:ComponentMap):void>>
@@ -86,21 +85,24 @@ def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype
 
 def private create_archetype ( var arch:Archetype; cmp:ComponentMap )
     assert(length(arch.components)==0 && length(arch.entities)==0)
-    for k,v in keys(cmp),values(cmp)
-        let chash = component_hash(k,v.info)
+    for kv in cmp
+        let chash = hash(kv.name)
         arch.componentsLookup[chash] = length(arch.components)
         arch.components |> emplace <| [[Component
-            name=k,
+            name=kv.name,
             hash=chash,
-            stride=int(v.info.size),
-            info=v.info
+            stride=int(kv.info.size),
+            info=kv.info
         ]]
 
-def private create_entity ( var arch:Archetype; eid:EntityId )
-    for c in arch.components
+def private create_entity ( var arch:Archetype; eid:EntityId; cmp:ComponentMap )
+    let eidx = arch.size++
+    for c,comp in arch.components,cmp
         c.data |> resize(length(c.data) + c.stride)
+        unsafe
+            memcpy ( addr(c.data[eidx*c.stride]), addr(comp.data), c.stride )
     arch.entities |> push(eid)
-    return arch.size++
+    return eidx
 
 def private create_entity_imm ( blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var cmp : ComponentMap
@@ -109,17 +111,13 @@ def private create_entity_imm ( blk : lambda<(eid:EntityId; var cmp:ComponentMap
     if length(cmp)==0            // question: shoulw we allow empty entities?
         panic("can't create empty entity")
     var ahash : ComponentHash
-    for name,value in keys(cmp),values(cmp)
-        ahash ^= component_hash(name,value.info)
+    for kv in cmp
+        ahash = (ahash<<<2u) ^ hash(kv.name)
     with_archetype(ahash) <| $ ( var arch; isNew )
         if isNew
             arch |> create_archetype(cmp)
-        let eidx = arch |> create_entity(eid)
+        let eidx = arch |> create_entity(eid,cmp)
         entityLookup[eid.id] = [[auto eid.generation,ahash,eidx]]
-        for c in arch.components
-            var comp & = cmp[c.name]
-            unsafe
-                memcpy ( addr(c.data[eidx*c.stride]), addr(comp.data), c.stride )
 
 def public create_entity ( blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     deferCreateEntity |> emplace(blk)
@@ -168,8 +166,13 @@ def public commit
 def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
     concept_assert((typeinfo(is_pod value) || typeinfo(is_string value))
         && typeinfo(sizeof value)<=16, "unsupported component type {typeinfo(typename value)}")
-    var cv : ComponentValue
+    var cv = [[ComponentValue name=name]]
     unsafe
         cv.info = addr(typeinfo(rtti_typeinfo type<TT-const-&>))
         memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
-    cmp[name] = cv
+    let idx = lower_bound(cmp) <| $ ( kv )
+        return kv.name < name
+    if idx<length(cmp) && cmp[idx].name==name
+        cmp[idx] = cv           // overwrite
+    else
+        cmp |> push(cv, idx)    // insert new one

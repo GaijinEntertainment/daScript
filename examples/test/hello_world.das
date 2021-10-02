@@ -8,6 +8,7 @@ struct Foo
     pos : float3
     name : string
     id : EntityId
+    foobar : int
 
 [export]
 def main
@@ -15,6 +16,7 @@ def main
     create_entity <| @ ( eid, cmp )
         print("eid = {eid}\n")
         cmp |> set("pos",float3(1.,2.,3.))
+        cmp |> set("pos",13)
         cmp |> set("name","entity_once")
     create_entity <| @ ( eid, cmp )
         var foo = [[Foo pos=float3(1.), name="from template", id=eid]]
