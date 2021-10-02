@@ -51,6 +51,17 @@ var private deferDeleteEntity : array<EntityId>
 var private lastEntityId : uint
 var private entityFreeList : array<EntityId>
 var private entityLookup : array<tuple<generation:int;archetype:ComponentHash;index:int>>
+var private componentTypeCheck : table<string; TypeInfo const?>
+
+def restart
+    delete allArchetypes
+    delete deferCreateEntity
+    delete deferUpdateEntity
+    delete deferDeleteEntity
+    delete entityFreeList
+    delete entityLookup
+    delete componentTypeCheck
+    lastEntityId = 0u
 
 def private new_entity_id()
     var eid : EntityId
@@ -86,6 +97,12 @@ def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype
 def private create_archetype ( var arch:Archetype; cmp:ComponentMap )
     assert(length(arch.components)==0 && length(arch.entities)==0)
     for kv in cmp
+        var ct & = componentTypeCheck[kv.name]
+        if ct != null
+            if kv.info.hash != (*ct).hash
+                panic("component {kv.name} type mismatch {describe(ct)} vs {describe(kv.info)}")
+        else
+            ct = kv.info
         let chash = hash(kv.name)
         arch.components |> emplace <| [[Component
             name=kv.name,
@@ -203,16 +220,15 @@ def public commit
         create_entity_imm(dc)
     delete deferCreateEntity
 
-[template (ftype)]
-def public get ( var cmp:ComponentMap; name:string; ftype:auto(TT) ) : TT const-&
-    concept_assert((typeinfo(is_pod ftype) || typeinfo(is_string ftype))
-        && typeinfo(sizeof ftype)<=16, "unsupported component type {typeinfo(typename value)}")
+def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
     let idx = lower_bound(cmp) <| $ ( kv )
         return kv.name < name
-    var value : TT const-&
     if idx<length(cmp) && cmp[idx].name==name
         unsafe
-            memcpy ( addr(value), addr(cmp[idx].value), typeinfo(sizeof type<TT const-&>))
+            let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
+            if cmp[idx].info.hash != cvinfo.hash
+                panic("get component {name} type mismatch, expecting {describe(cmp[idx].info)} vs {describe(cvinfo)}")
+            memcpy ( addr(value), addr(cmp[idx].data), typeinfo(sizeof type<TT const-&>))
     return value
 
 def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
@@ -226,7 +242,7 @@ def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
         return kv.name < name
     if idx<length(cmp) && cmp[idx].name==name
         if cmp[idx].info.hash != cv.info.hash
-            panic("component {name} type mismatch, expecting {describe(cmp[idx].info)} vs {describe(cv.info)}")
+            panic("set component {name} type mismatch, expecting {describe(cmp[idx].info)} vs {describe(cv.info)}")
         cmp[idx] = cv           // overwrite
     else
         cmp |> push(cv, idx)    // insert new one

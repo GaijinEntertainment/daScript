@@ -7,7 +7,7 @@ require daslib/static_let
 struct Foo
     pos : float3
     name : string
-    id : EntityId
+    eid : EntityId
     foobar : int
 
 [export]
@@ -17,19 +17,26 @@ def main
     test_type_mismatch()
 
 def test_type_mismatch
-    print("TEST TYPE MISMATCH\n")
+    print("\n\nTEST TYPE MISMATCH\n")
+    restart()
     create_entity <| @ ( eid, cmp )
         cmp |> set("pos", float3(1,2,3))
         try
             cmp |> set("pos", 13)
         recover
-            print("mismatch\n")
+            print("mismatch set\n")
+        try
+            cmp |> get("pos", type<int>)
+        recover
+            print("mismatch get\n")
+        let f123 = cmp |> get("pos", float3(13))
+        print("get[pos] = {f123}\n")
     commit()
     debug_dump()
 
-
 def test_update
-    print("TEST UPDATE\n")
+    print("\n\nTEST UPDATE\n")
+    restart()
     static_let <|
         var migr : EntityId
     print("before:\n")
@@ -57,14 +64,15 @@ def test_update
     debug_dump()
 
 def test_create_delete
-    print("TEST CREATE-DELETE\n")
+    print("\n\nTEST CREATE-DELETE\n")
+    restart()
     print("creating:\n")
     create_entity <| @ ( eid, cmp )
         print("eid = {eid}\n")
         cmp |> set("pos",float3(1.,2.,3.))
         cmp |> set("name","entity_once")
     create_entity <| @ ( eid, cmp )
-        var foo = [[Foo pos=float3(1.), name="from template", id=eid]]
+        var foo = [[Foo pos=float3(1.), name="from template",eid=eid]]
         apply(foo) <| $ ( n, v )
             cmp |> set ( n, v)
 
@@ -81,7 +89,7 @@ def test_create_delete
     commit()
     debug_dump()
 
-    print("\n\nafter delete:\n")
+    print("after delete:\n")
     print("deleting {de}\n")
     for d in de
         delete_entity(d)
