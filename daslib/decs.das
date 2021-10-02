@@ -165,6 +165,7 @@ def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
                     narch |> create_archetype(cmp)
                 let neidx = narch |> create_entity(eid, cmp)
                 entityLookup[eid.id] = [[auto eid.generation,new_ahash,neidx]]
+    delete cmp
 
 def private create_entity_imm ( blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var cmp : ComponentMap
@@ -178,6 +179,7 @@ def private create_entity_imm ( blk : lambda<(eid:EntityId; var cmp:ComponentMap
             arch |> create_archetype(cmp)
         let eidx = arch |> create_entity(eid,cmp)
         entityLookup[eid.id] = [[auto eid.generation,ahash,eidx]]
+    delete cmp
 
 def public update_entity ( eid:EntityId; var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     deferUpdateEntity |> emplace([[auto eid, blk]])
