@@ -4,6 +4,9 @@ options no_unused_function_arguments = false
 
 module algorithm shared public
 
+require daslib/array_boost
+require daslib/contracts
+
 def reverse ( var a:array<auto> )
     let l = length(a)
     let half = l/2
@@ -73,3 +76,54 @@ def binary_search ( a:array<auto(TT)>; f, last : int; val : TT const-&; less : b
     let first = lower_bound(a, f, last, val, less)
     return (first!=last) && (!invoke(less,val,a[first]))
 
+// now for all the other types
+
+[expect_any_array(a)]
+def reverse ( var a )
+    unsafe
+        reverse(temp_array(a))
+
+[expect_any_array(a)]
+def combinen ( a,b:array<auto(TT)> )
+    unsafe
+        return combine(temp_array(a),temp_array(b))
+
+[expect_any_array(a)]
+def lower_bound ( a; f,l:int; val )
+    unsafe
+        return lower_bound(temp_array(a), f,l, val)
+
+[expect_any_array(a)]
+def lower_bound ( a; val )
+    unsafe
+        return lower_bound(temp_array(a), val)
+
+[expect_any_array(a)]
+def lower_bound ( a; f, l : int; value:auto(TT); less : block<(a, b:TT const-&):bool> )
+    unsafe
+        return lower_bound(temp_array(a), f, l, value, less)
+
+[expect_any_array(a)]
+def lower_bound ( a; value:auto(TT); less : block<(a, b:TT const-&):bool> )
+    unsafe
+        return lower_bound(temp_array(a), value, less)
+
+[expect_any_array(a)]
+def binary_search ( a; val )
+    unsafe
+        return binary_search(temp_array(a), val)
+
+[expect_any_array(a)]
+def binary_search ( a; f, last : int; val )
+    unsafe
+        return binary_search(temp_array(a), f, last, val)
+
+[expect_any_array(a)]
+def binary_search ( a; val : auto(TT); less : block<(a, b:TT const-&):bool> )
+    unsafe
+        return binary_search(temp_array(a), val, less)
+
+[expect_any_array(a)]
+def binary_search ( a; f, last : int; val : auto(TT); less : block<(a, b:TT const-&):bool> )
+    unsafe
+        return binary_search(temp_array(a), f, last, val, less)

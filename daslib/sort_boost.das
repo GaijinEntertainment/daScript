@@ -4,25 +4,8 @@ options no_unused_function_arguments = false
 
 module sort_boost shared private
 
-require ast
-
-require daslib/templates public
-require daslib/contracts public
 require daslib/ast_boost
-
-[unsafe_operation, template (a), unused_argument(a)]
-def private sort_array_helper ( var arr : auto implicit; a : auto(TT) ) : array<TT -#>
-    var res : array<TT -#>
-    let lenA = length(arr)
-    if lenA>=1
-        unsafe
-            _builtin_make_temp_array(res, addr(arr[0]), lenA)
-    return <- res
-
-[unsafe_operation]
-def public temp_sort_array ( var arr : auto implicit )
-    unsafe
-        return <- sort_array_helper ( arr, decltype(arr[0]) )
+require daslib/array_boost public
 
 [call_macro(name="qsort")]
 class QsortMacro : AstCallMacro
@@ -43,7 +26,7 @@ class QsortMacro : AstCallMacro
             return <- call
         elif expr.arguments[0]._type.baseType==Type tHandle
             var call <- new [[ExprCall() name:="sort", at=expr.at]]
-            var tsa <- new [[ExprCall() name:="temp_sort_array", at=expr.at]]
+            var tsa <- new [[ExprCall() name:="temp_array", at=expr.at]]
             emplace_new(tsa.arguments) <| clone_expression(expr.arguments[0])
             tsa.genFlags |= ExprGenFlags alwaysSafe
             emplace(call.arguments,tsa)
