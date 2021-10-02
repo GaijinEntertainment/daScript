@@ -12,8 +12,21 @@ struct Foo
 
 [export]
 def main
-    // test_create_delete()
-    test_update();
+    test_create_delete()
+    test_update()
+    test_type_mismatch()
+
+def test_type_mismatch
+    print("TEST TYPE MISMATCH\n")
+    create_entity <| @ ( eid, cmp )
+        cmp |> set("pos", float3(1,2,3))
+        try
+            cmp |> set("pos", 13)
+        recover
+            print("mismatch\n")
+    commit()
+    debug_dump()
+
 
 def test_update
     print("TEST UPDATE\n")
@@ -34,7 +47,11 @@ def test_update
     debug_dump()
     print("after remove:\n")
     migr |> update_entity <| @ ( eid, cmp )
+        let t = cmp |> has("vel")
+        print("t = {t}\n")
+        verify(cmp |> has("vel"))
         cmp |> remove("vel")
+        verify(!(cmp |> has("vel")))
         migr = eid
     commit()
     debug_dump()
@@ -45,7 +62,6 @@ def test_create_delete
     create_entity <| @ ( eid, cmp )
         print("eid = {eid}\n")
         cmp |> set("pos",float3(1.,2.,3.))
-        cmp |> set("pos",13)
         cmp |> set("name","entity_once")
     create_entity <| @ ( eid, cmp )
         var foo = [[Foo pos=float3(1.), name="from template", id=eid]]

@@ -64,10 +64,3 @@ def binary_search ( a:array<auto(TT)>; f, last : int; val : TT const-& )
     let first = lower_bound(a, f, last, val)
     return (first!=last) && (!(val<a[first]))
 
-def binary_search ( a:array<auto(TT)>; less : block<(a:TT const-&):bool> )
-    let first = lower_bound(a, less)
-    return (first!=length(a)) && (!(val<a[first]))
-
-def binary_search ( a:array<auto(TT)>; f, last : int; less : block<(a:TT const-&):bool> )
-    let first = lower_bound(a, f, last, less)
-    return (first!=last) && (!(val<a[first]))
