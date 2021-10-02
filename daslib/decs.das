@@ -27,8 +27,8 @@ struct public EntityId
 struct public Archetype
     hash : ComponentHash
     components : array<Component>
-    entities : array<EntityId>
     size : int
+    eidIndex : int
 
 struct public ComponentValue
     name : string
@@ -84,8 +84,8 @@ def public debug_dump
     for arch in values(allArchetypes)
         print("archtype {arch.hash} : {arch.size}\n")
         // debug(arch)
-        for e,index in arch.entities,range(INT_MAX)
-            print("\tentity[{index}] {e.id}\n")
+        for index in range(arch.size)
+            print("\tentity[{index}]\n")
             for c in arch.components
                 unsafe
                     print("\t\t{c.name} : {describe(c.info)} = {sprint_data(addr(c.data[index*c.stride]),c.info,print_flags humanReadable)}\n")
@@ -101,8 +101,9 @@ def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype
     __builtin_table_unlock(allArchetypes)
 
 def private create_archetype ( var arch:Archetype; cmp:ComponentMap )
-    assert(length(arch.components)==0 && length(arch.entities)==0)
-    for kv in cmp
+    assert(length(arch.components)==0)
+    arch.eidIndex = -1
+    for kv,kvi in cmp,range(100500)
         var ct & = componentTypeCheck[kv.name]
         if ct != null
             if kv.info.hash != (*ct).hash
@@ -116,6 +117,15 @@ def private create_archetype ( var arch:Archetype; cmp:ComponentMap )
             stride=int(kv.info.size),
             info=kv.info
         ]]
+        if kv.name=="eid"
+            assert(arch.eidIndex==-1)
+            arch.eidIndex = kvi
+    assert(arch.eidIndex!=-1)
+
+def private get_eid ( var arch:Archetype; index:int ) : EntityId &
+    unsafe
+        var ceid & = arch.components[arch.eidIndex]
+        return *(reinterpret<EntityId?> addr(ceid.data[index*ceid.stride]))
 
 def private create_entity ( var arch:Archetype; eid:EntityId; cmp:ComponentMap )
     let eidx = arch.size++
@@ -123,19 +133,16 @@ def private create_entity ( var arch:Archetype; eid:EntityId; cmp:ComponentMap )
         c.data |> resize(length(c.data) + c.stride)
         unsafe
             memcpy ( addr(c.data[eidx*c.stride]), addr(comp.data), c.stride )
-    arch.entities |> push(eid)
     return eidx
 
 def private remove_entity ( var arch:Archetype; di:int )
     arch.size --
     if di!=arch.size    // copy last one in the hole
-        var eid_last = arch.entities[arch.size]
-        arch.entities[di] = eid_last
+        var eid_last & = arch |> get_eid(arch.size)
         entityLookup[eid_last.id].index = di
         for c in arch.components
             unsafe
                 memcpy ( addr(c.data[di*c.stride]), addr(c.data[arch.size*c.stride]), c.stride )
-    arch.entities |> pop    // trim the tail
     for c in arch.components
         c.data |> resize ( arch.size * c.stride )
 
@@ -235,8 +242,7 @@ def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
             cmp |> push(value)
         var old_ahash = arch.hash
         invoke(blk, eid, cmp)
-        if length(cmp)==0
-            panic("can't migrate to an empty entity")
+        cmp |> set("eid", eid)  // necessary?
         var new_ahash = cmp_archetype_hash(cmp)
         if old_ahash == new_ahash
             pass
@@ -249,12 +255,11 @@ def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
                 entityLookup[eid.id] = [[auto eid.generation,new_ahash,neidx]]
     delete cmp
 
-def private create_entity_imm ( blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+def private create_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var cmp : ComponentMap
-    let eid = new_entity_id()
+    cmp |> push <| make_component("eid", eid)
     invoke(blk, eid, cmp)
-    if length(cmp)==0            // question: shoulw we allow empty entities?
-        panic("can't create empty entity")
+    cmp |> set("eid", eid)       // necessary?
     var ahash = cmp_archetype_hash(cmp)
     with_archetype(ahash) <| $ ( var arch; isNew )
         if isNew
@@ -279,9 +284,11 @@ def public update_entity ( entityid:EntityId; var blk : lambda<(eid:EntityId; va
     deferActions |> emplace([[DeferAction action<-deval]])
 
 def public create_entity ( var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+    var eid = new_entity_id()
     var deval <- @ <| [[<-blk]]
-        create_entity_imm(blk)
+        create_entity_imm(eid, blk)
     deferActions |> emplace([[DeferAction action<-deval]])
+    return eid
 
 def public delete_entity ( entityid:EntityId )
     var eid = entityid
@@ -305,13 +312,17 @@ def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
             memcpy ( addr(value), addr(cmp[idx].data), typeinfo(sizeof type<TT const-&>))
     return value
 
-def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
-    concept_assert((typeinfo(is_pod value) || typeinfo(is_string value))
-        && typeinfo(sizeof value)<=16, "unsupported component type {typeinfo(typename value)}")
+def private make_component ( name:string; value:auto(TT) )
     var cv = [[ComponentValue name=name]]
     unsafe
         cv.info = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
         memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
+    return cv
+
+def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
+    concept_assert((typeinfo(is_pod value) || typeinfo(is_string value))
+        && typeinfo(sizeof value)<=16, "unsupported component type {typeinfo(typename value)}")
+    let cv = make_component(name, value)
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y )
         return x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
