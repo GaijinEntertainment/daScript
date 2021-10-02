@@ -52,6 +52,20 @@ def test_query
             // pos += float3(1) // this will fail due to "ro"
             total2 ++
     assert(total2==3)
+    // query 3
+    var total3 = 0
+    var found3 = 0
+    var erq3 <- [[EcsRequest
+        req <- [{string "pos"}]
+    ]]
+    erq3 |> for_each_archetype <| $ ( arch )
+        for col,pos in get_default_ro(arch,"col",0x12345678), get(arch,"pos",type<float3>)
+            if col==0xff00ffff
+                pos = float3(13)
+                found3 ++
+            total3 ++
+    assert(total3==6)
+    assert(found3==2)
     debug_dump()
 
 
