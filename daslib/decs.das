@@ -175,15 +175,16 @@ def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype)
                 invoke ( blk, arch )
 
 [template(atype)]
-def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-const-&>
+def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-const-&>#
     assert(length(src)>0)
-    var dest : array<TT -const -&>
+    var dest : array<TT -const -&>#
     unsafe
         _builtin_make_temp_array(dest, addr(src[0]), capacity)
     __builtin_array_lock(dest)
-    return <- dest
+    unsafe
+        return <- dest
 
-def public get ( arch:Archetype; name:string; value:auto(TT) )
+def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&>#
     let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y )
         return x.name < y.name
     if idx<length(arch.components)
@@ -193,12 +194,15 @@ def public get ( arch:Archetype; name:string; value:auto(TT) )
                 let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&>))
                 if comp.info.hash != cvinfo.hash
                     panic("component array {name} type mismatch, expecting {comp.info} vs {describe(cvinfo)}")
-            return <- decs_array(type<TT>, comp.data, arch.size)
+            unsafe
+                return <- decs_array(type<TT>, comp.data, arch.size)
     panic("component array {name} not found")
-    return <- [[array<TT-const-&>]]
+    unsafe
+        return <- [[array<TT-const-&># ]]
 
-def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&> const
-    return <- get(arch, name, value)
+def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&> const#
+    unsafe
+        return <- get(arch, name, value)
 
 def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var cmp : ComponentMap
