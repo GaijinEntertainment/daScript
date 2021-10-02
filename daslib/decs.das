@@ -9,6 +9,7 @@ require daslib/templates
 require daslib/rtti public
 require daslib/algorithm
 require daslib/sort_boost
+require daslib/functional
 
 typedef ComponentHash = uint
 
@@ -203,6 +204,22 @@ def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-
 def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&> const#
     unsafe
         return <- get(arch, name, value)
+
+def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iterator<TT const &>
+    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y )
+        return x.name < y.name
+    if idx<length(arch.components)
+        let comp & = arch.components[idx]
+        if comp.name==name
+            unsafe
+                let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&>))
+                if comp.info.hash != cvinfo.hash
+                    panic("component array {name} type mismatch, expecting {comp.info} vs {describe(cvinfo)}")
+            var it : iterator<TT const &>
+            unsafe
+                _builtin_make_fixed_array_iterator(it,addr(comp.data[0]),arch.size,comp.stride)
+            return <- it
+    return <- repeat_ref(value,arch.size)
 
 def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var cmp : ComponentMap
