@@ -8,19 +8,11 @@ require daslib/templates
 
 require daslib/rtti public
 require daslib/algorithm
-
-[template(atype)]
-def decs_array ( atype:auto(TT); src:array<uint8> )
-    assert(length(src)>0)
-    var dest : array<TT -const -&>
-    unsafe
-        _builtin_make_temp_array(dest, addr(src[0]), 25)
-    __builtin_array_lock(dest)
-    return <- dest
+require daslib/sort_boost
 
 typedef ComponentHash = uint
 
-struct private Component
+struct public Component
     name : string
     hash : ComponentHash
     stride : int
@@ -31,7 +23,7 @@ struct public EntityId
     id : uint
     generation : int
 
-struct private Archetype
+struct public Archetype
     hash : ComponentHash
     components : array<Component>
     entities : array<EntityId>
@@ -50,6 +42,16 @@ struct private DeferAction
 
 typedef ComponentMap = array<ComponentValue>
 
+struct public EcsRequest
+    hash : ComponentHash
+    req : array<string>
+
+enum private ReqLookup
+    dontKnow
+    yes
+    no
+
+var private requestLookup : table<uint64; ReqLookup>
 var private allArchetypes : table<ComponentHash; Archetype>
 var private deferActions : array<DeferAction>
 var private lastEntityId : uint
@@ -63,6 +65,7 @@ def restart
     delete entityFreeList
     delete entityLookup
     delete componentTypeCheck
+    delete requestLookup
     lastEntityId = 0u
 
 def private new_entity_id()
@@ -140,6 +143,62 @@ def private cmp_archetype_hash ( cmp:ComponentMap )
     for kv in cmp
         ahash = (ahash<<<2u) ^ hash(kv.name)
     return ahash
+
+def private req_hash ( erq : EcsRequest )
+    var ahash : ComponentHash
+    for kv in erq.req
+        ahash = (ahash<<<2u) ^ hash(kv)
+    return ahash
+
+def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
+    if erq.hash==arch.hash
+        return true
+    let key = (uint64(erq.hash)<<<32ul) ^ (uint64(arch.hash))
+    var rlook & = requestLookup[key]
+    if rlook==ReqLookup dontKnow
+        rlook = ReqLookup yes
+        for r in erq.req
+            let found = arch.components |> binary_search ( [[Component name=r]] ) <| $ ( x, y )
+                return x.name < y.name
+            if !found
+                rlook = ReqLookup no
+                break
+    return rlook==ReqLookup yes
+
+def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype):void> )
+    if erq.hash==0u
+        sort(erq.req)
+        erq.hash = req_hash(erq)
+    for arch in values(allArchetypes)
+        if arch.size > 0
+            if erq |> can_process_request(arch)
+                invoke ( blk, arch )
+
+[template(atype)]
+def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-const-&>
+    assert(length(src)>0)
+    var dest : array<TT -const -&>
+    unsafe
+        _builtin_make_temp_array(dest, addr(src[0]), capacity)
+    __builtin_array_lock(dest)
+    return <- dest
+
+def public get ( arch:Archetype; name:string; value:auto(TT) )
+    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y )
+        return x.name < y.name
+    if idx<length(arch.components)
+        let comp & = arch.components[idx]
+        if comp.name==name
+            unsafe
+                let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&>))
+                if comp.info.hash != cvinfo.hash
+                    panic("component array {name} type mismatch, expecting {comp.info} vs {describe(cvinfo)}")
+            return <- decs_array(type<TT>, comp.data, arch.size)
+    panic("component array {name} not found")
+    return <- [[array<TT-const-&>]]
+
+def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&> const
+    return <- get(arch, name, value)
 
 def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var cmp : ComponentMap

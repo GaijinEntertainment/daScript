@@ -15,6 +15,45 @@ def main
     test_create_delete()
     test_update()
     test_type_mismatch()
+    test_query()
+
+def test_query
+    print("\n\nTEST QUERY\n")
+    restart()
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp |> set ( "pos", float3(i))
+            cmp |> set ( "vel", float3(.1,.2,.3))
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp |> set ( "pos", float3(i+100))
+            cmp |> set ( "vel", float3(.1,.2,.3))
+            cmp |> set ( "col", 0xffffffff)
+    commit()
+    // query 1
+    var erq1 <- [[EcsRequest
+        req <- [{string "pos"; "vel"}]
+    ]]
+    var total1 = 0
+    erq1 |> for_each_archetype <| $ ( arch )
+        for pos, vel in get(arch,"pos",type<float3>), get(arch,"vel",type<float3>)
+            pos += vel
+            total1 ++
+    assert(total1==6)
+    // query 2
+    var total2 = 0
+    var erq2 <- [[EcsRequest
+        req <- [{string "pos"; "vel"; "col"}]
+    ]]
+    erq2 |> for_each_archetype <| $ ( arch )
+        for col,pos in get(arch,"col",type<uint>),get_ro(arch,"pos",type<float3>)
+            if pos.x > 101.
+                col =  0xff00ffff
+            // pos += float3(1) // this will fail due to "ro"
+            total2 ++
+    assert(total2==3)
+    debug_dump()
+
 
 def test_type_mismatch
     print("\n\nTEST TYPE MISMATCH\n")
