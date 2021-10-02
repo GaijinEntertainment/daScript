@@ -221,8 +221,8 @@ def public commit
     delete deferCreateEntity
 
 def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
-    let idx = lower_bound(cmp) <| $ ( kv )
-        return kv.name < name
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y )
+        return x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         unsafe
             let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
@@ -238,8 +238,8 @@ def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
     unsafe
         cv.info = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
         memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
-    let idx = lower_bound(cmp) <| $ ( kv )
-        return kv.name < name
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y )
+        return x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         if cmp[idx].info.hash != cv.info.hash
             panic("set component {name} type mismatch, expecting {describe(cmp[idx].info)} vs {describe(cv.info)}")
@@ -248,12 +248,11 @@ def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
         cmp |> push(cv, idx)    // insert new one
 
 def public has ( var cmp:ComponentMap; name:string )
-    let idx = lower_bound(cmp) <| $ ( kv )
-        return kv.name < name
-    return idx<length(cmp) && cmp[idx].name==name
+    return binary_search(cmp,[[ComponentValue name=name]]) <| $ ( x,y )
+        return x.name < y.name
 
 def public remove ( var cmp:ComponentMap; name:string )
-    let idx = lower_bound(cmp) <| $ ( kv )
-        return kv.name < name
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y )
+        return x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         cmp |> erase(idx)

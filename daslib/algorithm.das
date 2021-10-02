@@ -38,7 +38,7 @@ def lower_bound ( a:array<auto(TT)>; f,l:int; val : TT const-& )
 def lower_bound ( a:array<auto(TT)>; val : TT const-& )
     return lower_bound(a,0,length(a),val)
 
-def lower_bound ( a:array<auto(TT)>; f, l : int; less : block<(a:TT const-&):bool> )
+def lower_bound ( a:array<auto(TT)>; f, l : int; value:TT const-&; less : block<(a, b:TT const-&):bool> )
     assert(f>=0 && f<=l,"lower bound first out of range")
     assert(l>=f && l<=length(a),"lower bound last out of range")
     var count = l - f
@@ -46,15 +46,15 @@ def lower_bound ( a:array<auto(TT)>; f, l : int; less : block<(a:TT const-&):boo
     while count > 0
         let step = count / 2
         let it = first + step
-        if invoke(less,a[it])
+        if invoke(less,a[it],value)
             first += step + 1
             count -= step + 1
         else
             count = step
     return first
 
-def lower_bound ( a:array<auto(TT)>; less : block<(a:TT const-&):bool> )
-    return lower_bound(a, 0, length(a), less )
+def lower_bound ( a:array<auto(TT)>; value:TT const-&; less : block<(a, b:TT const-&):bool> )
+    return lower_bound(a, 0, length(a), value, less )
 
 def binary_search ( a:array<auto(TT)>; val : TT const-& )
     let first = lower_bound(a, val)
@@ -63,4 +63,13 @@ def binary_search ( a:array<auto(TT)>; val : TT const-& )
 def binary_search ( a:array<auto(TT)>; f, last : int; val : TT const-& )
     let first = lower_bound(a, f, last, val)
     return (first!=last) && (!(val<a[first]))
+
+def binary_search ( a:array<auto(TT)>; val : TT const-&; less : block<(a, b:TT const-&):bool> )
+    let first = lower_bound(a, val, less)
+    let last = length(a)
+    return (first!=last) && (!invoke(less,val,a[first]))
+
+def binary_search ( a:array<auto(TT)>; f, last : int; val : TT const-&; less : block<(a, b:TT const-&):bool> )
+    let first = lower_bound(a, f, last, val, less)
+    return (first!=last) && (!invoke(less,val,a[first]))
 
