@@ -35,19 +35,25 @@ variant ItCheck
     yes : string
     no  : bool
 
-def private is_decs_template ( t:TypeDeclPtr )
-    if t.baseType != Type tStructure
+def private decs_prefix ( arg:AnnotationArgumentList )
+    var p = find_arg ( "prefix", arg)
+    if p is tString
+        return [[ItCheck yes=p as tString]]
+    elif p is tBool
+        return [[ItCheck yes=""]]
+    else
         return [[ItCheck no=true]]
-    for ann in t.structType.annotations
-        if eq(ann.annotation.name,"decs_template")
-            let p = find_arg("prefix", ann.arguments)
-            if p is tString
-                return [[ItCheck yes=p as tString]]
-            elif p is tBool
-                return [[ItCheck yes=""]]
-            else
-                return [[ItCheck yes="{t.structType.name}_"]]
-    return [[ItCheck no=true]]
+
+def private is_decs_template ( v:VariablePtr )
+    if v._type.baseType != Type tStructure
+        return [[ItCheck no=true]]
+    var p = v.annotation |> decs_prefix
+    if p is no
+        for ann in v._type.structType.annotations
+            if eq(ann.annotation.name,"decs_template")
+                p = ann.arguments |> decs_prefix
+                return p is yes ? p : [[ItCheck yes="{v._type.structType.name}_"]]
+    return p
 
 def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart_ptr<ExprFor>; a; prefix:string; const_parent : bool = false )
     let qli = length(qloop.iterators)
@@ -69,7 +75,7 @@ def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart
                 macro_error(prog,qloop.at,"argument {a.name} has default value, it can't be & or var")
                 return false
             getter = "get_default_ro"
-        elif a._type.flags.ref
+        elif a._type.isRef
             if a._type.flags.constant
                 macro_error(prog,qloop.at,"argument {a.name} is both & and constant")
                 return false
@@ -101,12 +107,9 @@ class ApplyMacro : AstCallMacro
         var req : EcsRequest
         for a in qblk.arguments
             if a.init==null
-                let detp = a._type |> is_decs_template
+                let detp = a |> is_decs_template
                 if detp is yes
                     for f in a._type.structType.fields
-                        if (f._type |> is_decs_template) is yes
-                            macro_error(prog,expr.at,"nested desc_template are not supported")
-                            return [[ExpressionPtr]]
                         if f.init == null
                             req.req |> push("{detp as yes}{f.name}")
                 else
@@ -137,7 +140,7 @@ class ApplyMacro : AstCallMacro
         var qloop <- new [[ExprFor() at=qblk.at, visibility=qblk.at]]
         var kaboom : array<tuple<string;string>>
         for a in qblk.arguments
-            let detp = a._type |> is_decs_template
+            let detp = a |> is_decs_template
             if detp is yes
                 kaboom |> push <| [[auto string(a.name),detp as yes]]
                 for f in a._type.structType.fields

@@ -46,8 +46,17 @@ def test_query_macro
         count_nc ++
     assert(count_nc==3)
     debug_dump()
+    var count_par = 0
     query <| $ ( var p : Particle )
         p.pos += p.vel
+        count_par ++
+    assert(count_par==5)
+    debug_dump()
+    var count_npar = 0
+    query <| $ ( [[prefix="nothere_"]] var p : Particle )
+        p.pos += p.vel
+        count_npar ++
+    assert(count_npar==0)
     debug_dump()
 
 def test_query
