@@ -16,8 +16,7 @@ from:
     query ( ) <| $ ( pos:float3&; vel:float3; col:uint=0x12345678 )
         pos += vel
 to:
-    var erq <- [[EcsRequest req <- [[string "pos"; "vel"]] ]]
-    erq |> for_each_archetype <| $ ( arch )
+    for_each_archetype ( ERQ_HASH, @@ => [[EcsRequest req <- [[string "pos"; "vel"]] ]] ) <| $ ( arch )
         for pos, vel in get(arch,"pos",type<float3>), get_ro(arch,"vel",type<float3>), get_default_ro(arch,"col",0x12345678)
             tag
 */
@@ -102,7 +101,6 @@ class ApplyMacro : AstCallMacro
             macro_error(prog,expr.at,"expecting query($(block_with_arguments)), arguments are missing")
             return [[ExpressionPtr]]
         let prefix = "__{expr.at.line}_desc"
-        let erq_name = "{prefix}_erq"
         let arch_name = "{prefix}_arch"
         var req : EcsRequest
         for a in qblk.arguments
@@ -127,16 +125,22 @@ class ApplyMacro : AstCallMacro
             macro_error(prog,expr.at,"incorrect query, {vreq.error}")
             return [[ExpressionPtr]]
         var qblock <- quote() <|
-            tag_req
-            tag_erq |> for_each_archetype <| $ ( tag_arch )
+            for_each_archetype (tag_req, tag_erq) <| $ ( tag_arch )
                 tag_loop
-        var ereq <- new [[ExprLet() at=expr.at]]
-        ereq.variables |> emplace_new <| new [[Variable() at=expr.at,
-                name:=erq_name,
-                _type <- new [[TypeDecl() at=expr.at, baseType=Type autoinfer]],
-                init <- convert_to_expression(req, expr.at),
-                flags = VariableFlags init_via_move
-            ]]
+        // @@ => [[EcsQuery ...]]
+        var erq_blk <- new [[ExprBlock() at=expr.at,
+            returnType <- new [[TypeDecl() at=expr.at, baseType=Type autoinfer]],
+            blockFlags = ExprBlockFlags isClosure
+        ]]
+        erq_blk.list |> emplace_new <| new [[ExprReturn() at=expr.at,
+            subexpr <- convert_to_expression(req, expr.at),
+            returnFlags = ExprReturnFlags moveSemantics
+        ]]
+        var erq_fun <- new [[ExprMakeBlock() at=expr.at,
+            mmFlags=ExprMakeBlockFlags isLocalFunction,
+            _block <- erq_blk
+        ]]
+        // for s1, s2 ...
         var qloop <- new [[ExprFor() at=qblk.at, visibility=qblk.at]]
         var kaboom : array<tuple<string;string>>
         for a in qblk.arguments
@@ -159,10 +163,9 @@ class ApplyMacro : AstCallMacro
             for kb in kaboom
                 rules |> kaboomVarField(kb._0,kb._1)
         apply_template(expr.at, qblock) <| $ ( rules )
-            rules |> renameVariable("tag_erq") <| erq_name
+            rules |> replaceVariable("tag_erq") <| erq_fun
             rules |> replaceBlockArgument("tag_arch") <| arch_name
-            rules |> replaceVariable("tag_req_array") <| convert_to_expression(req, expr.at)
-            rules |> replaceVariable("tag_req") <| ereq
+            rules |> replaceVariable("tag_req") <| new [[ExprConstUInt() at=expr.at, value=req.hash]]
             rules |> replaceVariable("tag_loop") <| qloop
         var qres <- move_unquote_block(qblock)
         (qres as ExprBlock).blockFlags ^= ExprBlockFlags isClosure

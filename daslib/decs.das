@@ -88,6 +88,9 @@ def public debug_dump
             for c in arch.components
                 unsafe
                     print("\t\t{c.name} : {describe(c.info)} = {sprint_data(addr(c.data[index*c.stride]),c.info,print_flags humanReadable)}\n")
+    for erq in ecsQueries
+        print("query {erq.hash}\n")
+        print("\treq = {erq.req}\n\treqn = {erq.reqn}\n\tarchetypes = {erq.archetypes}\n")
 
 def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype; idx:int; isNew:bool ):void> )
     var afound & = archetypeLookup[hash]
@@ -184,10 +187,13 @@ def public verify_request ( var erq : EcsRequest ) : tuple<ok:bool;error:string>
     return [[auto true,""]]
 
 def public compile_request ( var erq : EcsRequest )
+    sort_unique(erq.req)
+    sort_unique(erq.reqn)
+    erq.hash = req_hash(erq)
+
+def public lookup_request ( var erq : EcsRequest )
     if erq.hash==0u
-        sort_unique(erq.req)
-        sort_unique(erq.reqn)
-        erq.hash = req_hash(erq)
+        compile_request(erq)
     var ql & = queryLookup[erq.hash]
     if ql == 0
         for arch,archi in allArchetypes,range(INT_MAX)
@@ -198,7 +204,18 @@ def public compile_request ( var erq : EcsRequest )
     return ql - 1
 
 def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype):void> )
-    let qi = compile_request(erq)
+    let qi = lookup_request(erq)
+    for aidx in ecsQueries[qi].archetypes
+        var arch & = allArchetypes[aidx]
+        if arch.size > 0
+            invoke ( blk, arch )
+
+def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype):void> )
+    var qi = -1
+    queryLookup |> find_if_exists(hash) <| $ ( ql )
+        qi = *ql - 1
+    if qi == -1
+        qi = lookup_request(invoke(erq))
     for aidx in ecsQueries[qi].archetypes
         var arch & = allArchetypes[aidx]
         if arch.size > 0
