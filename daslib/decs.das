@@ -19,7 +19,7 @@ struct public Component
     stride : int
     data : array<uint8>
     [[do_not_delete]] text : array<string>
-    info : TypeInfo const?
+    [[do_not_delete]] info : TypeInfo const?
 
 struct public EntityId
     id : uint
@@ -33,7 +33,7 @@ struct public Archetype
 
 struct public ComponentValue
     name : string
-    info : TypeInfo const?
+    [[do_not_delete]] info : TypeInfo const?
     data : float4[4]
 
 typedef DeferEval = lambda<():void>
