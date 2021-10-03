@@ -9,15 +9,15 @@ require ast
 require daslib/ast_boost
 
 struct Template
-    kaboomVar : table<string; bool>
+    kaboomVar : table<string; string>
     var2name : table<string; string>
     var2expr : table<string; smart_ptr<Expression>>
     type2type : table<string; string>
     blockArgName : table<string; string>
     annArg : table<string; lambda<(var ann: AnnotationDeclaration):void> >
 
-def kaboomVarField ( var self:Template; name:string )
-    self.kaboomVar[name] = true
+def kaboomVarField ( var self:Template; name,prefix:string )
+    self.kaboomVar[name] = prefix
 
 def replaceVariable ( var self:Template; name:string; var expr : smart_ptr<ast::Expression> )
     self.var2expr[name] <- expr
@@ -45,7 +45,8 @@ class private TemplateVisitor : AstVisitor
         if ev != null
             let kv = string(ev.name)
             if rules.kaboomVar |> key_exists(kv)
-                var nv <- new [[ExprVar() at=expr.at, name:=expr.name]]
+                let prefix = rules.kaboomVar[kv]
+                var nv <- new [[ExprVar() at=expr.at, name:="{prefix}{expr.name}"]]
                 return nv
         return expr
     def override visitExprLet( var expr:smart_ptr<ExprLet> ) : ExpressionPtr

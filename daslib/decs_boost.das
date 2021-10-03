@@ -31,18 +31,28 @@ class DecsReqN : AstFunctionAnnotation {}
 [structure_macro(name="decs_template")]
 class DecsTemplate : AstStructureAnnotation {}
 
+variant ItCheck
+    yes : string
+    no  : bool
+
 def private is_decs_template ( t:TypeDeclPtr )
     if t.baseType != Type tStructure
-        return false
+        return [[ItCheck no=true]]
     for ann in t.structType.annotations
         if eq(ann.annotation.name,"decs_template")
-            return true
-    return false
+            let p = find_arg("prefix", ann.arguments)
+            if p is tString
+                return [[ItCheck yes=p as tString]]
+            elif p is tBool
+                return [[ItCheck yes=""]]
+            else
+                return [[ItCheck yes="{t.structType.name}_"]]
+    return [[ItCheck no=true]]
 
-def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart_ptr<ExprFor>; a; const_parent : bool = false )
+def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart_ptr<ExprFor>; a; prefix:string; const_parent : bool = false )
     let qli = length(qloop.iterators)
     qloop.iterators |> resize( qli + 1 )
-    qloop.iterators[qli] := a.name
+    qloop.iterators[qli] := "{prefix}{a.name}"
     qloop.iteratorsAt |> push(a.at)
     var ftype <- clone_type(a._type)
     ftype.flags &= ~ TypeDeclFlags constant
@@ -91,13 +101,14 @@ class ApplyMacro : AstCallMacro
         var req : EcsRequest
         for a in qblk.arguments
             if a.init==null
-                if a._type |> is_decs_template
+                let detp = a._type |> is_decs_template
+                if detp is yes
                     for f in a._type.structType.fields
-                        if f._type |> is_decs_template
+                        if (f._type |> is_decs_template) is yes
                             macro_error(prog,expr.at,"nested desc_template are not supported")
                             return [[ExpressionPtr]]
                         if f.init == null
-                            req.req |> push(string(f.name))
+                            req.req |> push("{detp as yes}{f.name}")
                 else
                     req.req |> push(string(a.name))
         for aa in qblk.annotations
@@ -124,15 +135,16 @@ class ApplyMacro : AstCallMacro
                 flags = VariableFlags init_via_move
             ]]
         var qloop <- new [[ExprFor() at=qblk.at, visibility=qblk.at]]
-        var kaboom : array<string>
+        var kaboom : array<tuple<string;string>>
         for a in qblk.arguments
-            if a._type |> is_decs_template
-                kaboom |> push(string(a.name))
+            let detp = a._type |> is_decs_template
+            if detp is yes
+                kaboom |> push <| [[auto string(a.name),detp as yes]]
                 for f in a._type.structType.fields
-                    if !append_iterator(prog, arch_name, qloop, f, a._type.flags.constant)
+                    if !append_iterator(prog, arch_name, qloop, f, detp as yes, a._type.flags.constant)
                         return [[ExpressionPtr]]
             else
-                if !append_iterator(prog, arch_name, qloop, a)
+                if !append_iterator(prog, arch_name, qloop, a, "")
                     return [[ExpressionPtr]]
         var qlbody <- new [[ExprBlock() at=qblk.at]]
         for l in qblk.list
@@ -142,7 +154,7 @@ class ApplyMacro : AstCallMacro
         qloop.body <- qlbody
         apply_template(qloop) <| $ ( rules )
             for kb in kaboom
-                rules |> kaboomVarField(kb)
+                rules |> kaboomVarField(kb._0,kb._1)
         apply_template(expr.at, qblock) <| $ ( rules )
             rules |> renameVariable("tag_erq") <| erq_name
             rules |> replaceBlockArgument("tag_arch") <| arch_name

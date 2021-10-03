@@ -12,7 +12,8 @@ def main
     test_query()
     test_query_macro()
 
-[decs_template]
+// can specify prefix="string", prefix for nothing, or not specify for Particle_
+[decs_template(prefix)]
 struct Particle
     pos, vel : float3
 
