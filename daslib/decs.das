@@ -160,8 +160,7 @@ def private req_hash ( erq : EcsRequest )
     return ahash
 
 def public has ( arch:Archetype; name:string )
-    return arch.components |> binary_search ( [[Component name=name]] ) <| $ ( x, y )
-        return x.name < y.name
+    return arch.components |> binary_search ( [[Component name=name]] ) <| $ ( x, y ) => x.name < y.name
 
 def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
     if erq.hash==arch.hash
@@ -204,8 +203,7 @@ def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-con
         return <- dest
 
 def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&>#
-    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y )
-        return x.name < y.name
+    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
         let comp & = arch.components[idx]
         if comp.name==name
@@ -224,8 +222,7 @@ def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-con
         return <- get(arch, name, value)
 
 def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iterator<TT const &>
-    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y )
-        return x.name < y.name
+    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
         let comp & = arch.components[idx]
         if comp.name==name
@@ -316,8 +313,7 @@ def public commit
     delete deferActions
 
 def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
-    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y )
-        return x.name < y.name
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         unsafe
             let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
@@ -337,8 +333,7 @@ def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
     concept_assert((typeinfo(is_pod value) || typeinfo(is_string value))
         && typeinfo(sizeof value)<=16, "unsupported component type {typeinfo(typename value)}")
     let cv = make_component(name, value)
-    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y )
-        return x.name < y.name
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         if cmp[idx].info.hash != cv.info.hash
             panic("set component {name} type mismatch, expecting {describe(cmp[idx].info)} vs {describe(cv.info)}")
@@ -347,11 +342,9 @@ def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
         cmp |> push(cv, idx)    // insert new one
 
 def public has ( var cmp:ComponentMap; name:string )
-    return binary_search(cmp,[[ComponentValue name=name]]) <| $ ( x,y )
-        return x.name < y.name
+    return binary_search(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
 
 def public remove ( var cmp:ComponentMap; name:string )
-    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y )
-        return x.name < y.name
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         cmp |> erase(idx)
