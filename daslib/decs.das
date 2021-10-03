@@ -54,7 +54,8 @@ enum private ReqLookup
     no
 
 var private requestLookup : table<uint64; ReqLookup>
-var private allArchetypes : table<ComponentHash; Archetype>
+var private archetypeLookup : table<ComponentHash; int>
+var private allArchetypes : array<Archetype>
 var private deferActions : array<DeferAction>
 var private entityFreeList : array<EntityId>
 var private entityLookup : array<tuple<generation:int;archetype:ComponentHash;index:int>>
@@ -62,6 +63,7 @@ var private componentTypeCheck : table<string; TypeInfo const?>
 
 def restart
     delete deferActions
+    delete archetypeLookup
     delete allArchetypes
     delete entityFreeList
     delete entityLookup
@@ -80,7 +82,7 @@ def private new_entity_id()
     return eid
 
 def public debug_dump
-    for arch in values(allArchetypes)
+    for arch in allArchetypes
         print("archtype {arch.hash} : {arch.size}\n")
         // debug(arch)
         for index in range(arch.size)
@@ -90,14 +92,13 @@ def public debug_dump
                     print("\t\t{c.name} : {describe(c.info)} = {sprint_data(addr(c.data[index*c.stride]),c.info,print_flags humanReadable)}\n")
 
 def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype; isNew:bool ):void> )
-    var afound & = allArchetypes[hash]
-    __builtin_table_lock(allArchetypes) // todo: more elegant table lock. with find?
-    if afound.hash != [[ComponentHash]]
-        invoke(blk, afound, false)
+    var afound & = archetypeLookup[hash]
+    if afound==0
+        allArchetypes |> emplace([[Archetype hash=hash]])
+        afound = length(allArchetypes)
+        invoke(blk, allArchetypes[afound-1], true)
     else
-        afound.hash = hash
-        invoke(blk, afound, true)
-    __builtin_table_unlock(allArchetypes)
+        invoke(blk, allArchetypes[afound-1], false)
 
 def private create_archetype ( var arch:Archetype; cmp:ComponentMap )
     assert(length(arch.components)==0)
@@ -196,7 +197,7 @@ def public compile_request ( var erq : EcsRequest )
 
 def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype):void> )
     compile_request(erq)
-    for arch in values(allArchetypes)
+    for arch in allArchetypes
         if arch.size > 0
             if erq |> can_process_request(arch)
                 invoke ( blk, arch )
@@ -250,7 +251,7 @@ def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
     if lookup.generation != eid.generation
         return
     var cmp : ComponentMap
-    var arch & = allArchetypes[lookup.archetype]
+    var arch & = allArchetypes[archetypeLookup[lookup.archetype]-1]
     let eidx = entityLookup[eid.id].index
     cmp |> reserve ( length(arch.components) )
     for c in arch.components
@@ -291,7 +292,7 @@ def private create_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
 def private delete_entity_imm ( eid:EntityId )
     var lookup & = entityLookup[eid.id]
     if lookup.generation == eid.generation
-        var arch & = allArchetypes[lookup.archetype]
+        var arch & = allArchetypes[archetypeLookup[lookup.archetype]-1]
         let di = entityLookup[eid.id].index
         entityLookup[eid.id].generation = 0
         entityFreeList |> push(eid)
