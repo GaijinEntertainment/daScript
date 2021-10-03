@@ -46,6 +46,7 @@ typedef ComponentMap = array<ComponentValue>
 struct public EcsRequest
     hash : ComponentHash
     req : array<string>
+    reqn : array<string>
 
 enum private ReqLookup
     dontKnow
@@ -154,6 +155,8 @@ def private req_hash ( erq : EcsRequest )
     var ahash : ComponentHash
     for kv in erq.req
         ahash = (ahash<<<2u) ^ hash(kv)
+    for kv in erq.reqn
+        ahash = (ahash<<<2u) ^ ~hash(kv)
     return ahash
 
 def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
@@ -169,11 +172,21 @@ def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
             if !found
                 rlook = ReqLookup no
                 break
+        if rlook == ReqLookup yes
+            for r in erq.reqn
+                let found = arch.components |> binary_search ( [[Component name=r]] ) <| $ ( x, y )
+                    return x.name < y.name
+                if found
+                    rlook = ReqLookup no
+                    break
     return rlook==ReqLookup yes
 
 def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype):void> )
     if erq.hash==0u
-        sort(erq.req)
+        if !empty(erq.req)
+            sort(erq.req)
+        if !empty(erq.reqn)
+            sort(erq.reqn)
         erq.hash = req_hash(erq)
     for arch in values(allArchetypes)
         if arch.size > 0

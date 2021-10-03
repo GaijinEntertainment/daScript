@@ -67,6 +67,18 @@ def test_query
     assert(total3==6)
     assert(found3==2)
     debug_dump()
+    var total4 = 0
+    var erq4 <- [[EcsRequest
+        req <- [{string "pos"}],
+        reqn <- [{string "col"}]
+    ]]
+    erq4 |> for_each_archetype <| $ ( arch )
+        for pos in get(arch,"pos",type<float3>)
+            pos.y -= 0.001
+            total4 ++
+    assert(total4==3)
+    debug_dump()
+
 
 
 def test_type_mismatch
