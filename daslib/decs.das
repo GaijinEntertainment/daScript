@@ -47,19 +47,16 @@ struct public EcsRequest
     hash : ComponentHash
     req : array<string>
     reqn : array<string>
+    archetypes : array<int>
 
-enum private ReqLookup
-    dontKnow
-    yes
-    no
-
-var private requestLookup : table<uint64; ReqLookup>
 var private archetypeLookup : table<ComponentHash; int>
 var private allArchetypes : array<Archetype>
 var private deferActions : array<DeferAction>
 var private entityFreeList : array<EntityId>
 var private entityLookup : array<tuple<generation:int;archetype:ComponentHash;index:int>>
 var private componentTypeCheck : table<string; TypeInfo const?>
+var private ecsQueries : array<EcsRequest>
+var private queryLookup : table<uint; int>
 
 def restart
     delete deferActions
@@ -68,7 +65,8 @@ def restart
     delete entityFreeList
     delete entityLookup
     delete componentTypeCheck
-    delete requestLookup
+    delete ecsQueries
+    delete queryLookup
 
 def private new_entity_id()
     var eid : EntityId
@@ -91,19 +89,19 @@ def public debug_dump
                 unsafe
                     print("\t\t{c.name} : {describe(c.info)} = {sprint_data(addr(c.data[index*c.stride]),c.info,print_flags humanReadable)}\n")
 
-def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype; isNew:bool ):void> )
+def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype; idx:int; isNew:bool ):void> )
     var afound & = archetypeLookup[hash]
     if afound==0
         allArchetypes |> emplace([[Archetype hash=hash]])
         afound = length(allArchetypes)
-        invoke(blk, allArchetypes[afound-1], true)
+        invoke(blk, allArchetypes[afound-1], afound-1, true)
     else
-        invoke(blk, allArchetypes[afound-1], false)
+        invoke(blk, allArchetypes[afound-1], afound-1, false)
 
-def private create_archetype ( var arch:Archetype; cmp:ComponentMap )
+def private create_archetype ( var arch:Archetype; cmp:ComponentMap; idx:int )
     assert(length(arch.components)==0)
     arch.eidIndex = -1
-    for kv,kvi in cmp,range(100500)
+    for kv,kvi in cmp,range(INT_MAX)
         var ct & = componentTypeCheck[kv.name]
         if ct != null
             if kv.info.hash != (*ct).hash
@@ -121,6 +119,9 @@ def private create_archetype ( var arch:Archetype; cmp:ComponentMap )
             assert(arch.eidIndex==-1)
             arch.eidIndex = kvi
     assert(arch.eidIndex!=-1)
+    for erq in ecsQueries
+        if erq |> can_process_request(arch)
+            erq.archetypes |> push(idx)
 
 def private get_eid ( var arch:Archetype; index:int ) : EntityId &
     unsafe
@@ -166,20 +167,13 @@ def public has ( arch:Archetype; name:string )
 def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
     if erq.hash==arch.hash
         return true
-    let key = (uint64(erq.hash)<<<32ul) ^ (uint64(arch.hash))
-    var rlook & = requestLookup[key]
-    if rlook==ReqLookup dontKnow
-        rlook = ReqLookup yes
-        for r in erq.req
-            if ! arch |> has(r)
-                rlook = ReqLookup no
-                break
-        if rlook == ReqLookup yes
-            for r in erq.reqn
-                if arch |> has(r)
-                    rlook = ReqLookup no
-                    break
-    return rlook==ReqLookup yes
+    for r in erq.req
+        if ! arch |> has(r)
+            return false
+    for r in erq.reqn
+        if arch |> has(r)
+            return false
+    return true
 
 def public verify_request ( var erq : EcsRequest ) : tuple<ok:bool;error:string>
     if erq.hash==0u || (empty(erq.req) && empty(erq.reqn))
@@ -194,13 +188,21 @@ def public compile_request ( var erq : EcsRequest )
         sort_unique(erq.req)
         sort_unique(erq.reqn)
         erq.hash = req_hash(erq)
+    var ql & = queryLookup[erq.hash]
+    if ql == 0
+        for arch,archi in allArchetypes,range(INT_MAX)
+            if erq |> can_process_request(arch)
+                erq.archetypes |> push(archi)
+        ecsQueries |> push_clone(erq)
+        ql = length(ecsQueries)
+    return ql - 1
 
 def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype):void> )
-    compile_request(erq)
-    for arch in allArchetypes
+    let qi = compile_request(erq)
+    for aidx in ecsQueries[qi].archetypes
+        var arch & = allArchetypes[aidx]
         if arch.size > 0
-            if erq |> can_process_request(arch)
-                invoke ( blk, arch )
+            invoke ( blk, arch )
 
 [template(atype)]
 def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-const-&>#
@@ -269,9 +271,9 @@ def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
                 memcpy ( addr(c.data[eidx*c.stride]), addr(comp.data), c.stride )
     else
         arch |> remove_entity ( eidx )
-        with_archetype(new_ahash) <| $ ( var narch; isNew )
+        with_archetype(new_ahash) <| $ ( var narch; idx; isNew )
             if isNew
-                narch |> create_archetype(cmp)
+                narch |> create_archetype(cmp, idx)
             let neidx = narch |> create_entity(eid, cmp)
             entityLookup[eid.id] = [[auto eid.generation,new_ahash,neidx]]
     delete cmp
@@ -282,9 +284,9 @@ def private create_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
     invoke(blk, eid, cmp)
     cmp |> set("eid", eid)       // necessary?
     var ahash = cmp_archetype_hash(cmp)
-    with_archetype(ahash) <| $ ( var arch; isNew )
+    with_archetype(ahash) <| $ ( var arch; idx; isNew )
         if isNew
-            arch |> create_archetype(cmp)
+            arch |> create_archetype(cmp, idx)
         let eidx = arch |> create_entity(eid,cmp)
         entityLookup[eid.id] = [[auto eid.generation,ahash,eidx]]
     delete cmp
