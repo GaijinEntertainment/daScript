@@ -1,8 +1,14 @@
+options persistent_heap = true
+options persistent_string_heap = true
+options gc
+
 options log_compile_time
 
 require daslib/decs_boost
 require daslib/apply
 require daslib/static_let
+
+require rtti
 
 [export]
 def main
@@ -11,6 +17,26 @@ def main
     test_type_mismatch()
     test_query()
     test_query_macro()
+    test_strings()
+
+def test_strings
+    print("\n\nTEST STRINGS\n")
+    restart()
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp |> set ( "pos", float3(i))
+            cmp |> set ( "txt", "{i}")
+    commit()
+    debug_dump()
+    before_gc()
+    unsafe
+        string_heap_collect()
+    debug_dump()
+    var j = 0
+    query <| $ ( txt:string )
+        assert(txt=="{j}")
+        j ++
+    debug_dump()
 
 // can specify prefix="string", prefix for nothing, or not specify for Particle_
 [decs_template(prefix)]
@@ -219,3 +245,4 @@ def test_create_delete
 
 options debugger
 require daslib/debug
+

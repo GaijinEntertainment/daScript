@@ -18,6 +18,7 @@ struct public Component
     hash : ComponentHash
     stride : int
     data : array<uint8>
+    [[do_not_delete]] text : array<string>
     info : TypeInfo const?
 
 struct public EntityId
@@ -78,6 +79,15 @@ def private new_entity_id()
         entityLookup |> push([[auto 0,0u,0]])
     eid.generation ++
     return eid
+
+def public before_gc
+    for arch in allArchetypes
+        if arch.size > 0
+            for comp in arch.components
+                if comp.info.basicType==Type tString
+                    unsafe
+                        _builtin_make_temp_array(comp.text, addr(comp.data[0]), arch.size )
+                        __builtin_array_lock(comp.text)
 
 def public debug_dump
     for arch in allArchetypes
