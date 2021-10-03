@@ -180,13 +180,22 @@ def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
                     break
     return rlook==ReqLookup yes
 
-def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype):void> )
+def public verify_request ( var erq : EcsRequest ) : tuple<ok:bool;error:string>
+    if erq.hash==0u || (empty(erq.req) && empty(erq.reqn))
+        return [[auto false, "missing components"]]
+    for N in erq.reqn   // assuming require_not is typically shorter
+        if erq.req |> binary_search(N)
+            return [[auto false, "duplicate req and neq {N}"]]
+    return [[auto true,""]]
+
+def public compile_request ( var erq : EcsRequest )
     if erq.hash==0u
-        if !empty(erq.req)
-            sort(erq.req)
-        if !empty(erq.reqn)
-            sort(erq.reqn)
+        sort_unique(erq.req)
+        sort_unique(erq.reqn)
         erq.hash = req_hash(erq)
+
+def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype):void> )
+    compile_request(erq)
     for arch in values(allArchetypes)
         if arch.size > 0
             if erq |> can_process_request(arch)

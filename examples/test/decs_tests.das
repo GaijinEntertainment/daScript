@@ -35,6 +35,12 @@ def test_query_macro
     assert(count==5)
     assert(count_ff==3)
     debug_dump()
+    var count_nc = 0
+    query <| $ [decs_require_not(col)] ( var pos:float3& )
+        pos = float3(13)
+        count_nc ++
+    assert(count_nc==3)
+    debug_dump()
 
 def test_query
     print("\n\nTEST QUERY\n")
@@ -160,7 +166,6 @@ struct Foo
     name : string
     eid : EntityId
     foobar : int
-
 
 def test_create_delete
     print("\n\nTEST CREATE-DELETE\n")

@@ -65,6 +65,10 @@ class AstFunctionAnnotation
     def abstract isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
     def abstract isSpecialized : bool
 
+class AstBlockAnnotation
+    def abstract apply ( var blk:smart_ptr<ExprBlock>; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+    def abstract finish ( var blk:smart_ptr<ExprBlock>; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+
 class AstStructureAnnotation
     def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
     def abstract finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
@@ -478,6 +482,14 @@ def make_function_annotation ( name : string; someClassPtr ) : FunctionAnnotatio
         concept_assert(false,"expecting pointer to class")
         return [[FunctionAnnotationPtr]]
 
+def make_block_annotation ( name : string; someClassPtr ) : FunctionAnnotationPtr
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_block_annotation(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[FunctionAnnotationPtr]]
+
 def make_structure_annotation ( name : string; someClassPtr ) : StructureAnnotationPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
@@ -543,6 +555,12 @@ def make_variant_macro ( name : string; someClassPtr ) : VariantMacroPtr
     else
         concept_assert(false,"expecting pointer to class")
         return [[VariantMacroPtr]]
+
+def add_new_block_annotation ( name:string; someClassPtr )
+    var ann <- make_block_annotation(name, someClassPtr)
+    this_module() |> add_function_annotation(ann)
+    unsafe
+        delete ann
 
 def add_new_function_annotation ( name:string; someClassPtr )
     var ann <- make_function_annotation(name, someClassPtr)

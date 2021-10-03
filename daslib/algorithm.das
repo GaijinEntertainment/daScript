@@ -7,6 +7,23 @@ module algorithm shared public
 require daslib/array_boost
 require daslib/contracts
 
+def unique ( var a:array<auto(TT)> )
+    var pidx = -1
+    var b : array<TT-const-&>
+    for e,eidx in a,range(length(a))
+        if pidx==-1 || a[pidx]!=e
+            pidx = eidx
+            b |> push_clone(e)
+    return <- b
+
+def sort_unique ( var a : array<auto(TT)> )
+    if empty(a)
+        return
+    sort(a)
+    var b <- unique(a)
+    delete a
+    a <- b
+
 def reverse ( var a:array<auto> )
     let l = length(a)
     let half = l/2

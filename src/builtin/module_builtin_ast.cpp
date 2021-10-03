@@ -1974,6 +1974,44 @@ namespace das {
         }
     };
 
+    class BlockAnnotationAdapter : public FunctionAnnotation, AstBlockAnnotation_Adapter {
+    public:
+        BlockAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+        : FunctionAnnotation(n), AstBlockAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
+        }
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &,
+                            const AnnotationArgumentList &, string & err ) override {
+            err = "not a function annotation";
+            return false;
+        }
+        virtual bool finalize ( const FunctionPtr &, ModuleGroup &,
+                               const AnnotationArgumentList &,
+                               const AnnotationArgumentList &, string & err ) override {
+            err = "not a function annotation";
+            return false;
+        }
+        virtual bool apply ( ExprBlock * blk, ModuleGroup & group,
+                            const AnnotationArgumentList & args, string & errors ) override {
+            if ( auto fnApply = get_apply(classPtr) ) {
+                return invoke_apply(context,fnApply,classPtr,blk,group,args,errors);
+            } else {
+                return true;
+            }
+        }
+        virtual bool finalize ( ExprBlock * blk, ModuleGroup & group,
+                               const AnnotationArgumentList & args,
+                               const AnnotationArgumentList & progArgs, string & errors ) override {
+            if ( auto fnFinish = get_finish(classPtr) ) {
+                return invoke_finish(context,fnFinish,classPtr,blk,group,args,progArgs,errors);
+            } else {
+                return true;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
+
     class FunctionAnnotationAdapter : public FunctionAnnotation, AstFunctionAnnotation_Adapter {
     public:
         FunctionAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
@@ -2447,6 +2485,10 @@ namespace das {
                 }
             },lineInfo);
         }
+    }
+
+    FunctionAnnotationPtr makeBlockAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<BlockAnnotationAdapter>(name,(char *)pClass,info,context);
     }
 
     FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
@@ -3002,6 +3044,9 @@ namespace das {
             addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeFunctionAnnotation)>(*this, lib,  "make_function_annotation",
                 SideEffects::modifyExternal, "makeFunctionAnnotation")
+                    ->args({"name","class","info","context"});
+            addExtern<DAS_BIND_FUN(makeBlockAnnotation)>(*this, lib,  "make_block_annotation",
+                SideEffects::modifyExternal, "makeBlockAnnotation")
                     ->args({"name","class","info","context"});
             addExtern<DAS_BIND_FUN(addModuleFunctionAnnotation)>(*this, lib,  "add_function_annotation",
                 SideEffects::modifyExternal, "addModuleFunctionAnnotation")

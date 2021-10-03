@@ -111,6 +111,42 @@ public:
 };
 int AstFunctionAnnotation_Adapter::_das_class_method_offset[9];
 
+class AstBlockAnnotation_Adapter {
+protected:
+  enum {
+    __fn_apply = 0,
+    __fn_finish = 1,
+  };
+protected:
+  static int _das_class_method_offset[2];
+public:
+  AstBlockAnnotation_Adapter ( const StructInfo * info ) {
+    if ( _das_class_method_offset[0]==0 ) {
+      _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
+      _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
+    }
+  }
+  static __forceinline Func get_apply ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_apply]);
+  }
+  static __forceinline bool invoke_apply ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<ExprBlock> blk, ModuleGroup & group, AnnotationArgumentList const  & args, das::string & errors ) {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<ExprBlock>,ModuleGroup &,AnnotationArgumentList const  &,das::string &>
+        (__context__,nullptr,__funcCall__,
+          self,blk,group,args,errors);
+  }
+  static __forceinline Func get_finish ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_finish]);
+  }
+  static __forceinline bool invoke_finish ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<ExprBlock> blk, ModuleGroup & group, AnnotationArgumentList const  & args, AnnotationArgumentList const  & progArgs, das::string & errors ) {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<ExprBlock>,ModuleGroup &,AnnotationArgumentList const  &,AnnotationArgumentList const  &,das::string &>
+        (__context__,nullptr,__funcCall__,
+          self,blk,group,args,progArgs,errors);
+  }
+};
+int AstBlockAnnotation_Adapter::_das_class_method_offset[2];
+
 class AstStructureAnnotation_Adapter {
 protected:
   enum {

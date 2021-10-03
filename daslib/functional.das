@@ -155,7 +155,7 @@ def count(var start,step:int) : iterator<int>
         return true
 
 // [[ value; value; value; .... count times ]]
-def repeat_ref ( value:auto(TT); var total:int ) : iterator<TT const &>
+def repeat_ref ( value:auto(TT); var total:int )
     return <- generator<TT const &> () <| $ ()
         while total > 0
             yield value
@@ -163,7 +163,7 @@ def repeat_ref ( value:auto(TT); var total:int ) : iterator<TT const &>
         return false
 
 // [[ value; value; value; .... count times ]]
-def repeat(value : auto(TT); var count : int = 0) : iterator<TT const -&>
+def repeat(value : auto(TT); var count : int = 0)
     return <- generator<TT const-&> () <| $ ()
         if count == 0
             while true
