@@ -12,6 +12,10 @@ def main
     test_query()
     test_query_macro()
 
+[decs_template]
+struct Particle
+    pos, vel : float3
+
 def test_query_macro
     print("\n\nTEST QUERY MACRO\n")
     restart()
@@ -40,6 +44,9 @@ def test_query_macro
         pos = float3(13)
         count_nc ++
     assert(count_nc==3)
+    debug_dump()
+    query <| $ ( var p : Particle )
+        p.pos += p.vel
     debug_dump()
 
 def test_query

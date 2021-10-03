@@ -33,7 +33,7 @@ struct public Archetype
 struct public ComponentValue
     name : string
     info : TypeInfo const?
-    data : float4
+    data : float4[4]
 
 typedef DeferEval = lambda<():void>
 
@@ -341,7 +341,7 @@ def private make_component ( name:string; value:auto(TT) )
 
 def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
     concept_assert((typeinfo(is_pod value) || typeinfo(is_string value))
-        && typeinfo(sizeof value)<=16, "unsupported component type {typeinfo(typename value)}")
+        && typeinfo(sizeof value)<=typeinfo(sizeof cmp[0].data), "unsupported component type {typeinfo(typename value)}")
     let cv = make_component(name, value)
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name

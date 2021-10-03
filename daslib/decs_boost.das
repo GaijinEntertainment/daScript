@@ -11,7 +11,6 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/strings_boost
 
-
 /*
 from:
     query ( ) <| $ ( pos:float3&; vel:float3; col:uint=0x12345678 )
@@ -29,6 +28,52 @@ class DecsReq : AstFunctionAnnotation {}
 [block_macro(name="decs_require_not")]
 class DecsReqN : AstFunctionAnnotation {}
 
+[structure_macro(name="decs_template")]
+class DecsTemplate : AstStructureAnnotation {}
+
+def private is_decs_template ( t:TypeDeclPtr )
+    if t.baseType != Type tStructure
+        return false
+    for ann in t.structType.annotations
+        if eq(ann.annotation.name,"decs_template")
+            return true
+    return false
+
+def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart_ptr<ExprFor>; a; const_parent : bool = false )
+    let qli = length(qloop.iterators)
+    qloop.iterators |> resize( qli + 1 )
+    qloop.iterators[qli] := a.name
+    qloop.iteratorsAt |> push(a.at)
+    var ftype <- clone_type(a._type)
+    ftype.flags &= ~ TypeDeclFlags constant
+    ftype.flags &= ~ TypeDeclFlags ref
+    var getter = "get_ro"
+    if typeinfo(stripped_typename a)=="ast::FieldDeclaration"
+        if a.init != null
+            getter = "get_default_ro"
+        elif !const_parent
+            getter = "get"
+    else
+        if a.init != null
+            if a._type.flags.ref || !a._type.flags.constant
+                macro_error(prog,qloop.at,"argument {a.name} has default value, it can't be & or var")
+                return false
+            getter = "get_default_ro"
+        elif a._type.flags.ref
+            if a._type.flags.constant
+                macro_error(prog,qloop.at,"argument {a.name} is both & and constant")
+                return false
+            getter = "get"
+    var cget <- new [[ExprCall() name:=getter, at=a.at]]
+    cget.arguments |> emplace_new <| new [[ExprVar() at=a.at, name:=arch_name]]
+    cget.arguments |> emplace_new <| new [[ExprConstString() at=a.at, value:=a.name]]
+    if getter=="get_default_ro"
+        cget.arguments |> emplace_new <| clone_expression(a.init)
+    else
+        cget.arguments |> emplace_new <| new [[ExprTypeDecl() at=a.at, typeexpr<-ftype]]
+    qloop.sources |> emplace(cget)
+    return true
+
 [call_macro(name="query")]
 class ApplyMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
@@ -43,7 +88,18 @@ class ApplyMacro : AstCallMacro
         let prefix = "__{expr.at.line}_desc"
         let erq_name = "{prefix}_erq"
         let arch_name = "{prefix}_arch"
-        var req <- [[EcsRequest req<- [{for a in qblk.arguments; string(a.name); where a.init==null}]]]
+        var req : EcsRequest
+        for a in qblk.arguments
+            if a.init==null
+                if a._type |> is_decs_template
+                    for f in a._type.structType.fields
+                        if f._type |> is_decs_template
+                            macro_error(prog,expr.at,"nested desc_template are not supported")
+                            return [[ExpressionPtr]]
+                        if f.init == null
+                            req.req |> push(string(f.name))
+                else
+                    req.req |> push(string(a.name))
         for aa in qblk.annotations
             let isreq = eq(aa.annotation.name,"decs_require")
             let isreqn = eq(aa.annotation.name,"decs_require_not")
@@ -68,38 +124,25 @@ class ApplyMacro : AstCallMacro
                 flags = VariableFlags init_via_move
             ]]
         var qloop <- new [[ExprFor() at=qblk.at, visibility=qblk.at]]
-        qloop.iterators |> resize ( length(qblk.arguments) )
-        for i,a in qloop.iterators, qblk.arguments
-            i := a.name
-            qloop.iteratorsAt |> push(a.at)
-            var ftype <- clone_type(a._type)
-            ftype.flags &= ~ TypeDeclFlags constant
-            ftype.flags &= ~ TypeDeclFlags ref
-            var getter = "get_ro"
-            if a.init != null
-                if a._type.flags.ref || !a._type.flags.constant
-                    macro_error(prog,expr.at,"argument {a.name} has default value, it can't be & or var")
-                    return [[ExpressionPtr]]
-                getter = "get_default_ro"
-            elif a._type.flags.ref
-                if a._type.flags.constant
-                    macro_error(prog,expr.at,"argument {a.name} is both & and constant")
-                    return [[ExpressionPtr]]
-                getter = "get"
-            var cget <- new [[ExprCall() name:=getter, at=a.at]]
-            cget.arguments |> emplace_new <| new [[ExprVar() at=a.at, name:=arch_name]]
-            cget.arguments |> emplace_new <| new [[ExprConstString() at=a.at, value:=a.name]]
-            if getter=="get_default_ro"
-                cget.arguments |> emplace_new <| clone_expression(a.init)
+        var kaboom : array<string>
+        for a in qblk.arguments
+            if a._type |> is_decs_template
+                kaboom |> push(string(a.name))
+                for f in a._type.structType.fields
+                    if !append_iterator(prog, arch_name, qloop, f, a._type.flags.constant)
+                        return [[ExpressionPtr]]
             else
-                cget.arguments |> emplace_new <| new [[ExprTypeDecl() at=a.at, typeexpr<-ftype]]
-            qloop.sources |> emplace(cget)
+                if !append_iterator(prog, arch_name, qloop, a)
+                    return [[ExpressionPtr]]
         var qlbody <- new [[ExprBlock() at=qblk.at]]
         for l in qblk.list
             qlbody.list |> emplace_new <| clone_expression(l)
         for fl in qblk.finalList
             qlbody.finalList |> emplace_new <| clone_expression(fl)
         qloop.body <- qlbody
+        apply_template(qloop) <| $ ( rules )
+            for kb in kaboom
+                rules |> kaboomVarField(kb)
         apply_template(expr.at, qblock) <| $ ( rules )
             rules |> renameVariable("tag_erq") <| erq_name
             rules |> replaceBlockArgument("tag_arch") <| arch_name

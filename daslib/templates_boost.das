@@ -9,11 +9,15 @@ require ast
 require daslib/ast_boost
 
 struct Template
+    kaboomVar : table<string; bool>
     var2name : table<string; string>
     var2expr : table<string; smart_ptr<Expression>>
     type2type : table<string; string>
     blockArgName : table<string; string>
     annArg : table<string; lambda<(var ann: AnnotationDeclaration):void> >
+
+def kaboomVarField ( var self:Template; name:string )
+    self.kaboomVar[name] = true
 
 def replaceVariable ( var self:Template; name:string; var expr : smart_ptr<ast::Expression> )
     self.var2expr[name] <- expr
@@ -34,6 +38,16 @@ class private TemplateVisitor : AstVisitor
     rules : Template?
     def TemplateVisitor ( r : Template? )
         rules = r
+    def override visitExprField(expr:smart_ptr<ExprField>) : ExpressionPtr
+        var ev = expr.value ?as ExprVar
+        if ev == null
+            ev = (expr.value ?as ExprRef2Value) ?as ExprVar
+        if ev != null
+            let kv = string(ev.name)
+            if rules.kaboomVar |> key_exists(kv)
+                var nv <- new [[ExprVar() at=expr.at, name:=expr.name]]
+                return nv
+        return expr
     def override visitExprLet( var expr:smart_ptr<ExprLet> ) : ExpressionPtr
         for v in expr.variables
             let vn = string(v.name)
@@ -149,8 +163,14 @@ def add_global_private_let ( mod:Module?; vname:string; vat:LineInfo; var value:
 def make_unique_private_name ( prefix:string; vat:LineInfo )
     return "{prefix}_{vat.line}_{vat.column}"
 
-def apply_template ( at:LineInfo; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void>; forceAt:bool = true )
+def apply_template ( at:LineInfo; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> )
     var rules : Template
     invoke(blk, rules)
-    apply_template(rules, at, expr, forceAt)
+    apply_template(rules, at, expr, true)
+    delete rules
+
+def apply_template ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> )
+    var rules : Template
+    invoke(blk, rules)
+    apply_template(rules,expr.at, expr, false)
     delete rules
