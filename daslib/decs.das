@@ -159,6 +159,10 @@ def private req_hash ( erq : EcsRequest )
         ahash = (ahash<<<2u) ^ ~hash(kv)
     return ahash
 
+def public has ( arch:Archetype; name:string )
+    return arch.components |> binary_search ( [[Component name=name]] ) <| $ ( x, y )
+        return x.name < y.name
+
 def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
     if erq.hash==arch.hash
         return true
@@ -167,16 +171,12 @@ def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
     if rlook==ReqLookup dontKnow
         rlook = ReqLookup yes
         for r in erq.req
-            let found = arch.components |> binary_search ( [[Component name=r]] ) <| $ ( x, y )
-                return x.name < y.name
-            if !found
+            if ! arch |> has(r)
                 rlook = ReqLookup no
                 break
         if rlook == ReqLookup yes
             for r in erq.reqn
-                let found = arch.components |> binary_search ( [[Component name=r]] ) <| $ ( x, y )
-                    return x.name < y.name
-                if found
+                if arch |> has(r)
                     rlook = ReqLookup no
                     break
     return rlook==ReqLookup yes

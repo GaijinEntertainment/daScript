@@ -79,8 +79,6 @@ def test_query
     assert(total4==3)
     debug_dump()
 
-
-
 def test_type_mismatch
     print("\n\nTEST TYPE MISMATCH\n")
     restart()
