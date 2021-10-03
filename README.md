@@ -2,6 +2,19 @@
 daScript - high-performance statically strong typed scripting language
 
 ### What's new
+10/2/2021
+  * FEATURE - DECS - which is daScript ECS.
+      see daslib/decs and daslib/decs_boost for details. decs_test.das in examples.
+      upcomming is separate context for ecs memory
+  * feature - typedecl can now be a one-liner
+  * misc - empty block now produces SimNode_NOP vs SimNode_Block with nothing. its way faster and less memory
+  * feature - options log_symbol_use will report all used symbols with links on how they got used
+  * feature - block macro is now bound to das
+  * feature - many pass macros (lint, infer, dirty_infer, optimization) are now bound to das
+  * feature - Expr as, Expr is, Expr ?is for ExpressionPtr
+  * misc - better documentation. arguments names for just about everything
+  * misc - significantly better binding error reporting. experimental is automatic lib.addModule(requre()) if it can be deduced from all modules.
+  * greyprint - better preview
 
 9/26/2021
   * bug fixed - integer vector division and modulo operations now cause proper 'division by zero' exceptions. unused components of the vector no longer cause said exceptions.
