@@ -9,6 +9,7 @@ require ast
 require daslib/ast_boost
 
 struct Template
+    var2name : table<string; string>
     var2expr : table<string; smart_ptr<Expression>>
     type2type : table<string; string>
     blockArgName : table<string; string>
@@ -18,7 +19,7 @@ def replaceVariable ( var self:Template; name:string; var expr : smart_ptr<ast::
     self.var2expr[name] <- expr
 
 def renameVariable ( var self:Template; name, newName:string )
-    self |> replaceVariable(name) <| ExpressionPtr(new [[ExprVar() name:=newName]])
+    self.var2name[name] = newName
 
 def replaceType ( var self:Template; name,newName:string )
     self.type2type[name] = newName
@@ -33,8 +34,16 @@ class private TemplateVisitor : AstVisitor
     rules : Template?
     def TemplateVisitor ( r : Template? )
         rules = r
-    def override visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
-        let vn = "{expr.name}"
+    def override visitExprLet( var expr:smart_ptr<ExprLet> ) : ExpressionPtr
+        for v in expr.variables
+            let vn = string(v.name)
+            if key_exists(rules.var2name,vn)
+                v.name := rules.var2name[vn]
+        return expr
+    def override visitExprVar(var expr:smart_ptr<ExprVar>) : ExpressionPtr
+        let vn = string(expr.name)
+        if key_exists(rules.var2name,vn)
+            expr.name := rules.var2name[vn]
         if key_exists(rules.var2expr,vn)
             var rexpr <- clone_expression(rules.var2expr[vn])
             rexpr.at = expr.at

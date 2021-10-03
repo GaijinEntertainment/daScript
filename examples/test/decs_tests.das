@@ -1,14 +1,8 @@
 options log_compile_time
 
-require daslib/decs
+require daslib/decs_boost
 require daslib/apply
 require daslib/static_let
-
-struct Foo
-    pos : float3
-    name : string
-    eid : EntityId
-    foobar : int
 
 [export]
 def main
@@ -16,6 +10,31 @@ def main
     test_update()
     test_type_mismatch()
     test_query()
+    test_query_macro()
+
+def test_query_macro
+    print("\n\nTEST QUERY MACRO\n")
+    restart()
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp |> set ( "pos", float3(i))
+            cmp |> set ( "vel", float3(.1,.2,.3))
+    for i in range(2)
+        create_entity <| @ ( eid, cmp )
+            cmp |> set ( "pos", float3(i+3))
+            cmp |> set ( "vel", float3(.1,.2,.3))
+            cmp |> set ( "col", 0xffffffff)
+    commit()
+    var count = 0
+    var count_ff = 0
+    query <| $ ( var pos:float3&; vel:float3; col:uint=0x12345678 )
+        pos += vel
+        if col==0x12345678
+            count_ff ++
+        count ++
+    assert(count==5)
+    assert(count_ff==3)
+    debug_dump()
 
 def test_query
     print("\n\nTEST QUERY\n")
@@ -31,9 +50,10 @@ def test_query
             cmp |> set ( "col", 0xffffffff)
     commit()
     // query 1
-    var erq1 <- [[EcsRequest
-        req <- [{string "pos"; "vel"}]
-    ]]
+    static_let <|
+        var erq1 <- [[EcsRequest
+            req <- [{string "pos"; "vel"}]
+        ]]
     var total1 = 0
     erq1 |> for_each_archetype <| $ ( arch )
         for pos, vel in get(arch,"pos",type<float3>), get(arch,"vel",type<float3>)
@@ -42,9 +62,10 @@ def test_query
     assert(total1==6)
     // query 2
     var total2 = 0
-    var erq2 <- [[EcsRequest
-        req <- [{string "pos"; "col"}]
-    ]]
+    static_let <|
+        var erq2 <- [[EcsRequest
+            req <- [{string "pos"; "col"}]
+        ]]
     erq2 |> for_each_archetype <| $ ( arch )
         for col,pos in get(arch,"col",type<uint>),get_ro(arch,"pos",type<float3>)
             if pos.x > 101.
@@ -55,9 +76,10 @@ def test_query
     // query 3
     var total3 = 0
     var found3 = 0
-    var erq3 <- [[EcsRequest
-        req <- [{string "pos"}]
-    ]]
+    static_let <|
+        var erq3 <- [[EcsRequest
+            req <- [{string "pos"}]
+        ]]
     erq3 |> for_each_archetype <| $ ( arch )
         for col,pos in get_default_ro(arch,"col",0x12345678), get(arch,"pos",type<float3>)
             if col==0xff00ffff
@@ -68,10 +90,11 @@ def test_query
     assert(found3==2)
     debug_dump()
     var total4 = 0
-    var erq4 <- [[EcsRequest
-        req <- [{string "pos"}],
-        reqn <- [{string "col"}]
-    ]]
+    static_let <|
+        var erq4 <- [[EcsRequest
+            req <- [{string "pos"}],
+            reqn <- [{string "col"}]
+        ]]
     erq4 |> for_each_archetype <| $ ( arch )
         for pos in get(arch,"pos",type<float3>)
             pos.y -= 0.001
@@ -131,6 +154,13 @@ def test_update
         migr = eid
     commit()
     debug_dump()
+
+struct Foo
+    pos : float3
+    name : string
+    eid : EntityId
+    foobar : int
+
 
 def test_create_delete
     print("\n\nTEST CREATE-DELETE\n")
