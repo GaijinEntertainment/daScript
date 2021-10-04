@@ -659,6 +659,16 @@ namespace das
         return ins->second.get();
     }
 
+    bool FileAccess::invalidateFileInfo ( const string & fileName ) {
+        auto it = files.find(fileName);
+        if ( it != files.end() ) {
+            files.erase(it);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     FileInfo * FileAccess::getFileInfo ( const string & fileName ) {
         auto it = files.find(fileName);
         if ( it != files.end() ) {

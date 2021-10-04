@@ -96,19 +96,24 @@ namespace das
     };
 
     struct FileInfo {
+    public:
         FileInfo() = default;
         FileInfo(const char * s, uint32_t l) : source(s), sourceLength(l) {}
         virtual void freeSourceData() { }
         virtual ~FileInfo() { freeSourceData(); }
         void reserveProfileData();
-        const char * getSource() const { return source; }
+        const char * getSrcBytes() const { return source; }
+        const uint32_t getSrcLen() const { return sourceLength; }
         string                name;
-        const char *          source = nullptr;
-        uint32_t              sourceLength = 0;
         int32_t               tabSize = 4;
 #if DAS_ENABLE_PROFILER
+    public:
         vector<uint64_t>      profileData;
 #endif
+    protected:
+        const char *          source = nullptr;
+        uint32_t              sourceLength = 0;
+
     };
     typedef unique_ptr<FileInfo> FileInfoPtr;
 
@@ -123,6 +128,7 @@ namespace das
         virtual ~FileAccess() {}
         FileInfo * setFileInfo ( const string & fileName, FileInfoPtr && info );
         FileInfo * getFileInfo ( const string & fileName );
+        bool invalidateFileInfo ( const string & fileName );
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
         void freeSourceData();
         FileInfoPtr letGoOfFileInfo ( const string & fileName );

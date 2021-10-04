@@ -13,7 +13,7 @@ namespace das
     string to_string_ex ( float dnum );
     string reportError ( const struct LineInfo & li, const string & message, const string & extra,
         const string & fixme, CompilationError erc = CompilationError::unspecified );
-    string reportError ( const char * st, const char * fileName, int row, int col, int lrow, int lcol, int tabSize, const string & message,
+    string reportError ( const char * st, uint32_t stlen, const char * fileName, int row, int col, int lrow, int lcol, int tabSize, const string & message,
         const string & extra, const string & fixme, CompilationError erc = CompilationError::unspecified );
 }
 

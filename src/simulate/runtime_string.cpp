@@ -218,12 +218,13 @@ namespace das
         return result;
     }
 
-    string getFewLines ( const char* st, int ROW, int COL, int LROW, int LCOL, int TAB ) {
+    string getFewLines ( const char* st, uint32_t stlen, int ROW, int COL, int LROW, int LCOL, int TAB ) {
         TextWriter text;
         int col=0, row=1;
         auto it = st;
+        auto itend = st + stlen;
         if ( ROW>1 ) {
-            while ( *it ) {
+            while ( *it && it!=itend ) {
                 auto CH = *it++;
                 if ( CH=='\n' ) {
                     row++;
@@ -234,7 +235,7 @@ namespace das
         }
         if ( row!=ROW ) return "";
         auto beginOfLine = it;
-        while ( *it ) {
+        while ( *it && it!=itend ) {
             auto CH = *it++;
             if ( CH=='\t' ) {
                 int tcol = (col + TAB) & ~(TAB-1);
@@ -255,7 +256,7 @@ namespace das
         }
         it = beginOfLine;
         const char * tail = it + COL;
-        while ( *it && it != tail ) {
+        while ( *it && it!=tail && it!=itend ) {
             auto CH = *it++;
             if ( CH=='\t' ) {
                 int tcol = (col + TAB) & ~(TAB-1);
@@ -299,19 +300,20 @@ namespace das
     string reportError(const struct LineInfo & at, const string & message,
         const string & extra, const string & fixme, CompilationError erc) {
         return reportError(
-                at.fileInfo ? at.fileInfo->source : nullptr,
+                at.fileInfo ? at.fileInfo->getSrcBytes() : nullptr,
+                at.fileInfo ? at.fileInfo->getSrcLen() : 0,
                 at.fileInfo ? at.fileInfo->name.c_str() : nullptr,
                 at.line, at.column, at.last_line, at.last_column,
                 at.fileInfo ? at.fileInfo->tabSize : 4,
                 message, extra, fixme, erc );
     }
 
-    string reportError ( const char * st, const char * fileName,
+    string reportError ( const char * st, uint32_t stlen, const char * fileName,
         int row, int col, int lrow, int lcol, int tabSize, const string & message,
         const string & extra, const string & fixme, CompilationError erc ) {
         TextWriter ssw;
         if ( row ) {
-            auto text = st ? getFewLines(st, row, col, lrow, lcol, tabSize) : "";
+            auto text = st ? getFewLines(st, stlen, row, col, lrow, lcol, tabSize) : "";
             ssw << fileName << ":" << row << ":" << col << ":\n" << text;
             if ( erc != CompilationError::unspecified ) ssw << int(erc) << ": ";
             ssw << message << "\n";

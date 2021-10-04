@@ -2,7 +2,7 @@
 
 #include "daScript/ast/ast.h"
 
-void das_yybegin(const char * str);
+void das_yybegin(const char * str, uint32_t len);
 int das_yyparse();
 int das_yylex_destroy();
 
@@ -27,8 +27,8 @@ namespace das {
     }
 
     void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, vector<string> & req, das_set<FileInfo *> & collected  ) {
-        const char * src = fi->source;
-        uint32_t length = fi->sourceLength;
+        const char * src = fi->getSrcBytes();
+        uint32_t length = fi->getSrcLen();
         if ( isUtf8Text(src,length) ) { // skip utf8 byte order mark
             src += 3;
             length -= 3;
@@ -298,10 +298,12 @@ namespace das {
         g_FileAccessStack.clear();
         if ( auto fi = access->getFileInfo(fileName) ) {
             g_FileAccessStack.push_back(fi);
-            if (isUtf8Text(fi->source, fi->sourceLength)) {
-                das_yybegin(fi->source + 3);
+            auto src = fi->getSrcBytes();
+            auto len = fi->getSrcLen();
+            if (isUtf8Text(src, len)) {
+                das_yybegin(src + 3, len-3);
             } else {
-                das_yybegin(fi->source);
+                das_yybegin(src, len);
             }
         } else {
             g_Program->error(fileName + " not found", "","",LineInfo());

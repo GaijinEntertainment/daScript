@@ -410,7 +410,6 @@ namespace das {
 
     bool Module::compileBuiltinModule ( const string & modName, unsigned char * str, unsigned int str_len ) {
         TextWriter issues;
-        str[str_len-1] = 0;//replace last symbol with null terminating. fixme: This is sloppy, and assumes there is something to replace!
         auto access = make_smart<FileAccess>();
         auto fileInfo = make_unique<FileInfo>((char *) str, uint32_t(str_len));
         access->setFileInfo(modName, move(fileInfo));

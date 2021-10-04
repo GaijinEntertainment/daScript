@@ -1858,7 +1858,7 @@ YY_RULE_SETUP
             das_line_no.push_back(yylineno);
             yylineno = 1;
             yypush_buffer_state(YY_CURRENT_BUFFER);
-            yy_scan_bytes(info->source, info->sourceLength);
+            yy_scan_bytes(info->getSrcBytes(), info->getSrcLen());
         }
     }
     BEGIN(normal);
@@ -4005,7 +4005,7 @@ void das_yyend_reader ( void ) {
 extern int das_yydebug;
 #endif
 
-void das_yybegin(const char * str) {
+void das_yybegin(const char * str, uint32_t len ) {
     g_thisStructure = nullptr;
     das_module_alias.clear();
     das_already_include.clear();
@@ -4027,7 +4027,7 @@ void das_yybegin(const char * str) {
     das_c_style_depth = 0;
     das_arrow_depth = 0;
     BEGIN(normal);
-    yy_scan_string(str);
+    yy_scan_bytes(str, len);
 }
 
 
