@@ -1,6 +1,12 @@
 # daScript
 daScript - high-performance statically strong typed scripting language
 
+10/4/2021
+  * misc - desc is now GC-friendly
+  * feature - daslib/live started. it should handle live reloading, update, cross context in raw das
+  * bug fixed - annotationDataSid conflicts with SimNode_NOP, when empty
+  * bug fixed - move of local nonRef types in strange instances no longer causes internal compiler error
+
 ### What's new
 10/2/2021
   * FEATURE - DECS - which is daScript ECS.

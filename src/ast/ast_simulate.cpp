@@ -46,10 +46,7 @@ namespace das
         if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            DAS_ASSERTF(0, "we are calling makeLocalCMResMove where expression on a right is not a referece."
-                        "we should not be here, script compiler should have caught this during compilation."
-                        "compiler later will likely report internal compilation error.");
-            return nullptr;
+            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
         }
     }
 
@@ -121,7 +118,6 @@ namespace das
         if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
         } else {
-            // this is typically lambda or handled non-copyable
             return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
         }
     }
@@ -193,15 +189,8 @@ namespace das
         auto right = rE->simulate(context);
         if ( rightType.isRef() ) {
             return context.code->makeNode<SimNode_MoveRefValue>(at, left, right, rightType.getSizeOf());
-        } else if ( rightType.isPointer() && rightType.smartPtr ) {
+        } else  {
             return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
-        } else if ( rightType.isLambda() ) {
-            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
-        } else {
-            DAS_ASSERTF(0, "we are calling makeLocalMove where expression on a right is not a referece."
-                        "we should not be here, script compiler should have caught this during compilation."
-                        "compiler later will likely report internal compilation error.");
-            return nullptr;
         }
     }
 
