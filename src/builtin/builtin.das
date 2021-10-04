@@ -76,6 +76,20 @@ def push_clone ( var A : auto(CT) -# -const; b : auto(TT) implicit )
             var cb : TT -# -const := b
             _::emplace(A, cb)
 
+def back ( var a : array<auto(TT)> -const =const ) : TT &
+    let l = length(a)
+    if l==0
+        panic("back empty array")
+    unsafe
+        return a[l-1]
+
+def back ( a : array<auto(TT)> const =const ) : TT const &
+    let l = length(a)
+    if l==0
+        panic("back empty array")
+    unsafe
+        return a[l-1]
+
 def erase(var Arr:array<auto(numT)>;at:int)
     __builtin_array_erase(Arr,at,typeinfo(sizeof type<numT>))
 
