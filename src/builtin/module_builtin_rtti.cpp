@@ -1019,6 +1019,11 @@ namespace das {
         return context->stringHeap->allocateString(dt);
     }
 
+    char * builtin_debug_line ( const LineInfo & at, bool fully, Context * context ) {
+        auto dt = at.describe(fully);
+        return context->stringHeap->allocateString(dt);
+    }
+
     char * builtin_get_typeinfo_mangled_name ( TypeInfo * typeInfo, Context * context ) {
         if ( !typeInfo ) return nullptr;
         auto dt = getTypeInfoMangledName(typeInfo);
@@ -1195,10 +1200,14 @@ namespace das {
             // debug typeinfo
             addExtern<DAS_BIND_FUN(builtin_debug_type)>(*this, lib, "describe",
                 SideEffects::none, "builtin_debug_type")
-                    ->args({"type","context"});;
+                    ->args({"type","context"});
+            auto dl = addExtern<DAS_BIND_FUN(builtin_debug_line)>(*this, lib, "describe",
+                SideEffects::none, "builtin_debug_line_info")
+                    ->args({"lineinfo","fully","context"});
+            dl->arguments[1]->init = make_smart<ExprConstBool>(false);
             addExtern<DAS_BIND_FUN(builtin_get_typeinfo_mangled_name)>(*this, lib, "get_mangled_name",
                 SideEffects::none, "getTypeInfoMangledName")
-                    ->args({"type","context"});;
+                    ->args({"type","context"});
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo")->arg("line");

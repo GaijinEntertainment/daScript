@@ -61,7 +61,9 @@
 			"bitset": "cpp",
 			"fstream": "cpp",
 			"sstream": "cpp",
-			"xlocmes": "cpp"
+			"xlocmes": "cpp",
+			"format": "cpp",
+			"charconv": "cpp"
 		},
 		"dascript.experimental": true,
 		"dascript.hovers.verbose": true

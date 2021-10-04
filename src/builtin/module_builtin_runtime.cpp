@@ -355,6 +355,10 @@ namespace das
         context->to_out(text);
     }
 
+    void builtin_error ( char * text, Context * context ) {
+        context->to_err(text);
+    }
+
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * ) {
         context.breakPoint(call->debugInfo);
         return v_zero();
@@ -991,6 +995,9 @@ namespace das
                 ->args({"text","context","at"});
         addExtern<DAS_BIND_FUN(builtin_print)>(*this, lib, "print",
             SideEffects::modifyExternal, "builtin_print")
+                ->args({"text","context"});
+        addExtern<DAS_BIND_FUN(builtin_error)>(*this, lib, "error",
+            SideEffects::modifyExternal, "builtin_error")
                 ->args({"text","context"});
         addInterop<builtin_sprint,char *,vec4f,PrintFlags>(*this, lib, "sprint",
             SideEffects::modifyExternal, "builtin_sprint")

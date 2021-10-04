@@ -43,7 +43,7 @@ def public invoke_live ( fn:string )
             unsafe
                 invoke_in_context(appPtr, fn)
         recover
-            print("exception during '{fn}'\n{appPtr.exception}\n{report_line_info(appPtr.exceptionAt)}\n")
+            print("exception during '{fn}'\n{appPtr.exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public invoke_live ( fn:string; a1 )
@@ -52,7 +52,7 @@ def public invoke_live ( fn:string; a1 )
             unsafe
                 invoke_in_context(appPtr, fn, a1)
         recover
-            print("exception during '{fn}'\n{appPtr.exception}\n{report_line_info(appPtr.exceptionAt)}\n")
+            print("exception during '{fn}'\n{appPtr.exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public invoke_live ( fn:string; a1; a2 )
@@ -61,14 +61,26 @@ def public invoke_live ( fn:string; a1; a2 )
             unsafe
                 invoke_in_context(appPtr, fn, a1, a2)
         recover
-            print("exception during '{fn}'\n{appPtr.exception}\n{report_line_info(appPtr.exceptionAt)}\n")
+            print("exception during '{fn}'\n{appPtr.exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
-def private report_line_info(at:LineInfo)
-    if at.fileInfo != null
-        return "{at.fileInfo.name}:{int(at.line)}:{int(at.column)+1}"
-    else
-        return "somewhere at {int(at.line)}:{int(at.column)+1}"
+def public invoke_live ( fn:string; a1; a2; a3 )
+    if live_lookup(fn)
+        try
+            unsafe
+                invoke_in_context(appPtr, fn, a1, a2, a3)
+        recover
+            print("exception during '{fn}'\n{appPtr.exception}\n{describe(appPtr.exceptionAt)}\n")
+            appPtr := null
+
+def public invoke_live ( fn:string; a1; a2; a3; a4 )
+    if live_lookup(fn)
+        try
+            unsafe
+                invoke_in_context(appPtr, fn, a1, a2, a3, a4)
+        recover
+            print("exception during '{fn}'\n{appPtr.exception}\n{describe(appPtr.exceptionAt)}\n")
+            appPtr := null
 
 def public watch_files
     var clk = get_clock()
@@ -111,3 +123,7 @@ def public recompile
                 else
                     print("{appFile} failed to compile:\n{issues}\n")
                     appPtr := null
+
+def public live_keypressed ( keycode, scancode, action, mods : int )
+    // controls_keypressed(....)
+    invoke_live("keypressed", keycode, scancode, action, mods )

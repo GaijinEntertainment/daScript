@@ -8,10 +8,12 @@ namespace das {
     bool is_compiling_macros ( Context * ctx );
     void builtin_throw ( char * text, Context * context, LineInfoArg * at );
     void builtin_print ( char * text, Context * context );
+    void builtin_error ( char * text, Context * context );
     vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context );
     char * builtin_print_data_v ( float4 data, const TypeInfo * typeInfo, Bitfield flags, Context * context );
     char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context );
+    char * builtin_debug_line ( const LineInfo & at, bool fully, Context * context );
     char * builtin_get_typeinfo_mangled_name ( TypeInfo * typeInfo, Context * context );
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * );
     void builtin_stackwalk ( bool args, bool vars, Context * context, LineInfoArg * lineInfo );
