@@ -2388,6 +2388,11 @@ namespace das {
         module->lintMacros.push_back(newM);
     }
 
+    void addModuleGlobalLintMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
+        PassMacroPtr newM = move(_newM);
+        module->globalLintMacros.push_back(newM);
+    }
+
     void addModuleOptimizationMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
         PassMacroPtr newM = move(_newM);
         module->optimizationMacros.push_back(newM);
@@ -2794,6 +2799,10 @@ namespace das {
         return result;
     }
 
+    bool builtin_isVisibleDirectly ( Module * from, Module * too ) {
+        return from->isVisibleDirectly(too);
+    }
+
     class Module_Ast : public Module {
     public:
         template <typename RecAnn>
@@ -3110,7 +3119,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(addModuleLintMacro)>(*this, lib,  "add_lint_macro",
                 SideEffects::modifyExternal, "addModuleLintMacro")
                     ->args({"module","annotation","context"});
-            // lint macro
+            addExtern<DAS_BIND_FUN(addModuleGlobalLintMacro)>(*this, lib,  "add_global_lint_macro",
+                SideEffects::modifyExternal, "addModuleGlobalLintMacro")
+                    ->args({"module","annotation","context"});
+            // optimization macro
             addExtern<DAS_BIND_FUN(addModuleOptimizationMacro)>(*this, lib,  "add_optimization_macro",
                 SideEffects::modifyExternal, "addModuleOptimizationMacro")
                     ->args({"module","annotation","context"});
@@ -3232,6 +3244,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_structure_for_each_field)>(*this, lib,  "for_each_field",
                 SideEffects::modifyExternal, "builtin_structure_for_each_field")
                     ->args({"annotation","block","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_isVisibleDirectly)>(*this, lib, "is_visible_directly",
+                SideEffects::modifyExternal, "builtin_isVisibleDirectly")
+                    ->args({"from_module","which_module"});
             // context
             addAnnotation(make_smart<AstContextAnnotation>(lib));
             addExtern<DAS_BIND_FUN(getAstContext)>(*this, lib,  "get_ast_context",

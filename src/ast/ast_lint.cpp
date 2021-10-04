@@ -546,6 +546,14 @@ namespace das {
                     LineInfo(), CompilationError::invalid_option);
             }
         }
+        set<Module *> lints;
+        Module::foreach([&](Module * mod) -> bool {
+            DAS_ASSERT ( mod!=thisModule.get() );
+            for ( const auto & pm : mod->globalLintMacros ) {
+                pm->apply(this, thisModule.get());
+            }
+            return true;
+        });
         libGroup.foreach([&](Module * mod) -> bool {
             if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule.get() ) {
                 for ( const auto & pm : mod->lintMacros ) {

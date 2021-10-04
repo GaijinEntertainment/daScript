@@ -926,6 +926,7 @@ namespace das
         vector<PassMacroPtr>                        inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
         vector<PassMacroPtr>                        optimizationMacros; // optimization macros
         vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
+        vector<PassMacroPtr>                        globalLintMacros;   // lint macros which work everywhere
         vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         string  name;

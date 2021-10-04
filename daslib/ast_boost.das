@@ -281,6 +281,9 @@ class SetupDirtyInferMacro : SetupAnyAnnotation
 class SetupLintMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_lint_macro"
 
+class SetupGlobalLintMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_global_lint_macro"
+
 class SetupOptimizationMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_optimization_macro"
 
@@ -620,5 +623,5 @@ def private setup
         add_new_structure_annotation("dirty_infer_macro",new SetupDirtyInferMacro())
         add_new_structure_annotation("optimization_macro",new SetupOptimizationMacro())
         add_new_structure_annotation("lint_macro",new SetupLintMacro())
+        add_new_structure_annotation("global_lint_macro",new SetupGlobalLintMacro())
         add_new_variant_macro("better_rtti_in_expr", new BetterRttiVisitor())
-

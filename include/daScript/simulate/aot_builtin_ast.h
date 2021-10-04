@@ -451,6 +451,7 @@ namespace das {
     void addModuleInferMacro ( Module * module, PassMacroPtr & _newM, Context * );
     void addModuleInferDirtyMacro ( Module * module, PassMacroPtr & newM, Context * context );
     void addModuleLintMacro ( Module * module, PassMacroPtr & _newM, Context * );
+    void addModuleGlobalLintMacro ( Module * module, PassMacroPtr & _newM, Context * );
     void addModuleOptimizationMacro ( Module * module, PassMacroPtr & _newM, Context * );
     VariantMacroPtr makeVariantMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleVariantMacro ( Module * module, VariantMacroPtr & newM, Context * context );
@@ -492,6 +493,7 @@ namespace das {
     bool isTempType ( TypeDeclPtr ptr, bool refMatters );
     float4 evalSingleExpression ( const ExpressionPtr & expr, bool & ok );
     ExpressionPtr makeCall ( const LineInfo & at, const char * name );
+    bool builtin_isVisibleDirectly ( Module * from, Module * too );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {

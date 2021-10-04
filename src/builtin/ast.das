@@ -628,6 +628,12 @@ def add_new_lint_macro ( name:string; someClassPtr )
     unsafe
         delete ann
 
+def add_new_global_lint_macro ( name:string; someClassPtr )
+    var ann <- make_pass_macro(name, someClassPtr)
+    this_module() |> add_global_lint_macro(ann)
+    unsafe
+        delete ann
+
 def add_new_optimization_macro ( name:string; someClassPtr )
     var ann <- make_pass_macro(name, someClassPtr)
     this_module() |> add_optimization_macro(ann)

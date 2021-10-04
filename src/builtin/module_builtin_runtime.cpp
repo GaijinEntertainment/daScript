@@ -81,6 +81,13 @@ namespace das
         };
     };
 
+    struct NoLintFunctionAnnotation : MarkFunctionAnnotation {
+        NoLintFunctionAnnotation() : MarkFunctionAnnotation("no_lint") { }
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            return true;
+        };
+    };
+
     struct ExportFunctionAnnotation : MarkFunctionAnnotation {
         ExportFunctionAnnotation() : MarkFunctionAnnotation("export") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -917,6 +924,7 @@ namespace das
         addAnnotation(make_smart<GenericFunctionAnnotation>());
         addAnnotation(make_smart<MacroFunctionAnnotation>());
         addAnnotation(make_smart<ExportFunctionAnnotation>());
+        addAnnotation(make_smart<NoLintFunctionAnnotation>());
         addAnnotation(make_smart<SideEffectsFunctionAnnotation>());
         addAnnotation(make_smart<RunAtCompileTimeFunctionAnnotation>());
         addAnnotation(make_smart<UnsafeOpFunctionAnnotation>());

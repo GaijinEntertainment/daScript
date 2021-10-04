@@ -1,4 +1,5 @@
-require daslib/lint
+require daslib/lint_everything
+require daslib/json_boost
 
 [export]
 def main
