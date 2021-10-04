@@ -22,4 +22,6 @@ namespace das {
     void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, Context * context, LineInfoArg * arg );
     void instrument_all_functions ( Context & ctx );
     void clear_instruments ( Context & ctx );
+
+    bool has_function ( Context & ctx, const char * name );
 }

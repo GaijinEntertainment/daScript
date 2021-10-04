@@ -815,6 +815,10 @@ namespace debugapi {
         ctx.clearInstruments();
     }
 
+    bool has_function ( Context & ctx, const char * name ) {
+        return ctx.findFunction(name ? name : "") != nullptr;
+    }
+
     class Module_Debugger : public Module {
     public:
         Module_Debugger() : Module("debugapi") {
@@ -900,6 +904,10 @@ namespace debugapi {
             addInterop<get_global_variable,void *,vec4f,const char *>(*this,lib,"get_context_global_variable",
                 SideEffects::accessExternal,"get_global_variable")
                     ->args({"context","name"})->unsafeOperation = true;
+            // has function
+            addExtern<DAS_BIND_FUN(has_function)>(*this, lib,  "has_function",
+                SideEffects::none, "has_function")
+                    ->args({"context","function_name"});
             // pinvoke
             addInterop<pinvoke_impl,void,vec4f,const char *>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;

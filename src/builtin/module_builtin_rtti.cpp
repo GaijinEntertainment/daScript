@@ -259,6 +259,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addFieldEx("category", "category", offsetof(Context, category), makeContextCategoryFlags());
             addField<DAS_BIND_MANAGED_FIELD(breakOnException)>("breakOnException");
+            addField<DAS_BIND_MANAGED_FIELD(alwaysStackWalkOnException)>("alwaysStackWalkOnException");
             addField<DAS_BIND_MANAGED_FIELD(exception)>("exception");
             addField<DAS_BIND_MANAGED_FIELD(exceptionAt)>("exceptionAt");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalFunctions)>("totalFunctions",
@@ -645,14 +646,14 @@ namespace das {
     }
 
     void rtti_builtin_simulate ( const smart_ptr<Program> & program, bool useAot,
-            const TBlock<void,bool,Context *,string> & block, Context * context, LineInfoArg * lineinfo ) {
+            const TBlock<void,bool,smart_ptr<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
         TextWriter issues;
-        Context ctx(program->getContextStackSize());
-        bool failed = !program->simulate(ctx, issues);
+        auto ctx = make_smart<Context>(program->getContextStackSize());
+        bool failed = !program->simulate(*ctx, issues);
         if ( !failed && useAot ) {
             AotLibrary aotLib;
             AotListBase::registerAot(aotLib);
-            program->linkCppAot(ctx, aotLib, issues);
+            program->linkCppAot(*ctx, aotLib, issues);
             failed = program->failed();
         }
         if ( failed ) {
@@ -660,9 +661,9 @@ namespace das {
                 issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
             string istr = issues.str();
-            das_invoke<void>::invoke<bool,Context *,const string &>(context,lineinfo,block,false,nullptr,istr);
+            das_invoke<void>::invoke<bool,smart_ptr<Context>,const string &>(context,lineinfo,block,false,nullptr,istr);
         } else {
-            das_invoke<void>::invoke<bool,Context *,const string &>(context,lineinfo,block,true,&ctx,"");
+            das_invoke<void>::invoke<bool,smart_ptr<Context>,const string &>(context,lineinfo,block,true,ctx,"");
         }
     }
 

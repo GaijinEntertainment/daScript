@@ -6,7 +6,7 @@ namespace das {
     void getCommandLineArguments( Array & arr );
     bool is_compiling ( Context * ctx );
     bool is_compiling_macros ( Context * ctx );
-    void builtin_throw ( char * text, Context * context );
+    void builtin_throw ( char * text, Context * context, LineInfoArg * at );
     void builtin_print ( char * text, Context * context );
     vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context );

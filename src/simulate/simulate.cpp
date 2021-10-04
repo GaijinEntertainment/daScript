@@ -96,7 +96,7 @@ namespace das
         return cast<char *>::to(eval(context));
     }
 
-    vec4f SimNode_NOP::eval ( Context & context ) {
+    vec4f SimNode_NOP::eval ( Context & ) {
         return v_zero();
     }
 
@@ -1322,6 +1322,7 @@ namespace das
         throw dasException(message ? message : "", at);
 #else
         if ( throwBuf ) {
+            if ( alwaysStackWalkOnException ) stackWalk(nullptr, false, false);
             if ( breakOnException ) breakPoint(at, "exception", message);
             longjmp(*throwBuf,1);
         } else {

@@ -347,8 +347,8 @@ namespace das
 
     // core functions
 
-    void builtin_throw ( char * text, Context * context ) {
-        context->throw_error(text);
+    void builtin_throw ( char * text, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(*at, text);
     }
 
     void builtin_print ( char * text, Context * context ) {
@@ -988,7 +988,7 @@ namespace das
         // functions
         addExtern<DAS_BIND_FUN(builtin_throw)>(*this, lib, "panic",
             SideEffects::modifyExternal, "builtin_throw")
-                ->args({"text","context"});
+                ->args({"text","context","at"});
         addExtern<DAS_BIND_FUN(builtin_print)>(*this, lib, "print",
             SideEffects::modifyExternal, "builtin_print")
                 ->args({"text","context"});

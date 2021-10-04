@@ -237,7 +237,7 @@ namespace das
 
     typedef shared_ptr<Context> ContextPtr;
 
-    class Context : public enable_shared_from_this<Context> {
+    class Context : public ptr_ref_count, public enable_shared_from_this<Context> {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;
         template <typename TT> friend struct SimNode_GetSharedR2V;
@@ -633,6 +633,7 @@ namespace das
         bool                            ownStack = false;
         bool                            shutdown = false;
         bool                            breakOnException = false;
+        bool                            alwaysStackWalkOnException = false;
     public:
         string                          name;
         Bitfield                        category = 0;
