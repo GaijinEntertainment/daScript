@@ -1601,7 +1601,7 @@ namespace das
         das_map<int32_t,uint32_t> ofsmap;
         vector<SimNode *> simlist = collectExpressions(context, list, &ofsmap);
         // wow, such empty
-        if ( finalList.size()==0 && simlist.size()==0 ) {
+        if ( finalList.size()==0 && simlist.size()==0 && !annotationDataSid ) {
             return context.code->makeNode<SimNode_NOP>(at);
         }
         // we memzero block's stack memory, if there is a finally section
