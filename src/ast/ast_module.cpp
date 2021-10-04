@@ -191,6 +191,19 @@ namespace das {
         }
     }
 
+    void Module::ClearSharedModules() {
+        vector<Module *> kmp;
+        Module::foreach([&](Module * mod){
+            if ( mod->promoted ) {
+                kmp.push_back(mod);
+            }
+            return true;
+        });
+        for ( auto km : kmp ) {
+            delete km;
+        }
+    }
+
     bool Module::addAlias ( const TypeDeclPtr & at, bool canFail ) {
         if ( at->alias.empty() ) return false;
         if ( aliasTypes.insert(make_pair(at->alias, move(at))).second ) {
