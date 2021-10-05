@@ -28,7 +28,7 @@ namespace das {
             }
             if ( fnPtr ) {
                 vis.arg(fnPtr->name,"fnPtr");
-                vis.arg(Func(fnIndex+1), "fnIndex");
+                vis.arg(Func(), fnPtr->mangledName, "fnIndex");
             }
             if ( cmresEval ) {
                 V_SUB(cmresEval);
@@ -39,12 +39,11 @@ namespace das {
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
             SimNode_Op1Call1 * that = (SimNode_Op1Call1 *) SimNode_Op1Fusion::copyNode(context, code);
             if ( fnPtr ) {
-                that->fnPtr = context.getFunction(fnIndex);
+                that->fnPtr = context.getFunction(context.fnIdxByMangledName(fnPtr->mangledNameHash)-1);
             }
             return that;
         }
         SimFunction * fnPtr = nullptr;
-        int32_t  fnIndex = -1;
         SimNode * cmresEval = nullptr;
     };
 
@@ -70,7 +69,6 @@ namespace das {
     auto rn = (SimNode_Op1Call1 *)result; \
     auto sn = (SimNode_CallBase *)node; \
     rn->fnPtr = sn->fnPtr; \
-    rn->fnIndex = sn->fnIndex; \
     rn->cmresEval = sn->cmresEval; \
     rn->baseType = Type::none;
 

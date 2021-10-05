@@ -82,16 +82,14 @@ namespace das {
             crlf();
             ss << "#" << stackTop;
         }
-        virtual void arg ( Func fun,  const char * argN ) override {
-            SimVisitor::arg(fun,argN);
+        virtual void arg ( Func fun,  const char * mangledName, const char * argN ) override {
+            SimVisitor::arg(fun, mangledName, argN);
             // hash
-            SimFunction * simFun = context->getFunction(fun.index - 1);
-            DAS_ASSERT(simFun);
-            write(simFun->mangledName);
+            write(mangledName);
             write(argN);
             // regular print
             crlf();
-            ss << "@@" << fun.index << "/*" << simFun->mangledName << "*/";
+            ss << "@@" << fun.index << "/*" << mangledName << "*/";
         }
         virtual void arg ( int32_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);

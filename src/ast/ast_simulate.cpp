@@ -2008,7 +2008,6 @@ namespace das
             auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context,sarguments));
             pCall->debugInfo = at;
             pCall->fnPtr = context.getFunction(func->index);
-            pCall->fnIndex = func->index;
             pCall->arguments = (SimNode **) context.code->allocate(1 * sizeof(SimNode *));
             pCall->nArguments = 1;
             pCall->arguments[0] = subexpr->simulate(context);
@@ -2029,7 +2028,6 @@ namespace das
             auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context,sarguments));
             pCall->debugInfo = at;
             pCall->fnPtr = context.getFunction(func->index);
-            pCall->fnIndex = func->index;
             pCall->arguments = (SimNode **) context.code->allocate(2 * sizeof(SimNode *));
             pCall->nArguments = 2;
             pCall->arguments[0] = left->simulate(context);
@@ -2602,7 +2600,6 @@ namespace das
         DAS_ASSERTF((func->builtIn || func->index>=0), "calling function which is not used. how?");
         pCall->fnPtr = context.getFunction(func->index);
         DAS_ASSERTF((func->builtIn || pCall->fnPtr), "calling function which null. how?");
-        pCall->fnIndex = func->index;
         if ( int nArg = (int) expr->arguments.size() ) {
             pCall->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
             if ( needTypeInfo ) {

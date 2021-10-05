@@ -52,10 +52,8 @@ namespace das {
             write(&stackTop, sizeof(stackTop));
             write(op);
         }
-        virtual void arg ( Func fun,  const char * argN ) override {
-            SimFunction * simFun = context->getFunction(fun.index - 1);
-            DAS_ASSERT(simFun);
-            write(simFun->mangledName);
+        virtual void arg ( Func, const char * mangledName, const char * argN ) override {
+            write(mangledName);
             write(argN);
         }
         virtual void arg ( int32_t argV,  const char * argN ) override {
