@@ -722,7 +722,7 @@ namespace debugapi {
         auto simFn = invCtx->findFunction(fn);
         if ( !simFn ) context.throw_error_ex("pinvoke can't find %s function", fn);
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
-            context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
+            context.throw_error_ex("pinvoke can't invoke private function %s", simFn->mangledName);
         }
         invCtx->lock();
         vec4f res;
@@ -747,7 +747,7 @@ namespace debugapi {
         auto simFn = invCtx->getFunction(fn.index-1);
         if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%d", fn.index-1);
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
-            context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
+            context.throw_error_ex("pinvoke can't invoke private function %s", simFn->mangledName);
         }
         invCtx->lock();
         vec4f res;
@@ -773,7 +773,7 @@ namespace debugapi {
         SimFunction * simFn = invCtx->getFunction(*fnIndex-1);
         if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%d", *fnIndex-1);
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
-            context.throw_error_ex("pinvoke can't invoke private function ", simFn->mangledName);
+            context.throw_error_ex("pinvoke can't invoke private function %s", simFn->mangledName);
         }
         invCtx->lock();
         vec4f res;
