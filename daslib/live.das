@@ -125,5 +125,19 @@ def public recompile
                     appPtr := null
 
 def public live_keypressed ( keycode, scancode, action, mods : int )
-    // controls_keypressed(....)
     invoke_live("keypressed", keycode, scancode, action, mods )
+
+def public live_charpressed ( charcode : uint )
+    invoke_live("charpressed", charcode )
+
+def public live_mousemoved ( x, y : double )
+    invoke_live("mousemoved", x, y )
+
+def public live_mouseenter ( yes : bool )
+    invoke_live("mouseenter", yes)
+
+def public live_mousebutton ( button, action, mods : int )
+    invoke_live("mousebutton", button, action, mods )
+
+def public live_mousescroll ( x, y : double )
+    invoke_live("mousescroll", x, y )

@@ -6,6 +6,7 @@ daScript - high-performance statically strong typed scripting language
   * FEATURE - LINT - daslib/lint for details. all 'i can catch it during compilation' stuff goes there.
   * misc - desc is now GC-friendly
   * feature - daslib/live started. it should handle live reloading, update, cross context in raw das
+      live controls
   * bug fixed - annotationDataSid conflicts with SimNode_NOP, when empty
   * bug fixed - move of local nonRef types in strange instances no longer causes internal compiler error
 
