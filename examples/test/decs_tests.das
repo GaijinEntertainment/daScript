@@ -219,6 +219,7 @@ def test_create_delete
         cmp |> set("pos",float3(1.,2.,3.))
         cmp |> set("name","entity_once")
     create_entity <| @ ( eid, cmp )
+        print("eid = {eid}\n")
         var foo = [[Foo pos=float3(1.), name="from template",eid=eid]]
         apply(foo) <| $ ( n, v )
             cmp |> set ( n, v)
@@ -246,3 +247,20 @@ def test_create_delete
 options debugger
 require daslib/debug
 
+/*
+class private DecsAgent: DapiDebugAgent
+    def DecsAgent
+        pass
+
+def private desc_start
+    install_new_debug_agent(new DecsAgent(), "decs")
+    print("installing {this_context().name} {this_context()}\n")
+
+[init]
+def private decs_init
+    if !is_in_debug_agent_creation()
+        this_context().name := "main"
+        if !has_debug_agent_context("decs")
+            print("forking in {this_context().name} {this_context()}\n")
+            fork_debug_agent_context(@@desc_start)
+*/

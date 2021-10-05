@@ -36,7 +36,7 @@ struct public ComponentValue
     [[do_not_delete]] info : TypeInfo const?
     data : float4[4]
 
-typedef DeferEval = lambda<():void>
+typedef DeferEval = lambda<(var act:DeferAction):void>
 
 struct private DeferAction
     eid : EntityId
@@ -328,27 +328,25 @@ def private delete_entity_imm ( eid:EntityId )
         arch |> remove_entity(di)
 
 def public update_entity ( entityid:EntityId; var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
-    var eid = entityid
-    var deval <- @ <| [[<-blk]]
-        update_entity_imm(eid,blk)
-    deferActions |> emplace([[DeferAction action<-deval]])
+    var deval <- @ <| [[<-blk]] ( var act:DeferAction )
+        update_entity_imm(act.eid,blk)
+    deferActions |> emplace([[DeferAction action<-deval, eid=entityid]])
 
 def public create_entity ( var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+    var deval <- @ <| [[<-blk]] ( var act:DeferAction )
+        create_entity_imm(act.eid, blk)
     var eid = new_entity_id()
-    var deval <- @ <| [[<-blk]]
-        create_entity_imm(eid, blk)
-    deferActions |> emplace([[DeferAction action<-deval]])
+    deferActions |> emplace([[DeferAction action<-deval, eid=eid]])
     return eid
 
 def public delete_entity ( entityid:EntityId )
-    var eid = entityid
-    var deval <- @ <|
-        delete_entity_imm(eid)
-    deferActions |> emplace([[DeferAction action<-deval]])
+    var deval <- @ <| ( var act:DeferAction )
+        delete_entity_imm(act.eid)
+    deferActions |> emplace([[DeferAction action<-deval, eid=entityid]])
 
 def public commit
     for da in deferActions
-        da.action |> invoke
+        da.action |> invoke(da)
     delete deferActions
 
 def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
