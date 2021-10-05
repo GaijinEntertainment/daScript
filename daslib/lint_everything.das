@@ -11,6 +11,5 @@ require daslib/lint
 [global_lint_macro]
 class LintEverythingGlobal : AstPassMacro
     def override apply ( prog:ProgramPtr; mod:Module? ) : bool
-        print("global lint: {mod.name}\n")
         paranoid(prog, true)
         return true
