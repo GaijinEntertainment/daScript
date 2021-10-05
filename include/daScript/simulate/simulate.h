@@ -352,6 +352,13 @@ namespace das
             return 0;
         }
 
+        SimFunction * fnByMangledName ( uint32_t mnh ) {
+            uint32_t idx = rotl_c(mnh, tabMnRot) & tabMnMask;
+            uint32_t fnIndex = tabMnLookup[idx] - 1;
+            DAS_ASSERT(fnIndex<uint32_t(totalFunctions));
+            return functions + fnIndex;
+        }
+
         SimFunction * findFunction ( const char * name ) const;
         SimFunction * findFunction ( const char * name, bool & isUnique ) const;
         int findVariable ( const char * name ) const;

@@ -347,7 +347,7 @@ namespace das
             }
         }
         if ( fnPtr ) {
-            that->fnPtr = context.getFunction(context.fnIdxByMangledName(fnPtr->mangledNameHash)-1);
+            that->fnPtr = context.fnByMangledName(fnPtr->mangledNameHash);
         }
         return that;
     }

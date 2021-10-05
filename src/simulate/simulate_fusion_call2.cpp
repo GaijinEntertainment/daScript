@@ -36,7 +36,7 @@ namespace das {
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
             SimNode_Op2Call2 * that = (SimNode_Op2Call2 *) SimNode_Op2Fusion::copyNode(context, code);
             if ( fnPtr ) {
-                that->fnPtr = context.getFunction(context.fnIdxByMangledName(fnPtr->mangledNameHash)-1);
+                that->fnPtr = context.fnByMangledName(fnPtr->mangledNameHash);
             }
             return that;
         }
