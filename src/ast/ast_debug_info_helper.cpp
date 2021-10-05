@@ -131,11 +131,11 @@ namespace das {
             VarInfo * vi = makeVariableDebugInfo(st, var);
             sti->fields[i] = vi;
         }
-        sti->initializer = -1;
+        sti->init_mnh = 0;
         if ( st.module ) {
             sti->module_name = debugInfo->allocateName(st.module->name);
             if ( auto fn = st.module->findFunction(st.name) ) {
-                sti->initializer = fn->index;
+                sti->init_mnh = fn->getMangledNameHash();
             }
         }
         if ( rtti ) {

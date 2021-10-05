@@ -75,15 +75,15 @@ namespace das {
         instrument.isInstrumenting = false;
         instrument.anyLine = true;
         runVisitor(&instrument);
-        instrumentFunction(-1, false);
+        instrumentFunction(0u, false);
     }
 
-    void Context::instrumentFunction ( int index, bool isInstrumenting ) {
-        auto instFn = [&](SimFunction * fun, int32_t fnIndex) {
+    void Context::instrumentFunction ( uint32_t mnh, bool isInstrumenting ) {
+        auto instFn = [&](SimFunction * fun, uint32_t fnMnh) {
             if ( !fun->code ) return;
             if ( isInstrumenting ) {
                 if ( !fun->code->rtti_node_isInstrumentFunction() ) {
-                    fun->code = code->makeNode<SimNodeDebug_InstrumentFunction>(fun->code->debugInfo, fun, fnIndex, fun->code);
+                    fun->code = code->makeNode<SimNodeDebug_InstrumentFunction>(fun->code->debugInfo, fun, fnMnh, fun->code);
                 }
             } else {
                 if ( fun->code->rtti_node_isInstrumentFunction() ) {
@@ -92,16 +92,17 @@ namespace das {
                 }
             }
         };
-        if ( index==-1 ) {
+        if ( mnh==0 ) {
             for ( int fni=0; fni!=totalFunctions; ++fni ) {
-                instFn(&functions[fni], fni);
+                instFn(&functions[fni], functions[fni].mangledNameHash);
             }
         } else {
-            instFn(&functions[index], index);
+            auto fn = fnByMangledName(mnh);
+            instFn(fn, mnh);
         }
     }
 #else
-    void Context::instrumentFunction ( int, bool ) {}
+    void Context::instrumentFunction ( uint32_t mnh, bool ) {}
     void Context::instrumentContextNode ( const Block & blk, bool, Context * context, LineInfo * line ) {}
     void Context::clearInstruments() {}
 #endif

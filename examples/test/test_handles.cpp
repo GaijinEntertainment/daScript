@@ -362,8 +362,8 @@ vec4f new_and_init ( Context & context, SimNode_CallBase * call, vec4f * ) {
     }
     auto size = getTypeSize(typeInfo);
     auto data = context.heap->allocate(size);
-    if ( typeInfo->structType && typeInfo->structType->initializer!=-1 ) {
-        auto fn = context.getFunction(typeInfo->structType->initializer);
+    if ( typeInfo->structType && typeInfo->structType->init_mnh ) {
+        auto fn = context.fnByMangledName(typeInfo->structType->init_mnh);
         context.callWithCopyOnReturn(fn, nullptr, data, 0);
     } else {
         memset(data, 0, size);

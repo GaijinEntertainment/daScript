@@ -89,7 +89,7 @@ namespace das {
             write(argN);
             // regular print
             crlf();
-            ss << "@@" << fun.index << "/*" << mangledName << "*/";
+            ss << "@@" << fun.mnh << "/*" << mangledName << "*/";
         }
         virtual void arg ( int32_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);

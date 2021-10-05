@@ -353,10 +353,10 @@ namespace das
         }
 
         SimFunction * fnByMangledName ( uint32_t mnh ) {
+            if ( mnh==0 ) return nullptr;
             uint32_t idx = rotl_c(mnh, tabMnRot) & tabMnMask;
             uint32_t fnIndex = tabMnLookup[idx] - 1;
-            DAS_ASSERT(fnIndex<uint32_t(totalFunctions));
-            return functions + fnIndex;
+            return fnIndex < 0 ? nullptr : functions + fnIndex;
         }
 
         SimFunction * findFunction ( const char * name ) const;
@@ -589,7 +589,7 @@ namespace das
         void collectStringHeap(LineInfo * at, bool validate);
         void collectHeap(LineInfo * at, bool stringHeap, bool validate);
         void reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly);
-        void instrumentFunction ( int index, bool isInstrumenting );
+        void instrumentFunction ( uint32_t mnh, bool isInstrumenting );
         void instrumentContextNode ( const Block & blk, bool isInstrumenting, Context * context, LineInfo * line );
         void clearInstruments();
         void runVisitor ( SimVisitor * vis ) const;

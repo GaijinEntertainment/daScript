@@ -542,7 +542,7 @@ namespace das {
             }
             ss << info->count << ", ";
             ss << info->size << ", ";
-            ss << info->initializer << ", ";
+            ss << info->init_mnh << ", ";
             ss << "nullptr, ";  // annotation list
             ss << "0x" << HEX << info->hash << DEC;
         }
@@ -1034,9 +1034,8 @@ namespace das {
                     ss << string(tab,'\t');
                     if ( fn->noAot ) {
                         auto mangledName = fn->getMangledName();
-                        uint32_t hash = hash_blockz32((uint8_t *)mangledName.c_str());
-                        ss << "das_invoke_function<void>::invoke(__context__,nullptr,Func(__context__->fnIdxByMangledName(/*"
-                            << mangledName << "*/ " << hash << "u)));\n";
+                        uint32_t hash = fn->getMangledNameHash();
+                        ss << "das_invoke_function<void>::invoke(__context__,nullptr,Func(/*"<< mangledName << "*/ " << hash << "u));\n";
                     } else {
                         ss << aotFuncName(fn.get()) << "(__context__);\n";
                     }
@@ -2325,8 +2324,8 @@ namespace das {
         virtual void preVisit ( ExprAddr * expr ) override {
             if (expr->func) {
                 auto mangledName = expr->func->getMangledName();
-                uint32_t hash = hash_blockz32((uint8_t *)mangledName.c_str());
-                ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                uint32_t hash = expr->func->getMangledNameHash();
+                ss << "Func(/*" << mangledName << "*/ " << hash << "u)";
             } else {
                 ss << "Func(0 /*nullptr*/)";
             }
@@ -2959,7 +2958,7 @@ namespace das {
                         ss << "_cmres";
                     }
                     auto mangledName = call->func->getMangledName();
-                    uint32_t hash = hash_blockz32((uint8_t *)mangledName.c_str());
+                    uint32_t hash = call->func->getMangledNameHash();
                     if ( call->arguments.size()>=1 ) {
                         ss << "<";
                         for ( const auto & arg : call->arguments ) {
@@ -2972,10 +2971,10 @@ namespace das {
                             }
                         }
                         ss << ">(__context__,nullptr,";
-                        ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u)),";
+                        ss << "Func(/*" << mangledName << "*/ " << hash << "u),";
                     } else {
                         ss << "(__context__,nullptr,";
-                        ss << "Func(__context__->fnIdxByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                        ss << "Func(/*" << mangledName << "*/ " << hash << "u)";
                     }
                 } else {
                     ss << aotFuncName(call->func) << "(__context__";

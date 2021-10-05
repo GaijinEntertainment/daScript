@@ -981,7 +981,8 @@ namespace das
 
     SimNode * ExprAddr::simulate (Context & context) const {
         DAS_ASSERT(func->index>=0 && "how, we specified in the unused");
-        Func fn; fn.index = func->index + 1;
+        Func fn;
+        fn.mnh = func->getMangledNameHash();
         vec4f cval = v_zero();
         memcpy (&cval, &fn, sizeof(Func));
         return context.code->makeNode<SimNode_FuncConstValue>(at,cval);
@@ -2677,6 +2678,11 @@ namespace das
         das_hash_map<uint32_t, uint32_t> htab;
         for ( int i=0; i!=context.totalFunctions; ++i ) {
             auto mnh = context.functions[i].mangledNameHash;
+            if ( mnh==0 ) {
+                error("internal compiler error. mangled name hash is 0 "
+                      + string(context.functions[i].mangledName), "", "", LineInfo());
+                return;
+            }
             if ( htab[mnh] ) {
                 error("internal compiler error. mangled name hash collision "
                       + string(context.functions[i].mangledName), "", "", LineInfo());

@@ -926,7 +926,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
+            SimFunction * simFunc = context.fnByMangledName(cast<Func>::to(argValues[0]).mnh);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
             if ( argCount>1 ) {
                 return context.call(simFunc, argValues + 1, &debugInfo);
@@ -939,7 +939,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);  \
+            SimFunction * simFunc = context.fnByMangledName(cast<Func>::to(argValues[0]).mnh);  \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
             if ( argCount>1 ) {                                                                 \
                 return cast<CTYPE>::to(context.call(simFunc, argValues + 1, &debugInfo));       \
@@ -958,7 +958,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             vec4f argValues[32];
             evalArgs(context, argValues);
-            SimFunction* simFunc = context.getFunction(cast<Func>::to(argValues[0]).index - 1);
+            SimFunction* simFunc = context.fnByMangledName(cast<Func>::to(argValues[0]).mnh);
             if (!simFunc) context.throw_error_at(debugInfo, "invoke null function");
             return context.call(simFunc, argValues + 1, &debugInfo);
         }
@@ -967,7 +967,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             vec4f argValues[32]; \
             evalArgs(context, argValues); \
-            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1); \
+            SimFunction * simFunc = context.fnByMangledName(cast<Func>::to(argValues[0]).mnh); \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function"); \
             return cast<CTYPE>::to(context.call(simFunc, argValues + 1, &debugInfo)); \
         }
@@ -989,9 +989,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            int32_t * funIndex = cast<int32_t *>::to(argValues[0]);
-            if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");
-            SimFunction * simFunc = context.getFunction(*funIndex-1);
+            uint32_t * funMnh = cast<uint32_t *>::to(argValues[0]);
+            if (!funMnh) context.throw_error_at(debugInfo,"invoke null lambda");
+            SimFunction * simFunc = context.fnByMangledName(*funMnh);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
             return context.call(simFunc, argValues, &debugInfo);
         }
@@ -1000,9 +1000,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            int32_t * funIndex = cast<int32_t *>::to(argValues[0]);                             \
-            if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");              \
-            SimFunction * simFunc = context.getFunction(*funIndex-1);                           \
+            uint32_t * funMnh = cast<uint32_t *>::to(argValues[0]);                           \
+            if (!funMnh) context.throw_error_at(debugInfo,"invoke null lambda");                \
+            SimFunction * simFunc = context.fnByMangledName(*funMnh);                           \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
             return cast<CTYPE>::to(context.call(simFunc, argValues, &debugInfo));               \
         }
@@ -1017,9 +1017,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             vec4f argValues[32];
             evalArgs(context, argValues);
-            int32_t* funIndex = cast<int32_t*>::to(argValues[0]);
-            if (!funIndex) context.throw_error_at(debugInfo, "invoke null lambda");
-            SimFunction* simFunc = context.getFunction(*funIndex - 1);
+            uint32_t* funMnh = cast<uint32_t*>::to(argValues[0]);
+            if (!funMnh) context.throw_error_at(debugInfo, "invoke null lambda");
+            SimFunction* simFunc = context.fnByMangledName(*funMnh);
             if (!simFunc) context.throw_error_at(debugInfo, "invoke null function");
             return context.call(simFunc, argValues, &debugInfo);
         }
@@ -1028,9 +1028,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE \
             vec4f argValues[32]; \
             evalArgs(context, argValues); \
-            int32_t * funIndex = cast<int32_t *>::to(argValues[0]); \
-            if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda"); \
-            SimFunction * simFunc = context.getFunction(*funIndex-1);  \
+            uint32_t * funMnh = cast<uint32_t *>::to(argValues[0]); \
+            if (!funMnh) context.throw_error_at(debugInfo,"invoke null lambda"); \
+            SimFunction * simFunc = context.fnByMangledName(*funMnh);  \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function"); \
             return cast<CTYPE>::to(context.call(simFunc, argValues, &debugInfo)); \
         }
@@ -1055,7 +1055,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);
+            SimFunction * simFunc = context.fnByMangledName(cast<Func>::to(argValues[0]).mnh);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
             if ( argCount>1 ) {
                 return context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, &debugInfo);
@@ -1069,7 +1069,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);                                               \
             vec4f argValues[argCount ? argCount : 1]; \
             EvalBlock<argCount>::eval(context, arguments, argValues);                               \
-            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1);      \
+            SimFunction * simFunc = context.fnByMangledName(cast<Func>::to(argValues[0]).mnh);      \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");                 \
             if ( argCount>1 ) {                                                                     \
                 return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, &debugInfo)); \
@@ -1092,7 +1092,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[32];
             evalArgs(context, argValues);
-            SimFunction* simFunc = context.getFunction(cast<Func>::to(argValues[0]).index - 1);
+            SimFunction* simFunc = context.fnByMangledName(cast<Func>::to(argValues[0]).mnh);
             if (!simFunc) context.throw_error_at(debugInfo, "invoke null function");
             return context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, &debugInfo);
         }
@@ -1102,7 +1102,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context); \
             vec4f argValues[32]; \
             evalArgs(context, argValues); \
-            SimFunction * simFunc = context.getFunction(cast<Func>::to(argValues[0]).index-1); \
+            SimFunction * simFunc = context.fnByMangledName(cast<Func>::to(argValues[0]).mnh); \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function"); \
             return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, &debugInfo)); \
         }
@@ -1126,9 +1126,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
-            int32_t * funIndex = cast<int32_t *>::to(argValues[0]);
-            if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");
-            SimFunction * simFunc = context.getFunction(*funIndex-1);
+            uint32_t * funMnh = cast<uint32_t *>::to(argValues[0]);
+            if (!funMnh) context.throw_error_at(debugInfo,"invoke null lambda");
+            SimFunction * simFunc = context.fnByMangledName(*funMnh);
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
             return context.callWithCopyOnReturn(simFunc, argValues, cmres, &debugInfo);
         }
@@ -1138,9 +1138,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);                                           \
             vec4f argValues[argCount ? argCount : 1];                                           \
             EvalBlock<argCount>::eval(context, arguments, argValues);                           \
-            int32_t * funIndex = cast<int32_t *>::to(argValues[0]);                             \
-            if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda");              \
-            SimFunction * simFunc = context.getFunction(*funIndex-1);                           \
+            uint32_t * funMnh = cast<uint32_t *>::to(argValues[0]);                             \
+            if (!funMnh) context.throw_error_at(debugInfo,"invoke null lambda");                \
+            SimFunction * simFunc = context.fnByMangledName(*funMnh);                           \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
             return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues, cmres, &debugInfo));    \
         }
@@ -1159,9 +1159,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[32];
             evalArgs(context, argValues);
-            int32_t* funIndex = cast<int32_t*>::to(argValues[0]);
-            if (!funIndex) context.throw_error_at(debugInfo, "invoke null lambda");
-            SimFunction* simFunc = context.getFunction(*funIndex - 1);
+            uint32_t* funMnh = cast<uint32_t*>::to(argValues[0]);
+            if (!funMnh) context.throw_error_at(debugInfo, "invoke null lambda");
+            SimFunction* simFunc = context.fnByMangledName(*funMnh);
             if (!simFunc) context.throw_error_at(debugInfo, "invoke null function");
             return context.callWithCopyOnReturn(simFunc, argValues, cmres, &debugInfo);
         }
@@ -1171,9 +1171,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto cmres = cmresEval->evalPtr(context); \
             vec4f argValues[32]; \
             evalArgs(context, argValues); \
-            int32_t * funIndex = cast<int32_t *>::to(argValues[0]); \
-            if (!funIndex) context.throw_error_at(debugInfo,"invoke null lambda"); \
-            SimFunction * simFunc = context.getFunction(*funIndex-1); \
+            uint32_t * funMnh = cast<uint32_t *>::to(argValues[0]); \
+            if (!funMnh) context.throw_error_at(debugInfo,"invoke null lambda"); \
+            SimFunction * simFunc = context.fnByMangledName(*funMnh); \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function"); \
             return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues, cmres, &debugInfo)); \
         }
@@ -2432,7 +2432,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     struct SimNodeDebug_InstrumentFunction : SimNode {
         SimNodeDebug_InstrumentFunction ( const LineInfo & at, SimFunction * simF, int32_t fni, SimNode * se )
-            : SimNode(at), func(simF), fnIndex(fni), subexpr(se) {}
+            : SimNode(at), func(simF), fnMnh(fni), subexpr(se) {}
         virtual bool rtti_node_isInstrumentFunction() const override { return true; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
@@ -2453,7 +2453,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_EVAL_NODE
 #undef EVAL_NODE
         SimFunction *   func;
-        int32_t         fnIndex;
+        uint32_t        fnMnh;
         SimNode *       subexpr;
     };
 

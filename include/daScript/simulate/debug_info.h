@@ -270,7 +270,7 @@ namespace das
         VarInfo **  fields;
         uint32_t    count;
         uint32_t    size;
-        int32_t     initializer;
+        int32_t     init_mnh;
         void *      annotation_list;
         uint32_t    hash;
     };

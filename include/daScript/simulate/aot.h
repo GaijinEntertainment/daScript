@@ -1381,8 +1381,8 @@ namespace das {
     struct das_delete<Lambda> {
         static __forceinline void clear ( Context * __context__, Lambda & lambda ) {
             if ( lambda.capture ) {
-                int32_t * fnIndex = (int32_t *) lambda.capture;
-                SimFunction * simFunc = __context__->getFunction(fnIndex[1]-1);
+                uint32_t * fnMnh = (uint32_t *) lambda.capture;
+                SimFunction * simFunc = __context__->fnByMangledName(fnMnh[1]);
                 if (!simFunc) __context__->throw_error("lambda finalizer is a null function");
                 vec4f argValues[1] = {
                     cast<void *>::from(lambda.capture)
@@ -1907,7 +1907,7 @@ namespace das {
     template <typename ResType>
     struct das_invoke_function {
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
-            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            SimFunction * simFunc = __context__->fnByMangledName(blk.mnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context * );
@@ -1920,7 +1920,7 @@ namespace das {
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
-            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            SimFunction * simFunc = __context__->fnByMangledName(blk.mnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, ArgType... );
@@ -1933,7 +1933,7 @@ namespace das {
             }
         }
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
-            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            SimFunction * simFunc = __context__->fnByMangledName(blk.mnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context * );
@@ -1948,7 +1948,7 @@ namespace das {
         template <typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
-            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            SimFunction * simFunc = __context__->fnByMangledName(blk.mnh);
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -1965,14 +1965,14 @@ namespace das {
     template <>
     struct das_invoke_function<void> {
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
-            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            SimFunction * simFunc = __context__->fnByMangledName(blk.mnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             __context__->callOrFastcall(simFunc, nullptr, __lineinfo__);
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
-            SimFunction * simFunc = __context__->getFunction(blk.index-1);
+            SimFunction * simFunc = __context__->fnByMangledName(blk.mnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
         }
@@ -1981,9 +1981,9 @@ namespace das {
     template <typename ResType>
     struct das_invoke_lambda {
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
-            int32_t * fnIndex = (int32_t *)blk.capture;
-            if (!fnIndex) __context__->throw_error("invoke null lambda");
-            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            uint32_t * fnMnh = (uint32_t *) blk.capture;
+            if (!fnMnh) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->fnByMangledName(*fnMnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, void * );
@@ -1998,9 +1998,9 @@ namespace das {
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
-            int32_t * fnIndex = (int32_t *)blk.capture;
-            if (!fnIndex) __context__->throw_error("invoke null lambda");
-            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            uint32_t * fnMnh = (uint32_t *)blk.capture;
+            if (!fnMnh) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->fnByMangledName(*fnMnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, void *, ArgType... );
@@ -2013,9 +2013,9 @@ namespace das {
             }
         }
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
-            int32_t * fnIndex = (int32_t *)blk.capture;
-            if (!fnIndex) __context__->throw_error("invoke null lambda");
-            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            uint32_t * fnMnh = (uint32_t *)blk.capture;
+            if (!fnMnh) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->fnByMangledName(*fnMnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, void * );
@@ -2031,9 +2031,9 @@ namespace das {
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
-            int32_t * fnIndex = (int32_t *)blk.capture;
-            if (!fnIndex) __context__->throw_error("invoke null lambda");
-            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            uint32_t * fnMnh = (uint32_t *)blk.capture;
+            if (!fnMnh) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->fnByMangledName(*fnMnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, void *, ArgType... );
@@ -2051,9 +2051,9 @@ namespace das {
     template <>
     struct das_invoke_lambda<void> {
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
-            int32_t * fnIndex = (int32_t *)blk.capture;
-            if (!fnIndex) __context__->throw_error("invoke null lambda");
-            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            uint32_t * fnMnh = (uint32_t *)blk.capture;
+            if (!fnMnh) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->fnByMangledName(*fnMnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = void (*) ( Context *, void * );
@@ -2067,9 +2067,9 @@ namespace das {
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
-            int32_t * fnIndex = (int32_t *)blk.capture;
-            if (!fnIndex) __context__->throw_error("invoke null lambda");
-            SimFunction * simFunc = __context__->getFunction(*fnIndex-1);
+            uint32_t * fnMnh = (uint32_t *)blk.capture;
+            if (!fnMnh) __context__->throw_error("invoke null lambda");
+            SimFunction * simFunc = __context__->fnByMangledName(*fnMnh);
             if (!simFunc) __context__->throw_error("invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = void (*) ( Context *, void *, ArgType... );

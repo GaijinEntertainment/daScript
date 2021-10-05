@@ -816,7 +816,7 @@ namespace das {
         V_BEGIN();
         V_OP(Instrument);
         vis.arg(func->name,"fnPtr");
-        vis.arg(Func(fnIndex+1), "fnIndex");
+        vis.arg(Func(), func->mangledName, "fnIndex");
         V_SUB(subexpr);
         V_END();
     }

@@ -27,21 +27,21 @@ namespace das
     };
 
     struct Func {
-        int32_t     index;
-        Func() : index(0) {}
-        Func(int32_t idx) : index(idx) {}
-        __forceinline operator bool () const { return index!=0; }
+        int32_t mnh;
+        Func() : mnh(0) {}
+        Func(int32_t MNH) : mnh(MNH) {}
+        __forceinline operator bool () const { return mnh!=0; }
         __forceinline bool operator == ( void * ptr ) const {
-            return !ptr && (index==0);
+            return !ptr && (mnh==0);
         }
         __forceinline bool operator != ( void * ptr ) const {
-            return ptr || index;
+            return ptr || mnh;
         }
         __forceinline bool operator == ( const Func & b ) const {
-            return index == b.index;
+            return mnh == b.mnh;
         }
         __forceinline bool operator != ( const Func & b ) const {
-            return index != b.index;
+            return mnh != b.mnh;
         }
     };
     static_assert(sizeof(Func)==sizeof(int32_t), "has to be castable");
