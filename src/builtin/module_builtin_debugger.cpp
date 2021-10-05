@@ -781,9 +781,9 @@ namespace debugapi {
             if ( !invCtx->ownStack ) {
                 StackAllocator sharedStack(8*1024);
                 SharedStackGuard guard(*invCtx, sharedStack);
-                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+                res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
             } else {
-                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+                res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
             }
         });
         invCtx->unlock();
