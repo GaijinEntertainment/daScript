@@ -60,6 +60,17 @@ class LintVisitor : AstVisitor
         if expr.name |> eq <| "panic" && expr.func._module.name |> eq <| "$"
             exprForTerminator |> pop()
             exprForTerminator |> push(intptr(get_ptr(expr)))
+    def override preVisitExprLet(expr:smart_ptr<ExprLet>) : void
+        for v in expr.variables
+            if v.isAccessUnused
+                self->lint_error("unused variable", v.at)
+                continue
+            if !v.access_flags.access_ref && !v.access_flags.access_pass && v.init != null && v.init |> is_expr_const()
+                self->lint_error("unused variable", v.at)
+                continue
+            if !v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && v.init != null && !v.init.flags.noSideEffects
+                self->lint_error("unused variable", v.at)
+                continue
 
 def public paranoid ( prog:ProgramPtr; compile_time_errors : bool )
     var astVisitor = new [[LintVisitor() compile_time_errors=compile_time_errors]]
