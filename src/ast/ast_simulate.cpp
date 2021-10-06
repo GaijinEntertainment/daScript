@@ -2692,6 +2692,15 @@ namespace das
         }
         auto tab = buildLookup(htab, context.tabMnMask, context.tabMnRot);
         context.tabMnSize = uint32_t(tab.size());
+        context.tabMnLookup = (Context::MNEntry *) context.code->allocate(context.tabMnSize * sizeof(Context::MNEntry));
+        memset ( context.tabMnLookup, 0, context.tabMnSize * sizeof(Context::MNEntry));
+        for ( uint32_t i=0; i!=context.tabMnSize; ++i ) {
+            auto index = tab[i];
+            if ( index!=-1u ) {
+                context.tabMnLookup[i].index = index - 1;
+                context.tabMnLookup[i].mnh = context.functions[index-1].mangledNameHash;
+            }
+        }
         if ( options.getBoolOption("log_mn_hash",false) ) {
             logs
                 << "totalFunctions: " << context.totalFunctions << "\n"
@@ -2699,8 +2708,6 @@ namespace das
                 << "tabMnMask:" << context.tabMnMask << "\n"
                 << "tabMnRot:" << context.tabMnRot << "\n";
         }
-        context.tabMnLookup = (uint32_t *) context.code->allocate(context.tabMnSize * sizeof(uint32_t));
-        memcpy ( context.tabMnLookup, tab.data(), context.tabMnSize * sizeof(uint32_t));
     }
 
     void Program::buildADLookup ( Context & context, TextWriter & logs ) {

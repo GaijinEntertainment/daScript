@@ -921,8 +921,8 @@ namespace das
         }
         // relocate mangle-name lookup
         if ( tabMnLookup ) {
-            uint32_t * newMnLookup = (uint32_t *) rel.newCode->allocate(tabMnSize * sizeof(uint32_t));
-            memcpy ( newMnLookup, tabMnLookup, tabMnSize * sizeof(uint32_t));
+            MNEntry * newMnLookup = (MNEntry *) rel.newCode->allocate(tabMnSize * sizeof(MNEntry));
+            memcpy ( newMnLookup, tabMnLookup, tabMnSize * sizeof(MNEntry));
             tabMnLookup = newMnLookup;
         }
         // relocate global mangle-name lookup

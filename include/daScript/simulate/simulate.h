@@ -245,6 +245,11 @@ namespace das
         friend struct SimNode_TryCatch;
         friend class Program;
     public:
+        struct MNEntry {
+            uint32_t    index;
+            uint32_t    mnh;
+        };
+    public:
         Context(uint32_t stackSize = 16*1024, bool ph = false);
         Context(const Context &, uint32_t category_);
         Context(const Context &) = delete;
@@ -338,25 +343,12 @@ namespace das
             return tabAdLookup[idx];
         }
 
-        __forceinline int fnIdxByMangledName ( uint32_t mnh ) const {
-            uint32_t idx = rotl_c(mnh, tabMnRot) & tabMnMask;
-            return tabMnLookup[idx];
-        }
-
-        __forceinline int findIdxByMangledName ( uint32_t mnh ) const {
-            for ( int index=0; index!=totalFunctions; ++index ) {
-                if ( functions[index].mangledNameHash==mnh ) {
-                    return index + 1;
-                }
-            }
-            return 0;
-        }
-
         SimFunction * fnByMangledName ( uint32_t mnh ) {
             if ( mnh==0 ) return nullptr;
             uint32_t idx = rotl_c(mnh, tabMnRot) & tabMnMask;
-            uint32_t fnIndex = tabMnLookup[idx] - 1;
-            return fnIndex < 0 ? nullptr : functions + fnIndex;
+            if ( tabMnLookup[idx].mnh==mnh ) return functions + tabMnLookup[idx].index;
+            // TODO: insert global lookup here
+            return nullptr;
         }
 
         SimFunction * findFunction ( const char * name ) const;
@@ -670,7 +662,7 @@ namespace das
         bool        singleStepMode = false;
         const LineInfo * singleStepAt = nullptr;
     public:
-        uint32_t *  tabMnLookup = nullptr;
+        MNEntry *   tabMnLookup = nullptr;
         uint32_t    tabMnMask = 0;
         uint32_t    tabMnRot = 0;
         uint32_t    tabMnSize = 0;
