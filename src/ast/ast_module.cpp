@@ -44,6 +44,8 @@ namespace das {
 
     Module * Module::modules = nullptr;
 
+    vector<smart_ptr<Context>> Module::sharedCode;
+
     void Module::addDependency ( Module * mod, bool pub ) {
         requireModule[mod] |= pub;
         for ( auto it : mod->requireModule ) {
@@ -94,6 +96,7 @@ namespace das {
 
     void Module::Shutdown() {
         clearGlobalAotLibrary();
+        sharedCode.clear();
         ReuseGuard<TypeDecl> rguard;
         shutdownDebugAgent();
         auto m = modules;
@@ -177,6 +180,9 @@ namespace das {
         builtIn = true;
         promoted = true;
         promotedAccess = access;
+        if ( sharedCodeContext ) {
+            sharedCode.push_back(sharedCodeContext);
+        }
     }
 
     Module::~Module() {

@@ -80,7 +80,7 @@ namespace das {
             lib.foreach([&](Module * pm) {
                 for (const auto & it : pm->functions) {
                     auto fn = it.second;
-                    if ( forceAll || fn->exports || fn->init || fn->shutdown || (fn->macroInit && initThis) ) {
+                    if ( (forceAll && !fn->macroInit) || fn->exports || fn->init || fn->shutdown || (fn->macroInit && initThis) ) {
                         propagateFunctionUse(fn);
                     }
                 }
@@ -256,7 +256,7 @@ namespace das {
         clearSymbolUse();
         MarkSymbolUse vis(false);
         visit(vis);
-        vis.markUsedFunctions(library, forceAll, false);
+        vis.markUsedFunctions(library, forceAll, forceAll);
         vis.markVarsUsed(library, forceAll);
         if ( options.getBoolOption("remove_unused_symbols",true) ) {
             ClearUnusedSymbols cvis;
