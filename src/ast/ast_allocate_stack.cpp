@@ -554,6 +554,7 @@ namespace das {
                     var->init->visit(vstr);
                 }
             }
+            if ( pm->sharedCodeContext ) continue;
             for (auto & pf : pm->functions) {
                 auto & func = pf.second;
                 if (func->used) {
@@ -585,9 +586,10 @@ namespace das {
             logs << "FUNCTION TABLE:\n";
         }
         for (auto & pm : library.modules) {
+            if ( pm->sharedCodeContext ) continue;
             for (auto & pf : pm->functions) {
                 auto & func = pf.second;
-                if (func->used) {
+                if ( func->used && !func->builtIn ) {
                     func->index = totalFunctions++;
                     if ( log ) {
                         logs << "\t" << func->index << "\t" << func->totalStackSize << "\t" << func->getMangledName() << "\n";

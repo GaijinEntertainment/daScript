@@ -156,6 +156,12 @@ namespace das {
         __forceinline char * computeShared (Context & context) const {
             return context.shared + offset;
         }
+        __forceinline char * computeGlobalMnh (Context & context) const {
+            return context.globals + context.globalOffsetByMangledName(mangledNameHash);
+        }
+        __forceinline char * computeSharedMnh (Context & context) const {
+            return context.shared + context.globalOffsetByMangledName(mangledNameHash);
+        }
         __forceinline char * computeLocal ( Context & context ) const {
             return context.stack.sp() + stackTop;
         }
@@ -1651,6 +1657,37 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef EVAL_NODE
     };
 
+    // GLOBAL VARIABLE "GET" BY MANGLED NAME HASH
+    struct SimNode_GetGlobalMnh : SimNode_SourceBase {
+        DAS_PTR_NODE;
+        SimNode_GetGlobalMnh ( const LineInfo & at, uint32_t o, uint32_t mnh )
+            : SimNode_SourceBase(at) {
+            subexpr.setGlobal(o,mnh);
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
+            return subexpr.computeGlobalMnh(context);
+        }
+    };
+
+    template <typename TT>
+    struct SimNode_GetGlobalMnhR2V : SimNode_GetGlobalMnh {
+        SimNode_GetGlobalMnhR2V ( const LineInfo & at, uint32_t o, uint32_t mnh )
+            : SimNode_GetGlobalMnh(at,o,mnh) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *)compute(context);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)compute(context);                      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
     // SHARER VARIABLE "GET"
     struct SimNode_GetShared : SimNode_SourceBase {
         DAS_PTR_NODE;
@@ -1669,6 +1706,37 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_GetSharedR2V : SimNode_GetShared {
         SimNode_GetSharedR2V ( const LineInfo & at, uint32_t o, uint32_t mnh )
             : SimNode_GetShared(at,o,mnh) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *)compute(context);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)compute(context);                      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
+    // SHARER VARIABLE "GET" BY MANGLED NAME HASH
+    struct SimNode_GetSharedMnh : SimNode_SourceBase {
+        DAS_PTR_NODE;
+        SimNode_GetSharedMnh ( const LineInfo & at, uint32_t o, uint32_t mnh )
+            : SimNode_SourceBase(at) {
+            subexpr.setShared(o,mnh);
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
+            return subexpr.computeSharedMnh(context);
+        }
+    };
+
+    template <typename TT>
+    struct SimNode_GetSharedMnhR2V : SimNode_GetSharedMnh {
+        SimNode_GetSharedMnhR2V ( const LineInfo & at, uint32_t o, uint32_t mnh )
+            : SimNode_GetSharedMnh(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);

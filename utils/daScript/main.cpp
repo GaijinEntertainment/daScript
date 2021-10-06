@@ -10,7 +10,9 @@ bool pauseAfterErrors = false;
 void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
     auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup) ) {
+    CodeOfPolicies policies;
+    policies.debugger = false;   // TODO: from command line
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
                 tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );

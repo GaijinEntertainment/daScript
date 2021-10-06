@@ -468,6 +468,20 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_GetGlobalMnh::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetGlobalMnh);
+        subexpr.visit(vis);
+        V_END();
+    }
+
+    SimNode * SimNode_GetSharedMnh::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(GetSharedMnh);
+        subexpr.visit(vis);
+        V_END();
+    }
+
     SimNode * SimNode_TryCatch::visit ( SimVisitor & vis ) {
         V_BEGIN_CR();
         V_OP(TryCatch);

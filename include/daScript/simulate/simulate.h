@@ -83,6 +83,7 @@ namespace das
             struct {
                 bool    aot : 1;
                 bool    fastcall : 1;
+                bool    builtin : 1;
             };
         };
     };
@@ -244,6 +245,7 @@ namespace das
         friend struct SimNode_GetShared;
         friend struct SimNode_TryCatch;
         friend class Program;
+        friend class Module;
     public:
         struct MNEntry {
             uint32_t    index;
@@ -343,12 +345,11 @@ namespace das
             return tabAdLookup[idx];
         }
 
-        SimFunction * fnByMangledName ( uint32_t mnh ) {
+        __forceinline SimFunction * fnByMangledName ( uint32_t mnh ) {
             if ( mnh==0 ) return nullptr;
             uint32_t idx = rotl_c(mnh, tabMnRot) & tabMnMask;
             if ( tabMnLookup[idx].mnh==mnh ) return functions + tabMnLookup[idx].index;
-            // TODO: insert global lookup here
-            return nullptr;
+            return sharedLookup[mnh];
         }
 
         SimFunction * findFunction ( const char * name ) const;
@@ -616,7 +617,6 @@ namespace das
 
         __forceinline bool isGlobalPtr ( char * ptr ) const { return globals<=ptr && ptr<(globals+globalsSize); }
         __forceinline bool isSharedPtr ( char * ptr ) const { return shared<=ptr && ptr<(shared+sharedSize); }
-
     public:
         uint64_t *                      annotationData = nullptr;
         smart_ptr<StringHeapAllocator>  stringHeap;
@@ -633,6 +633,7 @@ namespace das
         bool                            shutdown = false;
         bool                            breakOnException = false;
         bool                            alwaysStackWalkOnException = false;
+        bool                            sharedCode = false;
     public:
         string                          name;
         Bitfield                        category = 0;
@@ -661,6 +662,8 @@ namespace das
         bool        debugger = false;
         bool        singleStepMode = false;
         const LineInfo * singleStepAt = nullptr;
+    public:
+        das_map<uint32_t, SimFunction *>    sharedLookup;
     public:
         MNEntry *   tabMnLookup = nullptr;
         uint32_t    tabMnMask = 0;

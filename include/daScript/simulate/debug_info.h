@@ -126,6 +126,7 @@ namespace das
     class FileAccess : public ptr_ref_count {
     public:
         virtual ~FileAccess() {}
+        void reset() { files.clear(); }
         FileInfo * setFileInfo ( const string & fileName, FileInfoPtr && info );
         FileInfo * getFileInfo ( const string & fileName );
         bool invalidateFileInfo ( const string & fileName );

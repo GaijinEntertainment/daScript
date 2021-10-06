@@ -1982,17 +1982,33 @@ namespace das
         } else {
             DAS_ASSERT(variable->index >= 0 && "using variable which is not used. how?");
             uint32_t mnh = variable->getMangledNameHash();
-            if ( variable->global_shared ) {
-                if ( r2v ) {
-                    return context.code->makeValueNode<SimNode_GetSharedR2V>(type->baseType, at, variable->stackTop, mnh);
+            if ( context.sharedCode ) {
+                if ( variable->global_shared ) {
+                    if ( r2v ) {
+                        return context.code->makeValueNode<SimNode_GetSharedMnhR2V>(type->baseType, at, variable->stackTop, mnh);
+                    } else {
+                        return context.code->makeNode<SimNode_GetSharedMnh>(at, variable->stackTop, mnh);
+                    }
                 } else {
-                    return context.code->makeNode<SimNode_GetShared>(at, variable->stackTop, mnh);
+                    if ( r2v ) {
+                        return context.code->makeValueNode<SimNode_GetGlobalMnhR2V>(type->baseType, at, variable->stackTop, mnh);
+                    } else {
+                        return context.code->makeNode<SimNode_GetGlobalMnh>(at, variable->stackTop, mnh);
+                    }
                 }
             } else {
-                if ( r2v ) {
-                    return context.code->makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->stackTop, mnh);
+                if ( variable->global_shared ) {
+                    if ( r2v ) {
+                        return context.code->makeValueNode<SimNode_GetSharedR2V>(type->baseType, at, variable->stackTop, mnh);
+                    } else {
+                        return context.code->makeNode<SimNode_GetShared>(at, variable->stackTop, mnh);
+                    }
                 } else {
-                    return context.code->makeNode<SimNode_GetGlobal>(at, variable->stackTop, mnh);
+                    if ( r2v ) {
+                        return context.code->makeValueNode<SimNode_GetGlobalR2V>(type->baseType, at, variable->stackTop, mnh);
+                    } else {
+                        return context.code->makeNode<SimNode_GetGlobal>(at, variable->stackTop, mnh);
+                    }
                 }
             }
         }
@@ -2525,10 +2541,18 @@ namespace das
             if ( var->init && var->init->rtti_isMakeLocal() ) {
                 return var->init->simulate(context);
             } else {
-                if ( var->global_shared ) {
-                    get = context.code->makeNode<SimNode_GetShared>(var->init->at, var->index, var->getMangledNameHash());
+                if ( context.sharedCode ) {
+                    if ( var->global_shared ) {
+                        get = context.code->makeNode<SimNode_GetSharedMnh>(var->init->at, var->index, var->getMangledNameHash());
+                    } else {
+                        get = context.code->makeNode<SimNode_GetGlobalMnh>(var->init->at, var->index, var->getMangledNameHash());
+                    }
                 } else {
-                    get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index, var->getMangledNameHash());
+                    if ( var->global_shared ) {
+                        get = context.code->makeNode<SimNode_GetShared>(var->init->at, var->index, var->getMangledNameHash());
+                    } else {
+                        get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index, var->getMangledNameHash());
+                    }
                 }
             }
         }
@@ -2599,7 +2623,13 @@ namespace das
         }
         pCall->debugInfo = expr->at;
         DAS_ASSERTF((func->builtIn || func->index>=0), "calling function which is not used. how?");
-        pCall->fnPtr = context.getFunction(func->index);
+        if ( func->module->sharedCodeContext ) {
+            auto MNH = func->getMangledNameHash();
+            pCall->fnPtr = func->module->sharedCodeContext->fnByMangledName(MNH);
+            DAS_ASSERT(pCall->fnPtr->mangledNameHash == MNH);
+        } else {
+            pCall->fnPtr = context.getFunction(func->index);
+        }
         DAS_ASSERTF((func->builtIn || pCall->fnPtr), "calling function which null. how?");
         if ( int nArg = (int) expr->arguments.size() ) {
             pCall->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
@@ -2684,7 +2714,7 @@ namespace das
                 return;
             }
             if ( htab[mnh] ) {
-                error("internal compiler error. mangled name hash collision "
+                error("internal compiler error. mangled name hash collision " + to_string(mnh) + " in "
                       + string(context.functions[i].mangledName), "", "", LineInfo());
                 return;
             }
@@ -2739,13 +2769,18 @@ namespace das
     }
 
     void Program::makeSharedCode ( TextWriter & logs ) {
-        thisModule->sharedCodeContext = thisModule->macroContext;
-#if 1
+        auto sharedCodeContext = make_smart<Context>(getContextStackSize());
+        sharedCodeContext->sharedCode = true;
+        simulate(*sharedCodeContext, logs);
+#if 0
         auto fona = policies.fail_on_no_aot;
         policies.fail_on_no_aot = false; // BBATKIN: VERIFY?
-        linkCppAot(*thisModule->sharedCodeContext, getGlobalAotLibrary(), logs);
+        linkCppAot(*sharedCodeContext, getGlobalAotLibrary(), logs);
         policies.fail_on_no_aot = fona;
+#else
+        linkCppAot(*sharedCodeContext, getGlobalAotLibrary(), logs);
 #endif
+        thisModule->sharedCodeContext = sharedCodeContext;
     }
 
     extern "C" int64_t ref_time_ticks ();
@@ -2780,7 +2815,11 @@ namespace das
                 for (auto & pvar : pm->globalsInOrder) {
                     if (!pvar->used)
                         continue;
-                    DAS_ASSERTF(pvar->index >= 0, "we are simulating variable, which is not used");
+                    if ( pvar->index<0 ) {
+                        error("Internalc compiler errors. Simulating variable which is not used" + pvar->name,
+                            "", "", LineInfo());
+                        continue;
+                    }
                     auto & gvar = context.globalVariables[pvar->index];
                     gvar.name = context.code->allocateName(pvar->name);
                     gvar.size = pvar->type->getSizeOf();
@@ -2811,20 +2850,45 @@ namespace das
                     auto pfun = it.second;
                     if (pfun->index < 0 || !pfun->used)
                         continue;
-                    auto & gfun = context.functions[pfun->index];
                     auto mangledName = pfun->getMangledName();
-                    gfun.name = context.code->allocateName(pfun->name);
-                    gfun.mangledName = context.code->allocateName(mangledName);
-                    gfun.code = pfun->simulate(context);
-                    gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
-                    if ( debuggerOrGC ) {
-                        helper.appendLocalVariables(gfun.debugInfo, pfun->body);
+                    auto MNH = hash_blockz32((uint8_t *)mangledName.c_str());
+                    if ( MNH==0 ) {
+                        error("Internalc compiler errors. Mangled name hash is zero. Function " + pfun->name,
+                            "\tMangled name " + mangledName + " hash is " + to_string(MNH), "",
+                                pfun->at);
                     }
-                    gfun.stackSize = pfun->totalStackSize;
-                    gfun.mangledNameHash = hash_blockz32((uint8_t *)mangledName.c_str());
-                    gfun.aotFunction = nullptr;
-                    gfun.flags = 0;
-                    gfun.fastcall = pfun->fastCall;
+                    if ( pm!=thisModule.get() && pm->sharedCodeContext ) {
+                        SimFunction * sfun = pm->sharedCodeContext->fnByMangledName(MNH);
+                        DAS_ASSERT(sfun->mangledNameHash==MNH && sfun->name==pfun->name);
+                        auto thit = context.sharedLookup.find(MNH);
+                        if ( thit!=context.sharedLookup.end() ) {
+                            SimFunction * tfun = thit->second;
+                            if ( stricmp(sfun->mangledName,tfun->mangledName)!=0 || !sfun->builtin || !tfun->builtin ) {
+                                error("Internalc compiler errors. Mangled name hash collision. Function " + string(sfun->mangledName) +
+                                    "collides with" + string(tfun->mangledName), "\tHash is " + to_string(MNH), "",
+                                        LineInfo(), CompilationError::cant_initialize);
+                            }
+                        } else {
+                            context.sharedLookup[MNH] = sfun;
+                        }
+                    } else {
+                        auto & gfun = context.functions[pfun->index];
+                        gfun.name = context.code->allocateName(pfun->name);
+                        gfun.mangledName = context.code->allocateName(mangledName);
+                        gfun.code = pfun->simulate(context);
+                        gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
+                        if ( debuggerOrGC ) {
+                            helper.appendLocalVariables(gfun.debugInfo, pfun->body);
+                        }
+                        gfun.stackSize = pfun->totalStackSize;
+                        gfun.mangledNameHash = MNH;
+                        gfun.aotFunction = nullptr;
+                        gfun.flags = 0;
+                        gfun.fastcall = pfun->fastCall;
+                        if ( pfun->module->builtIn && !pfun->module->promoted ) {
+                            gfun.builtin = true;
+                        }
+                    }
                 }
             }
         }
@@ -2877,6 +2941,7 @@ namespace das
         // now call annotation simulate
         das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
+            if ( pm!=thisModule.get() && pm->sharedCodeContext ) continue;
             for (auto & it : pm->functions) {
                 auto pfun = it.second;
                 if (pfun->index < 0 || !pfun->used)

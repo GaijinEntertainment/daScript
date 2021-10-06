@@ -806,6 +806,8 @@ namespace das
         // functoins
         functions = ctx.functions;
         totalFunctions = ctx.totalFunctions;
+        // shared code
+        sharedLookup = ctx.sharedLookup;
         // mangled name table
         tabMnLookup = ctx.tabMnLookup;
         tabMnMask = ctx.tabMnMask;
@@ -1042,6 +1044,12 @@ namespace das
                 return functions + fni;
             }
         }
+        for ( auto & it : sharedLookup ) {
+            auto fn = it.second;
+            if ( strcmp(fn->name, fnname)==0 ) {
+                return fn;
+            }
+        }
         return nullptr;
     }
 
@@ -1051,6 +1059,13 @@ namespace das
         for ( int fni = 0; fni != totalFunctions; ++fni ) {
             if ( strcmp(functions[fni].name, fnname)==0 ) {
                 found = functions + fni;
+                candidates++;
+            }
+        }
+        for ( auto & it : sharedLookup ) {
+            auto fn = it.second;
+            if ( strcmp(fn->name, fnname)==0 ) {
+                found = fn;
                 candidates++;
             }
         }

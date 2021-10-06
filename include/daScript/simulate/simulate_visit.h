@@ -163,6 +163,22 @@ namespace das {
     }
 
     template <typename TT>
+    SimNode * SimNode_GetGlobalMnhR2V<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(GetGlobalMnhR2V);
+        subexpr.visit(vis);
+        V_END();
+    }
+
+    template <typename TT>
+    SimNode * SimNode_GetSharedMnhR2V<TT>::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP_TT(GetSharedMnhR2V);
+        subexpr.visit(vis);
+        V_END();
+    }
+
+    template <typename TT>
     SimNode * SimNode_Ref2Value<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(Ref2Value);

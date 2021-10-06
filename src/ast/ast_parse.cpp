@@ -357,18 +357,31 @@ namespace das {
             sort(program->errors.begin(), program->errors.end());
             program->isCompiling = false;
             if ( !program->failed() ) {
-                bool needSharedCode = policies.enable_shared_code && program->promoteToBuiltin;
-                if ( program->needMacroModule || needSharedCode ) {
+                bool resetSymbolUse = false;
+                if ( program->needMacroModule ) {
                     if (!program->failed())
-                        program->markSymbolUse(true, true, true);
+                        program->markSymbolUse(false, false, true);
                     if (!program->failed())
                         program->allocateStack(logs);
                     if (!program->failed())
                         program->makeMacroModule(logs);
-                    if ( needSharedCode ) {
-                        if (!program->failed())
-                            program->makeSharedCode(logs);
-                    }
+                    resetSymbolUse = true;
+                }
+                if ( policies.enable_shared_code && program->promoteToBuiltin ) {
+                    if (!program->failed())
+                        program->markSymbolUse(false, true, false);
+                    if (!program->failed())
+                        program->allocateStack(logs);
+                    if (!program->failed())
+                        program->makeSharedCode(logs);
+                    resetSymbolUse = true;
+                }
+                if ( false && resetSymbolUse ) {
+                    auto forceAll = exportAll || program->thisModule->isModule;
+                    if (!program->failed())
+                        program->markSymbolUse(false, forceAll, forceAll);
+                    if (!program->failed())
+                        program->allocateStack(logs);
                 }
             }
             if ( program->options.getBoolOption("log_compile_time",false) ) {
