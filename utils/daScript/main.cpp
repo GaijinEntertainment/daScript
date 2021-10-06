@@ -12,6 +12,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
     policies.debugger = false;   // TODO: from command line
+    policies.fail_on_no_aot = false;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
