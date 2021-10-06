@@ -30,9 +30,7 @@ void tutorial () {
         return;
     }
     // link ahead-of-time functions
-    AotLibrary aotLib;
-    AotListBase::registerAot(aotLib);
-    program->linkCppAot(ctx, aotLib, tout);
+    program->linkCppAot(ctx, getGlobalAotLibrary(), tout);
     if ( program->failed() ) {
         tout << "failed to link AOT\n";
         for ( auto & err : program->errors ) {

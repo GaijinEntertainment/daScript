@@ -93,6 +93,7 @@ namespace das {
     }
 
     void Module::Shutdown() {
+        clearGlobalAotLibrary();
         ReuseGuard<TypeDecl> rguard;
         shutdownDebugAgent();
         auto m = modules;
@@ -202,6 +203,7 @@ namespace das {
         for ( auto km : kmp ) {
             delete km;
         }
+        clearGlobalAotLibrary();
     }
 
     bool Module::addAlias ( const TypeDeclPtr & at, bool canFail ) {

@@ -23,6 +23,22 @@ namespace das {
         }
     }
 
+    // aot library
+
+    unique_ptr<AotLibrary> g_AOT_lib;
+
+    AotLibrary & getGlobalAotLibrary() {
+        if ( !g_AOT_lib ) {
+            g_AOT_lib = make_unique<AotLibrary>();
+            AotListBase::registerAot(*g_AOT_lib);
+        }
+        return *g_AOT_lib;
+    }
+
+    void clearGlobalAotLibrary() {
+        g_AOT_lib.reset();
+    }
+
     // annotations
 
     string Annotation::getMangledName() const {

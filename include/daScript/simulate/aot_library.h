@@ -16,5 +16,8 @@ namespace das {
         static AotListBase * head;
         RegisterAotFunctions regFn;
     };
+
+    AotLibrary & getGlobalAotLibrary();
+    void clearGlobalAotLibrary();
 }
 

@@ -651,9 +651,7 @@ namespace das {
         auto ctx = make_smart<Context>(program->getContextStackSize());
         bool failed = !program->simulate(*ctx, issues);
         if ( !failed && useAot ) {
-            AotLibrary aotLib;
-            AotListBase::registerAot(aotLib);
-            program->linkCppAot(*ctx, aotLib, issues);
+            program->linkCppAot(*ctx, getGlobalAotLibrary(), issues);
             failed = program->failed();
         }
         if ( failed ) {

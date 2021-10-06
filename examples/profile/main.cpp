@@ -65,9 +65,7 @@ bool unit_test ( const string & fn, bool useAOT ) {
             }
             // now, what we get to do is to link AOT
             if ( useAOT ) {
-                AotLibrary aotLib;
-                AotListBase::registerAot(aotLib);
-                program->linkCppAot(ctx, aotLib, tout);
+                program->linkCppAot(ctx, getGlobalAotLibrary(), tout);
             }
             // run the test
             if ( auto fnTest = ctx.findFunction("test") ) {

@@ -2733,8 +2733,14 @@ namespace das
 
     void Program::makeMacroModule ( TextWriter & logs ) {
         isCompilingMacros = true;
-        thisModule->macroContext = make_unique<Context>(getContextStackSize());
+        thisModule->macroContext = make_smart<Context>(getContextStackSize());
         simulate(*thisModule->macroContext, logs);
+        if ( policies.enable_shared_libraries ) {
+            auto fona = policies.fail_on_no_aot;
+            policies.fail_on_no_aot = false;
+            linkCppAot(*thisModule->macroContext, getGlobalAotLibrary(), logs);
+            policies.fail_on_no_aot = fona;
+        }
         isCompilingMacros = false;
     }
 

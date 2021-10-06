@@ -906,7 +906,7 @@ namespace das
             return true;
         }
     public:
-        unique_ptr<Context>                         macroContext;
+        smart_ptr<Context>                          macroContext;
         das_safe_map<string, TypeDeclPtr>           aliasTypes;
         das_safe_map<string, AnnotationPtr>         handleTypes;
         das_safe_map<string, StructurePtr>          structures;
@@ -1093,6 +1093,7 @@ namespace das
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
+        bool enable_shared_libraries = true;
     // debugger
         //  when enabled
         //      1. disables [fastcall]
