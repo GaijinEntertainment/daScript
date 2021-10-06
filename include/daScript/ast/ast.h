@@ -1095,7 +1095,8 @@ namespace das
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
-        bool enable_shared_code = true;
+        bool enable_shared_code = false;
+        bool fail_on_no_shared_aot = true;
     // debugger
         //  when enabled
         //      1. disables [fastcall]
@@ -1161,7 +1162,7 @@ namespace das
         void aotCpp ( Context & context, TextWriter & logs );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
         void validateAotCpp ( TextWriter & logs, Context & context );
-        void buildMNLookup ( Context & context, TextWriter & logs );
+        void buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs );
         void buildGMNLookup ( Context & context, TextWriter & logs );
         void buildADLookup ( Context & context, TextWriter & logs );
         bool getOptimize() const;

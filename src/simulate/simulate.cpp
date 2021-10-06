@@ -348,6 +348,7 @@ namespace das
         }
         if ( fnPtr ) {
             that->fnPtr = context.fnByMangledName(fnPtr->mangledNameHash);
+            // printf("CALL %p -> %p\n", fnPtr, fnPtr );
         }
         return that;
     }
@@ -806,8 +807,6 @@ namespace das
         // functoins
         functions = ctx.functions;
         totalFunctions = ctx.totalFunctions;
-        // shared code
-        sharedLookup = ctx.sharedLookup;
         // mangled name table
         tabMnLookup = ctx.tabMnLookup;
         tabMnMask = ctx.tabMnMask;
@@ -890,6 +889,7 @@ namespace das
         rel.newCode->prefixWithHeader = false;
         uint32_t codeSize = uint32_t(code->bytesAllocated()) - code->totalNodesAllocated * uint32_t(sizeof(NodePrefix));
         rel.newCode->setInitialSize(codeSize);
+        SimFunction * oldFunctions = functions;
         if ( totalFunctions ) {
             SimFunction * newFunctions = (SimFunction *) rel.newCode->allocate(totalFunctions*sizeof(SimFunction));
             memcpy ( newFunctions, functions, totalFunctions*sizeof(SimFunction));
@@ -907,26 +907,31 @@ namespace das
             }
             globalVariables = newVariables;
         }
-        // relocate functions
-        for ( int i=0; i!=totalFunctions; ++i ) {
-            auto & fn = functions[i];
-            fn.code = fn.code->visit(rel);
-        }
-        // relocate variables
-        if ( totalVariables ) {
-            for ( int j=0; j!=totalVariables; ++j ) {
-                auto & var = globalVariables[j];
-                if ( var.init) {
-                    var.init = var.init->visit(rel);
-                }
-            }
-        }
         // relocate mangle-name lookup
         if ( tabMnLookup ) {
-            MNEntry * newMnLookup = (MNEntry *) rel.newCode->allocate(tabMnSize * sizeof(MNEntry));
-            memcpy ( newMnLookup, tabMnLookup, tabMnSize * sizeof(MNEntry));
+            SimFunction ** newMnLookup = (SimFunction **) rel.newCode->allocate(tabMnSize * sizeof(SimFunction*));
+            for ( uint32_t i=0; i!=tabMnSize; ++i ) {
+                auto fn = tabMnLookup[i];
+                if ( fn!=nullptr ) {
+                    if ( fn>=oldFunctions && fn<(oldFunctions+totalFunctions) ) {
+                        ptrdiff_t index = fn - oldFunctions;
+                        newMnLookup[i] = functions + index;
+                        DAS_ASSERT(fn->mangledNameHash == newMnLookup[i]->mangledNameHash);
+                        DAS_ASSERT(newMnLookup[i]>=functions && newMnLookup[i]<(functions+totalFunctions));
+                        // printf("%3i - MNH 0x%8x: %s [move %p -> %p]\n", i, fn->mangledNameHash, fn->name, fn, newMnLookup[i] );
+                    } else {
+                        newMnLookup[i] = fn;
+                        // printf("%3i - MNH 0x%8x: %s [stay %p]\n", i, fn->mangledNameHash, fn->name, fn );
+                    }
+                } else {
+                    newMnLookup[i] = nullptr;
+                }
+            }
             tabMnLookup = newMnLookup;
         }
+        // note - code needs to be relocated last
+        //  somehwere inside SimNode....::copyNode there is fnByMangledName lookup
+        //  which should be returning new functions, not old ones
         // relocate global mangle-name lookup
         if ( tabGMnLookup ) {
             uint32_t * newGMnLookup = (uint32_t *) rel.newCode->allocate(tabGMnSize * sizeof(uint32_t));
@@ -938,6 +943,20 @@ namespace das
             uint64_t * newAdLookup = (uint64_t *) rel.newCode->allocate(tabAdSize * sizeof(uint64_t));
             memcpy ( newAdLookup, tabAdLookup, tabAdSize * sizeof(uint64_t));
             tabAdLookup = newAdLookup;
+        }
+        // relocate variables
+        if ( totalVariables ) {
+            for ( int j=0; j!=totalVariables; ++j ) {
+                auto & var = globalVariables[j];
+                if ( var.init) {
+                    var.init = var.init->visit(rel);
+                }
+            }
+        }
+        // relocate functions
+        for ( int i=0; i!=totalFunctions; ++i ) {
+            auto & fn = functions[i];
+            fn.code = fn.code->visit(rel);
         }
         // swap the code
         DAS_ASSERTF(rel.newCode->depth()<=1,"after code relocation all code should be on one page");
@@ -1039,14 +1058,9 @@ namespace das
     }
 
     SimFunction * Context::findFunction ( const char * fnname ) const {
-        for ( int fni = 0; fni != totalFunctions; ++fni ) {
-            if ( strcmp(functions[fni].name, fnname)==0 ) {
-                return functions + fni;
-            }
-        }
-        for ( auto & it : sharedLookup ) {
-            auto fn = it.second;
-            if ( strcmp(fn->name, fnname)==0 ) {
+        for ( uint32_t i=0; i!=tabMnSize; ++i ) {
+            auto fn = tabMnLookup[i];
+            if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
                 return fn;
             }
         }
@@ -1056,15 +1070,9 @@ namespace das
     SimFunction * Context::findFunction ( const char * fnname, bool & isUnique ) const {
         int candidates = 0;
         SimFunction * found = nullptr;
-        for ( int fni = 0; fni != totalFunctions; ++fni ) {
-            if ( strcmp(functions[fni].name, fnname)==0 ) {
-                found = functions + fni;
-                candidates++;
-            }
-        }
-        for ( auto & it : sharedLookup ) {
-            auto fn = it.second;
-            if ( strcmp(fn->name, fnname)==0 ) {
+        for ( uint32_t i=0; i!=tabMnSize; ++i ) {
+            auto fn = tabMnLookup[i];
+            if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
                 found = fn;
                 candidates++;
             }

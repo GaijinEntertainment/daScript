@@ -37,6 +37,7 @@ namespace das {
             SimNode_Op2Call2 * that = (SimNode_Op2Call2 *) SimNode_Op2Fusion::copyNode(context, code);
             if ( fnPtr ) {
                 that->fnPtr = context.fnByMangledName(fnPtr->mangledNameHash);
+                // printf("OP2 %p to %p\n", fnPtr, that->fnPtr );
             }
             return that;
         }

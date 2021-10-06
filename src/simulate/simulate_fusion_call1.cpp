@@ -40,6 +40,7 @@ namespace das {
             SimNode_Op1Call1 * that = (SimNode_Op1Call1 *) SimNode_Op1Fusion::copyNode(context, code);
             if ( fnPtr ) {
                 that->fnPtr = context.fnByMangledName(fnPtr->mangledNameHash);
+                // printf("OP1 %p to %p\n", fnPtr, that->fnPtr );
             }
             return that;
         }

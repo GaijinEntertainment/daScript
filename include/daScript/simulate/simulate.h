@@ -247,11 +247,6 @@ namespace das
         friend class Program;
         friend class Module;
     public:
-        struct MNEntry {
-            uint32_t    index;
-            uint32_t    mnh;
-        };
-    public:
         Context(uint32_t stackSize = 16*1024, bool ph = false);
         Context(const Context &, uint32_t category_);
         Context(const Context &) = delete;
@@ -348,8 +343,9 @@ namespace das
         __forceinline SimFunction * fnByMangledName ( uint32_t mnh ) {
             if ( mnh==0 ) return nullptr;
             uint32_t idx = rotl_c(mnh, tabMnRot) & tabMnMask;
-            if ( tabMnLookup[idx].mnh==mnh ) return functions + tabMnLookup[idx].index;
-            return sharedLookup[mnh];
+            auto fn = tabMnLookup[idx];
+            DAS_ASSERT(fn->mangledNameHash==mnh);   // we need to actually test for this IF cross-context calls are ever a thing
+            return fn;
         }
 
         SimFunction * findFunction ( const char * name ) const;
@@ -663,12 +659,10 @@ namespace das
         bool        singleStepMode = false;
         const LineInfo * singleStepAt = nullptr;
     public:
-        das_map<uint32_t, SimFunction *>    sharedLookup;
-    public:
-        MNEntry *   tabMnLookup = nullptr;
-        uint32_t    tabMnMask = 0;
-        uint32_t    tabMnRot = 0;
-        uint32_t    tabMnSize = 0;
+        SimFunction **  tabMnLookup = nullptr;
+        uint32_t        tabMnMask = 0;
+        uint32_t        tabMnRot = 0;
+        uint32_t        tabMnSize = 0;
     public:
         uint32_t *  tabGMnLookup = nullptr;
         uint32_t    tabGMnMask = 0;
