@@ -1028,6 +1028,14 @@ namespace das {
         return context->stringHeap->allocateString(dt);
     }
 
+    const FuncInfo * builtin_get_function_info_by_mnh ( Context & context, Func fun ) {
+        if ( auto simFn = context.fnByMangledName(fun.mnh) ) {
+            return simFn->debugInfo;
+        } else {
+            return nullptr;
+        }
+    }
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -1206,6 +1214,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_get_typeinfo_mangled_name)>(*this, lib, "get_mangled_name",
                 SideEffects::none, "getTypeInfoMangledName")
                     ->args({"type","context"});
+            // function mnh lookup
+            addExtern<DAS_BIND_FUN(builtin_get_function_info_by_mnh)>(*this, lib, "get_function_info",
+                SideEffects::none, "builtin_get_function_info_by_mnh")
+                    ->args({"context","function"});
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo")->arg("line");
