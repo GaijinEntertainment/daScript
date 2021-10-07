@@ -1096,6 +1096,7 @@ namespace das
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
         bool enable_shared_code = false;
+        bool enable_shared_code_aot = true;
         bool fail_on_no_shared_aot = true;
     // debugger
         //  when enabled

@@ -2781,13 +2781,15 @@ namespace das
         auto sharedCodeContext = make_smart<Context>(getContextStackSize());
         sharedCodeContext->sharedCode = true;
         simulate(*sharedCodeContext, logs);
-        if ( policies.fail_on_no_shared_aot ) {
-            linkCppAot(*sharedCodeContext, getGlobalAotLibrary(), logs);
-        } else {
-            auto fona = policies.fail_on_no_aot;
-            policies.fail_on_no_aot = false; // BBATKIN: VERIFY?
-            linkCppAot(*sharedCodeContext, getGlobalAotLibrary(), logs);
-            policies.fail_on_no_aot = fona;
+        if ( policies.enable_shared_code_aot ) {
+            if ( policies.fail_on_no_shared_aot ) {
+                linkCppAot(*sharedCodeContext, getGlobalAotLibrary(), logs);
+            } else {
+                auto fona = policies.fail_on_no_aot;
+                policies.fail_on_no_aot = false; // BBATKIN: VERIFY?
+                linkCppAot(*sharedCodeContext, getGlobalAotLibrary(), logs);
+                policies.fail_on_no_aot = fona;
+            }
         }
         thisModule->sharedCodeContext = sharedCodeContext;
     }
