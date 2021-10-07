@@ -2791,6 +2791,7 @@ namespace das
                 policies.fail_on_no_aot = fona;
             }
         }
+        sharedCodeContext->strip();
         thisModule->sharedCodeContext = sharedCodeContext;
     }
 

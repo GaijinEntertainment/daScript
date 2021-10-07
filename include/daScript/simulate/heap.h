@@ -17,11 +17,15 @@ namespace das {
             reset();
         }
 
-        virtual ~StackAllocator() {
+        void strip () {
             if ( stack ) {
                 das_aligned_free16(stack);
                 stack = nullptr;
             }
+        }
+
+        virtual ~StackAllocator() {
+            strip();
         }
 
         __forceinline void letGo () {

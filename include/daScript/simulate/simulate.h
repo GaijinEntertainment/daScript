@@ -252,6 +252,7 @@ namespace das
         Context(const Context &) = delete;
         Context & operator = (const Context &) = delete;
         virtual ~Context();
+        void strip();
 
         uint32_t getGlobalSize() const {
             return globalsSize;
