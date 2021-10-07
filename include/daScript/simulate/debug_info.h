@@ -129,7 +129,7 @@ namespace das
         void reset() { files.clear(); }
         FileInfo * setFileInfo ( const string & fileName, FileInfoPtr && info );
         FileInfo * getFileInfo ( const string & fileName );
-        bool invalidateFileInfo ( const string & fileName );
+        virtual bool invalidateFileInfo ( const string & fileName );
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const;
         void freeSourceData();
         FileInfoPtr letGoOfFileInfo ( const string & fileName );

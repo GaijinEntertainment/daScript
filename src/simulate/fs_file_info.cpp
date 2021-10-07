@@ -17,6 +17,7 @@ namespace das {
         if ( source ) {
             das_aligned_free16((void*)source);
             source = nullptr;
+            sourceLength = 0;
         }
     }
 

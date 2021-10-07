@@ -79,7 +79,7 @@ namespace das {
                         if ( src >= src_end ) {
                             continue;
                         }
-                        if ( src[0]=='_' || isalphaE(src[0]) || src[0] ) {
+                        if ( src[0]=='_' || isalphaE(src[0]) || src[0] == '%' || src[0] == '.' || src[0]=='/' ) {
                             string mod;
                             mod += *src++;
                             while ( src < src_end && (isalnumE(src[0]) || src[0]=='_' || src[0]=='.' || src[0]=='/') ) {
