@@ -220,7 +220,8 @@ namespace das {
         uvec.push_back(fun->hash);
         for ( const auto & fn : vec ) {
             if ( !fn.first->noAot &&!fn.first->builtIn ) {
-                DAS_ASSERTF(fn.first->hash,"%s has dependency on %s, which hash hash of 0", fun->getMangledName().c_str(), fn->getMangledName().c_str());
+                DAS_ASSERTF(fn.first->hash,"%s has dependency on %s, which hash hash of 0",
+                    fun->getMangledName().c_str(), fn.first->getMangledName().c_str());
                 uvec.push_back(fn.first->hash);
                 debug_aot_hash("\t%s %llx\n", fn.second.c_str(), fn.first->hash);
             }
