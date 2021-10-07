@@ -9,11 +9,21 @@ require ast
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/defer
+require daslib/strings_boost
 
+require rtti public
+require debugapi public
 
 [function_macro(name="apply_in_context")]
 class AppendCondAnnotation : AstFunctionAnnotation
-  def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+
+  def override patch ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
+
+    for ann in func.annotations
+      if eq(ann.annotation.name,"apply_in_context")
+        if !(find_arg("patched",ann.arguments) is nothing)
+          return true
+
     if args.length != 1
       errors := "expecting one argument"
       return false
@@ -31,6 +41,11 @@ class AppendCondAnnotation : AstFunctionAnnotation
       if is_temp_type(arg._type,true) && !(arg._type.flags.temporary || arg._type.flags._implicit)
         errors := "argument {arg.name} needs to be temporary or implicit, i.e. {describe(arg._type)}# or {describe(arg._type)} implicit"
         return false
+
+    for ann in func.annotations
+      if eq(ann.annotation.name,"apply_in_context")
+        astChanged = true
+        ann.arguments |> add_annotation_argument("patched",true)
 
     let resName = "__res__"
     let ctxCloneFnName = "CONTEXT_CLONE`{func.name}"
@@ -60,15 +75,16 @@ class AppendCondAnnotation : AstFunctionAnnotation
       ctxFn.arguments |> emplace_new <| clone_variable(arg)
       callInCtx.arguments |> emplace_new <| new [[ExprVar() at=at, name:=arg.name]]
 
-    var resType <- new [[TypeDecl() baseType=Type tPointer, firstType<-clone_type(func.result)]]
-    ctxFn.arguments |> emplace_new <| new [[Variable() at=at, _type<-resType, name:=resName]]
-
-    var ctxExprDeref <- new [[ExprPtr2Ref() at=at, subexpr <- new [[ExprVar() at=at, name:=resName]] ]]
-    var ctxMovOp <- new [[ExprCopy() at=at, left<-ctxExprDeref, right<-callInCtx]]
-    ctxFnBlock.list |> emplace(ctxMovOp)
+    if !func.result.isVoid
+      var resType <- new [[TypeDecl() baseType=Type tPointer, firstType<-clone_type(func.result)]]
+      ctxFn.arguments |> emplace_new <| new [[Variable() at=at, _type<-resType, name:=resName]]
+      var ctxExprDeref <- new [[ExprPtr2Ref() at=at, subexpr <- new [[ExprVar() at=at, name:=resName]] ]]
+      var ctxMovOp <- new [[ExprCopy() at=at, left<-ctxExprDeref, right<-callInCtx]]
+      ctxFnBlock.list |> emplace(ctxMovOp)
+    else
+      ctxFnBlock.list |> emplace(callInCtx)
 
     compiling_module() |> add_function(ctxFn)
-
 
     var fn <- clone_function(func)
     fn.name := ctxCloneFnName
@@ -95,28 +111,38 @@ class AppendCondAnnotation : AstFunctionAnnotation
       funcBlock = reinterpret<ExprBlock?> func.body
     funcBlock.blockFlags ^= ExprBlockFlags isClosure
 
-    var vlet <- new [[ExprLet() at=at, atInit=at ]]
-    vlet.variables |> emplace_new() <| new [[Variable() at = at,
-      name := resName,
-      _type <- clone_type(func.result)
-    ]]
-
-    funcBlock.list |> emplace(vlet)
+    if !func.result.isVoid
+      var vlet <- new [[ExprLet() at=at, atInit=at ]]
+      vlet.variables |> emplace_new() <| new [[Variable() at = at,
+        name := resName,
+        _type <- clone_type(func.result)
+      ]]
+      funcBlock.list |> emplace(vlet)
 
     var pinvoke <- new [[ExprCall() at=at, name:="invoke_in_context"]]
     pinvoke.genFlags |= ExprGenFlags alwaysSafe
     var getCtx <- new [[ExprCall() at=at, name:="get_debug_agent_context"]]
     getCtx.arguments |> emplace_new <| new [[ExprConstString() at=at, value:=contextName]]
     pinvoke.arguments |> emplace(getCtx)
-    pinvoke.arguments |> emplace_new <| new [[ExprConstString() at=at, value:=ctxFnName]]
+    pinvoke.arguments |> emplace_new <| new [[ExprAddr() at=at, target:=ctxFnName]]
     for arg in func.arguments
-      pinvoke.arguments |> emplace_new <| new [[ExprVar() at=at, name:=arg.name]]
-    var resAddr <- new [[ExprRef2Ptr() at=at, subexpr<-new [[ExprVar() at=at, name:=resName]] ]]
-    resAddr.genFlags |= ExprGenFlags alwaysSafe
-    pinvoke.arguments |> emplace_new <| resAddr
+      if arg._type.isRef && !arg._type.isRefType
+        pinvoke.arguments |> emplace_new <| new [[ExprRef2Ptr() at=at,
+          subexpr <- new [[ExprVar() at=at, name:=arg.name]],
+          genFlags = ExprGenFlags alwaysSafe
+        ]]
+      else
+        pinvoke.arguments |> emplace_new <| new [[ExprVar() at=at, name:=arg.name]]
+    if !func.result.isVoid
+      var resAddr <- new [[ExprRef2Ptr() at=at,
+        subexpr<-new [[ExprVar() at=at, name:=resName]],
+        genFlags = ExprGenFlags alwaysSafe
+      ]]
+      pinvoke.arguments |> emplace_new <| resAddr
 
     funcBlock.list |> emplace(pinvoke)
 
-    funcBlock.list |> emplace_new() <| new [[ExprReturn() at=at, subexpr<-new [[ExprVar() at=at, name:=resName]] ]]
+    if !func.result.isVoid
+      funcBlock.list |> emplace_new() <| new [[ExprReturn() at=at, subexpr<-new [[ExprVar() at=at, name:=resName]] ]]
 
     return true
