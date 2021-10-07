@@ -95,8 +95,6 @@ namespace das {
     }
 
     void Module::Shutdown() {
-        clearGlobalAotLibrary();
-        sharedCode.clear();
         ReuseGuard<TypeDecl> rguard;
         shutdownDebugAgent();
         auto m = modules;
@@ -105,6 +103,8 @@ namespace das {
             m = m->next;
             delete pM;
         }
+        clearGlobalAotLibrary();
+        sharedCode.clear();
         resetFusionEngine();
         ReuseAllocator<TypeDecl>::canHold = false;
     }
