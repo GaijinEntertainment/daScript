@@ -770,6 +770,12 @@ namespace das
         });
     }
 
+    void Context::strip() {
+        stringHeap.reset();
+        heap.reset();
+        stack.strip();
+    }
+
     Context::Context(const Context & ctx, uint32_t category_): stack(ctx.stack.size()) {
         persistent = ctx.persistent;
         code = ctx.code;
