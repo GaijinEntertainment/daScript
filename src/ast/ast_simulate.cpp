@@ -2709,7 +2709,7 @@ namespace das
         if ( options.getBoolOption("log_mn_hash",false) ) {
             logs
                 << "totalFunctions: " << context.totalFunctions << "\n"
-                << "tabMnLookup:" << context.tabMnLookup.max_size() << "\n";
+                << "tabMnLookup:" << context.tabMnLookup.size() << "\n";
         }
     }
 
@@ -2734,7 +2734,7 @@ namespace das
     void Program::makeSharedCode ( TextWriter & logs ) {
         auto sharedCodeContext = make_smart<Context>(getContextStackSize());
         sharedCodeContext->sharedCode = true;
-        simulate(*sharedCodeContext, logs);
+        simulate(*sharedCodeContext, logs, nullptr, false);
         if ( policies.enable_shared_code_aot ) {
             if ( policies.fail_on_no_shared_aot ) {
                 linkCppAot(*sharedCodeContext, getGlobalAotLibrary(), logs);
@@ -2752,7 +2752,7 @@ namespace das
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
 
-    bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
+    bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack, bool runInitScripts ) {
         auto time0 = ref_time_ticks();
         isSimulating = true;
         context.thisProgram = this;
@@ -2963,7 +2963,7 @@ namespace das
             }
         }
         // run init script and restart
-        if ( !folding ) {
+        if ( !folding && runInitScripts ) {
             auto time1 = ref_time_ticks();
             if (!context.runWithCatch([&]() {
                 if ( context.stack.size() && context.stack.size()>globalInitStackSize ) {

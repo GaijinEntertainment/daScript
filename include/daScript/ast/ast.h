@@ -1147,7 +1147,7 @@ namespace das
         void clearSymbolUse();
         void markOrRemoveUnusedSymbols(bool forceAll = false);
         void allocateStack(TextWriter & logs);
-        bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
+        bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr, bool runInitScripts=true );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash ) const;
         void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
