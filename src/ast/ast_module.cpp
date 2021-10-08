@@ -46,6 +46,16 @@ namespace das {
 
     vector<smart_ptr<Context>> Module::sharedCode;
 
+    void Module::logSharedCodeMem ( TextWriter & tw ) {
+        uint64_t bytesTotal = 0;
+        tw << "SHARED MEMORY IS:\n\n";
+        for ( auto ctx : sharedCode ) {
+            ctx->logMemInfo(tw);
+            bytesTotal += ctx->getUniqueMemorySize() + ctx->getSharedMemorySize();
+        }
+        tw << "\nTOTAL SHARED MEMORY " << bytesTotal << "\n";
+    }
+
     void Module::addDependency ( Module * mod, bool pub ) {
         requireModule[mod] |= pub;
         for ( auto it : mod->requireModule ) {

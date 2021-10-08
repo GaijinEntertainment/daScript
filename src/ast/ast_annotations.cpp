@@ -3,8 +3,6 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 
-#include "daScript/misc/lookup1.h"
-
 namespace das
 {
     class FinAnnotationVisitor : public Visitor {

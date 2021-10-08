@@ -372,8 +372,10 @@ namespace das {
                         program->markSymbolUse(false, true, false);
                     if (!program->failed())
                         program->allocateStack(logs);
-                    if (!program->failed())
+                    if (!program->failed()) {
                         program->makeSharedCode(logs);
+                        program->thisModule->sharedCodeContext->name = fileName;
+                    }
                     resetSymbolUse = true;
                 }
                 if ( false && resetSymbolUse ) {

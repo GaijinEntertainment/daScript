@@ -51,7 +51,14 @@ namespace das
 #ifndef NDEBUG
         DAS_ASSERTF(prefix->magic==0xdeadc0de,"node was allocated on the heap without prefix");
 #endif
-        char * newNode = code->allocate(prefix->size);
+        char * newNode;
+        if ( code->prefixWithHeader ) {
+            newNode = code->allocate(prefix->size + sizeof(NodePrefix));
+            memcpy ( newNode, ((char *)this) - sizeof(NodePrefix), sizeof(NodePrefix));
+            newNode += sizeof(NodePrefix);
+        } else {
+            newNode = code->allocate(prefix->size);
+        }
         memcpy ( newNode, (char *)this, prefix->size );
         return (SimNode *) newNode;
     }
@@ -774,7 +781,108 @@ namespace das
         stringHeap.reset();
         heap.reset();
         stack.strip();
+        if ( globals ) {
+            das_aligned_free16(globals);
+            globals = nullptr;
+        }
+        if ( shared && sharedOwner ) {
+            das_aligned_free16(shared);
+            shared = nullptr;
+        }
     }
+
+    void Context::logMemInfo(TextWriter & tw) {
+        uint64_t bytesTotal = 0, bytesUsed = 0;
+    // context
+        tw << "Context: 0x" << HEX << intptr_t(this) << DEC << " '" << name << "' (" << int(sizeof(Context)) << " bytes)\n";
+        bytesTotal = bytesUsed = sizeof(Context);
+    // stringHeap
+        if ( stringHeap ) {
+            tw << "\tstringHeap: " << stringHeap->bytesAllocated() << " of " << stringHeap->totalAlignedMemoryAllocated()
+                << ", depth = " << stringHeap->depth() << "\n";
+            bytesTotal += stringHeap->totalAlignedMemoryAllocated();
+            bytesUsed += stringHeap->bytesAllocated();
+        }
+    // constStringHeap
+        if ( constStringHeap ) {
+            tw << "\tconstStringHeap: " << constStringHeap->bytesAllocated() << " of " << constStringHeap->totalAlignedMemoryAllocated()
+                << ", depth = " << constStringHeap->depth() << "\n";
+            bytesTotal += constStringHeap->totalAlignedMemoryAllocated();
+            bytesUsed += constStringHeap->bytesAllocated();
+        }
+    // heap
+        if ( heap ) {
+            tw << "\theap: " << heap->bytesAllocated() << " of " << heap->totalAlignedMemoryAllocated()
+                << ", depth = " << heap->depth() << "\n";
+            bytesTotal += heap->totalAlignedMemoryAllocated();
+            bytesUsed += heap->bytesAllocated();
+        }
+    // code
+        if ( code ) {
+            tw << "\tcode: " << code->bytesAllocated() << " of " << code->totalAlignedMemoryAllocated()
+                << ", depth = " << code->depth() << "\n";
+            tw << "\t\ttableMN[" << tabMnLookup.size() << "]\n";
+            tw << "\t\ttableGMN[" << tabGMnLookup.size() << "]\n";
+            tw << "\t\ttableAd[" << tabAdLookup.size() << "]\n";
+            bytesTotal += code->totalAlignedMemoryAllocated();
+            bytesUsed += code->bytesAllocated();
+        }
+    // debugInfo
+        if ( debugInfo ) {
+            tw << "\tdebugInfo: " << debugInfo->bytesAllocated() << " of " << debugInfo->totalAlignedMemoryAllocated()
+                << ", depth = " << debugInfo->depth() << "\n";
+            bytesTotal += debugInfo->totalAlignedMemoryAllocated();
+            bytesUsed += debugInfo->bytesAllocated();
+        }
+    // stack
+        tw << "\tstack: " << stack.size() << "\n";
+        bytesTotal += stack.size();
+        bytesUsed += stack.size();
+    // functions
+        //tw << "\functions table: " << totalFunctions*sizeof(SimFunction) << "\n";
+        //bytesTotal += totalFunctions*sizeof(SimFunction);
+        //bytesUsed += totalFunctions*sizeof(SimFunction);
+    // globals
+        //tw << "\tglobals table: " << totalVariables*sizeof(GlobalVariable) << "\n";
+        //bytesTotal += totalVariables*sizeof(GlobalVariable);
+        //bytesUsed += totalVariables*sizeof(GlobalVariable);
+    // globals data
+        if ( globals ) {
+            tw << "\tglobal data: " << globalsSize << "\n";
+            bytesTotal += globalsSize;
+            bytesUsed += globalsSize;
+        }
+    // shared
+        if ( shared ) {
+            tw << "\tshared data: " << sharedSize << "\n";
+            bytesTotal += sharedSize;
+            bytesUsed += sharedSize;
+        }
+    // total
+        tw << "-----------------------------------------------------------------\n";
+        tw << "  total " << bytesTotal << ", wasted "
+            << ((bytesTotal - bytesUsed)*100/bytesTotal) << "% ("
+            << (bytesTotal - bytesUsed) << ")\n";
+    }
+
+    uint64_t Context::getSharedMemorySize() const {
+        uint64_t mem = 0;
+        mem += code ? code->totalAlignedMemoryAllocated() : 0;
+        mem += constStringHeap ? constStringHeap->totalAlignedMemoryAllocated() : 0;
+        mem += debugInfo ? debugInfo->totalAlignedMemoryAllocated() : 0;
+        mem += sharedSize;
+        return mem;
+    }
+
+    uint64_t Context::getUniqueMemorySize() const {
+        uint64_t mem = 0;
+        mem += globalsSize;
+        mem += stack.size();
+        mem += heap ? heap->totalAlignedMemoryAllocated() : 0;
+        mem += stringHeap ? stringHeap->totalAlignedMemoryAllocated() : 0;
+        return mem;
+    }
+
 
     Context::Context(const Context & ctx, uint32_t category_): stack(ctx.stack.size()) {
         persistent = ctx.persistent;
@@ -815,19 +923,8 @@ namespace das
         totalFunctions = ctx.totalFunctions;
         // mangled name table
         tabMnLookup = ctx.tabMnLookup;
-        tabMnMask = ctx.tabMnMask;
-        tabMnRot = ctx.tabMnRot;
-        tabMnSize = ctx.tabMnSize;
-        // global mangled name table
         tabGMnLookup = ctx.tabGMnLookup;
-        tabGMnMask = ctx.tabGMnMask;
-        tabGMnRot = ctx.tabGMnRot;
-        tabGMnSize = ctx.tabGMnSize;
-        // annotation data table
         tabAdLookup = ctx.tabAdLookup;
-        tabAdMask = ctx.tabAdMask;
-        tabAdRot = ctx.tabAdRot;
-        tabAdSize = ctx.tabAdSize;
         // register
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             pAgent->onCreateContext(this);
@@ -863,23 +960,6 @@ namespace das
         }
     }
 
-    uint64_t Context::getSharedMemorySize() const {
-        uint64_t mem = 0;
-        mem += code->totalAlignedMemoryAllocated();
-        mem += constStringHeap->totalAlignedMemoryAllocated();
-        mem += debugInfo->totalAlignedMemoryAllocated();
-        return mem;
-    }
-
-    uint64_t Context::getUniqueMemorySize() const {
-        uint64_t mem = 0;
-        mem += globalsSize;
-        mem += stack.size();
-        mem += heap->totalAlignedMemoryAllocated();
-        mem += stringHeap->totalAlignedMemoryAllocated();
-        return mem;
-    }
-
     struct SimNodeRelocator : SimVisitor {
         shared_ptr<NodeAllocator>   newCode;
         Context * context = nullptr;
@@ -888,12 +968,15 @@ namespace das
         }
     };
 
-    void Context::relocateCode() {
+    void Context::relocateCode( bool pwh ) {
         SimNodeRelocator rel;
         rel.context = this;
         rel.newCode = make_shared<NodeAllocator>();
-        rel.newCode->prefixWithHeader = false;
-        uint32_t codeSize = uint32_t(code->bytesAllocated()) - code->totalNodesAllocated * uint32_t(sizeof(NodePrefix));
+        uint32_t codeSize = uint32_t(code->bytesAllocated());
+        if ( code->prefixWithHeader && !pwh ) {
+            codeSize -= code->totalNodesAllocated * uint32_t(sizeof(NodePrefix));
+        }
+        rel.newCode->prefixWithHeader = pwh;
         rel.newCode->setInitialSize(codeSize);
         SimFunction * oldFunctions = functions;
         if ( totalFunctions ) {
@@ -914,41 +997,18 @@ namespace das
             globalVariables = newVariables;
         }
         // relocate mangle-name lookup
-        if ( tabMnLookup ) {
-            SimFunction ** newMnLookup = (SimFunction **) rel.newCode->allocate(tabMnSize * sizeof(SimFunction*));
-            for ( uint32_t i=0; i!=tabMnSize; ++i ) {
-                auto fn = tabMnLookup[i];
-                if ( fn!=nullptr ) {
-                    if ( fn>=oldFunctions && fn<(oldFunctions+totalFunctions) ) {
-                        ptrdiff_t index = fn - oldFunctions;
-                        newMnLookup[i] = functions + index;
-                        DAS_ASSERT(fn->mangledNameHash == newMnLookup[i]->mangledNameHash);
-                        DAS_ASSERT(newMnLookup[i]>=functions && newMnLookup[i]<(functions+totalFunctions));
-                        // printf("%3i - MNH 0x%8x: %s [move %p -> %p]\n", i, fn->mangledNameHash, fn->name, fn, newMnLookup[i] );
-                    } else {
-                        newMnLookup[i] = fn;
-                        // printf("%3i - MNH 0x%8x: %s [stay %p]\n", i, fn->mangledNameHash, fn->name, fn );
-                    }
-                } else {
-                    newMnLookup[i] = nullptr;
+
+        for ( auto & kv : tabMnLookup ) {
+            auto fn = kv.second;
+            if ( fn!=nullptr ) {
+                if ( fn>=oldFunctions && fn<(oldFunctions+totalFunctions) ) {
+                    ptrdiff_t index = fn - oldFunctions;
+                    kv.second = functions + index;
+                    DAS_ASSERT(fn->mangledNameHash == kv.second->mangledNameHash);
+                    DAS_ASSERT(kv.second>=functions && kv.second<(functions+totalFunctions));
+                    // printf("%3i - MNH 0x%8x: %s [move %p -> %p]\n", i, fn->mangledNameHash, fn->name, fn, kv.second );
                 }
             }
-            tabMnLookup = newMnLookup;
-        }
-        // note - code needs to be relocated last
-        //  somehwere inside SimNode....::copyNode there is fnByMangledName lookup
-        //  which should be returning new functions, not old ones
-        // relocate global mangle-name lookup
-        if ( tabGMnLookup ) {
-            uint32_t * newGMnLookup = (uint32_t *) rel.newCode->allocate(tabGMnSize * sizeof(uint32_t));
-            memcpy ( newGMnLookup, tabGMnLookup, tabGMnSize * sizeof(uint32_t));
-            tabGMnLookup = newGMnLookup;
-        }
-        // relocate annotation data lookup
-        if ( tabAdLookup ) {
-            uint64_t * newAdLookup = (uint64_t *) rel.newCode->allocate(tabAdSize * sizeof(uint64_t));
-            memcpy ( newAdLookup, tabAdLookup, tabAdSize * sizeof(uint64_t));
-            tabAdLookup = newAdLookup;
         }
         // relocate variables
         if ( totalVariables ) {
@@ -1063,9 +1123,20 @@ namespace das
         });
     }
 
+    vector<SimFunction *> Context::findFunctions ( const char * fnname ) const {
+        vector<SimFunction *> res;
+        for ( auto & kv : tabMnLookup ) {
+            auto fn = kv.second;
+            if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
+                res.push_back(fn);
+            }
+        }
+        return res;
+    }
+
     SimFunction * Context::findFunction ( const char * fnname ) const {
-        for ( uint32_t i=0; i!=tabMnSize; ++i ) {
-            auto fn = tabMnLookup[i];
+        for ( auto & kv : tabMnLookup ) {
+            auto fn = kv.second;
             if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
                 return fn;
             }
@@ -1076,8 +1147,8 @@ namespace das
     SimFunction * Context::findFunction ( const char * fnname, bool & isUnique ) const {
         int candidates = 0;
         SimFunction * found = nullptr;
-        for ( uint32_t i=0; i!=tabMnSize; ++i ) {
-            auto fn = tabMnLookup[i];
+        for ( auto & kv : tabMnLookup ) {
+            auto fn = kv.second;
             if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
                 found = fn;
                 candidates++;

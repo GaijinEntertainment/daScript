@@ -253,6 +253,7 @@ namespace das
         Context & operator = (const Context &) = delete;
         virtual ~Context();
         void strip();
+        void logMemInfo(TextWriter & tw);
 
         uint32_t getGlobalSize() const {
             return globalsSize;
@@ -333,24 +334,24 @@ namespace das
         }
 
         __forceinline uint32_t globalOffsetByMangledName ( uint32_t mnh ) const {
-            uint32_t idx = rotl_c(mnh, tabGMnRot) & tabGMnMask;
-            return tabGMnLookup[idx];
+            auto it = tabGMnLookup.find(mnh);
+            DAS_ASSERT(it!=tabGMnLookup.end());
+            return it->second;
         }
         __forceinline uint64_t adBySid ( uint32_t sid ) const {
-            uint32_t idx = rotl_c(sid, tabAdRot) & tabAdMask;
-            return tabAdLookup[idx];
+            auto it = tabAdLookup.find(sid);
+            DAS_ASSERT(it!=tabAdLookup.end());
+            return it->second;
         }
-
         __forceinline SimFunction * fnByMangledName ( uint32_t mnh ) {
             if ( mnh==0 ) return nullptr;
-            uint32_t idx = rotl_c(mnh, tabMnRot) & tabMnMask;
-            auto fn = tabMnLookup[idx];
-            DAS_ASSERT(fn->mangledNameHash==mnh);   // we need to actually test for this IF cross-context calls are ever a thing
-            return fn;
+            auto it = tabMnLookup.find(mnh);
+            return it!=tabMnLookup.end() ? it->second : nullptr;
         }
 
         SimFunction * findFunction ( const char * name ) const;
         SimFunction * findFunction ( const char * name, bool & isUnique ) const;
+        vector<SimFunction *> findFunctions ( const char * name ) const;
         int findVariable ( const char * name ) const;
         void stackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables );
         string getStackWalk ( const LineInfo * at, bool showArguments, bool showLocalVariables, bool showOutOfScope = false, bool stackTopOnly = false );
@@ -575,7 +576,7 @@ namespace das
             return exception;
         }
 
-        void relocateCode();
+        void relocateCode( bool pwh = false );
         void collectStringHeap(LineInfo * at, bool validate);
         void collectHeap(LineInfo * at, bool stringHeap, bool validate);
         void reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly);
@@ -660,20 +661,9 @@ namespace das
         bool        singleStepMode = false;
         const LineInfo * singleStepAt = nullptr;
     public:
-        SimFunction **  tabMnLookup = nullptr;
-        uint32_t        tabMnMask = 0;
-        uint32_t        tabMnRot = 0;
-        uint32_t        tabMnSize = 0;
-    public:
-        uint32_t *  tabGMnLookup = nullptr;
-        uint32_t    tabGMnMask = 0;
-        uint32_t    tabGMnRot = 0;
-        uint32_t    tabGMnSize = 0;
-    public:
-        uint64_t *  tabAdLookup = nullptr;
-        uint32_t    tabAdMask = 0;
-        uint32_t    tabAdRot = 0;
-        uint32_t    tabAdSize = 0;
+        das_hash_map<uint32_t,SimFunction *> tabMnLookup;
+        das_hash_map<uint32_t,uint32_t> tabGMnLookup;
+        das_hash_map<uint32_t,uint64_t> tabAdLookup;
     public:
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;

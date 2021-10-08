@@ -880,6 +880,7 @@ namespace das
         void verifyAotReady();
         void verifyBuiltinNames(uint32_t flags);
         void addDependency ( Module * mod, bool pub );
+        static void logSharedCodeMem ( TextWriter & tw );
     public:
         template <typename RecAnn>
         void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
@@ -1095,7 +1096,8 @@ namespace das
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
-        bool enable_shared_code = false;
+        bool enable_shared_code = false;                // when enabled, shared overhead is increased (all shared modules have their own code)
+                                                        // but individual context memory overhead is decreased (shared)
         bool enable_shared_code_aot = true;
         bool fail_on_no_shared_aot = true;
     // debugger

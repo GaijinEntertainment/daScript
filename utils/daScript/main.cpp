@@ -11,7 +11,9 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
     auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
+    // policies.enable_shared_code = true;
     policies.debugger = false;   // TODO: from command line
+    policies.enable_shared_code_aot = false;
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
@@ -32,15 +34,24 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
             } else {
-                if ( auto fnTest = ctx.findFunction(mainFnName.c_str()) ) {
-                    if ( verifyCall<void>(fnTest->debugInfo, dummyGroup) || verifyCall<bool>(fnTest->debugInfo, dummyGroup) ) {
-                        ctx.restart();
-                        ctx.eval(fnTest, nullptr);
-                    } else {
-                        tout << "function '"  << mainFnName << "' call arguments do not match, expecting main():void or main():bool\n";
+                auto fnVec = ctx.findFunctions(mainFnName.c_str());
+                vector<SimFunction *> fnMVec;
+                for ( auto fnAS : fnVec ) {
+                    if ( verifyCall<void>(fnAS->debugInfo, dummyGroup) || verifyCall<bool>(fnAS->debugInfo, dummyGroup) ) {
+                        fnMVec.push_back(fnAS);
+                    }
+                }
+                if ( fnMVec.size()==0 ) {
+                    tout << "function '"  << mainFnName << "' not found\n";
+                } else if ( fnMVec.size()>1 ) {
+                    tout << "too many options for '" << mainFnName << "'\ncandidates are:\n";
+                    for ( auto fnAS : fnMVec ) {
+                        tout << "\t" << fnAS->mangledName << "\n";
                     }
                 } else {
-                    tout << "function '"  << mainFnName << " ' not found\n";
+                    auto fnTest = fnMVec.back();
+                    ctx.restart();
+                    ctx.eval(fnTest, nullptr);
                 }
             }
         }

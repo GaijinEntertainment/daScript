@@ -337,7 +337,6 @@ include/daScript/misc/arraytype.h
 include/daScript/misc/rangetype.h
 include/daScript/misc/string_writer.h
 include/daScript/misc/type_name.h
-include/daScript/misc/lookup1.h
 include/daScript/misc/memory_model.h
 include/daScript/misc/fnv.h
 include/daScript/misc/smart_ptr.h

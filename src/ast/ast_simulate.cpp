@@ -12,8 +12,6 @@
 
 #include "daScript/simulate/simulate_nodes.h"
 
-#include "daScript/misc/lookup1.h"
-
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das
@@ -2675,26 +2673,15 @@ namespace das
     }
 
     void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
-        das_hash_map<uint32_t, uint32_t> htab;
+        context.tabGMnLookup.clear();
         for ( int i=0; i!=context.totalVariables; ++i ) {
             auto mnh = context.globalVariables[i].mangledNameHash;
-            if ( htab[mnh] ) {
-                error("internal compiler error. mangled name hash collision "
-                      + string(context.globalVariables[i].name), "", "", LineInfo());
-                return;
-            }
-            htab[mnh] = context.globalVariables[i].offset;
+            context.tabGMnLookup[mnh] = context.globalVariables[i].offset;
         }
-        auto tab = buildLookup(htab, context.tabGMnMask, context.tabGMnRot);
-        context.tabGMnSize = uint32_t(tab.size());
-        context.tabGMnLookup = (uint32_t *) context.code->allocate(context.tabGMnSize * sizeof(uint32_t));
-        memcpy ( context.tabGMnLookup, tab.data(), context.tabGMnSize * sizeof(uint32_t));
         if ( options.getBoolOption("log_gmn_hash",false) ) {
             logs
                 << "totalGlobals: " << context.totalVariables << "\n"
-                << "tabGMnLookup:" << context.tabGMnSize << "\n"
-                << "tabGMnMask:" << context.tabGMnMask << "\n"
-                << "tabGMnRot:" << context.tabGMnRot << "\n";
+                << "tabGMnLookup:" << context.tabGMnLookup.size() << "\n";
         }
         for ( int i=0; i!=context.totalVariables; ++i ) {
             auto & gvar = context.globalVariables[i];
@@ -2708,65 +2695,30 @@ namespace das
     }
 
     void Program::buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs ) {
-        das_hash_map<uint32_t, uint32_t> htab;
-        for ( size_t i=0; i!=lookupFunctions.size(); ++i ) {
-            auto mnh = lookupFunctions[i]->getMangledNameHash();
-            if ( mnh==0 ) {
-                error("internal compiler error. mangled name hash is 0 "
-                      + lookupFunctions[i]->getMangledName(), "", "", LineInfo());
-                return;
-            }
-            if ( htab[mnh] ) {
-                error("internal compiler error. mangled name hash collision " + to_string(mnh) + " in "
-                      + lookupFunctions[i]->getMangledName(), "", "", LineInfo());
-                return;
-            }
-            htab[mnh] = uint32_t(i + 1);
-        }
-        auto tab = buildLookup(htab, context.tabMnMask, context.tabMnRot);
-        context.tabMnSize = uint32_t(tab.size());
-        context.tabMnLookup = (SimFunction **) context.code->allocate(context.tabMnSize * sizeof(SimFunction *));
-        for ( uint32_t i=0; i!=context.tabMnSize; ++i ) {
-            auto index = tab[i];
-            if ( index!=-1u ) {
-                auto fn = lookupFunctions[index-1];
-                if ( fn->module->sharedCodeContext ) {
-                    context.tabMnLookup[i] = fn->module->sharedCodeContext->fnByMangledName(fn->getMangledNameHash());
-                } else {
-                    context.tabMnLookup[i] = context.functions + fn->index;
-                }
-                DAS_ASSERT(context.tabMnLookup[i]);
+        context.tabMnLookup.clear();
+        for ( const auto & fn : lookupFunctions ) {
+            auto mnh = fn->getMangledNameHash();
+            if ( fn->module->sharedCodeContext ) {
+                context.tabMnLookup[mnh] = fn->module->sharedCodeContext->fnByMangledName(mnh);
             } else {
-                context.tabMnLookup[i] = nullptr;
+                context.tabMnLookup[mnh] = context.functions + fn->index;
             }
         }
         if ( options.getBoolOption("log_mn_hash",false) ) {
             logs
                 << "totalFunctions: " << context.totalFunctions << "\n"
-                << "tabMnLookup:" << context.tabMnSize << "\n"
-                << "tabMnMask:" << context.tabMnMask << "\n"
-                << "tabMnRot:" << context.tabMnRot << "\n";
+                << "tabMnLookup:" << context.tabMnLookup.max_size() << "\n";
         }
     }
 
     void Program::buildADLookup ( Context & context, TextWriter & logs ) {
-        das_hash_map<uint32_t,uint64_t>  tabAd;
         for (auto & pm : library.modules ) {
             for(auto s2d : pm->annotationData ) {
-                tabAd[s2d.first] = s2d.second;
+                context.tabAdLookup[s2d.first] = s2d.second;
             }
         }
-        if ( tabAd.size() ) {
-            auto tab = buildLookup(tabAd, context.tabAdMask, context.tabAdRot);
-            context.tabAdSize = uint32_t(tab.size());
-            context.tabAdLookup = (uint64_t *) context.code->allocate(context.tabAdSize * sizeof(uint64_t));
-            memcpy ( context.tabAdLookup, tab.data(), context.tabAdSize * sizeof(uint64_t));
-            if ( options.getBoolOption("log_ad_hash",false) ) {
-                logs
-                << "tabAdLookup:" << context.tabAdSize << "\n"
-                << "tabAdMask:" << context.tabAdMask << "\n"
-                << "tabAdRot:" << context.tabAdRot << "\n";
-            }
+        if ( options.getBoolOption("log_ad_hash",false) ) {
+            logs<< "tabAdLookup:" << context.tabAdLookup.size() << "\n";
         }
     }
 
@@ -2877,7 +2829,7 @@ namespace das
                         auto thit = sharedLookup.find(MNH);
                         if ( thit!=sharedLookup.end() ) {
                             SimFunction * tfun = thit->second;
-                            if ( stricmp(sfun->mangledName,tfun->mangledName)!=0 || !sfun->builtin || !tfun->builtin ) {
+                            if ( strcmp(sfun->mangledName,tfun->mangledName)!=0 || !sfun->builtin || !tfun->builtin ) {
                                 error("Internalc compiler errors. Mangled name hash collision. Function " + string(sfun->mangledName) +
                                     "collides with" + string(tfun->mangledName), "\tHash is " + to_string(MNH), "",
                                         LineInfo(), CompilationError::cant_initialize);
@@ -2950,6 +2902,11 @@ namespace das
 #if DAS_FUSION
         if ( !folding ) {               // note: only run fusion when not folding
             fusion(context, logs);
+            context.relocateCode(true); // this to get better estimate on relocated size. its fust enough
+            context.relocateCode();
+        }
+#else
+        if ( !folding ) {
             context.relocateCode();
         }
 #endif
@@ -3028,21 +2985,12 @@ namespace das
         }
         context.restart();
         if (options.getBoolOption("log_mem",false)) {
-            logs << "globals       " << context.getGlobalSize() << "\n";
-            logs << "shared        " << context.getSharedSize() << "\n";
-            logs << "stack         " << context.stack.size() << "\n";
-            logs << "code          " << context.code->bytesAllocated() << " in "<< context.code->depth()
-                << " pages (" << context.code->totalAlignedMemoryAllocated() << ")\n";
-            logs << "const strings " << context.constStringHeap->bytesAllocated() << " in "<< context.constStringHeap->depth()
-                << " pages (" << context.constStringHeap->totalAlignedMemoryAllocated() << ")\n";
-            logs << "debug         " << context.debugInfo->bytesAllocated() << " (" <<
-                context.debugInfo->totalAlignedMemoryAllocated() << ")\n";
-            logs << "heap          " << context.heap->bytesAllocated() << " in "<< context.heap->depth()
-                << " pages (" << context.heap->totalAlignedMemoryAllocated() << ")\n";
-            logs << "string        " << context.stringHeap->bytesAllocated() << " in "<< context.stringHeap->depth()
-                << " pages(" << context.stringHeap->totalAlignedMemoryAllocated() << ")\n";
+            context.logMemInfo(logs);
             logs << "shared        " << context.getSharedMemorySize() << "\n";
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
+        }
+        if (options.getBoolOption("log_shared_mem",false)) {
+            Module::logSharedCodeMem(logs);
         }
         // log CPP
         if (options.getBoolOption("log_cpp")) {
