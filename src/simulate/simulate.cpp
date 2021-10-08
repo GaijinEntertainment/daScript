@@ -963,7 +963,9 @@ namespace das
     struct SimNodeRelocator : SimVisitor {
         shared_ptr<NodeAllocator>   newCode;
         Context * context = nullptr;
+        int totalNodes = 0;
         virtual SimNode * visit ( SimNode * node ) override {
+            totalNodes ++;
             return node->copyNode(*context, newCode.get());
         }
     };
@@ -974,7 +976,10 @@ namespace das
         rel.newCode = make_shared<NodeAllocator>();
         uint32_t codeSize = uint32_t(code->bytesAllocated());
         if ( code->prefixWithHeader && !pwh ) {
+            // printf("[REL] %i adjusting\n", code->totalNodesAllocated);
             codeSize -= code->totalNodesAllocated * uint32_t(sizeof(NodePrefix));
+        } else {
+            // printf("[REL] %i not adjusting\n", code->totalNodesAllocated);
         }
         rel.newCode->prefixWithHeader = pwh;
         rel.newCode->setInitialSize(codeSize);
@@ -997,7 +1002,6 @@ namespace das
             globalVariables = newVariables;
         }
         // relocate mangle-name lookup
-
         for ( auto & kv : tabMnLookup ) {
             auto fn = kv.second;
             if ( fn!=nullptr ) {
@@ -1025,6 +1029,7 @@ namespace das
             fn.code = fn.code->visit(rel);
         }
         // swap the code
+        rel.newCode->totalNodesAllocated = rel.totalNodes;
         DAS_ASSERTF(rel.newCode->depth()<=1,"after code relocation all code should be on one page");
         code = rel.newCode;
     }

@@ -3166,7 +3166,7 @@ namespace das {
                 SideEffects::none, "ast_describe_typedecl_cpp")
                     ->args({"type","substitueRef","skipRef","skipConst","redundantConst","context"});
             addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "describe_expression",
-                SideEffects::none, "describe_expression")
+                SideEffects::none, "ast_describe_expression")
                     ->args({"expression","context"});
             addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "describe_function",
                 SideEffects::none, "describe_function")

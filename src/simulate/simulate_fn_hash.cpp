@@ -56,6 +56,10 @@ namespace das {
             write(mangledName);
             write(argN);
         }
+        virtual void arg ( Func, uint32_t mangledNameHash, const char * argN ) override {
+            write(&mangledNameHash, sizeof(mangledNameHash));
+            write(argN);
+        }
         virtual void arg ( int32_t argV,  const char * argN ) override {
             write(&argV,sizeof(argV));
             write(argN);

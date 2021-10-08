@@ -242,12 +242,15 @@ namespace das {
                 initialSize = default_initial_size;
             }
             chunk = new HeapChunk ( das::max(initialSize, s), nullptr );
+            // printf("[HC] %i\n", chunk->size);
         }
         for ( ;; ) {
             if ( char * res = chunk->allocate(s) ) {
+                // printf("[A] %i bytes, offs=%i\n", int(s), int(res-chunk->data));
                 return res;
             }
             chunk = new HeapChunk ( das::max(grow(chunk->size), s), chunk);
+            // printf("[HC] %i bytes\n", chunk->size);
         }
     }
 

@@ -188,6 +188,7 @@ namespace das
         virtual void arg ( double /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( bool /* argV */,  const char * /* argN */  ) { }
         virtual void arg ( Func /* fun */,  const char * /* mangledName */, const char * /* argN */ ) { }
+        virtual void arg ( Func /* fun */,  uint32_t /* mangledName */, const char * /* argN */ ) { }
         virtual void sub ( SimNode ** nodes, uint32_t count, const char * );
         virtual SimNode * sub ( SimNode * node, const char * /* opN */ = "subexpr" ) { return node->visit(*this); }
         virtual SimNode * visit ( SimNode * node ) { return node; }

@@ -91,6 +91,24 @@ namespace das {
             crlf();
             ss << "@@" << mangledName;
         }
+        virtual void arg ( Func fun,  uint32_t mangledNameHash, const char * argN ) override {
+            SimVisitor::arg(fun, mangledNameHash, argN);
+            // hash
+            write(&mangledNameHash, sizeof(mangledNameHash));
+            write(argN);
+            // regular print
+            crlf();
+            if ( context ) {
+                auto fn = context->fnByMangledName(mangledNameHash);
+                if ( fn ) {
+                    ss << "@@" << fn->name;
+                } else {
+                    ss << "@@null";
+                }
+            } else {
+                ss << "@@ 0x" << HEX << mangledNameHash << DEC;
+            }
+        }
         virtual void arg ( int32_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
             // hash

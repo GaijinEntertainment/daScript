@@ -2909,6 +2909,7 @@ namespace das
         }
 #else
         if ( !folding ) {
+            context.relocateCode(true);
             context.relocateCode();
         }
 #endif
