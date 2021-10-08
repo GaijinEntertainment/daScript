@@ -51,7 +51,7 @@ ExprCalc::ExprCalc ( const string & expr, const ExprVars & vars ) {
     // make file access, introduce string as if it was a file
     TextPrinter tout;
     auto fAccess = make_smart<FsFileAccess>();
-    auto fileInfo = make_unique<TextFileInfo>(text.c_str(), uint32_t(text.length()));
+    auto fileInfo = make_unique<TextFileInfo>(text.c_str(), uint32_t(text.length()), false);
     fAccess->setFileInfo("dummy.das", move(fileInfo));
     // compile script
     ModuleGroup dummyLibGroup;

@@ -16,7 +16,7 @@ namespace das {
             auto sourceLength = uint32_t(ftell(ff));
             fseek(ff,0,SEEK_SET);
             char *source = (char *) das_aligned_alloc16(sourceLength);
-            auto info = das::make_unique<TextFileInfo>(source, sourceLength);
+            auto info = das::make_unique<TextFileInfo>(source, sourceLength, true);
             uint32_t bytesRead = uint32_t(fread(source, 1, sourceLength, ff));
             fclose(ff);
             if (bytesRead == sourceLength) {

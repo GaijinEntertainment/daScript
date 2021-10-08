@@ -112,14 +112,15 @@ namespace das
 
     class TextFileInfo : public FileInfo {
     public:
-        TextFileInfo ( const char * src, uint32_t len )
-            : source(src), sourceLength(len) {}
-        virtual ~TextFileInfo() { freeSourceData(); }
+        TextFileInfo ( const char * src, uint32_t len, bool own )
+            : source(src), sourceLength(len), owner(own) {}
+        virtual ~TextFileInfo() { if ( owner ) freeSourceData(); }
         virtual void freeSourceData() override;
         virtual void getSourceAndLength ( const char * & src, uint32_t & len ) override;
     protected:
         const char *          source = nullptr;
         uint32_t              sourceLength = 0;
+        bool                  owner = true;
     };
 
     struct ModuleInfo {
