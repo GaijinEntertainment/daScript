@@ -117,7 +117,7 @@ namespace das {
             // regular print
             crlf();
             if ( argV ) {
-                ss << "\"" << argV << "\"";
+                ss << "\"" << escapeString(argV) << "\"";
             } else {
                 ss << "null";
             }
