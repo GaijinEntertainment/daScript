@@ -16,7 +16,7 @@ int main( int, char * [] ) {
     Module::Initialize();
     // make file access, introduce string as if it was a file
     auto fAccess = make_smart<FsFileAccess>();
-    auto fileInfo = make_unique<FileInfo>(tutorial_text, uint32_t(strlen(tutorial_text)));
+    auto fileInfo = make_unique<TextFileInfo>(tutorial_text, uint32_t(strlen(tutorial_text)));
     fAccess->setFileInfo("dummy.das", move(fileInfo));
     // compile script
     TextPrinter tout;
