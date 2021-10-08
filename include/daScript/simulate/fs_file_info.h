@@ -4,14 +4,6 @@
 
 namespace das {
 #if !DAS_NO_FILEIO
-    class FsFileInfo : public das::FileInfo {
-    public:
-        FsFileInfo ( const char * src, uint32_t len ) : FileInfo(src,len) {}
-        virtual ~FsFileInfo();
-    private:
-        virtual void freeSourceData() override;
-    };
-
     class FsFileAccess : public das::ModuleFileAccess {
     public:
         FsFileAccess();

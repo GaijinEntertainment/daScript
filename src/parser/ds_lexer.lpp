@@ -274,7 +274,10 @@ void YYNEWLINE() {
             das_line_no.push_back(yylineno);
             yylineno = 1;
             yypush_buffer_state(YY_CURRENT_BUFFER);
-            yy_scan_bytes(info->getSrcBytes(), info->getSrcLen());
+            const char * src = nullptr;
+            uint32_t len = 0;
+            info->getSourceAndLength(src, len);
+            yy_scan_bytes(src, len);
         }
     }
     BEGIN(normal);

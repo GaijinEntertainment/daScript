@@ -644,6 +644,19 @@ namespace das
 #endif
     }
 
+    void TextFileInfo::getSourceAndLength ( const char * & src, uint32_t & len ) {
+        src = source;
+        len = sourceLength;
+    }
+
+    void TextFileInfo::freeSourceData() {
+        if ( source ) {
+            das_aligned_free16((void*)source);
+            source = nullptr;
+            sourceLength = 0;
+        }
+    }
+
     FileInfoPtr FileAccess::letGoOfFileInfo ( const string & fileName ) {
         auto it = files.find(fileName);
         if ( it == files.end() ) return nullptr;

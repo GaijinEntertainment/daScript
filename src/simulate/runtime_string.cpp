@@ -299,9 +299,11 @@ namespace das
 
     string reportError(const struct LineInfo & at, const string & message,
         const string & extra, const string & fixme, CompilationError erc) {
+        const char * src = nullptr;
+        uint32_t len = 0;
+        if ( at.fileInfo ) at.fileInfo->getSourceAndLength(src, len);
         return reportError(
-                at.fileInfo ? at.fileInfo->getSrcBytes() : nullptr,
-                at.fileInfo ? at.fileInfo->getSrcLen() : 0,
+                src, len,
                 at.fileInfo ? at.fileInfo->name.c_str() : nullptr,
                 at.line, at.column, at.last_line, at.last_column,
                 at.fileInfo ? at.fileInfo->tabSize : 4,

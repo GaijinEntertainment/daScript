@@ -97,25 +97,30 @@ namespace das
 
     struct FileInfo {
     public:
-        FileInfo() = default;
-        FileInfo(const char * s, uint32_t l) : source(s), sourceLength(l) {}
         virtual void freeSourceData() { }
         virtual ~FileInfo() { freeSourceData(); }
         void reserveProfileData();
-        const char * getSrcBytes() const { return source; }
-        const uint32_t getSrcLen() const { return sourceLength; }
+        virtual void getSourceAndLength ( const char * & src, uint32_t & len ) { src=nullptr; len=0; }
         string                name;
         int32_t               tabSize = 4;
 #if DAS_ENABLE_PROFILER
     public:
         vector<uint64_t>      profileData;
 #endif
+    };
+    typedef unique_ptr<FileInfo> FileInfoPtr;
+
+    class TextFileInfo : public FileInfo {
+    public:
+        TextFileInfo ( const char * src, uint32_t len )
+            : source(src), sourceLength(len) {}
+        virtual ~TextFileInfo() { freeSourceData(); }
+        virtual void freeSourceData() override;
+        virtual void getSourceAndLength ( const char * & src, uint32_t & len ) override;
     protected:
         const char *          source = nullptr;
         uint32_t              sourceLength = 0;
-
     };
-    typedef unique_ptr<FileInfo> FileInfoPtr;
 
     struct ModuleInfo {
         string  moduleName;

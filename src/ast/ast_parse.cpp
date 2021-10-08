@@ -27,8 +27,9 @@ namespace das {
     }
 
     void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, vector<string> & req, das_set<FileInfo *> & collected  ) {
-        const char * src = fi->getSrcBytes();
-        uint32_t length = fi->getSrcLen();
+        const char * src = nullptr;
+        uint32_t length = 0;
+        fi->getSourceAndLength(src, length);
         if ( isUtf8Text(src,length) ) { // skip utf8 byte order mark
             src += 3;
             length -= 3;
@@ -298,8 +299,9 @@ namespace das {
         g_FileAccessStack.clear();
         if ( auto fi = access->getFileInfo(fileName) ) {
             g_FileAccessStack.push_back(fi);
-            auto src = fi->getSrcBytes();
-            auto len = fi->getSrcLen();
+            const char * src = nullptr;
+            uint32_t len = 0;
+            fi->getSourceAndLength(src,len);
             if (isUtf8Text(src, len)) {
                 das_yybegin(src + 3, len-3);
             } else {

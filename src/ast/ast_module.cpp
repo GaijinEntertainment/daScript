@@ -429,7 +429,7 @@ namespace das {
     bool Module::compileBuiltinModule ( const string & modName, unsigned char * str, unsigned int str_len ) {
         TextWriter issues;
         auto access = make_smart<FileAccess>();
-        auto fileInfo = make_unique<FileInfo>((char *) str, uint32_t(str_len));
+        auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len));
         access->setFileInfo(modName, move(fileInfo));
         ModuleGroup dummyLibGroup;
         auto program = parseDaScript(modName, access, issues, dummyLibGroup, true);

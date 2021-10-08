@@ -676,7 +676,7 @@ namespace das {
         TextWriter issues;
         uint32_t str_len = stringLengthSafe(*context, str);
         auto access = make_smart<FileAccess>();
-        auto fileInfo = make_unique<FileInfo>((char *) str, uint32_t(str_len));
+        auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len));
         access->setFileInfo(modName, move(fileInfo));
         ModuleGroup dummyLibGroup;
         auto program = parseDaScript(modName, access, issues, dummyLibGroup, exportAll, false, cop);
@@ -940,7 +940,7 @@ namespace das {
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * ) {
         if ( !str ) context->throw_error("can't introduce empty file");
         uint32_t str_len = stringLengthSafe(*context, str);
-        auto fileInfo = make_unique<FileInfo>(str, str_len);
+        auto fileInfo = make_unique<TextFileInfo>(str, str_len);
         return access->setFileInfo(fname, move(fileInfo)) != nullptr;
     }
 
@@ -1028,7 +1028,7 @@ namespace das {
         return context->stringHeap->allocateString(dt);
     }
 
-    const FuncInfo * builtin_get_function_info_by_mnh ( Context & context, Func fun ) {
+    const FuncInfo * builtin_get_function_info_by_mnh ( Context &, Func fun ) {
         if ( fun.PTR ) {
             return fun.PTR->debugInfo;
         } else {

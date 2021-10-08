@@ -9,18 +9,6 @@
 namespace das {
 #if !DAS_NO_FILEIO
 
-    FsFileInfo::~FsFileInfo() {
-        freeSourceData();
-    }
-
-    void FsFileInfo::freeSourceData() {
-        if ( source ) {
-            das_aligned_free16((void*)source);
-            source = nullptr;
-            sourceLength = 0;
-        }
-    }
-
     unique_ptr<FileInfo> getNewFsFileInfo(const das::string & fileName) {
         if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
 
@@ -28,7 +16,7 @@ namespace das {
             auto sourceLength = uint32_t(ftell(ff));
             fseek(ff,0,SEEK_SET);
             char *source = (char *) das_aligned_alloc16(sourceLength);
-            auto info = das::make_unique<FsFileInfo>(source, sourceLength);
+            auto info = das::make_unique<TextFileInfo>(source, sourceLength);
             uint32_t bytesRead = uint32_t(fread(source, 1, sourceLength, ff));
             fclose(ff);
             if (bytesRead == sourceLength) {
