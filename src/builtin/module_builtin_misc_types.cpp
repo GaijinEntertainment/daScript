@@ -51,8 +51,8 @@ namespace das
 
     template <>
     struct SimPolicy<Func> {
-        static __forceinline uint32_t to_func ( vec4f val ) {
-            return cast<Func>::to(val).mnh;
+        static __forceinline SimFunction * to_func ( vec4f val ) {
+            return cast<Func>::to(val).PTR;
         }
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_func(a) == to_func(b);
@@ -75,7 +75,7 @@ namespace das
             DAS_PROFILE_NODE
             auto lv = cast<Func>::to(l->eval(context));
             auto rv = r->evalPtr(context);
-            return !rv && lv.mnh==0;      // they only equal if both null
+            return !rv && !lv.PTR;      // they only equal if both null
         }
     };
 
@@ -89,7 +89,7 @@ namespace das
             DAS_PROFILE_NODE
             auto lv = cast<Func>::to(l->eval(context));
             auto rv = r->evalPtr(context);
-            return rv || lv.mnh;
+            return rv || lv.PTR;
         }
     };
 

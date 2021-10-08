@@ -89,7 +89,7 @@ namespace das {
             write(argN);
             // regular print
             crlf();
-            ss << "@@" << fun.mnh << "/*" << mangledName << "*/";
+            ss << "@@" << mangledName;
         }
         virtual void arg ( int32_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
@@ -107,7 +107,7 @@ namespace das {
             write(argN);
             // regular print
             crlf();
-            ss << argV;
+            ss << "0x" << HEX << argV << DEC;
         }
         virtual void arg ( const char * argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);
@@ -147,7 +147,7 @@ namespace das {
             write(argN);
             // regular print
             crlf();
-            ss << argV;
+            ss << "0x" << HEX << argV << DEC;
         }
         virtual void arg ( bool argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);

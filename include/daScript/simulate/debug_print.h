@@ -423,16 +423,9 @@ namespace das {
             ss << "enum " << value;
         }
         virtual void WalkFunction ( Func * fn ) override {
-            if (fn->mnh) {
-                if (context) {
-                    auto simFn = context->fnByMangledName(fn->mnh);
-                    ss << (simFn ? simFn->name : "null");
-                }
-                else {
-                    ss << fn->mnh;
-                }
-            }
-            else {
+            if ( fn->PTR ) {
+                ss << fn->PTR->name << "/*" << fn->PTR->mangledName << "*/";
+            } else {
                 ss << "null";
             }
         }

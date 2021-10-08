@@ -979,11 +979,13 @@ namespace das
 
     SimNode * ExprAddr::simulate (Context & context) const {
         DAS_ASSERT(func->index>=0 && "how, we specified in the unused");
-        Func fn;
-        fn.mnh = func->getMangledNameHash();
-        vec4f cval = v_zero();
-        memcpy (&cval, &fn, sizeof(Func));
-        return context.code->makeNode<SimNode_FuncConstValue>(at,cval);
+        union {
+            uint32_t    mnh;
+            vec4f       cval;
+        } temp;
+        temp.cval = v_zero();
+        temp.mnh = func->getMangledNameHash();
+        return context.code->makeNode<SimNode_FuncConstValue>(at,temp.cval);
     }
 
     SimNode * ExprPtr2Ref::simulate (Context & context) const {
@@ -1980,7 +1982,7 @@ namespace das
         } else {
             DAS_ASSERT(variable->index >= 0 && "using variable which is not used. how?");
             uint32_t mnh = variable->getMangledNameHash();
-            if ( context.sharedCode ) {
+            /* if ( context.sharedCode ) */ {
                 if ( variable->global_shared ) {
                     if ( r2v ) {
                         return context.code->makeValueNode<SimNode_GetSharedMnhR2V>(type->baseType, at, variable->stackTop, mnh);
@@ -1994,7 +1996,7 @@ namespace das
                         return context.code->makeNode<SimNode_GetGlobalMnh>(at, variable->stackTop, mnh);
                     }
                 }
-            } else {
+            } /* else {
                 if ( variable->global_shared ) {
                     if ( r2v ) {
                         return context.code->makeValueNode<SimNode_GetSharedR2V>(type->baseType, at, variable->stackTop, mnh);
@@ -2008,7 +2010,7 @@ namespace das
                         return context.code->makeNode<SimNode_GetGlobal>(at, variable->stackTop, mnh);
                     }
                 }
-            }
+            } */
         }
     }
 

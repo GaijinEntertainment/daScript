@@ -224,7 +224,14 @@ namespace das {
             error("binary serialization of blocks is not supported");
         }
         virtual void WalkFunction ( Func * func ) override {
-            serialize(func->mnh);
+            if ( reading ) {
+                uint32_t mnh;
+                serialize(mnh);
+                func->PTR = context->fnByMangledName(mnh);
+            } else {
+                uint32_t mnh = func->PTR ? func->PTR->mangledNameHash : 0;
+                serialize(mnh);
+            }
         }
         virtual void beforeLambda ( Lambda * lambda, TypeInfo * ) override {
             TypeInfo * info = nullptr;

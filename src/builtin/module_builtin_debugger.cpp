@@ -743,9 +743,9 @@ namespace debugapi {
     vec4f pinvoke_impl2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         auto invCtx = cast<Context *>::to(args[0]);
         auto fn = cast<Func>::to(args[1]);
-        if ( fn.mnh==0 ) context.throw_error("pnvoke can't invoke null function");
-        auto simFn = invCtx->fnByMangledName(fn.mnh);
-        if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%d", fn.mnh);
+        if ( fn.PTR==0 ) context.throw_error("pnvoke can't invoke null function");
+        auto simFn = fn.PTR;
+        if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%p", (void *)simFn);
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
             context.throw_error_ex("pinvoke can't invoke private function %s", simFn->mangledName);
         }
@@ -768,10 +768,10 @@ namespace debugapi {
     vec4f pinvoke_impl3 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         auto invCtx = cast<Context *>::to(args[0]);
         auto fn = cast<Lambda>::to(args[1]);
-        uint32_t * fnMnh = (uint32_t *)fn.capture;
+        SimFunction ** fnMnh = (SimFunction **)fn.capture;
         if (!fnMnh) context.throw_error("invoke null lambda");
-        SimFunction * simFn = invCtx->fnByMangledName(*fnMnh);
-        if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%d", *fnMnh);
+        SimFunction * simFn = *fnMnh;
+        if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%p", (void*)simFn);
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
             context.throw_error_ex("pinvoke can't invoke private function %s", simFn->mangledName);
         }
@@ -804,7 +804,7 @@ namespace debugapi {
 
     void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, Context * context, LineInfoArg * arg ) {
         if ( !fn ) context->throw_error_at(*arg, "expecting function");
-        ctx.instrumentFunction(fn.mnh, isInstrumenting);
+        ctx.instrumentFunction(fn.PTR, isInstrumenting);
     }
 
     void instrument_all_functions ( Context & ctx ) {

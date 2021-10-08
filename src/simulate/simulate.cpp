@@ -146,8 +146,8 @@ namespace das
         pLambda = pLambda + total - 1;
         for ( uint32_t i=0; i!=total; ++i, pLambda-- ) {
             if ( pLambda->capture ) {
-                uint32_t * fnMnh = (uint32_t *) pLambda->capture;
-                SimFunction * simFunc = context.fnByMangledName(fnMnh[1]);
+                SimFunction ** fnMnh = (SimFunction **) pLambda->capture;
+                SimFunction * simFunc = fnMnh[1];
                 if (!simFunc) context.throw_error_at(debugInfo, "lambda finalizer is a null function");
                 vec4f argValues[1] = {
                     cast<void *>::from(pLambda->capture)
@@ -1342,7 +1342,7 @@ namespace das
         g_isInDebugAgentCreation = false;
         vec4f args[1];
         args[0] = cast<Context *>::from(context);
-        SimFunction * fun = forkContext->fnByMangledName(exFn.mnh);
+        SimFunction * fun = exFn.PTR;
         forkContext->callOrFastcall(fun, args, lineinfo);
     }
 

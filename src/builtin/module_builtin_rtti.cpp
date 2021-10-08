@@ -1029,8 +1029,8 @@ namespace das {
     }
 
     const FuncInfo * builtin_get_function_info_by_mnh ( Context & context, Func fun ) {
-        if ( auto simFn = context.fnByMangledName(fun.mnh) ) {
-            return simFn->debugInfo;
+        if ( fun.PTR ) {
+            return fun.PTR->debugInfo;
         } else {
             return nullptr;
         }

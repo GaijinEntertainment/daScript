@@ -581,9 +581,9 @@ namespace das
     struct LambdaIterator : Iterator {
         using lambdaFunc = bool (*) (Context *,void*, char*);
         LambdaIterator ( Context & context, const Lambda & ll ) : lambda(ll) {
-            uint32_t * fnMnh = (uint32_t *) lambda.capture;
+            SimFunction ** fnMnh = (SimFunction **) lambda.capture;
             if (!fnMnh) context.throw_error("invoke null lambda");
-            simFunc = context.fnByMangledName(*fnMnh);
+            simFunc = *fnMnh;
             if (!simFunc) context.throw_error("invoke null function");
             aotFunc = (lambdaFunc) simFunc->aotFunction;
         }
@@ -606,8 +606,8 @@ namespace das
             return InvokeLambda(context, ptr);
         }
         virtual void close ( Context & context, char * ) override {
-            uint32_t * fnMnh = (uint32_t *) lambda.capture;
-            SimFunction * finFunc = context.fnByMangledName(fnMnh[1]);
+            SimFunction ** fnMnh = (SimFunction **) lambda.capture;
+            SimFunction * finFunc = fnMnh[1];
             if (!finFunc) context.throw_error("generator finalizer is a null function");
             vec4f argValues[1] = {
                 cast<void *>::from(lambda.capture)

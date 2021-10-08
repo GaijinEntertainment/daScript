@@ -78,7 +78,7 @@ namespace das {
         instrumentFunction(0u, false);
     }
 
-    void Context::instrumentFunction ( uint32_t mnh, bool isInstrumenting ) {
+    void Context::instrumentFunction ( SimFunction * FNPTR, bool isInstrumenting ) {
         auto instFn = [&](SimFunction * fun, uint32_t fnMnh) {
             if ( !fun->code ) return;
             if ( isInstrumenting ) {
@@ -92,17 +92,16 @@ namespace das {
                 }
             }
         };
-        if ( mnh==0 ) {
+        if ( FNPTR==nullptr ) {
             for ( int fni=0; fni!=totalFunctions; ++fni ) {
                 instFn(&functions[fni], functions[fni].mangledNameHash);
             }
         } else {
-            auto fn = fnByMangledName(mnh);
-            instFn(fn, mnh);
+            instFn(FNPTR, FNPTR->mangledNameHash);
         }
     }
 #else
-    void Context::instrumentFunction ( uint32_t mnh, bool ) {}
+    void Context::instrumentFunction ( SimFunction *, bool ) {}
     void Context::instrumentContextNode ( const Block & blk, bool, Context * context, LineInfo * line ) {}
     void Context::clearInstruments() {}
 #endif

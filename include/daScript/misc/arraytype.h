@@ -27,24 +27,26 @@ namespace das
     };
 
     struct Func {
-        int32_t mnh;
-        Func() : mnh(0) {}
-        Func(int32_t MNH) : mnh(MNH) {}
-        __forceinline operator bool () const { return mnh!=0; }
+        struct SimFunction * PTR;
+        Func() : PTR(nullptr) {}
+        Func(SimFunction * P) : PTR(P) {}
+        __forceinline operator bool () const {
+            return PTR!=nullptr;
+        }
         __forceinline bool operator == ( void * ptr ) const {
-            return !ptr && (mnh==0);
+            return !ptr && !PTR;
         }
         __forceinline bool operator != ( void * ptr ) const {
-            return ptr || mnh;
+            return ptr || PTR;
         }
         __forceinline bool operator == ( const Func & b ) const {
-            return mnh == b.mnh;
+            return PTR == b.PTR;
         }
         __forceinline bool operator != ( const Func & b ) const {
-            return mnh != b.mnh;
+            return PTR != b.PTR;
         }
     };
-    static_assert(sizeof(Func)==sizeof(int32_t), "has to be castable");
+    static_assert(sizeof(Func)==sizeof(struct SimFunction *), "has to be castable");
 
     template <typename Result, typename ...Args>
     struct TFunc : Func {
