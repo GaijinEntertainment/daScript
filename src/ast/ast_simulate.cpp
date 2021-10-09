@@ -2736,7 +2736,7 @@ namespace das
     void Program::makeSharedCode ( TextWriter & logs ) {
         auto sharedCodeContext = make_smart<Context>(getContextStackSize());
         sharedCodeContext->sharedCode = true;
-        simulate(*sharedCodeContext, logs, nullptr, false);
+        simulate(*sharedCodeContext, logs, nullptr);
         if ( policies.enable_shared_code_aot ) {
             if ( policies.fail_on_no_shared_aot ) {
                 linkCppAot(*sharedCodeContext, getGlobalAotLibrary(), logs);
@@ -2756,7 +2756,7 @@ namespace das
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
 
-    bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack, bool runInitScripts ) {
+    bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         auto time0 = ref_time_ticks();
         isSimulating = true;
         context.thisProgram = this;
@@ -2967,7 +2967,7 @@ namespace das
             }
         }
         // run init script and restart
-        if ( !folding && runInitScripts ) {
+        if ( needMacroModule || (!folding && !thisModule->isModule) ) {
             auto time1 = ref_time_ticks();
             if (!context.runWithCatch([&]() {
                 if ( context.stack.size() && context.stack.size()>globalInitStackSize ) {
@@ -3102,6 +3102,7 @@ namespace das
                 }
             }
         }
+        /*
         if ( context.totalVariables ) {
             uint64_t semHash = context.getInitSemanticHash();
             semHash = getInitSemanticHashWithDep(semHash);
@@ -3113,5 +3114,6 @@ namespace das
                 if ( logIt ) logs << "INIT SCRIPT NOT FOUND, AOT=0x" << HEX << semHash << DEC << "\n";
             }
         }
+        */
     }
 }
