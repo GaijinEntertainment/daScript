@@ -63,6 +63,14 @@ namespace das
         };
     };
 
+    struct MacroFnFunctionAnnotation : MarkFunctionAnnotation {
+        MacroFnFunctionAnnotation() : MarkFunctionAnnotation("macro_function") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->macroFunction = true;
+            return true;
+        };
+    };
+
     struct UnsafeDerefFunctionAnnotation : MarkFunctionAnnotation {
         UnsafeDerefFunctionAnnotation() : MarkFunctionAnnotation("unsafe_deref") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -230,6 +238,20 @@ namespace das
             return true;
         }
     };
+
+    struct MacroInterfaceAnnotation : StructureAnnotation {
+        MacroInterfaceAnnotation() : StructureAnnotation("macro_interface") {}
+        virtual bool touch(const StructurePtr & ps, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            ps->macroInterface = true;
+            return true;
+        }
+        virtual bool look ( const StructurePtr &, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            return true;
+        }
+    };
+
 
     struct HybridFunctionAnnotation : MarkFunctionAnnotation {
         HybridFunctionAnnotation() : MarkFunctionAnnotation("hybrid") { }
@@ -919,10 +941,12 @@ namespace das
         addReaderMacro(make_smart<UnescapedStringMacro>());
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
+        addAnnotation(make_smart<MacroInterfaceAnnotation>());
         addAnnotation(make_smart<MarkFunctionOrBlockAnnotation>());
         addAnnotation(make_smart<CppAlignmentAnnotation>());
         addAnnotation(make_smart<GenericFunctionAnnotation>());
         addAnnotation(make_smart<MacroFunctionAnnotation>());
+        addAnnotation(make_smart<MacroFnFunctionAnnotation>());
         addAnnotation(make_smart<ExportFunctionAnnotation>());
         addAnnotation(make_smart<NoLintFunctionAnnotation>());
         addAnnotation(make_smart<SideEffectsFunctionAnnotation>());

@@ -163,6 +163,7 @@ namespace das {
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             logAnnotations(that->annotations);
+            if ( that->macroInterface ) ss << "[macro_interface]\n";
             ss << (that->isClass ? "class " : "struct ");
             ss << (that->privateStructure ? "private " : "public ") << that->name << "\n";
         }
@@ -260,9 +261,11 @@ namespace das {
             if ( fn->exports ) { ss << "[export]\n"; }
             if ( fn->init ) { ss << "[init]\n"; }
             if ( fn->macroInit ) { ss << "[macro_init]\n"; }
+            if ( fn->macroFunction ) { ss << "[macro_function]\n"; }
             if ( fn->shutdown ) { ss << "[finalize]\n"; }
             if ( fn->unsafeDeref ) { ss << "[unsafe_deref]\n"; }
             if ( fn->unsafeOperation ) { ss << "[unsafe_operation]\n"; }
+            if ( fn->isClassMethod ) { ss << "[class_method]\n"; }
             if ( fn->generator ) { ss << "[GENERATOR]\n"; }
             logAnnotations(fn->annotations);
             ss << "def " << (fn->privateFunction ? "private " : "public ") << fn->name;

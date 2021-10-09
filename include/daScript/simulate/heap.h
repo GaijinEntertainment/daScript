@@ -557,5 +557,6 @@ namespace das {
         char * allocateCachedName ( const string & name );
         das_hash_map<uint32_t,TypeInfo *>    lookup;
         das_hash_map<string, char *>         stringLookup;
+        uint64_t                             stringBytes = 0;
     };
 }

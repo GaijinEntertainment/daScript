@@ -468,14 +468,14 @@ namespace das {
                     res->markSymbolUse(false, false, false, &logs);
                 }
             }
-            if ( res->promoteToBuiltin ) {
+            if ( res->promoteToBuiltin || res->thisModule->isModule ) {
                 if (!res->failed())
                     res->markModuleSymbolUse();
                 if (!res->failed())
                     res->removeUnusedSymbols();
                 if (!res->failed())
                     res->allocateStack(logs);
-                if (!res->failed()) {
+                if (!res->failed() && res->promoteToBuiltin) {
                     res->thisModule->promoteToBuiltin(access);
                 }
             } else {

@@ -226,6 +226,7 @@ namespace das
                 bool    persistent : 1;
                 bool    isLambda : 1;
                 bool    privateStructure : 1;
+                bool    macroInterface : 1;
             };
             uint32_t    flags = 0;
         };
@@ -716,6 +717,14 @@ namespace das
             };
             uint32_t flags = 0;
         };
+
+        union {
+            struct {
+                bool    macroFunction : 1;
+            };
+            uint32_t moreFlags = 0;
+
+        };
         union {
             struct {
                 bool unsafeFunction : 1;
@@ -1057,6 +1066,7 @@ namespace das
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
         FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
         void appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body );
+        void logMemInfo ( TextWriter & tw );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
         bool                            rtti = false;

@@ -256,6 +256,7 @@ namespace das {
         fn->name = str->name;
         fn->at = fn->atDecl = str->at;
         fn->result = make_smart<TypeDecl>(str);
+        if ( str->macroInterface ) fn->macroFunction = true;
         auto block = make_smart<ExprBlock>();
         block->at = str->at;
         auto makeT = make_smart<ExprMakeStruct>(str->at);
@@ -330,6 +331,7 @@ namespace das {
         auto ifb = make_smart<ExprBlock>();
         ifb->at = at;
         if ( ptrType->firstType && ptrType->firstType->isClass() ) {
+            if ( ptrType->firstType->structType->macroInterface ) pFunc->macroFunction = true;
             auto sizvar = make_smart<ExprLet>();              // let __size = class_rtti_size(__this)
             auto vsiz = make_smart<Variable>();
             vsiz->at = at;
@@ -400,6 +402,7 @@ namespace das {
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = ls->at;
         pFunc->name = "finalize";
+        if ( ls->macroInterface ) pFunc->macroFunction = true;
         auto fb = make_smart<ExprBlock>();
         fb->at = ls->at;
         // now finalize
@@ -1567,6 +1570,7 @@ namespace das {
         func->atDecl = method->at;
         func->name = baseClass->name;
         func->result = make_smart<TypeDecl>(baseClass);
+        if ( baseClass->macroInterface ) func->macroFunction = true;
         auto block = make_smart<ExprBlock>();
         block->at = func->at;
         func->body = block;
@@ -1664,6 +1668,7 @@ namespace das {
         func->atDecl = baseClass->at;
         func->name = fname;
         func->result = make_smart<TypeDecl>(Type::tVoid);
+        if ( baseClass->macroInterface ) func->macroFunction = true;
         auto block = make_smart<ExprBlock>();
         block->at = func->at;
         func->body = block;

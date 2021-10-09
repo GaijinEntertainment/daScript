@@ -97,7 +97,14 @@ namespace das {
         void markModuleUsedFunctions( ModuleLibrary &, Module * inWhichModule ) {
             for (const auto & it : inWhichModule->functions) {
                 auto fn = it.second;
-                if ( fn->builtIn || fn->macroInit  ) continue;
+                if ( fn->builtIn || fn->macroInit || fn->macroFunction  ) continue;
+                if ( fn->privateFunction && fn->generated && fn->fromGeneric ) continue; // instances of templates are never roots
+                if ( fn->isClassMethod ) {  // completly skip class methods of macro interfaces
+                    DAS_ASSERT(fn->arguments.size()>0 && fn->arguments[0]->type && fn->arguments[0]->type->baseType==Type::tStructure);
+                    if ( fn->arguments[0]->type->structType->macroInterface ) {
+                        continue;
+                    }
+                }
                 propagateFunctionUse(fn);
             }
         }

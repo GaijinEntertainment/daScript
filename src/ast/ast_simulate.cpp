@@ -2991,13 +2991,20 @@ namespace das
             }
         }
         context.restart();
-        if (options.getBoolOption("log_mem",false) && !thisModule->sharedCodeContext ) {
+        if (options.getBoolOption("log_mem",false) ) {
+            if ( thisModule->sharedCodeContext ) logs << "IN SHARED CONTEXT:\n";
             context.logMemInfo(logs);
             logs << "shared        " << context.getSharedMemorySize() << "\n";
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
         }
-        if (options.getBoolOption("log_shared_mem",false) && !thisModule->sharedCodeContext ) {
+        if (options.getBoolOption("log_shared_mem",false) ) {
+            if ( thisModule->sharedCodeContext ) logs << "IN SHARED CONTEXT:\n";
             Module::logSharedCodeMem(logs);
+        }
+        // debug info
+        if ( options.getBoolOption("log_debug_mem",false) ) {
+            if ( thisModule->sharedCodeContext ) logs << "IN SHARED CONTEXT:\n";
+            helper.logMemInfo(logs);
         }
         // log CPP
         if (options.getBoolOption("log_cpp")) {

@@ -491,6 +491,7 @@ namespace das {
         cfun->atDecl = atDecl;
         cfun->module = nullptr;
         cfun->flags = flags;
+        cfun->moreFlags = moreFlags;
         cfun->sideEffectFlags = sideEffectFlags;
         cfun->inferStack = inferStack;
         return cfun;

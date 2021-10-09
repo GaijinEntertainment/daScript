@@ -21,6 +21,17 @@ namespace das {
         vector<tuple<VariablePtr,LineInfo,bool>> locals;
     };
 
+    void DebugInfoHelper::logMemInfo ( TextWriter & tw ) {
+        tw << "DEBUG INFO IS:\n";
+        tw << "\tStructInfo " << (int(smn2s.size() * sizeof(StructInfo))) << " = " << int(smn2s.size()) << " x " << int(sizeof(StructInfo)) << "\n";
+        tw << "\tTypeInfo " << (int(tmn2t.size()*sizeof(TypeInfo))) <<  " = " << int(tmn2t.size()) << " x " << int(sizeof(TypeInfo)) << "\n";
+        tw << "\tVarInfo " << (int(vmn2v.size()*sizeof(VarInfo))) << " = " << int(vmn2v.size()) << " x " << int(sizeof(VarInfo)) << "\n";
+        tw << "\tFuncInfo " << (int(fmn2f.size()*sizeof(FuncInfo))) << " = " << int(fmn2f.size()) << " x " << int(sizeof(FuncInfo)) << "\n";
+        tw << "\tEnumInfo " << (int(emn2e.size()*sizeof(EnumInfo))) << " = " << int(emn2e.size()) << " x " << int(sizeof(EnumInfo)) << "\n";
+        tw << "\tSTRINGS " << debugInfo->stringBytes << "\n";
+        tw << "TOTAL " << debugInfo->bytesAllocated() << "\n";
+    }
+
     void DebugInfoHelper::appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body ) {
         CollectLocalVariables lv;
         body->visit(lv);
@@ -158,7 +169,6 @@ namespace das {
         }
         info->type = type->baseType;
         info->dimSize = (uint32_t) type->dim.size();
-        info->annotation_or_name = type->annotation;
         if ( info->dimSize ) {
             info->dim = (uint32_t *) debugInfo->allocate(sizeof(uint32_t) * info->dimSize );
             for ( uint32_t i=0; i != info->dimSize; ++i ) {
@@ -167,13 +177,10 @@ namespace das {
         }
         if ( type->baseType==Type::tStructure  ) {
             info->structType = makeStructureDebugInfo(*type->structType);
-        } else {
-            info->structType = nullptr;
-        }
-        if ( type->isEnumT() ) {
+        } else if ( type->isEnumT() ) {
             info->enumType = type->enumType ? makeEnumDebugInfo(*type->enumType) : nullptr;
         } else {
-            info->enumType = nullptr;
+            info->annotation_or_name = type->annotation;
         }
         info->flags = 0;
         if (type->ref) {

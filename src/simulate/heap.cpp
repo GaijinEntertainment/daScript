@@ -339,6 +339,9 @@ namespace das {
         if ( it!=stringLookup.end() )  return it->second;
         auto nname = NodeAllocator::allocateName(name);
         stringLookup[name] = nname;
+        uint32_t bytes = uint32_t(name.size()+1);
+        bytes = (bytes+15) & ~15;
+        stringBytes += bytes;
         return nname;
     }
 }

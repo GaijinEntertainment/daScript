@@ -743,7 +743,7 @@ namespace debugapi {
     vec4f pinvoke_impl2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         auto invCtx = cast<Context *>::to(args[0]);
         auto fn = cast<Func>::to(args[1]);
-        if ( fn.PTR==0 ) context.throw_error("pnvoke can't invoke null function");
+        if ( !fn.PTR ) context.throw_error("pnvoke can't invoke null function");
         auto simFn = fn.PTR;
         if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%p", (void *)simFn);
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {

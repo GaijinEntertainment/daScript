@@ -2232,6 +2232,7 @@ structure_name
                 pStruct->parent = structs.back().get();
                 pStruct->annotations.clear();
                 pStruct->genCtor = false;
+                pStruct->macroInterface = pStruct->parent && pStruct->parent->macroInterface;
             } else if ( structs.size()==0 ) {
                 das_yyerror("parent structure not found "+*$parent,tokAt(@parent),
                     CompilationError::structure_not_found);

@@ -599,18 +599,18 @@ namespace das {
         }
         void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info, const string & suffix = "" ) const {
             ss << "Type::" << das_to_cppCTypeString(info->type) << ", ";
-            if ( info->structType ) {
+            if ( info->type==Type::tStructure ) {
                 ss << "&" << structInfoName(info->structType);
             } else {
                 ss << "nullptr";
             }
             ss << ", ";
-            if ( info->enumType ) {
+            if ( info->type==Type::tEnumeration || info->type==Type::tEnumeration8 || info->type==Type::tEnumeration16 ) {
                 ss << "&" << enumInfoName(info->enumType);
             } else {
                 ss << "nullptr";
             }
-            if ( info->annotation_or_name ) {
+            if ( info->type==Type::tHandle ) {
                 ss << ", DAS_MAKE_ANNOTATION(L\"" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
             } else {
                 DAS_ASSERT(info->type!=Type::tHandle);
