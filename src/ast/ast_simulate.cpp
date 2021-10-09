@@ -2747,8 +2747,10 @@ namespace das
                 policies.fail_on_no_aot = fona;
             }
         }
-        sharedCodeContext->strip();
-        thisModule->sharedCodeContext = sharedCodeContext;
+        if ( sharedCodeContext->code->bytesAllocated() ) {
+            sharedCodeContext->strip();
+            thisModule->sharedCodeContext = sharedCodeContext;
+        }
     }
 
     extern "C" int64_t ref_time_ticks ();

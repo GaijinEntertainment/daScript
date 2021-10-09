@@ -391,8 +391,9 @@ namespace das {
                         program->allocateStack(logs);
                     if (!program->failed()) {
                         program->makeSharedCode(logs);
-                        program->thisModule->sharedCodeContext->name = "shared: " + fileName;
-                        DAS_ASSERT(program->thisModule->sharedCodeContext->use_count()==1);
+                        if ( program->thisModule->sharedCodeContext ) {
+                            program->thisModule->sharedCodeContext->name = "shared: " + fileName;
+                        }
                     }
                 }
             }
