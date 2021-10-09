@@ -3185,7 +3185,7 @@ namespace das {
         uint64_t hash = globalsSize ^ sharedSize;
         for ( int i=0; i!=totalVariables; ++i ) {
             hash = (hash ^ (globalVariables[i].shared ? 13 : 17)) * fnv_prime;
-            hash = (hash ^ globalVariables[i].offset) * fnv_prime;
+            hash = (hash ^ globalVariables[i].mangledNameHash) * fnv_prime;
             hash = (hash ^ globalVariables[i].size) * fnv_prime;
             if ( globalVariables[i].init ) {
                 hash = (hash ^ getSemanticHash(globalVariables[i].init,this)) * fnv_prime;
