@@ -468,7 +468,7 @@ namespace das {
                     res->markSymbolUse(false, false, false, &logs);
                 }
             }
-            if ( res->promoteToBuiltin || res->thisModule->isModule ) {
+            if ( res->promoteToBuiltin || res->thisModule->isModule || exportAll ) {
                 if (!res->failed())
                     res->markModuleSymbolUse();
                 if (!res->failed())
