@@ -794,7 +794,7 @@ namespace das
     void Context::logMemInfo(TextWriter & tw) {
         uint64_t bytesTotal = 0, bytesUsed = 0;
     // context
-        tw << "Context: 0x" << HEX << intptr_t(this) << DEC << " '" << name << "' (" << int(sizeof(Context)) << " bytes)\n";
+        tw << "Context: 0x" << HEX << intptr_t(this) << DEC << " '" << name << "' use_count = " << use_count() << "\n";
         bytesTotal = bytesUsed = sizeof(Context);
     // stringHeap
         if ( stringHeap ) {
@@ -835,9 +835,11 @@ namespace das
             bytesUsed += debugInfo->bytesAllocated();
         }
     // stack
-        tw << "\tstack: " << stack.size() << "\n";
-        bytesTotal += stack.size();
-        bytesUsed += stack.size();
+        if ( stack.bottom() ) {
+            tw << "\tstack: " << stack.size() << "\n";
+            bytesTotal += stack.size();
+            bytesUsed += stack.size();
+        }
     // functions
         //tw << "\functions table: " << totalFunctions*sizeof(SimFunction) << "\n";
         //bytesTotal += totalFunctions*sizeof(SimFunction);

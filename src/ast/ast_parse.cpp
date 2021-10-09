@@ -341,8 +341,18 @@ namespace das {
                 }
                 if (!program->failed())
                     program->verifyAndFoldContracts();
+                if (!program->failed()) {
+                    if ( program->thisModule->isModule || exportAll ) {
+                        program->markModuleSymbolUse();
+                    } else {
+                        program->markExecutableSymbolUse();
+                        program->removeUnusedSymbols();
+                    }
+                }
+                /*
                 if (!program->failed())
                     program->markOrRemoveUnusedSymbols(exportAll || program->thisModule->isModule);
+                */
                 if (!program->failed())
                     program->fixupAnnotations();
                 if (!program->failed())
@@ -359,33 +369,31 @@ namespace das {
             sort(program->errors.begin(), program->errors.end());
             program->isCompiling = false;
             if ( !program->failed() ) {
-                bool resetSymbolUse = false;
                 if ( program->needMacroModule ) {
+                    if ( !program->thisModule->isModule ) { // checking if its a module
+                        program->error("Module " + fileName + " is not setup correctly for macros",
+                            "module Module_Name is required", "", LineInfo(),
+                                CompilationError::module_does_not_have_a_name);
+                    }
                     if (!program->failed())
-                        program->markSymbolUse(false, false, true);
+                        program->markMacroSymbolUse();
                     if (!program->failed())
                         program->allocateStack(logs);
                     if (!program->failed())
                         program->makeMacroModule(logs);
-                    resetSymbolUse = true;
                 }
-                if ( policies.enable_shared_code && program->promoteToBuiltin ) {
+                if ( policies.enable_shared_code && program->promoteToBuiltin ) {   // always a module
                     if (!program->failed())
-                        program->markSymbolUse(false, true, false);
+                        program->markModuleSymbolUse();
+                    // logs << "In module " << fileName << "\n";
+                    // program->dumpSymbolUse(logs);
                     if (!program->failed())
                         program->allocateStack(logs);
                     if (!program->failed()) {
                         program->makeSharedCode(logs);
-                        program->thisModule->sharedCodeContext->name = fileName;
+                        program->thisModule->sharedCodeContext->name = "shared: " + fileName;
+                        DAS_ASSERT(program->thisModule->sharedCodeContext->use_count()==1);
                     }
-                    resetSymbolUse = true;
-                }
-                if ( false && resetSymbolUse ) {
-                    auto forceAll = exportAll || program->thisModule->isModule;
-                    if (!program->failed())
-                        program->markSymbolUse(false, forceAll, forceAll);
-                    if (!program->failed())
-                        program->allocateStack(logs);
                 }
             }
             if ( program->options.getBoolOption("log_compile_time",false) ) {
@@ -459,11 +467,24 @@ namespace das {
                     res->markSymbolUse(false, false, false, &logs);
                 }
             }
-            /*
             if ( res->promoteToBuiltin ) {
-                res->thisModule->promoteToBuiltin(access);
+                if (!res->failed())
+                    res->markModuleSymbolUse();
+                if (!res->failed())
+                    res->removeUnusedSymbols();
+                if (!res->failed())
+                    res->allocateStack(logs);
+                if (!res->failed()) {
+                    res->thisModule->promoteToBuiltin(access);
+                }
+            } else {
+                if (!res->failed())
+                    res->markExecutableSymbolUse();
+                if (!res->failed())
+                    res->removeUnusedSymbols();
+                if (!res->failed())
+                    res->allocateStack(logs);
             }
-            */
             if ( res->options.getBoolOption("log_require",false) ) {
                 TextWriter tw;
                 req.clear();

@@ -1144,8 +1144,13 @@ namespace das
         bool verifyAndFoldContracts();
         void optimize(TextWriter & logs, ModuleGroup & libGroup);
         void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, TextWriter * logs = nullptr);
+        void markModuleSymbolUse(TextWriter * logs = nullptr);
+        void markMacroSymbolUse(TextWriter * logs = nullptr);
+        void markExecutableSymbolUse(TextWriter * logs = nullptr);
+        void markFoldingSymbolUse(TextWriter * logs = nullptr);
+        void removeUnusedSymbols();
         void clearSymbolUse();
-        void markOrRemoveUnusedSymbols(bool forceAll = false);
+        void dumpSymbolUse(TextWriter & logs);
         void allocateStack(TextWriter & logs);
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr, bool runInitScripts=true );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash ) const;

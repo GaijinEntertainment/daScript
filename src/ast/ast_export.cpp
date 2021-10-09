@@ -87,6 +87,20 @@ namespace das {
                 return true;
             }, "*");
         }
+        void markModuleVarsUsed( ModuleLibrary &, Module * inWhichModule ) {
+            for (const auto & it : inWhichModule->globals) {
+                auto & var = it.second;
+                var->used = false;
+                propageteVarUse(var);
+            }
+        }
+        void markModuleUsedFunctions( ModuleLibrary &, Module * inWhichModule ) {
+            for (const auto & it : inWhichModule->functions) {
+                auto fn = it.second;
+                if ( fn->builtIn || fn->macroInit  ) continue;
+                propagateFunctionUse(fn);
+            }
+        }
         void RemoveUnusedSymbols ( Module & mod ) {
             das_safe_map<string,FunctionPtr> functions;
             vector<VariablePtr> globalsInOrder;
@@ -242,6 +256,44 @@ namespace das {
         }
     }
 
+    void Program::markModuleSymbolUse(TextWriter * logs) {
+        // this module public, this module export, this module init\shutdown
+        clearSymbolUse();
+        MarkSymbolUse vis(false);
+        vis.tw = logs;
+        visit(vis);
+        vis.markModuleUsedFunctions(library, thisModule.get());
+        vis.markModuleVarsUsed(library, thisModule.get());
+    }
+
+    void Program::markMacroSymbolUse(TextWriter * logs) {
+        // this module macro init
+        clearSymbolUse();
+        MarkSymbolUse vis(false);
+        vis.tw = logs;
+        visit(vis);
+        vis.markUsedFunctions(library, false, true);
+        vis.markVarsUsed(library, false);
+    }
+
+    void Program::markExecutableSymbolUse(TextWriter * logs) {
+        clearSymbolUse();
+        MarkSymbolUse vis(false);
+        vis.tw = logs;
+        visit(vis);
+        vis.markUsedFunctions(library, false, false);
+        vis.markVarsUsed(library, false);
+    }
+
+    void Program::markFoldingSymbolUse(TextWriter * logs) {
+        clearSymbolUse();
+        MarkSymbolUse vis(false);
+        vis.tw = logs;
+        visit(vis);
+        vis.markUsedFunctions(library, true, true);
+        vis.markVarsUsed(library, true);
+    }
+
     void Program::markSymbolUse(bool builtInSym, bool forceAll, bool initThis, TextWriter * logs) {
         clearSymbolUse();
         MarkSymbolUse vis(builtInSym);
@@ -251,17 +303,30 @@ namespace das {
         vis.markVarsUsed(library, forceAll);
     }
 
-    void Program::markOrRemoveUnusedSymbols(bool forceAll) {
-        forceAll |=  !options.getBoolOption("remove_unused_symbols",true);
-        clearSymbolUse();
-        MarkSymbolUse vis(false);
-        visit(vis);
-        vis.markUsedFunctions(library, forceAll, forceAll);
-        vis.markVarsUsed(library, forceAll);
+    void Program::removeUnusedSymbols() {
         if ( options.getBoolOption("remove_unused_symbols",true) ) {
             ClearUnusedSymbols cvis;
             visit(cvis);
+            MarkSymbolUse vis(false);
             vis.RemoveUnusedSymbols(*thisModule);
         }
+    }
+
+    void Program::dumpSymbolUse(TextWriter & logs) {
+        logs << "USED SYMBOLS ARE:\n";
+        for (auto & pm : library.modules) {
+            for (auto & var : pm->globalsInOrder) {
+                if ( var->used ) {
+                    logs << "let " << var->module->name << "::" << var->name << " : " << var->type->describe() << "\n";
+                }
+            }
+            for (auto & pf : pm->functions) {
+                auto & func = pf.second;
+                if ( func->used  ) {
+                    logs << func->module->name << "::" << func->describe() << "\n";
+                }
+            }
+        }
+        logs << "\n\n";
     }
 }

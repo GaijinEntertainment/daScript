@@ -806,7 +806,7 @@ namespace das {
         RunFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {
             TextWriter dummy;
             prog->folding = true;
-            prog->markOrRemoveUnusedSymbols(true);
+            prog->markFoldingSymbolUse();
             DAS_ASSERTF ( !prog->failed(), "internal error while folding (remove unused)?" );
             prog->allocateStack(dummy);
             DAS_ASSERTF ( !prog->failed(), "internal error while folding (allocate stack)?" );

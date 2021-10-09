@@ -2622,17 +2622,19 @@ namespace das
                 needTypeInfo = true;
         }
         pCall->debugInfo = expr->at;
-        DAS_ASSERTF((func->builtIn || func->index>=0), "calling function which is not used. how?");
         if ( func->builtIn) {
             pCall->fnPtr = nullptr;
         } else if ( func->module->sharedCodeContext ) {
             auto MNH = func->getMangledNameHash();
             pCall->fnPtr = func->module->sharedCodeContext->fnByMangledName(MNH);
-            DAS_ASSERT(pCall->fnPtr->mangledNameHash == MNH);
+            DAS_ASSERTF(pCall->fnPtr,"function not found in shared module. how?");
+            DAS_ASSERTF(pCall->fnPtr->mangledNameHash == MNH,"mangled name hash mismtach. wrong function?");
             DAS_ASSERTF((func->builtIn || pCall->fnPtr), "calling function which null. how?");
-        } else {
+        } else if ( func->index>=0 ) {
             pCall->fnPtr = context.getFunction(func->index);
             DAS_ASSERTF(pCall->fnPtr, "calling function which null. how?");
+        } else {
+            DAS_ASSERTF(0, "calling function which is not used. how?");
         }
         if ( int nArg = (int) expr->arguments.size() ) {
             pCall->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
@@ -2825,7 +2827,7 @@ namespace das
                             "\tMangled name " + mangledName + " hash is " + to_string(MNH), "",
                                 pfun->at);
                     }
-                    if ( pm!=thisModule.get() && pm->sharedCodeContext ) {
+                    if ( pm->sharedCodeContext ) { // pm!=thisModule.get()  - this is for self promoting
                         SimFunction * sfun = pm->sharedCodeContext->fnByMangledName(MNH);
                         DAS_ASSERT(sfun->mangledNameHash==MNH && sfun->name==pfun->name);
                         auto thit = sharedLookup.find(MNH);
@@ -2917,7 +2919,7 @@ namespace das
         // now call annotation simulate
         das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
-            if ( pm!=thisModule.get() && pm->sharedCodeContext ) continue;
+            if ( pm->sharedCodeContext ) continue; // pm!=thisModule.get() &&
             for (auto & it : pm->functions) {
                 auto pfun = it.second;
                 if (pfun->index < 0 || !pfun->used)
@@ -2987,12 +2989,12 @@ namespace das
             }
         }
         context.restart();
-        if (options.getBoolOption("log_mem",false)) {
+        if (options.getBoolOption("log_mem",false) && !thisModule->sharedCodeContext ) {
             context.logMemInfo(logs);
             logs << "shared        " << context.getSharedMemorySize() << "\n";
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
         }
-        if (options.getBoolOption("log_shared_mem",false)) {
+        if (options.getBoolOption("log_shared_mem",false) && !thisModule->sharedCodeContext ) {
             Module::logSharedCodeMem(logs);
         }
         // log CPP

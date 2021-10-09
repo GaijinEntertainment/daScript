@@ -49,7 +49,7 @@ namespace das {
     void Module::logSharedCodeMem ( TextWriter & tw ) {
         uint64_t bytesTotal = 0;
         tw << "SHARED MEMORY IS:\n\n";
-        for ( auto ctx : sharedCode ) {
+        for ( auto & ctx : sharedCode ) {
             ctx->logMemInfo(tw);
             bytesTotal += ctx->getUniqueMemorySize() + ctx->getSharedMemorySize();
         }
