@@ -554,6 +554,8 @@ namespace das {
         virtual uint32_t grow ( uint32_t size ) override {
             return size;
         }
+        char * allocateCachedName ( const string & name );
         das_hash_map<uint32_t,TypeInfo *>    lookup;
+        das_hash_map<string, char *>         stringLookup;
     };
 }

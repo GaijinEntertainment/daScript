@@ -333,4 +333,12 @@ namespace das {
             }
         }
     }
+
+    char * DebugInfoAllocator::allocateCachedName ( const string & name ) {
+        auto it = stringLookup.find(name);
+        if ( it!=stringLookup.end() )  return it->second;
+        auto nname = NodeAllocator::allocateName(name);
+        stringLookup[name] = nname;
+        return nname;
+    }
 }

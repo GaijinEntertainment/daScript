@@ -33,7 +33,7 @@ namespace das {
             info->locals[i] = lvar;
             makeTypeInfo(lvar, var->type);
             if ( get<2>(var_vis) ) lvar->flags |= TypeInfo::flag_ref;
-            lvar->name = debugInfo->allocateName(var->name);
+            lvar->name = debugInfo->allocateCachedName(var->name);
             lvar->stackTop = var->stackTop;
             lvar->visibility = get<1>(var_vis);
             lvar->localFlags = 0;
@@ -47,14 +47,14 @@ namespace das {
         auto it = emn2e.find(mangledName);
         if ( it!=emn2e.end() ) return it->second;
         EnumInfo * eni = debugInfo->makeNode<EnumInfo>();
-        eni->name = debugInfo->allocateName(en.name);
-        eni->module_name = debugInfo->allocateName(en.module->name);
+        eni->name = debugInfo->allocateCachedName(en.name);
+        eni->module_name = debugInfo->allocateCachedName(en.module->name);
         eni->count = uint32_t(en.list.size());
         eni->fields = (EnumValueInfo **) debugInfo->allocate(sizeof(EnumValueInfo *) * eni->count);
         uint32_t i = 0;
         for ( auto & ev : en.list ) {
             eni->fields[i] = (EnumValueInfo *) debugInfo->allocate(sizeof(EnumValueInfo));
-            eni->fields[i]->name = debugInfo->allocateName(ev.name);
+            eni->fields[i]->name = debugInfo->allocateCachedName(ev.name);
             eni->fields[i]->value = !ev.value ? -1 : getConstExprIntOrUInt(ev.value);
             i ++;
         }
@@ -68,10 +68,10 @@ namespace das {
         auto it = fmn2f.find(mangledName);
         if ( it!=fmn2f.end() ) return it->second;
         FuncInfo * fni = debugInfo->makeNode<FuncInfo>();
-        fni->name = debugInfo->allocateName(fn.name);
+        fni->name = debugInfo->allocateCachedName(fn.name);
         if ( rtti && fn.builtIn ) {
             auto bfn = (BuiltInFunction *) &fn;
-            fni->cppName = debugInfo->allocateName(bfn->cppName);
+            fni->cppName = debugInfo->allocateCachedName(bfn->cppName);
         } else {
             fni->cppName = nullptr;
         }
@@ -115,7 +115,7 @@ namespace das {
         auto it = smn2s.find(mangledName);
         if ( it!=smn2s.end() ) return it->second;
         StructInfo * sti = debugInfo->makeNode<StructInfo>();
-        sti->name = debugInfo->allocateName(st.name);
+        sti->name = debugInfo->allocateCachedName(st.name);
         sti->flags = 0;
         if ( st.isClass ) sti->flags |= StructInfo::flag_class;
         if ( st.isLambda ) sti->flags |= StructInfo::flag_lambda;
@@ -133,7 +133,7 @@ namespace das {
         }
         sti->init_mnh = 0;
         if ( st.module ) {
-            sti->module_name = debugInfo->allocateName(st.module->name);
+            sti->module_name = debugInfo->allocateCachedName(st.module->name);
             if ( auto fn = st.module->findFunction(st.name) ) {
                 sti->init_mnh = fn->getMangledNameHash();
             }
@@ -234,7 +234,7 @@ namespace das {
             if ( info->argCount ) {
                 info->argNames = (char **) debugInfo->allocate(sizeof(char *) * info->argCount );
                 for ( uint32_t i=0; i!=info->argCount; ++i ) {
-                    info->argNames[i] = debugInfo->allocateName(type->argNames[i]);
+                    info->argNames[i] = debugInfo->allocateCachedName(type->argNames[i]);
                 }
             }
         }
@@ -251,7 +251,7 @@ namespace das {
         if ( it!=vmn2v.end() ) return it->second;
         VarInfo * vi = debugInfo->makeNode<VarInfo>();
         makeTypeInfo(vi, var.type);
-        vi->name = debugInfo->allocateName(var.name);
+        vi->name = debugInfo->allocateCachedName(var.name);
         vi->offset = var.offset;
         if ( rtti && !var.annotation.empty() ) {
             vi->annotation_arguments = (void *) &var.annotation;
@@ -261,7 +261,7 @@ namespace das {
         if ( rtti && var.init && var.init->constexpression ) {
             if ( var.init->rtti_isStringConstant() ) {
                 auto sval = static_pointer_cast<ExprConstString>(var.init);
-                vi->sValue = debugInfo->allocateName(sval->text);
+                vi->sValue = debugInfo->allocateCachedName(sval->text);
             } else if ( var.init->rtti_isConstant() ) {
                 auto cval = static_pointer_cast<ExprConst>(var.init);
                 vi->value = cval->value;
@@ -283,12 +283,12 @@ namespace das {
         if ( it!=vmn2v.end() ) return it->second;
         VarInfo * vi = debugInfo->makeNode<VarInfo>();
         makeTypeInfo(vi, var.type);
-        vi->name = debugInfo->allocateName(var.name);
+        vi->name = debugInfo->allocateCachedName(var.name);
         vi->offset = 0;
         if ( rtti && var.init && var.init->constexpression ) {
             if ( var.init->rtti_isStringConstant() ) {
                 auto sval = static_pointer_cast<ExprConstString>(var.init);
-                vi->sValue = debugInfo->allocateName(sval->text);
+                vi->sValue = debugInfo->allocateCachedName(sval->text);
             } else if ( var.init->rtti_isConstant() ) {
                 auto cval = static_pointer_cast<ExprConst>(var.init);
                 vi->value = cval->value;
