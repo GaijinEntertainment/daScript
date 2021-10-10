@@ -165,6 +165,10 @@ namespace das {
         return int64_t((char *)a - (char *)b) / int64_t(stride);
     }
 
+    __forceinline char * das_string_cast ( const char * any ) {
+        return (char *) ( any ? any : "" );
+    }
+
     template <typename TT>
     struct das_arg {
         static __forceinline TT & pass ( TT && a ) {

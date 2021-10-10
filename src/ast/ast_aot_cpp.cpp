@@ -2991,6 +2991,9 @@ namespace das {
             if ( passExpr->rtti_isNullPtr() ) return true;
             return argType->isVoidPointer() ^ passType->isVoidPointer();
         }
+        bool needStringCast ( const FunctionPtr & func, const TypeDeclPtr & arg ) {
+            return func->needStringCast && arg->isString() && !arg->ref;
+        }
         void CallFunc_preVisitCallArg ( ExprCallFunc * call, Expression * arg, bool ) {
             vector<ExpressionPtr>::iterator it;
             int argIndex = 0;
@@ -3032,6 +3035,9 @@ namespace das {
             if ( isPolicyBasedCall(call) && policyArgNeedCast(call->func->result, argType) ) {
                 ss << "cast<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << ">::from(";
             }
+            if ( needStringCast(call->func,argType) ) {
+                ss << "(das_string_cast(";
+            }
         }
         void CallFunc_visitCallArg ( ExprCallFunc * call, Expression * arg, bool last ) {
             vector<ExpressionPtr>::iterator it;
@@ -3043,6 +3049,9 @@ namespace das {
             }
             DAS_ASSERT(it != call->arguments.end());
             auto argType = (*it)->type;
+            if ( needStringCast(call->func,argType) ) {
+                ss << "))";
+            }
             if ( isPolicyBasedCall(call) && policyArgNeedCast(call->func->result, argType) ) {
                 ss << ")";
             }
