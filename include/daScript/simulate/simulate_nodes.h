@@ -2309,6 +2309,30 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f       eval ( Context & context ) override {
             DAS_PROFILE_NODE
+            DAS_ASSERTF(subexpr.valueU<uint32_t(context.totalFunctions),
+                "Function address index is out of range. "
+                "Is this a multi-context scenario and options cross_context is missing?");
+            SimFunction * fun = context.functions + subexpr.valueU;
+            return cast<SimFunction *>::from(fun);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {            \
+            DAS_PROFILE_NODE \
+            DAS_ASSERT(0); \
+            return 0;                                               \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
+    struct SimNode_FuncConstValueMnh : SimNode_SourceBase {
+        SimNode_FuncConstValueMnh(const LineInfo & at, vec4f c)
+            : SimNode_SourceBase(at) {
+            subexpr.setConstValue(c);
+        }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f       eval ( Context & context ) override {
+            DAS_PROFILE_NODE
             SimFunction * fun = context.fnByMangledName(subexpr.valueU);
             DAS_ASSERT(fun==nullptr || fun->mangledNameHash==subexpr.valueU);
             return cast<SimFunction *>::from(fun);

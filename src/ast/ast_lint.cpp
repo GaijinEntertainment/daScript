@@ -460,6 +460,7 @@ namespace das {
         "heap_size_hint",               Type::tInt,
         "string_heap_size_hint",        Type::tInt,
         "gc",                           Type::tBool,
+        "cross_context",                Type::tBool,
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,

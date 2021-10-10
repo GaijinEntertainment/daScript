@@ -245,6 +245,7 @@ namespace das
         template <typename TT> friend struct SimNode_GetSharedR2V;
         friend struct SimNode_GetShared;
         friend struct SimNode_TryCatch;
+        friend struct SimNode_FuncConstValue;
         friend class Program;
         friend class Module;
     public:

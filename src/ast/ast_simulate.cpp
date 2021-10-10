@@ -984,8 +984,14 @@ namespace das
             vec4f       cval;
         } temp;
         temp.cval = v_zero();
-        temp.mnh = func->getMangledNameHash();
-        return context.code->makeNode<SimNode_FuncConstValue>(at,temp.cval);
+        if ( !func->module->isCorssContext ) {
+            DAS_ASSERT(func->index>=0 && "address of unsued function? how?");
+            temp.mnh = uint32_t(func->index);
+            return context.code->makeNode<SimNode_FuncConstValue>(at,temp.cval);
+        } else {
+            temp.mnh = func->getMangledNameHash();
+            return context.code->makeNode<SimNode_FuncConstValueMnh>(at,temp.cval);
+        }
     }
 
     SimNode * ExprPtr2Ref::simulate (Context & context) const {
@@ -1982,7 +1988,7 @@ namespace das
         } else {
             DAS_ASSERT(variable->index >= 0 && "using variable which is not used. how?");
             uint32_t mnh = variable->getMangledNameHash();
-            /* if ( context.sharedCode ) */ {
+            if ( variable->module->isCorssContext ) {
                 if ( variable->global_shared ) {
                     if ( r2v ) {
                         return context.code->makeValueNode<SimNode_GetSharedMnhR2V>(type->baseType, at, variable->stackTop, mnh);
@@ -1996,7 +2002,7 @@ namespace das
                         return context.code->makeNode<SimNode_GetGlobalMnh>(at, variable->stackTop, mnh);
                     }
                 }
-            } /* else {
+            } else {
                 if ( variable->global_shared ) {
                     if ( r2v ) {
                         return context.code->makeValueNode<SimNode_GetSharedR2V>(type->baseType, at, variable->stackTop, mnh);
@@ -2010,7 +2016,7 @@ namespace das
                         return context.code->makeNode<SimNode_GetGlobal>(at, variable->stackTop, mnh);
                     }
                 }
-            } */
+            }
         }
     }
 
@@ -2541,19 +2547,19 @@ namespace das
             if ( var->init && var->init->rtti_isMakeLocal() ) {
                 return var->init->simulate(context);
             } else {
-                /* if ( context.sharedCode ) */ {
+                if ( var->module->isCorssContext ) {
                     if ( var->global_shared ) {
                         get = context.code->makeNode<SimNode_GetSharedMnh>(var->init->at, var->index, var->getMangledNameHash());
                     } else {
                         get = context.code->makeNode<SimNode_GetGlobalMnh>(var->init->at, var->index, var->getMangledNameHash());
                     }
-                } /* else {
+                } else {
                     if ( var->global_shared ) {
                         get = context.code->makeNode<SimNode_GetShared>(var->init->at, var->index, var->getMangledNameHash());
                     } else {
                         get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index, var->getMangledNameHash());
                     }
-                } */
+                }
             }
         }
         if ( var->type->ref ) {
@@ -2719,7 +2725,10 @@ namespace das
     void Program::makeMacroModule ( TextWriter & logs ) {
         isCompilingMacros = true;
         thisModule->macroContext = make_smart<Context>(getContextStackSize());
+        auto oldAot = policies.aot;
+        policies.aot = false;
         simulate(*thisModule->macroContext, logs);
+        policies.aot = oldAot;
         isCompilingMacros = false;
     }
 
@@ -2929,7 +2938,7 @@ namespace das
             context.relocateCode();
         }
         // run init script and restart
-        if ( needMacroModule || (!folding && !thisModule->isModule) ) {
+        if ( !folding ) {
             auto time1 = ref_time_ticks();
             if (!context.runWithCatch([&]() {
                 if ( context.stack.size() && context.stack.size()>globalInitStackSize ) {
@@ -3049,8 +3058,7 @@ namespace das
                         TextWriter tp;
                         tp << "semantic hash is " << HEX << semHash << DEC << "\n";
                         printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
-                        error("AOT linking failed for " + string(fn.mangledName), tp.str(), "",
-                            LineInfo(), CompilationError::missing_aot);
+                        linkError(string(fn.mangledName), tp.str() );
                     }
                 }
             }

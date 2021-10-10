@@ -946,6 +946,7 @@ namespace das
                 bool    promoted : 1;
                 bool    isPublic : 1;
                 bool    isModule : 1;
+                bool    isCorssContext : 1;
             };
             uint32_t        moduleFlags = 0;
         };
@@ -1078,6 +1079,7 @@ namespace das
 
     struct CodeOfPolicies {
         bool        aot = false;                        // enable AOT
+        bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
     // memory
         uint32_t    stack = 16*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap
@@ -1085,6 +1087,7 @@ namespace das
         bool        multiple_contexts = false;          // code supports context safety
         uint32_t    heap_size_hint = 65536;
         uint32_t    string_heap_size_hint = 65536;
+        bool        cross_context = false;              // all access to varable and function lookup to be context-independent (via MNH)
     // rtti
         bool rtti = false;                              // create extended RTTI
     // language
@@ -1185,6 +1188,7 @@ namespace das
         // this is no longer the way to link AOT
         //  set CodeOfPolicies::aot instead
         void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
+        void linkError ( const string & str, const string & extra );
     public:
         template <typename TT>
         string describeCandidates ( const TT & result, bool needHeader = true ) const {
@@ -1208,6 +1212,7 @@ namespace das
         int                         totalVariables = 0;
         int                         newLambdaIndex = 1;
         vector<Error>               errors;
+        vector<Error>               aotErrors;
         uint32_t                    globalInitStackSize = 0;
         uint32_t                    globalStringHeapSize = 0;
         bool                        folding = false;

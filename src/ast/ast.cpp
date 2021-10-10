@@ -2524,6 +2524,14 @@ namespace das {
         failToCompile = true;
     }
 
+    void Program::linkError ( const string & str, const string & extra ) {
+        aotErrors.emplace_back(str,extra,"",LineInfo(), CompilationError::missing_aot);
+        if ( policies.fail_on_no_aot ) {
+            failToCompile = true;
+            errors.emplace_back("AOT link failed on " + str,extra,"",LineInfo(), CompilationError::missing_aot);
+        }
+    }
+
     Module * Program::addModule ( const string & name ) {
         if ( auto lm = library.findModule(name) ) {
             return lm;

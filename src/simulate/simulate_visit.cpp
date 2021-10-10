@@ -683,10 +683,17 @@ namespace das {
         V_END();
     }
 
-    SimNode * SimNode_FuncConstValue::visit ( SimVisitor & vis ) {
+    SimNode * SimNode_FuncConstValueMnh::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(FuncAddr);
         vis.arg(Func(),subexpr.valueU,"fnMangledName");
+        V_END();
+    }
+
+    SimNode * SimNode_FuncConstValue::visit ( SimVisitor & vis ) {
+        V_BEGIN();
+        V_OP(FuncAddr);
+        vis.arg(Func(),subexpr.valueU,"fnIndex");
         V_END();
     }
 

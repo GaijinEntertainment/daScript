@@ -359,8 +359,8 @@ namespace das {
         static __forceinline TT get ( const TT * ptr, TT value ) {
             return ptr ? *((TT *)ptr) : value;
         }
-		template <typename LPTR>
-        static __forceinline TT get ( LPTR ** ptr, nullptr_t pqq ) {
+		template <typename LPTRX>
+        static __forceinline TT get ( LPTRX ** ptr, nullptr_t pqq ) {
             return ptr ? *((TT *)ptr) : ((TT)pqq);
         }
         static __forceinline TT get ( const smart_ptr_raw<TT> & sp, TT value ) {

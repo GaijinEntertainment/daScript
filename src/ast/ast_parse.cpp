@@ -325,6 +325,9 @@ namespace das {
             program->isCompiling = false;
             return program;
         } else {
+            if ( policies.cross_context || program->options.getBoolOption("cross_context",false) ) {
+                program->thisModule->isCorssContext = true;
+            }
             restartInfer: program->inferTypes(logs, libGroup);
             if ( !program->failed() ) {
                 if ( program->patchAnnotations() ) {
@@ -349,10 +352,6 @@ namespace das {
                         program->removeUnusedSymbols();
                     }
                 }
-                /*
-                if (!program->failed())
-                    program->markOrRemoveUnusedSymbols(exportAll || program->thisModule->isModule);
-                */
                 if (!program->failed())
                     program->fixupAnnotations();
                 if (!program->failed())
@@ -454,16 +453,13 @@ namespace das {
                     res->markSymbolUse(false, false, false, &logs);
                 }
             }
-            if ( res->promoteToBuiltin || res->thisModule->isModule || exportAll ) {
+            if ( policies.aot_module && (res->promoteToBuiltin || res->thisModule->isModule || exportAll) ) {
                 if (!res->failed())
                     res->markModuleSymbolUse();
                 if (!res->failed())
                     res->removeUnusedSymbols();
                 if (!res->failed())
                     res->allocateStack(logs);
-                if (!res->failed() && res->promoteToBuiltin) {
-                    res->thisModule->promoteToBuiltin(access);
-                }
             } else {
                 if (!res->failed())
                     res->markExecutableSymbolUse();
