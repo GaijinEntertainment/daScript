@@ -824,6 +824,14 @@ namespace das
             tw << "\t\ttableMN[" << tabMnLookup.size() << "]\n";
             tw << "\t\ttableGMN[" << tabGMnLookup.size() << "]\n";
             tw << "\t\ttableAd[" << tabAdLookup.size() << "]\n";
+            int aotf = 0;
+            for ( int i=0; i!=totalFunctions; ++i ) {
+                if ( functions[i].aotFunction ) aotf++;
+            }
+            if ( aotf>0 ) {
+                int64_t saot = int64_t(sizeof(SimNode_CallBase));
+                tw << "\tAOT " << aotf << " of " << totalFunctions << ", " << aotf << " x sizeof(SimNode_Aot = " << saot << ") = " << aotf*saot << "\n";
+            }
             bytesTotal += code->totalAlignedMemoryAllocated();
             bytesUsed += code->bytesAllocated();
         }
@@ -1067,7 +1075,7 @@ namespace das
         };
         abiArg = args;
         abiCMRES = nullptr;
-        if ( aotInitScript ) {
+        if ( false && aotInitScript ) {
             aotInitScript->eval(*this);
         } else {
 #if DAS_ENABLE_STACK_WALK
