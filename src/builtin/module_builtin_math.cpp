@@ -741,7 +741,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(float4x4_identity_m), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "identity4x4",
                 SideEffects::none,"float4x4_identity_m");
             addExtern<DAS_BIND_FUN(float4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation",
-                 SideEffects::none, "float_4x4_translation")->arg("xyz");
+                 SideEffects::none, "float4x4_translation")->arg("xyz");
             addExtern<DAS_BIND_FUN(float4x4_transpose), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "transpose",
                 SideEffects::none, "float4x4_transpose")->arg("x");
             addExtern<DAS_BIND_FUN(float4x4_persp_forward), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "persp_forward",

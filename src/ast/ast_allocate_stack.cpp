@@ -11,7 +11,7 @@ namespace das {
             program = prog;
         }
     protected:
-        int                     inBlock = 0;
+        vector<ExprBlock *>     blocks;
         ProgramPtr              program;
         FunctionPtr             func;
         VariablePtr             cmresVAR;
@@ -27,22 +27,29 @@ namespace das {
             func.reset();
             cmresVAR.reset();
             failedToCMRES = false;
-            assert(inBlock==0);
+            assert(blocks.size()==0);
             return Visitor::visit(that);
         }
     // ExprBlock
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
-            if ( block->isClosure ) inBlock ++;
+            if ( block->isClosure ) {
+                blocks.push_back(block);
+            }
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
-            if ( block->isClosure ) inBlock --;
+            if ( block->isClosure ) {
+                blocks.pop_back();
+            }
             return Visitor::visit(block);
         }
     // ExprReturn
         virtual void preVisit ( ExprReturn * expr ) override {
             Visitor::preVisit(expr);
-            if ( inBlock ) return;
+            if ( blocks.size() ) {
+                expr->block = blocks.back();
+                return;
+            }
             expr->returnFunc = func.get();
             if ( failedToCMRES ) return;
             // we can safely skip makeLocal, invoke, or call

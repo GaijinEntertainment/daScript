@@ -346,7 +346,7 @@ namespace das {
     struct das_upcast<TT *> {
         template <typename QQ>
         static __forceinline TT * cast ( QQ * expr ) {
-            return static_cast<TT *>(expr);
+            return (TT *)(expr);
         }
     };
 
@@ -354,6 +354,10 @@ namespace das {
     struct das_null_coalescing {
         static __forceinline TT get ( const TT * ptr, TT value ) {
             return ptr ? *((TT *)ptr) : value;
+        }
+		template <typename LPTR>
+        static __forceinline TT get ( LPTR ** ptr, nullptr_t pqq ) {
+            return ptr ? *((TT *)ptr) : ((TT)pqq);
         }
         static __forceinline TT get ( const smart_ptr_raw<TT> & sp, TT value ) {
             TT * ptr = sp.get();

@@ -21,6 +21,21 @@ namespace das {
     float3x3 float3x3_from_float34 ( const float3x4 & mat );
     float3x4 float3x4_from_float44 ( const float4x4 & mat );
 
+    float4x4 float4x4_orthonormal_inverse( const float4x4 & src);
+    float4x4 float4x4_persp_forward(float wk, float hk, float zn, float zf);
+    float4x4 float4x4_persp_reverse(float wk, float hk, float zn, float zf);
+    float4x4 float4x4_look_at(float4 eye, float4 at, float4 up);
+    float4x4 float4x4_compose(float4 pos, float4 rot, float4 scale);
+    void float4x4_decompose(const float4x4 & mat, float3 & pos, float4 & rot, float4 & scale);
+
+    float4 un_quat_from_unit_arc(float3 v0, float3 v1);
+    float4 un_quat_from_unit_vec_ang(float3 v, float ang);
+    float4 un_quat(const float4x4 & m);
+
+    float4 quat_mul(float4 q1, float4 q2);
+    float3 quat_mul_vec(float4 q, float3 v);
+    float4 quat_conjugate(float4 q);
+
     inline float3 float3x4_mul_vec3p(const float3x4 &a, float3 b) {
         mat44f va;
         v_mat44_make_from_43cu(va, &a.m[0].x);

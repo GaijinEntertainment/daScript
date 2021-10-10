@@ -16,4 +16,5 @@ namespace das {
     // and das bindings
     class Context;
     char * GetSaveFileDlg ( const char * initialFileName , const char * initialPath, const char * filter, Context * ctx );
+    char * GetOpenFileDlg ( const char * initialPath, const char * filter, Context * ctx );
 }

@@ -42,7 +42,7 @@ public:
             SideEffects::worstDefault, "GetOpenFileDlg");
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
-        tw << "#include \"modules/dasStdDlg/src/dasStdDlg.h\"\n";
+        tw << "#include \"../modules/dasStdDlg/src/dasStdDlg.h\"\n";
         return ModuleAotType::cpp;
     }
 };

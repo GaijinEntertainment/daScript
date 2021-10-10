@@ -45,13 +45,13 @@ namespace das {
     template <> struct das_alias<RttiValue>
         : das_alias_ref<RttiValue,TVariant<sizeof(RttiValue),bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>> {};
 
-    template <typename TT, typename PD>
+    template <typename TT, typename PD, typename TTA = const TT>
     struct das_rtti_iterator {
         __forceinline das_rtti_iterator(const PD & r) {
             array_start = r.fields;
             array_end = array_start + r.count;
         }
-        __forceinline bool first ( Context *, const TT * & i ) {
+        __forceinline bool first ( Context *, TTA * & i ) {
             at = array_start;
             if ( at != array_end ) {
                 i = *at;
@@ -60,7 +60,7 @@ namespace das {
                 return false;
             }
         }
-        __forceinline bool next  ( Context *, const TT * & i ) {
+        __forceinline bool next  ( Context *, TTA * & i ) {
             at++;
             if ( at != array_end ) {
                 i = *at;
@@ -69,12 +69,18 @@ namespace das {
                 return false;
             }
         }
-        __forceinline void close ( Context *, const TT * & i ) {
+        __forceinline void close ( Context *, TTA * & i ) {
             i = nullptr;
         }
         TT ** at;
         TT ** array_start;
         TT ** array_end;
+    };
+
+    template <>
+    struct das_iterator<EnumInfo> :
+        das_rtti_iterator<EnumValueInfo, EnumInfo, EnumValueInfo> {
+        das_iterator(const EnumInfo & info) : das_rtti_iterator<EnumValueInfo, EnumInfo, EnumValueInfo>(info) {}
     };
 
     template <>
@@ -124,7 +130,7 @@ namespace das {
     void rtti_builtin_compile_file(char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
         const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context, LineInfoArg * lineinfo);
 
-    void rtti_builtin_simulate ( const smart_ptr<Program> & program, bool useAot,
+    void rtti_builtin_simulate ( const smart_ptr<Program> & program,
         const TBlock<void,bool,smart_ptr<Context>,string> & block, Context * context, LineInfoArg * lineinfo );
 
     void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, Module *> & block, Context * context, LineInfoArg * lineinfo);

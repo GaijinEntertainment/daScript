@@ -181,7 +181,7 @@ Thats why in the example above the `fputs` only occurs if text is not null.
 Lets look at another integration example from the builtin `math` module::
 
     addExtern<DAS_BIND_FUN(float4x4_translation), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "translation",
-            SideEffects::none, "float_4x4_translation")->arg("xyz");
+            SideEffects::none, "float4x4_translation")->arg("xyz");
 
 Here float4x4_translation function returns ref type by value, i.e. `float4x4`.
 This needs to be indicated explicitly by specifying templated SimNode argument for the ``addExtern`` function,

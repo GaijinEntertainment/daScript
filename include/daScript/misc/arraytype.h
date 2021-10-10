@@ -137,6 +137,7 @@ namespace das
 
     struct Bitfield {
         uint32_t    value;
+        __forceinline Bitfield () {}
         __forceinline Bitfield ( int32_t v ) : value(uint32_t(v)) {}
         __forceinline Bitfield ( uint32_t v ) : value(v) {}
         __forceinline Bitfield ( int64_t v ) : value(uint32_t(v)) {}

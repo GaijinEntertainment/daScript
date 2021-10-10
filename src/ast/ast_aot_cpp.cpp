@@ -204,9 +204,9 @@ namespace das {
         } else if ( baseType==Type::tStructure ) {
             if ( type->structType ) {
                 if ( type->structType->module->name.empty() ) {
-                    stream << type->structType->name;
+                    stream << "struct " << type->structType->name;
                 } else {
-                    stream << aotModuleName(type->structType->module) << "::" << type->structType->name;
+                    stream << "struct " << aotModuleName(type->structType->module) << "::" << type->structType->name;
                 }
             } else {
                 stream << "DAS_COMMENT(unspecified structure) ";
@@ -2962,12 +2962,12 @@ namespace das {
                     uint32_t hash = call->func->getMangledNameHash();
                     if ( call->arguments.size()>=1 ) {
                         ss << "<";
-                        for ( const auto & arg : call->arguments ) {
+                        for ( const auto & arg : call->func->arguments ) {
                             ss << describeCppType(arg->type);
                             if ( arg->type->isRefType() && !arg->type->ref ) {
                                 ss << " &";
                             }
-                            if ( arg!=call->arguments.back() ) {
+                            if ( arg!=call->func->arguments.back() ) {
                                 ss << ",";
                             }
                         }
@@ -3280,6 +3280,11 @@ namespace das {
         bool remUS = options.getBoolOption("remove_unused_symbols",true);
         UseTypeMarker utm;
         visit(utm);
+        for ( auto & pm : library.modules ) {
+            for ( const auto & ps : pm->structuresInOrder ) {
+                aotVisitor.ss << "namespace " << aotModuleName(ps->module) << " { struct " << ps->name << "; };\n";
+            }
+        }
         for ( auto & pm : library.modules ) {
             if ( pm == thisModule.get() ) {
                 continue;
