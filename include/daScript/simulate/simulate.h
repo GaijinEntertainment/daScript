@@ -632,7 +632,6 @@ namespace das
         bool                            shutdown = false;
         bool                            breakOnException = false;
         bool                            alwaysStackWalkOnException = false;
-        bool                            sharedCode = false;
     public:
         string                          name;
         Bitfield                        category = 0;

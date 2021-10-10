@@ -382,20 +382,6 @@ namespace das {
                     if (!program->failed())
                         program->makeMacroModule(logs);
                 }
-                if ( policies.enable_shared_code && program->promoteToBuiltin ) {   // always a module
-                    if (!program->failed())
-                        program->markModuleSymbolUse();
-                    // logs << "In module " << fileName << "\n";
-                    // program->dumpSymbolUse(logs);
-                    if (!program->failed())
-                        program->allocateStack(logs);
-                    if (!program->failed()) {
-                        program->makeSharedCode(logs);
-                        if ( program->thisModule->sharedCodeContext ) {
-                            program->thisModule->sharedCodeContext->name = "shared: " + fileName;
-                        }
-                    }
-                }
             }
             if ( program->options.getBoolOption("log_compile_time",false) ) {
                 auto dt = get_time_usec(time0) / 1000000.;

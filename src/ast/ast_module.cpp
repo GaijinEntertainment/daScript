@@ -44,18 +44,6 @@ namespace das {
 
     Module * Module::modules = nullptr;
 
-    vector<smart_ptr<Context>> Module::sharedCode;
-
-    void Module::logSharedCodeMem ( TextWriter & tw ) {
-        uint64_t bytesTotal = 0;
-        tw << "SHARED MEMORY IS:\n\n";
-        for ( auto & ctx : sharedCode ) {
-            ctx->logMemInfo(tw);
-            bytesTotal += ctx->getUniqueMemorySize() + ctx->getSharedMemorySize();
-        }
-        tw << "\nTOTAL SHARED MEMORY " << bytesTotal << "\n";
-    }
-
     void Module::addDependency ( Module * mod, bool pub ) {
         requireModule[mod] |= pub;
         for ( auto it : mod->requireModule ) {
@@ -114,7 +102,6 @@ namespace das {
             delete pM;
         }
         clearGlobalAotLibrary();
-        sharedCode.clear();
         resetFusionEngine();
         ReuseAllocator<TypeDecl>::canHold = false;
     }
@@ -190,9 +177,6 @@ namespace das {
         builtIn = true;
         promoted = true;
         promotedAccess = access;
-        if ( sharedCodeContext ) {
-            sharedCode.push_back(sharedCodeContext);
-        }
     }
 
     Module::~Module() {

@@ -890,7 +890,6 @@ namespace das
         void verifyAotReady();
         void verifyBuiltinNames(uint32_t flags);
         void addDependency ( Module * mod, bool pub );
-        static void logSharedCodeMem ( TextWriter & tw );
     public:
         template <typename RecAnn>
         void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
@@ -918,7 +917,6 @@ namespace das
         }
     public:
         smart_ptr<Context>                          macroContext;
-        smart_ptr<Context>                          sharedCodeContext;
         das_safe_map<string, TypeDeclPtr>           aliasTypes;
         das_safe_map<string, AnnotationPtr>         handleTypes;
         das_safe_map<string, StructurePtr>          structures;
@@ -954,7 +952,6 @@ namespace das
     private:
         Module * next = nullptr;
         static Module * modules;
-        static vector<smart_ptr<Context>>   sharedCode;
         unique_ptr<FileInfo>    ownFileInfo;
         FileAccessPtr           promotedAccess;
     };
@@ -1107,10 +1104,6 @@ namespace das
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
-        bool enable_shared_code = false;                // when enabled, shared overhead is increased (all shared modules have their own code)
-                                                        // but individual context memory overhead is decreased (shared)
-        bool enable_shared_code_aot = true;
-        bool fail_on_no_shared_aot = true;
     // debugger
         //  when enabled
         //      1. disables [fastcall]
@@ -1187,7 +1180,6 @@ namespace das
         bool getOptimize() const;
         bool getDebugger() const;
         void makeMacroModule( TextWriter & logs );
-        void makeSharedCode( TextWriter & logs );
         vector<ReaderMacroPtr> getReaderMacro ( const string & markup ) const;
     public:
         template <typename TT>

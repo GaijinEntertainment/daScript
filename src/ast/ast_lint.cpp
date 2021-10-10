@@ -472,7 +472,6 @@ namespace das {
         "log_nodes",                    Type::tBool,
         "log_nodes_aot_hash",           Type::tBool,
         "log_mem",                      Type::tBool,
-        "log_shared_mem",               Type::tBool,
         "log_debug_mem",                Type::tBool,
         "log_cpp",                      Type::tBool,
         "log_aot",                      Type::tBool,

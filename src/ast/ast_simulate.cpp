@@ -2624,12 +2624,6 @@ namespace das
         pCall->debugInfo = expr->at;
         if ( func->builtIn) {
             pCall->fnPtr = nullptr;
-        } else if ( func->module->sharedCodeContext ) {
-            auto MNH = func->getMangledNameHash();
-            pCall->fnPtr = func->module->sharedCodeContext->fnByMangledName(MNH);
-            DAS_ASSERTF(pCall->fnPtr,"function not found in shared module. how?");
-            DAS_ASSERTF(pCall->fnPtr->mangledNameHash == MNH,"mangled name hash mismtach. wrong function?");
-            DAS_ASSERTF((func->builtIn || pCall->fnPtr), "calling function which null. how?");
         } else if ( func->index>=0 ) {
             pCall->fnPtr = context.getFunction(func->index);
             DAS_ASSERTF(pCall->fnPtr, "calling function which null. how?");
@@ -2702,11 +2696,7 @@ namespace das
         context.tabMnLookup.clear();
         for ( const auto & fn : lookupFunctions ) {
             auto mnh = fn->getMangledNameHash();
-            if ( fn->module->sharedCodeContext ) {
-                context.tabMnLookup[mnh] = fn->module->sharedCodeContext->fnByMangledName(mnh);
-            } else {
-                context.tabMnLookup[mnh] = context.functions + fn->index;
-            }
+            context.tabMnLookup[mnh] = context.functions + fn->index;
         }
         if ( options.getBoolOption("log_mn_hash",false) ) {
             logs
@@ -2731,26 +2721,6 @@ namespace das
         thisModule->macroContext = make_smart<Context>(getContextStackSize());
         simulate(*thisModule->macroContext, logs);
         isCompilingMacros = false;
-    }
-
-    void Program::makeSharedCode ( TextWriter & logs ) {
-        auto sharedCodeContext = make_smart<Context>(getContextStackSize());
-        sharedCodeContext->sharedCode = true;
-        simulate(*sharedCodeContext, logs, nullptr);
-        if ( policies.enable_shared_code_aot ) {
-            if ( policies.fail_on_no_shared_aot ) {
-                linkCppAot(*sharedCodeContext, getGlobalAotLibrary(), logs);
-            } else {
-                auto fona = policies.fail_on_no_aot;
-                policies.fail_on_no_aot = false; // BBATKIN: VERIFY?
-                linkCppAot(*sharedCodeContext, getGlobalAotLibrary(), logs);
-                policies.fail_on_no_aot = fona;
-            }
-        }
-        if ( sharedCodeContext->code->bytesAllocated() ) {
-            sharedCodeContext->strip();
-            thisModule->sharedCodeContext = sharedCodeContext;
-        }
     }
 
     extern "C" int64_t ref_time_ticks ();
@@ -2829,40 +2799,23 @@ namespace das
                             "\tMangled name " + mangledName + " hash is " + to_string(MNH), "",
                                 pfun->at);
                     }
-                    if ( pm->sharedCodeContext ) { // pm!=thisModule.get()  - this is for self promoting
-                        SimFunction * sfun = pm->sharedCodeContext->fnByMangledName(MNH);
-                        DAS_ASSERT(sfun->mangledNameHash==MNH && sfun->name==pfun->name);
-                        auto thit = sharedLookup.find(MNH);
-                        if ( thit!=sharedLookup.end() ) {
-                            SimFunction * tfun = thit->second;
-                            if ( strcmp(sfun->mangledName,tfun->mangledName)!=0 || !sfun->builtin || !tfun->builtin ) {
-                                error("Internalc compiler errors. Mangled name hash collision. Function " + string(sfun->mangledName) +
-                                    "collides with" + string(tfun->mangledName), "\tHash is " + to_string(MNH), "",
-                                        LineInfo(), CompilationError::cant_initialize);
-                            }
-                        } else {
-                            sharedLookup[MNH] = sfun;
-                            lookupFunctionTable.push_back(pfun);
-                        }
-                    } else {
-                        auto & gfun = context.functions[pfun->index];
-                        gfun.name = context.code->allocateName(pfun->name);
-                        gfun.mangledName = context.code->allocateName(mangledName);
-                        gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
-                        if ( debuggerOrGC ) {
-                            helper.appendLocalVariables(gfun.debugInfo, pfun->body);
-                        }
-                        gfun.stackSize = pfun->totalStackSize;
-                        gfun.mangledNameHash = MNH;
-                        gfun.aotFunction = nullptr;
-                        gfun.flags = 0;
-                        gfun.fastcall = pfun->fastCall;
-                        if ( pfun->module->builtIn && !pfun->module->promoted ) {
-                            gfun.builtin = true;
-                        }
-                        gfun.code = pfun->simulate(context);
-                        lookupFunctionTable.push_back(pfun);
+                    auto & gfun = context.functions[pfun->index];
+                    gfun.name = context.code->allocateName(pfun->name);
+                    gfun.mangledName = context.code->allocateName(mangledName);
+                    gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
+                    if ( debuggerOrGC ) {
+                        helper.appendLocalVariables(gfun.debugInfo, pfun->body);
                     }
+                    gfun.stackSize = pfun->totalStackSize;
+                    gfun.mangledNameHash = MNH;
+                    gfun.aotFunction = nullptr;
+                    gfun.flags = 0;
+                    gfun.fastcall = pfun->fastCall;
+                    if ( pfun->module->builtIn && !pfun->module->promoted ) {
+                        gfun.builtin = true;
+                    }
+                    gfun.code = pfun->simulate(context);
+                    lookupFunctionTable.push_back(pfun);
                 }
             }
         }
@@ -2921,7 +2874,6 @@ namespace das
         // now call annotation simulate
         das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
-            if ( pm->sharedCodeContext ) continue; // pm!=thisModule.get() &&
             for (auto & it : pm->functions) {
                 auto pfun = it.second;
                 if (pfun->index < 0 || !pfun->used)
@@ -2992,18 +2944,12 @@ namespace das
         }
         context.restart();
         if (options.getBoolOption("log_mem",false) ) {
-            if ( thisModule->sharedCodeContext ) logs << "IN SHARED CONTEXT:\n";
             context.logMemInfo(logs);
             logs << "shared        " << context.getSharedMemorySize() << "\n";
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
         }
-        if (options.getBoolOption("log_shared_mem",false) ) {
-            if ( thisModule->sharedCodeContext ) logs << "IN SHARED CONTEXT:\n";
-            Module::logSharedCodeMem(logs);
-        }
         // debug info
         if ( options.getBoolOption("log_debug_mem",false) ) {
-            if ( thisModule->sharedCodeContext ) logs << "IN SHARED CONTEXT:\n";
             helper.logMemInfo(logs);
         }
         // log CPP

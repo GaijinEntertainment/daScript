@@ -63,7 +63,9 @@
 			"sstream": "cpp",
 			"xlocmes": "cpp",
 			"format": "cpp",
-			"charconv": "cpp"
+			"charconv": "cpp",
+			"optional": "cpp",
+			"forward_list": "cpp"
 		},
 		"dascript.experimental": true,
 		"dascript.hovers.verbose": true

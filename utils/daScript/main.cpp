@@ -11,9 +11,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
     auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
-    // policies.enable_shared_code = true;
     policies.debugger = false;   // TODO: from command line
-    policies.enable_shared_code_aot = false;
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {

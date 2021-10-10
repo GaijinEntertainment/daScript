@@ -48,7 +48,6 @@ bool compile ( const string & fn, const string & cppFn, const string &mainFnName
     auto access = get_file_access(nullptr);
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
-    policies.enable_shared_code = false;
     policies.fail_on_lack_of_aot_export = true;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
         if ( program->failed() ) {
