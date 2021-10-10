@@ -8,9 +8,11 @@ using namespace das;
 void tutorial () {
     TextPrinter tout;                               // output stream for all compiler messages (stdout. for stringstream use TextWriter)
     ModuleGroup dummyLibGroup;                      // module group for compiled program
+    CodeOfPolicies policies;                        // compiler setup
     auto fAccess = make_smart<FsFileAccess>();      // default file access
+    policies.aot = true;
     // compile program
-    auto program = compileDaScript(getDasRoot() + TUTORIAL_NAME, fAccess, tout, dummyLibGroup);
+    auto program = compileDaScript(getDasRoot() + TUTORIAL_NAME, fAccess, tout, dummyLibGroup, false, policies);
     if ( program->failed() ) {
         // if compilation failed, report errors
         tout << "failed to compile\n";
@@ -24,15 +26,6 @@ void tutorial () {
     if ( !program->simulate(ctx, tout) ) {
         // if interpretation failed, report errors
         tout << "failed to simulate\n";
-        for ( auto & err : program->errors ) {
-            tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-        }
-        return;
-    }
-    // link ahead-of-time functions
-    program->linkCppAot(ctx, getGlobalAotLibrary(), tout);
-    if ( program->failed() ) {
-        tout << "failed to link AOT\n";
         for ( auto & err : program->errors ) {
             tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
         }

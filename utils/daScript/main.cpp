@@ -31,6 +31,9 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                 for ( auto & err : program->errors ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
+            } else if ( program->thisModule->isModule ) {
+                tout<< "program is setup as module, and can't run\n"
+                    << "remove `module " << program->thisModule->name << "` on top of the " << fn << "\n";
             } else {
                 auto fnVec = ctx.findFunctions(mainFnName.c_str());
                 vector<SimFunction *> fnMVec;

@@ -1140,6 +1140,15 @@ namespace das {
         return ft;
     }
 
+    TypeDeclPtr makeMoreFunctionFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "MoreFunctionFlags";
+        ft->argNames = {
+            "macroFunction", "needStringCast"
+        };
+        return ft;
+    }
+
     TypeDeclPtr makeFunctionSideEffectFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "FunctionSideEffectFlags";
@@ -1180,6 +1189,8 @@ namespace das {
             // use global v
             addFieldEx ( "flags", "flags",
                 offsetof(Function, flags), makeFunctionFlags() );
+            addFieldEx ( "moreFlags", "moreFlags",
+                offsetof(Function, flags), makeMoreFunctionFlags() );
             addFieldEx ( "sideEffectFlags", "sideEffectFlags",
                 offsetof(Function, sideEffectFlags), makeFunctionSideEffectFlags() );
             addField<DAS_BIND_MANAGED_FIELD(inferStack)>("inferStack");
@@ -2837,6 +2848,7 @@ namespace das {
             addAlias(makeExprFlagsFlags());
             addAlias(makeExprPrintFlagsFlags());
             addAlias(makeFunctionFlags());
+            addAlias(makeMoreFunctionFlags());
             addAlias(makeFunctionSideEffectFlags());
             addAlias(makeVariableFlags());
             addAlias(makeVariableAccessFlags());

@@ -43,6 +43,7 @@ TextPrinter tout;
 bool unit_test ( const string & fn, bool useAOT ) {
     // make sure there is no stack
     CodeOfPolicies policies;
+    policies.aot = useAOT;
     policies.stack = 0;
     auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
@@ -62,10 +63,6 @@ bool unit_test ( const string & fn, bool useAOT ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
                 return false;
-            }
-            // now, what we get to do is to link AOT
-            if ( useAOT ) {
-                program->linkCppAot(ctx, getGlobalAotLibrary(), tout);
             }
             // run the test
             if ( auto fnTest = ctx.findFunction("test") ) {

@@ -1,6 +1,22 @@
 # daScript
 daScript - high-performance statically strong typed scripting language
 
+10/9/2021
+  * api change - aot is now part of CodeOfPolicies, not linkCppAot
+  * misc - massive memory clenaup
+      more compact debug info
+      Func now stored pointer to a function
+      GetGlobal and GetLocal are doing MNH for now
+      MNH tables of all sorts are now regular hash_map, vs O(1) with really low capacity
+        to be replaced by more efficient O(1) hash at some point
+      code is now compacted for both interpreted and AOT scenarios
+        unused code is thrown away in aot
+  * misc - tones of new memory logging
+  * feature - [macro_function] and [macro_interface]. to be thrown away from shared modules and such
+  * misc - concept cleanup. module will no longer 'run'. init scripts at compilation time will only be called from non-modules
+    macro scripts, however, will continue running
+  * notes - attempts are shared code showed that keeping full blown (or even stripped) module is not viable
+
 10/4/2021
   * feature - global_lint_macro - those happen reqardless of the visibility
   * FEATURE - LINT - daslib/lint for details. all 'i can catch it during compilation' stuff goes there.

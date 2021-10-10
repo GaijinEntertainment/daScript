@@ -96,6 +96,7 @@ bool unit_test ( const string & fn, bool useAot ) {
     auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
     CodeOfPolicies policies;
+    policies.aot = useAot;
     policies.fail_on_no_aot = true;
     // policies.intern_strings = true;
     // policies.intern_const_strings = true;
@@ -116,17 +117,6 @@ bool unit_test ( const string & fn, bool useAot ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
                 return false;
-            }
-            if ( useAot ) {
-                // now, what we get to do is to link AOT
-                program->linkCppAot(ctx, getGlobalAotLibrary(), tout);
-                if ( program->failed() ) {
-                    tout << "failed to link AOT\n";
-                    for ( auto & err : program->errors ) {
-                        tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-                    }
-                    return false;
-                }
             }
             if ( auto fnTest = ctx.findFunction("test") ) {
                 if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {
@@ -160,7 +150,9 @@ bool exception_test ( const string & fn, bool useAot ) {
     tout << fn << " ";
     auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
-    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup) ) {
+    CodeOfPolicies policies;
+    policies.aot = useAot;
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, false, policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -175,10 +167,6 @@ bool exception_test ( const string & fn, bool useAot ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
                 return false;
-            }
-            if ( useAot ) {
-                // now, what we get to do is to link AOT
-                program->linkCppAot(ctx, getGlobalAotLibrary(), tout);
             }
             if ( auto fnTest = ctx.findFunction("test") ) {
                 if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {
@@ -208,6 +196,7 @@ bool performance_test ( const string & fn, bool useAot ) {
     auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
     CodeOfPolicies policies;
+    policies.aot = useAot;
     policies.fail_on_no_aot = true;
     // policies.intern_strings = true;
     // policies.intern_const_strings = true;
@@ -227,17 +216,6 @@ bool performance_test ( const string & fn, bool useAot ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
                 return false;
-            }
-            if ( useAot ) {
-                // now, what we get to do is to link AOT
-                program->linkCppAot(ctx, getGlobalAotLibrary(), tout);
-                if ( program->failed() ) {
-                    tout << fn << " failed to link AOT\n";
-                    for ( auto & err : program->errors ) {
-                        tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-                    }
-                    return false;
-                }
             }
             return true;
         }
@@ -398,7 +376,7 @@ int main( int argc, char * argv[] ) {
     // #define TEST_NAME   "/examples/test/unit_tests/hint_macros_example.das"
     // #define TEST_NAME   "/examples/test/unit_tests/aonce.das"
     // #define TEST_NAME   "/examples/test/unit_tests/check_defer.das"
-    #define TEST_NAME   "/examples/test/unit_tests/split.das"
+    #define TEST_NAME   "/examples/test/unit_tests/return_reference.das"
     unit_test(getDasRoot() +  TEST_NAME,false);
     unit_test(getDasRoot() +  TEST_NAME,true);
     // extra

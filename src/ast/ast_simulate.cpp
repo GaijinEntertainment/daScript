@@ -2858,18 +2858,22 @@ namespace das
             isSimulating = false;
             return false;
         }
+        bool aot_hint = policies.aot && !folding && !thisModule->isModule;
 #if DAS_FUSION
         if ( !folding ) {               // note: only run fusion when not folding
             fusion(context, logs);
             context.relocateCode(true); // this to get better estimate on relocated size. its fust enough
-            context.relocateCode();
         }
 #else
         if ( !folding ) {
             context.relocateCode(true);
-            context.relocateCode();
         }
 #endif
+        if ( !folding ) {
+            if ( !aot_hint ) {
+                context.relocateCode();
+            }
+        }
         context.restart();
         // now call annotation simulate
         das_hash_map<int,Function *> indexToFunction;
@@ -2917,6 +2921,12 @@ namespace das
                     logs << "\n\n";
                 }
             }
+        }
+        // now relocate before we run that init script
+        if ( aot_hint ) {
+            linkCppAot(context, getGlobalAotLibrary(), logs);
+            context.relocateCode(true);
+            context.relocateCode();
         }
         // run init script and restart
         if ( needMacroModule || (!folding && !thisModule->isModule) ) {
@@ -3004,7 +3014,6 @@ namespace das
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
         bool logIt = options.getBoolOption("log_aot",false);
-
         // make list of functions
         vector<Function *> fnn; fnn.reserve(totalFunctions);
         das_hash_map<int,Function *> indexToFunction;
@@ -3017,14 +3026,12 @@ namespace das
                 indexToFunction[pfun->index] = pfun.get();
             }
         }
-
         for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
             if ( !fnn[fni]->noAot ) {
                 SimFunction & fn = context.functions[fni];
                 fnn[fni]->hash = getFunctionHash(fnn[fni], fn.code, &context);
             }
         }
-
         for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
             if ( !fnn[fni]->noAot ) {
                 SimFunction & fn = context.functions[fni];
@@ -3048,18 +3055,5 @@ namespace das
                 }
             }
         }
-        /*
-        if ( context.totalVariables ) {
-            uint64_t semHash = context.getInitSemanticHash();
-            semHash = getInitSemanticHashWithDep(semHash);
-            auto it = aotLib.find(semHash);
-            if ( it != aotLib.end() ) {
-                context.aotInitScript = (it->second)(context);
-                if ( logIt ) logs << "INIT SCRIPT AOT=0x" << HEX << semHash << DEC << "\n";
-            } else {
-                if ( logIt ) logs << "INIT SCRIPT NOT FOUND, AOT=0x" << HEX << semHash << DEC << "\n";
-            }
-        }
-        */
     }
 }

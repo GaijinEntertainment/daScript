@@ -113,7 +113,7 @@ def public recompile
         using <| $(var cop:CodeOfPolicies#)
             compile_file("{appDir}/{appFile}",access,addr(mg),cop) <| $(ok,program,issues)
                 if ok
-                    simulate(program,false) <| $ ( sok; context; serrors )
+                    simulate(program) <| $ ( sok; context; serrors )
                         if sok
                             // TODO: beep print("reloaded...\n")
                             set_new_context(context)

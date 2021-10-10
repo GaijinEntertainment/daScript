@@ -1077,6 +1077,7 @@ namespace das
     };
 
     struct CodeOfPolicies {
+        bool        aot = false;                        // enable AOT
     // memory
         uint32_t    stack = 16*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap
@@ -1158,7 +1159,6 @@ namespace das
         void allocateStack(TextWriter & logs);
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash ) const;
-        void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
@@ -1181,6 +1181,10 @@ namespace das
         bool getDebugger() const;
         void makeMacroModule( TextWriter & logs );
         vector<ReaderMacroPtr> getReaderMacro ( const string & markup ) const;
+    protected:
+        // this is no longer the way to link AOT
+        //  set CodeOfPolicies::aot instead
+        void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
     public:
         template <typename TT>
         string describeCandidates ( const TT & result, bool needHeader = true ) const {

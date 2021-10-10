@@ -563,6 +563,8 @@ namespace das {
 
     struct CodeOfPoliciesAnnotation : ManagedStructureAnnotation<CodeOfPolicies,false,false> {
         CodeOfPoliciesAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CodeOfPolicies", ml) {
+        // aot
+            addField<DAS_BIND_MANAGED_FIELD(aot)>("aot");
         // memory
             addField<DAS_BIND_MANAGED_FIELD(stack)>("stack");
             addField<DAS_BIND_MANAGED_FIELD(intern_strings)>("intern_strings");
@@ -645,15 +647,11 @@ namespace das {
         return cast<VarInfo *>::from(ctx->getVariableInfo(index));
     }
 
-    void rtti_builtin_simulate ( const smart_ptr<Program> & program, bool useAot,
+    void rtti_builtin_simulate ( const smart_ptr<Program> & program,
             const TBlock<void,bool,smart_ptr<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
         TextWriter issues;
         auto ctx = make_smart<Context>(program->getContextStackSize());
         bool failed = !program->simulate(*ctx, issues);
-        if ( !failed && useAot ) {
-            program->linkCppAot(*ctx, getGlobalAotLibrary(), issues);
-            failed = program->failed();
-        }
         if ( failed ) {
             for ( auto & err : program->errors ) {
                 issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
@@ -1141,7 +1139,7 @@ namespace das {
                     ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_builtin_simulate)>(*this, lib, "simulate",
                 SideEffects::modifyExternal, "rtti_builtin_simulate")
-                    ->args({"program","useAot","block","context","line"});
+                    ->args({"program","block","context","line"});
             addExtern<DAS_BIND_FUN(makeFileAccess)>(*this, lib, "make_file_access",
                 SideEffects::modifyExternal, "makeFileAccess")
                     ->args({"project","context"});
