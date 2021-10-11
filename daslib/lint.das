@@ -5,6 +5,7 @@ options no_aot = true
 
 module lint shared private
 
+require daslib/strings_boost
 require daslib/ast_boost
 require daslib/strings_boost
 
@@ -47,7 +48,7 @@ class LintVisitor : AstVisitor
         if lb != 0ul
             let eb = intptr(get_ptr(expr))
             if lb != eb
-                self->lint_error("unreachable code after return", expr.at)
+                self->lint_error("unreachable code", expr.at)
         return expr
     def override preVisitExprLabel(expr:smart_ptr<ExprLabel>) : void
         exprForTerminator |> pop()
@@ -55,6 +56,10 @@ class LintVisitor : AstVisitor
     def override preVisitExprReturn(expr:smart_ptr<ExprReturn>) : void
         exprForTerminator |> pop()
         exprForTerminator |> push(intptr(get_ptr(expr)))
+    def override preVisitExprCall(expr:smart_ptr<ExprCall>): void
+        if expr.name |> eq <| "panic" && expr.func._module.name |> eq <| "$"
+            exprForTerminator |> pop()
+            exprForTerminator |> push(intptr(get_ptr(expr)))
 
 def public paranoid ( prog:ProgramPtr; compile_time_errors : bool )
     var astVisitor = new [[LintVisitor() compile_time_errors=compile_time_errors]]
