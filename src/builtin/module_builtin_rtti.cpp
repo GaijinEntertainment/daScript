@@ -1021,9 +1021,9 @@ namespace das {
         return context->stringHeap->allocateString(dt);
     }
 
-    char * builtin_get_typeinfo_mangled_name ( TypeInfo * typeInfo, Context * context ) {
+    char * builtin_get_typeinfo_mangled_name ( const TypeInfo * typeInfo, Context * context ) {
         if ( !typeInfo ) return nullptr;
-        auto dt = getTypeInfoMangledName(typeInfo);
+        auto dt = getTypeInfoMangledName((TypeInfo*)typeInfo);
         return context->stringHeap->allocateString(dt);
     }
 
