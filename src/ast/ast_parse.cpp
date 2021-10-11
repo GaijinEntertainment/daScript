@@ -455,9 +455,13 @@ namespace das {
                 }
             }
             if ( policies.aot_module && (res->promoteToBuiltin || res->thisModule->isModule || exportAll) ) {
-                if (!res->failed())
-                    res->markModuleSymbolUse();
-                if (!res->failed())
+                if (!res->failed()) {
+                    if(exportAll)
+                        res->markSymbolUse(false,true,true);
+                    else
+                        res->markModuleSymbolUse();
+                }
+                if (!res->failed() && !exportAll)
                     res->removeUnusedSymbols();
                 if (!res->failed())
                     res->allocateStack(logs);
