@@ -99,15 +99,19 @@ namespace das {
             // regular print
             crlf();
             if ( context ) {
-                auto fn = context->fnByMangledName(mangledNameHash);
+                SimFunction * fn = nullptr;
+                if ( strcmp(argN,"mnh")==0 ) {
+                    fn = context->fnByMangledName(mangledNameHash);
+                } else {
+                    fn = context->getFunction(mangledNameHash);
+                }
                 if ( fn ) {
                     ss << "@@" << fn->name;
                 } else {
                     ss << "@@null";
                 }
-            } else {
-                ss << "@@ 0x" << HEX << mangledNameHash << DEC;
             }
+            ss << " (" << argN << "=" << mangledNameHash << ")";
         }
         virtual void arg ( int32_t argV,  const char * argN ) override {
             SimVisitor::arg(argV,argN);

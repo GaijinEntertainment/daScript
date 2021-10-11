@@ -984,7 +984,7 @@ namespace das
             vec4f       cval;
         } temp;
         temp.cval = v_zero();
-        if ( !func->module->isCorssContext ) {
+        if ( func->module->isSolidContext ) {
             DAS_ASSERT(func->index>=0 && "address of unsued function? how?");
             temp.mnh = uint32_t(func->index);
             return context.code->makeNode<SimNode_FuncConstValue>(at,temp.cval);
@@ -1988,7 +1988,7 @@ namespace das
         } else {
             DAS_ASSERT(variable->index >= 0 && "using variable which is not used. how?");
             uint32_t mnh = variable->getMangledNameHash();
-            if ( variable->module->isCorssContext ) {
+            if ( !variable->module->isSolidContext ) {
                 if ( variable->global_shared ) {
                     if ( r2v ) {
                         return context.code->makeValueNode<SimNode_GetSharedMnhR2V>(type->baseType, at, variable->stackTop, mnh);
@@ -2547,7 +2547,7 @@ namespace das
             if ( var->init && var->init->rtti_isMakeLocal() ) {
                 return var->init->simulate(context);
             } else {
-                if ( var->module->isCorssContext ) {
+                if ( !var->module->isSolidContext ) {
                     if ( var->global_shared ) {
                         get = context.code->makeNode<SimNode_GetSharedMnh>(var->init->at, var->index, var->getMangledNameHash());
                     } else {
@@ -3054,12 +3054,10 @@ namespace das
                     fn.aotFunction = fcb->aotFunction;
                 } else {
                     if ( logIt ) logs << "NOT FOUND " << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << "\n";
-                    if ( policies.fail_on_no_aot ) {
-                        TextWriter tp;
-                        tp << "semantic hash is " << HEX << semHash << DEC << "\n";
-                        printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
-                        linkError(string(fn.mangledName), tp.str() );
-                    }
+                    TextWriter tp;
+                    tp << "semantic hash is " << HEX << semHash << DEC << "\n";
+                    printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
+                    linkError(string(fn.mangledName), tp.str() );
                 }
             }
         }

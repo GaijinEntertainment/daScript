@@ -325,8 +325,8 @@ namespace das {
             program->isCompiling = false;
             return program;
         } else {
-            if ( policies.cross_context || program->options.getBoolOption("cross_context",false) ) {
-                program->thisModule->isCorssContext = true;
+            if ( policies.solid_context || program->options.getBoolOption("solid_context",false) ) {
+                program->thisModule->isSolidContext = true;
             }
             restartInfer: program->inferTypes(logs, libGroup);
             if ( !program->failed() ) {

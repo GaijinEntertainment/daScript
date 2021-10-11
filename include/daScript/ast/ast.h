@@ -946,7 +946,7 @@ namespace das
                 bool    promoted : 1;
                 bool    isPublic : 1;
                 bool    isModule : 1;
-                bool    isCorssContext : 1;
+                bool    isSolidContext : 1;
             };
             uint32_t        moduleFlags = 0;
         };
@@ -1087,7 +1087,8 @@ namespace das
         bool        multiple_contexts = false;          // code supports context safety
         uint32_t    heap_size_hint = 65536;
         uint32_t    string_heap_size_hint = 65536;
-        bool        cross_context = false;              // all access to varable and function lookup to be context-independent (via MNH)
+        bool        solid_context = false;              // all access to varable and function lookup to be context-dependent (via index)
+                                                        // this is slightly faster, but prohibits AOT or patches
     // rtti
         bool rtti = false;                              // create extended RTTI
     // language

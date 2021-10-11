@@ -2311,7 +2311,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             DAS_ASSERTF(subexpr.valueU<uint32_t(context.totalFunctions),
                 "Function address index is out of range. "
-                "Is this a multi-context scenario and options cross_context is missing?");
+                "Is this a multi-context scenario and options solid_context is set?");
             SimFunction * fun = context.functions + subexpr.valueU;
             return cast<SimFunction *>::from(fun);
         }

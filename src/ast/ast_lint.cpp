@@ -460,7 +460,7 @@ namespace das {
         "heap_size_hint",               Type::tInt,
         "string_heap_size_hint",        Type::tInt,
         "gc",                           Type::tBool,
-        "cross_context",                Type::tBool,
+        "solid_context",                Type::tBool,    // we will not have AOT or patches
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,
