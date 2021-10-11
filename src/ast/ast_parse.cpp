@@ -287,6 +287,7 @@ namespace das {
         program->promoteToBuiltin = false;
         program->isCompiling = true;
         program->isDependency = isDep;
+        program->needMacroModule = false;
         g_Program->policies = policies;
         g_Access = access;
         g_ReaderMacro = nullptr;
