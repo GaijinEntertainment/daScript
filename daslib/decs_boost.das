@@ -34,6 +34,7 @@ variant ItCheck
     yes : string
     no  : bool
 
+[macro_function]
 def private decs_prefix ( arg:AnnotationArgumentList )
     var p = find_arg ( "prefix", arg)
     if p is tString
@@ -43,6 +44,7 @@ def private decs_prefix ( arg:AnnotationArgumentList )
     else
         return [[ItCheck no=true]]
 
+[macro_function]
 def private is_decs_template ( v:VariablePtr )
     if v._type.baseType != Type tStructure
         return [[ItCheck no=true]]
@@ -54,6 +56,7 @@ def private is_decs_template ( v:VariablePtr )
                 return p is yes ? p : [[ItCheck yes="{v._type.structType.name}_"]]
     return p
 
+[macro_function]
 def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart_ptr<ExprFor>; a; prefix:string; const_parent : bool = false )
     let qli = length(qloop.iterators)
     qloop.iterators |> resize( qli + 1 )
@@ -90,7 +93,7 @@ def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart
     return true
 
 [call_macro(name="query")]
-class ApplyMacro : AstCallMacro
+class DecsQueryMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if length(expr.arguments)!=1 || !(expr.arguments[0] is ExprMakeBlock)
             macro_error(prog,expr.at,"expecting query($(block_with_arguments))")
@@ -170,3 +173,43 @@ class ApplyMacro : AstCallMacro
         var qres <- move_unquote_block(qblock)
         (qres as ExprBlock).blockFlags ^= ExprBlockFlags isClosure
         return <- qres
+
+[function_macro(name="decs")]
+class DecsEcsMacro : AstFunctionAnnotation
+    def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        let argPass = find_arg("stage", args)
+        if !(argPass is tString)
+            errors := "need to specify stage"
+            return false
+        let passName = argPass as tString
+        let passFuncName = "decs`pass`{passName}"
+        var blk <- setup_call_list(passFuncName, func.at)
+        if length(blk.list)==0
+            var reg <- setup_call_list("register`decs`passes", func.at, true)
+            var regc <- new [[ExprCall() at=func.at, name:="decs::register_decs_stage_call"]]
+            regc.arguments |> emplace_new <| new [[ExprConstString() at=func.at, value:=passName]]
+            regc.arguments |> emplace_new <| new [[ExprAddr() at=func.at, target:=passFuncName]]
+            reg.list |> emplace(regc)
+        blk.list |> emplace_new <| new [[ExprCall() at=func.at, name:="_::{func.name}"]]
+        var fblk <- new [[ExprBlock() at=func.body.at]]                 // new function block
+        var cqq <- make_call(func.body.at,"query")
+        var cquery = cqq as ExprCallMacro
+        var qblk <- new [[ExprBlock() at=func.body.at]]                 // inside the query block
+        qblk.blockFlags |= ExprBlockFlags isClosure
+        qblk.returnType <- new [[TypeDecl() baseType=Type tVoid, at=func.body.at]]
+        var fnbody = func.body as ExprBlock
+        for el in fnbody.list                                           // list goes to inside query
+            qblk.list |> emplace_new <| clone_expression(el)
+        for ef in fnbody.finalList                                      // finally goes to new finally
+            fblk.finalList |> emplace_new <| clone_expression(ef)
+        for arg in func.arguments                                       // add function arguments to query arguments
+            qblk.arguments |> emplace_new <| new [[Variable() at=arg.at,
+                name := arg.name,
+                _type <- clone_type(arg._type),
+                init <- clone_expression(arg.init)
+            ]]
+        func.arguments |> clear
+        cquery.arguments |> emplace_new <| new [[ExprMakeBlock() _block <- qblk, at=func.body.at]]
+        fblk.list |> emplace(cqq)
+        func.body := fblk
+        return true

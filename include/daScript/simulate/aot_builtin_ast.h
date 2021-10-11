@@ -477,11 +477,11 @@ namespace das {
     void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr & _newM, Context * context );
     void addFunctionFunctionAnnotation(smart_ptr_raw<Function> func, FunctionAnnotationPtr & ann, Context* context);
     void addAndApplyFunctionAnnotation ( smart_ptr_raw<Function> func, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context );
-    __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value->clone(); }
-    __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value->clone(); }
+    __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value ?value->clone() : nullptr; }
+    __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value ? value->clone() : nullptr; }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }
-    __forceinline StructurePtr clone_structure ( const Structure * value ) { return value->clone(); }
-    __forceinline VariablePtr clone_variable ( VariablePtr value ) { return value->clone(); }
+    __forceinline StructurePtr clone_structure ( const Structure * value ) { return value ? value->clone() : nullptr; }
+    __forceinline VariablePtr clone_variable ( VariablePtr value ) { return value ? value->clone() : nullptr; }
     void forceAtRaw ( const smart_ptr_raw<Expression> & expr, const LineInfo & at );
     void getAstContext ( smart_ptr_raw<Program> prog, smart_ptr_raw<Expression> expr, const TBlock<void,bool,AstContext> & block, Context * context, LineInfoArg * at );
     char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context );

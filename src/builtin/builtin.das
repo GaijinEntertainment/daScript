@@ -180,12 +180,12 @@ def clone(var a:array<auto(TT)>;b:array<TT>#)
     for aV,bV in a,b
         aV := bV
 
-def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>)
+def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT> implicit)
     clear(a)
     for k,v in keys(b),values(b)
         a[k] := v
 
-def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>#)
+def clone(var a:table<string;auto(VT)>;b:table<string;VT> implicit)
     clear(a)
     for k,v in keys(b),values(b)
         let kk := k

@@ -8,7 +8,28 @@ require daslib/decs_boost
 require daslib/apply
 require daslib/static_let
 
-require rtti
+[decs(stage="update")]
+def update_particle ( var pos:float3&; vel:float3 )
+    pos += vel
+
+[decs(stage="update")]
+def make_visible ( var col:float4& )
+    col.w = 1.
+
+[decs(stage="check")]
+def check_visible ( col:float4 )
+    assert(col.w==1.)
+
+def test_decs_macro
+    restart()
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp |> set ( "pos", float3(i))
+            cmp |> set ( "vel", float3(.1,.2,.3))
+            cmp |> set ( "col", float4(0.))
+    decs_stage("update")
+    decs_stage("check")
+    debug_dump()
 
 [export]
 def main
@@ -18,6 +39,7 @@ def main
     test_query()
     test_query_macro()
     test_strings()
+    test_decs_macro()
 
 def test_strings
     print("\n\nTEST STRINGS\n")
@@ -246,21 +268,3 @@ def test_create_delete
 
 options debugger
 require daslib/debug
-
-/*
-class private DecsAgent: DapiDebugAgent
-    def DecsAgent
-        pass
-
-def private desc_start
-    install_new_debug_agent(new DecsAgent(), "decs")
-    print("installing {this_context().name} {this_context()}\n")
-
-[init]
-def private decs_init
-    if !is_in_debug_agent_creation()
-        this_context().name := "main"
-        if !has_debug_agent_context("decs")
-            print("forking in {this_context().name} {this_context()}\n")
-            fork_debug_agent_context(@@desc_start)
-*/
