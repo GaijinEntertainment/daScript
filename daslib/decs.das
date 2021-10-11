@@ -15,13 +15,19 @@ require daslib/functional
 
 typedef ComponentHash = uint
 
+struct CTypeInfo
+    basicType : Type
+    mangledName : string
+    hash : uint
+    size : uint
+
 struct public Component
     name : string
     hash : ComponentHash
     stride : int
     data : array<uint8>
     [[do_not_delete]] text : array<string>
-    [[do_not_delete]] info : TypeInfo const?
+    info : CTypeInfo
 
 struct public EntityId
     id : uint
@@ -35,7 +41,7 @@ struct public Archetype
 
 struct public ComponentValue
     name : string
-    [[do_not_delete]] info : TypeInfo const?
+    info : CTypeInfo
     data : float4[4]
 
 typedef DeferEval = lambda<(var act:DeferAction):void>
@@ -57,7 +63,7 @@ struct public DecsState
     allArchetypes : array<Archetype>
     entityFreeList : array<EntityId>
     entityLookup : array<tuple<generation:int;archetype:ComponentHash;index:int>>
-    componentTypeCheck : table<string; TypeInfo const?>
+    componentTypeCheck : table<string; CTypeInfo>
     ecsQueries : array<EcsRequest>
     queryLookup : table<uint; int>
 
@@ -120,7 +126,7 @@ def public debug_dump
             print("\tentity[{index}]\n")
             for c in arch.components
                 unsafe
-                    print("\t\t{c.name} : {describe(c.info)} = {sprint_data(addr(c.data[index*c.stride]),c.info,print_flags humanReadable)}\n")
+                    print("\t\t{c.name} : {c.info}\n")
     for erq in decsState.ecsQueries
         print("query {erq.hash}\n")
         print("\treq = {erq.req}\n\treqn = {erq.reqn}\n\tarchetypes = {erq.archetypes}\n")
@@ -139,9 +145,9 @@ def private create_archetype ( var arch:Archetype; cmp:ComponentMap; idx:int )
     arch.eidIndex = -1
     for kv,kvi in cmp,range(INT_MAX)
         var ct & = decsState.componentTypeCheck[kv.name]
-        if ct != null
-            if kv.info.hash != (*ct).hash
-                panic("component {kv.name} type mismatch {describe(ct)} vs {describe(kv.info)}")
+        if ct.hash != 0u
+            if kv.info.hash != ct.hash
+                panic("component {kv.name} type mismatch {ct} vs {kv.info}")
         else
             ct = kv.info
         let chash = hash(kv.name)
@@ -378,14 +384,15 @@ def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
         unsafe
             let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
             if cmp[idx].info.hash != cvinfo.hash
-                panic("get component {name} type mismatch, expecting {describe(cmp[idx].info)} vs {describe(cvinfo)}")
+                panic("get component {name} type mismatch, expecting {cmp[idx].info} vs {describe(cvinfo)}")
             memcpy ( addr(value), addr(cmp[idx].data), typeinfo(sizeof type<TT const-&>))
     return value
 
 def private make_component ( name:string; value:auto(TT) )
     var cv = [[ComponentValue name=name]]
     unsafe
-        cv.info = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
+        var tinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
+        cv.info = [[CTypeInfo basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo), hash=tinfo.hash, size=tinfo.size]]
         memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
     return cv
 
@@ -396,7 +403,7 @@ def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         if cmp[idx].info.hash != cv.info.hash
-            panic("set component {name} type mismatch, expecting {describe(cmp[idx].info)} vs {describe(cv.info)}")
+            panic("set component {name} type mismatch, expecting {cmp[idx].info} vs {cv.info}")
         cmp[idx] = cv           // overwrite
     else
         cmp |> push(cv, idx)    // insert new one

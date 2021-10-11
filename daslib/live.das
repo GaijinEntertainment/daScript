@@ -2,9 +2,13 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options indenting = 4
 
+options multiple_contexts
+
 module live shared public
 
 require daslib/rtti
+require daslib/decs
+require daslib/static_let
 require debugapi
 require fio
 
@@ -26,6 +30,7 @@ def public go_main
         appPtr <- ctx
 
 def public go_live ( appf, appd : string )
+    this_context().name := "Live context"
     appFile = appf
     appDir = appd
     recompile()
@@ -99,15 +104,28 @@ def public watch_files
                 appTime[fname] = st.mtime
     return any
 
-def private set_new_context ( var ptr : smart_ptr<Context> )
+def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = false )
     invoke_live("shutdown")
+    if appPtr != null
+        unsafe
+            var pvar = get_context_global_variable(appPtr, "decsState")
+            if pvar != null
+                decsState := *(reinterpret<DecsState ?> pvar)
+
     appPtr := ptr
     delete liveFunctionLookup
     if appPtr != null
         appPtr.alwaysStackWalkOnException = true
-    invoke_live("initialize")
+    unsafe
+        var pvar = get_context_global_variable(appPtr, "decsState")
+        if pvar != null
+            var css <- @ <| [[&decsState]] ( state : DecsState? )
+                decsState := *state
+            invoke_in_context(appPtr, css, addr(decsState))
+            delete css
+    invoke_live("initialize", full_restart)
 
-def public recompile
+def public recompile(full_restart:bool=false)
     var access := make_file_access("")
     using <| $(var mg:ModuleGroup#)
         using <| $(var cop:CodeOfPolicies#)
@@ -116,7 +134,7 @@ def public recompile
                     simulate(program) <| $ ( sok; context; serrors )
                         if sok
                             // TODO: beep print("reloaded...\n")
-                            set_new_context(context)
+                            set_new_context(context,full_restart)
                         else
                             print("{appFile} failed to simulate:\n{issues}\n")
                             appPtr := null
@@ -126,6 +144,10 @@ def public recompile
 
 def public live_keypressed ( keycode, scancode, action, mods : int )
     invoke_live("keypressed", keycode, scancode, action, mods )
+    // ctrl-r
+    // 82 19 1 2
+    if scancode==19 && action==1 && mods==2
+        recompile(true)
 
 def public live_charpressed ( charcode : uint )
     invoke_live("charpressed", charcode )
@@ -141,3 +163,11 @@ def public live_mousebutton ( button, action, mods : int )
 
 def public live_mousescroll ( x, y : double )
     invoke_live("mousescroll", x, y )
+
+def public live_update ( appTime : double )
+    static_let <|
+        var t = -1.0lf
+    if t == -1.0lf
+        t = appTime
+    let dt = float(appTime - t)
+    invoke_live("update", dt)
