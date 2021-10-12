@@ -15,13 +15,11 @@ static GetCloneContextFunc specificGetCloneContext = nullptr;
 
 namespace das {
 
-#if !DAS_NO_FILEIO
     void set_project_specific_fs_callbacks(GetFileAccessFunc getFileAccess) {
         DAS_ASSERT(getFileAccess);
         DAS_ASSERT(specificGetFileAccess == nullptr);
         specificGetFileAccess = getFileAccess;
     }
-#endif
 
     void set_project_specific_ctx_callbacks(GetNewContextFunc getNewContext, GetCloneContextFunc getCloneContext) {
         DAS_ASSERT(getContext);
@@ -35,17 +33,25 @@ namespace das {
 
 } // namespace das
 
-#if !DAS_NO_FILEIO
 smart_ptr<das::FileAccess> get_file_access( char * pak ) {
     if (specificGetFileAccess)
         return specificGetFileAccess(pak);
+#if !DAS_NO_FILEIO
     if ( pak ) {
         return make_smart<FsFileAccess>(pak, make_smart<FsFileAccess>());
     } else {
         return make_smart<FsFileAccess>();
     }
-}
+#else
+    DAS_FATAL_LOG(
+        "daScript is configured with DAS_NO_FILEIO. However file access is not specified."
+        "set_project_specific_fs_callbacks or link-time dependency in project_specific_file_info.cpp "
+        "needs to be speicied."
+    )
+    DAS_FATAL_ERROR;
+    return nullptr;
 #endif
+}
 
 Context * get_context( int stackSize = 0 ) {
     if (specificGetNewContext)

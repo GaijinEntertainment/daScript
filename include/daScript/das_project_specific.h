@@ -3,10 +3,8 @@
 #include "daScript/simulate/fs_file_info.h"
 
 namespace das {
-#if !DAS_NO_FILEIO
     typedef smart_ptr<FileAccess> (* GetFileAccessFunc)(char * pak);
     void set_project_specific_fs_callbacks(GetFileAccessFunc getFileAccess);
-#endif
 
     class Context;
 
