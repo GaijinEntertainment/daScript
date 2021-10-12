@@ -249,7 +249,7 @@ def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype)
         if arch.size > 0
             invoke ( blk, arch )
 
-def public for_eid_archetype ( eid:EntityId; hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype;index:int):void> )
+def public for_eid_archetype ( eid:EntityId implicit; hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype;index:int):void> )
     var lookup & = decsState.entityLookup[eid.id]
     if lookup.generation != eid.generation
         return false
@@ -269,7 +269,7 @@ def public for_eid_archetype ( eid:EntityId; hash:ComponentHash; var erq : funct
         return true
     else
         panic("archetype not found")
-    return true
+        return false
 
 def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype):void> )
     var qi = -1
