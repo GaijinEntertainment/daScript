@@ -22,9 +22,9 @@ namespace das {
     }
 
     void set_project_specific_ctx_callbacks(GetNewContextFunc getNewContext, GetCloneContextFunc getCloneContext) {
-        DAS_ASSERT(getContext);
+        DAS_ASSERT(getNewContext);
         DAS_ASSERT(getCloneContext);
-        DAS_ASSERT(specificGetContext == nullptr);
+        DAS_ASSERT(specificGetNewContext == nullptr);
         DAS_ASSERT(specificGetCloneContext == nullptr);
 
         specificGetNewContext = getNewContext;
