@@ -56,7 +56,7 @@ struct public EcsRequest
     hash : ComponentHash
     req : array<string>
     reqn : array<string>
-    archetypes : array<int>
+    archetypes : array<int>     // sorted
 
 struct public DecsState
     archetypeLookup : table<ComponentHash; int>
@@ -248,6 +248,28 @@ def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype)
         var arch & = decsState.allArchetypes[aidx]
         if arch.size > 0
             invoke ( blk, arch )
+
+def public for_eid_archetype ( eid:EntityId; hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype;index:int):void> )
+    var lookup & = decsState.entityLookup[eid.id]
+    if lookup.generation != eid.generation
+        return false
+    var qi = -1
+    decsState.queryLookup |> find_if_exists(hash) <| $ ( ql )
+        qi = *ql - 1
+    if qi == -1
+        qi = lookup_request(invoke(erq))
+    var req & = decsState.ecsQueries[qi]
+    let aidx = decsState.archetypeLookup[lookup.archetype]
+    if aidx == 0
+        panic("archetype not found")
+    if binary_search(req.archetypes,aidx-1)
+        var arch & = decsState.allArchetypes[aidx-1]
+        assert(arch.size > 0)
+        invoke(blk, arch, lookup.index)
+        return true
+    else
+        panic("archetype not found")
+    return true
 
 def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype):void> )
     var qi = -1

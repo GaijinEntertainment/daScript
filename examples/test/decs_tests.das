@@ -8,6 +8,41 @@ require daslib/decs_boost
 require daslib/apply
 require daslib/static_let
 
+
+def test_query_1
+    print("\n\nTEST QUERY ONE MACRO\n")
+    restart()
+    static_let <|
+        var kaboom : EntityId
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp |> set ( "eid", eid )
+            cmp |> set ( "pos", float3(i))
+            cmp |> set ( "vel", float3(.1,.2,.3))
+            if i==1
+                kaboom = eid
+    commit()
+    debug_dump()
+    query_one(kaboom) <| $ ( var pos:float3&; vel:float3; col:uint=13u )
+        pos += vel
+        assert(col==13u)
+        print("index = {entity_index}\n")
+    commit()
+    query() <| $ ( eid:EntityId; pos, vel : float3 )
+        print("[{eid}] pos={pos} vel={vel}\n")
+    debug_dump()
+
+[export]
+def main
+    test_query_1()
+    test_create_delete()
+    test_update()
+    test_type_mismatch()
+    test_query()
+    test_query_macro()
+    test_strings()
+    test_decs_macro()
+
 [decs(stage="update")]
 def update_particle ( var pos:float3&; vel:float3 )
     pos += vel
@@ -31,15 +66,6 @@ def test_decs_macro
     decs_stage("check")
     debug_dump()
 
-[export]
-def main
-    test_create_delete()
-    test_update()
-    test_type_mismatch()
-    test_query()
-    test_query_macro()
-    test_strings()
-    test_decs_macro()
 
 def test_strings
     print("\n\nTEST STRINGS\n")
@@ -268,3 +294,4 @@ def test_create_delete
 
 options debugger
 require daslib/debug
+
