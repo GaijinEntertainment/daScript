@@ -49,8 +49,7 @@ namespace das {
     }
 
     inline float3 float3x3_mul_vec3(const float3x3 &a, float3 b) {
-        mat33f va;
-        memcpy(&va,&a,sizeof(float3x3));
+        mat33f va;  va.col0 = a.m[0]; va.col1 = a.m[1]; va.col2 = a.m[2];
         return v_mat33_mul_vec3(va, b);
     }
 

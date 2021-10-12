@@ -512,11 +512,12 @@ namespace das {
     }
 
     float3x3 float3x3_mul(const float3x3 &a, const float3x3 &b) {
-        mat33f va,vb,res;
-        memcpy(&va,&a,sizeof(float3x3));
-        memcpy(&vb,&b,sizeof(float3x3));
-        v_mat33_mul(res,va,vb);
-        return reinterpret_cast<float3x3&>(res);;
+        float3x3 res;
+        mat33f va;  va.col0 = a.m[0]; va.col1 = a.m[1]; va.col2 = a.m[2];
+        res.m[0] = v_mat33_mul_vec3(va, b.m[0]);
+        res.m[1] = v_mat33_mul_vec3(va, b.m[1]);
+        res.m[2] = v_mat33_mul_vec3(va, b.m[2]);
+        return res;
     }
 
     float4x4 float4x4_transpose ( const float4x4 & src ) {
@@ -543,10 +544,11 @@ namespace das {
     }
 
     float3x3 float3x3_inverse( const float3x3 & src) {
-        mat33f mat, invMat;
+        mat33f mat, invMat; mat.col0 = src.m[0]; mat.col1 = src.m[1]; mat.col2 = src.m[2];
         memcpy(&mat, &src, sizeof(float3x3));
         v_mat33_inverse(invMat, mat);
-        return reinterpret_cast<float3x3&>(invMat);;
+        float3x3 res; res.m[0] = invMat.col0; res.m[1] = invMat.col1; res.m[2] = invMat.col2;
+        return res;
     }
 
     float4x4 float4x4_orthonormal_inverse( const float4x4 & src) {

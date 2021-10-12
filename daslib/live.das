@@ -166,8 +166,7 @@ def public live_mousescroll ( x, y : double )
 
 def public live_update ( appTime : double )
     static_let <|
-        var t = -1.0lf
-    if t == -1.0lf
-        t = appTime
+        var t = 0.0lf
     let dt = float(appTime - t)
+    t = appTime
     invoke_live("update", dt)

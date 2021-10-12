@@ -77,7 +77,7 @@ def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart
                 macro_error(prog,qloop.at,"argument {a.name} has default value, it can't be & or var")
                 return false
             getter = "get_default_ro"
-        elif a._type.isRef
+        elif a._type.isRef && !a._type.isRefType
             if a._type.flags.constant
                 macro_error(prog,qloop.at,"argument {a.name} is both & and constant")
                 return false
@@ -192,11 +192,11 @@ class DecsEcsMacro : AstFunctionAnnotation
             reg.list |> emplace(regc)
         blk.list |> emplace_new <| new [[ExprCall() at=func.at, name:="_::{func.name}"]]
         var fblk <- new [[ExprBlock() at=func.body.at]]                 // new function block
-        var cqq <- make_call(func.body.at,"query")
+        var cqq <- make_call(func.at,"query")
         var cquery = cqq as ExprCallMacro
         var qblk <- new [[ExprBlock() at=func.body.at]]                 // inside the query block
         qblk.blockFlags |= ExprBlockFlags isClosure
-        qblk.returnType <- new [[TypeDecl() baseType=Type tVoid, at=func.body.at]]
+        qblk.returnType <- new [[TypeDecl() baseType=Type tVoid, at=func.at]]
         var fnbody = func.body as ExprBlock
         for el in fnbody.list                                           // list goes to inside query
             qblk.list |> emplace_new <| clone_expression(el)
@@ -209,7 +209,7 @@ class DecsEcsMacro : AstFunctionAnnotation
                 init <- clone_expression(arg.init)
             ]]
         func.arguments |> clear
-        cquery.arguments |> emplace_new <| new [[ExprMakeBlock() _block <- qblk, at=func.body.at]]
+        cquery.arguments |> emplace_new <| new [[ExprMakeBlock() _block <- qblk, at=func.at]]
         fblk.list |> emplace(cqq)
         func.body := fblk
         return true

@@ -356,7 +356,7 @@ def private delete_entity_imm ( eid:EntityId )
         decsState.entityFreeList |> push(eid)
         arch |> remove_entity(di)
 
-def public update_entity ( entityid:EntityId; var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+def public update_entity ( entityid:EntityId implicit; var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var deval <- @ <| [[<-blk]] ( var act:DeferAction )
         update_entity_imm(act.eid,blk)
     deferActions |> emplace([[DeferAction action<-deval, eid=entityid]])
@@ -368,7 +368,7 @@ def public create_entity ( var blk : lambda<(eid:EntityId; var cmp:ComponentMap)
     deferActions |> emplace([[DeferAction action<-deval, eid=eid]])
     return eid
 
-def public delete_entity ( entityid:EntityId )
+def public delete_entity ( entityid:EntityId implicit )
     var deval <- @ <| ( var act:DeferAction )
         delete_entity_imm(act.eid)
     deferActions |> emplace([[DeferAction action<-deval, eid=entityid]])
