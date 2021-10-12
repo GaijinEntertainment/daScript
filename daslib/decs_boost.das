@@ -120,6 +120,9 @@ class DecsQueryMacro : AstCallMacro
         if length(expr.arguments)!=1 || !(expr.arguments[0] is ExprMakeBlock)
             macro_error(prog,expr.at,"expecting query($(block_with_arguments))")
             return [[ExpressionPtr]]
+        if expr.arguments[0]._type.isAutoOrAlias
+            macro_error(prog,expr.at,"argument types are not fully inferred")
+            return [[ExpressionPtr]]
         let mblk = expr.arguments[0] as ExprMakeBlock
         let qblk = mblk._block as ExprBlock
         if length(qblk.arguments)==0
@@ -135,6 +138,7 @@ class DecsQueryMacro : AstCallMacro
         var qblock <- quote() <|
             for_each_archetype (tag_req, tag_erq) <| $ ( tag_arch )
                 tag_loop
+        qblock |> force_at(expr.at)
         // @@ => [[EcsQuery ...]]
         var erq_blk <- new [[ExprBlock() at=expr.at,
             returnType <- new [[TypeDecl() at=expr.at, baseType=Type autoinfer]],
@@ -170,14 +174,16 @@ class DecsQueryMacro : AstCallMacro
         apply_template(qloop) <| $ ( rules )
             for kb in kaboom
                 rules |> kaboomVarField(kb._0,kb._1)
-        apply_template(expr.at, qblock) <| $ ( rules )
+        apply_template(qblock) <| $ ( rules )
             rules |> replaceVariable("tag_erq") <| erq_fun
             rules |> replaceBlockArgument("tag_arch") <| arch_name
             rules |> replaceVariable("tag_req") <| new [[ExprConstUInt() at=expr.at, value=req.hash]]
             rules |> replaceVariable("tag_loop") <| qloop
         var qres <- move_unquote_block(qblock)
-        (qres as ExprBlock).blockFlags ^= ExprBlockFlags isClosure
-        return <- qres
+        assert(length(qres.list)==1 && length(qres.finalList)==0)
+        var rqres <- qres.list[0]
+        qres := null
+        return <- rqres
 
 [macro_function]
 def private append_index_lookup ( prog:ProgramPtr; arch_name:string; var qblock:smart_ptr<ExprBlock>; a; prefix:string; const_parent : bool = false )
@@ -229,6 +235,9 @@ class DecsQueryOneMacro : AstCallMacro
         if length(expr.arguments)!=2 || !(expr.arguments[1] is ExprMakeBlock)
             macro_error(prog,expr.at,"expecting query_one(eid,$(block_with_arguments))")
             return [[ExpressionPtr]]
+        if expr.arguments[0]._type.isAutoOrAlias || expr.arguments[1]._type.isAutoOrAlias
+            macro_error(prog,expr.at,"argument types are not fully inferred")
+            return [[ExpressionPtr]]
         let mblk = expr.arguments[1] as ExprMakeBlock
         let qblk = mblk._block as ExprBlock
         if length(qblk.arguments)==0
@@ -244,6 +253,7 @@ class DecsQueryOneMacro : AstCallMacro
         var qblock <- quote() <|
             for_eid_archetype (tag_eid, tag_req, tag_erq) <| $ ( tag_arch, entity_index )
                 tag_loop
+        qblock |> force_at(expr.at)
         // @@ => [[EcsQuery ...]]
         var erq_blk <- new [[ExprBlock() at=expr.at,
             returnType <- new [[TypeDecl() at=expr.at, baseType=Type autoinfer]],
@@ -278,15 +288,17 @@ class DecsQueryOneMacro : AstCallMacro
         apply_template(qlbody) <| $ ( rules )
             for kb in kaboom
                 rules |> kaboomVarField(kb._0,kb._1)
-        apply_template(expr.at, qblock) <| $ ( rules )
+        apply_template(qblock) <| $ ( rules )
             rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
             rules |> replaceVariable("tag_erq") <| erq_fun
             rules |> replaceBlockArgument("tag_arch") <| arch_name
             rules |> replaceVariable("tag_req") <| new [[ExprConstUInt() at=expr.at, value=req.hash]]
             rules |> replaceVariable("tag_loop") <| qlbody
         var qres <- move_unquote_block(qblock)
-        (qres as ExprBlock).blockFlags ^= ExprBlockFlags isClosure
-        return <- qres
+        assert(length(qres.list)==1 && length(qres.finalList)==0)
+        var rqres <- qres.list[0]
+        qres := null
+        return <- rqres
 
 [function_macro(name="decs")]
 class DecsEcsMacro : AstFunctionAnnotation
