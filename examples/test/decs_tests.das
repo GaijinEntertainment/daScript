@@ -115,7 +115,7 @@ def test_query_macro
     assert(count_ff==3)
     debug_dump()
     var count_nc = 0
-    query <| $ [decs_require_not(col)] ( var pos:float3& )
+    query <| $ [REQUIRE_NOT(col)] ( var pos:float3& )
         pos = float3(13)
         count_nc ++
     assert(count_nc==3)

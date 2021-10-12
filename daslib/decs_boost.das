@@ -21,10 +21,10 @@ to:
             tag
 */
 
-[block_macro(name="decs_require")]
+[block_macro(name="REQUIRE")]
 class DecsReq : AstFunctionAnnotation {}
 
-[block_macro(name="decs_require_not")]
+[block_macro(name="REQUIRE_NOT")]
 class DecsReqN : AstFunctionAnnotation {}
 
 [structure_macro(name="decs_template")]
@@ -69,8 +69,8 @@ def build_req_from_args ( qblk:ExprBlock? )
             else
                 req.req |> push(string(a.name))
     for aa in qblk.annotations
-        let isreq = eq(aa.annotation.name,"decs_require")
-        let isreqn = eq(aa.annotation.name,"decs_require_not")
+        let isreq = eq(aa.annotation.name,"REQUIRE")
+        let isreqn = eq(aa.annotation.name,"REQUIRE_NOT")
         if isreq || isreqn
             for ab in aa.arguments
                 if ab.basicType==Type tBool && ab.bValue
@@ -113,7 +113,7 @@ def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a;
         return false
     var cget <- new [[ExprCall() name:=getter, at=a.at]]
     cget.arguments |> emplace_new <| new [[ExprVar() at=a.at, name:=arch_name]]
-    cget.arguments |> emplace_new <| new [[ExprConstString() at=a.at, value:=a.name]]
+    cget.arguments |> emplace_new <| new [[ExprConstString() at=a.at, value:="{prefix}{a.name}"]]
     if getter=="get_default_ro"
         cget.arguments |> emplace_new <| clone_expression(a.init)
     else
@@ -136,7 +136,7 @@ def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlo
     else
         var cget <- new [[ExprCall() name:=getter, at=a.at]]
         cget.arguments |> emplace_new <| new [[ExprVar() at=a.at, name:=arch_name]]
-        cget.arguments |> emplace_new <| new [[ExprConstString() at=a.at, value:=a.name]]
+        cget.arguments |> emplace_new <| new [[ExprConstString() at=a.at, value:="{prefix}{a.name}"]]
         cget.arguments |> emplace_new <| new [[ExprTypeDecl() at=a.at, typeexpr<-ftype]]
         iget <- new [[ExprAt() at=a.at,
                 subexpr <- cget,
