@@ -28,7 +28,39 @@ class DecsReq : AstFunctionAnnotation {}
 class DecsReqN : AstFunctionAnnotation {}
 
 [structure_macro(name="decs_template")]
-class DecsTemplate : AstStructureAnnotation {}
+class DecsTemplate : AstStructureAnnotation
+    def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        let ppref = decs_prefix(args)
+        let prefix = (ppref is yes) ? (ppref as yes) : "{st.name}_"
+        var fn <- new [[Function() at=st.at, atDecl=st.at, name:="apply_decs_template"]]
+        fn.flags |= FunctionFlags generated
+        fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=st.at]]
+        fn.arguments |> emplace_new <| new [[Variable() at=st.at,
+            name := "cmp",
+            _type <- clone_type() <| typeinfo(ast_typedecl type<ComponentMap>)
+        ]]
+        fn.arguments |> emplace_new <| new [[Variable() at=st.at,
+            name := "src",
+            _type <- new [[TypeDecl() at=st.at,
+                baseType=Type tStructure,
+                structType = get_ptr(st)
+            ]]
+        ]]
+        var blk <- new [[ExprBlock() at=st.at]]
+        for fld in st.fields
+            var cset <- new [[ExprCall() at=fld.at, name:="decs::set"]]
+            cset.arguments |> emplace_new <| new [[ExprVar() at=fld.at, name:="cmp"]]
+            cset.arguments |> emplace_new <| new [[ExprConstString() at=fld.at, value:="{prefix}{fld.name}"]]
+            cset.arguments |> emplace_new <| new [[ExprField() at=fld.at,
+                    value <- new [[ExprVar() at=fld.at, name:="src"]],
+                    name := fld.name
+                ]]
+            blk.list |> emplace(cset)
+
+        fn.body <- blk
+        if !(compiling_module() |> add_function(fn))
+            panic("failed to setup macro, can't add function {fn.name}")
+        return true
 
 variant ItCheck
     yes : string
@@ -284,6 +316,29 @@ class DecsEcsMacro : AstFunctionAnnotation
         var qblk <- new [[ExprBlock() at=func.body.at]]                 // inside the query block
         qblk.blockFlags |= ExprBlockFlags isClosure
         qblk.returnType <- new [[TypeDecl() baseType=Type tVoid, at=func.at]]
+        var req, nreq : array<string>
+        for arg in args
+            if arg.basicType==Type tString
+                if eq(arg.name,"REQUIRE")
+                    req |> push("{arg.sValue}")
+                if eq(arg.name,"REQUIRE_NOT")
+                    nreq |> push("{arg.sValue}")
+        if !req |> empty
+            var decl <- new [[AnnotationDeclaration() ]]
+            var ann = find_annotation("decs_boost", "REQUIRE")
+            unsafe
+                decl.annotation := reinterpret<smart_ptr<Annotation>> ann
+            for rq in req
+                decl.arguments |> add_annotation_argument(rq, true)
+            qblk.annotations |> emplace(decl)
+        if !nreq |> empty
+            var decl <- new [[AnnotationDeclaration() ]]
+            var ann = find_annotation("decs_boost", "REQUIRE_NOT")
+            unsafe
+                decl.annotation := reinterpret<smart_ptr<Annotation>> ann
+            for rq in nreq
+                decl.arguments |> add_annotation_argument(rq, true)
+            qblk.annotations |> emplace(decl)
         var fnbody = func.body as ExprBlock
         for el in fnbody.list                                           // list goes to inside query
             qblk.list |> emplace_new <| clone_expression(el)

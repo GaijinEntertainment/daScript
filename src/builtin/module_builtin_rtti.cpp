@@ -1224,7 +1224,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(thisContext), SimNode_ExtFuncCallRef>(*this, lib,  "this_context",
                 SideEffects::accessExternal, "thisContext")->arg("context");
             // extras
-            registerVectorFunctions<AnnotationList>::init(this,lib,false,false);
+            registerVectorFunctions<AnnotationList>::init(this,lib,false,true);
             registerVectorFunctions<AnnotationArgumentList>::init(this,lib,false,false);
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
