@@ -32,21 +32,30 @@ class DecsTemplate : AstStructureAnnotation
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         let ppref = decs_prefix(args)
         let prefix = (ppref is yes) ? (ppref as yes) : "{st.name}_"
-        var fn <- new [[Function() at=st.at, atDecl=st.at, name:="apply_decs_template"]]
-        fn.flags |= FunctionFlags generated
-        fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=st.at]]
-        fn.arguments |> emplace_new <| new [[Variable() at=st.at,
+        var fnApply <- new [[Function() at=st.at, atDecl=st.at, name:="apply_decs_template"]]
+        fnApply.flags |= FunctionFlags generated
+        fnApply.result <- new [[TypeDecl() baseType=Type tVoid, at=st.at]]
+        fnApply.arguments |> emplace_new <| new [[Variable() at=st.at,
             name := "cmp",
             _type <- clone_type() <| typeinfo(ast_typedecl type<ComponentMap>)
         ]]
-        fn.arguments |> emplace_new <| new [[Variable() at=st.at,
+        fnApply.arguments |> emplace_new <| new [[Variable() at=st.at,
             name := "src",
             _type <- new [[TypeDecl() at=st.at,
                 baseType=Type tStructure,
                 structType = get_ptr(st)
             ]]
         ]]
-        var blk <- new [[ExprBlock() at=st.at]]
+        var fnErase <- new [[Function() at=st.at, atDecl=st.at, name:="remove_decs_template`{st.name}"]]
+        fnErase.flags |= FunctionFlags generated
+        fnErase.result <- new [[TypeDecl() baseType=Type tVoid, at=st.at]]
+        fnErase.arguments |> emplace_new <| new [[Variable() at=st.at,
+            name := "cmp",
+            _type <- clone_type() <| typeinfo(ast_typedecl type<ComponentMap>)
+        ]]
+
+        var blkApply <- new [[ExprBlock() at=st.at]]
+        var blkErase <- new [[ExprBlock() at=st.at]]
         for fld in st.fields
             var cset <- new [[ExprCall() at=fld.at, name:="decs::set"]]
             cset.arguments |> emplace_new <| new [[ExprVar() at=fld.at, name:="cmp"]]
@@ -55,11 +64,17 @@ class DecsTemplate : AstStructureAnnotation
                     value <- new [[ExprVar() at=fld.at, name:="src"]],
                     name := fld.name
                 ]]
-            blk.list |> emplace(cset)
-
-        fn.body <- blk
-        if !(compiling_module() |> add_function(fn))
-            panic("failed to setup macro, can't add function {fn.name}")
+            blkApply.list |> emplace(cset)
+            var cremove <- new [[ExprCall() at=fld.at, name:="decs::remove"]]
+            cremove.arguments |> emplace_new <| new [[ExprVar() at=fld.at, name:="cmp"]]
+            cremove.arguments |> emplace_new <| new [[ExprConstString() at=fld.at, value:="{prefix}{fld.name}"]]
+            blkErase.list |> emplace(cremove)
+        fnApply.body <- blkApply
+        fnErase.body <- blkErase
+        if !(compiling_module() |> add_function(fnApply))
+            panic("failed to add apply_decs_template, can't add function {fnApply.name}")
+        if !(compiling_module() |> add_function(fnErase))
+            panic("failed to add remove_decs_template, can't add function {fnErase.name}")
         return true
 
 variant ItCheck
