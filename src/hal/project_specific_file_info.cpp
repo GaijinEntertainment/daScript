@@ -6,18 +6,22 @@
 
 using namespace das;
 
+#if !DAS_NO_FILEIO
 static GetFileAccessFunc specificGetFileAccess = nullptr;
+#endif
+
 static GetNewContextFunc specificGetNewContext = nullptr;
 static GetCloneContextFunc specificGetCloneContext = nullptr;
 
 namespace das {
 
+#if !DAS_NO_FILEIO
     void set_project_specific_fs_callbacks(GetFileAccessFunc getFileAccess) {
         DAS_ASSERT(getFileAccess);
         DAS_ASSERT(specificGetFileAccess == nullptr);
         specificGetFileAccess = getFileAccess;
     }
-
+#endif
 
     void set_project_specific_ctx_callbacks(GetNewContextFunc getNewContext, GetCloneContextFunc getCloneContext) {
         DAS_ASSERT(getContext);
@@ -31,7 +35,7 @@ namespace das {
 
 } // namespace das
 
-
+#if !DAS_NO_FILEIO
 smart_ptr<das::FileAccess> get_file_access( char * pak ) {
     if (specificGetFileAccess)
         return specificGetFileAccess(pak);
@@ -41,7 +45,7 @@ smart_ptr<das::FileAccess> get_file_access( char * pak ) {
         return make_smart<FsFileAccess>();
     }
 }
-
+#endif
 
 Context * get_context( int stackSize = 0 ) {
     if (specificGetNewContext)
