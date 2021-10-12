@@ -23,7 +23,7 @@ def test_query_1
                 kaboom = eid
     commit()
     debug_dump()
-    query_one(kaboom) <| $ ( var pos:float3&; vel:float3; col:uint=13u )
+    query(kaboom) <| $ ( var pos:float3&; vel:float3; col:uint=13u )
         pos += vel
         assert(col==13u)
         print("index = {entity_index}\n")

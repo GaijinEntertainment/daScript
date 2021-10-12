@@ -1102,6 +1102,7 @@ namespace das
         bool no_unused_block_arguments = false;
         bool smart_pointer_by_value_unsafe = false;     // is passing smart_ptr by value unsafe?
         bool allow_block_variable_shadowing = false;
+        bool allow_local_variable_shadowing = false;
         bool allow_shared_lambda = false;
         bool ignore_shared_modules = false;
         bool default_module_public = true;              // by default module is 'public', not 'private'

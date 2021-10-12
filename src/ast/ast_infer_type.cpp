@@ -5371,35 +5371,37 @@ namespace das {
                 error("local variable type can't be inferred, it needs an initializer", "", "",
                       var->at, CompilationError::cant_infer_missing_initializer );
             }
-            if ( func ) {
-                for ( auto & fna : func->arguments ) {
-                    if ( fna->name==var->name ) {
-                        error("local variable " + var->name +" is shadowed by function argument "
-                            + fna->name + " : " + describeType(fna->type) + " at line " + to_string(fna->at.line), "", "",
-                                var->at, CompilationError::variable_not_found);
+            if ( !var->can_shadow && !program->policies.allow_local_variable_shadowing ) {
+                if ( func ) {
+                    for ( auto & fna : func->arguments ) {
+                        if ( fna->name==var->name ) {
+                            error("local variable " + var->name +" is shadowed by function argument "
+                                + fna->name + " : " + describeType(fna->type) + " at line " + to_string(fna->at.line), "", "",
+                                    var->at, CompilationError::variable_not_found);
+                        }
                     }
                 }
-            }
-            for ( auto & blk : blocks ) {
-                for ( auto & bna : blk->arguments ) {
-                    if ( bna->name==var->name ) {
-                        error("local variable " + var->name +" is shadowed by block argument "
-                            + bna->name + " : " + describeType(bna->type) + " at line " + to_string(bna->at.line), "", "",
-                                var->at, CompilationError::variable_not_found);
+                for ( auto & blk : blocks ) {
+                    for ( auto & bna : blk->arguments ) {
+                        if ( bna->name==var->name ) {
+                            error("local variable " + var->name +" is shadowed by block argument "
+                                + bna->name + " : " + describeType(bna->type) + " at line " + to_string(bna->at.line), "", "",
+                                    var->at, CompilationError::variable_not_found);
+                        }
                     }
                 }
-            }
-            for ( auto & lv : local ) {
-                if ( lv->name==var->name ) {
-                    error("local variable " + var->name +" is shadowed by another local variable "
-                          + lv->name + " : " + describeType(lv->type) + " at line " + to_string(lv->at.line), "", "",
-                          var->at, CompilationError::variable_not_found);
-                    break;
+                for ( auto & lv : local ) {
+                    if ( lv->name==var->name ) {
+                        error("local variable " + var->name +" is shadowed by another local variable "
+                            + lv->name + " : " + describeType(lv->type) + " at line " + to_string(lv->at.line), "", "",
+                            var->at, CompilationError::variable_not_found);
+                        break;
+                    }
                 }
-            }
-            if ( auto eW = hasMatchingWith(var->name) ) {
-                error("local variable " + var->name + " is shadowed by with expression at line " + to_string(eW->at.line), "", "",
-                      var->at, CompilationError::variable_not_found);
+                if ( auto eW = hasMatchingWith(var->name) ) {
+                    error("local variable " + var->name + " is shadowed by with expression at line " + to_string(eW->at.line), "", "",
+                        var->at, CompilationError::variable_not_found);
+                }
             }
             if ( !var->init ) {
                 local.push_back(var);

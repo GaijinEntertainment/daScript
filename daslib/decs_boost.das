@@ -79,14 +79,7 @@ def build_req_from_args ( qblk:ExprBlock? )
     return <- req
 
 [macro_function]
-def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart_ptr<ExprFor>; a; prefix:string; const_parent : bool = false )
-    let qli = length(qloop.iterators)
-    qloop.iterators |> resize( qli + 1 )
-    qloop.iterators[qli] := "{prefix}{a.name}"
-    qloop.iteratorsAt |> push(a.at)
-    var ftype <- clone_type(a._type)
-    ftype.flags &= ~ TypeDeclFlags constant
-    ftype.flags &= ~ TypeDeclFlags ref
+def getter_name ( a; const_parent:bool )
     var getter = "get_ro"
     if typeinfo(stripped_typename a)=="ast::FieldDeclaration"
         if a.init != null
@@ -96,14 +89,28 @@ def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart
     else
         if a.init != null
             if a._type.flags.ref || !a._type.flags.constant
-                macro_error(prog,qloop.at,"argument {a.name} has default value, it can't be & or var")
-                return false
+                macro_error(compiling_program(),a.at,"argument {a.name} has default value, it can't be & or var")
+                return ""
             getter = "get_default_ro"
         elif a._type.isRef && !a._type.isRefType
             if a._type.flags.constant
-                macro_error(prog,qloop.at,"argument {a.name} is both & and constant")
-                return false
+                macro_error(compiling_program(),a.at,"argument {a.name} is both & and constant")
+                return ""
             getter = "get"
+    return getter
+
+[macro_function]
+def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a; prefix:string; const_parent : bool = false )
+    let qli = length(qloop.iterators)
+    qloop.iterators |> resize( qli + 1 )
+    qloop.iterators[qli] := "{prefix}{a.name}"
+    qloop.iteratorsAt |> push(a.at)
+    var ftype <- clone_type(a._type)
+    ftype.flags &= ~ TypeDeclFlags constant
+    ftype.flags &= ~ TypeDeclFlags ref
+    var getter = getter_name(a,const_parent)
+    if empty(getter)
+        return false
     var cget <- new [[ExprCall() name:=getter, at=a.at]]
     cget.arguments |> emplace_new <| new [[ExprVar() at=a.at, name:=arch_name]]
     cget.arguments |> emplace_new <| new [[ExprConstString() at=a.at, value:=a.name]]
@@ -114,99 +121,14 @@ def private append_iterator ( prog:ProgramPtr; arch_name:string; var qloop:smart
     qloop.sources |> emplace(cget)
     return true
 
-[call_macro(name="query")]
-class DecsQueryMacro : AstCallMacro
-    def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        if length(expr.arguments)!=1 || !(expr.arguments[0] is ExprMakeBlock)
-            macro_error(prog,expr.at,"expecting query($(block_with_arguments))")
-            return [[ExpressionPtr]]
-        if expr.arguments[0]._type.isAutoOrAlias
-            macro_error(prog,expr.at,"argument types are not fully inferred")
-            return [[ExpressionPtr]]
-        let mblk = expr.arguments[0] as ExprMakeBlock
-        let qblk = mblk._block as ExprBlock
-        if length(qblk.arguments)==0
-            macro_error(prog,expr.at,"expecting query($(block_with_arguments)), arguments are missing")
-            return [[ExpressionPtr]]
-        let prefix = "__{expr.at.line}_desc"
-        let arch_name = "{prefix}_arch"
-        var req <- build_req_from_args(qblk)
-        let vreq = verify_request(req)
-        if !vreq.ok
-            macro_error(prog,expr.at,"incorrect query, {vreq.error}")
-            return [[ExpressionPtr]]
-        var qblock <- quote() <|
-            for_each_archetype (tag_req, tag_erq) <| $ ( tag_arch )
-                tag_loop
-        qblock |> force_at(expr.at)
-        // @@ => [[EcsQuery ...]]
-        var erq_blk <- new [[ExprBlock() at=expr.at,
-            returnType <- new [[TypeDecl() at=expr.at, baseType=Type autoinfer]],
-            blockFlags = ExprBlockFlags isClosure
-        ]]
-        erq_blk.list |> emplace_new <| new [[ExprReturn() at=expr.at,
-            subexpr <- convert_to_expression(req, expr.at),
-            returnFlags = ExprReturnFlags moveSemantics
-        ]]
-        var erq_fun <- new [[ExprMakeBlock() at=expr.at,
-            mmFlags=ExprMakeBlockFlags isLocalFunction,
-            _block <- erq_blk
-        ]]
-        // for s1, s2 ...
-        var qloop <- new [[ExprFor() at=qblk.at, visibility=qblk.at]]
-        var kaboom : array<tuple<string;string>>
-        for a in qblk.arguments
-            let detp = a |> is_decs_template
-            if detp is yes
-                kaboom |> push <| [[auto string(a.name),detp as yes]]
-                for f in a._type.structType.fields
-                    if !append_iterator(prog, arch_name, qloop, f, detp as yes, a._type.flags.constant)
-                        return [[ExpressionPtr]]
-            else
-                if !append_iterator(prog, arch_name, qloop, a, "")
-                    return [[ExpressionPtr]]
-        var qlbody <- new [[ExprBlock() at=qblk.at]]
-        for l in qblk.list
-            qlbody.list |> emplace_new <| clone_expression(l)
-        for fl in qblk.finalList
-            qlbody.finalList |> emplace_new <| clone_expression(fl)
-        qloop.body <- qlbody
-        apply_template(qloop) <| $ ( rules )
-            for kb in kaboom
-                rules |> kaboomVarField(kb._0,kb._1)
-        apply_template(qblock) <| $ ( rules )
-            rules |> replaceVariable("tag_erq") <| erq_fun
-            rules |> replaceBlockArgument("tag_arch") <| arch_name
-            rules |> replaceVariable("tag_req") <| new [[ExprConstUInt() at=expr.at, value=req.hash]]
-            rules |> replaceVariable("tag_loop") <| qloop
-        var qres <- move_unquote_block(qblock)
-        assert(length(qres.list)==1 && length(qres.finalList)==0)
-        var rqres <- qres.list[0]
-        qres := null
-        return <- rqres
-
 [macro_function]
-def private append_index_lookup ( prog:ProgramPtr; arch_name:string; var qblock:smart_ptr<ExprBlock>; a; prefix:string; const_parent : bool = false )
+def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlock>; a; prefix:string; const_parent : bool = false )
     var ftype <- clone_type(a._type)
     ftype.flags &= ~ TypeDeclFlags constant
     ftype.flags &= ~ TypeDeclFlags ref
-    var getter = "get_ro"
-    if typeinfo(stripped_typename a)=="ast::FieldDeclaration"
-        if a.init != null
-            getter = "get_default_ro"
-        elif !const_parent
-            getter = "get"
-    else
-        if a.init != null
-            if a._type.flags.ref || !a._type.flags.constant
-                macro_error(prog,qblock.at,"argument {a.name} has default value, it can't be & or var")
-                return false
-            getter = "get_default_ro"
-        elif a._type.isRef && !a._type.isRefType
-            if a._type.flags.constant
-                macro_error(prog,qblock.at,"argument {a.name} is both & and constant")
-                return false
-            getter = "get"
+    var getter = getter_name(a,const_parent)
+    if empty(getter)
+        return false
     var iget : ExpressionPtr
     if getter=="get_default_ro"
         unsafe
@@ -224,25 +146,34 @@ def private append_index_lookup ( prog:ProgramPtr; arch_name:string; var qblock:
     vlet.variables |> emplace_new() <| new [[Variable() at = a.at,
         name := "{prefix}{a.name}",
         _type <- clone_type(a._type),
-        init <- iget
+        init <- iget,
+        flags = VariableFlags can_shadow
         ]]
     qblock.list |> emplace(vlet)
     return true
 
-[call_macro(name="query_one")]
-class DecsQueryOneMacro : AstCallMacro
+[call_macro(name="query")]
+class DecsQueryMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        if length(expr.arguments)!=2 || !(expr.arguments[1] is ExprMakeBlock)
-            macro_error(prog,expr.at,"expecting query_one(eid,$(block_with_arguments))")
+        let totalArgs = length(expr.arguments)
+        if totalArgs!=1 && totalArgs!=2
+            macro_error(prog,expr.at,"expecting query($(block_with_arguments)) or query(eid,$(block_with_arguments))")
             return [[ExpressionPtr]]
-        if expr.arguments[0]._type.isAutoOrAlias || expr.arguments[1]._type.isAutoOrAlias
-            macro_error(prog,expr.at,"argument types are not fully inferred")
+        let eid_query = totalArgs==2
+        let block_arg_index = totalArgs-1
+        for arg in expr.arguments
+            if arg._type.isAutoOrAlias
+                macro_error(prog,expr.at,"argument types are not fully inferred")
+                return [[ExpressionPtr]]
+        if !(expr.arguments[block_arg_index] is ExprMakeBlock)
+            macro_error(prog,expr.at,"expecting $(block_with_arguments)")
             return [[ExpressionPtr]]
-        let mblk = expr.arguments[1] as ExprMakeBlock
+        let mblk = expr.arguments[block_arg_index] as ExprMakeBlock
         let qblk = mblk._block as ExprBlock
         if length(qblk.arguments)==0
             macro_error(prog,expr.at,"expecting query($(block_with_arguments)), arguments are missing")
             return [[ExpressionPtr]]
+
         let prefix = "__{expr.at.line}_desc"
         let arch_name = "{prefix}_arch"
         var req <- build_req_from_args(qblk)
@@ -250,9 +181,16 @@ class DecsQueryOneMacro : AstCallMacro
         if !vreq.ok
             macro_error(prog,expr.at,"incorrect query, {vreq.error}")
             return [[ExpressionPtr]]
-        var qblock <- quote() <|
-            for_eid_archetype (tag_eid, tag_req, tag_erq) <| $ ( tag_arch, entity_index )
-                tag_loop
+        var qblock : ExpressionPtr
+        unsafe
+            if !eid_query
+                qblock <- quote() <|
+                    for_each_archetype (tag_req, tag_erq) <| $ ( tag_arch )
+                        tag_loop
+            else
+                qblock <- quote() <|
+                    for_eid_archetype (tag_eid, tag_req, tag_erq) <| $ ( tag_arch, entity_index )
+                        tag_loop
         qblock |> force_at(expr.at)
         // @@ => [[EcsQuery ...]]
         var erq_blk <- new [[ExprBlock() at=expr.at,
@@ -267,33 +205,56 @@ class DecsQueryOneMacro : AstCallMacro
             mmFlags=ExprMakeBlockFlags isLocalFunction,
             _block <- erq_blk
         ]]
-        // for s1, s2 ...
-        var qlbody <- new [[ExprBlock() at=qblk.at]]
         var kaboom : array<tuple<string;string>>
-        for a in qblk.arguments
-            let detp = a |> is_decs_template
-            if detp is yes
-                kaboom |> push <| [[auto string(a.name),detp as yes]]
-                for f in a._type.structType.fields
-                    if !append_index_lookup(prog, arch_name, qlbody, f, detp as yes, a._type.flags.constant)
+        var qtop : ExpressionPtr
+        if eid_query
+            var qlbody <- new [[ExprBlock() at=qblk.at]]
+            for a in qblk.arguments
+                let detp = a |> is_decs_template
+                if detp is yes
+                    kaboom |> push <| [[auto string(a.name),detp as yes]]
+                    for f in a._type.structType.fields
+                        if !append_index_lookup(arch_name, qlbody, f, detp as yes, a._type.flags.constant)
+                            return [[ExpressionPtr]]
+                else
+                    if !append_index_lookup(arch_name, qlbody, a, "")
                         return [[ExpressionPtr]]
-            else
-                if !append_index_lookup(prog, arch_name, qlbody, a, "")
-                    return [[ExpressionPtr]]
 
-        for l in qblk.list
-            qlbody.list |> emplace_new <| clone_expression(l)
-        for fl in qblk.finalList
-            qlbody.finalList |> emplace_new <| clone_expression(fl)
-        apply_template(qlbody) <| $ ( rules )
+            for l in qblk.list
+                qlbody.list |> emplace_new <| clone_expression(l)
+            for fl in qblk.finalList
+                qlbody.finalList |> emplace_new <| clone_expression(fl)
+            qtop <- qlbody
+        else
+            // for s1, s2 ...
+            var qloop <- new [[ExprFor() at=qblk.at, visibility=qblk.at]]
+            for a in qblk.arguments
+                let detp = a |> is_decs_template
+                if detp is yes
+                    kaboom |> push <| [[auto string(a.name),detp as yes]]
+                    for f in a._type.structType.fields
+                        if !append_iterator(arch_name, qloop, f, detp as yes, a._type.flags.constant)
+                            return [[ExpressionPtr]]
+                else
+                    if !append_iterator(arch_name, qloop, a, "")
+                        return [[ExpressionPtr]]
+            var qlbody <- new [[ExprBlock() at=qblk.at]]
+            for l in qblk.list
+                qlbody.list |> emplace_new <| clone_expression(l)
+            for fl in qblk.finalList
+                qlbody.finalList |> emplace_new <| clone_expression(fl)
+            qloop.body <- qlbody
+            qtop <- qloop
+        apply_template(qtop) <| $ ( rules )
             for kb in kaboom
                 rules |> kaboomVarField(kb._0,kb._1)
         apply_template(qblock) <| $ ( rules )
-            rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
+            if eid_query
+                rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
             rules |> replaceVariable("tag_erq") <| erq_fun
             rules |> replaceBlockArgument("tag_arch") <| arch_name
             rules |> replaceVariable("tag_req") <| new [[ExprConstUInt() at=expr.at, value=req.hash]]
-            rules |> replaceVariable("tag_loop") <| qlbody
+            rules |> replaceVariable("tag_loop") <| qtop
         var qres <- move_unquote_block(qblock)
         assert(length(qres.list)==1 && length(qres.finalList)==0)
         var rqres <- qres.list[0]

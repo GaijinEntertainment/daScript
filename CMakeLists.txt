@@ -477,6 +477,7 @@ include/daScript/daScript.h
 include/daScript/daScriptC.h
 include/daScript/daScriptModule.h
 include/daScript/das_config.h
+include/daScript/das_project_specific.h
 )
 SOURCE_GROUP_FILES("main" MAIN_SRC)
 
