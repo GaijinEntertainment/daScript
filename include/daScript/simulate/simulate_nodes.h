@@ -2979,15 +2979,14 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     struct SimNode_ForWithIteratorBase : SimNode_Block {
         SimNode_ForWithIteratorBase ( const LineInfo & at )
-            : SimNode_Block(at) {
-            for ( int i = 0; i != MAX_FOR_ITERATORS; ++i ) {
-                source_iterators[i] = nullptr;
-                stackTop[i] = 0;
-            }
-        }
+            : SimNode_Block(at) { }
+        void allocateFor ( NodeAllocator * code, uint32_t t );
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         SimNode * visitFor ( SimVisitor & vis, int total );
-        SimNode *   source_iterators[MAX_FOR_ITERATORS];
-        uint32_t    stackTop[MAX_FOR_ITERATORS];
+        SimNode **  source_iterators;
+        uint32_t *  stackTop;
+        uint32_t    size;
+        uint32_t    totalSources;
     };
 
     ////////////////////

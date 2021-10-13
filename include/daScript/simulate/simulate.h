@@ -31,8 +31,6 @@ namespace das
     #define DAS_ENABLE_EXCEPTIONS   0
     #endif
 
-    #define MAX_FOR_ITERATORS   8
-
     #if DAS_ENABLE_PROFILER
         #define DAS_PROFILE_NODE    profileNode(this);
     #else
@@ -905,10 +903,13 @@ __forceinline void profileNode ( SimNode * node ) {
     struct SimNode_ForBase : SimNode_Block {
         SimNode_ForBase ( const LineInfo & at ) : SimNode_Block(at) {}
         SimNode * visitFor ( SimVisitor & vis, int total, const char * loopName );
-        SimNode *   sources [MAX_FOR_ITERATORS];
-        uint32_t    strides [MAX_FOR_ITERATORS];
-        uint32_t    stackTop[MAX_FOR_ITERATORS];
+        void allocateFor ( NodeAllocator * code, uint32_t t );
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
+        SimNode **  sources = nullptr;
+        uint32_t *  strides = nullptr;
+        uint32_t *  stackTop = nullptr;
         uint32_t    size;
+        uint32_t    totalSources;
     };
 
     struct SimNode_Delete : SimNode {

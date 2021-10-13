@@ -5255,10 +5255,6 @@ namespace das {
                 error("for loop needs as many iterators as there are sources", "", "",
                     expr->at, CompilationError::invalid_loop);
                 return;
-            } else if ( expr->sources.size()>MAX_FOR_ITERATORS ) {
-                error("for loop has too many sources", "", "",
-                    expr->at, CompilationError::invalid_loop);
-                return;
             }
             // iterator variables
             int idx = 0;

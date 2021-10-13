@@ -339,6 +339,63 @@ namespace das
         return v_zero();
     }
 
+    // SimNode_ForBase
+
+    void SimNode_ForBase::allocateFor ( NodeAllocator * code, uint32_t t ) {
+        totalSources = t;
+        auto bytes = code->allocate( totalSources * ( sizeof(SimNode*) + sizeof(uint32_t)*2 ) );
+        sources = (SimNode **) (bytes);
+        strides = (uint32_t *) (bytes + totalSources * sizeof(SimNode *));
+        stackTop = (uint32_t *) (bytes + totalSources * sizeof(SimNode *) + totalSources * sizeof(uint32_t));
+    }
+
+    SimNode * SimNode_ForBase::copyNode ( Context & context, NodeAllocator * code ) {
+        SimNode_ForBase * that = (SimNode_ForBase *) SimNode_Block::copyNode(context, code);
+        if ( total ) {
+            auto bytes = code->allocate( totalSources * ( sizeof(SimNode*) + sizeof(uint32_t)*2 ) );
+            auto newSources = (SimNode **) (bytes);
+            memcpy ( newSources, that->sources, totalSources*sizeof(SimNode *));
+            that->sources = newSources;
+            auto newStrides = (uint32_t *) (bytes + totalSources * sizeof(SimNode *));
+            memcpy( newStrides, that->strides, totalSources*sizeof(uint32_t));
+            that->strides = newStrides;
+            auto newStackTop = (uint32_t *) (bytes + totalSources * sizeof(SimNode *) + totalSources * sizeof(uint32_t));
+            memcpy ( newStackTop, that->stackTop, totalSources * sizeof(uint32_t));
+            that->stackTop = newStackTop;
+        } else {
+            sources = nullptr;
+            strides = nullptr;
+            stackTop = nullptr;
+        }
+        return that;
+    }
+
+    // SimNode_ForWithIterator
+
+    void SimNode_ForWithIteratorBase::allocateFor ( NodeAllocator * code, uint32_t t ) {
+        totalSources = t;
+        auto bytes = code->allocate( totalSources * ( sizeof(SimNode*) + sizeof(uint32_t) ) );
+        source_iterators = (SimNode **) (bytes);
+        stackTop = (uint32_t *) (bytes + totalSources * sizeof(SimNode *));
+    }
+
+    SimNode * SimNode_ForWithIteratorBase::copyNode ( Context & context, NodeAllocator * code ) {
+        SimNode_ForWithIteratorBase * that = (SimNode_ForWithIteratorBase *) SimNode_Block::copyNode(context, code);
+        if ( total ) {
+            auto bytes = code->allocate( totalSources * ( sizeof(SimNode*) + sizeof(uint32_t) ) );
+            auto new_source_iterators = (SimNode **) (bytes);
+            memcpy ( new_source_iterators, that->source_iterators, totalSources*sizeof(SimNode *));
+            that->source_iterators = new_source_iterators;
+            auto newStackTop = (uint32_t *) (bytes + totalSources * sizeof(SimNode *));
+            memcpy ( newStackTop, that->stackTop, totalSources * sizeof(uint32_t));
+            that->stackTop = newStackTop;
+        } else {
+            source_iterators = nullptr;
+            stackTop = nullptr;
+        }
+        return that;
+    }
+
     // SimNode_CallBase
 
     SimNode * SimNode_CallBase::copyNode ( Context & context, NodeAllocator * code ) {

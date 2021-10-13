@@ -2372,6 +2372,7 @@ namespace das
             {
                 result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnrollNZ_FOR<SimNode_ForWithIterator>(total, at);
             }
+            result->allocateFor(context.code.get(), total);
             for ( int t=0; t!=total; ++t ) {
                 if ( sources[t]->type->isGoodIteratorType() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_Seq2Iter>(
@@ -2497,6 +2498,7 @@ namespace das
                     return nullptr;
                 }
             }
+            result->allocateFor(context.code.get(), total);
             for ( int t=0; t!=total; ++t ) {
                 result->sources[t] = sources[t]->simulate(context);
                 if ( sources[t]->type->isGoodArrayType() ) {
