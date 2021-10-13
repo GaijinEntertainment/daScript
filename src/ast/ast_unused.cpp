@@ -584,21 +584,27 @@ namespace das {
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             // TODO: how do we determine, if iteration count is not used?
             //  also, how do we determine, if native iterator has side-effect?
-            /*
-            auto itV = expr->iteratorVariables.begin();
-            auto itS = expr->sources.begin();
-            while ( itV != expr->iteratorVariables.end() ) {
-                auto & var = *itV;
-                if ( !var->access_ref && !var->access_get ) {
-                    itV = expr->iteratorVariables.erase(itV);
-                    itS = expr->sources.erase(itS);
-                    anyFolding = true;
-                } else {
-                    itV ++;
-                    itS ++;
+            if ( expr->allowIteratorOptimization ) {
+                auto itI = expr->iterators.begin();
+                auto itA = expr->iteratorsAt.begin();
+                auto itV = expr->iteratorVariables.begin();
+                auto itS = expr->sources.begin();
+                while ( itV != expr->iteratorVariables.end() ) {
+                    auto & var = *itV;
+                    if ( !var->access_ref && !var->access_get && (expr->sources.size()>1) ) {   // we need to leave at least 1 variable
+                        itI = expr->iterators.erase(itI);
+                        itA = expr->iteratorsAt.erase(itA);
+                        itV = expr->iteratorVariables.erase(itV);
+                        itS = expr->sources.erase(itS);
+                        reportFolding();
+                    } else {
+                        itI ++;
+                        itA ++;
+                        itV ++;
+                        itS ++;
+                    }
                 }
             }
-            */
             return Visitor::visit(expr);
         }
     };

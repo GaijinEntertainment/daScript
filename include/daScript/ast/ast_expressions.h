@@ -797,6 +797,7 @@ namespace das
         vector<ExpressionPtr>   sources;
         ExpressionPtr           body;
         LineInfo                visibility;
+        bool                    allowIteratorOptimization = false;  // if enabled, unused source variables can be removed
     };
 
     struct ExprUnsafe : Expression {

@@ -2118,6 +2118,7 @@ namespace das {
         if ( body ) {
             cexpr->body = body->clone();
         }
+        cexpr->allowIteratorOptimization = allowIteratorOptimization;
         return cexpr;
     }
 

@@ -446,6 +446,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(sources)>("sources");
             addField<DAS_BIND_MANAGED_FIELD(body)>("body");
             addField<DAS_BIND_MANAGED_FIELD(visibility)>("visibility");
+            addField<DAS_BIND_MANAGED_FIELD(allowIteratorOptimization)>("allowIteratorOptimization");
         }
     };
 
