@@ -901,6 +901,10 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_ForWithIteratorBase::visit ( SimVisitor & vis ) {
+        return visitFor(vis, totalSources);
+    }
+
     SimNode * SimNode_Op1::visitOp1 ( SimVisitor & vis, const char * op, int typeSize, const string & typeName ) {
         V_BEGIN();
         vis.op(op, typeSize, typeName);

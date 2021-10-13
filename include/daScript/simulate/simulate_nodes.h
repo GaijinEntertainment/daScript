@@ -2983,6 +2983,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         void allocateFor ( NodeAllocator * code, uint32_t t );
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         SimNode * visitFor ( SimVisitor & vis, int total );
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
         SimNode **  source_iterators;
         uint32_t *  stackTop;
         uint32_t    size;
@@ -3099,6 +3101,12 @@ SIM_NODE_AT_VECTOR(Float, float)
     //////////////////////////
     // FOR WITH ITERATOR DEBUG
     //////////////////////////
+
+    struct SimNodeDebug_ForWithIteratorBase : SimNode_ForWithIteratorBase {
+        SimNodeDebug_ForWithIteratorBase ( const LineInfo & at )
+            : SimNode_ForWithIteratorBase(at) { }
+        virtual vec4f eval ( Context & context ) override;
+    };
 
     template <int totalCount>
     struct SimNodeDebug_ForWithIterator : SimNode_ForWithIterator<totalCount> {

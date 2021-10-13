@@ -396,6 +396,90 @@ namespace das
         return that;
     }
 
+    vec4f SimNode_ForWithIteratorBase::eval ( Context & context ) {
+        // note: this is the 'slow' version, to which we fall back when there are too many sources
+        DAS_PROFILE_NODE
+        int totalCount = int(totalSources);
+        vector<char *> pi(totalCount);
+        for ( int t=0; t!=totalCount; ++t ) {
+            pi[t] = context.stack.sp() + stackTop[t];
+        }
+        vector<Iterator *> sources(totalCount);
+        for ( int t=0; t!=totalCount; ++t ) {
+            vec4f ll = source_iterators[t]->eval(context);
+            sources[t] = cast<Iterator *>::to(ll);
+        }
+        bool needLoop = true;
+        SimNode ** __restrict tail = list + total;
+        for ( int t=0; t!=totalCount; ++t ) {
+            sources[t]->isOpen = true;
+            needLoop = sources[t]->first(context, pi[t]) && needLoop;
+            if ( context.stopFlags ) goto loopend;
+        }
+        if ( !needLoop ) goto loopend;
+        for ( int i=0; !context.stopFlags; ++i ) {
+            SimNode ** __restrict body = list;
+        loopbegin:;
+            for (; body!=tail; ++body) {
+                (*body)->eval(context);
+                DAS_PROCESS_LOOP_FLAGS(break);
+            }
+            for ( int t=0; t!=totalCount; ++t ){
+                if ( !sources[t]->next(context, pi[t]) ) goto loopend;
+                if ( context.stopFlags ) goto loopend;
+            }
+        }
+    loopend:
+        evalFinal(context);
+        for ( int t=0; t!=totalCount; ++t ) {
+            sources[t]->close(context, pi[t]);
+        }
+        context.stopFlags &= ~EvalFlags::stopForBreak;
+        return v_zero();
+    }
+
+    vec4f SimNodeDebug_ForWithIteratorBase::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        auto totalCount = int(totalSources);
+        vector<char *> pi(totalCount);
+        for ( int t=0; t!=totalCount; ++t ) {
+            pi[t] = context.stack.sp() + this->stackTop[t];
+        }
+        vector<Iterator *> sources(totalCount);
+        for ( int t=0; t!=totalCount; ++t ) {
+            vec4f ll = this->source_iterators[t]->eval(context);
+            sources[t] = cast<Iterator *>::to(ll);
+        }
+        bool needLoop = true;
+        SimNode ** __restrict tail = this-> list + this->total;
+        for ( int t=0; t!=totalCount; ++t ) {
+            sources[t]->isOpen = true;
+            needLoop = sources[t]->first(context, pi[t]) && needLoop;
+            if ( context.stopFlags ) goto loopend;
+        }
+        if ( !needLoop ) goto loopend;
+        for ( int i=0; !context.stopFlags; ++i ) {
+            SimNode ** __restrict body = this->list;
+        loopbegin:;
+            for (; body!=tail; ++body) {
+                DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                (*body)->eval(context);
+                DAS_PROCESS_LOOP_FLAGS(break);
+            }
+            for ( int t=0; t!=totalCount; ++t ){
+                if ( !sources[t]->next(context, pi[t]) ) goto loopend;
+                if ( context.stopFlags ) goto loopend;
+            }
+        }
+    loopend:
+        this->evalFinal(context);
+        for ( int t=0; t!=totalCount; ++t ) {
+            sources[t]->close(context, pi[t]);
+        }
+        context.stopFlags &= ~EvalFlags::stopForBreak;
+        return v_zero();
+    }
+
     // SimNode_CallBase
 
     SimNode * SimNode_CallBase::copyNode ( Context & context, NodeAllocator * code ) {

@@ -2362,15 +2362,23 @@ namespace das
         int  total = int(sources.size());
         int  sourceTypes = int(dynamicArrays) + int(fixedArrays) + int(rangeBase) + int(stringChars);
         bool hybridRange = rangeBase && (total>1);
-        if ( (sourceTypes>1) || hybridRange || nativeIterators || stringChars ) {
+        if ( (sourceTypes>1) || hybridRange || nativeIterators || stringChars || /* this is how much we can unroll */ total>MAX_FOR_UNROLL ) {
             SimNode_ForWithIteratorBase * result;
 #if DAS_DEBUGGER
             if ( context.thisProgram->getDebugger() ) {
-                result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnrollNZ_FOR<SimNodeDebug_ForWithIterator>(total, at);
+                if ( total>MAX_FOR_UNROLL ) {
+                    result = (SimNode_ForWithIteratorBase *) context.code->makeNode<SimNodeDebug_ForWithIteratorBase>(at);
+                } else {
+                    result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnrollNZ_FOR<SimNodeDebug_ForWithIterator>(total, at);
+                }
             } else
 #endif
             {
-                result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnrollNZ_FOR<SimNode_ForWithIterator>(total, at);
+                if ( total>MAX_FOR_UNROLL ) {
+                    result = (SimNode_ForWithIteratorBase *) context.code->makeNode<SimNode_ForWithIteratorBase>(at);
+                } else {
+                    result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnrollNZ_FOR<SimNode_ForWithIterator>(total, at);
+                }
             }
             result->allocateFor(context.code.get(), total);
             for ( int t=0; t!=total; ++t ) {
