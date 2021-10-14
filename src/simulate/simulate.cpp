@@ -438,6 +438,8 @@ namespace das
         return v_zero();
     }
 
+#if DAS_DEBUGGER
+
     vec4f SimNodeDebug_ForWithIteratorBase::eval ( Context & context ) {
         DAS_PROFILE_NODE
         auto totalCount = int(totalSources);
@@ -479,6 +481,8 @@ namespace das
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
+
+#endif
 
     // SimNode_CallBase
 

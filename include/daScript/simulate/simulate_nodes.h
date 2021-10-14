@@ -2985,8 +2985,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * visitFor ( SimVisitor & vis, int total );
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override;
-        SimNode **  source_iterators;
-        uint32_t *  stackTop;
+        SimNode **  source_iterators = nullptr;
+        uint32_t *  stackTop = nullptr;
         uint32_t    size;
         uint32_t    totalSources;
     };
