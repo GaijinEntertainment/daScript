@@ -2,8 +2,6 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
-options multiple_contexts
-
 module decs shared public
 
 require daslib/templates
@@ -281,6 +279,19 @@ def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsReq
         var arch & = decsState.allArchetypes[aidx]
         if arch.size > 0
             invoke ( blk, arch )
+
+def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype):bool> )
+    var qi = -1
+    decsState.queryLookup |> find_if_exists(hash) <| $ ( ql )
+        qi = *ql - 1
+    if qi == -1
+        qi = lookup_request(invoke(erq))
+    for aidx in decsState.ecsQueries[qi].archetypes
+        var arch & = decsState.allArchetypes[aidx]
+        if arch.size > 0
+            if invoke ( blk, arch )
+                return true
+    return false
 
 [template(atype)]
 def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-const-&>#

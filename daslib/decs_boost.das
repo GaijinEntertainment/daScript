@@ -10,6 +10,7 @@ require daslib/decs public
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/strings_boost
+require daslib/ast_block_to_loop
 
 /*
 from:
@@ -199,6 +200,11 @@ def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlo
     qblock.list |> emplace(vlet)
     return true
 
+enum private DecsQueryType
+    query
+    eid_query
+    find_query
+
 [call_macro(name="query")]
 class DecsQueryMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
@@ -206,38 +212,47 @@ class DecsQueryMacro : AstCallMacro
         if totalArgs!=1 && totalArgs!=2
             macro_error(prog,expr.at,"expecting query($(block_with_arguments)) or query(eid,$(block_with_arguments))")
             return [[ExpressionPtr]]
-        let eid_query = totalArgs==2
+        let qt = totalArgs==2 ? DecsQueryType eid_query : DecsQueryType query
         let block_arg_index = totalArgs-1
+        return self->implement(expr, block_arg_index, qt)
+    def implement ( var expr:smart_ptr<ExprCallMacro>; block_arg_index:int; qt:DecsQueryType ) : ExpressionPtr
         for arg in expr.arguments
             if arg._type.isAutoOrAlias
-                macro_error(prog,expr.at,"argument types are not fully inferred")
+                macro_error(compiling_program(),expr.at,"argument types are not fully inferred")
                 return [[ExpressionPtr]]
         if !(expr.arguments[block_arg_index] is ExprMakeBlock)
-            macro_error(prog,expr.at,"expecting $(block_with_arguments)")
+            macro_error(compiling_program(),expr.at,"expecting $(block_with_arguments)")
             return [[ExpressionPtr]]
         let mblk = expr.arguments[block_arg_index] as ExprMakeBlock
         let qblk = mblk._block as ExprBlock
         if length(qblk.arguments)==0
-            macro_error(prog,expr.at,"expecting query($(block_with_arguments)), arguments are missing")
+            macro_error(compiling_program(),expr.at,"expecting query($(block_with_arguments)), arguments are missing")
             return [[ExpressionPtr]]
-
         let prefix = "__{expr.at.line}_desc"
         let arch_name = "{prefix}_arch"
         var req <- build_req_from_args(qblk)
         let vreq = verify_request(req)
         if !vreq.ok
-            macro_error(prog,expr.at,"incorrect query, {vreq.error}")
+            macro_error(compiling_program(),expr.at,"incorrect query, {vreq.error}")
             return [[ExpressionPtr]]
         var qblock : ExpressionPtr
         unsafe
-            if !eid_query
+            if qt==DecsQueryType eid_query
+                qblock <- quote() <|
+                    for_eid_archetype (tag_eid, tag_req, tag_erq) <| $ ( tag_arch, entity_index )
+                        tag_loop
+            elif qt==DecsQueryType find_query
+                qblock <- quote() <|
+                    for_each_archetype_find (tag_req, tag_erq) <| $ ( tag_arch )
+                        tag_loop
+                        return false
+            elif qt==DecsQueryType query
                 qblock <- quote() <|
                     for_each_archetype (tag_req, tag_erq) <| $ ( tag_arch )
                         tag_loop
             else
-                qblock <- quote() <|
-                    for_eid_archetype (tag_eid, tag_req, tag_erq) <| $ ( tag_arch, entity_index )
-                        tag_loop
+                macro_error(compiling_program(),expr.at,"internal error. unsupported query type")
+                return [[ExpressionPtr]]
         qblock |> force_at(expr.at)
         // @@ => [[EcsQuery ...]]
         var erq_blk <- new [[ExprBlock() at=expr.at,
@@ -254,7 +269,7 @@ class DecsQueryMacro : AstCallMacro
         ]]
         var kaboom : array<tuple<string;string>>
         var qtop : ExpressionPtr
-        if eid_query
+        if qt==DecsQueryType eid_query
             var qlbody <- new [[ExprBlock() at=qblk.at]]
             for a in qblk.arguments
                 let detp = a |> is_decs_template
@@ -271,6 +286,7 @@ class DecsQueryMacro : AstCallMacro
                 qlbody.list |> emplace_new <| clone_expression(l)
             for fl in qblk.finalList
                 qlbody.finalList |> emplace_new <| clone_expression(fl)
+            convert_block_to_loop(qlbody, true, false)
             qtop <- qlbody
         else
             // for s1, s2 ...
@@ -291,13 +307,17 @@ class DecsQueryMacro : AstCallMacro
                 qlbody.list |> emplace_new <| clone_expression(l)
             for fl in qblk.finalList
                 qlbody.finalList |> emplace_new <| clone_expression(fl)
+            if qt==DecsQueryType query
+                convert_block_to_loop(qlbody, false, true )
+            else
+                convert_block_to_loop(qlbody, false, false )
             qloop.body <- qlbody
             qtop <- qloop
         apply_template(qtop) <| $ ( rules )
             for kb in kaboom
                 rules |> kaboomVarField(kb._0,kb._1)
         apply_template(qblock) <| $ ( rules )
-            if eid_query
+            if qt==DecsQueryType eid_query
                 rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
             rules |> replaceVariable("tag_erq") <| erq_fun
             rules |> replaceBlockArgument("tag_arch") <| arch_name
@@ -308,6 +328,14 @@ class DecsQueryMacro : AstCallMacro
         var rqres <- qres.list[0]
         qres := null
         return <- rqres
+
+[call_macro(name="find_query")]
+class DecsFindQueryMacro : DecsQueryMacro
+    def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+        if length(expr.arguments)!=1
+            macro_error(prog,expr.at,"expecting find_query($(block_with_arguments))")
+            return [[ExpressionPtr]]
+        return self->implement(expr, 0, DecsQueryType find_query)
 
 [function_macro(name="decs")]
 class DecsEcsMacro : AstFunctionAnnotation
