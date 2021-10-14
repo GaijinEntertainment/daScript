@@ -105,25 +105,25 @@ def public watch_files
     return any
 
 def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = false )
+    print("set new context {intptr(get_ptr(ptr))}\n")
     invoke_live("shutdown")
     if appPtr != null
         unsafe
             var pvar = get_context_global_variable(appPtr, "decsState")
             if pvar != null
                 decsState := *(reinterpret<DecsState ?> pvar)
-
     appPtr := ptr
     delete liveFunctionLookup
     if appPtr != null
         appPtr.alwaysStackWalkOnException = true
-    unsafe
-        var pvar = get_context_global_variable(appPtr, "decsState")
-        if pvar != null
-            var css <- @ <| [[&decsState]] ( state : DecsState? )
-                decsState := *state
-            invoke_in_context(appPtr, css, addr(decsState))
-            delete css
-    invoke_live("initialize", full_restart)
+        unsafe
+            var pvar = get_context_global_variable(appPtr, "decsState")
+            if pvar != null
+                var css <- @ <| [[&decsState]] ( state : DecsState? )
+                    decsState := *state
+                invoke_in_context(appPtr, css, addr(decsState))
+                delete css
+        invoke_live("initialize", full_restart)
 
 def public recompile(full_restart:bool=false)
     var access := make_file_access("")
@@ -137,10 +137,10 @@ def public recompile(full_restart:bool=false)
                             set_new_context(context,full_restart)
                         else
                             print("{appFile} failed to simulate:\n{issues}\n")
-                            appPtr := null
+                            set_new_context([[smart_ptr<Context>]],full_restart)
                 else
                     print("{appFile} failed to compile:\n{issues}\n")
-                    appPtr := null
+                    set_new_context([[smart_ptr<Context>]],full_restart)
 
 def public live_keypressed ( keycode, scancode, action, mods : int )
     invoke_live("keypressed", keycode, scancode, action, mods )

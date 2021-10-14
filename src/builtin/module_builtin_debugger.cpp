@@ -791,8 +791,9 @@ namespace debugapi {
         return res;
     }
 
-    vec4f get_global_variable ( Context &, SimNode_CallBase *, vec4f * args ) {
+    vec4f get_global_variable ( Context & context, SimNode_CallBase * node, vec4f * args ) {
         auto ctx = cast<Context *>::to(args[0]);
+        if ( ctx==nullptr ) context.throw_error_at(node->debugInfo, "expecting context pointer");
         auto name = cast<char *>::to(args[1]);
         auto vidx = ctx->findVariable(name);
         return cast<void *>::from(ctx->getVariable(vidx));
