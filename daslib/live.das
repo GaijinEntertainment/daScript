@@ -169,4 +169,4 @@ def public live_update ( appTime : double )
         var t = 0.0lf
     let dt = float(appTime - t)
     t = appTime
-    invoke_live("update", dt)
+    invoke_live("act", dt)
