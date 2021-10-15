@@ -127,7 +127,7 @@ All structs (as well as other non-POD types, except strings) are passed by refer
 Classes
 --------
 
-Structs are similar to structures, but additionally they allow built-in methods and rtti.
+Classes are similar to structures, but additionally they allow built-in methods and rtti.
 
 (see :ref:`Classes <classes>`).
 
@@ -220,8 +220,6 @@ Pointers can be created using new operator, or with C++ environment.
 
     def getX(foo: Foo?)  // it returns either foo.x or -1, if foo is null
        return foo?.x ?? -1
-
-All structs are always passed to functions arguments as references.
 
 -----------
 Iterators
