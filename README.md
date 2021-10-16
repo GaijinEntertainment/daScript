@@ -1,6 +1,14 @@
 # daScript
 daScript - high-performance statically strong typed scripting language
 
+10/15/2021
+  * LANGUAGE CHANGE - bitfields are now strongish type. i.e bitfield vs bitfield<...>
+  * misc - massive cleanup of variable lookup. solid_context
+  * misc - more macro cleanup
+  * bug fixed - mat3x3 math is no longer broken
+  * decs - find_query, query - harmonized, lookups, bugs fixed
+  * live - now supports persistent desc data
+
 10/9/2021
   * api change - aot is now part of CodeOfPolicies, not linkCppAot
   * misc - massive memory clenaup
