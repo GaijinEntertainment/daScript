@@ -441,7 +441,7 @@ def private walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:Lin
                 var elem <- walk_and_convert ( fdata, x._type, at)
                 var mkF <- new [[MakeFieldDecl() at=at, name := x.name, value <- elem]]
                 if !x._type.canCopy
-                    mkF.flags = FieldDeclarationFlags moveSemantics
+                    mkF.flags = MakeFieldDeclFlags moveSemantics
                 emplace_new(*mkS, mkF)
     emplace(mkStruct.structs, mkS)
 	return mkStruct
@@ -454,7 +454,7 @@ def private walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineI
         var elem <- walk_and_convert ( data + offset, info.argTypes[vindex], at)
         var mkS <- new [[MakeFieldDecl() at=at, name:=info.argNames[vindex], value <- elem]]
         if !info.argTypes[vindex].canCopy
-            mkS.flags = FieldDeclarationFlags moveSemantics
+            mkS.flags = MakeFieldDeclFlags moveSemantics
         emplace(mkVariant.variants, mkS)
         return mkVariant
 

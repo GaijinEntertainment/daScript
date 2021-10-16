@@ -1043,7 +1043,9 @@ namespace das
                         return false;
                     }
                 } else {
-                    return iAmVoid == heIsVoid;
+                    if ( iAmVoid != heIsVoid ) {
+                        return false;
+                    }
                 }
             }
         }
@@ -1099,6 +1101,34 @@ namespace das
                     const auto & declArg = decl.argTypes[i];
                     if ( !arg->isSameType(*declArg, RefMatters::yes, ConstMatters::yes,
                             TemporaryMatters::yes,AllowSubstitute::no,true ) ) {
+                        return false;
+                    }
+                }
+            }
+        }
+        if ( baseType==Type::tBitfield ) {
+            bool iAmAnyBitfield = argNames.size()==0;
+            bool heIsAnyBitfield = decl.argNames.size()==0;
+            bool compareArgs = false;
+            if ( topLevel ) {
+                if ( !iAmAnyBitfield && !heIsAnyBitfield ) {
+                    compareArgs = true;
+                }
+            } else {
+                if ( !iAmAnyBitfield && !heIsAnyBitfield ) {
+                    compareArgs = true;
+                } if ( iAmAnyBitfield != heIsAnyBitfield ) {
+                    return false;
+                }
+            }
+            if ( compareArgs ) {
+                if (argNames.size() != decl.argNames.size()) {
+                    return false;
+                }
+                for ( size_t i=0; i != argNames.size(); ++i ) {
+                    const auto & arg = argNames[i];
+                    const auto & declArg = decl.argNames[i];
+                    if ( arg != declArg ) {
                         return false;
                     }
                 }
