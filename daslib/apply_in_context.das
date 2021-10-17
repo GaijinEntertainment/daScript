@@ -58,8 +58,8 @@ class AppendCondAnnotation : AstFunctionAnnotation
 
     var ctxQblock <- quote() <|
       unsafe
-        verify(has_debug_agent_context(CONTEXT_NAME))
-        verify(addr(get_debug_agent_context(CONTEXT_NAME)) == addr(this_context()))
+        verify(has_debug_agent_context(CONTEXT_NAME),"debug agent is not installed")
+        verify(addr(get_debug_agent_context(CONTEXT_NAME)) == addr(this_context()),"agent context mismatch")
 
     apply_template(at, ctxQblock) <| $ ( rules )
       rules |> replaceVariable("CONTEXT_NAME") <| new [[ExprConstString() at = at, value := contextName]]
@@ -97,8 +97,8 @@ class AppendCondAnnotation : AstFunctionAnnotation
 
     var qblock <- quote() <|
       unsafe
-        verify(has_debug_agent_context(CONTEXT_NAME))
-        verify(addr(get_debug_agent_context(CONTEXT_NAME)) != addr(this_context()))
+        verify(has_debug_agent_context(CONTEXT_NAME),"debug agent is not installed")
+        verify(addr(get_debug_agent_context(CONTEXT_NAME)) != addr(this_context()),"agent context mismatch")
 
     apply_template(at, qblock) <| $ ( rules2 )
       rules2 |> replaceVariable("CONTEXT_NAME") <| new [[ExprConstString() at = at, value := contextName]]

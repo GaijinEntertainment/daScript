@@ -1,6 +1,7 @@
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options multiple_contexts
 
 module decs shared public
 
@@ -75,6 +76,32 @@ var public decsState : DecsState
 var private deferActions : array<DeferAction>
 var private decsPasses : array<DecsPass>
 
+def private cleanup_temp_string_array ( var comp:Component )
+    assert(comp.info.basicType==Type tString,"not a string array")
+    unsafe
+        memzero(comp.text)
+
+def private make_temp_string_array ( var comp:Component; size:int )
+    assert(comp.info.basicType==Type tString,"not a string array")
+    unsafe
+        _builtin_make_temp_array(comp.text, addr(comp.data[0]), size )
+        __builtin_array_lock(comp.text)
+
+def public clone ( var dst:Component; src:Component )
+    dst.name := src.name
+    dst.hash = src.hash
+    dst.stride = src.stride
+    dst.data := src.data
+    dst.info := src.info
+    if src.info.basicType==Type tString
+        let size = length(src.data) / src.stride
+        var dtext, stext : array<string>
+        unsafe
+            _builtin_make_temp_array(dtext, addr(dst.data[0]), size )
+            _builtin_make_temp_array(stext, addr(src.data[0]), size )
+        for d,s in dtext,stext
+            d := s
+
 def public register_decs_stage_call ( name:string; pcall:PassFunction )
     var dpass <- [[DecsPass name=name]]
     let idx = lower_bound(decsPasses,dpass) <| $ ( x,y ) => x.name < y.name
@@ -115,6 +142,15 @@ def public before_gc
                     unsafe
                         _builtin_make_temp_array(comp.text, addr(comp.data[0]), arch.size )
                         __builtin_array_lock(comp.text)
+
+
+def public after_gc
+    for arch in decsState.allArchetypes
+        if arch.size > 0
+            for comp in arch.components
+                if comp.info.basicType==Type tString
+                    unsafe
+                        memzero(comp.text)
 
 def public debug_dump
     for arch in decsState.allArchetypes
