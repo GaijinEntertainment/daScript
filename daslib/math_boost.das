@@ -24,6 +24,19 @@ def degrees(f:float)
 def radians(f:float)
     return f*PI/180.
 
+def UCOLOR_TO_RGBA(x:uint)
+    return float4(
+        float((x>>16u)&255u)/255.0,
+        float((x>> 8u)&255u)/255.0,
+        float((x>> 0u)&255u)/255.0,
+        float((x>>24u)&255u)/255.0)
+
+def UCOLOR_TO_RGB(x:uint)
+    return float3(
+        float((x>>16u)&255u)/255.0,
+        float((x>> 8u)&255u)/255.0,
+        float((x>> 0u)&255u)/255.0)
+
 def is_intersecting ( a, b : AABR ) // A.LO<=B.HI && A.HI>=B.LO
     return (a.min.x<=b.max.x && a.min.y<=b.max.y &&
         a.max.x>=b.min.x && a.max.y>=b.min.y)

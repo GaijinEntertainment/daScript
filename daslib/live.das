@@ -15,6 +15,7 @@ require fio
 var private appPtr : smart_ptr<Context>
 var private appFile = "app.das"
 var private appDir  = get_das_root() + "/modules/dasGlfw/framework"
+var private appLive = false
 
 var private appTime : table<string;clock>
 var private watchTime = get_clock()
@@ -22,14 +23,16 @@ var private watchTime = get_clock()
 var private liveFunctionLookup : table<string; bool>
 
 def public is_live
-    return appPtr != null
+    return appLive
 
 def public go_main
+    appLive = false
     unsafe
         var ctx <- reinterpret<smart_ptr<Context>> addr(this_context())
         appPtr <- ctx
 
 def public go_live ( appf, appd : string )
+    appLive = true
     this_context().name := "Live context"
     appFile = appf
     appDir = appd
@@ -144,10 +147,9 @@ def public recompile(full_restart:bool=false)
 
 def public live_keypressed ( keycode, scancode, action, mods : int )
     invoke_live("keypressed", keycode, scancode, action, mods )
-    // ctrl-r
-    // 82 19 1 2
-    if scancode==19 && action==1 && mods==2
-        recompile(true)
+    if is_live()
+        if scancode==19 && action==1 && mods==2
+            recompile(true)
 
 def public live_charpressed ( charcode : uint )
     invoke_live("charpressed", charcode )
