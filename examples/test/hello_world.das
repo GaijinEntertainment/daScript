@@ -13,9 +13,15 @@ def testPanic(a: int)
         panic("panic")
         print("after panic\n")
 
+def testUnused(a: int)
+    debug(a)
+    var b = 10
+    var c: float
+
 [export]
 def main
     pass
     // testReturn(10)
     // testPanic(-10)
 
+// options optimize = false
