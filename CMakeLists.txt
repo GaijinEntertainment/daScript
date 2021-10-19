@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.9)
+cmake_minimum_required (VERSION 3.20)
 project (DAS)
 
 INCLUDE(./CMakeCommon.txt)
@@ -32,8 +32,8 @@ MACRO(DAS_AOT input genList mainTarget dasAotTool)
     set(out_dir ${input_dir}/_aot_generated)
     set(out_src ${out_dir}/${input_name}.cpp)
     file(MAKE_DIRECTORY ${out_dir})
-	ADD_CUSTOM_COMMAND(
-		DEPENDS ${input_src}
+	  ADD_CUSTOM_COMMAND(
+		    DEPENDS ${input_src}
         DEPENDS ${dasAotTool}
         OUTPUT  ${out_src}
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
@@ -41,7 +41,7 @@ MACRO(DAS_AOT input genList mainTarget dasAotTool)
     )
     list(APPEND ${genList} ${out_src})
     set(custom_name ${mainTarget}_${input_name}_aot)
-    ADD_CUSTOM_TARGET(${custom_name} ALL DEPENDS ${out_src})
+    ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
     SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
     ADD_DEPENDENCIES(${mainTarget} ${custom_name})
 ENDMACRO()
@@ -95,7 +95,7 @@ SET(UNITZE_BUILD_BATCH_SIZE 10)
 MACRO(UNITIZE_BUILD input_dir genList)
     set(unitList)
     set(files ${${genList}})
-    set(out_dir "${CMAKE_SOURCE_DIR}/${input_dir}/_aot_generated")
+    set(out_dir "${PROJECT_SOURCE_DIR}/${input_dir}/_aot_generated")
     set_source_files_properties(${files} PROPERTIES HEADER_FILE_ONLY true)
     set(unit_build_file "")
     set(file_index 0)
@@ -512,7 +512,13 @@ ${DAS_MODULES_NEED_INC}
 )
 SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
 
-add_executable(dasAot ${DASAOT_MAIN_SRC} )
+if (${DAS_BUILD_TOOLS} MATCHES NO)
+  # build only if required by some target
+  add_executable(dasAot EXCLUDE_FROM_ALL ${DASAOT_MAIN_SRC})
+else()
+  add_executable(dasAot ${DASAOT_MAIN_SRC})
+endif()
+
 TARGET_LINK_LIBRARIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser libDasModuleStdDlg Threads::Threads ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser libDasModuleStdDlg need_and_resolve ${DAS_MODULES_LIBS})
 SETUP_CPP11(dasAot)
@@ -574,33 +580,35 @@ target_include_directories(libDasModuleUriparser PUBLIC
 )
 ADD_DEPENDENCIES(libDasModuleUriparser libDaScript libUriParser)
 
+if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
 # Continues development tool
 
-SET(DASCONTDEV_MAIN_SRC
-utils/dasContDev/main.cpp
-${DAS_MODULES_NEED_INC}
-)
-SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
+  SET(DASCONTDEV_MAIN_SRC
+  utils/dasContDev/main.cpp
+  ${DAS_MODULES_NEED_INC}
+  )
+  SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
 
-add_executable(dasContDev ${DASCONTDEV_MAIN_SRC})
-TARGET_LINK_LIBRARIES(dasContDev libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(dasContDev libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
-SETUP_CPP11(dasContDev)
-SETUP_LTO(dasContDev)
+  add_executable(dasContDev ${DASCONTDEV_MAIN_SRC})
+  TARGET_LINK_LIBRARIES(dasContDev libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+  ADD_DEPENDENCIES(dasContDev libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
+  SETUP_CPP11(dasContDev)
+  SETUP_LTO(dasContDev)
 
 # Stand alone command line compiler
 
-SET(DASCRIPT_MAIN_SRC
-utils/daScript/main.cpp
-${DAS_MODULES_NEED_INC}
-)
-SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
+  SET(DASCRIPT_MAIN_SRC
+  utils/daScript/main.cpp
+  ${DAS_MODULES_NEED_INC}
+  )
+  SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
-add_executable(daScript ${DASCRIPT_MAIN_SRC})
-TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
-SETUP_CPP11(daScript)
-SETUP_LTO(daScript)
+  add_executable(daScript ${DASCRIPT_MAIN_SRC})
+  TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+  ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
+  SETUP_CPP11(daScript)
+  SETUP_LTO(daScript)
+endif()
 
 # Test module
 
@@ -621,66 +629,9 @@ SETUP_CPP11(libDaScriptTest)
 ADD_DEPENDENCIES(libDaScriptTest libDaScript)
 
 # Test
-
-file(GLOB UNIT_TEST_SRC
-"examples/test/unit_tests/*.das"
-)
-list(SORT UNIT_TEST_SRC)
-SOURCE_GROUP_FILES("examples/test/unit" UNIT_TEST_SRC)
-
-file(GLOB COMPILATION_FAIL_TEST_SRC
-"examples/test/compilation_fail_tests/*.das"
-)
-list(SORT COMPILATION_FAIL_TEST_SRC)
-SOURCE_GROUP_FILES("examples/test/compilation fail" COMPILATION_FAIL_TEST_SRC)
-
-file(GLOB OPTIMIZATION_SRC
-"examples/test/optimizations/*.das"
-)
-list(SORT OPTIMIZATION_SRC)
-SOURCE_GROUP_FILES("examples/test/optimizations" OPTIMIZATION_SRC)
-
-file(GLOB RUNTIME_ERRORS_SRC
-"examples/test/runtime_errors/*.das"
-)
-list(SORT RUNTIME_ERRORS_SRC)
-SOURCE_GROUP_FILES("examples/test/runtime_errors" RUNTIME_ERRORS_SRC)
-
-file(GLOB MIX_TEST_SRC
-"examples/test/*.das"
-)
-list(SORT MIX_TEST_SRC)
-SOURCE_GROUP_FILES("examples/test/mix" MIX_TEST_SRC)
-
-file(GLOB_RECURSE MODULE_TEST_SRC
-"examples/test/module/*.*"
-)
-list(SORT MODULE_TEST_SRC)
-SOURCE_GROUP_FILES("examples/test/module" MODULE_TEST_SRC)
-
-SET(TEST_MAIN_SRC
-examples/test/main.cpp
-examples/test/unitTest.h
-)
-list(SORT TEST_MAIN_SRC)
-SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
-
-add_custom_target(daScriptTestAot)
-SET(TEST_GENERATED_SRC)
-DAS_AOT_DIR("${UNIT_TEST_SRC}" TEST_GENERATED_SRC daScriptTestAot dasAot)
-UNITIZE_BUILD("examples/test/unit_tests" TEST_GENERATED_SRC)
-#DAS_AOT("examples/test/hello_world.das" TEST_GENERATED_SRC daScriptTestAot dasAot)
-SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
-
-add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}
-    ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
-TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC examples/test)
-SETUP_CPP11(daScriptTest)
-add_dependencies(daScriptTest daScriptTestAot dasAotStub)
-SETUP_LTO(daScriptTest)
-#target_precompile_headers(daScriptTest PUBLIC include/daScript/misc/platform.h)
+if (NOT ${DAS_BUILD_TEST} MATCHES NO)
+  add_subdirectory(examples/test)
+endif()
 
 # Profile module
 
@@ -694,151 +645,10 @@ ADD_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
 SETUP_CPP11(libDaScriptProfile)
 ADD_DEPENDENCIES(libDaScriptProfile libDaScript)
 
-# Profile
+if (NOT ${DAS_BUILD_PROFILE} MATCHES NO)
+  add_subdirectory(examples/profile)
+endif()
 
-file(GLOB PROFILE_SRC
-"examples/profile/tests/*.das"
-)
-list(SORT PROFILE_SRC)
-SOURCE_GROUP_FILES("profile" PROFILE_SRC)
-
-SET(PROFILE_MAIN_SRC
-examples/profile/main.cpp
-examples/profile/test_profile.h
-)
-list(SORT PROFILE_MAIN_SRC)
-SOURCE_GROUP_FILES("source" PROFILE_MAIN_SRC)
-
-add_custom_target(daScriptProfileAot)
-SET(PROFILE_GENERATED_SRC)
-DAS_AOT_DIR("${PROFILE_SRC}" PROFILE_GENERATED_SRC daScriptProfileAot dasAot)
-SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
-
-add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC} ${AOT_GENERATED_SRC})
-TARGET_INCLUDE_DIRECTORIES(daScriptProfile PUBLIC examples/profile)
-TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptProfile Threads::Threads)
-ADD_DEPENDENCIES(daScriptProfile libDaScript dasAot libDaScriptProfile)
-SETUP_CPP11(daScriptProfile)
-add_dependencies(daScriptProfile daScriptProfileAot dasAotStub)
-#target_precompile_headers(daScriptProfile PUBLIC include/daScript/misc/platform.h)
-
-MACRO(DAS_TUTORIAL tutorial_name tutorial_src)
-    add_executable(${tutorial_name} ${tutorial_src})
-    TARGET_LINK_LIBRARIES(${tutorial_name} libDaScript Threads::Threads)
-    ADD_DEPENDENCIES(${tutorial_name} libDaScript)
-    SETUP_CPP11(${tutorial_name})
-ENDMACRO()
-
-####################
-# tutorial 00 - nano
-####################
-SET(TUTORIAL_00_SRC
-examples/tutorial/tutorial00.cpp
-)
-DAS_TUTORIAL(tutorial00 "${TUTORIAL_00_SRC}")
-
-##################################################
-# tutorial 01 - all error checking, external files
-##################################################
-SET(TUTORIAL_01_SRC
-examples/tutorial/tutorial01.cpp
-examples/tutorial/tutorial01.das
-)
-DAS_TUTORIAL(tutorial01 "${TUTORIAL_01_SRC}")
-
-##########################################
-# tutorial 02 - module, function, constant
-##########################################
-SET(TUTORIAL_02_SRC
-examples/tutorial/tutorial.inc
-examples/tutorial/tutorial02.cpp
-examples/tutorial/tutorial02.das
-)
-DAS_TUTORIAL(tutorial02 "${TUTORIAL_02_SRC}")
-
-##########################################################
-# tutorial 02 AOT - same as tutorial02, only setup for AOT
-##########################################################
-
-### 1. setup custom AOT utility
-SET(TUTORIAL_02_DASAOT_MAIN_SRC
-examples/tutorial/tutorial02_dasaot.cpp
-examples/tutorial/tutorial02aot.h
-examples/tutorial/tutorial02module.cpp
-utils/dasAot/main.cpp
-)
-add_executable(tutorial02_dasAot ${TUTORIAL_02_DASAOT_MAIN_SRC} )
-target_compile_definitions(tutorial02_dasAot PUBLIC MAIN_FUNC_NAME=das_aot_main)
-TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(tutorial02_dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
-SETUP_CPP11(tutorial02_dasAot)
-SETUP_LTO(tutorial02_dasAot)
-
-### 2. setup aot target for the tutorial
-add_custom_target(tutorial02_dasAotStub)
-SET(TUTORIAL_02_AOT_GENERATED_SRC)
-DAS_AOT("examples/tutorial/tutorial02.das" TUTORIAL_02_AOT_GENERATED_SRC tutorial02_dasAotStub tutorial02_dasAot)
-
-### setup main tutorial executable
-SET(TUTORIAL_02_AOT_SRC
-examples/tutorial/tutorial02aot.cpp
-examples/tutorial/tutorial02aot.h
-examples/tutorial/tutorial02module.cpp
-examples/tutorial/tutorial02.das
-)
-add_executable(tutorial02aot ${TUTORIAL_02_AOT_SRC} ${TUTORIAL_02_AOT_GENERATED_SRC})
-target_include_directories(tutorial02aot PUBLIC ${CMAKE_SOURCE_DIR}/examples/tutorial)
-TARGET_LINK_LIBRARIES(tutorial02aot libDaScript)
-ADD_DEPENDENCIES(tutorial02aot libDaScript tutorial02_dasAotStub)
-SETUP_CPP11(tutorial02aot)
-
-###########################
-# tutorial 03 - custom type
-###########################
-SET(TUTORIAL_03_SRC
-examples/tutorial/tutorial.inc
-examples/tutorial/tutorial03.cpp
-examples/tutorial/tutorial03.das
-)
-DAS_TUTORIAL(tutorial03 "${TUTORIAL_03_SRC}")
-
-#################################
-# tutorial 04 - C++ class adapter
-#################################
-SET(TUTORIAL_04_SRC
-examples/tutorial/tutorial.inc
-examples/tutorial/tutorial04.cpp
-examples/tutorial/tutorial04.das
-examples/tutorial/tutorial04module.das
-examples/tutorial/tutorial04module.das.inc
-)
-DAS_TUTORIAL(tutorial04 "${TUTORIAL_04_SRC}")
-target_include_directories(tutorial04 PUBLIC ${CMAKE_SOURCE_DIR}/src/builtin)   # we need RTTI to bind StructInfo and such
-XXD(examples/tutorial/tutorial04module.das)
-
-##########################
-# tutorial 05 - coroutines
-##########################
-SET(TUTORIAL_05_SRC
-examples/tutorial/tutorial.inc
-examples/tutorial/tutorial05.cpp
-examples/tutorial/tutorial05.das
-)
-DAS_TUTORIAL(tutorial05 "${TUTORIAL_05_SRC}")
-
-#################################
-# tutorial 06 - expression parser
-#################################
-SET(TUTORIAL_06_SRC
-examples/tutorial/tutorial06.cpp
-)
-DAS_TUTORIAL(tutorial06 "${TUTORIAL_06_SRC}")
-
-#################################
-# tutorial 07 - "C" interface
-#################################
-SET(TUTORIAL_07_SRC
-examples/tutorial/tutorial07.c
-examples/tutorial/tutorial07.das
-)
-DAS_TUTORIAL(tutorial07 "${TUTORIAL_07_SRC}")
+if (NOT ${DAS_BUILD_TUTORIAL} MATCHES NO)
+  add_subdirectory(examples/tutorial)
+endif()
