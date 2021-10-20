@@ -60,6 +60,8 @@ namespace das {
         bool isSameExactType ( const TypeDecl & decl ) const;
         void sanitize();
         bool isExprType() const;
+        bool isExprTypeAnywhere() const;
+        bool isExprTypeAnywhere(das_set<Structure*> & dep) const;
         bool isSimpleType () const;
         bool isSimpleType ( Type typ ) const;
         bool isArray() const;

@@ -2822,6 +2822,9 @@ namespace das
                     gfun.name = context.code->allocateName(pfun->name);
                     gfun.mangledName = context.code->allocateName(mangledName);
                     gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);
+                    if ( folding ) {
+                        gfun.debugInfo->flags &= ~ (FuncInfo::flag_init | FuncInfo::flag_shutdown);
+                    }
                     if ( debuggerOrGC ) {
                         helper.appendLocalVariables(gfun.debugInfo, pfun->body);
                     }

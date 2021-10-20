@@ -377,6 +377,15 @@ namespace das {
         return true;
     }
 
+    bool Structure::isExprTypeAnywhere(das_set<Structure *> & dep) const {   // &&
+        for ( const auto & fd : fields ) {
+            if ( fd.type && fd.type->isExprTypeAnywhere(dep) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool Structure::isLocal(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
             if ( fd.type && !fd.type->isLocal(dep) ) {

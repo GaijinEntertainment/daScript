@@ -286,6 +286,7 @@ namespace das
             DAS_ASSERTF(insideContext==0,"can't reset locked context");
             stopFlags = 0;
             exception = nullptr;
+            last_exception = nullptr;
         }
 
         __forceinline void restartHeaps() {
@@ -641,6 +642,7 @@ namespace das
     public:
         string          exceptionMessage;
         const char *    exception = nullptr;
+        const char *    last_exception = nullptr;
         LineInfo        exceptionAt;
 #if !DAS_ENABLE_EXCEPTIONS
         jmp_buf *       throwBuf = nullptr;

@@ -2664,15 +2664,30 @@ namespace das {
             }
             if ( nErrors==program->errors.size() ) {
                 if ( expr->trait=="sizeof" ) {
+                    if ( expr->typeexpr->isExprTypeAnywhere() ) {
+                        error("typeinfo(sizeof " + describeType(expr->typeexpr) + ") is not fully inferred, expecting resolved dim",  "", "",
+                            expr->at, CompilationError::type_not_found);
+                        return Visitor::visit(expr);
+                    }
                     reportAstChanged();
                     return make_smart<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
                 } else if ( expr->trait=="alignof" ) {
+                    if ( expr->typeexpr->isExprTypeAnywhere() ) {
+                        error("typeinfo(alignof " + describeType(expr->typeexpr) + ") is not fully inferred, expecting resolved dim",  "", "",
+                            expr->at, CompilationError::type_not_found);
+                        return Visitor::visit(expr);
+                    }
                     reportAstChanged();
                     return make_smart<ExprConstInt>(expr->at, expr->typeexpr->getAlignOf());
                 } else if ( expr->trait=="is_dim" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->dim.size()!=0);
                 } else if ( expr->trait=="dim" ) {
+                    if ( expr->typeexpr->isExprTypeAnywhere() ) {
+                        error("typeinfo(dim " + describeType(expr->typeexpr) + ") is not fully inferred, expecting resolved dim",  "", "",
+                            expr->at, CompilationError::type_not_found);
+                        return Visitor::visit(expr);
+                    }
                     if ( expr->typeexpr->dim.size() ) {
                         reportAstChanged();
                         return make_smart<ExprConstInt>(expr->at, expr->typeexpr->dim[0]);

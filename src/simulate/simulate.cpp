@@ -249,6 +249,7 @@ namespace das
                 context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
+                context.last_exception = context.exception;
                 context.exception = nullptr;
                 catch_block->eval(context);
             }
@@ -264,6 +265,7 @@ namespace das
                 context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
+                context.last_exception = context.exception;
                 context.exception = nullptr;
                 catch_block->eval(context);
             }
@@ -287,6 +289,7 @@ namespace das
                 context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
+                context.last_exception = context.exception;
                 context.exception = nullptr;
                 DAS_SINGLE_STEP(context,catch_block->debugInfo,false);
                 catch_block->eval(context);
@@ -304,6 +307,7 @@ namespace das
                 context.abiCMRES = acm;
                 context.stack.pop(EP,SP);
                 context.stopFlags = 0;
+                context.last_exception = context.exception;
                 context.exception = nullptr;
                 DAS_SINGLE_STEP(context,catch_block->debugInfo,false);
                 catch_block->eval(context);

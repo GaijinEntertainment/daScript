@@ -2108,6 +2108,7 @@ namespace das {
             __context__->abiCMRES = acm;
             __context__->stack.pop(EP,SP);
             __context__->stopFlags = 0;
+            __context__->last_exception = __context__->exception;
             __context__->exception = nullptr;
         }
 #else
@@ -2123,6 +2124,7 @@ namespace das {
             __context__->abiCMRES = acm;
             __context__->stack.pop(EP,SP);
             __context__->stopFlags = 0;
+            __context__->last_exception = __context__->exception;
             __context__->exception = nullptr;
         }
         __context__->throwBuf = JB;

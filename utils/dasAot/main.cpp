@@ -44,6 +44,8 @@ bool saveToFile ( const string & fname, const string & str ) {
     return true;
 }
 
+das::Context * get_context ( int stackSize=0 );
+
 bool compile ( const string & fn, const string & cppFn, const string &mainFnName ) {
     auto access = get_file_access(nullptr);
     ModuleGroup dummyGroup;
@@ -59,8 +61,8 @@ bool compile ( const string & fn, const string & cppFn, const string &mainFnName
             }
             return false;
         } else {
-            Context ctx(program->getContextStackSize());
-            if ( !program->simulate(ctx, tout) ) {
+            smart_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
+            if ( !program->simulate(*pctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
@@ -68,11 +70,25 @@ bool compile ( const string & fn, const string & cppFn, const string &mainFnName
                 return false;
             }
             if (!mainFnName.empty()) {
-                if ( auto fnTest = ctx.findFunction(mainFnName.c_str()) ) {
-                    ctx.restart();
-                    ctx.eval(fnTest, nullptr);
+                auto fnVec = pctx->findFunctions(mainFnName.c_str());
+                vector<SimFunction *> fnMVec;
+                for ( auto fnAS : fnVec ) {
+                    if ( verifyCall<void>(fnAS->debugInfo, dummyGroup) || verifyCall<bool>(fnAS->debugInfo, dummyGroup) ) {
+                        fnMVec.push_back(fnAS);
+                    }
                 }
-                return true;
+                if ( fnMVec.size()==0 ) {
+                    tout << "function '"  << mainFnName << "' not found\n";
+                } else if ( fnMVec.size()>1 ) {
+                    tout << "too many options for '" << mainFnName << "'\ncandidates are:\n";
+                    for ( auto fnAS : fnMVec ) {
+                        tout << "\t" << fnAS->mangledName << "\n";
+                    }
+                } else {
+                    auto fnTest = fnMVec.back();
+                    pctx->restart();
+                    pctx->eval(fnTest, nullptr);
+                }
             }
             // AOT time
             TextWriter tw;
@@ -151,17 +167,17 @@ bool compile ( const string & fn, const string & cppFn, const string &mainFnName
                 tw << "namespace das {\n";
                 tw << "namespace " << program->thisNamespace << " {\n"; // anonymous
                 g_Program = program;
-                program->aotCpp(ctx, tw);
+                program->aotCpp(*pctx, tw);
                 g_Program.reset();
                 // list STUFF
                 tw << "\tstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
-                program->registerAotCpp(tw, ctx, false);
+                program->registerAotCpp(tw, *pctx, false);
                 tw << "\t};\n";
                 tw << "\n";
                 tw << "AotListBase impl(registerAotFunctions);\n";
                 // validation stuff
                 if ( paranoid_validation ) {
-                    program->validateAotCpp(tw,ctx);
+                    program->validateAotCpp(tw,*pctx);
                     tw << "\n";
                 }
                 // footter

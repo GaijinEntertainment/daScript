@@ -23,6 +23,34 @@ namespace das
         }
     }
 
+    bool TypeDecl::isExprTypeAnywhere() const {
+        das_set<Structure*> dep;
+        return isExprTypeAnywhere(dep);
+    }
+
+    bool TypeDecl::isExprTypeAnywhere(das_set<Structure*> & dep) const {
+        for ( auto di : dim ) {
+            if ( di==TypeDecl::dimConst ) {
+                return true;
+            }
+        }
+        if ( baseType==Type::tStructure ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                return structType->isExprTypeAnywhere(dep);
+            }
+        }
+        if ( firstType && firstType->isExprTypeAnywhere(dep) ) return true;
+        if ( secondType && secondType->isExprTypeAnywhere(dep) ) return true;
+        for ( auto & arg : argTypes ) {
+            if ( arg->isExprTypeAnywhere(dep) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool TypeDecl::isExprType() const {
         for ( auto di : dim ) {
             if ( di==TypeDecl::dimConst ) {

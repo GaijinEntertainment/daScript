@@ -22,6 +22,10 @@ var private watchTime = get_clock()
 
 var private liveFunctionLookup : table<string; bool>
 
+[finalize]
+def private go_offline
+    appPtr := null
+
 def public is_live
     return appLive
 
@@ -29,7 +33,7 @@ def public go_main
     appLive = false
     unsafe
         var ctx <- reinterpret<smart_ptr<Context>> addr(this_context())
-        appPtr <- ctx
+        appPtr := ctx
 
 def public go_live ( appf, appd : string )
     appLive = true
@@ -51,7 +55,7 @@ def public invoke_live ( fn:string )
             unsafe
                 invoke_in_context(appPtr, fn)
         recover
-            print("exception during '{fn}'\n{appPtr.exception}\n{describe(appPtr.exceptionAt)}\n")
+            print("exception during '{fn}'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public invoke_live ( fn:string; a1 )
@@ -60,7 +64,7 @@ def public invoke_live ( fn:string; a1 )
             unsafe
                 invoke_in_context(appPtr, fn, a1)
         recover
-            print("exception during '{fn}'\n{appPtr.exception}\n{describe(appPtr.exceptionAt)}\n")
+            print("exception during '{fn}'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public invoke_live ( fn:string; a1; a2 )
@@ -69,7 +73,7 @@ def public invoke_live ( fn:string; a1; a2 )
             unsafe
                 invoke_in_context(appPtr, fn, a1, a2)
         recover
-            print("exception during '{fn}'\n{appPtr.exception}\n{describe(appPtr.exceptionAt)}\n")
+            print("exception during '{fn}'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public invoke_live ( fn:string; a1; a2; a3 )
@@ -78,7 +82,7 @@ def public invoke_live ( fn:string; a1; a2; a3 )
             unsafe
                 invoke_in_context(appPtr, fn, a1, a2, a3)
         recover
-            print("exception during '{fn}'\n{appPtr.exception}\n{describe(appPtr.exceptionAt)}\n")
+            print("exception during '{fn}'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public invoke_live ( fn:string; a1; a2; a3; a4 )
@@ -87,7 +91,7 @@ def public invoke_live ( fn:string; a1; a2; a3; a4 )
             unsafe
                 invoke_in_context(appPtr, fn, a1, a2, a3, a4)
         recover
-            print("exception during '{fn}'\n{appPtr.exception}\n{describe(appPtr.exceptionAt)}\n")
+            print("exception during '{fn}'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public watch_files

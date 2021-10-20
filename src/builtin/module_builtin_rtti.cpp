@@ -261,6 +261,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(breakOnException)>("breakOnException");
             addField<DAS_BIND_MANAGED_FIELD(alwaysStackWalkOnException)>("alwaysStackWalkOnException");
             addField<DAS_BIND_MANAGED_FIELD(exception)>("exception");
+            addField<DAS_BIND_MANAGED_FIELD(last_exception)>("last_exception");
             addField<DAS_BIND_MANAGED_FIELD(exceptionAt)>("exceptionAt");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalFunctions)>("totalFunctions",
                 "getTotalFunctions");

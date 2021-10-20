@@ -7,6 +7,8 @@ TextPrinter tout;
 
 bool pauseAfterErrors = false;
 
+das::Context * get_context ( int stackSize=0 );
+
 void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
     auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
@@ -25,8 +27,8 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
         } else {
             if ( outputProgramCode )
                 tout << *program << "\n";
-            Context ctx(program->getContextStackSize());
-            if ( !program->simulate(ctx, tout) ) {
+            smart_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
+            if ( !program->simulate(*pctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
@@ -35,7 +37,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                 if ( program->thisModule->isModule ) {
                     tout<< "WARNING: program is setup as both module, and endpoint.\n";
                 }
-                auto fnVec = ctx.findFunctions(mainFnName.c_str());
+                auto fnVec = pctx->findFunctions(mainFnName.c_str());
                 vector<SimFunction *> fnMVec;
                 for ( auto fnAS : fnVec ) {
                     if ( verifyCall<void>(fnAS->debugInfo, dummyGroup) || verifyCall<bool>(fnAS->debugInfo, dummyGroup) ) {
@@ -51,8 +53,8 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                     }
                 } else {
                     auto fnTest = fnMVec.back();
-                    ctx.restart();
-                    ctx.eval(fnTest, nullptr);
+                    pctx->restart();
+                    pctx->eval(fnTest, nullptr);
                 }
             }
         }

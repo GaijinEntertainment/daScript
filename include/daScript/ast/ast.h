@@ -197,6 +197,7 @@ namespace das
         bool isNoHeapType() const;
         bool isPod() const;
         bool isRawPod() const;
+        bool isExprTypeAnywhere( das_set<Structure *> & dep ) const;
         bool isLocal( das_set<Structure *> & dep ) const;
         bool isTemp( das_set<Structure *> & dep ) const;
         bool isShareable ( das_set<Structure *> & dep ) const;
