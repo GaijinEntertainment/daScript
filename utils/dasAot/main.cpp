@@ -89,6 +89,7 @@ bool compile ( const string & fn, const string & cppFn, const string &mainFnName
                     pctx->restart();
                     pctx->eval(fnTest, nullptr);
                 }
+                return true;
             }
             // AOT time
             TextWriter tw;

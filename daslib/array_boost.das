@@ -38,4 +38,4 @@ def public temp_array ( arr : auto implicit =const)
 
 [expect_any_array(v)]
 def empty(v:auto(VecT))
-    return length(v)==0
+    return _::length(v)==0
