@@ -31,12 +31,11 @@ var [[uniform]] c_frame : int = 0
 [vertex_program(name="VERTEX_SRC",version=330)]
 def vs_effect
     f_texcoord = v_texcoord
-    gl_Position = float4(v_position.x, v_position.y, 0.0, 1.0)
+    gl_Position = float4(v_position, 0.0, 1.0)
 
 def linear_to_RGB ( color : float3 )
-    var x = float4(color.x, color.y, color.z, 1.0)
-    x = max(x, float4(0));
-    return max(1.055 * pow(x, float4(0.416666667)) - float4(0.055), float4(0));
+    let x = float4(max(color, float3(0)), 1.0)
+    return max(1.055 * pow(x, float4(0.416666667)) - float4(0.055), float4(0))
 
 [fragment_program(name="FRAGMENT_SRC",version=330)]
 def ps_effect

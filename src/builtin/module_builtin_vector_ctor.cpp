@@ -241,16 +241,27 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         ADD_VEC_CTOR_2(float2,"float2");
         addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float2, int2>>("float2",lib,"cvt_float4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float2,uint2>>("float2",lib,"cvt_float4",false) );
+
         // float3
         ADD_VEC_CTOR_1(float3,"v_splats");
         ADD_VEC_CTOR_3(float3,"float3");
         addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float3, int3>>("float3",lib,"cvt_float4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float3,uint3>>("float3",lib,"cvt_float4",false) );
+        addExtern<DAS_BIND_FUN(float3_from_xy_z)> (*this, lib, "float3", SideEffects::none, "float3_from_xy_z");
+        addExtern<DAS_BIND_FUN(float3_from_x_yz)> (*this, lib, "float3", SideEffects::none, "float3_from_x_yz");
         // float4
         ADD_VEC_CTOR_1(float4,"v_splats");
         ADD_VEC_CTOR_4(float4,"float4");
         addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float4, int4>>("float4",lib,"cvt_float4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float4,uint4>>("float4",lib,"cvt_float4",false) );
+
+        addExtern<DAS_BIND_FUN(float4_from_xyz_w)>  (*this, lib, "float4", SideEffects::none, "float4_from_xyz_w");
+        addExtern<DAS_BIND_FUN(float4_from_x_yzw)>  (*this, lib, "float4", SideEffects::none, "float4_from_x_yzw");
+        addExtern<DAS_BIND_FUN(float4_from_xy_zw)>  (*this, lib, "float4", SideEffects::none, "float4_from_xy_zw");
+        addExtern<DAS_BIND_FUN(float4_from_xy_z_w)> (*this, lib, "float4", SideEffects::none, "float4_from_xy_z_w");
+        addExtern<DAS_BIND_FUN(float4_from_x_yz_w)> (*this, lib, "float4", SideEffects::none, "float4_from_x_yz_w");
+        addExtern<DAS_BIND_FUN(float4_from_x_y_zw)> (*this, lib, "float4", SideEffects::none, "float4_from_x_y_zw");
+
         // int2
         ADD_VEC_CTOR_1(int2,"int2");
         ADD_VEC_CTOR_2(int2,"int2");

@@ -2660,6 +2660,16 @@ namespace das {
        auto pti = (TypeInfo **)ptr;
        return (**pti).size;
     }
+
+    __forceinline float3 float3_from_xy_z ( float2 xy, float z ) { return float3(xy.x, xy.y, z); }
+    __forceinline float3 float3_from_x_yz ( float x, float2 yz ) { return float3(x, yz.x, yz.y); }
+
+    __forceinline float4 float4_from_xyz_w  ( float3 xyz, float w ) { return float4(xyz.x, xyz.y, xyz.z, w); }
+    __forceinline float4 float4_from_x_yzw  ( float x, float3 yzw ) { return float4(x, yzw.x, yzw.y, yzw.z); }
+    __forceinline float4 float4_from_xy_zw  ( float2 xy, float2 zw ) { return float4(xy.x, xy.y, zw.x, zw.y); }
+    __forceinline float4 float4_from_xy_z_w ( float2 xy, float z, float w ) { return float4(xy.x, xy.y, z, w); }
+    __forceinline float4 float4_from_x_yz_w ( float x, float2 yz, float w ) { return float4(x, yz.x, yz.y, w); }
+    __forceinline float4 float4_from_x_y_zw ( float x, float y, float2 zw ) { return float4(x, y, zw.x, zw.y); }
 }
 
 #if defined(_MSC_VER)
