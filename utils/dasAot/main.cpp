@@ -71,7 +71,7 @@ bool compile ( const string & fn, const string & cppFn, const string &mainFnName
             }
             if (!mainFnName.empty()) {
                 auto fnVec = pctx->findFunctions(mainFnName.c_str());
-                vector<SimFunction *> fnMVec;
+                das::vector<SimFunction *> fnMVec;
                 for ( auto fnAS : fnVec ) {
                     if ( verifyCall<void>(fnAS->debugInfo, dummyGroup) || verifyCall<bool>(fnAS->debugInfo, dummyGroup) ) {
                         fnMVec.push_back(fnAS);
