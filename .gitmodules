@@ -13,3 +13,6 @@
 [submodule "modules/dasImgui"]
 	path = modules/dasImgui
 	url = https://github.com/borisbat/dasImgui.git
+[submodule "modules/dasBGFX"]
+	path = modules/dasBGFX
+	url = https://github.com/borisbat/dasBGFX.git
