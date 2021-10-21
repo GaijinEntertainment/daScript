@@ -22,6 +22,11 @@ var private watchTime = get_clock()
 
 var private liveFunctionLookup : table<string; bool>
 
+var private liveContext : smart_ptr<Context>
+
+def public get_live_context : smart_ptr<Context>
+    return liveContext
+
 [finalize]
 def private go_offline
     appPtr := null
@@ -125,9 +130,12 @@ def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = 
         appPtr.alwaysStackWalkOnException = true
         unsafe
             var pvar = get_context_global_variable(appPtr, "decsState")
+            var lContext <- reinterpret<smart_ptr<Context>> addr(this_context())
             if pvar != null
                 var css <- @ <| [[&decsState]] ( state : DecsState? )
                     decsState := *state
+                    unsafe
+                        liveContext <- lContext
                 invoke_in_context(appPtr, css, addr(decsState))
                 delete css
         invoke_live("initialize", full_restart)
