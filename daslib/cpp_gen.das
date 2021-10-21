@@ -50,6 +50,10 @@ var is_function_blocked : lambda<(name:string):bool>
 
 var is_const_blocked : lambda<(name:string):bool>
 
+var is_struct_blocked : lambda<(name:string):bool>
+
+var alt_struct_name : lambda<(name:string):string>
+
 var cmres_functions : array<string>
 
 var allow_extern_c = false
@@ -66,6 +70,8 @@ var generate_split_functions = false
 var split_prefix = ""
 var split_cpp_prefix = ""
 var split_cpp_suffix = ""
+
+var enum_suffix = ""
 
 /*
     end of configuration
@@ -225,7 +231,7 @@ def onEnum(var root)
             print("enum {tag} {name} : {qtype} // {fullName}\n")
         ast.enums[fullName] <- [[ClangEnum
             name=name,
-            cppName=fullName,
+            cppName="{fullName}{enum_suffix}",
             eclass=true,
             etype=qtype
         ]]
@@ -234,7 +240,7 @@ def onEnum(var root)
             print("enum {name} // {fullName}\n")
         ast.enums[fullName] <- [[ClangEnum
             name=name,
-            cppName=fullName,
+            cppName="{fullName}{enum_suffix}",
             eclass=false
         ]]
     root |> with_array("inner") <| $ ( inner )
@@ -510,7 +516,9 @@ public:
 def needToGenStruct(st)
     if empty(st.name)
         return false
-    // TODO: skip unrelated
+    if is_struct_blocked!=null
+        if invoke(is_struct_blocked, st.name)
+            return false
     return true
 
 def needToGenField(fld)
@@ -653,6 +661,11 @@ def isCmresFun(fn)
             return false
     if ast.structs |> key_exists(cppResType)
         return true
+    if alt_struct_name!=null
+        let aname = invoke(alt_struct_name, cppResType)
+        if aname!=""
+            if ast.structs |> key_exists(aname)
+                return true
     for bf in cmres_functions
         if bf == fn.cppName
             return true
