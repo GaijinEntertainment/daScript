@@ -1,27 +1,8 @@
-require daslib/lint_everything
-require daslib/json_boost
-
-def testReturn(a: int)
-    if a > 0
-        print("before return\n")
-        return
-        print("after return\n")
-
-def testPanic(a: int)
-    if a > 0
-        print("before panic\n")
-        panic("panic")
-        print("after panic\n")
-
-def testUnused(a: int)
-    debug(a)
-    var b = 10
-    var c: float
+def cmp ( a:string; b:das_string )
+    return a < b
 
 [export]
 def main
     pass
-    // testReturn(10)
-    // testPanic(-10)
 
 // options optimize = false

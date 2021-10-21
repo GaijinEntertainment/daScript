@@ -898,6 +898,10 @@ namespace das
         str = bs ? bs : "";
     }
 
+    void set_string_das(char * & bs, const string & str, Context * ctx ) {
+        bs = ctx->stringHeap->allocateString(str);
+    }
+
     void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg * at) {
         vec4f args[1];
         args[0] = cast<const char *>::from(str.c_str());
@@ -933,6 +937,10 @@ namespace das
     bool is_in_aot ( ) {
         return g_isInAot;
     }
+
+#define STR_DSTR_REG(OPNAME,EXPR) \
+    addExtern<DAS_BIND_FUN(OPNAME##_str_dstr)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_str_dstr)); \
+    addExtern<DAS_BIND_FUN(OPNAME##_dstr_str)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_dstr_str));
 
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
@@ -1227,14 +1235,25 @@ namespace das
         addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_das_string")
                 ->args({"target","src"});
+        addExtern<DAS_BIND_FUN(set_string_das)>(*this, lib, "clone",
+            SideEffects::modifyArgument,"set_string_das")
+                ->args({"target","src"});
         addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
             SideEffects::modifyExternal,"peek_das_string_T")
                 ->args({"src","block","context","line"})->setAotTemplate();
         addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string",
             SideEffects::none, "builtin_string_clone")
                 ->args({"src","context"});
+        // das-string
         addExtern<DAS_BIND_FUN(das_str_equ)>(*this, lib, "==", SideEffects::none, "das_str_equ");
         addExtern<DAS_BIND_FUN(das_str_nequ)>(*this, lib, "!=", SideEffects::none, "das_str_nequ");
+        // das-string extra
+        STR_DSTR_REG(  eq,==);
+        STR_DSTR_REG( neq,!=);
+        STR_DSTR_REG(gteq,>=);
+        STR_DSTR_REG(lseq,<=);
+        STR_DSTR_REG(  ls,<);
+        STR_DSTR_REG(  gt,>);
         // temp array out of mem
         auto bta = addExtern<DAS_BIND_FUN(builtin_temp_array)>(*this, lib, "_builtin_temp_array",
             SideEffects::invoke, "builtin_temp_array")

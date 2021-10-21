@@ -32,7 +32,7 @@ class LintVisitor : AstVisitor
     def override preVisitFunction(fun:FunctionPtr) : void
         noLint = false
         for ann in fun.annotations
-            if eq(ann.annotation.name,"no_lint")
+            if ann.annotation.name=="no_lint"
                 noLint = true
                 break
     def override visitFunction(fun:FunctionPtr) : FunctionPtr

@@ -29,10 +29,7 @@ class TemplateMacro : AstFunctionAnnotation
             compiling_program() |> macro_error(expr.at,"expecting inferred function")
             return expr
         let taidx = find_index_if(each(expr.func.annotations)) <| $ ( ann )
-            var same = false
-            peek(ann.annotation.name) <| $(st)
-                same = (st == "template")
-            return same
+            return ann.annotation.name == "template"
         if taidx == -1
             return expr
         var cfunc = expr.func

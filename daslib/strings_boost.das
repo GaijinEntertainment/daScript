@@ -56,15 +56,9 @@ def is_character_at(foo:array<uint8>#; idx:int; ch:int)
 
 [generic]
 def eq ( a:string; b:das_string )
-    var res : bool
-    peek(b) <| $ ( B )
-        res = a==B
-    return res
+    return a==b
 
 [generic]
 def eq ( b:das_string; a:string )
-    var res : bool
-    peek(b) <| $ ( B )
-        res = a==B
-    return res
+    return b==a
 

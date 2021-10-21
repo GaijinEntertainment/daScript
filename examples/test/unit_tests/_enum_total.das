@@ -7,7 +7,7 @@ require daslib/strings_boost
 class EnumTotalAnnotation : AstEnumerationAnnotation
     def override apply ( var enu:EnumerationPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         for ee in enu.list
-            if eq(ee.name,"total")
+            if ee.name=="total"
                 errors := "enumeration already has `total` field"
                 return false
         let itot = add_enumeration_entry(enu,"total")

@@ -2342,6 +2342,7 @@ namespace das {
 
     char * to_das_string(const string & str, Context * ctx);
     void set_das_string(string & str, const char * bs);
+    void set_string_das(char * & bs, const string & str, Context * ctx);
 
     __forceinline bool das_str_equ ( const string & a, const string & b ) { return a==b; }
     __forceinline bool das_str_nequ ( const string & a, const string & b ) { return a!=b; }
@@ -2670,6 +2671,17 @@ namespace das {
     __forceinline float4 float4_from_xy_z_w ( float2 xy, float z, float w ) { return float4(xy.x, xy.y, z, w); }
     __forceinline float4 float4_from_x_yz_w ( float x, float2 yz, float w ) { return float4(x, yz.x, yz.y, w); }
     __forceinline float4 float4_from_x_y_zw ( float x, float y, float2 zw ) { return float4(x, y, zw.x, zw.y); }
+
+#define STR_DSTR_OP(OPNAME,EXPR) \
+    __forceinline bool  OPNAME##_str_dstr ( const char * str, const string & dstr ) { return strcmp(to_rts(str), dstr.c_str()) EXPR 0; } \
+    __forceinline bool  OPNAME##_dstr_str ( const string & dstr, const char * str ) { return strcmp(dstr.c_str(), to_rts(str)) EXPR 0; }
+
+    STR_DSTR_OP(  eq,==);
+    STR_DSTR_OP( neq,!=);
+    STR_DSTR_OP(gteq,>=);
+    STR_DSTR_OP(lseq,<=);
+    STR_DSTR_OP(  ls,<);
+    STR_DSTR_OP(  gt,>);
 }
 
 #if defined(_MSC_VER)

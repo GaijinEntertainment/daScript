@@ -100,7 +100,7 @@ def private is_decs_template ( v:VariablePtr )
     var p = v.annotation |> decs_prefix
     if p is no
         for ann in v._type.structType.annotations
-            if eq(ann.annotation.name,"decs_template")
+            if ann.annotation.name=="decs_template"
                 p = ann.arguments |> decs_prefix
                 return p is yes ? p : [[ItCheck yes="{v._type.structType.name}_"]]
     return p
@@ -118,8 +118,8 @@ def build_req_from_args ( qblk:ExprBlock? )
             else
                 req.req |> push(string(a.name))
     for aa in qblk.annotations
-        let isreq = eq(aa.annotation.name,"REQUIRE")
-        let isreqn = eq(aa.annotation.name,"REQUIRE_NOT")
+        let isreq = aa.annotation.name=="REQUIRE"
+        let isreqn = aa.annotation.name=="REQUIRE_NOT"
         if isreq || isreqn
             for ab in aa.arguments
                 if ab.basicType==Type tBool && ab.bValue
@@ -364,9 +364,9 @@ class DecsEcsMacro : AstFunctionAnnotation
         var req, nreq : array<string>
         for arg in args
             if arg.basicType==Type tString
-                if eq(arg.name,"REQUIRE")
+                if arg.name=="REQUIRE"
                     req |> push("{arg.sValue}")
-                if eq(arg.name,"REQUIRE_NOT")
+                if arg.name=="REQUIRE_NOT"
                     nreq |> push("{arg.sValue}")
         if !req |> empty
             var decl <- new [[AnnotationDeclaration() ]]

@@ -20,7 +20,7 @@ class AppendCondAnnotation : AstFunctionAnnotation
   def override patch ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
 
     for ann in func.annotations
-      if eq(ann.annotation.name,"apply_in_context")
+      if ann.annotation.name=="apply_in_context"
         if !(find_arg("patched",ann.arguments) is nothing)
           return true
 
@@ -43,7 +43,7 @@ class AppendCondAnnotation : AstFunctionAnnotation
         return false
 
     for ann in func.annotations
-      if eq(ann.annotation.name,"apply_in_context")
+      if ann.annotation.name=="apply_in_context"
         astChanged = true
         ann.arguments |> add_annotation_argument("patched",true)
 

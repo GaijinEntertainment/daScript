@@ -107,7 +107,7 @@ class Dump2Fields : AstStructureAnnotation
                     elif field._type.baseType==Type tFloat
                         set_component(cmp, string(field.name), (econst ?as ExprConstFloat)?.value ?? 0.)
                     elif field._type.baseType==Type tHandle
-                        if eq(field._type.annotation.name,"EntityId")
+                        if field._type.annotation.name=="EntityId"
                             set_component(cmp, string(field.name), get_entity_id_const(field.init,errors,any_errors))
         return !any_errors
 

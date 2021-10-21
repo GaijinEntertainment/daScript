@@ -50,7 +50,7 @@ def isExpression(t:TypeDeclPtr; top:bool=true) : bool
     elif t.dim.length!=0
         return false
     elif t.baseType==Type tHandle
-        if eq(t.annotation._module.name,"ast")
+        if t.annotation._module.name=="ast"
             return starts_with("{t.annotation.name}","Expr")
         else
             return false
@@ -96,7 +96,7 @@ def emplace_new ( var vec:MakeStruct; var ptr:smart_ptr<MakeFieldDecl> )
 
 def override_method ( var str:StructurePtr; name,funcName:string ) : bool
     for fld in str.fields
-        if eq(fld.name,name)
+        if fld.name==name
             var vcast <- new [[ExprCast() at=str.at,
                 subexpr <- new [[ExprAddr() at=str.at,target:=funcName]],
                 castType <- new [[TypeDecl() at=str.at,baseType=Type autoinfer]]
@@ -139,20 +139,20 @@ class TagStructureAnnotation : AstStructureAnnotation
 def private for_each_tag_function(mod:Module?; tag:string; blk : block<(var func:FunctionPtr):void> )
     for_each_function(mod, "") <| $ ( func )
         for ann in func.annotations
-            if ann!=null && eq(ann.annotation.name,"tag_function")
+            if ann!=null && ann.annotation.name=="tag_function"
                 for t in ann.arguments
-                    if eq(t.name,tag)
+                    if t.name==tag
                         invoke(blk, func)
     for_each_generic(mod, "") <| $ ( func )
         for ann in func.annotations
-            if ann!=null && eq(ann.annotation.name,"tag_function")
+            if ann!=null && ann.annotation.name=="tag_function"
                 for t in ann.arguments
-                    if eq(t.name,tag)
+                    if t.name==tag
                         invoke(blk, func)
 
 def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
     for a in args
-        if eq(a.name,argn)
+        if a.name==argn
             return get_annotation_argument_value(a)
     return RttiValue_nothing()
 
@@ -559,10 +559,9 @@ def find_annotation ( mod_name,ann_name:string ) : Annotation const?
         return null
     var ann : Annotation const?
     module_for_each_annotation(mod) <| $ ( value )
-        peek(value.name) <| $ ( vname )
-            if vname == ann_name
-                unsafe
-                    ann = addr(value)
+        if value.name == ann_name
+            unsafe
+                ann = addr(value)
     return ann
 
 def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
