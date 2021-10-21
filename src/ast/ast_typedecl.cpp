@@ -1145,7 +1145,8 @@ namespace das
             } else {
                 if ( !iAmAnyBitfield && !heIsAnyBitfield ) {
                     compareArgs = true;
-                } if ( iAmAnyBitfield != heIsAnyBitfield ) {
+                }
+                if ( iAmAnyBitfield != heIsAnyBitfield ) {
                     return false;
                 }
             }
