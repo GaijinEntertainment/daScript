@@ -624,7 +624,7 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left",
                 SideEffects::none, "builtin_string_strip_left")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
-                SideEffects::none, "builtin_string_chop")->unsafeOperation = true;
+                SideEffects::none, "builtin_string_chop")->args({"str","start","length","context"});
             addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice",
                 SideEffects::none, "builtin_string_slice1")->args({"str","start","end","context"});
             addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice",
