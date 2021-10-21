@@ -1237,7 +1237,7 @@ namespace das
                 ->args({"target","src"});
         addExtern<DAS_BIND_FUN(set_string_das)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_string_das")
-                ->args({"target","src"});
+                ->args({"target","src","context"});
         addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
             SideEffects::modifyExternal,"peek_das_string_T")
                 ->args({"src","block","context","line"})->setAotTemplate();

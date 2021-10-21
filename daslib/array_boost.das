@@ -6,6 +6,7 @@ options no_aot = true
 module array_boost shared public
 
 require daslib/templates
+require daslib/contracts
 
 [unsafe_operation, template (a), unused_argument(a)]
 def private array_helper ( var arr : auto implicit =const; a : auto(TT) ) : array<TT -const-#>
@@ -34,3 +35,7 @@ def public temp_array ( var arr : auto implicit =const )
 def public temp_array ( arr : auto implicit =const)
     unsafe
         return <- array_helper ( arr, decltype(arr[0]) )
+
+[expect_any_array(v)]
+def empty(v:auto(VecT))
+    return length(v)==0
