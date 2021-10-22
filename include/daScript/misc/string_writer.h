@@ -27,7 +27,7 @@ namespace das {
     struct StringWriterTag {};
     extern StringWriterTag HEX;
     extern StringWriterTag DEC;
-    extern StringWriterTag FIXED;
+    extern StringWriterTag FIXEDFP;
     extern StringWriterTag SCIENTIFIC;
 
     template <typename AllocationPolicy>
@@ -65,7 +65,7 @@ namespace das {
         StringWriter & operator << (const StringWriterTag & v ) {
             if (&v == &HEX) hex = true;
             else if (&v == &DEC) hex = false;
-            else if (&v == &FIXED) fixed = true;
+            else if (&v == &FIXEDFP) fixed = true;
             else if (&v == &SCIENTIFIC) fixed = false;
             return *this;
         }
