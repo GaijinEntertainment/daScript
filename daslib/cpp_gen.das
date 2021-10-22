@@ -73,6 +73,11 @@ var split_cpp_suffix = ""
 
 var enum_suffix = ""
 
+var const_type_table : table<string; string>
+
+var const_uint8_type = "uint8_t"
+var const_uint16_type = "uint16_t"
+
 /*
     end of configuration
 */
@@ -530,6 +535,11 @@ def needToGenField(fld)
         return false
     return true
 
+def getBindFldName(name:string)
+    if name=="type"
+        return "_{name}"
+    return name
+
 def genStructs(hf,mf,df:FILE const?)
     fprint(hf,"// ------------\n// structures\n// ------------\n\n")
     fprint(mf,"// ------------\n// structures\n// ------------\n\n")
@@ -583,9 +593,9 @@ def genStructs(hf,mf,df:FILE const?)
                 if val != null
                     substType = *val
             if substType |> empty()
-                fprint(mf,"\t\taddField<DAS_BIND_MANAGED_FIELD({fld.cppName})>(\"{fld.name}\",\"{fld.cppName}\");\n")
+                fprint(mf,"\t\taddField<DAS_BIND_MANAGED_FIELD({fld.cppName})>(\"{getBindFldName(fld.name)}\",\"{fld.cppName}\");\n")
             else
-                fprint(mf,"\t\taddField<{substType},offsetof(ManagedType,{fld.cppName})>(\"{fld.name}\",\"{fld.cppName}\")\n")
+                fprint(mf,"\t\taddField<{substType},offsetof(ManagedType,{fld.cppName})>(\"{getBindFldName(fld.name)}\",\"{fld.cppName}\")\n")
                 fprint(mf,"\t\t\t.adjustAot(\"das_reinterpret<{substType}>::pass(\",\")\");\n")
         fprint(mf,"\t\}\n\};\n")
         fprint(mf,"#endif\n")
@@ -872,6 +882,19 @@ def genDefineConstants(fname,prefix:string)
     defer <| { delete fnames; }
     fnames |> genDefineConstants <| prefix
 
+def getGenConstType ( name, default_name:string )
+    return const_type_table?[name] ?? default_name
+
+def searchAndGenConst ( var regex_def:Regex; defTName,suffix:string; var ofs:table<int; bool>; data:string; hf:FILE const? )
+    regex_foreach(regex_def,data) <| $ ( r )
+        if ! ofs |> key_exists(r.x)
+            let DEF = regex_group(regex_def,1,data)
+            let VAL = regex_group(regex_def,2,data)
+            if !blocked_defines_table |> key_exists(DEF)
+                if is_const_blocked==null || !invoke(is_const_blocked,DEF)
+                    let ctt = getGenConstType(DEF,defTName)
+                    fprint(hf,"addConstant<{ctt}>(*this,\"{DEF}\",{ctt}({VAL}{suffix}));\n")
+        return true
 
 def genDefineConstants(fnames:array<string>; prefix:string)
     delete blocked_defines_table
@@ -879,6 +902,10 @@ def genDefineConstants(fnames:array<string>; prefix:string)
         blocked_defines_table[bd] = true
     var reg_def_hex <- %regex~#define\s+(\w+)\s+(0x[0-9A-Za-z]+)%%
     var reg_def_dec <- %regex~#define\s+(\w+)\s+(\d+)%%
+    var reg_def_UINT8 <- %regex~#define\s+(\w+)\s+UINT8_C\s*\((0x[0-9A-Za-z]+)\)%%
+    var reg_def_UINT16 <- %regex~#define\s+(\w+)\s+UINT16_C\s*\((0x[0-9A-Za-z]+)\)%%
+    var reg_def_UINT32 <- %regex~#define\s+(\w+)\s+UINT32_C\s*\((0x[0-9A-Za-z]+)\)%%
+    var reg_def_UINT64 <- %regex~#define\s+(\w+)\s+UINT64_C\s*\((0x[0-9A-Za-z]+)\)%%
     fopen("{prefix}.const_inc","wb") <| $(hf)
         if hf==null
             panic("can't write {prefix}.const_inc")
@@ -888,19 +915,9 @@ def genDefineConstants(fnames:array<string>; prefix:string)
                     panic("can't open {fname}")
                 var ofs : table<int; bool>
                 let data = fread(f)
-                regex_foreach(reg_def_hex,data) <| $ ( r )
-                    ofs[r.x] = true
-                    let DEF = regex_group(reg_def_hex,1,data)
-                    let VAL = regex_group(reg_def_hex,2,data)
-                    if !blocked_defines_table |> key_exists(DEF)
-                        if is_const_blocked==null || !invoke(is_const_blocked,DEF)
-                            fprint(hf,"addConstant(*this,\"{DEF}\",uint32_t({VAL}));\n")
-                    return true
-                regex_foreach(reg_def_dec,data) <| $ ( r )
-                    if ! ofs |> key_exists(r.x)
-                        let DEF = regex_group(reg_def_dec,1,data)
-                        let VAL = regex_group(reg_def_dec,2,data)
-                        if !blocked_defines_table |> key_exists(DEF)
-                            if is_const_blocked==null || !invoke(is_const_blocked,DEF)
-                                fprint(hf,"addConstant(*this,\"{DEF}\",int32_t({VAL}));\n")
-                    return true
+                searchAndGenConst(reg_def_hex, "uint32_t", "u", ofs, data, hf)
+                searchAndGenConst(reg_def_dec, "int32_t", "", ofs, data, hf)
+                searchAndGenConst(reg_def_UINT8, const_uint8_type, "u", ofs, data, hf)
+                searchAndGenConst(reg_def_UINT16, const_uint16_type, "u", ofs, data, hf)
+                searchAndGenConst(reg_def_UINT32, "uint32_t", "u", ofs, data, hf)
+                searchAndGenConst(reg_def_UINT64, "uint64_t", "ul", ofs, data, hf)
