@@ -66,7 +66,6 @@ def look_at_lh ( Eye,At,Up:float3 )
     tm[3] = float4( -dot(xaxis, Eye),
                     -dot(yaxis, Eye),
                     -dot(zaxis, Eye),1.)
-    print("{xaxis} {yaxis} {zaxis} {tm}\n")
     return tm
 
 def look_at_rh ( Eye,At,Up:float3 )
