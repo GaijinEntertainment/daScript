@@ -404,6 +404,22 @@ namespace das {
         exit(ec);
     }
 
+    int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) {
+#ifdef _MSC_VER
+        FILE * f = cmd ? _popen(cmd, "rt") : nullptr;
+#else
+        FILE * f = cmd ? popen(cmd, "rt") : nullptr;
+#endif
+        vec4f args[1];
+        args[0] = cast<FILE *>::from(f);
+        context->invoke(blk, args, nullptr, at);
+#ifdef _MSC_VER
+        return _pclose( f );
+#else
+        return WEXITSTATUS(_pclose(f));
+#endif
+    }
+
     class Module_FIO : public Module {
     public:
         Module_FIO() : Module("fio") {
@@ -482,6 +498,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_exit)>(*this, lib, "exit",
                 SideEffects::modifyExternal, "builtin_exit")
                     ->arg("exitCode")->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_popen)>(*this, lib, "popen",
+                SideEffects::modifyExternal, "builtin_popen")
+                    ->args({"command","scope","context","at"})->unsafeOperation = true;
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
             // lets verify all names
