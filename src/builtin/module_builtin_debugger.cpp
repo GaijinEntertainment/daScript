@@ -717,12 +717,13 @@ namespace debugapi {
 
     vec4f pinvoke_impl ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         auto invCtx = cast<Context *>::to(args[0]);
+        if ( !invCtx ) context.throw_error_at(call->debugInfo, "pinvoke with null context");
         auto fn = cast<const char *>::to(args[1]);
-        if ( !fn ) context.throw_error("can't pinvoke empty string");
+        if ( !fn ) context.throw_error_at(call->debugInfo, "can't pinvoke empty string");
         auto simFn = invCtx->findFunction(fn);
-        if ( !simFn ) context.throw_error_ex("pinvoke can't find %s function", fn);
+        if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find %s function", fn);
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
-            context.throw_error_ex("pinvoke can't invoke private function %s", simFn->mangledName);
+            context.throw_error_at(call->debugInfo, "pinvoke can't invoke private function %s", simFn->mangledName);
         }
         invCtx->lock();
         vec4f res;
@@ -742,12 +743,13 @@ namespace debugapi {
 
     vec4f pinvoke_impl2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         auto invCtx = cast<Context *>::to(args[0]);
+        if ( !invCtx ) context.throw_error_at(call->debugInfo, "pinvoke with null context");
         auto fn = cast<Func>::to(args[1]);
-        if ( !fn.PTR ) context.throw_error("pnvoke can't invoke null function");
+        if ( !fn.PTR ) context.throw_error_at(call->debugInfo, "pnvoke can't invoke null function");
         auto simFn = fn.PTR;
-        if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%p", (void *)simFn);
+        if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void *)simFn);
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
-            context.throw_error_ex("pinvoke can't invoke private function %s", simFn->mangledName);
+            context.throw_error_at(call->debugInfo, "pinvoke can't invoke private function %s", simFn->mangledName);
         }
         invCtx->lock();
         vec4f res;
@@ -767,13 +769,14 @@ namespace debugapi {
 
     vec4f pinvoke_impl3 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         auto invCtx = cast<Context *>::to(args[0]);
+        if ( !invCtx ) context.throw_error_at(call->debugInfo, "pinvoke with null context");
         auto fn = cast<Lambda>::to(args[1]);
         SimFunction ** fnMnh = (SimFunction **)fn.capture;
-        if (!fnMnh) context.throw_error("invoke null lambda");
+        if (!fnMnh) context.throw_error_at(call->debugInfo, "invoke null lambda");
         SimFunction * simFn = *fnMnh;
-        if ( !simFn ) context.throw_error_ex("pinvoke can't find function #%p", (void*)simFn);
+        if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void*)simFn);
         if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
-            context.throw_error_ex("pinvoke can't invoke private function %s", simFn->mangledName);
+            context.throw_error_at(call->debugInfo, "pinvoke can't invoke private function %s", simFn->mangledName);
         }
         invCtx->lock();
         vec4f res;

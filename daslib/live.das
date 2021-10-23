@@ -129,11 +129,18 @@ def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = 
     if appPtr != null
         appPtr.alwaysStackWalkOnException = true
         unsafe
+            // fixup decs if its there
             var pvar = get_context_global_variable(appPtr, "decsState")
-            var lContext <- reinterpret<smart_ptr<Context>> addr(this_context())
             if pvar != null
                 var css <- @ <| [[&decsState]] ( state : DecsState? )
                     decsState := *state
+                invoke_in_context(appPtr, css, addr(decsState))
+                delete css
+            // fix-up live context, if its there
+            var pctx_var = get_context_global_variable(appPtr, "liveContext")
+            if pctx_var != null
+                var lContext <- reinterpret<smart_ptr<Context>> addr(this_context())
+                var css <- @ <| [[&decsState]] ( state : DecsState? )
                     unsafe
                         liveContext <- lContext
                 invoke_in_context(appPtr, css, addr(decsState))
