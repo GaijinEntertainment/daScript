@@ -2527,6 +2527,10 @@ namespace das {
         return module->addVariable(move(var), true);
     }
 
+    VariablePtr findModuleVariable ( Module * module, const char * name ) {
+        return name ? module->findVariable(name) : nullptr;
+    }
+
     bool addModuleStructure ( Module * module, StructurePtr & _struct, Context * ) {
         StructurePtr stru = move(_struct);
         return module->addStructure(stru, true);
@@ -3089,6 +3093,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(addModuleVariable)>(*this, lib, "add_variable",
                 SideEffects::modifyExternal, "addModuleVariable")
                     ->args({"module","variable","context"});
+            addExtern<DAS_BIND_FUN(findModuleVariable)>(*this, lib, "find_variable",
+                SideEffects::modifyExternal, "findModuleVariable")
+                    ->args({"module","variable"});
             // structure annotation
             addAnnotation(make_smart<AstStructureAnnotationAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeStructureAnnotation)>(*this, lib,  "make_structure_annotation",

@@ -90,4 +90,4 @@ var gl_GlobalInvocationID : uint3	// unique index of current invocation in globa
 var gl_LocalInvocationIndex	: uint  // 1d index representation of gl_LocalInvocationID
 
 var gl_Position : float4
-
+var gl_FragColor : float4

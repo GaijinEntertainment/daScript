@@ -3,7 +3,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
 
-module glsl_internal shared private
+module glsl_internal shared public
 
 require ast
 require rtti
@@ -14,7 +14,6 @@ require daslib/templates_boost
 require daslib/strings_boost
 require daslib/ast_used
 
-let OUTPUT_SHADER_LINE = true
 let DEBUG_SHADER_TEXT = false
 let DEBUG_SHADER_BINDINGS = false
 
@@ -23,8 +22,27 @@ enum ShaderType
     fragment
     compute
 
+bitfield ShaderExportCaps
+    output_shader_lines
+    write_version
+    output_inout
+    output_inout_stub
+    output_inout_decl
+    replace_hlsl_incompatible_operations
+
 class GlslShader : AstFunctionAnnotation
     shaderType = ShaderType vertex
+    write_version = true
+    output_inout = true
+    output_inout_stub = false
+    output_inout_decl = false
+    output_shader_lines = true
+    replace_hlsl_incompatible_operations = false
+    glsl_prefix = ""
+    def generate_bind_uniform_dummy ( var func:FunctionPtr )
+        pass
+    def generate_bind_uniform(fnMain:FunctionPtr; var fn:FunctionPtr)
+        pass
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         func.flags |= FunctionFlags exports // note: this is temporary, until we are done with dependency collecting etc
         let argName = find_arg("name", args)
@@ -34,15 +52,35 @@ class GlslShader : AstFunctionAnnotation
         if !add_global_var(compiling_module(),"{argName as tString}", new [[TypeDecl() at=func.at, baseType=Type tString]], func.at, false)
             errors := "can't add global variable {argName as tString}"
             return false
-        generate_bind_uniform_dummy(func)
+        if output_inout_decl
+            let decl_name = "{argName as tString}_DECL"
+            if !add_global_var(compiling_module(), decl_name, new [[TypeDecl() at=func.at, baseType=Type tString]], func.at, false)
+                errors := "can't add global variable {decl_name}"
+                return false
+        self->generate_bind_uniform_dummy(func)
         return true
     def override patch ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
         for_each_function(compiling_module(), bind_uniform_function_name(func)) <| $ ( bfun )
             if bfun.flags.exports
                 bfun.flags &= ~FunctionFlags exports
-                generate_bind_uniform(func, bfun)
+                self->generate_bind_uniform(func, bfun)
                 astChanged = true
         return true
+    def buildCaps
+        var caps : ShaderExportCaps
+        if write_version
+            caps |= ShaderExportCaps write_version
+        if output_inout
+            caps |= ShaderExportCaps output_inout
+        if output_inout_stub
+            caps |= ShaderExportCaps output_inout_stub
+        if output_inout_decl
+            caps |= ShaderExportCaps output_inout_decl
+        if output_shader_lines
+            caps |= ShaderExportCaps output_shader_lines
+        if replace_hlsl_incompatible_operations
+            caps |= ShaderExportCaps replace_hlsl_incompatible_operations
+        return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
         if !(argName is tString)
@@ -61,34 +99,34 @@ class GlslShader : AstFunctionAnnotation
             compute_local_size.z = find_arg("local_size_z", args) ?as tInt ?? 0
         // TODO: 'find_global(name)'
         var err : array<string>
-        for_each_global(compiling_module()) <| $ ( var glob )
-            if err |> empty()
-                if glob.init == null
-                    if glob.name == argName as tString
-                        glob.init <- new [[ExprConstString() at=func.at,
-                            value:=generate_glsl(func, err, shaderType, version, compute_local_size),
-                            _type <- new [[TypeDecl() at=func.at, baseType=Type tString]]
-                        ]]
-                        if ! err |> empty()
-                            glob.init := null
-                        else
-                            glob._type.flags |= TypeDeclFlags constant
+        var glob <- find_variable(compiling_module(), argName as tString)
+        if glob.init == null
+            if glob.name == argName as tString
+                var caps = self->buildCaps()
+                let gres = generate_glsl(func, err, shaderType, version, compute_local_size, caps)
+                let shader_text = "{gres.inout_stub}{glsl_prefix}{gres.body}"
+                glob.init <- new [[ExprConstString() at=func.at,
+                    value := shader_text,
+                    _type <- new [[TypeDecl() at=func.at, baseType=Type tString]]
+                ]]
+                if ! err |> empty()
+                    glob.init := null
+                else
+                    glob._type.flags |= TypeDeclFlags constant
+                    if output_inout_decl
+                        let decl_name = "{argName as tString}_DECL"
+                        var glob_def <- find_variable(compiling_module(), decl_name)
+                        if glob_def!=null
+                            glob_def.init <- new [[ExprConstString() at=func.at,
+                                value := gres.inout_decl,
+                                _type <- new [[TypeDecl() at=func.at, baseType=Type tString]]
+                            ]]
+                            glob_def := null
+        glob := null
         if !err |> empty()
             errors := join(err, "\n")
             return false
         return true
-
-[function_macro(name="vertex_program")]
-class GlslVertexProgram : GlslShader
-    override shaderType = ShaderType vertex
-
-[function_macro(name="fragment_program")]
-class GlslPixelProgram : GlslShader
-    override shaderType = ShaderType fragment
-
-[function_macro(name="compute_program")]
-class GlslComputeProgram : GlslShader
-    override shaderType = ShaderType compute
 
 let private glsl_types <- {{
     Type tFloat         => "float";
@@ -124,6 +162,7 @@ let private glsl_functions <- {{
     "uint4"    =>  "uvec4";
     "floori"    =>  "floor";
     "lerp"      =>  "mix";
+    "saturate"  =>  "SATURATE";
     "_"         =>  "_"
 }}
 
@@ -143,12 +182,16 @@ class GlslExport : AstVisitor
     renames : array<tuple<name:string;repl:string>>
     astVisitorAdapter : smart_ptr<ast::VisitorAdapter>
     compute_local_size : int3
-    def GlslExport ( var w : StringBuilderWriter; sht:ShaderType; ver:int; cls:int3 )
+    caps : ShaderExportCaps
+    inout_stub : string
+    inout_decl : string
+    def GlslExport ( var w : StringBuilderWriter; sht:ShaderType; ver:int; cls:int3; cp:ShaderExportCaps )
         unsafe
             writer = addr(w)
         shaderType = sht
         version = ver
         compute_local_size = cls
+        caps = cp
     def finalize
         delete stnames
         delete depFun
@@ -165,7 +208,7 @@ class GlslExport : AstVisitor
         let fname = at.fileInfo!=null ? "{at.fileInfo.name}" : ""
         errors |> push("\tGLSL: {txt} at {fname}:{int(at.line)}:{int(at.column)}")
     def line(at:LineInfo)
-        if !OUTPUT_SHADER_LINE
+        if !caps.output_shader_lines
             return
         if at.fileInfo!=null
             peek(at.fileInfo.name) <| $ ( atname )
@@ -291,7 +334,7 @@ class GlslExport : AstVisitor
         var isMain = false
         for ann in fun.annotations
             peek(ann.annotation.name) <| $ ( aname )
-                if aname=="vertex_program" || aname=="fragment_program" || aname=="compute_program"
+                if aname|>find("vertex_program")!=-1 || aname|>find("fragment_program")!=-1 || aname|>find("compute_program")!=-1
                     isMain = true
         return isMain
 // program
@@ -308,22 +351,23 @@ class GlslExport : AstVisitor
         if any
             self->newLine(1)
     def override preVisitProgram(prog:ProgramPtr) : void
-        *writer |> write("#version {version} core\n\n")
+        if caps.write_version
+            *writer |> write("#version {version} core\n\n")
         // TODO: only output builtin functions which are necessary
         *writer |> write("ivec2 range ( int r ) \{ return ivec2(0,r); \}\n")
         *writer |> write("ivec2 range ( int f, int t ) \{ return ivec2(f,t); \}\n")
-        *writer |> write("float saturate ( float a ) \{ return clamp(a,0.,1.); \}\n")
-        *writer |> write("vec2 saturate ( vec2 a ) \{ return clamp(a,vec2(0.),vec2(1.)); \}\n")
-        *writer |> write("vec3 saturate ( vec3 a ) \{ return clamp(a,vec3(0.),vec3(1.)); \}\n")
-        *writer |> write("vec4 saturate ( vec4 a ) \{ return clamp(a,vec4(0.),vec4(1.)); \}\n")
+        *writer |> write("float SATURATE ( float a ) \{ return clamp(a,0.,1.); \}\n")
+        *writer |> write("vec2 SATURATE ( vec2 a ) \{ return clamp(a,vec2(0.,0.),vec2(1.,1.)); \}\n")
+        *writer |> write("vec3 SATURATE ( vec3 a ) \{ return clamp(a,vec3(0.,0.,0.),vec3(1.,1.,1.)); \}\n")
+        *writer |> write("vec4 SATURATE ( vec4 a ) \{ return clamp(a,vec4(0.,0.,0.,0.),vec4(1.,1.,1.,1.)); \}\n")
         *writer |> write("void sincos ( float a, out float sv, out float cv ) \{ sv=sin(a); cv=cos(a); \}\n")
         *writer |> write("float length_sq ( vec2 t ) \{ return dot(t,t); \}\n")
         *writer |> write("float length_sq ( vec3 t ) \{ return dot(t,t); \}\n")
         *writer |> write("float length_sq ( vec4 t ) \{ return dot(t,t); \}\n")
         *writer |> write("float mad ( float a, float b, float c ) \{ return a*b+c; \}\n")
-        *writer |> write("vec2 mad ( vec2 a, float b, vec2 c ) \{ return a*vec2(b)+c; \}\n")
-        *writer |> write("vec3 mad ( vec3 a, float b, vec3 c ) \{ return a*vec3(b)+c; \}\n")
-        *writer |> write("vec4 mad ( vec4 a, float b, vec4 c ) \{ return a*vec4(b)+c; \}\n")
+        *writer |> write("vec2 mad ( vec2 a, float b, vec2 c ) \{ return a*vec2(b,b)+c; \}\n")
+        *writer |> write("vec3 mad ( vec3 a, float b, vec3 c ) \{ return a*vec3(b,b,b)+c; \}\n")
+        *writer |> write("vec4 mad ( vec4 a, float b, vec4 c ) \{ return a*vec4(b,b,b,b)+c; \}\n")
         *writer |> write("vec2 mad ( vec2 a, vec2 b, vec2 c ) \{ return a*b+c; \}\n")
         *writer |> write("vec3 mad ( vec3 a, vec3 b, vec3 c ) \{ return a*b+c; \}\n")
         *writer |> write("vec4 mad ( vec4 a, vec4 b, vec4 c ) \{ return a*b+c; \}\n")
@@ -392,9 +436,9 @@ class GlslExport : AstVisitor
         self->line(fun.at)
         *writer |> write("{self->describe_glsl_type(fun.result)} ")
         var fnName = self->isMainFunction(fun) ? "main" : self->glsl_function_name(fun)
-        *writer |> write("{fnName} ( ")
+        *writer |> write("{fnName}(")
     def override preVisitFunctionBody(fun:FunctionPtr)
-        *writer |> write(" )")
+        *writer |> write(")")
         for ann in fun.annotations
             if ann.annotation.name=="pixel_shader" // TODO: other ann
                 let argo = find_arg("output",ann.arguments)
@@ -456,13 +500,16 @@ class GlslExport : AstVisitor
     def override canVisitGlobalVariable(arg:Variable?):bool
         if !depVar |> key_exists(intptr(arg))
             return false
-        if arg._module.name=="glsl_common"
-            return false
-        if !(find_arg("cbuffer",arg.annotation) is nothing)
+        if "{arg._module.name}" |> find("glsl_") != -1
             return false
         return true
     def override preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool)
         self->line(arg.at)
+        if !caps.output_inout
+            if ( !(find_arg("inout", arg.annotation) is nothing) ||
+                 !(find_arg("in",  arg.annotation) is nothing) ||
+                 !(find_arg("out", arg.annotation) is nothing) )
+                *writer |> write("// ")
         if find_arg("ssbo", arg.annotation) is tBool
             var binding = find_arg("binding", arg.annotation) ?as tInt ?? 0
             *writer |> write("layout(std430, binding={binding}) buffer {arg.name}_ssbo")
@@ -529,6 +576,26 @@ class GlslExport : AstVisitor
             *writer |> write(": register({reg as tString})")
         *writer |> write(";")
         self->newLine(2)
+        var is_inout = false
+        if caps.output_inout_stub
+            is_inout = true
+            if !(find_arg("inout", arg.annotation) is nothing)
+                if shaderType==ShaderType vertex
+                    inout_stub += "$output {arg.name}\n"
+                elif shaderType==ShaderType compute || shaderType==ShaderType fragment
+                    inout_stub += "$input {arg.name}\n"
+            elif !(find_arg("in", arg.annotation) is nothing)
+                inout_stub += "$input {arg.name}\n"
+            elif !(find_arg("out", arg.annotation) is nothing)
+                inout_stub += "$output {arg.name}\n"
+            else
+                is_inout = false
+        if is_inout && caps.output_inout_decl
+            let sema = find_arg("semantics", arg.annotation)
+            var suffix = ""
+            if sema is tString
+                suffix = " : {sema as tString}"
+            inout_decl +="{self->describe_glsl_type(arg._type)} {arg.name}{suffix};\n"
         return arg
     def override preVisitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr)
         // if arg.flags.init_via_move
@@ -600,10 +667,13 @@ class GlslExport : AstVisitor
         self->error ("is type is not supported", expr.at)
 // op2
     def getReplaceOp2(expr:smart_ptr<ExprOp2>)
-        if "{expr.op}"=="%" && !expr._type.isInteger
+        if expr.op=="%" && !expr._type.isInteger
             return "mod"
-        else
-            return ""
+        if caps.replace_hlsl_incompatible_operations
+            if expr.op=="*"
+                if is_any_matrix(expr.left._type) || is_any_matrix(expr.right._type)
+                    return "mul"
+        return ""
     def override preVisitExprOp2(expr:smart_ptr<ExprOp2>)
         let repl = self->getReplaceOp2(expr)
         *writer |> write("{repl}(")
@@ -1006,9 +1076,11 @@ class GlslExport : AstVisitor
         self->error ("call macro is not supported", expr.at)
 
 [macro_function]
-def generate_glsl(fnMain:FunctionPtr; var errors:array<string>; shaderType:ShaderType; version:int; comp_loc_size:int3 )
+def generate_glsl(fnMain:FunctionPtr; var errors:array<string>; shaderType:ShaderType; version:int; comp_loc_size:int3; caps:ShaderExportCaps ) : tuple<body:string;inout_stub:string;inout_decl:string>
+    var inout_stub = ""
+    var inout_decl = ""
     var st = build_string() <| $ (var writer)
-        var astVisitor = new GlslExport(writer,shaderType,version,comp_loc_size)
+        var astVisitor = new GlslExport(writer,shaderType,version,comp_loc_size, caps)
         unsafe
             astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)
         collect_dependencies(fnMain) <| $ ( vfun, vvar )
@@ -1024,31 +1096,18 @@ def generate_glsl(fnMain:FunctionPtr; var errors:array<string>; shaderType:Shade
                     astVisitor.depStruct[intptr(en)] = true
                 visit_modules(compiling_program(), astVisitor.astVisitorAdapter)
         errors <- astVisitor.errors
+        inout_stub = astVisitor.inout_stub
+        inout_decl = astVisitor.inout_decl
         astVisitor.astVisitorAdapter := null
         unsafe
             delete astVisitor
     if DEBUG_SHADER_TEXT
         print("{st}\n\n")
-    return st
+    return [[auto st, inout_stub, inout_decl]]
 
 [macro_function]
 def bind_uniform_function_name(fnMain:FunctionPtr)
     return "{fnMain.name}_bind_uniform"
-
-[macro_function]
-def generate_bind_uniform_dummy(fnMain:FunctionPtr)
-    var fn <- new [[Function() at = fnMain.at, atDecl = fnMain.at, name := bind_uniform_function_name(fnMain)]]
-    fn.flags |= FunctionFlags generated
-    fn.flags |= FunctionFlags exports   // note: this is temporary, until we are done with dependency collecting etc
-    fn.result <- new [[TypeDecl() baseType=Type tVoid, at=fnMain.at]]
-    fn.arguments |> emplace_new() <| new [[Variable() at=fnMain.at,
-        name := "__program",
-        _type <- new [[TypeDecl() at=fnMain.at, baseType=Type tUInt]]
-    ]]
-    fn.body <- new [[ExprBlock() at=fnMain.at]]
-    if !(compiling_module() |> add_function(fn))
-        panic("can't setup")
-    return true
 
 [macro_function]
 def is_glsl_structure(arg; name:string)
@@ -1058,60 +1117,7 @@ def is_glsl_structure(arg; name:string)
     return false
 
 [macro_function]
-def generate_bind_uniform(fnMain:FunctionPtr; var fn:FunctionPtr)
-    var blk <- new [[ExprBlock() at=fn.at]]
-    collect_dependencies(fnMain) <| $ ( vfun, vvar )
-        for vv in vvar
-            var needUniform = true
-            if find_arg("uniform", vv.annotation) is tBool
-                if is_glsl_structure(vv,"sampler2D")
-                    // bind_sampler_2d(binding, varName.texture2D)
-                    var binding = find_arg("binding", vv.annotation) ?as tInt ?? 0
-                    var vtex <- new [[ExprField() at=vv.at,
-                        value <- new [[ExprVar() at=vv.at, name:=vv.name]],
-                        name := "texture2D"
-                    ]]
-                    var cll_bind <- new [[ExprCall() at=vv.at, name:="bind_sampler_2d"]]
-                    cll_bind.arguments |> emplace_new() <| new [[ExprConstInt() at=vv.at, value=binding]]
-                    cll_bind.arguments |> emplace(vtex)
-                    blk.list |>emplace(cll_bind)
-                    // glUniformAny(gl_GetUniformLocation("varName"),binding)
-                    var cll_gul <- new [[ExprCall() at=vv.at, name:="glGetUniformLocation"]]
-                    cll_gul.arguments |> emplace_new() <| new [[ExprVar() at=vv.at, name:="__program"]]
-                    cll_gul.arguments |> emplace_new() <| new [[ExprConstString() at=vv.at, value:=vv.name]]
-                    var cll_uni <- new [[ExprCall() at=vv.at, name:="glUniformAny"]]
-                    cll_uni.arguments |> emplace(cll_gul)
-                    cll_uni.arguments |> emplace_new() <| new [[ExprConstInt() at=vv.at, value=binding]]
-                    blk.list |>emplace(cll_uni)
-                elif is_glsl_structure(vv,"image2D")
-                    // bind_sampler_2d(binding, varName.texture2D, format, access)
-                    var binding = find_arg("binding", vv.annotation) ?as tInt ?? 0
-                    var vtex <- new [[ExprField() at=vv.at,
-                        value <- new [[ExprVar() at=vv.at, name:=vv.name]],
-                        name := "texture2D"
-                    ]]
-                    var format = find_arg("format", vv.annotation) ?as tString ?? "rgba8"
-                    format = "GL_{to_upper(format)}"
-                    var access = "GL_READ_WRITE"
-                    if find_arg("writeonly", vv.annotation) is tBool
-                        access = "GL_WRITE_ONLY"
-                    if find_arg("readonly", vv.annotation) is tBool
-                        access = "GL_READ_ONLY"
-                    var cll_uni <- new [[ExprCall() at=vv.at, name:="bind_image_2d"]]
-                    cll_uni.arguments |> emplace_new() <| new [[ExprConstInt() at=vv.at, value=binding]]
-                    cll_uni.arguments |> emplace(vtex)
-                    cll_uni.arguments |> emplace_new() <| new [[ExprVar() at=vv.at, name:=format]]
-                    cll_uni.arguments |> emplace_new() <| new [[ExprVar() at=vv.at, name:=access]]
-                    blk.list |>emplace(cll_uni)
-                else
-                    // glUniformAny(gl_GetUniformLocation("varName"),varName)
-                    var cll_gul <- new [[ExprCall() at=vv.at, name:="glGetUniformLocation"]]
-                    cll_gul.arguments |> emplace_new() <| new [[ExprVar() at=vv.at, name:="__program"]]
-                    cll_gul.arguments |> emplace_new() <| new [[ExprConstString() at=vv.at, value:=vv.name]]
-                    var cll_uni <- new [[ExprCall() at=vv.at, name:="glUniformAny"]]
-                    cll_uni.arguments |> emplace(cll_gul)
-                    cll_uni.arguments |> emplace_new() <| new [[ExprVar() at=vv.at, name:=vv.name]]
-                    blk.list |>emplace(cll_uni)
-    fn.body := blk
-    if DEBUG_SHADER_BINDINGS
-        print("{describe(fn)}\n")
+def is_any_matrix(typ:TypeDeclPtr)
+    if typ.baseType != Type tHandle
+        return false
+    return typ.annotation.name=="float3x3" || typ.annotation.name=="float3x4" || typ.annotation.name=="float4x4"

@@ -18,3 +18,8 @@ include/modules/external_need.inc
 include/modules/external_resolve.inc
 examples/test/imgui.ini
 examples/test/Simple.json
+temp/fragment.bin
+temp/fragment.sh
+temp/varying.def.sc
+temp/vertex.bin
+temp/vertex.sh
