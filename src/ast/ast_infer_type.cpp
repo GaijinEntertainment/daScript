@@ -1745,7 +1745,7 @@ namespace das {
                     c->type = cE->enumType->makeEnumType();
                     c->type->constant = true;
                 } else {
-                    error("enumeration value not inferred yet",  "", "",
+                    error("enumeration value not inferred yet " + cE->text,  "", "",
                         c->at, CompilationError::invalid_enumeration);
                     c->type.reset();
                 }
