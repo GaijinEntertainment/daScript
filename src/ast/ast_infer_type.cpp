@@ -918,15 +918,18 @@ namespace das {
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
+            auto thisModule = program->thisModule.get();
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
-                            if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
-                                if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
-                                    result.push_back(pFn.get());
+                            if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
+                                if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
+                                    if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
+                                        result.push_back(pFn.get());
+                                    }
                                 }
                             }
                         }
@@ -942,15 +945,18 @@ namespace das {
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
+            auto thisModule = program->thisModule.get();
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(funcName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
-                            if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
-                                if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
-                                    result.push_back(pFn.get());
+                            if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
+                                if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
+                                    if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
+                                        result.push_back(pFn.get());
+                                    }
                                 }
                             }
                         }
@@ -966,13 +972,14 @@ namespace das {
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
+            auto thisModule = program->thisModule.get();
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->genericsByName.find(funcName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
-                            if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
+                            if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                 if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
                                     result.push_back(pFn.get());
                                 }
@@ -990,13 +997,14 @@ namespace das {
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
+            auto thisModule = program->thisModule.get();
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->genericsByName.find(funcName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
-                            if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
+                            if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                 if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
                                     result.push_back(pFn.get());
                                 }
@@ -4281,10 +4289,11 @@ namespace das {
             splitTypeName(name, moduleName, varName);
             vector<VariablePtr> result;
             auto inWhichModule = getSearchModule(moduleName);
+            auto thisModule = program->thisModule.get();
             program->library.foreach([&](Module * mod) -> bool {
                 if ( auto var = mod->findVariable(varName) ) {
                     if ( inWhichModule->isVisibleDirectly(var->module) ) {
-                        if ( seePrivate || canAccessGlobal(var,inWhichModule,program->thisModule.get()) ) {
+                        if ( seePrivate || canAccessGlobal(var,inWhichModule,thisModule) ) {
                             result.push_back(var);
                         }
                     }
