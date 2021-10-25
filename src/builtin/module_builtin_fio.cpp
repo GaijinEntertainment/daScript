@@ -416,7 +416,7 @@ namespace das {
 #ifdef _MSC_VER
         return _pclose( f );
 #else
-        return WEXITSTATUS(_pclose(f));
+        return WEXITSTATUS(pclose(f));
 #endif
     }
 
