@@ -1,10 +1,14 @@
 require fio
 
+class Foo
+    def const GetValue()
+        return 2
+
+def Bar( foo: Foo const& )
+    return foo->GetValue()
+
 [export]
 def main
-    unsafe
-        popen("dir") <| $ ( f )
-            if f != null
-                while !feof(f)
-                    let st = fgets(f)
-                    print("{st}")
+    let foo = new Foo()
+    Bar(*foo)
+

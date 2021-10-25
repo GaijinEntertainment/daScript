@@ -339,6 +339,7 @@
 %type <b>               class_or_struct
 %type <b>               copy_or_move
 %type <b>               optional_override
+%type <b>               optional_constant
 %type <b>               kwd_let
 %type <b>               is_public_module
 %type <b>               optional_shared
@@ -1761,6 +1762,11 @@ optional_override
     |   DAS_OVERRIDE    { $$ = true; }
     ;
 
+optional_constant
+    :                   { $$ = false; }
+    |   DAS_CONST       { $$ = true; }
+    ;
+
 structure_variable_declaration
     :   optional_field_annotation[alist] optional_override[ovr] variable_declaration[decl] {
         $decl->override = $ovr;
@@ -1822,7 +1828,7 @@ struct_variable_declaration_list
         $func->delRef();
         $$ = $list;
     }
-    |   struct_variable_declaration_list[list] optional_annotation_list[annL] DAS_DEF[from] optional_override[ovr] function_declaration[func] {
+    |   struct_variable_declaration_list[list] optional_annotation_list[annL] DAS_DEF[from] optional_override[ovr] optional_constant[cnst] function_declaration[func] {
         $func->atDecl = tokRangeAt(@from,@func);
         if ( !g_thisStructure ) {
             das_yyerror("internal error. member function outside of class.",
@@ -1850,10 +1856,14 @@ struct_variable_declaration_list
                 );
                 decl->override = $ovr;
                 $list->push_back(decl);
-                modifyToClassMember($func, g_thisStructure, false);
+                modifyToClassMember($func, g_thisStructure, false, $cnst);
             } else {
                 if ( $ovr ) {
-                    das_yyerror("can't override constructor " + $func->getMangledName(),
+                    das_yyerror("can't override initializer or finalizer " + $func->getMangledName(),
+                        $func->at, CompilationError::invalid_member_function);
+                }
+                if ( $cnst ) {
+                    das_yyerror("can't have constant initializer or finalizer " + $func->getMangledName(),
                         $func->at, CompilationError::invalid_member_function);
                 }
                 if ( $func->name!="finalize" ) {
@@ -1863,9 +1873,9 @@ struct_variable_declaration_list
                             ctr->at, CompilationError::function_already_declared);
                     }
                     $func->name = g_thisStructure->name + "`" + g_thisStructure->name;
-                    modifyToClassMember($func, g_thisStructure, false);
+                    modifyToClassMember($func, g_thisStructure, false, false);
                 } else {
-                    modifyToClassMember($func, g_thisStructure, true);
+                    modifyToClassMember($func, g_thisStructure, true, false);
                 }
             }
             assignDefaultArguments($func);

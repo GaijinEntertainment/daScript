@@ -48,7 +48,7 @@ namespace das {
             with self
                 ...
     */
-    void modifyToClassMember ( Function * func, Structure * baseClass, bool isExplicit );
+    void modifyToClassMember ( Function * func, Structure * baseClass, bool isExplicit, bool isConstant );
 
     /*
         def Foo ( ... )

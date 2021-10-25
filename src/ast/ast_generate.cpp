@@ -1534,10 +1534,10 @@ namespace das {
         return enc.enclosure;
     }
 
-    void modifyToClassMember ( Function * func, Structure * baseClass, bool isExplicit ) {
+    void modifyToClassMember ( Function * func, Structure * baseClass, bool isExplicit, bool isConstant ) {
         // first argument is this
         auto argT = make_smart<TypeDecl>(baseClass);
-        argT->constant = false;
+        argT->constant = isConstant;
         argT->isExplicit = isExplicit;
         auto argV = make_smart<Variable>();
         argV->name = "self";
