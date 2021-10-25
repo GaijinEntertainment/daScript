@@ -408,7 +408,7 @@ namespace das {
 #ifdef _MSC_VER
         FILE * f = cmd ? _popen(cmd, "rt") : nullptr;
 #else
-        FILE * f = cmd ? popen(cmd, "rt") : nullptr;
+        FILE * f = cmd ? popen(cmd, "r+") : nullptr;
 #endif
         vec4f args[1];
         args[0] = cast<FILE *>::from(f);
@@ -416,7 +416,8 @@ namespace das {
 #ifdef _MSC_VER
         return _pclose( f );
 #else
-        return WEXITSTATUS(pclose(f));
+        auto t = pclose(f);
+        return WEXITSTATUS(t);
 #endif
     }
 
