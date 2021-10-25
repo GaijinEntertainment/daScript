@@ -30,6 +30,7 @@ bitfield ShaderExportCaps
     output_inout_decl
     replace_hlsl_incompatible_operations
     restrict_uniform_types
+    restrict_vertex_attribute_names
 
 class GlslShader : AstFunctionAnnotation
     shaderType = ShaderType vertex
@@ -40,6 +41,7 @@ class GlslShader : AstFunctionAnnotation
     output_shader_lines = true
     replace_hlsl_incompatible_operations = false
     restrict_uniform_types = false
+    restrict_vertex_attribute_names = false
     glsl_prefix = ""
     def generate_bind_uniform_dummy ( var func:FunctionPtr )
         pass
@@ -84,6 +86,8 @@ class GlslShader : AstFunctionAnnotation
             caps |= ShaderExportCaps replace_hlsl_incompatible_operations
         if restrict_uniform_types
             caps |= ShaderExportCaps restrict_uniform_types
+        if restrict_vertex_attribute_names
+            caps |= ShaderExportCaps restrict_vertex_attribute_names
         return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
@@ -104,7 +108,7 @@ class GlslShader : AstFunctionAnnotation
         // TODO: 'find_global(name)'
         var err : array<string>
         var glob <- find_variable(compiling_module(), argName as tString)
-        if glob.init == null
+        if glob!=null && glob.init == null
             if glob.name == argName as tString
                 var caps = self->buildCaps()
                 let gres = generate_glsl(func, err, shaderType, version, compute_local_size, caps)
@@ -131,6 +135,27 @@ class GlslShader : AstFunctionAnnotation
             errors := join(err, "\n")
             return false
         return true
+
+let private glsl_restricted_vertex_attribute_names <- {{
+    "a_position"    => true;
+    "a_normal"      => true;
+    "a_tangent"     => true;
+    "a_bitangent"   => true;
+    "a_color0"      => true;
+    "a_color1"      => true;
+    "a_color2"      => true;
+    "a_color3"      => true;
+    "a_indices"     => true;
+    "a_weight"      => true;
+    "a_texcoord0"   => true;
+    "a_texcoord1"   => true;
+    "a_texcoord2"   => true;
+    "a_texcoord3"   => true;
+    "a_texcoord4"   => true;
+    "a_texcoord5"   => true;
+    "a_texcoord6"   => true;
+    "a_texcoord7"   => true
+}}
 
 let private glsl_types <- {{
     Type tFloat         => "float";
@@ -604,6 +629,12 @@ class GlslExport : AstVisitor
                     inout_stub += "$input {arg.name}\n"
             elif !(find_arg("in", arg.annotation) is nothing)
                 inout_stub += "$input {arg.name}\n"
+                if caps.restrict_vertex_attribute_names
+                    if !glsl_restricted_vertex_attribute_names |> key_exists("{arg.name}")
+                        var names <- [{for n in keys(glsl_restricted_vertex_attribute_names); n}]
+                        let allowed_names = join(names,",")
+                        self->error("invalid vertex attribute name {arg.name}, supported names are {allowed_names}", arg.at)
+                        delete names
             elif !(find_arg("out", arg.annotation) is nothing)
                 inout_stub += "$output {arg.name}\n"
             else

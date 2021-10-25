@@ -24,6 +24,9 @@ def degrees(f:float)
 def radians(f:float)
     return f*PI/180.
 
+def RGBA_TO_UCOLOR(x,y,z,w:float)
+    return pack_float_to_byte(float4(x,y,z,w)*255.)
+
 def UCOLOR_TO_RGBA(x:uint)
     return float4(
         float((x>>16u)&255u)/255.0,
