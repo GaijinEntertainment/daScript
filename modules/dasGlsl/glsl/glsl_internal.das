@@ -29,6 +29,7 @@ bitfield ShaderExportCaps
     output_inout_stub
     output_inout_decl
     replace_hlsl_incompatible_operations
+    restrict_uniform_types
 
 class GlslShader : AstFunctionAnnotation
     shaderType = ShaderType vertex
@@ -38,6 +39,7 @@ class GlslShader : AstFunctionAnnotation
     output_inout_decl = false
     output_shader_lines = true
     replace_hlsl_incompatible_operations = false
+    restrict_uniform_types = false
     glsl_prefix = ""
     def generate_bind_uniform_dummy ( var func:FunctionPtr )
         pass
@@ -80,6 +82,8 @@ class GlslShader : AstFunctionAnnotation
             caps |= ShaderExportCaps output_shader_lines
         if replace_hlsl_incompatible_operations
             caps |= ShaderExportCaps replace_hlsl_incompatible_operations
+        if restrict_uniform_types
+            caps |= ShaderExportCaps restrict_uniform_types
         return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
@@ -503,6 +507,15 @@ class GlslExport : AstVisitor
         if "{arg._module.name}" |> find("glsl_") != -1
             return false
         return true
+    def checkUniformType ( typ:TypeDeclPtr )
+        if !caps.restrict_uniform_types
+            return
+        if typ.baseType==Type tFloat4
+            return
+        if typ.baseType==Type tHandle
+            if typ.annotation.name=="float3x3" || typ.annotation.name=="float4x4"
+                return
+        self->error("unsupported uniform type {describe(typ)}", typ.at)
     def override preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool)
         self->line(arg.at)
         if !caps.output_inout
@@ -523,6 +536,7 @@ class GlslExport : AstVisitor
             var needInit = true
             if shaderType==ShaderType vertex
                 if find_arg("uniform", arg.annotation) is tBool
+                    self->checkUniformType(arg._type)
                     *writer |> write("uniform "); needInit = false
                 let argLoc = find_arg("location", arg.annotation)
                 if argLoc is tInt
@@ -533,6 +547,7 @@ class GlslExport : AstVisitor
                     *writer |> write("out "); needInit = false
             elif shaderType==ShaderType fragment
                 if find_arg("uniform", arg.annotation) is tBool
+                    self->checkUniformType(arg._type)
                     *writer |> write("uniform "); needInit = false
                 if find_arg("in", arg.annotation) is tBool
                     *writer |> write("in "); needInit = false
@@ -542,6 +557,7 @@ class GlslExport : AstVisitor
                     *writer |> write("in "); needInit = false
             elif shaderType==ShaderType compute
                 if find_arg("uniform", arg.annotation) is tBool
+                    self->checkUniformType(arg._type)
                     *writer |> write("uniform "); needInit = false
                 if find_arg("in", arg.annotation) is tBool
                     *writer |> write("in "); needInit = false
@@ -566,7 +582,9 @@ class GlslExport : AstVisitor
                     if !empty(layouts)
                         let lstr = join(layouts,",")
                         *writer |> write("layout({lstr}) "); needInit = false
-            *writer |> write("{self->describe_glsl_type(arg._type)} {arg.name}")
+            *writer |> write("{self->describe_glsl_type_ex(arg._type,false)} {arg.name}")
+            for d in arg._type.dim
+                *writer |> write("[{d}]")
             if arg.init==null && needInit
                 *writer |> write(" = ")
                 self->produce_zero(arg._type)
