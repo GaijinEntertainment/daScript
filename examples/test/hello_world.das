@@ -1,11 +1,10 @@
-require fio
-
 class Foo
-    def const GetValue()
-        return 2
+    def const GetValue(x:int; a:int=5)
+        print("GetValue({x},{a})\n")
+        return 2 + a
 
 def Bar( foo: Foo const& )
-    return foo->GetValue()
+    return foo->GetValue(1)
 
 [export]
 def main

@@ -2405,6 +2405,64 @@ namespace das {
                 } else if ( !blockT->isGoodBlockType() && !blockT->isGoodFunctionType() && !blockT->isGoodLambdaType() ) {
                     // no go, not a good block
                 } else if ( expr->arguments.size()-1 != blockT->argTypes.size() ) {
+                    // default arguments
+                    // invoke(foo.GetValue,cast<auto> foo)
+                    if ( expr->isInvokeMethod ) {
+                        auto classDotMethod = expr->arguments[0];
+                        if ( classDotMethod->rtti_isR2V() ) {
+                            classDotMethod = static_pointer_cast<ExprRef2Value>(classDotMethod)->subexpr;
+                        }
+                        if ( classDotMethod->rtti_isField() ) {
+                            auto eField = static_pointer_cast<ExprField>(classDotMethod);
+                            if ( eField->value->type && !eField->value->type->isAutoOrAlias() ) {
+                                if ( eField->value->type->baseType==Type::tStructure ) {
+                                    auto stt = eField->value->type->structType;
+                                    auto sttf = stt->findField(eField->name);
+                                    if ( sttf ) {
+                                        if ( sttf->init && sttf->init->rtti_isAddr() ) {
+                                            auto fnAddr = static_pointer_cast<ExprAddr>(sttf->init);
+                                            if ( fnAddr->func ) {
+                                                int fnArgSize = int(fnAddr->func->arguments.size());
+                                                int fromFnArgSize = int(expr->arguments.size()-1);
+                                                bool allHaveInit = true;
+                                                for ( int ai=fromFnArgSize; ai!=fnArgSize; ++ai ) {
+                                                    if ( !fnAddr->func->arguments[ai]->init ) {
+                                                        allHaveInit = false;
+                                                        break;
+                                                    }
+                                                }
+                                                if ( allHaveInit ) {
+                                                    for ( int ai=fromFnArgSize; ai!=fnArgSize; ++ai ) {
+                                                        expr->arguments.emplace_back(fnAddr->func->arguments[ai]->init->clone());
+                                                    }
+                                                    reportAstChanged();
+                                                    return Visitor::visit(expr);
+                                                }
+                                            } else {
+                                                error(fnAddr->target + " is not fully resolved yet", "", "",
+                                                    expr->at, CompilationError::invalid_argument_count);
+                                            }
+                                        } else {
+                                            error(stt->name + "->" + eField->name + " expecting function", "", "",
+                                                expr->at, CompilationError::invalid_argument_count);
+                                        }
+                                    } else {
+                                        error(stt->name + "->" + eField->name + " not found", "", "",
+                                            expr->at, CompilationError::invalid_argument_count);
+                                    }
+                                } else {
+                                    error("expecting class->method", "", "",
+                                        expr->at, CompilationError::invalid_argument_count);
+                                }
+                            } else {
+                                error("class type is not inferred yet", "", "",
+                                    expr->at, CompilationError::invalid_argument_count);
+                            }
+                        } else {
+                            error("expecting class.method in the method invoke", "", "",
+                                expr->at, CompilationError::invalid_argument_count);
+                        }
+                    }
                     error("expecting " + to_string(blockT->argTypes.size()) + " arguments, got " + to_string(expr->arguments.size()-1) ,  "", "",
                         expr->at, CompilationError::invalid_argument_count);
                 } else {
