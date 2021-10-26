@@ -39,8 +39,8 @@ def linear_to_RGB ( color : float3 )
 
 [fragment_program(name="FRAGMENT_SRC",version=330)]
 def ps_effect
-    let color = texture(f_tex,f_texcoord)
-    let bloom = texture(f_bloom,f_texcoord)
+    let color = texture2D(f_tex,f_texcoord)
+    let bloom = texture2D(f_bloom,f_texcoord)
     let res = bloom + color
     f_outputColor = linear_to_RGB(res.xyz).zyxx
 

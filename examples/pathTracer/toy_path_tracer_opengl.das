@@ -33,7 +33,7 @@ def linear_to_RGB ( color : float3 )
 
 [fragment_program(name="FRAGMENT_SRC",version=330)]
 def ps_effect
-    f_outputColor = linear_to_RGB(texture(f_tex,f_texcoord).xyz).zyxx
+    f_outputColor = linear_to_RGB(texture2D(f_tex,f_texcoord).xyz).zyxx
 
 [compute_program(name="COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
 def compute_effect

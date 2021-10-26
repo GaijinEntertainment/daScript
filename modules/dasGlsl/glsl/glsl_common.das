@@ -18,7 +18,6 @@ def texture2D(sampler:sampler2D;uv:float2)
     assert(false,"we should not be here\n")
     return float4(0.)
 
-
 def textureOffset(sample:sampler2D; uv:float2; ofs:int2)
     assert(false,"we should not be here\n")
     return float4(0.)
