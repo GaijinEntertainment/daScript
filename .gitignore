@@ -23,3 +23,5 @@ temp/fragment.sh
 temp/varying.def.sc
 temp/vertex.bin
 temp/vertex.sh
+temp/compute.bin
+temp/compute.sh

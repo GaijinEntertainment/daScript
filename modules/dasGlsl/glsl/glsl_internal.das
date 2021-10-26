@@ -33,6 +33,7 @@ bitfield ShaderExportCaps
     restrict_vertex_attribute_names
     output_unfirom_macro_declarations
     output_compatibility_constructors
+    output_hlsl_style_compute_layout
 
 class GlslShader : AstFunctionAnnotation
     shaderType = ShaderType vertex
@@ -46,7 +47,9 @@ class GlslShader : AstFunctionAnnotation
     restrict_vertex_attribute_names = false
     output_unfirom_macro_declarations = false
     output_compatibility_constructors = false
-    glsl_prefix = ""
+    output_hlsl_style_compute_layout = false
+    def get_glsl_prefix
+        return ""
     def generate_bind_uniform_dummy ( var func:FunctionPtr )
         pass
     def generate_bind_uniform(fnMain:FunctionPtr; var fn:FunctionPtr)
@@ -96,6 +99,8 @@ class GlslShader : AstFunctionAnnotation
             caps |= ShaderExportCaps output_unfirom_macro_declarations
         if output_compatibility_constructors
             caps |= ShaderExportCaps output_compatibility_constructors
+        if output_hlsl_style_compute_layout
+            caps |= ShaderExportCaps output_hlsl_style_compute_layout
         return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
@@ -120,7 +125,7 @@ class GlslShader : AstFunctionAnnotation
             if glob.name == argName as tString
                 var caps = self->buildCaps()
                 let gres = generate_glsl(func, err, shaderType, version, compute_local_size, caps)
-                let shader_text = "{gres.inout_stub}{glsl_prefix}{gres.body}"
+                let shader_text = "{gres.inout_stub}{self->get_glsl_prefix()}{gres.body}"
                 glob.init <- new [[ExprConstString() at=func.at,
                     value := shader_text,
                     _type <- new [[TypeDecl() at=func.at, baseType=Type tString]]
@@ -440,12 +445,13 @@ class GlslExport : AstVisitor
             *writer |> write("mat3 MAT3(vec3 a, vec3 b, vec3 c) \{ mat3 res; res[0]=a; res[1]=b; res[2]=c; return res; \}\n")
             *writer |> write("mat3 MAT3(mat4 m) \{ mat3 res; res[0]=m[0].xyz; res[1]=m[1].xyz; res[2]=m[2].xyz; return res; \}\n")
         if shaderType==ShaderType compute
-            if compute_local_size.z != 0
-                *writer |> write("layout (local_size_x={compute_local_size.x}, local_size_y={compute_local_size.y}, local_size_z={compute_local_size.z}) in;\n")
-            elif compute_local_size.y != 0
-                *writer |> write("layout (local_size_x={compute_local_size.x}, local_size_y={compute_local_size.y}) in;\n")
-            else
-                *writer |> write("layout (local_size_x={compute_local_size.x}) in;\n")
+            if !caps.output_hlsl_style_compute_layout
+                if compute_local_size.z != 0
+                    *writer |> write("layout (local_size_x={compute_local_size.x}, local_size_y={compute_local_size.y}, local_size_z={compute_local_size.z}) in;\n")
+                elif compute_local_size.y != 0
+                    *writer |> write("layout (local_size_x={compute_local_size.x}, local_size_y={compute_local_size.y}) in;\n")
+                else
+                    *writer |> write("layout (local_size_x={compute_local_size.x}) in;\n")
 // type
     ET : bool = false
     def override preVisitTypeDecl(typ:TypeDeclPtr)
@@ -499,9 +505,18 @@ class GlslExport : AstVisitor
             return false
         return true
     def override preVisitFunction(fun:FunctionPtr)
+        let isMain = self->isMainFunction(fun)
+        if isMain && shaderType==ShaderType compute
+            if caps.output_hlsl_style_compute_layout
+                if compute_local_size.z != 0
+                    *writer |> write("NUM_THREADS({compute_local_size.x},{compute_local_size.y},{compute_local_size.z})\n")
+                elif compute_local_size.y != 0
+                    *writer |> write("NUM_THREADS({compute_local_size.x},{compute_local_size.y},1)\n")
+                else
+                    *writer |> write("NUM_THREADS({compute_local_size.x},1,1)\n")
         self->line(fun.at)
         *writer |> write("{self->describe_glsl_type(fun.result)} ")
-        var fnName = self->isMainFunction(fun) ? "main" : self->glsl_function_name(fun)
+        var fnName = isMain ? "main" : self->glsl_function_name(fun)
         *writer |> write("{fnName}(")
     def override preVisitFunctionBody(fun:FunctionPtr)
         *writer |> write(")")
@@ -580,10 +595,17 @@ class GlslExport : AstVisitor
         if typ.baseType==Type tStructure
             if "{typ.structType.name}" |> find("sampler")!=-1
                 return
+            if "{typ.structType.name}" |> find("image")!=-1
+                return
         self->error("unsupported uniform type {describe(typ)}", typ.at)
     def getSamplerType(typ:TypeDeclPtr) : string
         if typ.baseType==Type tStructure
             if "{typ.structType.name}" |> find("sampler")!=-1
+                return string(typ.structType.name)
+        return ""
+    def getImageType(typ:TypeDeclPtr) : string
+        if typ.baseType==Type tStructure
+            if "{typ.structType.name}" |> find("image")!=-1
                 return string(typ.structType.name)
         return ""
     def outputSamplerMacro(arg:VariablePtr) : bool
@@ -596,6 +618,23 @@ class GlslExport : AstVisitor
         let sfunc = to_upper(st)
         *writer |> write(sfunc)
         *writer |> write("({arg.name},{stage})")
+        return true
+    def outputImageMacro(arg:VariablePtr) : bool
+        if !caps.output_unfirom_macro_declarations
+            return false
+        let st = self->getImageType(arg._type)
+        if st==""
+            return false
+        let format =  (find_arg("format",arg.annotation) ?as tString) ?? "rgba8"
+        let binding = (find_arg("binding",arg.annotation) ?as tInt) ?? 0
+        var suffix = "_RW"
+        if (find_arg("writeonly",arg.annotation) ?as tBool) ?? false
+            suffix = "_WR"
+        elif (find_arg("readonly",arg.annotation) ?as tBool) ?? false
+            suffix = "_RO"
+        let sfunc = to_upper(st)
+        *writer |> write(sfunc)
+        *writer |> write("{suffix}({arg.name},{format},{binding})")
         return true
     def override preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool)
         self->line(arg.at)
@@ -644,6 +683,8 @@ class GlslExport : AstVisitor
                 if find_arg("uniform", arg.annotation) is tBool
                     self->checkUniformType(arg._type)
                     if self->outputSamplerMacro(arg)
+                        return
+                    if self->outputImageMacro(arg)
                         return
                     *writer |> write("uniform "); needInit = false
                 if find_arg("in", arg.annotation) is tBool
