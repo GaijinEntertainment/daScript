@@ -32,6 +32,7 @@ bitfield ShaderExportCaps
     restrict_uniform_types
     restrict_vertex_attribute_names
     output_unfirom_macro_declarations
+    output_compatibility_constructors
 
 class GlslShader : AstFunctionAnnotation
     shaderType = ShaderType vertex
@@ -44,6 +45,7 @@ class GlslShader : AstFunctionAnnotation
     restrict_uniform_types = false
     restrict_vertex_attribute_names = false
     output_unfirom_macro_declarations = false
+    output_compatibility_constructors = false
     glsl_prefix = ""
     def generate_bind_uniform_dummy ( var func:FunctionPtr )
         pass
@@ -92,6 +94,8 @@ class GlslShader : AstFunctionAnnotation
             caps |= ShaderExportCaps restrict_vertex_attribute_names
         if output_unfirom_macro_declarations
             caps |= ShaderExportCaps output_unfirom_macro_declarations
+        if output_compatibility_constructors
+            caps |= ShaderExportCaps output_compatibility_constructors
         return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
@@ -197,6 +201,14 @@ let private glsl_functions <- {{
     "lerp"      =>  "mix";
     "saturate"  =>  "SATURATE";
     "_"         =>  "_"
+}}
+
+let private glsl_compatibility_constructors <- {{
+    // "float4x4"  =>  "MAT4";
+    "float3x3"  =>  "MAT3";
+    "float4"  =>  "VEC4";
+    "float3"  =>  "VEC3";
+    "float2"  =>  "VEC2"
 }}
 
 class GlslExport : AstVisitor
@@ -406,6 +418,27 @@ class GlslExport : AstVisitor
         *writer |> write("vec4 mad ( vec4 a, vec4 b, vec4 c ) \{ return a*b+c; \}\n")
         *writer |> write("float distance_sq ( vec3 a, vec3 b ) \{ return length_sq(a-b); \}\n")
         *writer |> write("float inv_distance_sq ( vec3 a, vec3 b ) \{ return 1. / distance_sq(a,b); \}\n")
+        if caps.output_compatibility_constructors
+            // vec2
+            *writer |> write("vec2 VEC2(float c) \{ return vec2(c,c); \}\n")
+            *writer |> write("vec2 VEC2(float x, float y) \{ return vec2(x,y); \}\n")
+            // vec3
+            *writer |> write("vec3 VEC3(float c) \{ return vec3(c,c,c); \}\n")
+            *writer |> write("vec3 VEC3(float x, float y, float z) \{ return vec3(x,y,z); \}\n")
+            *writer |> write("vec3 VEC3(vec2 xy, float z) \{ return vec3(xy.x,xy.y,z); \}\n")
+            *writer |> write("vec3 VEC3(float x, vec2 yz) \{ return vec3(x,yz.x,yz.y); \}\n")
+            // vec4
+            *writer |> write("vec4 VEC4(float c) \{ return vec4(c,c,c,c); \}\n")
+            *writer |> write("vec4 VEC4(vec2 xy, float z, float w) \{ return vec4(xy.x,xy.y,z,w); \}\n")
+            *writer |> write("vec4 VEC4(vec2 xy, vec2 zw) \{ return vec4(xy.x,xy.y,zw.x,zw.y); \}\n")
+            *writer |> write("vec4 VEC4(float x, float y, vec2 zw) \{ return vec4(x,y,zw.x,zw.y); \}\n")
+            *writer |> write("vec4 VEC4(float x, vec2 yz, float w) \{ return vec4(x,yz.x,yz.y,w); \}\n")
+            *writer |> write("vec4 VEC4(vec3 xyz, float w) \{ return vec4(xyz.x,xyz.y,xyz.z,w); \}\n")
+            *writer |> write("vec4 VEC4(float x, vec3 yzw) \{ return vec4(x,yzw.x,yzw.y,yzw.z); \}\n")
+            *writer |> write("vec4 VEC4(float x, float y, float z, float w) \{ return vec4(x,y,z,w); \}\n")
+            // mat3
+            *writer |> write("mat3 MAT3(vec3 a, vec3 b, vec3 c) \{ mat3 res; res[0]=a; res[1]=b; res[2]=c; return res; \}\n")
+            *writer |> write("mat3 MAT3(mat4 m) \{ mat3 res; res[0]=m[0].xyz; res[1]=m[1].xyz; res[2]=m[2].xyz; return res; \}\n")
         if shaderType==ShaderType compute
             if compute_local_size.z != 0
                 *writer |> write("layout (local_size_x={compute_local_size.x}, local_size_y={compute_local_size.y}, local_size_z={compute_local_size.z}) in;\n")
@@ -717,6 +750,10 @@ class GlslExport : AstVisitor
         var fnName : string
         unsafe
             fnName = self->glsl_function_name(reinterpret<FunctionPtr> expr.func)
+        if caps.output_compatibility_constructors
+            glsl_compatibility_constructors |> find_if_exists(fnName) <| $(newName:string?)
+                if newName != null
+                    fnName = *newName
         glsl_functions |> find_if_exists(fnName) <| $(newName:string?)
             if newName != null
                 fnName = *newName
