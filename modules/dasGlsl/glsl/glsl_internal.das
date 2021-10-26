@@ -31,6 +31,7 @@ bitfield ShaderExportCaps
     replace_hlsl_incompatible_operations
     restrict_uniform_types
     restrict_vertex_attribute_names
+    output_unfirom_macro_declarations
 
 class GlslShader : AstFunctionAnnotation
     shaderType = ShaderType vertex
@@ -42,6 +43,7 @@ class GlslShader : AstFunctionAnnotation
     replace_hlsl_incompatible_operations = false
     restrict_uniform_types = false
     restrict_vertex_attribute_names = false
+    output_unfirom_macro_declarations = false
     glsl_prefix = ""
     def generate_bind_uniform_dummy ( var func:FunctionPtr )
         pass
@@ -88,6 +90,8 @@ class GlslShader : AstFunctionAnnotation
             caps |= ShaderExportCaps restrict_uniform_types
         if restrict_vertex_attribute_names
             caps |= ShaderExportCaps restrict_vertex_attribute_names
+        if output_unfirom_macro_declarations
+            caps |= ShaderExportCaps output_unfirom_macro_declarations
         return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
@@ -540,7 +544,26 @@ class GlslExport : AstVisitor
         if typ.baseType==Type tHandle
             if typ.annotation.name=="float3x3" || typ.annotation.name=="float4x4"
                 return
+        if typ.baseType==Type tStructure
+            if "{typ.structType.name}" |> find("sampler")!=-1
+                return
         self->error("unsupported uniform type {describe(typ)}", typ.at)
+    def getSamplerType(typ:TypeDeclPtr) : string
+        if typ.baseType==Type tStructure
+            if "{typ.structType.name}" |> find("sampler")!=-1
+                return string(typ.structType.name)
+        return ""
+    def outputSamplerMacro(arg:VariablePtr) : bool
+        if !caps.output_unfirom_macro_declarations
+            return false
+        let st = self->getSamplerType(arg._type)
+        if st==""
+            return false
+        let stage = (find_arg("stage",arg.annotation) ?as tInt) ?? 0
+        let sfunc = to_upper(st)
+        *writer |> write(sfunc)
+        *writer |> write("({arg.name},{stage})")
+        return true
     def override preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool)
         self->line(arg.at)
         if !caps.output_inout
@@ -562,6 +585,8 @@ class GlslExport : AstVisitor
             if shaderType==ShaderType vertex
                 if find_arg("uniform", arg.annotation) is tBool
                     self->checkUniformType(arg._type)
+                    if self->outputSamplerMacro(arg)
+                        return
                     *writer |> write("uniform "); needInit = false
                 let argLoc = find_arg("location", arg.annotation)
                 if argLoc is tInt
@@ -573,6 +598,8 @@ class GlslExport : AstVisitor
             elif shaderType==ShaderType fragment
                 if find_arg("uniform", arg.annotation) is tBool
                     self->checkUniformType(arg._type)
+                    if self->outputSamplerMacro(arg)
+                        return
                     *writer |> write("uniform "); needInit = false
                 if find_arg("in", arg.annotation) is tBool
                     *writer |> write("in "); needInit = false
@@ -583,6 +610,8 @@ class GlslExport : AstVisitor
             elif shaderType==ShaderType compute
                 if find_arg("uniform", arg.annotation) is tBool
                     self->checkUniformType(arg._type)
+                    if self->outputSamplerMacro(arg)
+                        return
                     *writer |> write("uniform "); needInit = false
                 if find_arg("in", arg.annotation) is tBool
                     *writer |> write("in "); needInit = false
