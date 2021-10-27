@@ -209,11 +209,17 @@ let private glsl_functions <- {{
 }}
 
 let private glsl_compatibility_constructors <- {{
-    // "float4x4"  =>  "MAT4";
+    "float4x4"  =>  "MAT4";
     "float3x3"  =>  "MAT3";
     "float4"  =>  "VEC4";
     "float3"  =>  "VEC3";
-    "float2"  =>  "VEC2"
+    "float2"  =>  "VEC2";
+    "int4"  =>  "IVEC4";
+    "int3"  =>  "IVEC3";
+    "int2"  =>  "IVEC2";
+    "uint4"  =>  "UVEC4";
+    "uint3"  =>  "UVEC3";
+    "uint2"  =>  "UVEC2"
 }}
 
 class GlslExport : AstVisitor
@@ -335,9 +341,15 @@ class GlslExport : AstVisitor
             *writer |> write(")")
         elif t.baseType==Type tHandle
             if t.annotation.name=="float3x3"
-                *writer |> write("mat3(vec3(0),vec3(0),vec3(0))")
+                if caps.output_compatibility_constructors
+                    *writer |> write("MAT3(VEC3(0),VEC3(0),VEC3(0))")
+                else
+                    *writer |> write("mat3(vec3(0),vec3(0),vec3(0))")
             elif t.annotation.name=="float4x4"
-                *writer |> write("mat4(vec4(0),vec4(0),vec4(0),vec4(0))")
+                if caps.output_compatibility_constructors
+                    *writer |> write("MAT4(VEC4(0),VEC4(0),VEC4(0),VEC4(0))")
+                else
+                    *writer |> write("mat4(vec4(0),vec4(0),vec4(0),vec4(0))")
             else
                 self->error("unsupported zero for handled type {describe(t)}", t.at)
         elif t.baseType==Type tInt
@@ -441,9 +453,65 @@ class GlslExport : AstVisitor
             *writer |> write("vec4 VEC4(vec3 xyz, float w) \{ return vec4(xyz.x,xyz.y,xyz.z,w); \}\n")
             *writer |> write("vec4 VEC4(float x, vec3 yzw) \{ return vec4(x,yzw.x,yzw.y,yzw.z); \}\n")
             *writer |> write("vec4 VEC4(float x, float y, float z, float w) \{ return vec4(x,y,z,w); \}\n")
+            // ivec2
+            *writer |> write("ivec2 IVEC2(int c) \{ return ivec2(c,c); \}\n")
+            *writer |> write("ivec2 IVEC2(uvec2 c) \{ return ivec2(int(c.x),int(c.y)); \}\n")
+            *writer |> write("ivec2 IVEC2(int x, int y) \{ return ivec2(x,y); \}\n")
+            // ivec3
+            *writer |> write("ivec3 IVEC3(int c) \{ return ivec3(c,c,c); \}\n")
+            *writer |> write("ivec3 IVEC3(int x, int y, int z) \{ return ivec3(x,y,z); \}\n")
+            *writer |> write("ivec3 IVEC3(ivec2 xy, int z) \{ return ivec3(xy.x,xy.y,z); \}\n")
+            *writer |> write("ivec3 IVEC3(int x, ivec2 yz) \{ return ivec3(x,yz.x,yz.y); \}\n")
+            // ivec4
+            *writer |> write("ivec4 IVEC4(int c) \{ return ivec4(c,c,c,c); \}\n")
+            *writer |> write("ivec4 IVEC4(ivec2 xy, int z, int w) \{ return ivec4(xy.x,xy.y,z,w); \}\n")
+            *writer |> write("ivec4 IVEC4(ivec2 xy, ivec2 zw) \{ return ivec4(xy.x,xy.y,zw.x,zw.y); \}\n")
+            *writer |> write("ivec4 IVEC4(int x, int y, ivec2 zw) \{ return ivec4(x,y,zw.x,zw.y); \}\n")
+            *writer |> write("ivec4 IVEC4(int x, ivec2 yz, int w) \{ return ivec4(x,yz.x,yz.y,w); \}\n")
+            *writer |> write("ivec4 IVEC4(ivec3 xyz, int w) \{ return ivec4(xyz.x,xyz.y,xyz.z,w); \}\n")
+            *writer |> write("ivec4 IVEC4(int x, ivec3 yzw) \{ return ivec4(x,yzw.x,yzw.y,yzw.z); \}\n")
+            *writer |> write("ivec4 IVEC4(int x, int y, int z, int w) \{ return ivec4(x,y,z,w); \}\n")
+            // uvec2
+            *writer |> write("uvec2 UVEC2(uint c) \{ return uvec2(c,c); \}\n")
+            *writer |> write("uvec2 UVEC2(ivec2 c) \{ return uvec2(uint(c.x),uint(c.y)); \}\n")
+            *writer |> write("uvec2 UVEC2(uint x, uint y) \{ return uvec2(x,y); \}\n")
+            // uvec3
+            *writer |> write("uvec3 UVEC3(uint c) \{ return uvec3(c,c,c); \}\n")
+            *writer |> write("uvec3 UVEC3(uint x, uint y, uint z) \{ return uvec3(x,y,z); \}\n")
+            *writer |> write("uvec3 UVEC3(uvec2 xy, uint z) \{ return uvec3(xy.x,xy.y,z); \}\n")
+            *writer |> write("uvec3 UVEC3(uint x, uvec2 yz) \{ return uvec3(x,yz.x,yz.y); \}\n")
+            // uvec4
+            *writer |> write("uvec4 UVEC4(uint c) \{ return uvec4(c,c,c,c); \}\n")
+            *writer |> write("uvec4 UVEC4(uvec2 xy, uint z, uint w) \{ return uvec4(xy.x,xy.y,z,w); \}\n")
+            *writer |> write("uvec4 UVEC4(uvec2 xy, uvec2 zw) \{ return uvec4(xy.x,xy.y,zw.x,zw.y); \}\n")
+            *writer |> write("uvec4 UVEC4(uint x, uint y, uvec2 zw) \{ return uvec4(x,y,zw.x,zw.y); \}\n")
+            *writer |> write("uvec4 UVEC4(uint x, uvec2 yz, uint w) \{ return uvec4(x,yz.x,yz.y,w); \}\n")
+            *writer |> write("uvec4 UVEC4(uvec3 xyz, uint w) \{ return uvec4(xyz.x,xyz.y,xyz.z,w); \}\n")
+            *writer |> write("uvec4 UVEC4(uint x, uvec3 yzw) \{ return uvec4(x,yzw.x,yzw.y,yzw.z); \}\n")
+            *writer |> write("uvec4 UVEC4(uint x, uint y, uint z, uint w) \{ return uvec4(x,y,z,w); \}\n")
             // mat3
             *writer |> write("mat3 MAT3(vec3 a, vec3 b, vec3 c) \{ mat3 res; res[0]=a; res[1]=b; res[2]=c; return res; \}\n")
             *writer |> write("mat3 MAT3(mat4 m) \{ mat3 res; res[0]=m[0].xyz; res[1]=m[1].xyz; res[2]=m[2].xyz; return res; \}\n")
+            // mat4
+            *writer |> write("mat4 MAT4(vec4 a, vec4 b, vec4 c, vec4 d) \{ mat4 res; res[0]=a; res[1]=b; res[2]=c; res[3]=d; return res; \}\n")
+            // mul mat vec
+            *writer |> write("vec3 MUL(mat3 a, vec3 b) \{ return a[0]*b.x + a[1]*b.y + a[2]*b.z; \}\n")
+            *writer |> write("mat3 MUL(mat3 a, mat3 b) \{
+                mat3 res;
+                res[0] = a[0]*b[0].x + a[1]*b[0].y + a[2]*b[0].z;
+                res[1] = a[0]*b[1].x + a[1]*b[1].y + a[2]*b[1].z;
+                res[2] = a[0]*b[2].x + a[1]*b[2].y + a[2]*b[2].z;
+                return res; \}\n")
+            *writer |> write("vec4 MUL(mat4 a, vec4 b) \{ return a[0]*b.x + a[1]*b.y + a[2]*b.z + a[3]*b.w; \}\n")
+            *writer |> write("mat4 MUL(mat4 a, mat4 b) \{
+                mat4 res;
+                res[0] = a[0]*b[0].x + a[1]*b[0].y + a[2]*b[0].z + a[3]*b[0].w;
+                res[1] = a[0]*b[1].x + a[1]*b[1].y + a[2]*b[1].z + a[3]*b[1].w;
+                res[2] = a[0]*b[2].x + a[1]*b[2].y + a[2]*b[2].z + a[3]*b[2].w;
+                res[3] = a[0]*b[3].x + a[1]*b[3].y + a[2]*b[3].z + a[3]*b[3].w;
+                return res; \}\n")
+            // and done
+            *writer |> write("\n")
         if shaderType==ShaderType compute
             if !caps.output_hlsl_style_compute_layout
                 if compute_local_size.z != 0
@@ -822,23 +890,26 @@ class GlslExport : AstVisitor
     def override preVisitExprIsType(expr:smart_ptr<ExprAt>;typeDecl:TypeDeclPtr)
         self->error ("is type is not supported", expr.at)
 // op2
-    def getReplaceOp2(expr:smart_ptr<ExprOp2>)
+    def getReplaceOp2(expr:smart_ptr<ExprOp2>) : tuple<fun:string;replOp:bool>
         if expr.op=="%" && !expr._type.isInteger
-            return "mod"
+            return [[auto "mod",true]]
         if caps.replace_hlsl_incompatible_operations
             if expr.op=="*"
                 if is_any_matrix(expr.left._type) || is_any_matrix(expr.right._type)
-                    return "mul"
-        return ""
+                    return [[auto "MUL",true]]
+            if expr.op=="==" || expr.op=="!="
+                if is_any_matrix(expr.left._type) || expr.left._type.isVectorType || is_any_matrix(expr.right._type) || expr.right._type.isVectorType
+                    return [[auto "all", false]]
+        return [[auto "",false]]
     def override preVisitExprOp2(expr:smart_ptr<ExprOp2>)
         let repl = self->getReplaceOp2(expr)
-        *writer |> write("{repl}(")
+        *writer |> write("{repl.fun}(")
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
         *writer |> write(")")
         return expr
     def override preVisitExprOp2Right(expr:smart_ptr<ExprOp2>;right:ExpressionPtr)
         let repl = self->getReplaceOp2(expr)
-        if repl != ""
+        if repl.replOp
             *writer |> write(", ")
         else
             *writer |> write(" {expr.op} ")
@@ -1163,13 +1234,22 @@ class GlslExport : AstVisitor
         *writer |> write("{expr.value}")
 // const int2
     def override preVisitExprConstInt2(expr:smart_ptr<ExprConstInt2>) : void
-        *writer |> write("ivec2({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("IVEC2({expr.value})")
+        else
+            *writer |> write("ivec2({expr.value})")
 // const int3
     def override preVisitExprConstInt3(expr:smart_ptr<ExprConstInt3>) : void
-        *writer |> write("ivec3({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("IVEC3({expr.value})")
+        else
+            *writer |> write("ivec3({expr.value})")
 // const int4
     def override preVisitExprConstInt4(expr:smart_ptr<ExprConstInt4>) : void
-        *writer |> write("ivec4({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("IVEC4({expr.value})")
+        else
+            *writer |> write("ivec4({expr.value})")
 // const uint 8
     def override preVisitExprConstUInt8(expr:smart_ptr<ExprConstUInt8>) : void
         *writer |> write("{expr.value}")
@@ -1184,19 +1264,34 @@ class GlslExport : AstVisitor
         *writer |> write("{expr.value}")
 // const uint2
     def override preVisitExprConstUInt2(expr:smart_ptr<ExprConstUInt2>) : void
-        *writer |> write("uvec2({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("UVEC2({expr.value})")
+        else
+            *writer |> write("uvec2({expr.value})")
 // const uint3
     def override preVisitExprConstUInt3(expr:smart_ptr<ExprConstUInt3>) : void
-        *writer |> write("uvec3({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("UVEC3({expr.value})")
+        else
+            *writer |> write("uvec3({expr.value})")
 // const uint4
     def override preVisitExprConstUInt4(expr:smart_ptr<ExprConstUInt4>) : void
-        *writer |> write("uvec4({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("UVEC4({expr.value})")
+        else
+            *writer |> write("uvec4({expr.value})")
 // const range
     def override preVisitExprConstRange(expr:smart_ptr<ExprConstRange>) : void
-        *writer |> write("ivec2({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("IVEC2({expr.value})")
+        else
+            *writer |> write("ivec2({expr.value})")
 // const urnage
     def override preVisitExprConstURange(expr:smart_ptr<ExprConstURange>) : void
-        *writer |> write("uvec2({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("UVEC2({expr.value})")
+        else
+            *writer |> write("uvec2({expr.value})")
 // const bool
     def override preVisitExprConstBool(expr:smart_ptr<ExprConstBool>) : void
         *writer |> write("{expr.value}")
@@ -1205,13 +1300,22 @@ class GlslExport : AstVisitor
         *writer |> write("{expr.value}")
 // const float2
     def override preVisitExprConstFloat2(expr:smart_ptr<ExprConstFloat2>) : void
-        *writer |> write("vec2({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("VEC2({expr.value})")
+        else
+            *writer |> write("vec2({expr.value})")
 // const float3
     def override preVisitExprConstFloat3(expr:smart_ptr<ExprConstFloat3>) : void
-        *writer |> write("vec3({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("VEC3({expr.value})")
+        else
+            *writer |> write("vec3({expr.value})")
 // const float4
     def override preVisitExprConstFloat4(expr:smart_ptr<ExprConstFloat4>) : void
-        *writer |> write("vec4({expr.value})")
+        if caps.output_compatibility_constructors
+            *writer |> write("VEC4({expr.value})")
+        else
+            *writer |> write("vec4({expr.value})")
 // string
     def override preVisitExprConstString(expr:smart_ptr<ExprConstString>) : void
         self->error ("string constant is not supported", expr.at)
