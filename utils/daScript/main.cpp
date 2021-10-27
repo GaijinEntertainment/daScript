@@ -9,11 +9,11 @@ bool pauseAfterErrors = false;
 
 das::Context * get_context ( int stackSize=0 );
 
-void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
+void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode, bool debug ) {
     auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
-    policies.debugger = false;   // TODO: from command line
+    policies.debugger = debug;
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
@@ -62,7 +62,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
 }
 
 void print_help() {
-    tout << "daScript scriptName1 {scriptName2} .. {-main mainFnName} {-log}\n";
+    tout << "daScript scriptName1 {scriptName2} .. {-main mainFnName} {-log} {-debug}\n";
 }
 
 void require_project_specific_modules();//link time resolved dependencies
@@ -78,6 +78,7 @@ int main(int argc, char * argv[]) {
     bool scriptArgs = false;
     bool outputProgramCode = false;
     bool pauseAfterDone = false;
+    bool debug = false;
     for ( int i=1; i < argc; ++i ) {
         if ( argv[i][0]=='-' ) {
             string cmd(argv[i]+1);
@@ -99,6 +100,8 @@ int main(int argc, char * argv[]) {
             } else if ( cmd=="pause" ) {
                 pauseAfterErrors = true;
                 pauseAfterDone = true;
+            } else if (cmd == "debug") {
+                debug = true;
             } else if ( !scriptArgs) {
                 print_help();
                 return -1;
@@ -129,7 +132,7 @@ int main(int argc, char * argv[]) {
     Module::Initialize();
     // compile and run
     for ( const auto & fn : files ) {
-        compile_and_run(fn, mainName, outputProgramCode);
+        compile_and_run(fn, mainName, outputProgramCode, debug);
     }
     // and done
     if ( pauseAfterDone ) getchar();
