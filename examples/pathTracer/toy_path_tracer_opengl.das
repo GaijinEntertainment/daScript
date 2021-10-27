@@ -6,7 +6,6 @@ require math
 
 require daslib/safe_addr
 require daslib/random
-require daslib/tga
 
 require path_tracer
 
@@ -15,9 +14,7 @@ let TRACE_HEIGHT = 1024
 
 var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_texcoord : float2
-var [[inout]] f_color : float3
 var [[inout]] f_texcoord : float2
-var [[out]] f_outputColor : float4
 var [[uniform]] f_tex : sampler2D
 var [[uniform, format=rgba32f, binding=0]] c_destTex : image2D
 var [[uniform]] c_frame : int = 0
@@ -33,10 +30,13 @@ def linear_to_RGB ( color : float3 )
 
 [fragment_program(name="FRAGMENT_SRC",version=330)]
 def ps_effect
-    f_outputColor = linear_to_RGB(texture2D(f_tex,f_texcoord).xyz).zyxx
+    gl_FragColor = linear_to_RGB(texture2D(f_tex,f_texcoord).xyz).zyxx
 
 [compute_program(name="COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
 def compute_effect
+    if gl_LocalInvocationIndex==0u
+        init_path_tracer()
+    memoryBarrierShared()
     let storePos = int2(gl_GlobalInvocationID.xy)
     random_seed2D(RAND_SEED,storePos,c_frame)
     random_float4(RAND_SEED)
@@ -97,7 +97,7 @@ def main
     defer <|
         glfwTerminate()
     glfwInitOpenGL(4,3)
-    var window = glfwCreateWindow(TRACE_WIDTH, TRACE_HEIGHT, "Path tracer", null, null)
+    var window = glfwCreateWindow(TRACE_WIDTH, TRACE_HEIGHT, "OpenGL Path tracer", null, null)
     if window==null
 		panic("can't create window")
     defer <|

@@ -31,9 +31,11 @@ bitfield ShaderExportCaps
     replace_hlsl_incompatible_operations
     restrict_uniform_types
     restrict_vertex_attribute_names
+    restrict_array_as_result
     output_unfirom_macro_declarations
     output_compatibility_constructors
     output_hlsl_style_compute_layout
+    output_structure_initializers
 
 class GlslShader : AstFunctionAnnotation
     shaderType = ShaderType vertex
@@ -45,9 +47,11 @@ class GlslShader : AstFunctionAnnotation
     replace_hlsl_incompatible_operations = false
     restrict_uniform_types = false
     restrict_vertex_attribute_names = false
+    restrict_array_as_result = false
     output_unfirom_macro_declarations = false
     output_compatibility_constructors = false
     output_hlsl_style_compute_layout = false
+    output_structure_initializers = false
     def get_glsl_prefix
         return ""
     def generate_bind_uniform_dummy ( var func:FunctionPtr )
@@ -95,12 +99,16 @@ class GlslShader : AstFunctionAnnotation
             caps |= ShaderExportCaps restrict_uniform_types
         if restrict_vertex_attribute_names
             caps |= ShaderExportCaps restrict_vertex_attribute_names
+        if restrict_array_as_result
+            caps |= ShaderExportCaps restrict_array_as_result
         if output_unfirom_macro_declarations
             caps |= ShaderExportCaps output_unfirom_macro_declarations
         if output_compatibility_constructors
             caps |= ShaderExportCaps output_compatibility_constructors
         if output_hlsl_style_compute_layout
             caps |= ShaderExportCaps output_hlsl_style_compute_layout
+        if output_structure_initializers
+            caps |= ShaderExportCaps output_structure_initializers
         return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
@@ -205,6 +213,10 @@ let private glsl_functions <- {{
     "floori"    =>  "floor";
     "lerp"      =>  "mix";
     "saturate"  =>  "SATURATE";
+    "int_bits_to_float" => "intBitsToFloat";
+    "uint_bits_to_float" => "uintBitsToFloat";
+    "float_bits_to_int" => "floatBitsToInt";
+    "float_bits_to_uint" => "floatBitsToUint";
     "_"         =>  "_"
 }}
 
@@ -302,6 +314,8 @@ class GlslExport : AstVisitor
             pass
         elif fun._module.name=="glsl_common"
             pass
+        elif fun._module.name=="math" || fun._module.name=="math_bits"
+            pass
         elif fun._module.name!=""
             funname = "{funname}_in_{fun._module.name}"
         while stnames |> key_exists(funname)
@@ -333,7 +347,10 @@ class GlslExport : AstVisitor
             ct := null
             *writer |> write(")")
         elif t.baseType==Type tStructure
-            *writer |> write("{t.structType.name}(")
+            if caps.output_structure_initializers
+                *writer |> write("{t.structType.name}_STRUCTURE_INITIALIZER(")
+            else
+                *writer |> write("{t.structType.name}(")
             for fld,i in t.structType.fields,range(100500)
                 if i!=0
                     *writer |> write(",")
@@ -355,27 +372,27 @@ class GlslExport : AstVisitor
         elif t.baseType==Type tInt
             *writer |> write("0")
         elif t.baseType==Type tInt2 || t.baseType==Type tRange
-            *writer |> write("ivec2(0)")
+            *writer |> write("ivec2(0,0)")
         elif t.baseType==Type tInt3
-            *writer |> write("ivec3(0)")
+            *writer |> write("ivec3(0,0,0)")
         elif t.baseType==Type tInt4
-            *writer |> write("ivec4(0)")
+            *writer |> write("ivec4(0,0,0,0)")
         elif t.baseType==Type tUInt || t.baseType==Type tURange
-            *writer |> write("0")
+            *writer |> write("0u")
         elif t.baseType==Type tUInt2
-            *writer |> write("uvec2(0)")
+            *writer |> write("uvec2(0u,0u)")
         elif t.baseType==Type tUInt3
-            *writer |> write("uvec3(0)")
+            *writer |> write("uvec3(0u,0u,0u)")
         elif t.baseType==Type tUInt4
-            *writer |> write("uvec4(0)")
+            *writer |> write("uvec4(0u,0u,0u,0u)")
         elif t.baseType==Type tFloat
             *writer |> write("0.0")
         elif t.baseType==Type tFloat2
-            *writer |> write("vec2(0.0)")
+            *writer |> write("vec2(0.0f,0.0f)")
         elif t.baseType==Type tFloat3
-            *writer |> write("vec3(0.0)")
+            *writer |> write("vec3(0.0f,0.0f,0.0f)")
         elif t.baseType==Type tFloat4
-            *writer |> write("vec4(0.0)")
+            *writer |> write("vec4(0.0f,0.0f,0.0f,0.0f)")
         elif t.baseType==Type tBool
             *writer |> write("false")
         elif t.baseType==Type tEnumeration
@@ -439,11 +456,13 @@ class GlslExport : AstVisitor
             // vec2
             *writer |> write("vec2 VEC2(float c) \{ return vec2(c,c); \}\n")
             *writer |> write("vec2 VEC2(float x, float y) \{ return vec2(x,y); \}\n")
+            *writer |> write("vec2 VEC2(ivec2 c) \{ return vec2(float(c.x),float(c.y)); \}\n")
             // vec3
             *writer |> write("vec3 VEC3(float c) \{ return vec3(c,c,c); \}\n")
             *writer |> write("vec3 VEC3(float x, float y, float z) \{ return vec3(x,y,z); \}\n")
             *writer |> write("vec3 VEC3(vec2 xy, float z) \{ return vec3(xy.x,xy.y,z); \}\n")
             *writer |> write("vec3 VEC3(float x, vec2 yz) \{ return vec3(x,yz.x,yz.y); \}\n")
+            *writer |> write("vec3 VEC3(ivec3 c) \{ return vec3(float(c.x),float(c.y),float(c.z)); \}\n")
             // vec4
             *writer |> write("vec4 VEC4(float c) \{ return vec4(c,c,c,c); \}\n")
             *writer |> write("vec4 VEC4(vec2 xy, float z, float w) \{ return vec4(xy.x,xy.y,z,w); \}\n")
@@ -453,6 +472,7 @@ class GlslExport : AstVisitor
             *writer |> write("vec4 VEC4(vec3 xyz, float w) \{ return vec4(xyz.x,xyz.y,xyz.z,w); \}\n")
             *writer |> write("vec4 VEC4(float x, vec3 yzw) \{ return vec4(x,yzw.x,yzw.y,yzw.z); \}\n")
             *writer |> write("vec4 VEC4(float x, float y, float z, float w) \{ return vec4(x,y,z,w); \}\n")
+            *writer |> write("vec4 VEC4(ivec4 c) \{ return vec4(float(c.x),float(c.y),float(c.z),float(c.w)); \}\n")
             // ivec2
             *writer |> write("ivec2 IVEC2(int c) \{ return ivec2(c,c); \}\n")
             *writer |> write("ivec2 IVEC2(uvec2 c) \{ return ivec2(int(c.x),int(c.y)); \}\n")
@@ -564,6 +584,23 @@ class GlslExport : AstVisitor
     def override visitStructure(str:StructurePtr) : StructurePtr
         *writer |> write("};")
         self->newLine(2)
+        if caps.output_structure_initializers
+            *writer |> write("{str.name} {str.name}_STRUCTURE_INITIALIZER ( ")
+            var first = true
+            for fl in str.fields
+                if first
+                    first = false
+                else
+                    *writer |> write(", ")
+                *writer |> write(self->describe_glsl_type(fl._type))
+                *writer |> write(" _{fl.name}")
+            *writer |> write(" )\n")
+            *writer |> write("\{\n")
+            *writer |> write("\t{str.name} RESULT;\n")
+            for fl in str.fields
+                *writer |> write("\tRESULT.{fl.name} = _{fl.name};\n")
+            *writer |> write("\treturn RESULT;\n")
+            *writer |> write("\}\n\n")
         return str
 // function
     def override canVisitFunction(arg:Function?):bool
@@ -571,8 +608,13 @@ class GlslExport : AstVisitor
             return false
         if arg._module.name=="glsl_common"
             return false
+        if arg._module.name=="math" || arg._module.name=="math_bits"
+            return false
         return true
     def override preVisitFunction(fun:FunctionPtr)
+        if caps.restrict_array_as_result
+            if length(fun.result.dim)>0
+                self->error("returning arrays is prohibited in this shader model", fun.at)
         let isMain = self->isMainFunction(fun)
         if isMain && shaderType==ShaderType compute
             if caps.output_hlsl_style_compute_layout
@@ -706,6 +748,10 @@ class GlslExport : AstVisitor
         return true
     def override preVisitGlobalLetVariable(arg:VariablePtr;lastArg:bool)
         self->line(arg.at)
+        if caps.restrict_array_as_result
+            if length(arg._type.dim)>0
+                if (find_arg("need_init",arg.annotation) ?as tBool ?? false) || !(find_arg("groupshared",arg.annotation) ?as tBool ?? false)
+                    self->error("returning arrays is prohibited in this shader model",arg.at)
         if !caps.output_inout
             if ( !(find_arg("inout", arg.annotation) is nothing) ||
                  !(find_arg("in",  arg.annotation) is nothing) ||
@@ -721,7 +767,9 @@ class GlslExport : AstVisitor
             self->newLine(1)
             *writer |> write("\}")
         else
-            var needInit = true
+            var needInit = find_arg("need_init", arg.annotation) ?as tBool ?? false
+            if find_arg("groupshared", arg.annotation) ?as tBool ?? false
+                needInit = false
             if shaderType==ShaderType vertex
                 if find_arg("uniform", arg.annotation) is tBool
                     self->checkUniformType(arg._type)
@@ -748,6 +796,11 @@ class GlslExport : AstVisitor
                 if find_arg("inout", arg.annotation) is tBool
                     *writer |> write("in "); needInit = false
             elif shaderType==ShaderType compute
+                if find_arg("groupshared", arg.annotation) is tBool
+                    if caps.output_unfirom_macro_declarations
+                        *writer |> write("SHARED ")
+                    else
+                        *writer |> write("shared ")
                 if find_arg("uniform", arg.annotation) is tBool
                     self->checkUniformType(arg._type)
                     if self->outputSamplerMacro(arg)
@@ -1048,6 +1101,8 @@ class GlslExport : AstVisitor
         if expr._block != null
             self->error ("structure initialization with the block is not supported", expr.at)
         *writer |> write("{expr.makeType.structType.name}")
+        if caps.output_structure_initializers
+            *writer |> write("_STRUCTURE_INITIALIZER")
         let nStructs = length(expr.structs)
         if nStructs!=1
             *writer |> write("[{nStructs}]")
@@ -1261,23 +1316,23 @@ class GlslExport : AstVisitor
         *writer |> write("{expr.value}")
 // const uint
     def override preVisitExprConstUInt(expr:smart_ptr<ExprConstUInt>) : void
-        *writer |> write("{expr.value}")
+        *writer |> write("{expr.value}u")
 // const uint2
     def override preVisitExprConstUInt2(expr:smart_ptr<ExprConstUInt2>) : void
         if caps.output_compatibility_constructors
-            *writer |> write("UVEC2({expr.value})")
+            *writer |> write("UVEC2({expr.value.x}u,{expr.value.y}u)")
         else
             *writer |> write("uvec2({expr.value})")
 // const uint3
     def override preVisitExprConstUInt3(expr:smart_ptr<ExprConstUInt3>) : void
         if caps.output_compatibility_constructors
-            *writer |> write("UVEC3({expr.value})")
+            *writer |> write("UVEC3({expr.value.x}u, {expr.value.y}u, {expr.value.z}u)")
         else
             *writer |> write("uvec3({expr.value})")
 // const uint4
     def override preVisitExprConstUInt4(expr:smart_ptr<ExprConstUInt4>) : void
         if caps.output_compatibility_constructors
-            *writer |> write("UVEC4({expr.value})")
+            *writer |> write("UVEC4({expr.value.x}u,{expr.value.y}u,{expr.value.z}u,{expr.value.w}u)")
         else
             *writer |> write("uvec4({expr.value})")
 // const range
@@ -1289,7 +1344,7 @@ class GlslExport : AstVisitor
 // const urnage
     def override preVisitExprConstURange(expr:smart_ptr<ExprConstURange>) : void
         if caps.output_compatibility_constructors
-            *writer |> write("UVEC2({expr.value})")
+            *writer |> write("UVEC2({expr.value.x}u,{expr.value.y}u)")
         else
             *writer |> write("uvec2({expr.value})")
 // const bool
@@ -1297,23 +1352,23 @@ class GlslExport : AstVisitor
         *writer |> write("{expr.value}")
 // const float
     def override preVisitExprConstFloat(expr:smart_ptr<ExprConstFloat>) : void
-        *writer |> write("{expr.value}")
+        *writer |> write("{expr.value}f")
 // const float2
     def override preVisitExprConstFloat2(expr:smart_ptr<ExprConstFloat2>) : void
         if caps.output_compatibility_constructors
-            *writer |> write("VEC2({expr.value})")
+            *writer |> write("VEC2({expr.value.x}f,{expr.value.y}f)")
         else
             *writer |> write("vec2({expr.value})")
 // const float3
     def override preVisitExprConstFloat3(expr:smart_ptr<ExprConstFloat3>) : void
         if caps.output_compatibility_constructors
-            *writer |> write("VEC3({expr.value})")
+            *writer |> write("VEC3({expr.value.x}f,{expr.value.y}f,{expr.value.z}f)")
         else
             *writer |> write("vec3({expr.value})")
 // const float4
     def override preVisitExprConstFloat4(expr:smart_ptr<ExprConstFloat4>) : void
         if caps.output_compatibility_constructors
-            *writer |> write("VEC4({expr.value})")
+            *writer |> write("VEC4({expr.value.x}f,{expr.value.y}f,{expr.value.z}f,{expr.value.w}f)")
         else
             *writer |> write("vec4({expr.value})")
 // string

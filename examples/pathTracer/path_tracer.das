@@ -2,7 +2,7 @@
 // options logCpp
 // options log_nodes
 
-module path_tracer
+module path_tracer public
 
 require math
 require strings
@@ -91,29 +91,28 @@ struct Material
 
 let TOTAL_SPHERES = 9
 
-var s_Spheres = [[Sphere[TOTAL_SPHERES]
-        center = float3(0.,-100.5,-1.), radius = 100.,  radius2=100.0*100., iRadius = 1. / 100.;
-        center = float3(2.,0.,-1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
-        center = float3(0.,0.,-1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
-        center = float3(-2.,0.,-1.),    radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
-        center = float3(2.,0.,1.),      radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
-        center = float3(0.,0.,1.),      radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
-        center = float3(-2.,0.,1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
-        center = float3(0.5,1.,0.5),    radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5;
-        center = float3(-1.5,1.5,0.),   radius = 0.3,   radius2=0.3*0.3,    iRadius = 1. / .3
-    ]]
+var [[groupshared]] s_Spheres : Sphere[TOTAL_SPHERES]
+var [[groupshared]] s_SphereMats : Material[TOTAL_SPHERES]
 
-let s_SphereMats = [[Material[TOTAL_SPHERES]
-        mtype = Type Lambert,    albedo = float3(0.8, 0.8, 0.8), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;
-        mtype = Type Lambert,    albedo = float3(0.8, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;
-        mtype = Type Lambert,    albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;
-        mtype = Type Metal,      albedo = float3(0.4, 0.4, 0.8), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;
-        mtype = Type Metal,      albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.;
-        mtype = Type Metal,      albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.2, ri = 0.;
-        mtype = Type Metal,      albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.6, ri = 0.;
-        mtype = Type Dielectric, albedo = float3(0.4, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 1.5;
-        mtype = Type Lambert,    albedo = float3(0.8, 0.6, 0.2), emissive = float3(30,25,15),  roughness = 0.,  ri = 0.
-    ]]
+def init_path_tracer
+    s_Spheres[0] = [[Sphere center = float3(0.,-100.5,-1.), radius = 100.,  radius2=100.0*100., iRadius = 1. / 100.]]
+    s_Spheres[1] = [[Sphere center = float3(2.,0.,-1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
+    s_Spheres[2] = [[Sphere center = float3(0.,0.,-1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
+    s_Spheres[3] = [[Sphere center = float3(-2.,0.,-1.),    radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
+    s_Spheres[4] = [[Sphere center = float3(2.,0.,1.),      radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
+    s_Spheres[5] = [[Sphere center = float3(0.,0.,1.),      radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
+    s_Spheres[6] = [[Sphere center = float3(-2.,0.,1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
+    s_Spheres[7] = [[Sphere center = float3(0.5,1.,0.5),    radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
+    s_Spheres[8] = [[Sphere center = float3(-1.5,1.5,0.),   radius = 0.3,   radius2=0.3*0.3,    iRadius = 1. / .3]]
+    s_SphereMats[0] = [[Material mtype = Type Lambert,    albedo = float3(0.8, 0.8, 0.8), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.]]
+    s_SphereMats[1] = [[Material mtype = Type Lambert,    albedo = float3(0.8, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.]]
+    s_SphereMats[2] = [[Material mtype = Type Lambert,    albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.]]
+    s_SphereMats[3] = [[Material mtype = Type Metal,      albedo = float3(0.4, 0.4, 0.8), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.]]
+    s_SphereMats[4] = [[Material mtype = Type Metal,      albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.]]
+    s_SphereMats[5] = [[Material mtype = Type Metal,      albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.2, ri = 0.]]
+    s_SphereMats[6] = [[Material mtype = Type Metal,      albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.6, ri = 0.]]
+    s_SphereMats[7] = [[Material mtype = Type Dielectric, albedo = float3(0.4, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 1.5]]
+    s_SphereMats[8] = [[Material mtype = Type Lambert,    albedo = float3(0.8, 0.6, 0.2), emissive = float3(30,25,15),  roughness = 0.,  ri = 0.]]
 
 def hitSpheres(r:Ray const;tMin,tMax:float;var outHit:Hit)
     var hitT = tMax

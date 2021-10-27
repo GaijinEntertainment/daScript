@@ -46,6 +46,9 @@ def ps_effect
 
 [compute_program(name="COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
 def compute_effect
+    if gl_LocalInvocationIndex==0u
+        init_path_tracer()
+    memoryBarrierShared()
     let storePos = int2(gl_GlobalInvocationID.xy)
     random_seed2D(RAND_SEED,storePos,c_frame)
     random_float4(RAND_SEED)
@@ -58,7 +61,7 @@ def compute_effect
             nrgb = (orgb*wf + nrgb) / (wf + 1.)
         imageStore(c_destTex,storePos, nrgb)
     else
-        imageStore(c_destTex,storePos, srgb)
+        imageStore(c_destTex,storePos, rgb.zyxx)
 
 var compute_program, display_program : uint
 var vao : uint
@@ -172,7 +175,7 @@ def main
     defer <|
         glfwTerminate()
     glfwInitOpenGL(4,3)
-    var window = glfwCreateWindow(TRACE_WIDTH, TRACE_HEIGHT, "Path tracer", null, null)
+    var window = glfwCreateWindow(TRACE_WIDTH, TRACE_HEIGHT, "OpenGL Path tracer with bloom", null, null)
     if window==null
 		panic("can't create window")
     defer <|

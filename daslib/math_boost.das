@@ -4,9 +4,11 @@ options indenting = 4
 
 module math_boost shared public
 
+
 // _rh, _lh - right handed vs left handed
 //  OpenGL, Vulkan - RH
 
+require daslib/math_bits public
 require math public
 
 struct AABR

@@ -43,6 +43,7 @@ def main
                 with_job_status(height) <| $ ( status )
                     for y in range(height)
                         new_job <| @
+                            init_path_tracer()
                             var rayCount = 0
                             draw(i, width, height, y, y+1, *pbb, rayCount)
                             *ptr += rayCount
@@ -68,6 +69,7 @@ def main
                     let yMin = c * chunk
                     let yMax = min((c + 1)*chunk, height)
                     new_thread <| @
+                        init_path_tracer()
                         var rayCount = 0
                         draw(i, width, height, yMin, yMax, *pbb, rayCount)
                         *ptr += rayCount
@@ -79,12 +81,14 @@ def main
         print("{totalRays} in {sec} sec, {format("%.3f",double(totalRays)/double(dt))} mrays/sec\n")
     elif USE_MODE == Mode SimulateGpu
         profile(kFrameCount,"ray-trace frame via per ray prep") <|
+            init_path_tracer()
             for y in range(height)
                 for x in range(width)
                     random_seed2D(RAND_SEED,int2(x,y))
                     backbuffer[y*width+x] = draw_ray(x,y,width,height)
     else
         profile(kFrameCount,"ray-trace frame") <|
+            init_path_tracer()
             var rayCount = 0
             draw(i, width, height, 0, height, backbuffer, rayCount)
             i ++
