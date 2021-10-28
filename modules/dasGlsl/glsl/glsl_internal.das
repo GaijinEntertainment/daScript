@@ -37,6 +37,7 @@ bitfield ShaderExportCaps
     output_hlsl_style_compute_layout            // output NUM_THREADS(x,y,z) macro in front of main of the compute shader
     output_structure_initializers               // generate Foo_STRUCTURE_INITIALIZER instead of Foo() for HLSL compatibility
     allow_unitialized_local_arrays              // var a: float[9] can be local, and will not be initialized for HLSL (only if restrict_array_as_result)
+    resolve_supported_semantics                 // resolve semantics from variable name (a_color0, v_position etc)
 
 class GlslShader : AstFunctionAnnotation
     shaderType = ShaderType vertex
@@ -54,6 +55,7 @@ class GlslShader : AstFunctionAnnotation
     output_hlsl_style_compute_layout = false
     output_structure_initializers = false
     allow_unitialized_local_arrays = false
+    resolve_supported_semantics = false
     def get_glsl_prefix
         return ""
     def generate_bind_uniform_dummy ( var func:FunctionPtr )
@@ -113,6 +115,8 @@ class GlslShader : AstFunctionAnnotation
             caps |= ShaderExportCaps output_structure_initializers
         if allow_unitialized_local_arrays
             caps |= ShaderExportCaps allow_unitialized_local_arrays
+        if resolve_supported_semantics
+            caps |= ShaderExportCaps resolve_supported_semantics
         return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
@@ -897,6 +901,17 @@ class GlslExport : AstVisitor
             var suffix = ""
             if sema is tString
                 suffix = " : {sema as tString}"
+            if caps.resolve_supported_semantics
+                if suffix == ""
+                    let aname = to_upper(string(arg.name))
+                    if glsl_supported_semantics |> key_exists(aname)
+                        suffix = " : {aname}"
+                    else
+                        let atail = slice(aname,2)
+                        if glsl_supported_semantics |> key_exists(atail)
+                            suffix = " : {atail}"
+                if suffix == ""
+                    self->error("missing semantics for {arg.name}", arg.at)
             inout_decl +="{self->describe_glsl_type(arg._type)} {arg.name}{suffix};\n"
         return arg
     def override preVisitGlobalLetVariableInit(arg:VariablePtr;expr:ExpressionPtr)
@@ -1483,3 +1498,63 @@ def is_any_matrix(typ:TypeDeclPtr)
     if typ.baseType != Type tHandle
         return false
     return typ.annotation.name=="float3x3" || typ.annotation.name=="float3x4" || typ.annotation.name=="float4x4"
+
+struct public FieldDeclInfo
+    sizei : int
+    typet : Type
+    normalized : bool
+    as_int : bool
+
+[macro_function]
+def get_decl_type_from_name ( name:string )
+    if name==""
+        return Type none
+    elif name=="float" || name=="FLOAT" || name=="GL_FLOAT"
+        return Type tFloat
+    elif name=="uint8" || name=="UINT8" || name=="GL_BYTE"
+        return Type tUInt8
+    elif name=="int16" || name=="INT16" || name=="GL_SHORT"
+        return Type tInt16
+    elif name=="double" || name=="DOUBLE" || name=="GL_DOUBLE"
+        return Type tDouble
+    return Type none
+
+[macro_function]
+def get_decl_info ( typ:TypeDeclPtr; arguments:AnnotationArgumentList ) : tuple<ok:bool; info:FieldDeclInfo>
+    if length(typ.dim)>0 || !(typ.isNumeric || typ.isVectorType)
+        return [[auto false, [[FieldDeclInfo]]]]
+    var fdi = [[FieldDeclInfo
+        sizei = find_arg("size", arguments) ?as tInt ?? -1,
+        typet = get_decl_type_from_name(find_arg("type", arguments) ?as tString ?? ""),
+        normalized = (find_arg("normalized", arguments) ?as tBool) ?? false,
+        as_int = (find_arg("as_int", arguments) ?as tBool) ?? false
+    ]]
+    if fdi.sizei==-1
+        fdi.sizei = typ.isVectorType ? typ.vectorDim : 1
+    if fdi.typet == Type none
+        if typ.baseType==Type tFloat || typ.baseType==Type tFloat2 || typ.baseType==Type tFloat3 || typ.baseType==Type tFloat4
+            fdi.typet = Type tFloat
+        elif typ.baseType==Type tUInt8 || typ.baseType==Type tInt16 || typ.baseType==Type tDouble
+            fdi.typet = typ.baseType
+    return fdi.typet!=Type none ? [[auto true, fdi]] : [[auto false, [[FieldDeclInfo]]]]
+
+var public glsl_supported_semantics <- {{
+	"POSITION" => true;
+	"NORMAL" => true;
+	"TANGENT" => true;
+	"BITANGENT" => true;
+	"COLOR0" => true;
+	"COLOR1" => true;
+	"COLOR2" => true;
+	"COLOR3" => true;
+	"INDICES" => true;
+	"WEIGHT" => true;
+	"TEXCOORD0" => true;
+	"TEXCOORD1" => true;
+	"TEXCOORD2" => true;
+	"TEXCOORD3" => true;
+	"TEXCOORD4" => true;
+	"TEXCOORD5" => true;
+	"TEXCOORD6" => true;
+	"TEXCOORD7" => true
+}}

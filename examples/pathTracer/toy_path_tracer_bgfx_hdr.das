@@ -12,9 +12,9 @@ let TRACE_WIDTH = 1024
 let TRACE_HEIGHT = 1024
 let BLOOM_SCALE = 4
 
-var [[in, semantics=POSITION ]]     a_position : float2
-var [[in, semantics=TEXCOORD0]]    a_texcoord0 : float2
-var [[inout, semantics=TEXCOORD0]] v_texcoord0 : float2
+var [[in]] a_position : float2
+var [[in]] a_texcoord0 : float2
+var [[inout]] v_texcoord0 : float2
 var [[uniform, stage=0]] f_tex : sampler2D
 var [[uniform, stage=1]] f_bloom : sampler2D
 var [[uniform, format=rgba32f, binding=0]] c_destTex : image2D
@@ -110,14 +110,14 @@ def bloom_effect_h
 
 [bgfx_vertex_buffer]
 struct EffectVertex
-    [[type=FLOAT, size=2, semantics=POSITION ]] xy  : float2
-    [[type=FLOAT, size=2, semantics=TEXCOORD0]] uv  : float2
+    position  : float2
+    texcoord0 : float2
 
 let effect_vertices = [[EffectVertex
-        xy=float2(-1.0, 1.0), uv=float2(0.0,0.0);
-        xy=float2( 1.0, 1.0), uv=float2(1.0,0.0);
-        xy=float2( 1.0,-1.0), uv=float2(1.0,1.0);
-        xy=float2(-1.0,-1.0), uv=float2(0.0,1.0)
+    position=float2(-1.0, 1.0), texcoord0=float2(0.0,0.0);
+    position=float2( 1.0, 1.0), texcoord0=float2(1.0,0.0);
+    position=float2( 1.0,-1.0), texcoord0=float2(1.0,1.0);
+    position=float2(-1.0,-1.0), texcoord0=float2(0.0,1.0)
 ]]
 
 let effect_indices = [[int 0; 2; 1; 2; 0; 3]]
