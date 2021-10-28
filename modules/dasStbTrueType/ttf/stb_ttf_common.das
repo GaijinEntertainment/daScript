@@ -19,6 +19,9 @@ class public TTFApiAdapter
 
 var private g_apiAdapter : TTFApiAdapter?
 
+def public has_api_adapter
+    return g_apiAdapter != null
+
 def public set_api_adapter ( var aa:TTFApiAdapter? )
     if g_apiAdapter != null
         panic("TTF api is already initialized")
