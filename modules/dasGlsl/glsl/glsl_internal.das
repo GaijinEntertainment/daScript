@@ -23,19 +23,20 @@ enum ShaderType
     compute
 
 bitfield ShaderExportCaps
-    output_shader_lines
-    write_version
-    output_inout
-    output_inout_stub
-    output_inout_decl
-    replace_hlsl_incompatible_operations
-    restrict_uniform_types
-    restrict_vertex_attribute_names
-    restrict_array_as_result
-    output_unfirom_macro_declarations
-    output_compatibility_constructors
-    output_hlsl_style_compute_layout
-    output_structure_initializers
+    output_shader_lines                         // output #line declarations
+    write_version                               // output shader version on top
+    output_inout                                // output regular variable declarations for inout variables (disable allows BGFX replcament declarations)
+    output_inout_stub                           // output $input and $output declarations for the inout varaibles for BGFX
+    output_inout_decl                           // output inout variable declarations to the separate DECL variable for BGFX
+    replace_hlsl_incompatible_operations        // replace MUL and vector comparisons
+    restrict_uniform_types                      // restrict uniform types to BGFX-compatible
+    restrict_vertex_attribute_names             // restrict vertex attribute names to BGFX-compatible
+    restrict_array_as_result                    // restrict arrays as function results or global variables (due to initializer)
+    output_unfirom_macro_declarations           // output BGFX-style image and sampler declarations
+    output_compatibility_constructors           // output VEC2, VEC3, etc constructors. also MUL for matrix and vector multiplications
+    output_hlsl_style_compute_layout            // output NUM_THREADS(x,y,z) macro in front of main of the compute shader
+    output_structure_initializers               // generate Foo_STRUCTURE_INITIALIZER instead of Foo() for HLSL compatibility
+    allow_unitialized_local_arrays              // var a: float[9] can be local, and will not be initialized for HLSL (only if restrict_array_as_result)
 
 class GlslShader : AstFunctionAnnotation
     shaderType = ShaderType vertex
@@ -52,6 +53,7 @@ class GlslShader : AstFunctionAnnotation
     output_compatibility_constructors = false
     output_hlsl_style_compute_layout = false
     output_structure_initializers = false
+    allow_unitialized_local_arrays = false
     def get_glsl_prefix
         return ""
     def generate_bind_uniform_dummy ( var func:FunctionPtr )
@@ -109,6 +111,8 @@ class GlslShader : AstFunctionAnnotation
             caps |= ShaderExportCaps output_hlsl_style_compute_layout
         if output_structure_initializers
             caps |= ShaderExportCaps output_structure_initializers
+        if allow_unitialized_local_arrays
+            caps |= ShaderExportCaps allow_unitialized_local_arrays
         return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         let argName = find_arg("name", args)
@@ -690,11 +694,19 @@ class GlslExport : AstVisitor
         if arg._type.flags.ref
             self->error("local references are not supported by GLSL", arg.at)
         self->line(arg.at)
-        *writer |> write("{self->describe_glsl_type(arg._type)} {arg.name}")
+        *writer |> write("{self->describe_glsl_type_ex(arg._type,false)} {arg.name}")
+        for d in arg._type.dim
+            *writer |> write("[{d}]")
     def override visitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool)
         if arg.init == null
-            *writer |> write(" = ")
-            self->produce_zero(arg._type)
+            var needZero = true
+            if caps.restrict_array_as_result
+                if caps.allow_unitialized_local_arrays
+                    if length(arg._type.dim) > 0
+                        needZero = false
+            if needZero
+                *writer |> write(" = ")
+                self->produce_zero(arg._type)
         if !lastArg
             *writer |> write(";")
         return arg
@@ -765,7 +777,9 @@ class GlslExport : AstVisitor
         self->line(arg.at)
         if caps.restrict_array_as_result
             if length(arg._type.dim)>0
-                if (find_arg("need_init",arg.annotation) ?as tBool ?? false) || !(find_arg("groupshared",arg.annotation) ?as tBool ?? false)
+                let need_init = find_arg("need_init",arg.annotation) ?as tBool ?? true
+                let group_shared = find_arg("groupshared",arg.annotation) ?as tBool ?? false
+                if need_init && !group_shared
                     self->error("returning arrays is prohibited in this shader model",arg.at)
         if !caps.output_inout
             if ( !(find_arg("inout", arg.annotation) is nothing) ||
@@ -782,7 +796,7 @@ class GlslExport : AstVisitor
             self->newLine(1)
             *writer |> write("\}")
         else
-            var needInit = find_arg("need_init", arg.annotation) ?as tBool ?? false
+            var needInit = find_arg("need_init", arg.annotation) ?as tBool ?? true
             if find_arg("groupshared", arg.annotation) ?as tBool ?? false
                 needInit = false
             if shaderType==ShaderType vertex
