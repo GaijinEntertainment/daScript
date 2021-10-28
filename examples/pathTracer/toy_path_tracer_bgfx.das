@@ -39,10 +39,10 @@ def compute_effect
     let storePos = int2(gl_GlobalInvocationID.xy)
     random_seed2D(RAND_SEED,storePos,cframe)
     random_float4(RAND_SEED)
-    let rgb = draw_ray(storePos.x,TRACE_HEIGHT-storePos.y,TRACE_WIDTH,TRACE_HEIGHT)
+    var rgb = draw_ray(storePos.x,TRACE_HEIGHT-storePos.y,TRACE_WIDTH,TRACE_HEIGHT)
     if true
         var nrgb = rgb.zyxx
-        if c_frame.x!=0.
+        if cframe!=0
             let orgb = imageLoad(c_destTex, storePos)
             let wf = float(cframe)
             nrgb = (orgb*wf + nrgb) / (wf + 1.)
@@ -80,9 +80,9 @@ def main
     var pd: bgfx_platform_data_s
     pd.nwh = glfwGetWin32Window(window)
     bgfx_set_platform_data(safe_addr(pd))
-    bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type BGFX_RENDERER_TYPE_OPENGL)
+    // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type BGFX_RENDERER_TYPE_OPENGL)
     // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type BGFX_RENDERER_TYPE_DIRECT3D12)
-    // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type BGFX_RENDERER_TYPE_DIRECT3D11)
+    bgfx_init(TRACE_WIDTH,TRACE_WIDTH)
     let render_type = bgfx_get_renderer_type()
     compute_effect_bind_uniform()
     var compute_program = bgfx_create_compute_shader_program(COMPUTE_SRC, render_type)

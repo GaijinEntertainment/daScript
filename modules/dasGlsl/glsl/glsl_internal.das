@@ -453,10 +453,24 @@ class GlslExport : AstVisitor
         *writer |> write("float distance_sq ( vec3 a, vec3 b ) \{ return length_sq(a-b); \}\n")
         *writer |> write("float inv_distance_sq ( vec3 a, vec3 b ) \{ return 1. / distance_sq(a,b); \}\n")
         if caps.output_compatibility_constructors
+            /*
+            *writer |> write("#define VEC2 vec2\n")
+            *writer |> write("#define VEC3 vec3\n")
+            *writer |> write("#define VEC4 vec4\n")
+            *writer |> write("#define IVEC2 ivec2\n")
+            *writer |> write("#define IVEC3 ivec3\n")
+            *writer |> write("#define IVEC4 ivec4\n")
+            *writer |> write("#define UVEC2 uvec2\n")
+            *writer |> write("#define UVEC3 uvec3\n")
+            *writer |> write("#define UVEC4 uvec4\n")
+            *writer |> write("#define MAT3 mat3\n")
+            *writer |> write("#define MAT4 mat4\n")
+            */
             // vec2
             *writer |> write("vec2 VEC2(float c) \{ return vec2(c,c); \}\n")
             *writer |> write("vec2 VEC2(float x, float y) \{ return vec2(x,y); \}\n")
             *writer |> write("vec2 VEC2(ivec2 c) \{ return vec2(float(c.x),float(c.y)); \}\n")
+            *writer |> write("vec2 VEC2(uvec2 c) \{ return vec2(float(c.x),float(c.y)); \}\n")
             // vec3
             *writer |> write("vec3 VEC3(float c) \{ return vec3(c,c,c); \}\n")
             *writer |> write("vec3 VEC3(float x, float y, float z) \{ return vec3(x,y,z); \}\n")
@@ -473,6 +487,7 @@ class GlslExport : AstVisitor
             *writer |> write("vec4 VEC4(float x, vec3 yzw) \{ return vec4(x,yzw.x,yzw.y,yzw.z); \}\n")
             *writer |> write("vec4 VEC4(float x, float y, float z, float w) \{ return vec4(x,y,z,w); \}\n")
             *writer |> write("vec4 VEC4(ivec4 c) \{ return vec4(float(c.x),float(c.y),float(c.z),float(c.w)); \}\n")
+
             // ivec2
             *writer |> write("ivec2 IVEC2(int c) \{ return ivec2(c,c); \}\n")
             *writer |> write("ivec2 IVEC2(uvec2 c) \{ return ivec2(int(c.x),int(c.y)); \}\n")
@@ -1352,25 +1367,43 @@ class GlslExport : AstVisitor
         *writer |> write("{expr.value}")
 // const float
     def override preVisitExprConstFloat(expr:smart_ptr<ExprConstFloat>) : void
-        *writer |> write("{expr.value}f")
+        *writer |> format("%g",expr.value)
 // const float2
     def override preVisitExprConstFloat2(expr:smart_ptr<ExprConstFloat2>) : void
         if caps.output_compatibility_constructors
-            *writer |> write("VEC2({expr.value.x}f,{expr.value.y}f)")
+            *writer |> write("VEC2(")
         else
-            *writer |> write("vec2({expr.value})")
+            *writer |> write("vec2(")
+        *writer |> format("%g", expr.value.x)
+        *writer |> write(",")
+        *writer |> format("%g", expr.value.y)
+        *writer |> write(")")
 // const float3
     def override preVisitExprConstFloat3(expr:smart_ptr<ExprConstFloat3>) : void
         if caps.output_compatibility_constructors
-            *writer |> write("VEC3({expr.value.x}f,{expr.value.y}f,{expr.value.z}f)")
+            *writer |> write("VEC3(")
         else
-            *writer |> write("vec3({expr.value})")
+            *writer |> write("vec3(")
+        *writer |> format("%g", expr.value.x)
+        *writer |> write(",")
+        *writer |> format("%g", expr.value.y)
+        *writer |> write(",")
+        *writer |> format("%g", expr.value.z)
+        *writer |> write(")")
 // const float4
     def override preVisitExprConstFloat4(expr:smart_ptr<ExprConstFloat4>) : void
         if caps.output_compatibility_constructors
-            *writer |> write("VEC4({expr.value.x}f,{expr.value.y}f,{expr.value.z}f,{expr.value.w}f)")
+            *writer |> write("VEC4(")
         else
-            *writer |> write("vec4({expr.value})")
+            *writer |> write("vec4(")
+        *writer |> format("%g", expr.value.x)
+        *writer |> write(",")
+        *writer |> format("%g", expr.value.y)
+        *writer |> write(",")
+        *writer |> format("%g", expr.value.z)
+        *writer |> write(",")
+        *writer |> format("%g", expr.value.w)
+        *writer |> write(")")
 // string
     def override preVisitExprConstString(expr:smart_ptr<ExprConstString>) : void
         self->error ("string constant is not supported", expr.at)
