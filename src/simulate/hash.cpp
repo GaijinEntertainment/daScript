@@ -20,6 +20,10 @@ namespace das
             }
         }
         __forceinline void updateString ( char * & str ) {
+            if ( !str ) {
+                fnv_bias *= fnv_prime;
+                return;
+            }
             uint8_t * block = (uint8_t *) str;
             while ( *block ) {
                 fnv_bias = ( fnv_bias ^ *block++ ) * fnv_prime;
