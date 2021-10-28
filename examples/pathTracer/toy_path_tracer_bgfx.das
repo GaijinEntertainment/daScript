@@ -85,10 +85,8 @@ def main
     bgfx_init(TRACE_WIDTH,TRACE_WIDTH)
     let render_type = bgfx_get_renderer_type()
     glfwSetWindowTitle(window, "BGFX Path tracer - {render_type}")
-    if render_type == bgfx_renderer_type BGFX_RENDERER_TYPE_OPENGL  // workaround opengl bug
-        compute_effect_bind_uniform()
-    var compute_program = bgfx_create_compute_shader_program(COMPUTE_SRC, render_type)
-    var display_program = bgfx_create_shader_program(VERTEX_SRC, VERTEX_SRC_DECL, FRAGMENT_SRC, FRAGMENT_SRC_DECL, render_type)
+    var compute_program = bgfx_create_compute_shader_program(@@compute_effect)
+    var display_program = bgfx_create_shader_program(@@vs_effect,@@fs_effect)
     var pcvl_decl = bgfx_create_vertex_layout(type<EffectVertex>,render_type)
     var vbh = bgfx_create_vertex_buffer(bgfx_make_ref(effect_vertices), safe_addr(pcvl_decl), BGFX_BUFFER_NONE)
     var ibh = bgfx_create_index_buffer(bgfx_make_ref(effect_indices), BGFX_BUFFER_INDEX32)

@@ -143,10 +143,8 @@ def main
     bgfx_init(TRACE_WIDTH,TRACE_WIDTH)
     let render_type = bgfx_get_renderer_type()
     glfwSetWindowTitle(window, "BGFX Path tracer with bloom - {render_type}")
-    if render_type == bgfx_renderer_type BGFX_RENDERER_TYPE_OPENGL  // workaround opengl bug
-        compute_effect_bind_uniform()
-    var compute_program = bgfx_create_compute_shader_program(COMPUTE_SRC, render_type)
-    var display_program = bgfx_create_shader_program(VERTEX_SRC, VERTEX_SRC_DECL, FRAGMENT_SRC, FRAGMENT_SRC_DECL, render_type)
+    var compute_program = bgfx_create_compute_shader_program(@@compute_effect)
+    var display_program = bgfx_create_shader_program(@@vs_effect,@@fs_effect)
     var pcvl_decl = bgfx_create_vertex_layout(type<EffectVertex>,render_type)
     var vbh = bgfx_create_vertex_buffer(bgfx_make_ref(effect_vertices), safe_addr(pcvl_decl), BGFX_BUFFER_NONE)
     var ibh = bgfx_create_index_buffer(bgfx_make_ref(effect_indices), BGFX_BUFFER_INDEX32)
@@ -154,15 +152,9 @@ def main
         bgfx_texture_format BGFX_TEXTURE_FORMAT_RGBA32F, BGFX_TEXTURE_COMPUTE_WRITE, null)
     if texture.idx==uint16(0xffff)
         panic("can't create texture")
-    if render_type == bgfx_renderer_type BGFX_RENDERER_TYPE_OPENGL  // workaround opengl bug
-        bloom_effect_copy_bind_uniform()
-    var bloom_program_copy = bgfx_create_compute_shader_program(BLOOM_COPY_COMPUTE_SRC, render_type)
-    if render_type == bgfx_renderer_type BGFX_RENDERER_TYPE_OPENGL  // workaround opengl bug
-        bloom_effect_h_bind_uniform()
-    var bloom_program_h = bgfx_create_compute_shader_program(BLOOM_H_COMPUTE_SRC, render_type)
-    if render_type == bgfx_renderer_type BGFX_RENDERER_TYPE_OPENGL  // workaround opengl bug
-        bloom_effect_v_bind_uniform()
-    var bloom_program_v = bgfx_create_compute_shader_program(BLOOM_V_COMPUTE_SRC, render_type)
+    var bloom_program_copy = bgfx_create_compute_shader_program(@@bloom_effect_copy)
+    var bloom_program_h = bgfx_create_compute_shader_program(@@bloom_effect_h)
+    var bloom_program_v = bgfx_create_compute_shader_program(@@bloom_effect_v)
     var bloom_texture : bgfx_texture_handle_s[2]
     for b in bloom_texture
         b = bgfx_create_texture_2d(uint(TRACE_WIDTH/BLOOM_SCALE), uint(TRACE_HEIGHT/BLOOM_SCALE), false, 1u,
