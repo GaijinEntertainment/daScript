@@ -78,6 +78,15 @@ var const_type_table : table<string; string>
 var const_uint8_type = "uint8_t"
 var const_uint16_type = "uint16_t"
 
+var ex_keywords : table<string; bool>
+
+var all_keywords = [[string
+    "float";    "double";
+    "uint";     "uint8";    "uint16";   "uint64";   "uint2";    "uint3";    "uint4";
+    "int";      "int8";     "int16";    "int64";    "int2";     "int3";     "int4";
+    "bool"
+]]
+
 /*
     end of configuration
 */
@@ -502,6 +511,7 @@ public:
         cppName = \"{en.cppName}\";
         baseType = (das::Type) das::ToBasicType< das::underlying_type< {en.cppName} >::type >::type;
 ")
+        let uename = to_upper(en.name)
         for ene in en.edecl
             var entryName = ene
             var entryCppName = ene
@@ -510,8 +520,14 @@ public:
                     entryName = slice(ene,length(en.name)+1)
                 elif ene |> starts_with(en.name)
                     entryName = slice(ene,length(en.name))
+                elif ene |> starts_with("{uename}_")
+                    entryName = slice(ene,length(en.name)+1)
+                elif ene |> starts_with(uename)
+                    entryName = slice(ene,length(en.name))
                 else
                     print("warning: {ene} does not start with {en.name}\n")
+            if ex_keywords |> key_exists(entryName)
+                entryName = "_{entryName}"
             fprint(mf,"\t\taddIEx(\"{entryName}\", \"{entryCppName}\", int64_t({en.cppName}::{ene}), das::LineInfo());\n")
         fprint(mf,"\t\}\n\};\n")
         fprint(mf,"#endif\n")
@@ -850,6 +866,8 @@ def bindHeaders ( fname, outprefix:string )
         blocked_functions_table[fn] = true
     for enk,env in keys(ex_enums),values(ex_enums)
         rev_enums[env.name] = enk
+    for kwd in all_keywords
+        ex_keywords[kwd] = true
     fopen(fname, "rb") <| $ ( f )
         if f==null
             print("can't open {fname}")

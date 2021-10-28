@@ -95,3 +95,9 @@ var gl_LocalInvocationIndex	: uint  // 1d index representation of gl_LocalInvoca
 
 var gl_Position : float4
 var gl_FragColor : float4
+
+def clone ( var image:image2D; sampler:sampler2D )
+    image.texture2D = sampler.texture2D
+
+def clone ( var sampler:sampler2D; image:image2D )
+    sampler.texture2D = image.texture2D

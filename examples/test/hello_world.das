@@ -1,13 +1,12 @@
-class Foo
-    def const GetValue(x:int; a:int=5)
-        print("GetValue({x},{a})\n")
-        return 2 + a
+require math
 
-def Bar( foo: Foo const& )
-    return foo->GetValue(1)
+def add(a,b)
+    return a + b
+
+def show(a)
+    print("{a}\n")
+    return a
 
 [export]
 def main
-    let foo = new Foo()
-    Bar(*foo)
-
+    13 |> add(2) |> show |> add(3) |> show

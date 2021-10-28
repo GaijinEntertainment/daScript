@@ -80,8 +80,8 @@ def main
     var pd: bgfx_platform_data_s
     pd.nwh = glfwGetWin32Window(window)
     bgfx_set_platform_data(safe_addr(pd))
-    // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type BGFX_RENDERER_TYPE_OPENGL)
-    // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type BGFX_RENDERER_TYPE_DIRECT3D12)
+    // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type OPENGL)
+    // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type DIRECT3D12)
     bgfx_init(TRACE_WIDTH,TRACE_WIDTH)
     let render_type = bgfx_get_renderer_type()
     glfwSetWindowTitle(window, "BGFX Path tracer - {render_type}")
@@ -91,7 +91,7 @@ def main
     var vbh = bgfx_create_vertex_buffer(bgfx_make_ref(effect_vertices), safe_addr(pcvl_decl), BGFX_BUFFER_NONE)
     var ibh = bgfx_create_index_buffer(bgfx_make_ref(effect_indices), BGFX_BUFFER_INDEX32)
     var texture = bgfx_create_texture_2d(uint(TRACE_WIDTH), uint(TRACE_HEIGHT), false, 1u,
-        bgfx_texture_format BGFX_TEXTURE_FORMAT_RGBA32F, BGFX_TEXTURE_COMPUTE_WRITE, null)
+        bgfx_texture_format RGBA32F, BGFX_TEXTURE_COMPUTE_WRITE, null)
     if texture.idx==uint16(0xffff)
         panic("can't create texture")
     let v_ortho = bgfx_mat_ortho(-1.,1.,-1.,1.,-100.,100.,0.,bgfx_get_caps().homogeneousDepth,false)
@@ -104,13 +104,13 @@ def main
         c_frame.x = float(cframe)
         c_frame.y = int_bits_to_float(cframe)
         cframe ++
-        c_destTex.texture2D = uint(texture.idx)
+        c_destTex := texture
         compute_effect_bind_uniform()
         bgfx_dispatch(0u, compute_program, uint(TRACE_WIDTH/16), uint(TRACE_HEIGHT/16), 1u, 0u)
         bgfx_set_view_rect(0u, 0u, 0u, uint(display_w), uint(display_h))
         bgfx_set_vertex_buffer(0u, vbh, 0u, uint(length(effect_vertices)))
         bgfx_set_index_buffer(ibh, 0u, uint(length(effect_indices)))
-        f_tex.texture2D = uint(texture.idx)
+        f_tex := texture
         vs_effect_bind_uniform()
         fs_effect_bind_uniform()
         bgfx_set_state(BGFX_STATE_DEFAULT, 0u)
