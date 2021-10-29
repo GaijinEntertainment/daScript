@@ -903,7 +903,7 @@ def genDefineConstants(fname,prefix:string)
 def getGenConstType ( name, default_name:string )
     return const_type_table?[name] ?? default_name
 
-def searchAndGenConst ( var regex_def:Regex; defTName,suffix:string; var ofs:table<int; bool>; data:string; hf:FILE const? )
+def searchAndGenConst ( var regex_def:Regex; defTName,suffix:string; var ofs:table<int; bool>; data:string; var dup:table<string;bool>; hf:FILE const? )
     regex_foreach(regex_def,data) <| $ ( r )
         if ! ofs |> key_exists(r.x)
             let DEF = regex_group(regex_def,1,data)
@@ -911,7 +911,11 @@ def searchAndGenConst ( var regex_def:Regex; defTName,suffix:string; var ofs:tab
             if !blocked_defines_table |> key_exists(DEF)
                 if is_const_blocked==null || !invoke(is_const_blocked,DEF)
                     let ctt = getGenConstType(DEF,defTName)
-                    fprint(hf,"addConstant<{ctt}>(*this,\"{DEF}\",{ctt}({VAL}{suffix}));\n")
+                    if !dup[DEF]
+                        fprint(hf,"addConstant<{ctt}>(*this,\"{DEF}\",{ctt}({VAL}{suffix}));\n")
+                        dup[DEF] = true
+                    else
+                        print("const: duplicate {DEF}\n")
         return true
 
 def genDefineConstants(fnames:array<string>; prefix:string)
@@ -933,9 +937,10 @@ def genDefineConstants(fnames:array<string>; prefix:string)
                     panic("can't open {fname}")
                 var ofs : table<int; bool>
                 let data = fread(f)
-                searchAndGenConst(reg_def_hex, "uint32_t", "u", ofs, data, hf)
-                searchAndGenConst(reg_def_dec, "int32_t", "", ofs, data, hf)
-                searchAndGenConst(reg_def_UINT8, const_uint8_type, "u", ofs, data, hf)
-                searchAndGenConst(reg_def_UINT16, const_uint16_type, "u", ofs, data, hf)
-                searchAndGenConst(reg_def_UINT32, "uint32_t", "u", ofs, data, hf)
-                searchAndGenConst(reg_def_UINT64, "uint64_t", "ul", ofs, data, hf)
+                var dup : table<string; bool>
+                searchAndGenConst(reg_def_hex, "uint32_t", "u", ofs, data, dup, hf)
+                searchAndGenConst(reg_def_dec, "int32_t", "", ofs, data, dup, hf)
+                searchAndGenConst(reg_def_UINT8, const_uint8_type, "u", ofs, data, dup, hf)
+                searchAndGenConst(reg_def_UINT16, const_uint16_type, "u", ofs, data, dup, hf)
+                searchAndGenConst(reg_def_UINT32, "uint32_t", "u", ofs, data, dup, hf)
+                searchAndGenConst(reg_def_UINT64, "uint64_t", "ul", ofs, data, dup, hf)
