@@ -371,7 +371,7 @@ namespace das {
             }
             for ( auto blk = scopes.rbegin(); blk!=scopes.rend(); ++blk ) {
                 auto pblock = *blk;
-                pblock->stackCleanVars.push_back(make_pair(var->stackTop, var->type->getSizeOf()));
+                pblock->stackCleanVars.push_back(make_pair(var->stackTop, var->type->ref ? int(sizeof(void *)) : var->type->getSizeOf()));
                 if ( pblock->isClosure ) break;
             }
             if ( var->init ) {
