@@ -17,7 +17,7 @@ var [[uniform, stage=0]] f_tex : sampler2D
 var [[uniform, format=rgba32f, stage=0, readwrite]] c_destTex : image2D
 var [[uniform]] c_frame : float4
 
-[bgfx_vertex_program(name="VERTEX_SRC")]
+[bgfx_vertex_program]
 def vs_effect
     v_texcoord0 = a_texcoord0
     gl_Position = float4(a_position, 0.0, 1.0)
@@ -26,11 +26,11 @@ def linear_to_RGB ( color : float3 )
     let x = float4(max(color, float3(0)), 1.0)
     return max(1.055 * pow(x, float4(0.416666667)) - float4(0.055), float4(0))
 
-[bgfx_fragment_program(name="FRAGMENT_SRC")]
+[bgfx_fragment_program]
 def fs_effect
     gl_FragColor = linear_to_RGB(texture2D(f_tex,v_texcoord0).xyz).zyxx
 
-[bgfx_compute_program(name="COMPUTE_SRC",local_size_x=16,local_size_y=16)]
+[bgfx_compute_program(local_size_x=16,local_size_y=16)]
 def compute_effect
     if gl_LocalInvocationIndex==0u
         init_path_tracer()

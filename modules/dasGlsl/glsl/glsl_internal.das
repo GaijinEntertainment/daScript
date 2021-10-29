@@ -64,15 +64,12 @@ class GlslShader : AstFunctionAnnotation
         pass
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         func.flags |= FunctionFlags exports // note: this is temporary, until we are done with dependency collecting etc
-        let argName = find_arg("name", args)
-        if !(argName is tString)
-            errors := "name must be string constant"
-            return false
-        if !add_global_var(compiling_module(),"{argName as tString}", new [[TypeDecl() at=func.at, baseType=Type tString]], func.at, false)
-            errors := "can't add global variable {argName as tString}"
+        let argName = find_arg("name", args) ?as tString ?? "{func.name}`shader_text"
+        if !add_global_var(compiling_module(),argName, new [[TypeDecl() at=func.at, baseType=Type tString]], func.at, false)
+            errors := "can't add global variable {argName}"
             return false
         if output_inout_decl
-            let decl_name = "{argName as tString}_DECL"
+            let decl_name = "{argName}_DECL"
             if !add_global_var(compiling_module(), decl_name, new [[TypeDecl() at=func.at, baseType=Type tString]], func.at, false)
                 errors := "can't add global variable {decl_name}"
                 return false
@@ -119,11 +116,8 @@ class GlslShader : AstFunctionAnnotation
             caps |= ShaderExportCaps resolve_supported_semantics
         return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
-        let argName = find_arg("name", args)
-        if !(argName is tString)
-            errors := "name must be string constant"
-            return false
-        var version = find_arg("version", args) ?as tInt ?? 100
+        let argName = find_arg("name", args) ?as tString ?? "{func.name}`shader_text"
+        var version = find_arg("version", args) ?as tInt ?? (shaderType==ShaderType compute ? 430 : 330)
         var compute_local_size : int3
         if shaderType==ShaderType compute
             let arg_local_size_x = find_arg("local_size_x", args)
@@ -136,9 +130,9 @@ class GlslShader : AstFunctionAnnotation
             compute_local_size.z = find_arg("local_size_z", args) ?as tInt ?? 0
         // TODO: 'find_global(name)'
         var err : array<string>
-        var glob <- find_variable(compiling_module(), argName as tString)
+        var glob <- find_variable(compiling_module(), argName)
         if glob!=null && glob.init == null
-            if glob.name == argName as tString
+            if glob.name == argName
                 var caps = self->buildCaps()
                 let gres = generate_glsl(func, err, shaderType, version, compute_local_size, caps)
                 let shader_text = "{gres.inout_stub}{self->get_glsl_prefix()}{gres.body}"
@@ -151,7 +145,7 @@ class GlslShader : AstFunctionAnnotation
                 else
                     glob._type.flags |= TypeDeclFlags constant
                     if output_inout_decl
-                        let decl_name = "{argName as tString}_DECL"
+                        let decl_name = "{argName}_DECL"
                         var glob_def <- find_variable(compiling_module(), decl_name)
                         if glob_def!=null
                             glob_def.init <- new [[ExprConstString() at=func.at,

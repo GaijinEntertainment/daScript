@@ -20,7 +20,7 @@ var [[uniform, stage=1]] f_bloom : sampler2D
 var [[uniform, format=rgba32f, stage=0]] c_destTex : image2D
 var [[uniform]] c_frame : float4
 
-[bgfx_vertex_program(name="VERTEX_SRC")]
+[bgfx_vertex_program]
 def vs_effect
     v_texcoord0 = a_texcoord0
     gl_Position = float4(a_position, 0.0, 1.0)
@@ -29,14 +29,14 @@ def linear_to_RGB ( color : float3 )
     let x = float4(max(color, float3(0)), 1.0)
     return max(1.055 * pow(x, float4(0.416666667)) - float4(0.055), float4(0))
 
-[bgfx_fragment_program(name="FRAGMENT_SRC")]
+[bgfx_fragment_program]
 def fs_effect
     let color = texture2D(f_tex,v_texcoord0)
     let bloom = texture2D(f_bloom,v_texcoord0)
     let res = bloom + color
     gl_FragColor = linear_to_RGB(res.xyz).zyxx
 
-[bgfx_compute_program(name="COMPUTE_SRC",local_size_x=16,local_size_y=16)]
+[bgfx_compute_program(local_size_x=16,local_size_y=16)]
 def compute_effect
     if gl_LocalInvocationIndex==0u
         init_path_tracer()
@@ -65,7 +65,7 @@ var [[uniform]] c_bloom_iweights_summ : float4
 def gaussian(x, sigma:float)
     return ( 1. / ( sqrt(2.*PI) * sigma ) ) * exp( -(x*x) / (2.*sigma*sigma) )
 
-[bgfx_compute_program(name="BLOOM_COPY_COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
+[bgfx_compute_program(version=430,local_size_x=16,local_size_y=16)]
 def bloom_effect_copy
     let xy = int2(gl_GlobalInvocationID.xy)
     // copy
@@ -80,7 +80,7 @@ def bloom_effect_copy
     orgb = saturate(orgb)
     imageStore(c_bloom_vtex,xy,orgb)
 
-[bgfx_compute_program(name="BLOOM_V_COMPUTE_SRC",local_size_x=16,local_size_y=16)]
+[bgfx_compute_program(local_size_x=16,local_size_y=16)]
 def bloom_effect_v
     let xy = int2(gl_GlobalInvocationID.xy)
     // blur v
@@ -94,7 +94,7 @@ def bloom_effect_v
     hrgb *= c_bloom_iweights_summ
     imageStore(c_bloom_htex,xy,hrgb)
 
-[bgfx_compute_program(name="BLOOM_H_COMPUTE_SRC",local_size_x=16,local_size_y=16)]
+[bgfx_compute_program(local_size_x=16,local_size_y=16)]
 def bloom_effect_h
     let xy = int2(gl_GlobalInvocationID.xy)
     // blur h

@@ -22,13 +22,12 @@ var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_texcoord : float2
 var [[inout]] f_color : float3
 var [[inout]] f_texcoord : float2
-var [[out]] f_outputColor : float4
 var [[uniform, stage=0]] f_tex : sampler2D
 var [[uniform, stage=1]] f_bloom : sampler2D
 var [[uniform, format=rgba32f, stage=0]] c_destTex : image2D
 var [[uniform]] c_frame : int = 0
 
-[vertex_program(name="VERTEX_SRC",version=330)]
+[vertex_program]
 def vs_effect
     f_texcoord = v_texcoord
     gl_Position = float4(v_position, 0.0, 1.0)
@@ -37,14 +36,14 @@ def linear_to_RGB ( color : float3 )
     let x = float4(max(color, float3(0)), 1.0)
     return max(1.055 * pow(x, float4(0.416666667)) - float4(0.055), float4(0))
 
-[fragment_program(name="FRAGMENT_SRC",version=330)]
-def ps_effect
+[fragment_program]
+def fs_effect
     let color = texture2D(f_tex,f_texcoord)
     let bloom = texture2D(f_bloom,f_texcoord)
     let res = bloom + color
-    f_outputColor = linear_to_RGB(res.xyz).zyxx
+    gl_FragColor = linear_to_RGB(res.xyz).zyxx
 
-[compute_program(name="COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
+[compute_program(version=430,local_size_x=16,local_size_y=16)]
 def compute_effect
     if gl_LocalInvocationIndex==0u
         init_path_tracer()
@@ -78,7 +77,7 @@ var [[uniform]] c_bloom_iweights_summ : float
 def gaussian(x, sigma:float)
     return ( 1. / ( sqrt(2.*PI) * sigma ) ) * exp( -(x*x) / (2.*sigma*sigma) )
 
-[compute_program(name="BLOOM_COPY_COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
+[compute_program(local_size_x=16,local_size_y=16)]
 def bloom_effect_copy
     let xy = int2(gl_GlobalInvocationID.xy)
     // copy
@@ -93,7 +92,7 @@ def bloom_effect_copy
     orgb = saturate(orgb)
     imageStore(c_bloom_vtex,xy,orgb)
 
-[compute_program(name="BLOOM_V_COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
+[compute_program(local_size_x=16,local_size_y=16)]
 def bloom_effect_v
     let xy = int2(gl_GlobalInvocationID.xy)
     // blur v
@@ -107,7 +106,7 @@ def bloom_effect_v
     hrgb *= c_bloom_iweights_summ
     imageStore(c_bloom_htex,xy,hrgb)
 
-[compute_program(name="BLOOM_H_COMPUTE_SRC",version=430,local_size_x=16,local_size_y=16)]
+[compute_program(local_size_x=16,local_size_y=16)]
 def bloom_effect_h
     let xy = int2(gl_GlobalInvocationID.xy)
     // blur h
@@ -139,8 +138,8 @@ let effect_vertices = [[EffectVertex
 let effect_indices = [[int 0; 1; 2; 2; 3; 0]]
 
 def create_gl_objects
-    compute_program = create_compute_shader_program(COMPUTE_SRC)
-    display_program = create_shader_program(VERTEX_SRC,FRAGMENT_SRC)
+    compute_program = create_compute_shader_program(@@compute_effect)
+    display_program = create_shader_program(@@vs_effect,@@fs_effect)
     glGenVertexArrays(1, safe_addr(vao))
     glBindVertexArray(vao);
     glGenBuffers(1, safe_addr(vbo))
@@ -156,9 +155,9 @@ def create_gl_objects
     glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA32F), TRACE_WIDTH, TRACE_HEIGHT, 0, GL_RGBA, GL_FLOAT, null)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-    bloom_program_copy = create_compute_shader_program(BLOOM_COPY_COMPUTE_SRC)
-    bloom_program_h = create_compute_shader_program(BLOOM_H_COMPUTE_SRC)
-    bloom_program_v = create_compute_shader_program(BLOOM_V_COMPUTE_SRC)
+    bloom_program_copy = create_compute_shader_program(@@bloom_effect_copy)
+    bloom_program_h = create_compute_shader_program(@@bloom_effect_h)
+    bloom_program_v = create_compute_shader_program(@@bloom_effect_v)
     // bloom texture
     for btexture in bloom_texture
         glGenTextures(1, safe_addr(btexture))
@@ -234,7 +233,7 @@ def main
         f_tex := texture
         f_bloom := c_bloom_vtex
         vs_effect_bind_uniform(display_program)
-        ps_effect_bind_uniform(display_program)
+        fs_effect_bind_uniform(display_program)
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
         // swap buffers
