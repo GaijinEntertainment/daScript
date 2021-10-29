@@ -202,8 +202,8 @@ def main
         bgfx_dispatch(0u, bloom_program_h, uint(TRACE_WIDTH/16/BLOOM_SCALE), uint(TRACE_HEIGHT/16/BLOOM_SCALE), 1u, 0u)
         // display it
         bgfx_set_view_rect(0u, 0u, 0u, uint(display_w), uint(display_h))
-        bgfx_set_vertex_buffer(0u, vbh, 0u, uint(length(effect_vertices)))
-        bgfx_set_index_buffer(ibh, 0u, uint(length(effect_indices)))
+        bgfx_set_vertex_buffer(0u, vbh)
+        bgfx_set_index_buffer(ibh)
         f_tex := texture
         f_bloom := c_bloom_vtex
         vs_effect_bind_uniform()

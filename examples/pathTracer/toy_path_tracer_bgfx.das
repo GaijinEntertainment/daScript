@@ -107,8 +107,8 @@ def main
         compute_effect_bind_uniform()
         bgfx_dispatch(0u, compute_program, uint(TRACE_WIDTH/16), uint(TRACE_HEIGHT/16), 1u, 0u)
         bgfx_set_view_rect(0u, 0u, 0u, uint(display_w), uint(display_h))
-        bgfx_set_vertex_buffer(0u, vbh, 0u, uint(length(effect_vertices)))
-        bgfx_set_index_buffer(ibh, 0u, uint(length(effect_indices)))
+        bgfx_set_vertex_buffer(0u, vbh)
+        bgfx_set_index_buffer(ibh)
         f_tex := texture
         vs_effect_bind_uniform()
         fs_effect_bind_uniform()
