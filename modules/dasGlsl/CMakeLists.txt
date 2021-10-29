@@ -4,4 +4,5 @@ IF(NOT DAS_GLSL_INCLUDED)
 
 	ADD_MODULE_DAS(glsl glsl glsl_common)
 	ADD_MODULE_DAS(glsl glsl glsl_internal)
+    ADD_MODULE_DAS(geometry glsl geom_gen)
 ENDIF()
