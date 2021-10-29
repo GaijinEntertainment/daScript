@@ -14,7 +14,7 @@ var [[in]] a_position : float2
 var [[in]] a_texcoord0 : float2
 var [[inout]] v_texcoord0 : float2
 var [[uniform, stage=0]] f_tex : sampler2D
-var [[uniform, format=rgba32f, binding=0, readwrite]] c_destTex : image2D
+var [[uniform, format=rgba32f, stage=0, readwrite]] c_destTex : image2D
 var [[uniform]] c_frame : float4
 
 [bgfx_vertex_program(name="VERTEX_SRC")]

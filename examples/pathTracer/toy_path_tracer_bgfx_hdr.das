@@ -17,7 +17,7 @@ var [[in]] a_texcoord0 : float2
 var [[inout]] v_texcoord0 : float2
 var [[uniform, stage=0]] f_tex : sampler2D
 var [[uniform, stage=1]] f_bloom : sampler2D
-var [[uniform, format=rgba32f, binding=0]] c_destTex : image2D
+var [[uniform, format=rgba32f, stage=0]] c_destTex : image2D
 var [[uniform]] c_frame : float4
 
 [bgfx_vertex_program(name="VERTEX_SRC")]
@@ -56,9 +56,9 @@ def compute_effect
     else
         imageStore(c_destTex,storePos, rgb.zyxx)
 
-var [[uniform, format=rgba32f, binding=0]] c_bloom_source : image2D
-var [[uniform, format=rgba32f, binding=1]] c_bloom_vtex : image2D
-var [[uniform, format=rgba32f, binding=2]] c_bloom_htex : image2D
+var [[uniform, format=rgba32f, stage=0]] c_bloom_source : image2D
+var [[uniform, format=rgba32f, stage=1]] c_bloom_vtex : image2D
+var [[uniform, format=rgba32f, stage=2]] c_bloom_htex : image2D
 var [[uniform, need_init=false]] c_bloom_weights : float4[9]
 var [[uniform]] c_bloom_iweights_summ : float4
 

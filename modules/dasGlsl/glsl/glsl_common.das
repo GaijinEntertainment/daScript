@@ -101,3 +101,9 @@ def clone ( var image:image2D; sampler:sampler2D )
 
 def clone ( var sampler:sampler2D; image:image2D )
     sampler.texture2D = image.texture2D
+
+def clone ( var image:image2D; sampler:uint )
+    image.texture2D = sampler
+
+def clone ( var sampler:sampler2D; image:uint )
+    sampler.texture2D = image

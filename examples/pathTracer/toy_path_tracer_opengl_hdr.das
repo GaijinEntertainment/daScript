@@ -23,9 +23,9 @@ var [[in, location=1]] v_texcoord : float2
 var [[inout]] f_color : float3
 var [[inout]] f_texcoord : float2
 var [[out]] f_outputColor : float4
-var [[uniform, binding=0]] f_tex : sampler2D
-var [[uniform, binding=1]] f_bloom : sampler2D
-var [[uniform, format=rgba32f, binding=0]] c_destTex : image2D
+var [[uniform, stage=0]] f_tex : sampler2D
+var [[uniform, stage=1]] f_bloom : sampler2D
+var [[uniform, format=rgba32f, stage=0]] c_destTex : image2D
 var [[uniform]] c_frame : int = 0
 
 [vertex_program(name="VERTEX_SRC",version=330)]
@@ -69,9 +69,9 @@ var vbo : uint
 var ebo : uint
 var texture : uint
 
-var [[uniform, format=rgba32f, binding=0]] c_bloom_source : image2D
-var [[uniform, format=rgba32f, binding=1]] c_bloom_vtex : image2D
-var [[uniform, format=rgba32f, binding=2]] c_bloom_htex : image2D
+var [[uniform, format=rgba32f, stage=0]] c_bloom_source : image2D
+var [[uniform, format=rgba32f, stage=1]] c_bloom_vtex : image2D
+var [[uniform, format=rgba32f, stage=2]] c_bloom_htex : image2D
 var [[uniform]] c_bloom_weights : float[9]
 var [[uniform]] c_bloom_iweights_summ : float
 
@@ -126,14 +126,14 @@ var bloom_texture : uint[2]
 
 [vertex_buffer]
 struct EffectVertex
-    [[type=GL_FLOAT, size=2, normalized=false]] xy  : float2
-    [[type=GL_FLOAT, size=2, normalized=false]] uv  : float2
+    xy : float2
+    uv : float2
 
 let effect_vertices = [[EffectVertex
-        xy=float2(-1.0, 1.0), uv=float2(0.0,0.0);
-        xy=float2( 1.0, 1.0), uv=float2(1.0,0.0);
-        xy=float2( 1.0,-1.0), uv=float2(1.0,1.0);
-        xy=float2(-1.0,-1.0), uv=float2(0.0,1.0)
+    xy=float2(-1.0, 1.0), uv=float2(0.0,0.0);
+    xy=float2( 1.0, 1.0), uv=float2(1.0,0.0);
+    xy=float2( 1.0,-1.0), uv=float2(1.0,1.0);
+    xy=float2(-1.0,-1.0), uv=float2(0.0,1.0)
 ]]
 
 let effect_indices = [[int 0; 1; 2; 2; 3; 0]]
@@ -156,7 +156,6 @@ def create_gl_objects
     glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA32F), TRACE_WIDTH, TRACE_HEIGHT, 0, GL_RGBA, GL_FLOAT, null)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-
     bloom_program_copy = create_compute_shader_program(BLOOM_COPY_COMPUTE_SRC)
     bloom_program_h = create_compute_shader_program(BLOOM_H_COMPUTE_SRC)
     bloom_program_v = create_compute_shader_program(BLOOM_V_COMPUTE_SRC)
@@ -189,7 +188,7 @@ def main
         glfwGetFramebufferSize(window, display_w, display_h)
         // copmute next iteration of tracing
         glUseProgram(compute_program)
-        c_destTex.texture2D = texture
+        c_destTex := texture
         compute_effect_bind_uniform(compute_program)
         glDispatchCompute(uint(TRACE_WIDTH/16),uint(TRACE_HEIGHT/16),1u)
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
@@ -207,33 +206,33 @@ def main
         c_bloom_iweights_summ = 1.0 / c_bloom_iweights_summ
         // bloom copy
         glUseProgram(bloom_program_copy)
-        c_bloom_source.texture2D = texture
-        c_bloom_vtex.texture2D = bloom_texture[0]
-        c_bloom_htex.texture2D = bloom_texture[1]
+        c_bloom_source := texture
+        c_bloom_vtex := bloom_texture[0]
+        c_bloom_htex := bloom_texture[1]
         bloom_effect_copy_bind_uniform(bloom_program_copy)
         glDispatchCompute(uint(TRACE_WIDTH/16/BLOOM_SCALE),uint(TRACE_HEIGHT/16/BLOOM_SCALE),1u)
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
         // bloom v
         glUseProgram(bloom_program_v)
-        c_bloom_source.texture2D = texture
-        c_bloom_vtex.texture2D = bloom_texture[0]
-        c_bloom_htex.texture2D = bloom_texture[1]
+        c_bloom_source := texture
+        c_bloom_vtex := bloom_texture[0]
+        c_bloom_htex := bloom_texture[1]
         bloom_effect_v_bind_uniform(bloom_program_v)
         glDispatchCompute(uint(TRACE_WIDTH/16/BLOOM_SCALE),uint(TRACE_HEIGHT/16/BLOOM_SCALE),1u)
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
         // bloom h
         glUseProgram(bloom_program_h)
-        c_bloom_source.texture2D = texture
-        c_bloom_vtex.texture2D = bloom_texture[0]
-        c_bloom_htex.texture2D = bloom_texture[1]
+        c_bloom_source := texture
+        c_bloom_vtex := bloom_texture[0]
+        c_bloom_htex := bloom_texture[1]
         bloom_effect_h_bind_uniform(bloom_program_h)
         glDispatchCompute(uint(TRACE_WIDTH/16/BLOOM_SCALE),uint(TRACE_HEIGHT/16/BLOOM_SCALE),1u)
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
         // display it
         glViewport(0, 0, display_w, display_h)
         glUseProgram(display_program)
-        f_tex.texture2D = texture
-        f_bloom.texture2D = c_bloom_vtex.texture2D
+        f_tex := texture
+        f_bloom := c_bloom_vtex
         vs_effect_bind_uniform(display_program)
         ps_effect_bind_uniform(display_program)
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)

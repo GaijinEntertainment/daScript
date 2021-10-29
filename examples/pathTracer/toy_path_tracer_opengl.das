@@ -16,7 +16,7 @@ var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_texcoord : float2
 var [[inout]] f_texcoord : float2
 var [[uniform]] f_tex : sampler2D
-var [[uniform, format=rgba32f, binding=0]] c_destTex : image2D
+var [[uniform, format=rgba32f, stage=0]] c_destTex : image2D
 var [[uniform]] c_frame : int = 0
 
 [vertex_program(name="VERTEX_SRC",version=330)]
@@ -59,14 +59,14 @@ var texture : uint
 
 [vertex_buffer]
 struct EffectVertex
-    [[type=GL_FLOAT, size=2, normalized=false]] xy  : float2
-    [[type=GL_FLOAT, size=2, normalized=false]] uv  : float2
+    xy : float2
+    uv : float2
 
 let effect_vertices = [[EffectVertex
-        xy=float2(-1.0, 1.0), uv=float2(0.0,0.0);
-        xy=float2( 1.0, 1.0), uv=float2(1.0,0.0);
-        xy=float2( 1.0,-1.0), uv=float2(1.0,1.0);
-        xy=float2(-1.0,-1.0), uv=float2(0.0,1.0)
+    xy=float2(-1.0, 1.0), uv=float2(0.0,0.0);
+    xy=float2( 1.0, 1.0), uv=float2(1.0,0.0);
+    xy=float2( 1.0,-1.0), uv=float2(1.0,1.0);
+    xy=float2(-1.0,-1.0), uv=float2(0.0,1.0)
 ]]
 
 let effect_indices = [[int 0; 1; 2; 2; 3; 0]]
@@ -111,7 +111,7 @@ def main
         glfwGetFramebufferSize(window, display_w, display_h)
         // copmute next iteration of tracing
         glUseProgram(compute_program)
-        c_destTex.texture2D = texture
+        c_destTex := texture
         compute_effect_bind_uniform(compute_program)
         glDispatchCompute(uint(TRACE_WIDTH/16),uint(TRACE_HEIGHT/16),1u)
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
@@ -119,7 +119,7 @@ def main
         // display it
         glViewport(0, 0, display_w, display_h)
         glUseProgram(display_program)
-        f_tex.texture2D = texture
+        f_tex := texture
         vs_effect_bind_uniform(display_program)
         ps_effect_bind_uniform(display_program)
         glBindVertexArray(vao)

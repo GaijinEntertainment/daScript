@@ -767,7 +767,7 @@ class GlslExport : AstVisitor
         if st==""
             return false
         let format =  (find_arg("format",arg.annotation) ?as tString) ?? "rgba8"
-        let binding = (find_arg("binding",arg.annotation) ?as tInt) ?? 0
+        let binding = (find_arg("stage",arg.annotation) ?as tInt) ?? 0
         var suffix = "_RW"
         if (find_arg("writeonly",arg.annotation) ?as tBool) ?? false
             suffix = "_WR"
@@ -791,7 +791,7 @@ class GlslExport : AstVisitor
                  !(find_arg("out", arg.annotation) is nothing) )
                 *writer |> write("// ")
         if find_arg("ssbo", arg.annotation) is tBool
-            var binding = find_arg("binding", arg.annotation) ?as tInt ?? 0
+            var binding = find_arg("stage", arg.annotation) ?as tInt ?? 0
             *writer |> write("layout(std430, binding={binding}) buffer {arg.name}_ssbo")
             self->newLine(1)
             *writer |> write("\{")
@@ -858,7 +858,7 @@ class GlslExport : AstVisitor
                     let s_format = find_arg("format", arg.annotation)
                     if s_format is tString
                         layouts |> push(s_format as tString)
-                    let i_binding = find_arg("binding", arg.annotation)
+                    let i_binding = find_arg("stage", arg.annotation)
                     if i_binding is tInt
                         layouts |> push("binding={i_binding as tInt}")
                     if !empty(layouts)
