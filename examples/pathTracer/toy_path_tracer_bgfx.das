@@ -83,11 +83,10 @@ def main
     // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type OPENGL)
     // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type DIRECT3D12)
     bgfx_init(TRACE_WIDTH,TRACE_WIDTH)
-    let render_type = bgfx_get_renderer_type()
-    glfwSetWindowTitle(window, "BGFX Path tracer - {render_type}")
+    glfwSetWindowTitle(window, "BGFX Path tracer - {bgfx_get_renderer_type()}")
     var compute_program = bgfx_create_compute_shader_program(@@compute_effect)
     var display_program = bgfx_create_shader_program(@@vs_effect,@@fs_effect)
-    var pcvl_decl = bgfx_create_vertex_layout(type<EffectVertex>,render_type)
+    var pcvl_decl = bgfx_create_vertex_layout(type<EffectVertex>)
     var vbh = bgfx_create_vertex_buffer(bgfx_make_ref(effect_vertices), safe_addr(pcvl_decl), BGFX_BUFFER_NONE)
     var ibh = bgfx_create_index_buffer(bgfx_make_ref(effect_indices), BGFX_BUFFER_INDEX32)
     var texture = bgfx_create_texture_2d(uint(TRACE_WIDTH), uint(TRACE_HEIGHT), false, 1u,
