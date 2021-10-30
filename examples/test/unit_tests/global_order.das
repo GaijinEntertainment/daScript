@@ -1,4 +1,4 @@
-def clone(value : auto(T))
+def operator :=(value : auto(T))
     var res : T
     res := value
     return <-res

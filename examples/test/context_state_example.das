@@ -34,7 +34,7 @@ class SampleDebugAgent : DapiDebugAgent
         walker = new SampleStackWalker()
         unsafe
             walker_adapter <- make_stack_walker(walker)
-    def finalize
+    def operator delete
         unsafe
             delete walker_adapter
             delete walker

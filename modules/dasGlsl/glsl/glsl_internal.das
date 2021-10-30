@@ -262,7 +262,7 @@ class GlslExport : AstVisitor
         version = ver
         compute_local_size = cls
         caps = cp
-    def finalize
+    def operator delete
         delete stnames
         delete depFun
         delete depVar

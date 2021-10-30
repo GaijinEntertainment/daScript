@@ -11,7 +11,7 @@ def Foo()
     f.a = 5
     return f
 
-def finalize(var f:Foo)
+def operator delete(var f:Foo)
     print("killing foo\n")
 
 [finalize]

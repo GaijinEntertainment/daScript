@@ -11,6 +11,7 @@ require daslib/rtti public
 require daslib/algorithm
 require daslib/sort_boost
 require daslib/functional
+require math
 
 typedef ComponentHash = uint
 
@@ -75,6 +76,46 @@ struct public DecsPass
 var public decsState : DecsState
 var private deferActions : array<DeferAction>
 var private decsPasses : array<DecsPass>
+
+def public operator . ( var cmp:ComponentMap; name:string ) : ComponentValue &
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
+    if !(idx<length(cmp) && cmp[idx].name==name)
+        cmp |> push([[ComponentValue name=name]], idx)
+    unsafe
+        return cmp[idx]
+
+def public set ( var cv:ComponentValue; val:auto )
+    var cval = make_component(cv.name, val)
+    assert(cv.info.hash==0u || cv.info.hash==cval.info.hash)
+    cv = cval
+
+def public operator := ( var cv:ComponentValue; val:EntityId )    { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:bool )        { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:range )       { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:urange )      { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:string )      { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:int )         { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:int8 )        { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:int16 )       { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:int64 )       { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:int2 )        { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:int3 )        { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:int4 )        { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:uint )        { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:uint8 )       { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:uint16 )      { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:uint64 )      { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:uint2 )       { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:uint3 )       { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:uint4 )       { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:float )       { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:float2 )      { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:float3 )      { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:float4 )      { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:float3x3 )    { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:float3x4 )    { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:float4x4 )    { set(cv, val); }
+def public operator := ( var cv:ComponentValue; val:double )      { set(cv, val); }
 
 def private cleanup_temp_string_array ( var comp:Component )
     assert(comp.info.basicType==Type tString,"not a string array")

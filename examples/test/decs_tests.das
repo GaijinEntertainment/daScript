@@ -16,9 +16,9 @@ def test_query_1
         var kaboom : EntityId
     for i in range(3)
         create_entity <| @ ( eid, cmp )
-            cmp |> set ( "eid", eid )
-            cmp |> set ( "pos", float3(i))
-            cmp |> set ( "vel", float3(.1,.2,.3))
+            cmp.eid := eid
+            cmp.pos := float3(i)
+            cmp.vel := float3(1.,2.,3.)
             if i==1
                 kaboom = eid
     commit()
@@ -59,9 +59,9 @@ def test_decs_macro
     restart()
     for i in range(3)
         create_entity <| @ ( eid, cmp )
-            cmp |> set ( "pos", float3(i))
-            cmp |> set ( "vel", float3(.1,.2,.3))
-            cmp |> set ( "col", float4(0.))
+            cmp.pos := float3(i)
+            cmp.vel := float3(.1,.2,.3)
+            cmp.col := float4(0.)
     decs_stage("update")
     decs_stage("check")
     debug_dump()
@@ -72,8 +72,8 @@ def test_strings
     restart()
     for i in range(3)
         create_entity <| @ ( eid, cmp )
-            cmp |> set ( "pos", float3(i))
-            cmp |> set ( "txt", "{i}")
+            cmp.pos := float3(i)
+            cmp.txt := "{i}"
     commit()
     debug_dump()
     before_gc()
@@ -96,13 +96,13 @@ def test_query_macro
     restart()
     for i in range(3)
         create_entity <| @ ( eid, cmp )
-            cmp |> set ( "pos", float3(i))
-            cmp |> set ( "vel", float3(.1,.2,.3))
+            cmp.pos := float3(i)
+            cmp.vel := float3(.1,.2,.3)
     for i in range(2)
         create_entity <| @ ( eid, cmp )
-            cmp |> set ( "pos", float3(i+3))
-            cmp |> set ( "vel", float3(.1,.2,.3))
-            cmp |> set ( "col", 0xffffffff)
+            cmp.pos := float3(i+3)
+            cmp.vel := float3(.1,.2,.3)
+            cmp.col := 0xffffffff
     commit()
     var count = 0
     var count_ff = 0
@@ -138,13 +138,13 @@ def test_query
     restart()
     for i in range(3)
         create_entity <| @ ( eid, cmp )
-            cmp |> set ( "pos", float3(i))
-            cmp |> set ( "vel", float3(.1,.2,.3))
+            cmp.pos := float3(i)
+            cmp.vel := float3(.1,.2,.3)
     for i in range(3)
         create_entity <| @ ( eid, cmp )
-            cmp |> set ( "pos", float3(i+100))
-            cmp |> set ( "vel", float3(.1,.2,.3))
-            cmp |> set ( "col", 0xffffffff)
+            cmp.pos := float3(i+100)
+            cmp.vel := float3(.1,.2,.3)
+            cmp.col := 0xffffffff
     commit()
     // query 1
     static_let <|
@@ -203,7 +203,7 @@ def test_type_mismatch
     print("\n\nTEST TYPE MISMATCH\n")
     restart()
     create_entity <| @ ( eid, cmp )
-        cmp |> set("pos", float3(1,2,3))
+        cmp.pos := float3(1,2,3)
         try
             cmp |> set("pos", 13)
         recover
@@ -224,14 +224,14 @@ def test_update
         var migr : EntityId
     print("before:\n")
     create_entity <| @ ( eid, cmp )
-        cmp |> set("pos", float3(1,2,3))
-        cmp |> set("vel", float3(0.,-9.8,0.))
+        cmp.pos := float3(1,2,3)
+        cmp.vel := float3(0.,-9.8,0.)
         migr = eid
     commit()
     debug_dump()
     print("after add:\n")
     migr |> update_entity <| @ ( eid, cmp )
-        cmp |> set("color", float4(1,0,0,1))
+        cmp.color := float4(1,0,0,1)
         migr = eid
     commit()
     debug_dump()
@@ -264,8 +264,8 @@ def test_create_delete
     print("creating:\n")
     create_entity <| @ ( eid, cmp )
         print("eid = {eid}\n")
-        cmp |> set("pos",float3(1.,2.,3.))
-        cmp |> set("name","entity_once")
+        cmp.pos  := float3(1.,2.,3.)
+        cmp.name := "entity_once"
     create_entity <| @ ( eid, cmp )
         print("eid = {eid}\n")
         var foo = [[Foo pos=float3(1.), name="from template",eid=eid]]
@@ -279,9 +279,9 @@ def test_create_delete
             print("i={i} eid = {eid}\n")
             if i==1 || i==2
                 de |> push(eid)
-            cmp |> set("pos",float3(1+i,2+i,3+i))
-            cmp |> set("name","entity{i}")
-            cmp |> set("id", i)
+            cmp.pos  := float3(1+i,2+i,3+i)
+            cmp.name := "entity{i}"
+            cmp.id   := i
     commit()
     debug_dump()
 
@@ -292,6 +292,4 @@ def test_create_delete
     commit()
     debug_dump()
 
-options debugger
-require daslib/debug
 

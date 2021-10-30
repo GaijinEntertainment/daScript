@@ -6,7 +6,7 @@ var
 struct Foo
     a : int
 
-def finalize(var f : Foo)
+def operator delete (var f : Foo)
     all_good = true
 
 [export]

@@ -18,7 +18,7 @@ class Foo
     def ups()
         x = -1
         y = -1
-    def finalize                        // custom finalizer
+    def operator delete                        // custom finalizer
         delFoo ++
 
 class Foo3D : Foo
@@ -36,7 +36,7 @@ class Foo3D : Foo
         x = -2
         y = -2
         z = -2
-    def finalize                        // custom finalizer
+    def operator delete                        // custom finalizer
         delete cast<Foo> self           // calling Foo finalizer
         delFoo3D ++
 

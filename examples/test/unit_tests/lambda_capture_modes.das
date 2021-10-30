@@ -4,7 +4,7 @@ struct Foo
 var
 	g_counter = 0
 
-def finalize ( f : Foo )
+def operator delete ( f : Foo )
 	g_counter ++
 
 

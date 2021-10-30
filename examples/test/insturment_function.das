@@ -24,7 +24,7 @@ struct Foo
     arr2 = [[Bar[] [[Bar]]; [[Bar]]]]
     ref: Foo?
 
-def finalize(var a:Foo&)
+def operator delete (var a:Foo&)
     print("destroy Foo[{a.a}]\n")
 
 [export]

@@ -1,7 +1,7 @@
 struct Pipeline
     a : int
 
-def finalize ( var p : Pipeline )
+def operator delete ( var p : Pipeline )
     assert(p.a==2)
     p.a = 0
 
