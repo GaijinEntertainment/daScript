@@ -2819,6 +2819,18 @@ namespace das {
         return from->isVisibleDirectly(too);
     }
 
+    bool builtin_hasField ( TypeDeclPtr ptr, const char * field, bool constant ) {
+        if ( !field || !ptr ) return false;
+        if ( ptr->baseType==Type::tStructure ) {
+            return ptr->structType->findField(field);
+        } else if ( ptr->baseType==Type::tHandle ) {
+            return ptr->annotation->makeFieldType(field, constant);
+        } else if ( ptr->baseType==Type::tPointer && ptr->firstType ) {
+            return builtin_hasField(ptr->firstType, field, constant);
+        }
+        return false;
+    }
+
     class Module_Ast : public Module {
     public:
         template <typename RecAnn>
@@ -3264,6 +3276,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_structure_for_each_field)>(*this, lib,  "for_each_field",
                 SideEffects::modifyExternal, "builtin_structure_for_each_field")
                     ->args({"annotation","block","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_hasField)>(*this, lib, "has_field",
+                SideEffects::modifyExternal, "builtin_hasField")
+                    ->args({"type","fieldName","constant"});
+            // type
             addExtern<DAS_BIND_FUN(builtin_isVisibleDirectly)>(*this, lib, "is_visible_directly",
                 SideEffects::modifyExternal, "builtin_isVisibleDirectly")
                     ->args({"from_module","which_module"});
