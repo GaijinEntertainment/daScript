@@ -10,6 +10,7 @@ MAKE_TYPE_FACTORY(NetworkServer,Server)
 
 namespace das {
 
+    bool needShutdown = false;
     class ServerAdapter : public Server {
     public:
         ServerAdapter(char * pClass, const StructInfo * info, Context * ctx ) {
@@ -78,6 +79,7 @@ namespace das {
     #include "network.das.inc"
 
     bool makeServer ( const void * pClass, const StructInfo * info, Context * context ) {
+        needShutdown = needShutdown || Server::startup();
         auto server = make_smart<ServerAdapter>((char *)pClass,info,context);
         if ( !server->isValid() ) return false;
         server.orphan();
@@ -119,7 +121,6 @@ namespace das {
     public:
         Module_Network() : Module("network") {
             DAS_PROFILE_SECTION("Module_Network");
-            needShutdown = Server::startup();
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();
@@ -157,8 +158,6 @@ namespace das {
         virtual ~Module_Network() {
             if ( needShutdown ) Server::shutdown();
         }
-    protected:
-        bool needShutdown = false;
     };
 }
 
