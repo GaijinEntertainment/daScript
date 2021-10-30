@@ -1377,6 +1377,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         cexpr->index = index->clone();
+        cexpr->no_promotion = no_promotion;
         return cexpr;
     }
 
@@ -1395,6 +1396,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         cexpr->index = index->clone();
+        cexpr->no_promotion = no_promotion;
         return cexpr;
     }
 
@@ -1600,6 +1602,7 @@ namespace das {
         cexpr->field = field;
         cexpr->fieldIndex = fieldIndex;
         cexpr->unsafeDeref = unsafeDeref;
+        cexpr->no_promotion = no_promotion;
         cexpr->atField = atField;
         return cexpr;
     }

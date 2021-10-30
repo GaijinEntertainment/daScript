@@ -113,8 +113,8 @@ namespace das
 
     struct ExprAt : Expression {
         ExprAt() { __rtti = "ExprAt"; };
-        ExprAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i )
-            : Expression(a), subexpr(s), index(i) { __rtti = "ExprAt"; }
+        ExprAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i, bool no_promo = false )
+            : Expression(a), subexpr(s), index(i) { __rtti = "ExprAt"; no_promotion = no_promo; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -126,6 +126,7 @@ namespace das
                 bool        r2v : 1;
                 bool        r2cr : 1;
                 bool        write : 1;
+                bool        no_promotion : 1;
             };
             uint32_t atFlags = 0;
         };
@@ -133,8 +134,8 @@ namespace das
 
     struct ExprSafeAt : ExprAt {
         ExprSafeAt() { __rtti = "ExprSafeAt"; };
-        ExprSafeAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i )
-            : ExprAt(a,s,i) { __rtti = "ExprSafeAt"; }
+        ExprSafeAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i, bool no_promo=false )
+            : ExprAt(a,s,i,no_promo) { __rtti = "ExprSafeAt"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -225,10 +226,10 @@ namespace das
 
     struct ExprField : Expression {
         ExprField () { __rtti = "ExprField"; };
-        ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : Expression(a), value(val), name(n), atField(a) { __rtti = "ExprField"; }
-        ExprField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n )
-            : Expression(a), value(val), name(n), atField(af) { __rtti = "ExprField"; }
+        ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n, bool no_promo=false )
+            : Expression(a), value(val), name(n), atField(a) { __rtti = "ExprField"; no_promotion = no_promo; }
+        ExprField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n, bool no_promo=false )
+            : Expression(a), value(val), name(n), atField(af) { __rtti = "ExprField"; no_promotion = no_promo; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
@@ -255,6 +256,7 @@ namespace das
                 bool        r2v : 1;
                 bool        r2cr : 1;
                 bool        write : 1;
+                bool        no_promotion : 1;
             };
             uint32_t fieldFlags = 0;
         };
@@ -318,10 +320,10 @@ namespace das
 
     struct ExprSafeField : ExprField {
         ExprSafeField () { __rtti = "ExprField"; };
-        ExprSafeField ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : ExprField(a,val,n) { __rtti = "ExprField"; }
-        ExprSafeField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n )
-            : ExprField(a,af,val,n) { __rtti = "ExprField"; }
+        ExprSafeField ( const LineInfo & a, const ExpressionPtr & val, const string & n, bool no_promo=false )
+            : ExprField(a,val,n,no_promo) { __rtti = "ExprField"; }
+        ExprSafeField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n, bool no_promo=false )
+            : ExprField(a,af,val,n,no_promo) { __rtti = "ExprField"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;

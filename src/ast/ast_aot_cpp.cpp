@@ -690,6 +690,9 @@ namespace das {
                     case '!':   name += "Excl"; break;
                     case '>':   name += "Greater"; break;
                     case '<':   name += "Less"; break;
+                    case '[':   name += "Sqbl"; break;
+                    case ']':   name += "Sqbr"; break;
+                    case '.':   name += "Dot"; break;
                     default:
                         name += "_0x";
                         name += '0' + (ch>>4);

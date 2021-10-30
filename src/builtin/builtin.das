@@ -263,7 +263,7 @@ def next ( it:iterator<auto(TT)>; var value : TT& ) : bool
 
 [expect_any_vector(vec)]
 def length ( vec )
-    return vec.length
+    return vec..length
 
 [generic]
 def each ( rng : range ) : iterator<int>

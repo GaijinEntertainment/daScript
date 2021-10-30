@@ -3596,9 +3596,31 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprAt
+        MatchingFunctions getOperatorAt ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
+            vector<TypeDeclPtr> argDummy = { left, right };
+            auto clones = findMatchingFunctions("[]", argDummy);
+            applyLSP(argDummy, clones);
+            return clones;
+        }
+        bool verifyOperatorAt ( const MatchingFunctions & fnList, const LineInfo & at ) const {
+            return verifyAnyFunc(fnList, at);
+        }
         virtual ExpressionPtr visit ( ExprAt * expr ) override {
             if ( !expr->subexpr->type || !expr->index->type) return Visitor::visit(expr);
-            // infer
+            if ( !expr->no_promotion ) {
+            auto fnList = getOperatorAt(expr->subexpr->type, expr->index->type);
+                if ( fnList.size() ) {
+                    if ( verifyOperatorAt(fnList, expr->at) ) {
+                        reportAstChanged();
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "[]");
+                        cloneFn->arguments.push_back(expr->subexpr->clone());
+                        cloneFn->arguments.push_back(expr->index->clone());
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        return Visitor::visit(expr);
+                    }
+                }
+            }
             expr->index = Expression::autoDereference(expr->index);
             auto seT = expr->subexpr->type;
             auto ixT = expr->index->type;
@@ -3685,9 +3707,31 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprSafeAt
+        MatchingFunctions getOperatorSafeAt ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
+            vector<TypeDeclPtr> argDummy = { left, right };
+            auto clones = findMatchingFunctions("?[]", argDummy);
+            applyLSP(argDummy, clones);
+            return clones;
+        }
+        bool verifyOperatorSafeAt ( const MatchingFunctions & fnList, const LineInfo & at ) const {
+            return verifyAnyFunc(fnList, at);
+        }
         virtual ExpressionPtr visit ( ExprSafeAt * expr ) override {
             if ( !expr->subexpr->type || !expr->index->type) return Visitor::visit(expr);
-            // infer
+            if ( !expr->no_promotion ) {
+                auto fnList = getOperatorSafeAt(expr->subexpr->type, expr->index->type);
+                if ( fnList.size() ) {
+                    if ( verifyOperatorSafeAt(fnList, expr->at) ) {
+                        reportAstChanged();
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "?[]");
+                        cloneFn->arguments.push_back(expr->subexpr->clone());
+                        cloneFn->arguments.push_back(expr->index->clone());
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        return Visitor::visit(expr);
+                    }
+                }
+            }
             if ( !expr->subexpr->type->isVectorType() ) {
                 expr->subexpr = Expression::autoDereference(expr->subexpr);
             }
@@ -4163,6 +4207,17 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprField
+        MatchingFunctions getOperatorField ( const TypeDeclPtr & left ) const {
+            auto conststring = make_smart<TypeDecl>(Type::tString);
+            conststring->constant = true;
+            vector<TypeDeclPtr> argDummy = { left, conststring };
+            auto clones = findMatchingFunctions(".", argDummy);
+            applyLSP(argDummy, clones);
+            return clones;
+        }
+        bool verifyOperatorField ( const MatchingFunctions & fnList, const LineInfo & at ) const {
+            return verifyAnyFunc(fnList, at);
+        }
         virtual ExpressionPtr visit ( ExprField * expr ) override {
             if ( !expr->value->type ) return Visitor::visit(expr);
             if ( expr->name.empty() ) {
@@ -4170,7 +4225,20 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
-            // infer
+            if ( !expr->no_promotion ) {
+                auto fnList = getOperatorField(expr->value->type);
+                if ( fnList.size() ) {
+                    if ( verifyOperatorField(fnList, expr->at) ) {
+                        reportAstChanged();
+                        auto cloneFn = make_smart<ExprCall>(expr->at, ".");
+                        cloneFn->arguments.push_back(expr->value->clone());
+                        cloneFn->arguments.push_back(make_smart<ExprConstString>(expr->at,expr->name));
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        return Visitor::visit(expr);
+                    }
+                }
+            }
             auto valT = expr->value->type;
             if ( valT->isVectorType() ) {
                 reportAstChanged();
@@ -4277,9 +4345,33 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprSafeField
+        MatchingFunctions getOperatorSafeField ( const TypeDeclPtr & left ) const {
+            auto conststring = make_smart<TypeDecl>(Type::tString);
+            conststring->constant = true;
+            vector<TypeDeclPtr> argDummy = { left, conststring };
+            auto clones = findMatchingFunctions("?.", argDummy);
+            applyLSP(argDummy, clones);
+            return clones;
+        }
+        bool verifyOperatorSafeField ( const MatchingFunctions & fnList, const LineInfo & at ) const {
+            return verifyAnyFunc(fnList, at);
+        }
         virtual ExpressionPtr visit ( ExprSafeField * expr ) override {
             if ( !expr->value->type ) return Visitor::visit(expr);
-            // infer
+            if ( !expr->no_promotion ) {
+                auto fnList = getOperatorSafeField(expr->value->type);
+                if ( fnList.size() ) {
+                    if ( verifyOperatorSafeField(fnList, expr->at) ) {
+                        reportAstChanged();
+                        auto cloneFn = make_smart<ExprCall>(expr->at, "?.");
+                        cloneFn->arguments.push_back(expr->value->clone());
+                        cloneFn->arguments.push_back(make_smart<ExprConstString>(expr->at,expr->name));
+                        return ExpressionPtr(cloneFn);
+                    } else {
+                        return Visitor::visit(expr);
+                    }
+                }
+            }
             auto valT = expr->value->type;
             if ( !valT->isPointer() || !valT->firstType ) {
                 error("can only safe dereference a pointer to a tupe, a structure or a handle " + describeType(valT), "", "",
@@ -4847,7 +4939,7 @@ namespace das {
             auto fnList = getCloneFunc(expr->left->type, expr->right->type);
             if ( fnList.size() ) {
                 if ( verifyCloneFunc(fnList, expr->at) ) {
-                    // auto fn = fnList[0];
+                    reportAstChanged();
                     string cloneName = "_::clone";
                     auto cloneFn = make_smart<ExprCall>(expr->at, cloneName);
                     cloneFn->arguments.push_back(expr->left->clone());

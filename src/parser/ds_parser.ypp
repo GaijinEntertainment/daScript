@@ -967,6 +967,10 @@ function_name
     |   DAS_OPERATOR ROTR    { $$ = new string(">>>"); }
     |   DAS_OPERATOR ROTLEQU { $$ = new string("<<<="); }
     |   DAS_OPERATOR ROTREQU { $$ = new string(">>>="); }
+    |   DAS_OPERATOR '[' ']' { $$ = new string("[]"); }
+    |   DAS_OPERATOR QBRA ']' { $$ = new string("?[]"); }
+    |   DAS_OPERATOR '.'     { $$ = new string("."); }
+    |   DAS_OPERATOR QDOT    { $$ = new string("?."); }
     ;
 
 global_function_declaration
@@ -1552,6 +1556,10 @@ expr_field
         $$ = new ExprField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name);
         delete $name;
     }
+    |   expr[subexpr] '.' '.'[loc] NAME[name]     {
+        $$ = new ExprField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name, true);
+        delete $name;
+    }
     |   expr[subexpr] '.'[loc] { das_supress_errors=true; } error { das_supress_errors=false; } {
         $$ = new ExprField(tokAt(@loc), tokAt(@loc), ExpressionPtr($subexpr), "");
         yyerrok;
@@ -1599,8 +1607,11 @@ expr
     |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokAt(@loc),"---", ExpressionPtr($subexpr)); }
     |   '(' expr[subexpr] ')'                    { $$ = $subexpr; }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
+    |   expr[subexpr] '.' '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index), true); }
     |   expr[subexpr] QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
+    |   expr[subexpr] '.' QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(@loc), ExpressionPtr($subexpr), ExpressionPtr($index), true); }
     |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name); delete $name; }
+    |   expr[subexpr] '.' QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name, true); delete $name; }
     |   func_addr_expr[subexpr]                  { $$ = $subexpr; }
     |   name_in_namespace[name] '(' ')'[atend] {
             $$ = g_Program->makeCall(tokAt(@name),tokAt(@atend),*$name);
