@@ -111,6 +111,7 @@ namespace das
         virtual void aotPreVisitGetFieldPtr ( TextWriter &, const string & ) override;
         virtual void aotVisitGetField(TextWriter & ss, const string & fieldName) override;
         virtual void aotVisitGetFieldPtr(TextWriter & ss, const string & fieldName) override;
+        virtual bool canSubstitute(TypeAnnotation * ann) const override;
         StructureField & addFieldEx(const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT);
         virtual void walk(DataWalker & walker, void * data) override;
         int32_t fieldCount() const { return int32_t(fields.size()); }

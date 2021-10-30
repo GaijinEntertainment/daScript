@@ -150,8 +150,8 @@ namespace das {
     };
 
 
-    void builtin_fprint ( const FILE * f, const char * text, Context * context ) {
-        if ( !f ) context->throw_error("can't fprint NULL");
+    void builtin_fprint ( const FILE * f, const char * text, Context * context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(*at, "can't fprint NULL");
         if ( text ) fputs(text,(FILE *)f);
     }
 
@@ -165,8 +165,8 @@ namespace das {
         }
     }
 
-    void builtin_fclose ( const FILE * f, Context * context ) {
-        if ( !f ) context->throw_error("can't fclose NULL");
+    void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(*at, "can't fclose NULL");
         fclose((FILE *)f);
     }
 
@@ -188,7 +188,7 @@ namespace das {
     }
 
     void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) {
-        if ( !f ) context->throw_error("can't map NULL file");
+        if ( !f ) context->throw_error_at(*at, "can't map NULL file");
         struct stat st;
         int fd = fileno((FILE *)f);
         fstat(fd, &st);
@@ -203,8 +203,18 @@ namespace das {
         munmap(data, 0);
     }
 
-    char * builtin_fread ( const FILE * f, Context * context ) {
-        if ( !f ) context->throw_error("can't fread NULL");
+    int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(*at, "can't ftell NULL");
+        return ftell((FILE *)f);
+    }
+
+    int64_t builtin_fseek ( const FILE * f, int64_t offset, int32_t mode, Context * context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(*at, "can't fseek NULL");
+        return fseek((FILE *)f, long(offset), mode);
+    }
+
+    char * builtin_fread ( const FILE * f, Context * context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(*at, "can't fread NULL");
         struct stat st;
         int fd = fileno((FILE*)f);
         fstat(fd, &st);
@@ -212,14 +222,14 @@ namespace das {
         fseek((FILE*)f, 0, SEEK_SET);
         auto bytes = fread(res, 1, st.st_size, (FILE *)f);
         if ( uint64_t(bytes) != uint64_t(st.st_size) ) {
-            context->throw_error_ex("incorrect fread result, expected %d, got %d bytes. read requires binary file mode", st.st_size, bytes);
+            context->throw_error_at(*at, "incorrect fread result, expected %d, got %d bytes. read requires binary file mode", st.st_size, bytes);
         }
         return res;
     }
 
-    char * builtin_fgets(const FILE* f, Context* context) {
-        if ( !f ) context->throw_error("can't fgets NULL");
-        char buffer[1024];
+    char * builtin_fgets(const FILE* f, Context* context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(*at, "can't fgets NULL");
+        char buffer[16384];
         if (char* buf = fgets(buffer, sizeof(buffer), (FILE *)f)) {
             return context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
         } else {
@@ -227,8 +237,8 @@ namespace das {
         }
     }
 
-    void builtin_fwrite ( const FILE * f, char * str, Context * context ) {
-        if ( !f ) context->throw_error("can't fprint NULL");
+    void builtin_fwrite ( const FILE * f, char * str, Context * context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(*at, "can't fprint NULL");
         if (!str) return;
         uint32_t len = stringLength(*context, str);
         if (len) fwrite(str, 1, len, (FILE*)f);
@@ -243,7 +253,7 @@ namespace das {
         DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType()
             || call->types[1]->type==Type::tString || call->types[1]->type==Type::tPointer);
         auto fp = cast<FILE *>::to(args[0]);
-        if ( !fp ) context.throw_error("can't read NULL");
+        if ( !fp ) context.throw_error_at(call->debugInfo, "can't read NULL");
         auto buf = cast<void *>::to(args[1]);
         auto len = cast<int32_t>::to(args[2]);
         int32_t res = (int32_t) fread(buf,1,len,fp);
@@ -254,7 +264,7 @@ namespace das {
         DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType()
             || call->types[1]->type==Type::tString || call->types[1]->type==Type::tPointer);
         auto fp = cast<FILE *>::to(args[0]);
-        if ( !fp ) context.throw_error("can't write NULL");
+        if ( !fp ) context.throw_error_at(call->debugInfo, "can't write NULL");
         auto buf = cast<void *>::to(args[1]);
         auto len = cast<int32_t>::to(args[2]);
         int32_t res = (int32_t) fwrite(buf,1,len,fp);
@@ -268,12 +278,12 @@ namespace das {
     // loads(file,block<data>)
     vec4f builtin_load ( Context & context, SimNode_CallBase * node, vec4f * args ) {
         auto fp = cast<FILE *>::to(args[0]);
-        if ( !fp ) context.throw_error("can't load NULL");
+        if ( !fp ) context.throw_error_at(node->debugInfo, "can't load NULL");
         int32_t len = cast<int32_t>::to(args[1]);
-        if (len < 0) context.throw_error_ex("can't read negative number from binary save, %d", len);
+        if (len < 0) context.throw_error_at(node->debugInfo, "can't read negative number from binary save, %d", len);
         Block * block = cast<Block *>::to(args[2]);
         char * buf = (char *) malloc(len + 1);
-        if (!buf) context.throw_error_ex("can't read. out of memory, %d", len);
+        if (!buf) context.throw_error_at(node->debugInfo, "can't read. out of memory, %d", len);
         vec4f bargs[1];
         int32_t rlen = int32_t(fread(buf, 1, len, fp));
         if ( rlen != len ) {
@@ -294,7 +304,7 @@ namespace das {
     }
 
 
-    char * builtin_dirname ( const char * name, Context * context ) {
+    char * builtin_dirname ( const char * name, Context * context, LineInfoArg * ) {
         if ( name ) {
 #if defined(_MSC_VER)
             char full_path[ _MAX_PATH ];
@@ -322,7 +332,7 @@ namespace das {
         }
     }
 
-    char * builtin_basename ( const char * name, Context * context ) {
+    char * builtin_basename ( const char * name, Context * context, LineInfoArg * ) {
         if ( name ) {
 #if defined(_MSC_VER)
             char drive[ _MAX_DRIVE ];
@@ -432,31 +442,41 @@ namespace das {
             // type
             addAnnotation(make_smart<FileAnnotation>(lib));
             addAnnotation(make_smart<FStatAnnotation>(lib));
+            // seek constants
+            addConstant<int32_t>(*this, "seek_set", SEEK_SET);
+            addConstant<int32_t>(*this, "seek_cur", SEEK_CUR);
+            addConstant<int32_t>(*this, "seek_end", SEEK_END);
             // file io
             addExtern<DAS_BIND_FUN(builtin_fopen)>(*this, lib, "fopen",
                 SideEffects::modifyExternal, "builtin_fopen")
                     ->args({"name","mode"});
             addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose",
                 SideEffects::modifyExternal, "builtin_fclose")
-                    ->args({"file","context"});
+                    ->args({"file","context","line"});
             addExtern<DAS_BIND_FUN(builtin_fprint)>(*this, lib, "fprint",
                 SideEffects::modifyExternal, "builtin_fprint")
-                    ->args({"file","text","context"});
+                    ->args({"file","text","context","line"});
             addExtern<DAS_BIND_FUN(builtin_fread)>(*this, lib, "fread",
                 SideEffects::modifyExternal, "builtin_fread")
-                    ->args({"file","context"});;
+                    ->args({"file","context","line"});
             addExtern<DAS_BIND_FUN(builtin_map_file)>(*this, lib, "fmap",
                 SideEffects::modifyExternal, "builtin_map_file")
                     ->args({"file","block","context","line"});
             addExtern<DAS_BIND_FUN(builtin_fgets)>(*this, lib, "fgets",
                 SideEffects::modifyExternal, "builtin_fgets")
-                    ->args({"file","context"});
+                    ->args({"file","context","line"});
             addExtern<DAS_BIND_FUN(builtin_fwrite)>(*this, lib, "fwrite",
                 SideEffects::modifyExternal, "builtin_fwrite")
-                    ->args({"file","text","context"});
+                    ->args({"file","text","context","line"});
             addExtern<DAS_BIND_FUN(builtin_feof)>(*this, lib, "feof",
                 SideEffects::modifyExternal, "builtin_feof")
                     ->arg("file");
+            addExtern<DAS_BIND_FUN(builtin_fseek)>(*this, lib, "fseek",
+                SideEffects::modifyExternal, "builtin_fseek")
+                    ->args({"file","offset","mode","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_ftell)>(*this, lib, "ftell",
+                SideEffects::modifyExternal, "builtin_ftell")
+                    ->args({"file","context","line"});
             // builtin file functions
             addInterop<builtin_read,int,const FILE*,vec4f,int32_t>(*this, lib, "_builtin_read",
                 SideEffects::modifyExternal, "builtin_read")
@@ -469,10 +489,10 @@ namespace das {
                     ->args({"file","length","block"});
             addExtern<DAS_BIND_FUN(builtin_dirname)>(*this, lib, "dir_name",
                 SideEffects::none, "builtin_dirname")
-                    ->args({"name","context"});
+                    ->args({"name","context","line"});
             addExtern<DAS_BIND_FUN(builtin_basename)>(*this, lib, "base_name",
                 SideEffects::none, "builtin_basename")
-                    ->args({"name","context"});
+                    ->args({"name","context","line"});
             addExtern<DAS_BIND_FUN(builtin_fstat)>(*this, lib, "fstat",
                 SideEffects::modifyExternal, "builtin_fstat")
                     ->args({"file","stat","context","line"});

@@ -5,6 +5,18 @@
 
 namespace das {
 
+    bool BasicStructureAnnotation::canSubstitute(TypeAnnotation * ann) const {
+        if ( this==ann ) return true;
+        if ( this->module != ann->module ) return false;
+        if ( ann->rtti_isBasicStructureAnnotation() ) {
+            auto* AEA = static_cast<BasicStructureAnnotation*>(ann);
+            for ( auto p : AEA->parents ) {
+                if ( p == this ) return true;
+            }
+        }
+        return false;
+    }
+
     void BasicStructureAnnotation::seal( Module * m ) {
         TypeAnnotation::seal(m);
         mlib = nullptr;

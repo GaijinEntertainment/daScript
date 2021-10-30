@@ -138,10 +138,43 @@ IF(CLANG_BIN_EXE)
             COMMENT "Generating C++ bindings from ${header_from}.json\n"
         )
     ENDMACRO()
+
+    MACRO(DAS_OUTPUT_AST tgt header_from src_dir inc_dirs)
+        MESSAGE(STATUS "Generating C++ bindings target ${tgt} from ${header_from}")
+        ADD_CUSTOM_TARGET(${tgt})
+        ADD_DEPENDENCIES(${tgt} daScript)
+        ADD_CUSTOM_COMMAND(
+            TARGET ${tgt}
+            WORKING_DIRECTORY ${src_dir}
+            VERBATIM
+            COMMAND ${CLANG_BIN_EXE} -Xclang -ast-dump -x c++ -c ${header_from} -I${inc_dirs} > ${header_from}.ast 2> ${header_from}.ast.log || cmd /c exit /b 0
+            COMMENT "Generating JSON AST for ${header_from} to ${header_from}.json\ninclude directoryes are ${inc_dirs}\n"
+        )
+    ENDMACRO()
+
+    MACRO(DAS_OUTPUT_JSON tgt header_from src_dir inc_dirs)
+        MESSAGE(STATUS "Generating C++ bindings target ${tgt} from ${header_from}")
+        ADD_CUSTOM_TARGET(${tgt})
+        ADD_DEPENDENCIES(${tgt} daScript)
+        ADD_CUSTOM_COMMAND(
+            TARGET ${tgt}
+            WORKING_DIRECTORY ${src_dir}
+            VERBATIM
+            COMMAND ${CLANG_BIN_EXE} -Xclang -ast-dump=json -x c++ -c ${header_from} -I${inc_dirs} > ${header_from}.ast 2> ${header_from}.ast.log || cmd /c exit /b 0
+            COMMENT "Generating JSON AST for ${header_from} to ${header_from}.json\ninclude directoryes are ${inc_dirs}\n"
+        )
+    ENDMACRO()
+
+
 ELSE()
     MACRO(DAS_CPP_BIND_AST tgt generate_das header_from prefix src_dir inc_dirs)
         MESSAGE(STATUS "Skipping C++ bindings from ${header_from}")
     ENDMACRO()
+
+    MACRO(DAS_OUTPUT_AST tgt header_from src_dir inc_dirs)
+        MESSAGE(STATUS "Skipping ast dump from from ${header_from}")
+    ENDMACRO()
+
 ENDIF()
 
 SET(DAS_MODULES_RESOLVE_INC ${PROJECT_SOURCE_DIR}/include/modules/external_resolve.inc)

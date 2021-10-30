@@ -30,4 +30,12 @@ namespace das {
             return res ? res : ((char *)"");
         }
     };
+
+    template <>
+    struct cast_arg<string> {
+        static __forceinline string to ( Context & ctx, SimNode * node ) {
+            auto res = (std::string *) node->evalPtr(ctx);
+            return *res;
+        }
+    };
 }
