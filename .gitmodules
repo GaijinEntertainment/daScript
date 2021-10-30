@@ -16,3 +16,6 @@
 [submodule "modules/dasBGFX"]
 	path = modules/dasBGFX
 	url = https://github.com/borisbat/dasBGFX.git
+[submodule "modules/dasXbyak"]
+	path = modules/dasXbyak
+	url = https://github.com/borisbat/dasXbyak.git
