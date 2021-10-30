@@ -166,6 +166,10 @@ def main
     var cframe = 0
     while glfwWindowShouldClose(window)==0
         glfwPollEvents()
+        var display_w, display_h : int
+        glfwGetWindowSize(window, safe_addr(display_w), safe_addr(display_h))
+        bgfx_reset(uint(display_w), uint(display_h), BGFX_RESET_VSYNC, bgfx_texture_format COUNT)
+        bgfx_set_view_rect(0u, 0u, 0u, uint(display_w), uint(display_h))
         // copmute next iteration of tracing
         c_frame.x = float(cframe)
         c_frame.y = int_bits_to_float(cframe)
@@ -200,7 +204,6 @@ def main
         bloom_effect_h_bind_uniform()
         bgfx_dispatch(0u, bloom_program_h, uint(TRACE_WIDTH/16/BLOOM_SCALE), uint(TRACE_HEIGHT/16/BLOOM_SCALE), 1u, 0u)
         // display it
-        bgfx_set_view_rect(0u, 0u, 0u, uint(TRACE_WIDTH), uint(TRACE_HEIGHT))
         bgfx_set_vertex_buffer(0u, vbh)
         bgfx_set_index_buffer(ibh)
         f_tex := texture

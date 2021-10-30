@@ -99,13 +99,16 @@ def main
     var cframe = 0
     while glfwWindowShouldClose(window)==0
         glfwPollEvents()
+        var display_w, display_h : int
+        glfwGetWindowSize(window, safe_addr(display_w), safe_addr(display_h))
+        bgfx_reset(uint(display_w), uint(display_h), BGFX_RESET_VSYNC, bgfx_texture_format COUNT)
+        bgfx_set_view_rect(0u, 0u, 0u, uint(display_w), uint(display_h))
         c_frame.x = float(cframe)
         c_frame.y = int_bits_to_float(cframe)
         cframe ++
         c_destTex := texture
         compute_effect_bind_uniform()
         bgfx_dispatch(0u, compute_program, uint(TRACE_WIDTH/16), uint(TRACE_HEIGHT/16), 1u, 0u)
-        bgfx_set_view_rect(0u, 0u, 0u, uint(TRACE_WIDTH), uint(TRACE_HEIGHT))
         bgfx_set_vertex_buffer(0u, vbh)
         bgfx_set_index_buffer(ibh)
         f_tex := texture
