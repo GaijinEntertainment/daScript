@@ -19,6 +19,15 @@ def intptr ( p : void? ) : uint64
         unsafe
 		    return reinterpret<uint64> p
 
+[generic]
+def intptr ( p : smart_ptr<auto> ) : uint64
+	static_if typeinfo(sizeof p)==4
+        unsafe
+		    return uint64(reinterpret<uint> p)
+	else
+        unsafe
+		    return reinterpret<uint64> p
+
 def resize(var Arr:array<auto(numT)>;newSize:int)
     __builtin_array_resize(Arr,newSize,typeinfo(sizeof type<numT>))
 
