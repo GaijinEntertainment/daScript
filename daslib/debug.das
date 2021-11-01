@@ -1433,18 +1433,19 @@ def private start_agent(force:bool = false): bool
 
 [init,export]
 def private auto_start_debug()
-    if !is_in_debug_agent_creation()
-        this_context().category |= context_category_flags debugger_attached
-        set_single_step(this_context(), !use_instruments() || wait_debugger())
-        if !has_debug_agent_context("~debug")
-            if start_agent()
-                new_thread <| @
-                    this_context().category &= ~context_category_flags debugger_attached
-                    this_context().category |= context_category_flags debugger_tick
-                    set_single_step(this_context(), false)
-                    this_context().name := "tick thread"
-                    while !is_job_que_shutting_down()
-                        tick_debugger()
+    if (is_in_aot() && loads_itself()) || is_in_debug_agent_creation()
+        return
+    this_context().category |= context_category_flags debugger_attached
+    set_single_step(this_context(), !use_instruments() || wait_debugger())
+    if !has_debug_agent_context("~debug")
+        if start_agent()
+            new_thread <| @
+                this_context().category &= ~context_category_flags debugger_attached
+                this_context().category |= context_category_flags debugger_tick
+                set_single_step(this_context(), false)
+                this_context().name := "tick thread"
+                while !is_job_que_shutting_down()
+                    tick_debugger()
 
 
 def private use_instruments() // or stepping debugger
@@ -1455,3 +1456,8 @@ def private use_instruments() // or stepping debugger
 def private wait_debugger(): bool
     let args <- get_command_line_arguments()
     return args |> find_index("--das-wait-debugger") >= 0
+
+
+def private loads_itself(): bool
+    let args <- get_command_line_arguments()
+    return length(args) >= 2 && (args[1] |> ends_with("daslib\\debug.das") || args[1] |> ends_with("daslib/debug.das"))
