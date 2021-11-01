@@ -232,6 +232,7 @@ class DecsQueryMacro : AstCallMacro
         let prefix = "__{expr.at.line}_desc"
         let arch_name = "{prefix}_arch"
         var req <- build_req_from_args(qblk)
+        req.at = EcsRequestPos(expr.at)
         let vreq = verify_request(req)
         if !vreq.ok
             macro_error(compiling_program(),expr.at,"incorrect query, {vreq.error}")
