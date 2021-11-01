@@ -11,7 +11,7 @@ Basic class declaration is similar to that of a structure, but with the ``class`
 
     class Foo
         x, y : int = 0
-        [export] def Foo                    // custom initializer
+        def Foo                             // custom initializer
             Foo`set(self,1,1)
         def set(X,Y:int)                    // inline method
             x = X

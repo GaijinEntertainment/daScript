@@ -278,7 +278,6 @@ daScript supports pipe operators. Pipe operator is similar to 'call' expression 
 
     require daslib/lpipe
 
-    [export]
     def main
         print()
         lpipe() <| "this is string constant"
