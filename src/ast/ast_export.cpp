@@ -178,7 +178,7 @@ namespace das {
         // function address
         virtual void preVisit(ExprAddr * addr) override {
             Visitor::preVisit(addr);
-            if (builtInDependencies || !addr->func->builtIn) {
+            if (builtInDependencies || (addr->func && !addr->func->builtIn)) {
                 assert(addr->func);
                 if (func) {
                     func->useFunctions.insert(addr->func);

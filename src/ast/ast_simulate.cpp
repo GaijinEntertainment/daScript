@@ -978,7 +978,14 @@ namespace das
     }
 
     SimNode * ExprAddr::simulate (Context & context) const {
-        DAS_ASSERT(func->index>=0 && "how, we specified in the unused");
+        if ( !func ) {
+            context.thisProgram->error("internal compilation error, ExprAddr func is null", "", "", at);
+            return nullptr;
+        } else if ( func->index<0 ) {
+            context.thisProgram->error("internal compilation error, ExprAddr func->index is unused", "", "", at);
+            return nullptr;
+
+        }
         union {
             uint32_t    mnh;
             vec4f       cval;
