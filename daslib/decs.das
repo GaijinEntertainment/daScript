@@ -52,11 +52,19 @@ struct private DeferAction
 
 typedef ComponentMap = array<ComponentValue>
 
+struct EcsRequestPos
+    file: string
+    line: uint
+
+def EcsRequestPos(at: rtti::LineInfo): EcsRequestPos
+    return [[EcsRequestPos file=at.fileInfo != null ? string(at.fileInfo.name) : "", line=at.line]]
+
 struct public EcsRequest
     hash : ComponentHash
     req : array<string>
     reqn : array<string>
     archetypes : array<int>     // sorted
+    at: EcsRequestPos
 
 struct public DecsState
     archetypeLookup : table<ComponentHash; int>
@@ -204,7 +212,7 @@ def public debug_dump
                     print("\t\t{c.name} : {c.info}\n")
     for erq in decsState.ecsQueries
         print("query {erq.hash}\n")
-        print("\treq = {erq.req}\n\treqn = {erq.reqn}\n\tarchetypes = {erq.archetypes}\n")
+        print("\treq = {erq.req}\n\treqn = {erq.reqn}\n\tarchetypes = {erq.archetypes}\nat = {erq.at.file}:{int(erq.at.line)}\n")
 
 def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype; idx:int; isNew:bool ):void> )
     var afound & = decsState.archetypeLookup[hash]

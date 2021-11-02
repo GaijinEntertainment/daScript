@@ -149,7 +149,8 @@ def test_query
     // query 1
     static_let <|
         var erq1 <- [[EcsRequest
-            req <- [{string "pos"; "vel"}]
+            req <- [{string "pos"; "vel"}],
+            at <- EcsRequestPos(get_line_info())
         ]]
     var total1 = 0
     erq1 |> for_each_archetype <| $ ( arch )
@@ -161,7 +162,8 @@ def test_query
     var total2 = 0
     static_let <|
         var erq2 <- [[EcsRequest
-            req <- [{string "pos"; "col"}]
+            req <- [{string "pos"; "col"}],
+            at <- EcsRequestPos(get_line_info())
         ]]
     erq2 |> for_each_archetype <| $ ( arch )
         for col,pos in get(arch,"col",type<uint>),get_ro(arch,"pos",type<float3>)
@@ -175,7 +177,8 @@ def test_query
     var found3 = 0
     static_let <|
         var erq3 <- [[EcsRequest
-            req <- [{string "pos"}]
+            req <- [{string "pos"}],
+            at <- EcsRequestPos(get_line_info())
         ]]
     erq3 |> for_each_archetype <| $ ( arch )
         for col,pos in get_default_ro(arch,"col",0x12345678), get(arch,"pos",type<float3>)
@@ -190,7 +193,8 @@ def test_query
     static_let <|
         var erq4 <- [[EcsRequest
             req <- [{string "pos"}],
-            reqn <- [{string "col"}]
+            reqn <- [{string "col"}],
+            at <- EcsRequestPos(get_line_info())
         ]]
     erq4 |> for_each_archetype <| $ ( arch )
         for pos in get(arch,"pos",type<float3>)
