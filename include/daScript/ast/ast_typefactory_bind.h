@@ -32,9 +32,9 @@ namespace das {
     };
 
     template <>
-    struct cast_arg<string> {
+    struct cast_arg<das::string> {
         static __forceinline string to ( Context & ctx, SimNode * node ) {
-            auto res = (std::string *) node->evalPtr(ctx);
+            auto res = (das::string *) node->evalPtr(ctx);
             return *res;
         }
     };
