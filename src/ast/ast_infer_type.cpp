@@ -2357,7 +2357,7 @@ namespace das {
                     auto pFn = generateLocalFunction(lname, block.get());
                     if ( program->addFunction(pFn) ) {
                         reportAstChanged();
-                        return make_smart<ExprAddr>(expr->at, lname + "`function");
+                        return make_smart<ExprAddr>(expr->at, "_::" + lname + "`function");
                     } else {
                         error("local function name mismatch",  "", "",
                             expr->at, CompilationError::invalid_block);
@@ -2382,15 +2382,25 @@ namespace das {
                 // TODO: verify
                 // if ( isFullySealedType(expr->type) ) {
                 if ( !expr->type->isAutoOrAlias() ) {
-                    if ( auto btl = convertBlockToLambda(expr) ) {
-                        return btl;
+                    if ( isFullyInferredBlock(block.get()) ) {
+                        if ( auto btl = convertBlockToLambda(expr) ) {
+                            return btl;
+                        }
+                    } else {
+                        error("block is not fully inferred yet",  "", "",
+                            expr->at, CompilationError::invalid_block);
                     }
                 }
             } else if ( expr->isLocalFunction ) {
                 expr->type->baseType = Type::tFunction;
                 if ( !expr->type->isAutoOrAlias() ) {
-                    if ( auto btl = convertBlockToLocalFunction(expr) ) {
-                        return btl;
+                    if ( isFullyInferredBlock(block.get()) ) {
+                        if ( auto btl = convertBlockToLocalFunction(expr) ) {
+                            return btl;
+                        }
+                    } else {
+                        error("block is not fully inferred yet",  "", "",
+                            expr->at, CompilationError::invalid_block);
                     }
                 }
             }

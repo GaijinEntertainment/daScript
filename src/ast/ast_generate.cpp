@@ -95,6 +95,21 @@ namespace das {
         return call;
     }
 
+    struct CheckFullyInferred : Visitor {
+        bool fullyInferred = true;
+        virtual void preVisit ( TypeDecl * td ) {
+            if ( td->isAutoOrAlias() ) {
+                fullyInferred = false;
+            }
+        }
+    };
+
+    bool isFullyInferredBlock ( ExprBlock * block ) {
+        CheckFullyInferred vis;
+        block->visit(vis);
+        return vis.fullyInferred;
+    }
+
     // array comprehension
     //  invoke( $()
     //      let temp : Array<expr->subexpr->type>

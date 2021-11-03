@@ -11,6 +11,9 @@ namespace das {
     // ExprConstPtr, where value is nullptr
     bool isExpressionNull(const ExpressionPtr & expr);
 
+    // check if block is inferred enough to be promoted to lambda\local_function
+    bool isFullyInferredBlock ( ExprBlock * block );
+
     // make sure generated code contains line information etc
     void verifyGenerated ( const ExpressionPtr & expr );
 
