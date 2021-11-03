@@ -318,6 +318,10 @@ class DecsQueryMacro : AstCallMacro
         apply_template(qtop) <| $ ( rules )
             for kb in kaboom
                 rules |> kaboomVarField(kb._0,kb._1)
+        if length(kaboom) > 0
+            apply_template(qtop) <| $ ( rules )
+                for kb in kaboom
+                    rules |> replaceVariable(kb._0) <| make_static_assert_false("decs_template variables can only be accessed by fields", expr.at)
         apply_template(qblock) <| $ ( rules )
             if qt==DecsQueryType eid_query
                 rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
