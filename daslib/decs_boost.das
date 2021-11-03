@@ -288,7 +288,7 @@ class DecsQueryMacro : AstCallMacro
                 qlbody.list |> emplace_new <| clone_expression(l)
             for fl in qblk.finalList
                 qlbody.finalList |> emplace_new <| clone_expression(fl)
-            convert_block_to_loop(qlbody, true, false)
+            convert_block_to_loop(qlbody, true, false, false)
             qtop <- qlbody
         else
             // for s1, s2 ...
@@ -310,9 +310,9 @@ class DecsQueryMacro : AstCallMacro
             for fl in qblk.finalList
                 qlbody.finalList |> emplace_new <| clone_expression(fl)
             if qt==DecsQueryType query
-                convert_block_to_loop(qlbody, false, true )
+                convert_block_to_loop(qlbody, false, true, false )
             else
-                convert_block_to_loop(qlbody, false, false )
+                convert_block_to_loop(qlbody, false, true, true )
             qloop.body <- qlbody
             qtop <- qloop
         apply_template(qtop) <| $ ( rules )

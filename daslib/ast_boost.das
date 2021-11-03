@@ -622,6 +622,13 @@ def get_for_source_index(expr:smart_ptr<ExprFor>; source:ExpressionPtr)
             return t
     return -1
 
+[macro_function]
+def make_static_assert_false ( text : string; at:LineInfo )
+    var esa <- new [[ExprStaticAssert() at=at]]
+    esa.arguments |> emplace_new <| new [[ExprConstBool() at=at, value=false]]
+    esa.arguments |> emplace_new <| new [[ExprConstString() at=at, value:=text]]
+    return esa
+
 [_macro]
 def private setup
     if is_compiling_macros_in_module("ast_boost")

@@ -85,6 +85,14 @@ var public decsState : DecsState
 var private deferActions : array<DeferAction>
 var private decsPasses : array<DecsPass>
 
+let INVALID_ENTITY_ID = [[decs::EntityId]]
+
+def operator ==(a, b: decs::EntityId implicit)
+    return a.id == b.id && a.generation == b.generation
+
+def operator !=(a, b: decs::EntityId implicit)
+    return a.id != b.id || a.generation != b.generation
+
 def public operator . ( var cmp:ComponentMap; name:string ) : ComponentValue &
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if !(idx<length(cmp) && cmp[idx].name==name)

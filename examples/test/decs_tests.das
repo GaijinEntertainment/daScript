@@ -32,9 +32,31 @@ def test_query_1
         print("[{eid}] pos={pos} vel={vel}\n")
     debug_dump()
 
+def test_query_2
+    print("\n\nTEST QUERY MACRO (2)\n")
+    restart()
+    static_let <|
+        var kaboom : EntityId
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp.eid := eid
+            cmp.pos := float3(i)
+            cmp.vel := float3(1.,2.,3.)
+            if i==1
+                kaboom = eid
+    commit()
+    var num_found = 0
+    find_query <| $ ( var pos:float3&; vel:float3; col:uint=13u )
+        print("found {pos}\n")
+        num_found ++
+        return pos.x==1.
+    commit()
+    assert(num_found==2)
+
 [export]
 def main
     test_query_1()
+    test_query_2()
     test_create_delete()
     test_update()
     test_type_mismatch()
