@@ -8,6 +8,18 @@ require daslib/decs_boost
 require daslib/apply
 require daslib/static_let
 
+[export]
+def main
+    test_arrays()
+    test_query_1()
+    test_query_2()
+    test_create_delete()
+    test_update()
+    test_type_mismatch()
+    test_query()
+    test_query_macro()
+    test_strings()
+    test_decs_macro()
 
 def test_query_1
     print("\n\nTEST QUERY ONE MACRO\n")
@@ -53,18 +65,6 @@ def test_query_2
     commit()
     assert(num_found==2)
 
-[export]
-def main
-    test_query_1()
-    test_query_2()
-    test_create_delete()
-    test_update()
-    test_type_mismatch()
-    test_query()
-    test_query_macro()
-    test_strings()
-    test_decs_macro()
-
 [decs(stage="update")]
 def update_particle ( var pos:float3&; vel:float3 )
     pos += vel
@@ -88,6 +88,28 @@ def test_decs_macro
     decs_stage("check")
     debug_dump()
 
+def test_arrays
+    print("\n\nTEST ARRAYS\n")
+    restart()
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp |> set("values", [{for x in range(i+1); x}])
+    commit()
+    print("BEFORE GC:\n")
+    debug_dump()
+    before_gc()
+    unsafe
+        heap_collect()
+    after_gc()
+    print("AFTER GC:\n")
+    debug_dump()
+    var j = 0
+    query <| $ ( values:array<int> )
+        print("values = {values}\n")
+        assert(length(values)==j+1)
+        for i in range(j+1)
+            assert(values[i]==i)
+        j ++
 
 def test_strings
     print("\n\nTEST STRINGS\n")
@@ -95,16 +117,17 @@ def test_strings
     for i in range(3)
         create_entity <| @ ( eid, cmp )
             cmp.pos := float3(i)
-            cmp.txt := "{i}"
+            cmp.txt := "hello_{i}"
     commit()
     debug_dump()
     before_gc()
     unsafe
         string_heap_collect()
+    after_gc()
     debug_dump()
     var j = 0
     query <| $ ( txt:string )
-        assert(txt=="{j}")
+        assert(txt=="hello_{j}")
         j ++
     debug_dump()
 
@@ -318,4 +341,5 @@ def test_create_delete
     commit()
     debug_dump()
 
-
+options debugger
+require daslib/debug

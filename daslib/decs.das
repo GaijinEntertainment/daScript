@@ -12,6 +12,7 @@ require daslib/algorithm
 require daslib/sort_boost
 require daslib/functional
 require math
+require strings
 
 typedef ComponentHash = uint
 
@@ -20,14 +21,18 @@ struct CTypeInfo
     mangledName : string
     hash : uint
     size : uint
+    eraser  : function<(var arr:array<uint8>):void>
+    clonner : function<(var dst:array<uint8>; src:array<uint8>):void>
+    dumper  : function<(elem:void?):string>
+    gc      : function<(var src:array<uint8>):lambda>
 
 struct public Component
     name : string
     hash : ComponentHash
     stride : int
     data : array<uint8>
-    [[do_not_delete]] text : array<string>
     info : CTypeInfo
+    gc_dummy : lambda           // this is here so that GC can find real representation of data
 
 struct public EntityId
     id : uint
@@ -133,31 +138,15 @@ def public operator := ( var cv:ComponentValue; val:float3x4 )    { set(cv, val)
 def public operator := ( var cv:ComponentValue; val:float4x4 )    { set(cv, val); }
 def public operator := ( var cv:ComponentValue; val:double )      { set(cv, val); }
 
-def private cleanup_temp_string_array ( var comp:Component )
-    assert(comp.info.basicType==Type tString,"not a string array")
-    unsafe
-        memzero(comp.text)
-
-def private make_temp_string_array ( var comp:Component; size:int )
-    assert(comp.info.basicType==Type tString,"not a string array")
-    unsafe
-        _builtin_make_temp_array(comp.text, addr(comp.data[0]), size )
-        __builtin_array_lock(comp.text)
-
 def public clone ( var dst:Component; src:Component )
     dst.name := src.name
     dst.hash = src.hash
     dst.stride = src.stride
-    dst.data := src.data
     dst.info := src.info
-    if src.info.basicType==Type tString
-        let size = length(src.data) / src.stride
-        var dtext, stext : array<string>
-        unsafe
-            _builtin_make_temp_array(dtext, addr(dst.data[0]), size )
-            _builtin_make_temp_array(stext, addr(src.data[0]), size )
-        for d,s in dtext,stext
-            d := s
+    if src.info.clonner!=null
+        invoke(src.info.clonner, dst.data, src.data)
+    else
+        dst.data := src.data
 
 def public register_decs_stage_call ( name:string; pcall:PassFunction )
     var dpass <- [[DecsPass name=name]]
@@ -175,6 +164,12 @@ def public decs_stage ( name : string )
         for cll in decsPasses[idx].calls
             invoke ( cll )
     commit()
+
+def operator delete ( var cmp:Component )
+    if cmp.info.eraser != null
+        invoke(cmp.info.eraser,cmp.data)
+    delete cmp.data
+    delete cmp.info
 
 def public restart
     delete deferActions
@@ -195,19 +190,15 @@ def public before_gc
     for arch in decsState.allArchetypes
         if arch.size > 0
             for comp in arch.components
-                if comp.info.basicType==Type tString
-                    unsafe
-                        _builtin_make_temp_array(comp.text, addr(comp.data[0]), arch.size )
-                        __builtin_array_lock(comp.text)
-
+                if comp.info.gc != null
+                    comp.gc_dummy <- invoke(comp.info.gc, comp.data)
 
 def public after_gc
     for arch in decsState.allArchetypes
         if arch.size > 0
             for comp in arch.components
-                if comp.info.basicType==Type tString
-                    unsafe
-                        memzero(comp.text)
+                if comp.gc_dummy != null
+                    delete comp.gc_dummy
 
 def public debug_dump
     for arch in decsState.allArchetypes
@@ -216,7 +207,17 @@ def public debug_dump
         for index in range(arch.size)
             print("\tentity[{index}]\n")
             for c in arch.components
-                unsafe
+                if c.info.dumper!=null
+                    let dump = build_string() <| $ ( wr )
+                        for x in range(arch.size)
+                            if x!=0
+                                wr |> write(", ")
+                            let offset = x * c.stride
+                            unsafe
+                                let txt = invoke(c.info.dumper, addr(c.data[offset]))
+                                wr |> write(txt)
+                    print("\t\t{c.name} : {c.info}\n\t\t\t{dump}\n")
+                else
                     print("\t\t{c.name} : {c.info}\n")
     for erq in decsState.ecsQueries
         print("query {erq.hash}\n")
@@ -411,6 +412,21 @@ def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-
     unsafe
         return <- [[array<TT-const-&># ]]
 
+def public get ( arch:Archetype; name:string; value:array<auto(TT)> ) : array<array<TT>>#
+    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
+    if idx<length(arch.components)
+        let comp & = arch.components[idx]
+        if comp.name==name
+            unsafe
+                let cvinfo = addr(typeinfo(rtti_typeinfo type<array<TT>>))
+                if comp.info.hash != cvinfo.hash
+                    panic("component array {name} type mismatch, expecting {comp.info} vs {describe(cvinfo)}")
+            unsafe
+                return <- decs_array(type<array<TT>>, comp.data, arch.size)
+    panic("component array {name} not found")
+    unsafe
+        return <- [[array<array<TT>># ]]
+
 def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&> const#
     unsafe
         return <- get(arch, name, value)
@@ -514,17 +530,99 @@ def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
             memcpy ( addr(value), addr(cmp[idx].data), typeinfo(sizeof type<TT const-&>))
     return value
 
+def private make_dumper_and_gc ( var cv:ComponentValue; value:auto(TT) )
+    var dumper = @@ <| ( elem:void? )
+        if elem==null
+            return ""
+        unsafe
+            var pTT = reinterpret<TT-const-&-#?> elem
+            return "{*pTT}"
+    var gc = @@ <| ( var src:array<uint8> ) : lambda
+        // the idea with this one is that we make a lambda
+        //  which would capture an array of the right size and type
+        //  which points to the right data
+        //  and when lambda is deleted - we memzero the temp array
+        var gc_dummy : array<TT-const-&-#>
+        let stride = typeinfo(sizeof type<TT-const-&-#>)
+        let size = length(src) / stride
+        unsafe
+            _builtin_make_temp_array(gc_dummy, addr(src[0]), size )
+        var lmb <- @ <| [[<-gc_dummy]]
+            pass
+        finally
+            memzero(gc_dummy)
+        return <- lmb
+    cv.info.dumper = dumper
+    cv.info.gc = gc
+
 def private make_component ( name:string; value:auto(TT) )
     var cv = [[ComponentValue name=name]]
     unsafe
         var tinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
-        cv.info = [[CTypeInfo basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo), hash=tinfo.hash, size=tinfo.size]]
+        cv.info = [[CTypeInfo basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo),
+            hash=tinfo.hash, size=tinfo.size]]
+        if tinfo.basicType==Type tString
+            var clonner = @@ <| ( var dst:array<uint8>; src:array<uint8> )
+                if length(src)==0
+                    return
+                let stride = typeinfo(sizeof type<string>)
+                dst |> resize(length(src))
+                let size = length(src) / stride
+                var dsrc, ssrc : array<string>
+                unsafe
+                    _builtin_make_temp_array(dsrc, addr(dst[0]), size )
+                    _builtin_make_temp_array(ssrc, addr(src[0]), size )
+                for d,s in dsrc,ssrc
+                    d := s
+            cv.info.clonner = clonner
+        make_dumper_and_gc(cv, value)
+        memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
+    return cv
+
+def private make_component ( name:string; value:array<auto(TT)> )
+    var cv = [[ComponentValue name=name]]
+    unsafe
+        var tinfo = addr(typeinfo(rtti_typeinfo type<array<TT-const-&-#>>))
+        var eraser = @@ <| ( var arr:array<uint8> )
+            if length(arr)==0
+                return
+            let stride = typeinfo(sizeof type<array<TT-const-&-#>>)
+            for i in range(length(arr)/stride)
+                let offset = i * stride
+                unsafe
+                    var adel = reinterpret< array<TT-const-&-#>? > addr(arr[offset])
+                    delete * adel
+        var clonner = @@ <| ( var dst:array<uint8>; src:array<uint8> )
+            if length(src)==0
+                return
+            let stride = typeinfo(sizeof type<array<TT-const-&-#>>)
+            dst |> resize(length(src))
+            let size = length(src) / stride
+            var dsrc, ssrc : array<array<TT-const-&-#>>
+            unsafe
+                _builtin_make_temp_array(dsrc, addr(dst[0]), size )
+                _builtin_make_temp_array(ssrc, addr(src[0]), size )
+            for d,s in dsrc,ssrc
+                d := s
+        cv.info = [[CTypeInfo basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo),
+            hash=tinfo.hash, size=tinfo.size, eraser=eraser, clonner=clonner]]
+        make_dumper_and_gc(cv, value)
         memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
     return cv
 
 def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
     concept_assert((typeinfo(is_pod value) || typeinfo(is_string value))
         && typeinfo(sizeof value)<=typeinfo(sizeof cmp[0].data), "unsupported component type {typeinfo(typename value)}")
+    let cv = make_component(name, value)
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
+    if idx<length(cmp) && cmp[idx].name==name
+        if cmp[idx].info.hash != cv.info.hash
+            panic("set component {name} type mismatch, expecting {cmp[idx].info} vs {cv.info}")
+        cmp[idx] = cv           // overwrite
+    else
+        cmp |> push(cv, idx)    // insert new one
+
+def public set ( var cmp:ComponentMap; name:string; value:array<auto(TT)> )
     let cv = make_component(name, value)
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
