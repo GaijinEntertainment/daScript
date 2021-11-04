@@ -16,14 +16,17 @@ struct SuiteResult
     errors: int
     total: int
 
+
 def SuiteResult(passed: int; failed: int; total: int)
     return [[SuiteResult passed=passed, failed=failed, total=total]]
+
 
 def operator +=(var a: SuiteResult; b: SuiteResult)
     a.passed += b.passed
     a.failed += b.failed
     a.total += b.total
     a.errors += b.errors
+
 
 def SuiteResult(val: JsonValue?)
     if val == null
@@ -35,6 +38,7 @@ def SuiteResult(val: JsonValue?)
         total=int((obj?["total"] ?? JV(0lf)) as _number),
         errors=int((obj?["errors"] ?? JV(0lf)) as _number)
     ]]
+
 
 def test_file(fileName: string): SuiteResult
     // log::info("\n===> {fileName}", get_line_info())
@@ -82,10 +86,12 @@ def test_file(fileName: string): SuiteResult
                                         dt = get_time_usec(t0)
                                     recover
                                         res.failed += 1
-                                        log::info("\n--- FAIL {name} ({double(dt)/1000000.0lf}s) {context.exception}", get_line_info())
+                                        log::info("\n--- FAIL {name} ({double(dt)/1000000.0lf}s)", get_line_info())
+                                        log::info(context.exception, get_line_info())
+                                        *context |> stackwalk(context.exceptionAt)
                                         return
                                 res.passed += 1
                                 log::info("\n--- PASS {name} ({double(dt)/1000000.0lf}s)", get_line_info())
                                 return
-
+    access := null
     return res
