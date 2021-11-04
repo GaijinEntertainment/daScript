@@ -1036,6 +1036,12 @@ namespace das {
         }
     }
 
+    Func builtin_SimFunction_by_MNH ( Context & context, uint32_t MNH ) {
+        Func fn;
+        fn.PTR = context.fnByMangledName(MNH);
+        return fn;
+    }
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -1218,6 +1224,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_get_function_info_by_mnh)>(*this, lib, "get_function_info",
                 SideEffects::none, "builtin_get_function_info_by_mnh")
                     ->args({"context","function"});
+            addExtern<DAS_BIND_FUN(builtin_SimFunction_by_MNH)>(*this, lib, "get_function_by_mnh",
+                SideEffects::none, "builtin_SimFunction_by_MNH")
+                    ->args({"context","MNH"});
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo")->arg("line");

@@ -2578,6 +2578,17 @@ namespace das {
         return context->thisProgram->thisModule.get();
     }
 
+    Module * findRttiModule ( smart_ptr<Program> THAT_PROGRAM, const char * name, Context *, LineInfoArg *) {
+        auto found = THAT_PROGRAM->library.findModule(name ? name : "");
+        return found ? found : Module::require(name);
+    }
+
+    smart_ptr<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
+        if ( !func.PTR ) context->throw_error_at(*line_info, "function not found");
+        if ( !mod ) context->throw_error_at(*line_info, "module not found");
+        return mod->findFunction(func.PTR->mangledName);
+    }
+
     smart_ptr_raw<Program> thisProgram ( Context * context ) {
         return context->thisProgram;
     }
@@ -3045,6 +3056,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(thisModule)>(*this, lib,  "this_module",
                 SideEffects::accessExternal, "thisModule")
                     ->args({"context","line"});
+            addExtern<DAS_BIND_FUN(findRttiModule)>(*this, lib,  "find_module_via_rtti",
+                SideEffects::accessExternal, "findRttiModule")
+                    ->args({"program","name","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(findRttiFunction)>(*this, lib,  "find_module_function_via_rtti",
+                SideEffects::accessExternal, "findRttiFunction")
+                    ->args({"module","function","context","lineinfo"});
             addExtern<DAS_BIND_FUN(compileProgram)>(*this, lib,  "compiling_program",
                 SideEffects::accessExternal, "compileProgram")
                     ->arg("context");

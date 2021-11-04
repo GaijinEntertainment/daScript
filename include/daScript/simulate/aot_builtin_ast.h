@@ -495,6 +495,8 @@ namespace das {
     float4 evalSingleExpression ( const ExpressionPtr & expr, bool & ok );
     ExpressionPtr makeCall ( const LineInfo & at, const char * name );
     bool builtin_isVisibleDirectly ( Module * from, Module * too );
+    Module * findRttiModule ( smart_ptr<Program> THAT_PROGRAM, const char * name, Context *, LineInfoArg *);
+    smart_ptr<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {
