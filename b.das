@@ -8,4 +8,6 @@ def t2()
     var sum = 0
     for i in range(100000)
         sum += i
+    // var a: int?
+    // *a = 1
     assert(sum == 100000 * (100000 - 1) / 2)

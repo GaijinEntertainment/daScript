@@ -8,7 +8,7 @@
             "type": "dascript",
             "request": "launch",
             "name": "daScript: launch",
-            "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${workspaceFolder}/a.das --test ${workspaceFolder}/b.das",
+            "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${workspaceFolder}/a.das --test ${workspaceFolder}/b.das --one-process",
             "cwd": "${workspaceFolder}"
         },
         {
