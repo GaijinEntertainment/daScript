@@ -1253,6 +1253,10 @@ namespace das
                     memset ( globals + pv.offset, 0, pv.size );
                 }
             }
+        }
+        abiArg = nullptr;
+        stack.pop(EP,SP);
+        if ( !aotInitScript ) {
             for ( int j=0; j!=totalFunctions && !stopFlags; ++j ) {
                 auto & pf = functions[j];
                 if ( pf.debugInfo->flags & FuncInfo::flag_init ) {
@@ -1261,8 +1265,6 @@ namespace das
 
             }
         }
-        abiArg = nullptr;
-        stack.pop(EP,SP);
         // now, share the data
         if ( sharedOwner && shared ) {
             SharedDataWalker sdw;
