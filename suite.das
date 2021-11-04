@@ -45,18 +45,18 @@ def test_file(fileName: string): SuiteResult
             cop.aot_module = true
             compile_file(fileName, access, addr(mg), cop) <| $(ok, program, errors)
                 if !ok
+                    res.total += 1
+                    res.errors += 1
                     log::error("Failed to compile {fileName}\n{errors}", get_line_info())
                     if program != null
                         for err in program.errors
                             log::error("{describe(err.at)}: {int(err.cerr)}: {err.what} {err.extra} {err.fixme}", get_line_info())
-                    unsafe
-                        fio::exit(1)
                     return
                 simulate(program) <| $ (sok; context; serrors)
                     if !sok
+                        res.total += 1
+                        res.errors += 1
                         log::error("Failed to compile {fileName}\n{serrors}", get_line_info())
-                        unsafe
-                            fio::exit(1)
                         return
                     let mod = program |> get_this_module()
                     mod |> module_for_each_function <| $(f)
@@ -88,6 +88,4 @@ def test_file(fileName: string): SuiteResult
                                 log::info("\n--- PASS {name} ({double(dt)/1000000.0lf}s)", get_line_info())
                                 return
 
-
     return res
-
