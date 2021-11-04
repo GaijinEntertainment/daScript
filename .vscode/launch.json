@@ -1,0 +1,21 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "dascript",
+            "request": "launch",
+            "name": "daScript: launch",
+            "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${workspaceFolder}/a.das --test ${workspaceFolder}/b.das",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "dascript",
+            "request": "attach",
+            "name": "daScript: attach",
+            "port": 10000
+        }
+    ]
+}
