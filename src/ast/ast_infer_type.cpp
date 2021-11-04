@@ -4010,6 +4010,17 @@ namespace das {
         }
 
         virtual ExpressionPtr visitBlockExpression ( ExprBlock * block, Expression * that ) override {
+            // lets do strenth reduction on ++ and -- at the top-level expressions
+            if ( that->type && that->rtti_isOp1() && that->type->isWorkhorseType() ) {
+                auto op1 = static_cast<ExprOp1 *>(that);
+                if ( op1->op=="+++" ) {
+                    op1->op = "++";
+                    reportAstChanged();
+                } else if ( op1->op=="---" ) {
+                    op1->op = "--";
+                    reportAstChanged();
+                }
+            }
             // lets collapse the following every time
             //  return quote() <|
             //      pass
