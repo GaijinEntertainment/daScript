@@ -4,8 +4,8 @@ require dastest/testing_boost
 
 [test]
 def t1()
-    print("first test t1\n")
+    assert("{1}" == "1")
 
 [test]
 def t2()
-    print("first test t2\n")
+    assert(1 + 2 == 3)

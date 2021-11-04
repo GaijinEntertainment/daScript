@@ -2,9 +2,9 @@
 require dastest/testing_boost
 
 
-[test(name="cool name")]
+[test(name="cool test")]
 def t2()
-    print("first test t2\n")
+    print("inside `cool test`\n")
     var sum = 0
     for i in range(100000)
         sum += i
