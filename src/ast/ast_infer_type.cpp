@@ -2435,14 +2435,14 @@ namespace das {
                                                 int fnArgSize = int(fnAddr->func->arguments.size());
                                                 int fromFnArgSize = int(expr->arguments.size()-1);
                                                 bool allHaveInit = true;
-                                                for ( int ai=fromFnArgSize; ai!=fnArgSize; ++ai ) {
+                                                for ( int ai=fromFnArgSize; ai<fnArgSize; ++ai ) {
                                                     if ( !fnAddr->func->arguments[ai]->init ) {
                                                         allHaveInit = false;
                                                         break;
                                                     }
                                                 }
                                                 if ( allHaveInit ) {
-                                                    for ( int ai=fromFnArgSize; ai!=fnArgSize; ++ai ) {
+                                                    for ( int ai=fromFnArgSize; ai<fnArgSize; ++ai ) {
                                                         expr->arguments.emplace_back(fnAddr->func->arguments[ai]->init->clone());
                                                     }
                                                     reportAstChanged();
