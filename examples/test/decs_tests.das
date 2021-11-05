@@ -8,8 +8,14 @@ require daslib/decs_boost
 require daslib/apply
 require daslib/static_let
 
+// can specify prefix="string", prefix for nothing, or not specify for Particle_
+[decs_template(prefix)]
+struct Particle
+    pos, vel : float3
+
 [export]
 def main
+    test_query_nested_macro()
     test_arrays()
     test_query_1()
     test_query_2()
@@ -20,6 +26,24 @@ def main
     test_query_macro()
     test_strings()
     test_decs_macro()
+
+def test_query_nested_macro
+    print("\n\nTEST NESTED QUERY\n")
+    restart()
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            apply_decs_template(cmp, [[Particle pos=float3(i), vel=float3(i+1)]])
+    commit()
+    // debug_dump()
+    query <| $ ( var q : Particle )
+        print("q = {q.pos} += {q.vel}\n")
+        let qp = q.pos
+        let qv = q.vel
+        query <| $ ( var p : Particle )
+            print("\tq = ({q.pos} , {q.vel})\n")
+            print("\tp = ({p.pos} , {p.vel})\n")
+            assert(qp==q.pos)
+            assert(qv==q.vel)
 
 def test_query_1
     print("\n\nTEST QUERY ONE MACRO\n")
@@ -130,11 +154,6 @@ def test_strings
         assert(txt=="hello_{j}")
         j ++
     debug_dump()
-
-// can specify prefix="string", prefix for nothing, or not specify for Particle_
-[decs_template(prefix)]
-struct Particle
-    pos, vel : float3
 
 def test_query_macro
     print("\n\nTEST QUERY MACRO\n")
@@ -340,6 +359,3 @@ def test_create_delete
         delete_entity(d)
     commit()
     debug_dump()
-
-options debugger
-require daslib/debug

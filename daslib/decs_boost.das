@@ -149,10 +149,10 @@ def getter_name ( a; const_parent:bool )
     return getter
 
 [macro_function]
-def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a; prefix:string; const_parent : bool = false )
+def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a; prefix,suffix:string; const_parent : bool = false )
     let qli = length(qloop.iterators)
     qloop.iterators |> resize( qli + 1 )
-    qloop.iterators[qli] := "{prefix}{a.name}"
+    qloop.iterators[qli] := "{prefix}{a.name}{suffix}"
     qloop.iteratorsAt |> push(a.at)
     var ftype <- clone_type(a._type)
     ftype.flags &= ~ TypeDeclFlags constant
@@ -171,7 +171,7 @@ def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a;
     return true
 
 [macro_function]
-def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlock>; a; prefix:string; const_parent : bool = false )
+def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlock>; a; prefix, suffix:string; const_parent : bool = false )
     var ftype <- clone_type(a._type)
     ftype.flags &= ~ TypeDeclFlags constant
     ftype.flags &= ~ TypeDeclFlags ref
@@ -193,7 +193,7 @@ def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlo
             ]]
     var vlet <- new [[ExprLet() at=a.at, atInit=a.at]]
     vlet.variables |> emplace_new() <| new [[Variable() at = a.at,
-        name := "{prefix}{a.name}",
+        name := "{prefix}{a.name}{suffix}",
         _type <- clone_type(a._type),
         init <- iget,
         flags = VariableFlags can_shadow
@@ -269,19 +269,19 @@ class DecsQueryMacro : AstCallMacro
             mmFlags=ExprMakeBlockFlags isLocalFunction,
             _block <- erq_blk
         ]]
-        var kaboom : array<tuple<string;string>>
+        var kaboom : array<tuple<string;string;string>>
         var qtop : ExpressionPtr
         if qt==DecsQueryType eid_query
             var qlbody <- new [[ExprBlock() at=qblk.at]]
             for a in qblk.arguments
                 let detp = a |> is_decs_template
                 if detp is yes
-                    kaboom |> push <| [[auto string(a.name),detp as yes]]
+                    kaboom |> push <| [[auto string(a.name),detp as yes,"_{a.name}"]]
                     for f in a._type.structType.fields
-                        if !append_index_lookup(arch_name, qlbody, f, detp as yes, a._type.flags.constant)
+                        if !append_index_lookup(arch_name, qlbody, f, detp as yes, "_{a.name}", a._type.flags.constant)
                             return [[ExpressionPtr]]
                 else
-                    if !append_index_lookup(arch_name, qlbody, a, "")
+                    if !append_index_lookup(arch_name, qlbody, a, "", "")
                         return [[ExpressionPtr]]
 
             for l in qblk.list
@@ -297,12 +297,12 @@ class DecsQueryMacro : AstCallMacro
             for a in qblk.arguments
                 let detp = a |> is_decs_template
                 if detp is yes
-                    kaboom |> push <| [[auto string(a.name),detp as yes]]
+                    kaboom |> push <| [[auto string(a.name),detp as yes,"_{a.name}"]]
                     for f in a._type.structType.fields
-                        if !append_iterator(arch_name, qloop, f, detp as yes, a._type.flags.constant)
+                        if !append_iterator(arch_name, qloop, f, detp as yes, "_{a.name}", a._type.flags.constant)
                             return [[ExpressionPtr]]
                 else
-                    if !append_iterator(arch_name, qloop, a, "")
+                    if !append_iterator(arch_name, qloop, a, "", "")
                         return [[ExpressionPtr]]
             var qlbody <- new [[ExprBlock() at=qblk.at]]
             for l in qblk.list
@@ -317,7 +317,7 @@ class DecsQueryMacro : AstCallMacro
             qtop <- qloop
         apply_template(qtop) <| $ ( rules )
             for kb in kaboom
-                rules |> kaboomVarField(kb._0,kb._1)
+                rules |> kaboomVarField(kb._0,kb._1,kb._2)
         if length(kaboom) > 0
             apply_template(qtop) <| $ ( rules )
                 for kb in kaboom
