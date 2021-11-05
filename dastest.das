@@ -84,7 +84,7 @@ def main()
                 if exitCode != 0
                     log::error("exit status {exitCode}", get_line_info())
                 else
-                    log::error("`{file}` execution was interrupted, crashed for example\ntry to run test manually: {singleTest}", get_line_info())
+                    log::error("`{file}` execution was interrupted, crashed for example", get_line_info())
                 log::info("to get more information, run the test manually\n> {singleTest}", get_line_info())
 
     log::info("\n{res.total} tests, {res.failed} failed, {res.errors} errors, {res.passed} passed", get_line_info())
