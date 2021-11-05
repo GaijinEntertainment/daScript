@@ -427,7 +427,7 @@ namespace das {
         return _pclose( f );
 #else
         auto t = pclose(f);
-        return WEXITSTATUS(t);
+        return WIFEXITED(t) ? WEXITSTATUS(t) : WIFSIGNALED(t) ? WTERMSIG(t) : t;
 #endif
     }
 
