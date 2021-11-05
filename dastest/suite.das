@@ -29,8 +29,6 @@ def operator +=(var a: SuiteResult; b: SuiteResult)
 
 
 def SuiteResult(val: JsonValue?)
-    if val == null
-        return [[SuiteResult]]
     let obj & = val as _object
     return [[SuiteResult
         passed=int((obj?["passed"] ?? JV(0lf)) as _number),

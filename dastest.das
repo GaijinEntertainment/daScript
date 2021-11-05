@@ -54,9 +54,11 @@ def main()
         if runInOneProcess
             res += suite::test_file(file)
         else
+            let singleTest = "{args[0]} {args[1]} -- --run {file}"
             var exitCode = 0
+            var parsedResult = false
             unsafe
-                exitCode = popen("{args[0]} {args[1]} -- --run {file}") <| $(f)
+                exitCode = popen(singleTest) <| $(f)
                     if f != null
                         var readJson = false
                         var jsonResult = ""
@@ -73,13 +75,17 @@ def main()
                         var js = read_json(jsonResult, jsError)
                         if !empty(jsError)
                             log::error(jsError, get_line_info())
-                        else
+                        elif js != null
+                            parsedResult = true
                             res += SuiteResult(js)
-            let exitMsg = "exit status {exitCode}"
-            if exitCode != 0
+            if exitCode != 0 || !parsedResult
                 res.total += 1
                 res.errors += 1
-                log::error(exitMsg, get_line_info())
+                if exitCode != 0
+                    log::error("exit status {exitCode}", get_line_info())
+                else
+                    log::error("`{file}` execution was interrupted, crashed for example\ntry to run test manually: {singleTest}", get_line_info())
+                log::info("to get more information, run the test manually\n> {singleTest}", get_line_info())
 
     log::info("\n{res.total} tests, {res.failed} failed, {res.errors} errors, {res.passed} passed", get_line_info())
     unsafe
