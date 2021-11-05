@@ -6295,6 +6295,23 @@ namespace das {
                 expr->aliasSubstitution.reset();
                 return ecast;
             }
+            if ( func && !expr->func && func->isClassMethod && func->arguments.size()>=1 ) {
+                auto bt = func->arguments[0]->type;
+                if ( bt && bt->isClass() ) {
+                    if ( expr->name.find("::") == string::npos ) {  // we only promote to self->call() if its not blah::call, _::call, or __::call
+                        auto memFn = bt->structType->findField(expr->name);
+                        if ( memFn && memFn->type && memFn->type->isFunction() ) {
+                            auto self = new ExprVar(expr->at, "self");
+                            auto pInvoke = makeInvokeMethod(expr->at, self, expr->name);
+                            for ( auto & arg : expr->arguments ) {
+                                pInvoke->arguments.push_back(arg->clone());
+                            }
+                            reportAstChanged();
+                            return pInvoke;
+                        }
+                    }
+                }
+            }
             /*
             // NOTE: this should not be necessary, since infer function call suppose to report every time
             if ( !expr->func ) {
