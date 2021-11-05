@@ -90,7 +90,6 @@ def main()
     log::info("\n{res.total} tests, {res.failed} failed, {res.errors} errors, {res.passed} passed", get_line_info())
     unsafe
         fio::exit(res.failed + res.errors)
-    return
 
 
 // options debugger

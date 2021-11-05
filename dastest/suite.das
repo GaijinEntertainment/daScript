@@ -52,7 +52,11 @@ def test_file(fileName: string): SuiteResult
                     log::error("Failed to compile {fileName}\n{errors}", get_line_info())
                     if program != null
                         for err in program.errors
-                            log::error("{describe(err.at)}: {int(err.cerr)}: {err.what} {err.extra} {err.fixme}", get_line_info())
+                            log::error("{describe(err.at)}: {int(err.cerr)}: {err.what}", get_line_info())
+                            if !empty(err.extra)
+                                log::info("{err.extra}", get_line_info())
+                            if !empty(err.fixme)
+                                log::info("{err.fixme}", get_line_info())
                     return
                 simulate(program) <| $ (sok; context; serrors)
                     if !sok
@@ -76,13 +80,14 @@ def test_file(fileName: string): SuiteResult
                                         name = "'{arg.sValue}'"
                                 log::info("\n=== RUN {name}", get_line_info())
                                 res.total += 1
-                                var dt: int
+                                var dt = 0
+                                var t0 = ref_time_ticks()
                                 unsafe
                                     try
-                                        var t0 = ref_time_ticks()
                                         context |> invoke_in_context(func)
                                         dt = get_time_usec(t0)
                                     recover
+                                        dt = get_time_usec(t0)
                                         res.failed += 1
                                         log::info("\n--- FAIL {name} ({double(dt)/1000000.0lf}s)", get_line_info())
                                         log::info(context.exception, get_line_info())
