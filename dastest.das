@@ -52,11 +52,20 @@ def main()
     var res: SuiteResult
     for file in files
         if runInOneProcess
-            res += suite::test_file(file)
+            let t0 = ref_time_ticks()
+            let status = suite::test_file(file)
+            let dt = get_time_usec(t0)
+            if status.errors + status.failed == 0
+                log::info("PASS {file} ({double(dt)/1000000.0lf}s)", get_line_info())
+            else
+                log::info("FAIL {file} ({double(dt)/1000000.0lf}s)", get_line_info())
+            res += status
         else
             let singleTest = "{args[0]} {args[1]} -- --run {file}"
             var exitCode = 0
             var parsedResult = false
+            let t0 = ref_time_ticks()
+            var status: SuiteResult
             unsafe
                 exitCode = popen(singleTest) <| $(f)
                     if f != null
@@ -77,13 +86,18 @@ def main()
                             log::error(jsError, get_line_info())
                         elif js != null
                             parsedResult = true
-                            res += SuiteResult(js)
-            if exitCode != 0 || !parsedResult
-                res.total += 1
-                res.errors += 1
+                            status = SuiteResult(js)
+            let dt = get_time_usec(t0)
+            res += status
+            if exitCode == 0 && parsedResult && status.failed + status.errors == 0
+                log::info("PASS {file} ({double(dt)/1000000.0lf}s)", get_line_info())
+            else
+                log::info("FAIL {file} ({double(dt)/1000000.0lf}s)", get_line_info())
                 if exitCode != 0
-                    log::error("exit status {exitCode}", get_line_info())
-                else
+                    log::info("exit status {exitCode}", get_line_info())
+                if !parsedResult
+                    res.total += 1
+                    res.errors += 1
                     log::error("`{file}` execution was interrupted, crashed for example", get_line_info())
                 log::info("to get more information, run the test manually\n> {singleTest}", get_line_info())
 
