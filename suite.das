@@ -81,7 +81,7 @@ def test_file(fileName: string): SuiteResult
                                 log::info("\n=== RUN {name}", get_line_info())
                                 res.total += 1
                                 var dt = 0
-                                var t0 = ref_time_ticks()
+                                let t0 = ref_time_ticks()
                                 unsafe
                                     try
                                         context |> invoke_in_context(func)
