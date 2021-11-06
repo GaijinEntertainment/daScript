@@ -2973,8 +2973,8 @@ namespace das
                     context.runInitScript();
                 }
             })) {
-                string exc = context.getException();
-                error("exception during init script", exc, "", LineInfo(), CompilationError::cant_initialize);
+                error("exception during init script", context.getException(), "",
+                    context.exceptionAt, CompilationError::cant_initialize);
             }
             if ( options.getBoolOption("log_total_compile_time",false) ) {
                 auto dt = get_time_usec(time1) / 1000000.;

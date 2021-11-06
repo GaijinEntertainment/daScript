@@ -4655,6 +4655,22 @@ namespace das {
                 || (op=="<<=") || (op==">>=") || (op=="<<<=") || (op==">>>=");
         }
 
+        bool isLogicOperator ( const string & op ) {
+            return (op=="==") || (op=="!=") || (op==">=") || (op=="<=") || (op==">") || (op=="<");
+        }
+
+        bool isCommutativeOperator ( const string & op ) {
+            return (op=="*") || (op=="+") || isLogicOperator(op);
+        }
+
+        string flipCommutativeOperatorSide ( const string & op ) {
+                 if ( op==">"  ) return "<";
+            else if ( op=="<"  ) return ">";
+            else if ( op==">=" ) return "<=";
+            else if ( op=="<=" ) return ">=";
+            else return op;
+        }
+
         bool canOperateOnPointers ( const TypeDeclPtr & leftType, const TypeDeclPtr & rightType, TemporaryMatters tmatter ) const {
             if ( leftType->baseType==Type::tPointer ) {
                 return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::yes);
@@ -4683,6 +4699,15 @@ namespace das {
 
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
+            // flippling commutative operations, if the constant is on the left
+            if ( expr->left->rtti_isConstant() && !expr->right->rtti_isConstant() ) {                   // if left is const, but right is not
+                if ( expr->left->type->isNumericComparable() && isCommutativeOperator(expr->op) ) {     // if its compareable, and its a logic operator
+                    auto flip = flipCommutativeOperatorSide(expr->op);                              // we swap left and right, and change the op
+                    auto nexpr = make_smart<ExprOp2>(expr->at, flip, expr->right, expr->left);
+                    reportAstChanged();
+                    return nexpr;
+                }
+            }
             // pointer arithmetics
             if ( expr->left->type->isPointer() && expr->right->type->isSimpleType(Type::tInt) ) {
                 if ( !expr->left->type->firstType ) {
