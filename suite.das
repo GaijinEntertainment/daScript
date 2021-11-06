@@ -9,16 +9,14 @@ require log
 require debugapi
 require daslib/json_boost
 require fio
+require testing
 
 struct SuiteResult
-    passed: int
-    failed: int
-    errors: int
-    total: int
-
-
-def SuiteResult(passed: int; failed: int; total: int)
-    return [[SuiteResult passed=passed, failed=failed, total=total]]
+    passed: int // number of passed tests
+    failed: int // number of failed tests
+    errors: int // compile, runtime error
+    total: int // total number of tests
+    skipped: int // number of skipped tests
 
 
 def operator +=(var a: SuiteResult; b: SuiteResult)
@@ -26,6 +24,7 @@ def operator +=(var a: SuiteResult; b: SuiteResult)
     a.failed += b.failed
     a.total += b.total
     a.errors += b.errors
+    a.skipped += b.skipped
 
 
 def SuiteResult(val: JsonValue?)
@@ -34,7 +33,8 @@ def SuiteResult(val: JsonValue?)
         passed=int((obj?["passed"] ?? JV(0lf)) as _number),
         failed=int((obj?["failed"] ?? JV(0lf)) as _number),
         total=int((obj?["total"] ?? JV(0lf)) as _number),
-        errors=int((obj?["errors"] ?? JV(0lf)) as _number)
+        errors=int((obj?["errors"] ?? JV(0lf)) as _number),
+        skipped=int((obj?["skipped"] ?? JV(0lf)) as _number)
     ]]
 
 
@@ -74,27 +74,61 @@ def test_file(fileName: string): SuiteResult
                             return
                         for ann in fn.annotations
                             if ann.annotation.name == "test"
-                                var name = "'{fn.name}'"
+                                var name = "{fn.name}"
                                 for arg in ann.arguments
                                     if arg.name == "name"
-                                        name = "'{arg.sValue}'"
-                                log::info("\n=== RUN {name}", get_line_info())
+                                        name = "{arg.sValue}"
+                                log::info("\n=== RUN '{name}'", get_line_info())
                                 res.total += 1
-                                var dt = 0
                                 let t0 = ref_time_ticks()
+                                var dt = 0
+                                var deliberateRecover = false
+                                var failed = false
+                                var skipped = false
                                 unsafe
                                     try
-                                        context |> invoke_in_context(func)
+                                        if length(fn.arguments) == 0
+                                            context |> invoke_in_context(func)
+                                        else
+                                            var testing = new T(name)
+                                            testing.onFail <- @ <| [[&testing, &failed]]()
+                                                testing.failed = true
+                                                failed = true
+
+                                            testing.onFailNow <- @ <| [[&testing, &failed, &deliberateRecover]]()
+                                                testing.failed = true
+                                                failed = true
+                                                deliberateRecover = true
+
+                                            testing.onSkipNow <- @ <| [[&testing, &skipped, &deliberateRecover]]()
+                                                testing.skipped = true
+                                                skipped = true
+                                                deliberateRecover = true
+
+                                            testing.onLog <- @ <| (msg: string)
+                                                log::info("{name}: {msg}", get_line_info())
+
+                                            context |> invoke_in_context(func, testing)
+                                            delete testing
                                         dt = get_time_usec(t0)
                                     recover
-                                        dt = get_time_usec(t0)
-                                        res.failed += 1
-                                        log::info("\n--- FAIL {name} ({double(dt)/1000000.0lf}s)", get_line_info())
-                                        log::info(context.exception, get_line_info())
-                                        *context |> stackwalk(context.exceptionAt)
-                                        return
-                                res.passed += 1
-                                log::info("\n--- PASS {name} ({double(dt)/1000000.0lf}s)", get_line_info())
+                                        if !deliberateRecover
+                                            dt = get_time_usec(t0)
+                                            res.errors += 1
+                                            log::info("\n--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+                                            log::info(context.exception, get_line_info())
+                                            *context |> stackwalk(context.exceptionAt)
+                                            // TODO: context |> reset()
+                                            return
+                                if failed
+                                    res.failed += 1
+                                    log::info("\n--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+                                elif skipped
+                                    res.skipped += 1
+                                    log::info("\n--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+                                else
+                                    res.passed += 1
+                                    log::info("\n--- PASS '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
                                 return
     access := null
     return res
