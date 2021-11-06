@@ -101,14 +101,10 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
                 context |> invoke_in_context(func)
             else
                 var testing = new T(name)
-                testing.onFail <- @ <| [[&testing, &failed]]()
+                testing.onFail <- @ <| [[&testing, &failed, &deliberateRecover]](now: bool)
                     testing.failed = true
                     failed = true
-
-                testing.onFailNow <- @ <| [[&testing, &failed, &deliberateRecover]]()
-                    testing.failed = true
-                    failed = true
-                    deliberateRecover = true
+                    deliberateRecover = now
 
                 testing.onSkipNow <- @ <| [[&testing, &skipped, &deliberateRecover]]()
                     testing.skipped = true
@@ -120,8 +116,8 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
                     unsafe
                         selfCtx |> invoke_in_context("test_func", name, f, 1, context, res)
 
-                testing.onLog <- @ <| (msg: string)
-                    log::info("{name}: {msg}", get_line_info())
+                testing.onLog <- @ <| (msg: string; at: LineInfo)
+                    log::info("{at.fileInfo != null ? base_name(string(at.fileInfo.name)) : ""}:{int(at.line)}: {msg}", get_line_info())
 
                 context |> invoke_in_context(func, testing)
                 delete testing
