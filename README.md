@@ -10,6 +10,7 @@ Inspired by [Golang testing framework](https://pkg.go.dev/testing), this framewo
 
 ### dastest.das arguments
 - `--test`: Path to the folder with scripts or single script to test
+- `--test-names <namePrefix>`: Run top-level tests matching "namePrefix", such as "namePrefix1".
 
 #### Internal arguments
 - `--isolated-mode`: Run tests in isolated processes, useful to catch crashes

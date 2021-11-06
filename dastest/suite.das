@@ -39,6 +39,15 @@ def SuiteResult(val: JsonValue?)
 
 struct SuiteCtx
     dastestRoot: string
+    testNames: array<string>
+
+def private match_test_name(name: string; ctx: SuiteCtx)
+    if length(ctx.testNames) == 0
+        return true
+    for match in ctx.testNames
+        if name |> starts_with(match)
+            return true
+    return false
 
 def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
     var res: SuiteResult
@@ -80,7 +89,8 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                                 for arg in ann.arguments
                                     if arg.name == "name"
                                         name = "{arg.sValue}"
-                                test_func(name, func, length(fn.arguments), *context, res)
+                                if match_test_name(name, ctx)
+                                    test_func(name, func, length(fn.arguments), *context, res)
                                 return
     access := null
     return res

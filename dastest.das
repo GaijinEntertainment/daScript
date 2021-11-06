@@ -18,6 +18,12 @@ def private collect_input_paths(args: array<string>; var paths: array<string>)
             paths |> push <| args[i + 1]
 
 
+def private collect_tests_names(args: array<string>; var names: array<string>)
+    for i in range(length(args) - 1)
+        if args[i] == "--test-names"
+            names |> push <| args[i + 1]
+
+
 def private collect_files(input_paths: array<string>; var files: array<string>)
     var cache: table<string; void?>
     for path in input_paths
@@ -37,7 +43,8 @@ def private collect_files(input_paths: array<string>; var files: array<string>)
 def create_suite_ctx(args: array<string>)
     var ctx: SuiteCtx
     ctx.dastestRoot = dir_name(args[1]) |> join_path <| "dastest"
-    return ctx
+    collect_tests_names(args, ctx.testNames)
+    return <- ctx
 
 
 [export]
@@ -58,13 +65,14 @@ def main()
     var res: SuiteResult
     let isolatedMode = args |> has_value("--isolated-mode")
     if !isolatedMode
-        let ctx = create_suite_ctx(args)
+        let ctx <- create_suite_ctx(args)
         for file in files
             let fileTime = ref_time_ticks()
             let status = suite::test_file(file, ctx)
             let fileDt = get_time_usec(fileTime)
             if status.errors + status.failed == 0
-                log::info("PASS {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
+                if status.total > 0
+                    log::info("PASS {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
             else
                 log::info("FAIL {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
             res += status
