@@ -133,7 +133,6 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
                 log::info("--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
                 log::info(context.exception, get_line_info())
                 context |> stackwalk(context.exceptionAt)
-                // TODO: context |> reset()
                 return
     if failed
         res.failed += 1
