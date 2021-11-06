@@ -3,6 +3,7 @@ options indenting = 4
 require fio
 require rtti
 require strings
+require uriparser
 require dastest/fs
 require dastest/suite
 require dastest/log
@@ -67,17 +68,19 @@ def main()
     if !isolatedMode
         let ctx <- create_suite_ctx(args)
         for file in files
+            let uri = file_name_to_uri(file)
             let fileTime = ref_time_ticks()
             let status = suite::test_file(file, ctx)
             let fileDt = get_time_usec(fileTime)
             if status.errors + status.failed == 0
                 if status.total > 0
-                    log::info("PASS {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
+                    log::info("PASS {uri} ({double(fileDt)/1000000.0lf}s)", get_line_info())
             else
-                log::info("FAIL {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
+                log::info("FAIL {uri} ({double(fileDt)/1000000.0lf}s)", get_line_info())
             res += status
     else
         for file in files
+            let uri = file_name_to_uri(file)
             let singleTest = "{args[0]} {args[1]} -- --run {file}"
             var exitCode = 0
             var parsedResult = false
@@ -109,15 +112,15 @@ def main()
             let fileDt = get_time_usec(fileTime)
             res += status
             if exitCode == 0 && parsedResult && status.failed + status.errors == 0
-                log::info("PASS {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
+                log::info("PASS {uri} ({double(fileDt)/1000000.0lf}s)", get_line_info())
             else
-                log::info("FAIL {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
+                log::info("FAIL {uri} ({double(fileDt)/1000000.0lf}s)", get_line_info())
                 if exitCode != 0
                     log::info("exit status {exitCode}", get_line_info())
                 if !parsedResult
                     res.total += 1
                     res.errors += 1
-                    log::error("`{file}` execution was interrupted, crashed for example", get_line_info())
+                    log::error("`{uri}` execution was interrupted, crashed for example", get_line_info())
                     log::info("to get more information, run the test manually\n> {singleTest}", get_line_info())
 
     let resCode = res.failed + res.errors

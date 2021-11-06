@@ -10,6 +10,7 @@ require debugapi
 require daslib/json_boost
 require fio
 require testing
+require uriparser
 
 struct SuiteResult
     passed: int // number of passed tests
@@ -127,7 +128,7 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
                         selfCtx |> invoke_in_context("test_func", name, f, 1, context, indenting + "\t", res)
 
                 testing.onLog <- @ <| (msg: string; at: LineInfo)
-                    log::info("{indenting}{at.fileInfo != null ? base_name(string(at.fileInfo.name)) : ""}:{int(at.line)}: {msg}", get_line_info())
+                    log::info("{indenting}{at.fileInfo != null ? file_name_to_uri(string(at.fileInfo.name)) : ""}#{int(at.line)}: {msg}", get_line_info())
 
                 context |> invoke_in_context(func, testing)
                 delete testing
