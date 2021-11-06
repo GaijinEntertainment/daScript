@@ -9,6 +9,7 @@ class T
     onFail: lambda<(): void>
     onFailNow: lambda<(): void>
     onSkipNow: lambda<(): void>
+    onRun: lambda<(name: string; fn: function<(t: T?): void>): void>
 
     failed: bool = false
     skipped: bool = false
@@ -41,6 +42,9 @@ class T
     def const skip(msg: string)
         log(msg)
         skipNow()
+
+    def const run(sub_name: string; func: function<(t: T?): void>)
+        onRun |> invoke(sub_name, func)
 
 
 def equal(t: T?; a; b)

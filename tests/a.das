@@ -19,11 +19,10 @@ def t1(t: testing::T?)
     t->log("test {t.name} was {t.failed ? "failed" : "success"}")
 
 
-// [test]
-// def t2(t: T?)
-//     pass
-//     t->skip("skip {t.name} currently")
-//     t->error("not implemented")
+[test]
+def t2(t: T?)
+    t->skip("skip {t.name} currently")
+    t->error("not implemented")
 
 [test]
 def tassert()

@@ -81,57 +81,66 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                                 for arg in ann.arguments
                                     if arg.name == "name"
                                         name = "{arg.sValue}"
-                                log::info("\n=== RUN '{name}'", get_line_info())
-                                res.total += 1
-                                let t0 = ref_time_ticks()
-                                var dt = 0
-                                var deliberateRecover = false
-                                var failed = false
-                                var skipped = false
-                                unsafe
-                                    try
-                                        if length(fn.arguments) == 0
-                                            context |> invoke_in_context(func)
-                                        else
-                                            var testing = new T(name)
-                                            testing.onFail <- @ <| [[&testing, &failed]]()
-                                                testing.failed = true
-                                                failed = true
-
-                                            testing.onFailNow <- @ <| [[&testing, &failed, &deliberateRecover]]()
-                                                testing.failed = true
-                                                failed = true
-                                                deliberateRecover = true
-
-                                            testing.onSkipNow <- @ <| [[&testing, &skipped, &deliberateRecover]]()
-                                                testing.skipped = true
-                                                skipped = true
-                                                deliberateRecover = true
-
-                                            testing.onLog <- @ <| (msg: string)
-                                                log::info("{name}: {msg}", get_line_info())
-
-                                            context |> invoke_in_context(func, testing)
-                                            delete testing
-                                        dt = get_time_usec(t0)
-                                    recover
-                                        if !deliberateRecover
-                                            dt = get_time_usec(t0)
-                                            res.errors += 1
-                                            log::info("\n--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
-                                            log::info(context.exception, get_line_info())
-                                            *context |> stackwalk(context.exceptionAt)
-                                            // TODO: context |> reset()
-                                            return
-                                if failed
-                                    res.failed += 1
-                                    log::info("\n--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
-                                elif skipped
-                                    res.skipped += 1
-                                    log::info("\n--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
-                                else
-                                    res.passed += 1
-                                    log::info("\n--- PASS '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+                                test_func(name, func, length(fn.arguments), *context, res)
                                 return
     access := null
     return res
+
+
+def test_func(name: string; func: function; args_num: int; var context: rtti::Context&; var res: SuiteResult&)
+    log::info("=== RUN '{name}'", get_line_info())
+    res.total += 1
+    let t0 = ref_time_ticks()
+    var dt = 0
+    var deliberateRecover = false
+    var failed = false
+    var skipped = false
+    unsafe
+        try
+            if args_num == 0
+                context |> invoke_in_context(func)
+            else
+                var testing = new T(name)
+                testing.onFail <- @ <| [[&testing, &failed]]()
+                    testing.failed = true
+                    failed = true
+
+                testing.onFailNow <- @ <| [[&testing, &failed, &deliberateRecover]]()
+                    testing.failed = true
+                    failed = true
+                    deliberateRecover = true
+
+                testing.onSkipNow <- @ <| [[&testing, &skipped, &deliberateRecover]]()
+                    testing.skipped = true
+                    skipped = true
+                    deliberateRecover = true
+
+                var selfCtx & = this_context()
+                testing.onRun <- @ <| [[&selfCtx, &context, &res]](name: string; f: function<(t: T?): void>)
+                    unsafe
+                        selfCtx |> invoke_in_context("test_func", name, f, 1, context, res)
+
+                testing.onLog <- @ <| (msg: string)
+                    log::info("{name}: {msg}", get_line_info())
+
+                context |> invoke_in_context(func, testing)
+                delete testing
+            dt = get_time_usec(t0)
+        recover
+            if !deliberateRecover
+                dt = get_time_usec(t0)
+                res.errors += 1
+                log::info("--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+                log::info(context.exception, get_line_info())
+                context |> stackwalk(context.exceptionAt)
+                // TODO: context |> reset()
+                return
+    if failed
+        res.failed += 1
+        log::info("--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+    elif skipped
+        res.skipped += 1
+        log::info("--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+    else
+        res.passed += 1
+        log::info("--- PASS '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
