@@ -41,9 +41,10 @@ def private collect_files(input_paths: array<string>; var files: array<string>)
     delete cache
 
 
-def create_suite_ctx(args: array<string>)
+def create_suite_ctx(args: array<string>; uri_paths: bool)
     var ctx: SuiteCtx
     ctx.dastestRoot = dir_name(args[1]) |> join_path <| "dastest"
+    ctx.uriPaths = uri_paths
     collect_tests_names(args, ctx.testNames)
     return <- ctx
 
@@ -51,9 +52,10 @@ def create_suite_ctx(args: array<string>)
 [export]
 def main()
     var args <- get_command_line_arguments()
+    let uriPaths = args |> has_value("--uri-paths")
     let runIdx = args |> find_index("--run")
     if runIdx != -1
-        let res = suite::test_file(args[runIdx + 1], create_suite_ctx(args))
+        let res = suite::test_file(args[runIdx + 1], create_suite_ctx(args, uriPaths))
         log::info_raw("{jsonResultPrefix}{write_json(JV(res))}", get_line_info())
         return
 
@@ -66,9 +68,9 @@ def main()
     var res: SuiteResult
     let isolatedMode = args |> has_value("--isolated-mode")
     if !isolatedMode
-        let ctx <- create_suite_ctx(args)
+        let ctx <- create_suite_ctx(args, uriPaths)
         for file in files
-            let uri = file_name_to_uri(file)
+            let uri = uriPaths ? file_name_to_uri(file) : file
             let fileTime = ref_time_ticks()
             let status = suite::test_file(file, ctx)
             let fileDt = get_time_usec(fileTime)
@@ -80,7 +82,7 @@ def main()
             res += status
     else
         for file in files
-            let uri = file_name_to_uri(file)
+            let uri = uriPaths ? file_name_to_uri(file) : file
             let singleTest = "{args[0]} {args[1]} -- --run {file}"
             var exitCode = 0
             var parsedResult = false
