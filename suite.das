@@ -41,7 +41,6 @@ struct SuiteCtx
     dastestRoot: string
 
 def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
-    // log::info("\n===> {fileName}", get_line_info())
     var res: SuiteResult
     var access := make_file_access("")
     access |> add_file_access_root("dastest", ctx.dastestRoot)
@@ -89,6 +88,7 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
 
 def test_func(name: string; func: function; args_num: int; var context: rtti::Context&; var res: SuiteResult&)
     log::info("=== RUN '{name}'", get_line_info())
+    let beforeFailed = res.failed
     res.total += 1
     let t0 = ref_time_ticks()
     var dt = 0
@@ -137,10 +137,13 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
                 return
     if failed
         res.failed += 1
-        log::info("--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
     elif skipped
         res.skipped += 1
         log::info("--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
     else
         res.passed += 1
+
+    if beforeFailed < res.failed
+        log::info("--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+    else
         log::info("--- PASS '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
