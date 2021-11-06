@@ -37,19 +37,22 @@ def SuiteResult(val: JsonValue?)
         skipped=int((obj?["skipped"] ?? JV(0lf)) as _number)
     ]]
 
+struct SuiteCtx
+    dastestRoot: string
 
-def test_file(fileName: string): SuiteResult
+def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
     // log::info("\n===> {fileName}", get_line_info())
     var res: SuiteResult
     var access := make_file_access("")
+    access |> add_file_access_root("dastest", ctx.dastestRoot)
     using <| $(var mg:ModuleGroup#)
         using <| $(var cop:CodeOfPolicies#)
             cop.aot_module = true
-            compile_file(fileName, access, addr(mg), cop) <| $(ok, program, errors)
+            compile_file(file_name, access, addr(mg), cop) <| $(ok, program, errors)
                 if !ok
                     res.total += 1
                     res.errors += 1
-                    log::error("Failed to compile {fileName}\n{errors}", get_line_info())
+                    log::error("Failed to compile {file_name}\n{errors}", get_line_info())
                     if program != null
                         for err in program.errors
                             log::error("{describe(err.at)}: {int(err.cerr)}: {err.what}", get_line_info())
@@ -62,7 +65,7 @@ def test_file(fileName: string): SuiteResult
                     if !sok
                         res.total += 1
                         res.errors += 1
-                        log::error("Failed to compile {fileName}\n{serrors}", get_line_info())
+                        log::error("Failed to compile {file_name}\n{serrors}", get_line_info())
                         return
                     let mod = program |> get_this_module()
                     mod |> module_for_each_function <| $(f)

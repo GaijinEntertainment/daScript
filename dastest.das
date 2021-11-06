@@ -34,13 +34,18 @@ def private collect_files(input_paths: array<string>; var files: array<string>)
     delete cache
 
 
+def create_suite_ctx(args: array<string>)
+    var ctx: SuiteCtx
+    ctx.dastestRoot = dir_name(args[1]) |> join_path <| "dastest"
+    return ctx
+
+
 [export]
 def main()
     var args <- get_command_line_arguments()
-    let runInOneProcess = args |> has_value("--one-process")
     let runIdx = args |> find_index("--run")
     if runIdx != -1
-        let res = suite::test_file(args[runIdx + 1])
+        let res = suite::test_file(args[runIdx + 1], create_suite_ctx(args))
         log::info("\n{jsonResultPrefix}{write_json(JV(res))}", get_line_info())
         return
 
@@ -50,21 +55,25 @@ def main()
     collect_files(inputPaths, files)
 
     var res: SuiteResult
-    for file in files
-        let t0 = ref_time_ticks()
-        if runInOneProcess
-            let status = suite::test_file(file)
+    let runInOneProcess = args |> has_value("--one-process")
+    if runInOneProcess
+        let ctx = create_suite_ctx(args)
+        for file in files
+            let t0 = ref_time_ticks()
+            let status = suite::test_file(file, ctx)
             let dt = get_time_usec(t0)
             if status.errors + status.failed == 0
                 log::info("PASS {file} ({double(dt)/1000000.0lf}s)", get_line_info())
             else
                 log::info("FAIL {file} ({double(dt)/1000000.0lf}s)", get_line_info())
             res += status
-        else
+    else
+        for file in files
             let singleTest = "{args[0]} {args[1]} -- --run {file}"
             var exitCode = 0
             var parsedResult = false
             var status: SuiteResult
+            let t0 = ref_time_ticks()
             unsafe
                 exitCode = popen(singleTest) <| $(f)
                     if f != null
@@ -100,9 +109,10 @@ def main()
                     log::error("`{file}` execution was interrupted, crashed for example", get_line_info())
                 log::info("to get more information, run the test manually\n> {singleTest}", get_line_info())
 
-    log::info("\n{res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped", get_line_info())
+    let resCode = res.failed + res.errors
+    log::info("\n{resCode == 0 ? "SUCCESS!" : "FAILED!"} {res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped", get_line_info())
     unsafe
-        fio::exit(res.failed + res.errors)
+        fio::exit(resCode)
 
 
 // options debugger
