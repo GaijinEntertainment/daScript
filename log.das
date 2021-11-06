@@ -6,11 +6,9 @@ module log shared
 
 let verbose = false
 
+[unused_argument(at)]
 def info_raw(msg: string; at: rtti::LineInfo)
-    if !verbose
-        print("{msg}")
-    else
-        print("{msg} @{at.fileInfo.name}:{at.line}\n")
+    print("{msg}")
 
 def info(msg: string; at: rtti::LineInfo)
     if !verbose
