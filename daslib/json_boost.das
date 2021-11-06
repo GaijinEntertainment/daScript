@@ -197,7 +197,7 @@ def JV(value): JsonValue?
                 pass // skip void?
             static_elif typeinfo(is_pointer field)
                 if field != null
-                    map[name] = _::JV(field)
+                    map[name] = _::JV(*field)
             else
                 map[name] = _::JV(field)
         return _::JV(map)
