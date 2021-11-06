@@ -51,8 +51,8 @@ def main()
 
     var res: SuiteResult
     for file in files
+        let t0 = ref_time_ticks()
         if runInOneProcess
-            let t0 = ref_time_ticks()
             let status = suite::test_file(file)
             let dt = get_time_usec(t0)
             if status.errors + status.failed == 0
@@ -64,7 +64,6 @@ def main()
             let singleTest = "{args[0]} {args[1]} -- --run {file}"
             var exitCode = 0
             var parsedResult = false
-            let t0 = ref_time_ticks()
             var status: SuiteResult
             unsafe
                 exitCode = popen(singleTest) <| $(f)
@@ -101,7 +100,7 @@ def main()
                     log::error("`{file}` execution was interrupted, crashed for example", get_line_info())
                 log::info("to get more information, run the test manually\n> {singleTest}", get_line_info())
 
-    log::info("\n{res.total} tests, {res.failed} failed, {res.errors} errors, {res.passed} passed", get_line_info())
+    log::info("\n{res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped", get_line_info())
     unsafe
         fio::exit(res.failed + res.errors)
 
