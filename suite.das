@@ -40,6 +40,7 @@ def SuiteResult(val: JsonValue?)
 
 struct SuiteCtx
     dastestRoot: string
+    uriPaths: bool = false
     testNames: array<string>
 
 def private match_test_name(name: string; ctx: SuiteCtx)
@@ -91,13 +92,13 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                                     if arg.name == "name"
                                         name = "{arg.sValue}"
                                 if match_test_name(name, ctx)
-                                    test_func(name, func, length(fn.arguments), *context, "", res)
+                                    test_func(name, func, length(fn.arguments), *context, ctx.uriPaths, "", res)
                                 return
     access := null
     return res
 
 
-def test_func(name: string; func: function; args_num: int; var context: rtti::Context&; indenting: string; var res: SuiteResult&)
+def test_func(name: string; func: function; args_num: int; var context: rtti::Context&; uri_paths: bool; indenting: string; var res: SuiteResult&)
     log::info("{indenting}=== RUN '{name}'", get_line_info())
     let beforeFailed = res.failed
     res.total += 1
@@ -125,10 +126,11 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
                 var selfCtx & = this_context()
                 testing.onRun <- @ <| [[&selfCtx, &context, &res]](name: string; f: function<(t: T?): void>)
                     unsafe
-                        selfCtx |> invoke_in_context("test_func", name, f, 1, context, indenting + "\t", res)
+                        selfCtx |> invoke_in_context("test_func", name, f, 1, context, uri_paths, indenting + "\t", res)
 
                 testing.onLog <- @ <| (msg: string; at: LineInfo)
-                    log::info("{indenting}{at.fileInfo != null ? file_name_to_uri(string(at.fileInfo.name)) : ""}#{int(at.line)}: {msg}", get_line_info())
+                    let uri = at.fileInfo == null ? "" : uri_paths ? "{file_name_to_uri(string(at.fileInfo.name))}#" : "{at.fileInfo.name}:"
+                    log::info("{indenting}{uri}{int(at.line)}: {msg}", get_line_info())
 
                 context |> invoke_in_context(func, testing)
                 delete testing
