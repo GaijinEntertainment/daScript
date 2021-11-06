@@ -91,6 +91,7 @@ extern int das_yydebug;
         bool                    init_via_move = false;
         bool                    init_via_clone = false;
         bool                    override = false;
+        bool                    isPrivate = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
 
@@ -112,7 +113,7 @@ extern int das_yydebug;
 
     extern Structure * g_thisStructure;
 
-#line 116 "ds_parser.hpp"
+#line 117 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -283,7 +284,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 94 "ds_parser.ypp"
+#line 95 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -312,7 +313,7 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 316 "ds_parser.hpp"
+#line 317 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

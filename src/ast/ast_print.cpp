@@ -189,6 +189,7 @@ namespace das {
             Visitor::preVisitStructureField(that, decl, last);
             ss << "\t";
             outputVariableAnnotation(decl.annotation);
+            if ( decl.privateField ) ss << "private ";
             ss << decl.name << " : " << decl.type->describe();
             if ( decl.parentType ) {
                 ss << " /* from " << that->parent->name << " */";

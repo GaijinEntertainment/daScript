@@ -4239,6 +4239,30 @@ namespace das {
         bool verifyOperatorField ( const MatchingFunctions & fnList, const LineInfo & at ) const {
             return verifyAnyFunc(fnList, at);
         }
+        bool verifyPrivateFieldLookup ( ExprField * expr ) {
+            // lets verify private field lookup
+            if ( expr->field && expr->field->privateField ) {
+                bool canLookup = false;
+                if ( func && func->isClassMethod ) {
+                    if  ( func->arguments.size() ) {
+                        auto selfT = func->arguments[0]->type;
+                        if ( selfT->baseType==Type::tStructure && selfT->structType ) {
+                            if ( selfT->isSameType(*expr->value->type,
+                                    RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::yes) ) {
+                                canLookup = true;
+                            }
+                        }
+                    }
+                }
+                if ( !canLookup ) {
+                    error("can't access private field " + expr->name + " of " + describeType(expr->value->type)
+                        + " outside of member functions.", "", "",
+                            expr->at, CompilationError::cant_get_field);
+                    return false;
+                }
+            }
+            return true;
+        }
         virtual ExpressionPtr visit ( ExprField * expr ) override {
             if ( !expr->value->type ) return Visitor::visit(expr);
             if ( expr->name.empty() ) {
@@ -4333,6 +4357,10 @@ namespace das {
             } else {
                 error("can't get field " + expr->name + " of " + describeType(expr->value->type), "", "",
                       expr->at, CompilationError::cant_get_field);
+                return Visitor::visit(expr);
+            }
+            // lets verify private field lookup
+            if ( !verifyPrivateFieldLookup(expr) ) {
                 return Visitor::visit(expr);
             }
             // handle
@@ -4452,6 +4480,8 @@ namespace das {
             }
             expr->type->constant |= valT->constant;
             propagateTempType(expr->value->type, expr->type); // a#?.foo = foo?#
+            // lets verify private field lookup
+            verifyPrivateFieldLookup(expr);
             return Visitor::visit(expr);
         }
     // ExprVar

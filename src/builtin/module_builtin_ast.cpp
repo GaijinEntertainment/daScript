@@ -1087,7 +1087,7 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "FieldDeclarationFlags";
         ft->argNames = { "moveSemantics", "parentType", "capturedConstant",
-            "generated", "capturedRef", "doNotDelete" };
+            "generated", "capturedRef", "doNotDelete", "privateField" };
         return ft;
     }
 

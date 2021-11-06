@@ -37,6 +37,7 @@
         bool                    init_via_move = false;
         bool                    init_via_clone = false;
         bool                    override = false;
+        bool                    isPrivate = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
 
@@ -349,6 +350,7 @@
 %type <b>               optional_public_or_private_variable
 %type <b>               optional_public_or_private_structure
 %type <b>               optional_public_or_private_function
+%type <b>               optional_public_or_private_member_variable
 %type <b>               optional_public_or_private_enum
 
 %type <b>               if_or_static_if
@@ -1004,12 +1006,11 @@ optional_public_or_private_function
     ;
 
 function_declaration_header
-    :  optional_public_or_private_function[pub_func] function_name[name] optional_function_argument_list[list] optional_function_type[result] {
+    :  function_name[name] optional_function_argument_list[list] optional_function_type[result] {
         auto pFunction = make_smart<Function>();
         pFunction->at = tokAt(@name);
         pFunction->name = *$name;
         pFunction->result = TypeDeclPtr($result);
-        pFunction->privateFunction = !$pub_func;
         if ( $list ) {
             for ( auto pDecl : *$list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -1043,8 +1044,9 @@ function_declaration_header
     ;
 
 function_declaration
-    :  function_declaration_header[func] expression_block[block] {
+    :  optional_public_or_private_function[pub_func] function_declaration_header[func] expression_block[block] {
         $func->body = ExpressionPtr($block);
+        $func->privateFunction = !$pub_func;
         $$ = $func;
     }
     ;
@@ -1780,10 +1782,17 @@ optional_constant
     |   DAS_CONST       { $$ = true; }
     ;
 
+optional_public_or_private_member_variable
+    :                   { $$ = false; }
+    |   DAS_PUBLIC      { $$ = false; }
+    |   DAS_PRIVATE     { $$ = true; }
+    ;
+
 structure_variable_declaration
-    :   optional_field_annotation[alist] optional_override[ovr] variable_declaration[decl] {
+    :   optional_field_annotation[alist] optional_override[ovr] optional_public_or_private_member_variable[isPrivate] variable_declaration[decl] {
         $decl->override = $ovr;
         $decl->annotation = $alist;
+        $decl->isPrivate = $isPrivate;
         $$ = $decl;
     }
     ;
@@ -1797,7 +1806,7 @@ struct_variable_declaration_list
         if ( $decl ) $list->push_back($decl);
     }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
-            DAS_DEF[from] DAS_ABSTRACT { das_force_oxford_comma=true; } function_declaration_header[func] ';' {
+            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT { das_force_oxford_comma=true; } function_declaration_header[func] ';' {
         if ( !g_thisStructure->isClass ) {
             das_yyerror("structure can't have member function",
                 $func->at, CompilationError::invalid_member_function);
@@ -1836,13 +1845,17 @@ struct_variable_declaration_list
                 funcType,
                 nullptr
             );
+            decl->isPrivate = $isPrivate;
             $list->push_back(decl);
         }
         $func->delRef();
         $$ = $list;
     }
-    |   struct_variable_declaration_list[list] optional_annotation_list[annL] DAS_DEF[from] optional_override[ovr] optional_constant[cnst] function_declaration[func] {
-        $func->atDecl = tokRangeAt(@from,@func);
+    |   struct_variable_declaration_list[list] optional_annotation_list[annL]
+            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] optional_override[ovr] optional_constant[cnst]
+                function_declaration_header[func] expression_block[block] {
+        $func->atDecl = tokRangeAt(@from,@block);
+        $func->body = $block;
         if ( !g_thisStructure ) {
             das_yyerror("internal error. member function outside of class.",
                 $func->at, CompilationError::invalid_member_function);
@@ -1853,6 +1866,7 @@ struct_variable_declaration_list
             das_yyerror("generic function can't be a member of a class " + $func->getMangledName(),
                 $func->at, CompilationError::invalid_member_function);
         } else {
+            $func->privateFunction = g_thisStructure->privateStructure;
             if ( $func->name != g_thisStructure->name && $func->name != "finalize") {
                 auto varName = $func->name;
                 $func->name = g_thisStructure->name + "`" + $func->name;
@@ -1868,6 +1882,7 @@ struct_variable_declaration_list
                     finit
                 );
                 decl->override = $ovr;
+                decl->isPrivate = $isPrivate;
                 $list->push_back(decl);
                 modifyToClassMember($func, g_thisStructure, false, $cnst);
             } else {
@@ -2317,6 +2332,10 @@ structure_declaration
             }
             for ( auto pDecl : *$list ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
+                    if ( !pStruct->isClass && pDecl->isPrivate ) {
+                        das_yyerror("only class member can be private, "+name_at.first,name_at.second,
+                            CompilationError::invalid_private);
+                    }
                     auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name_at.first);
                     if ( !oldFd ) {
                         if ( pDecl->override ) {
@@ -2328,12 +2347,14 @@ structure_declaration
                             pStruct->fields.emplace_back(name_at.first, td, init,
                                 pDecl->annotation ? *pDecl->annotation : AnnotationArgumentList(),
                                 pDecl->init_via_move, name_at.second);
+                            pStruct->fields.back().privateField = pDecl->isPrivate;
                         }
                     } else {
                         if ( pDecl->override ) {
                                 auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
                                 oldFd->init = init;
                                 oldFd->parentType = oldFd->type->isAuto();
+                                oldFd->privateField = pDecl->isPrivate;
                         } else {
                             das_yyerror("structure field is already declared "+name_at.first
                                 +", use override to replace initial value instead",name_at.second,

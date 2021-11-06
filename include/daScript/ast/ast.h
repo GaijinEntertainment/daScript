@@ -163,6 +163,7 @@ namespace das
                     bool            generated : 1;
                     bool            capturedRef : 1;
                     bool            doNotDelete : 1;
+                    bool            privateField : 1;
                 };
                 uint32_t            flags = 0;
             };
