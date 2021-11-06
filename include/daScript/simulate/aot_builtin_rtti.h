@@ -119,8 +119,10 @@ namespace das {
     int32_t rtti_getDimTypeInfo(const TypeInfo & ti, int32_t index, Context * context);
     int32_t rtti_getDimVarInfo(const VarInfo & ti, int32_t index, Context * context);
 
+    char * builtin_das_root ( Context * context );
     smart_ptr<FileAccess> makeFileAccess( char * pak, Context * context );
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * );
+    bool rtti_add_file_access_root ( smart_ptr<FileAccess> access, const char * mod, const char * path );
 
     struct CodeOfPolicies;
     void rtti_builtin_compile(char * modName, char * str, const CodeOfPolicies & cop,

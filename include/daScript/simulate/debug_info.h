@@ -141,6 +141,7 @@ namespace das
         FileInfoPtr letGoOfFileInfo ( const string & fileName );
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
         virtual bool isModuleAllowed ( const string &, const string & ) const { return true; };
+        virtual bool addFsRoot ( const string & , const string & ) { return false; }
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:

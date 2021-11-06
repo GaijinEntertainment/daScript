@@ -44,6 +44,13 @@ namespace das {
         return nullptr;
     }
 
+    bool FsFileAccess::addFsRoot ( const string & mod, const string & path ) {
+        auto & eroots = extraRoots[mod];
+        if ( !eroots.empty() && eroots!=path ) return false;
+        eroots = path;
+        return true;
+    }
+
     ModuleInfo FsFileAccess::getModuleInfo ( const string & req, const string & from ) const {
         if (!failed()) {
             return ModuleFileAccess::getModuleInfo(req, from);
@@ -66,6 +73,12 @@ namespace das {
                 }
             #include "modules/external_resolve.inc"
             #undef NATIVE_MODULE
+            auto ert = extraRoots.find(top);
+            if ( ert!=extraRoots.end() ) {
+                info.moduleName = mod_name;
+                info.fileName = ert->second + "/" + mod_name + ".das";
+                return info;
+            }
         }
         return FileAccess::getModuleInfo(req, from);
     }

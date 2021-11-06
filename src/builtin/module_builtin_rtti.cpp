@@ -900,6 +900,12 @@ namespace das {
         return (int)list.size() - 1;
     }
 
+    bool rtti_add_file_access_root ( smart_ptr<FileAccess> access, const char * mod, const char * path ) {
+        if ( !mod ) return false;
+        if ( !path ) return false;
+        return access->addFsRoot(mod, path);
+    }
+
 #if !DAS_NO_FILEIO
 
     void rtti_builtin_compile_file ( char * modName, smart_ptr<FileAccess> access, ModuleGroup* module_group, const CodeOfPolicies & cop,
@@ -1154,6 +1160,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(introduceFile)>(*this, lib, "set_file_source",
                 SideEffects::modifyExternal, "introduceFile")
                     ->args({"access","fileName","text","context","line"});
+            addExtern<DAS_BIND_FUN(rtti_add_file_access_root)>(*this, lib, "add_file_access_root",
+                SideEffects::modifyExternal, "rtti_add_file_access_root")
+                    ->args({"access","mod","path"});
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "program_for_each_module",
                 SideEffects::modifyExternal, "rtti_builtin_program_for_each_module")
                     ->args({"program","block","context","line"});
