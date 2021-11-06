@@ -9,6 +9,7 @@ require daslib/ast_boost
 
 class B2LVisitor : AstVisitor
     inClosure : int
+    inArchetype : int
     failOnReturn : bool
     replaceReturnWithContinue : bool
     requireContinueCond : bool
@@ -24,7 +25,7 @@ class B2LVisitor : AstVisitor
             inClosure --
         return blk
     def override visitExprReturn(expr:smart_ptr<ExprReturn>) : ExpressionPtr
-        if inClosure==0
+        if inClosure==0 && inArchetype==0
             if failOnReturn
                 return make_static_assert_false("return is not allowed inside this macros's block", expr.at)
             elif replaceReturnWithContinue
@@ -42,9 +43,20 @@ class B2LVisitor : AstVisitor
                     else
                         return <- new [[ExprContinue() at=expr.at]]
         return expr
+    def override preVisitExprCall(expr:smart_ptr<ExprCall>): void
+        if expr.name=="for_each_archetype"
+            inArchetype ++
+    def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
+        if expr.name=="for_each_archetype"
+            inArchetype --
+        return expr
     def override visitExprBreak(expr:smart_ptr<ExprBreak>) : ExpressionPtr
+        if inClosure!=0 || inArchetype!=0
+            return expr
         return make_static_assert_false("break is not allowed inside this macros's block", expr.at)
     def override visitExprContinue(expr:smart_ptr<ExprContinue>) : ExpressionPtr
+        if inClosure!=0 || inArchetype!=0
+            return expr
         return make_static_assert_false("continue is not allowed inside this macros's block", expr.at)
 
 [macro_function]
