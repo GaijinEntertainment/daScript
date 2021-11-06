@@ -101,6 +101,7 @@ namespace das {
         virtual void WalkEnumeration8  ( int8_t &, EnumInfo * ) {}
         virtual void WalkEnumeration16 ( int16_t &, EnumInfo * ) {}
         virtual void FakeContext ( Context * ) {}
+        virtual void FakeLineInfo ( LineInfo * ) {}
     // walk
         virtual void walk ( char * pf, TypeInfo * ti );
         virtual void walk ( vec4f f, TypeInfo * ti );

@@ -104,6 +104,7 @@ int main(int argc, char * argv[]) {
     NEED_MODULE(Module_UriParser);
     NEED_MODULE(Module_JobQue);
     NEED_MODULE(Module_FIO);
+    NEED_MODULE(Module_DASBIND);
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();

@@ -320,6 +320,8 @@ namespace das
         virtual bool lint ( const FunctionPtr &, ModuleGroup &,
                                const AnnotationArgumentList &,
                                const AnnotationArgumentList &, string & ) { return true; }
+        virtual SimNode * simulate ( Context *, Function *,
+                            const AnnotationArgumentList &, string & ) { return nullptr; }
         virtual void complete ( Context * ) { }
         virtual bool simulate ( Context *, SimFunction * ) { return true; }
         virtual bool verifyCall ( ExprCallFunc * /*call*/, const AnnotationArgumentList & /*args*/,

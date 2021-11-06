@@ -351,6 +351,7 @@ int main( int argc, char * argv[] ) {
     NEED_MODULE(Module_UriParser);
     NEED_MODULE(Module_JobQue);
     NEED_MODULE(Module_FIO);
+    NEED_MODULE(Module_DASBIND);
     Module::Initialize();
     // aot library
 #if 0 // Debug this one test

@@ -426,6 +426,7 @@ namespace das {
         // function which is 'return const'
         ExpressionPtr getSimpleConst ( const FunctionPtr & func ) {
             if ( func->builtIn ) return nullptr;
+            if ( func->userScenario ) return nullptr;
             if ( func->body->rtti_isBlock() ) {
                 auto block = static_pointer_cast<ExprBlock>(func->body);
                 if ( block->list.size()==1 && block->finalList.size()==0 ) {

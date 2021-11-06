@@ -386,6 +386,9 @@ namespace das {
         virtual void FakeContext ( Context * ctx ) override {
             ss << "context 0x" << HEX << intptr_t(ctx) << DEC;
         }
+        virtual void FakeLineInfo ( LineInfo * at ) override {
+            ss << (at ? at->describe() : "lineinfo null)");
+        }
         virtual void beforeIterator ( Sequence *, TypeInfo * ) override {
             ss << "iterator [[";
         }

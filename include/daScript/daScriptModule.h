@@ -19,5 +19,6 @@ namespace das
     NEED_MODULE(Module_Ast); \
     NEED_MODULE(Module_Debugger); \
     NEED_MODULE(Module_FIO); \
+    NEED_MODULE(Module_DASBIND); \
     NEED_MODULE(Module_Network);
 

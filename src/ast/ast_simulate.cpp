@@ -328,6 +328,22 @@ namespace das
             DAS_ASSERTF(0, "can only simulate non built-in function");
             return nullptr;
         }
+        for ( auto & ann : annotations ) {
+            if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                auto fann = (FunctionAnnotation *)(ann->annotation.get());
+                string err;
+                auto node = fann->simulate(&context, (Function*)this, ann->arguments, err);
+                if ( !node ) {
+                    if ( !err.empty() ) {
+                        context.thisProgram->error("integration error, function failed to simulate", err, "",
+                            at, CompilationError::missing_node );
+                        return nullptr;
+                    }
+                } else {
+                    return node;
+                }
+            }
+        }
         if ( fastCall ) {
             DAS_ASSERT(totalStackSize == sizeof(Prologue) && "function can't allocate stack");
             DAS_ASSERT((result->isWorkhorseType() || result->isVoid()) && "fastcall can only return a workhorse type");
