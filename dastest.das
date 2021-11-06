@@ -46,9 +46,10 @@ def main()
     let runIdx = args |> find_index("--run")
     if runIdx != -1
         let res = suite::test_file(args[runIdx + 1], create_suite_ctx(args))
-        log::info("\n{jsonResultPrefix}{write_json(JV(res))}", get_line_info())
+        log::info_raw("{jsonResultPrefix}{write_json(JV(res))}", get_line_info())
         return
 
+    let totalTime = ref_time_ticks()
     var inputPaths: array<string>
     collect_input_paths(args, inputPaths)
     var files: array<string>
@@ -59,13 +60,13 @@ def main()
     if runInOneProcess
         let ctx = create_suite_ctx(args)
         for file in files
-            let t0 = ref_time_ticks()
+            let fileTime = ref_time_ticks()
             let status = suite::test_file(file, ctx)
-            let dt = get_time_usec(t0)
+            let fileDt = get_time_usec(fileTime)
             if status.errors + status.failed == 0
-                log::info("PASS {file} ({double(dt)/1000000.0lf}s)", get_line_info())
+                log::info("PASS {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
             else
-                log::info("FAIL {file} ({double(dt)/1000000.0lf}s)", get_line_info())
+                log::info("FAIL {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
             res += status
     else
         for file in files
@@ -73,7 +74,7 @@ def main()
             var exitCode = 0
             var parsedResult = false
             var status: SuiteResult
-            let t0 = ref_time_ticks()
+            let fileTime = ref_time_ticks()
             unsafe
                 exitCode = popen(singleTest) <| $(f)
                     if f != null
@@ -95,22 +96,24 @@ def main()
                         elif js != null
                             parsedResult = true
                             status = SuiteResult(js)
-            let dt = get_time_usec(t0)
+            let fileDt = get_time_usec(fileTime)
             res += status
             if exitCode == 0 && parsedResult && status.failed + status.errors == 0
-                log::info("PASS {file} ({double(dt)/1000000.0lf}s)", get_line_info())
+                log::info("PASS {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
             else
-                log::info("FAIL {file} ({double(dt)/1000000.0lf}s)", get_line_info())
+                log::info("FAIL {file} ({double(fileDt)/1000000.0lf}s)", get_line_info())
                 if exitCode != 0
                     log::info("exit status {exitCode}", get_line_info())
                 if !parsedResult
                     res.total += 1
                     res.errors += 1
                     log::error("`{file}` execution was interrupted, crashed for example", get_line_info())
-                log::info("to get more information, run the test manually\n> {singleTest}", get_line_info())
+                    log::info("to get more information, run the test manually\n> {singleTest}", get_line_info())
 
     let resCode = res.failed + res.errors
-    log::info("\n{resCode == 0 ? "SUCCESS!" : "FAILED!"} {res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped", get_line_info())
+    let totalDt = get_time_usec(totalTime)
+    log::info("\n{res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped", get_line_info())
+    log::info("{resCode == 0 ? "SUCCESS!" : "FAILED!"} ({double(totalDt)/1000000.0lf}s)", get_line_info())
     unsafe
         fio::exit(resCode)
 
