@@ -1,8 +1,8 @@
-# DaScrip unit tests framework
+# DaScript testing framework
 
 ## Introduction
 
-Inspired by [Golang testing](https://pkg.go.dev/testing), this framework provides a simple way to write unit tests for your scripts.
+Inspired by [Golang testing framework](https://pkg.go.dev/testing), this framework provides a simple way to write unit tests for your scripts.
 
 ## Usage
 
