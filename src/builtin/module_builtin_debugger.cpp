@@ -727,6 +727,7 @@ namespace debugapi {
         }
         invCtx->lock();
         vec4f res;
+        invCtx->exception = nullptr;
         invCtx->runWithCatch([&](){
             if ( !invCtx->ownStack ) {
                 StackAllocator sharedStack(8*1024);
@@ -753,6 +754,7 @@ namespace debugapi {
         }
         invCtx->lock();
         vec4f res;
+        invCtx->exception = nullptr;
         invCtx->runWithCatch([&](){
             if ( !invCtx->ownStack ) {
                 StackAllocator sharedStack(8*1024);
@@ -780,6 +782,7 @@ namespace debugapi {
         }
         invCtx->lock();
         vec4f res;
+        invCtx->exception = nullptr;
         invCtx->runWithCatch([&](){
             if ( !invCtx->ownStack ) {
                 StackAllocator sharedStack(8*1024);
