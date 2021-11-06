@@ -463,6 +463,7 @@ namespace das {
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
+        pFunc->privateFunction = true;
         auto fb = make_smart<ExprBlock>();
         fb->at = block->at;
         // fb->list.push_back(genComment("delete this lambda\n"));
@@ -512,6 +513,7 @@ namespace das {
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
         pFunc->body = block->clone();
+        pFunc->privateFunction = true;
         auto wb = static_pointer_cast<ExprBlock>(pFunc->body);
         wb->blockFlags = 0;
         wb->arguments.clear();
@@ -539,6 +541,7 @@ namespace das {
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
+        pFunc->privateFunction = true;
         auto fb = make_smart<ExprBlock>();
         fb->at = block->at;
         auto with = make_smart<ExprWith>(block->at);
