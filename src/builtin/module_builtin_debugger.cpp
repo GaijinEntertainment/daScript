@@ -777,9 +777,6 @@ namespace debugapi {
         if (!fnMnh) context.throw_error_at(call->debugInfo, "invoke null lambda");
         SimFunction * simFn = *fnMnh;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void*)simFn);
-        if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
-            context.throw_error_at(call->debugInfo, "pinvoke can't invoke private function %s", simFn->mangledName);
-        }
         invCtx->lock();
         vec4f res;
         invCtx->exception = nullptr;
