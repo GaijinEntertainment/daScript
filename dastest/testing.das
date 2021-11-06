@@ -2,12 +2,13 @@ options indenting = 4
 
 module testing shared
 
+require rtti
+require strings
 
 class T
     name: string
-    onLog: lambda<(msg: string): void>
-    onFail: lambda<(): void>
-    onFailNow: lambda<(): void>
+    onLog: lambda<(msg: string; at: LineInfo): void>
+    onFail: lambda<(now: bool): void>
     onSkipNow: lambda<(): void>
     onRun: lambda<(name: string; fn: function<(t: T?): void>): void>
 
@@ -18,40 +19,52 @@ class T
         name = name_
 
     def const failNow()
-        onFailNow |> invoke()
+        onFail |> invoke(true)
         panic("test failed")
 
     def const fail()
-        onFail |> invoke()
+        onFail |> invoke(false)
 
     def const error(msg: string)
-        log(msg)
+        errorAt(msg, get_line_info(1))
+
+    def const errorAt(msg: string; at: LineInfo)
+        logAt(msg, at)
         fail()
 
     def const fatal(msg: string)
-        log(msg)
+        fatalAt(msg, get_line_info(1))
+
+    def const fatalAt(msg: string; at: LineInfo)
+        logAt(msg, at)
         failNow()
 
     def const log(msg: string)
-        onLog |> invoke(msg)
+        logAt(msg, get_line_info(1))
+
+    def const logAt(msg: string; at: LineInfo)
+        onLog |> invoke(msg, at)
 
     def const skipNow()
         onSkipNow |> invoke()
         panic("test skipped")
 
     def const skip(msg: string)
-        log(msg)
+        skipAt(msg, get_line_info(1))
+
+    def const skipAt(msg: string; at: LineInfo)
+        logAt(msg, at)
         skipNow()
 
     def const run(sub_name: string; func: function<(t: T?): void>)
         onRun |> invoke(sub_name, func)
 
 
-def equal(t: T?; a; b)
+def equal(t: T?; a; b; msg = "")
     if a != b
-        t->error("values differ\n\texpected: {a}\n\tgot: {b}")
+        t->errorAt("{!empty(msg) ? msg : "values differ"}\n\texpected: {a}\n\tgot: {b}", get_line_info(1))
 
 
-def success(t: T?; a)
+def success(t: T?; a; msg = "")
     if !a
-        t->error("expected success, got failure")
+        t->errorAt(!empty(msg) ? msg : "expected success, got failure", get_line_info(1))
