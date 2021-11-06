@@ -12,5 +12,5 @@ Inspired by [Golang testing framework](https://pkg.go.dev/testing), this framewo
 - `--test`: Path to the folder with scripts or single script to test
 
 #### Internal arguments
-- `--run`: Path to the single script file to run tests in multiprocessor mode
-- `--one-process`: Run tests in one process, useful for debugging of the framework
+- `--isolated-mode`: Run tests in isolated processes, useful to catch crashes
+- `--run`: Path to the single script file to run tests in isolated mode

@@ -8,7 +8,7 @@
             "type": "dascript",
             "request": "launch",
             "name": "daScript: launch",
-            "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${workspaceFolder}/tests -one-process",
+            "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${workspaceFolder}/tests",
             "cwd": "${workspaceFolder}",
             "connectTimeout": 3
         },

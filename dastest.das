@@ -56,8 +56,8 @@ def main()
     collect_files(inputPaths, files)
 
     var res: SuiteResult
-    let runInOneProcess = args |> has_value("--one-process")
-    if runInOneProcess
+    let isolatedMode = args |> has_value("--isolated-mode")
+    if !isolatedMode
         let ctx = create_suite_ctx(args)
         for file in files
             let fileTime = ref_time_ticks()
