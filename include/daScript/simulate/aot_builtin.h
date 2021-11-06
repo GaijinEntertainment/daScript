@@ -146,4 +146,7 @@ namespace das {
 
     __forceinline void concept_assert ( bool, const char * ) {}
     __forceinline void das_static_assert ( bool, const char * ) {}
+
+    LineInfo getCurrentLineInfo( LineInfoArg * lineInfo );
+    LineInfo rtti_get_line_info ( int depth, Context * context, LineInfoArg * at );
 }

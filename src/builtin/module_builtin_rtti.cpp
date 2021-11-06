@@ -1048,6 +1048,36 @@ namespace das {
         return fn;
     }
 
+    LineInfo rtti_get_line_info ( int depth, Context * context, LineInfoArg * at ) {
+    #if DAS_ENABLE_STACK_WALK
+        char * sp = context->stack.ap();
+        const LineInfo * lineAt = at;
+        while (  sp < context->stack.top() ) {
+            Prologue * pp = (Prologue *) sp;
+            Block * block = nullptr;
+            FuncInfo * info = nullptr;
+            char * SP = sp;
+            if ( pp->info ) {
+                intptr_t iblock = intptr_t(pp->block);
+                if ( iblock & 1 ) {
+                    block = (Block *) (iblock & ~1);
+                    info = block->info;
+                    SP = context->stack.bottom() + block->stackOffset;
+                } else {
+                    info = pp->info;
+                }
+            }
+            lineAt = info ? pp->line : nullptr;
+            sp += info ? info->stackSize : pp->stackSize;
+            depth --;
+            if ( depth==0 ) return *lineAt;
+        }
+        return LineInfo();
+    #else
+        return LineInfo();
+    #endif
+    }
+
     #include "rtti.das.inc"
 
     class Module_Rtti : public Module {
@@ -1239,6 +1269,9 @@ namespace das {
             // current line info
             addExtern<DAS_BIND_FUN(getCurrentLineInfo), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "get_line_info", SideEffects::none, "getCurrentLineInfo")->arg("line");
+            addExtern<DAS_BIND_FUN(rtti_get_line_info), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_line_info",
+                SideEffects::modifyExternal, "rtti_get_line_info")
+                    ->args({"depth","context","line"});
             // this context
             addExtern<DAS_BIND_FUN(thisContext), SimNode_ExtFuncCallRef>(*this, lib,  "this_context",
                 SideEffects::accessExternal, "thisContext")->arg("context");
