@@ -77,25 +77,27 @@ def main()
             let fileTime = ref_time_ticks()
             unsafe
                 exitCode = popen(singleTest) <| $(f)
-                    if f != null
-                        var readJson = false
-                        var jsonResult = ""
-                        while !feof(f)
-                            let st = fgets(f)
-                            if st == jsonResultPrefix
-                                readJson = true
-                                continue
-                            if readJson
-                                jsonResult += st
-                            else
-                                log::info_raw(st, get_line_info())
-                        var jsError: string
-                        var js = read_json(jsonResult, jsError)
-                        if !empty(jsError)
-                            log::error(jsError, get_line_info())
-                        elif js != null
-                            parsedResult = true
-                            status = SuiteResult(js)
+                    if f == null
+                        log::error("Internal error: Failed to execute cmd > {singleTest}", get_line_info())
+                        return
+                    var readJson = false
+                    var jsonResult = ""
+                    while !feof(f)
+                        let st = fgets(f)
+                        if st == jsonResultPrefix
+                            readJson = true
+                            continue
+                        if readJson
+                            jsonResult += st
+                        else
+                            log::info_raw(st, get_line_info())
+                    var jsError: string
+                    var js = jsonResult |> read_json(jsError)
+                    if !empty(jsError)
+                        log::error("Internal error: failed to parse json result {jsError}", get_line_info())
+                    elif js != null
+                        parsedResult = true
+                        status = SuiteResult(js)
             let fileDt = get_time_usec(fileTime)
             res += status
             if exitCode == 0 && parsedResult && status.failed + status.errors == 0
