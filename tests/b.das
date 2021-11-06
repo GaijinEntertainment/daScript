@@ -16,6 +16,7 @@ def t2(t: T?)
     // var a: int?
     // *a = 1
     equal(t, sum, 100000 * (100000 - 1) / 2)
+    t->log("used time {t->getTimeSec()}")
 
 [test(name="sub tests")]
 def sub(t: T?)

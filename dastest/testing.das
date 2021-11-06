@@ -7,6 +7,7 @@ require strings
 
 class T
     name: string
+    startTick: int64
     onLog: lambda<(msg: string; at: LineInfo): void>
     onFail: lambda<(now: bool): void>
     onSkipNow: lambda<(): void>
@@ -15,8 +16,9 @@ class T
     failed: bool = false
     skipped: bool = false
 
-    def T(name_: string)
+    def T(name_: string; start_tick: int64)
         name = name_
+        startTick = start_tick
 
     def const failNow()
         onFail |> invoke(true)
@@ -58,6 +60,12 @@ class T
 
     def const run(sub_name: string; func: function<(t: T?): void>)
         onRun |> invoke(sub_name, func)
+
+    def const getTimeUsec(): int
+        return get_time_usec(startTick)
+
+    def const getTimeSec(): double
+        return double(getTimeUsec())/1000000.0lf
 
 
 def equal(t: T?; a; b; msg = "")
