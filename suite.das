@@ -102,17 +102,18 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
     log::info("{indenting}=== RUN '{name}'", get_line_info())
     let beforeFailed = res.failed
     res.total += 1
-    let t0 = ref_time_ticks()
     var dt = 0
     var deliberateRecover = false
     var failed = false
     var skipped = false
     unsafe
+        let t0 = ref_time_ticks()
         try
             if args_num == 0
                 context |> invoke_in_context(func)
+                dt = get_time_usec(t0)
             else
-                var testing = new T(name)
+                var testing = new T(name, t0)
                 testing.onFail <- @ <| [[&testing, &failed, &deliberateRecover]](now: bool)
                     testing.failed = true
                     failed = true
@@ -133,8 +134,8 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
                     log::info("{indenting}{uri}{int(at.line)}: {msg}", get_line_info())
 
                 context |> invoke_in_context(func, testing)
+                dt = get_time_usec(t0)
                 delete testing
-            dt = get_time_usec(t0)
         recover
             if !deliberateRecover
                 dt = get_time_usec(t0)
