@@ -90,14 +90,14 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                                     if arg.name == "name"
                                         name = "{arg.sValue}"
                                 if match_test_name(name, ctx)
-                                    test_func(name, func, length(fn.arguments), *context, res)
+                                    test_func(name, func, length(fn.arguments), *context, "", res)
                                 return
     access := null
     return res
 
 
-def test_func(name: string; func: function; args_num: int; var context: rtti::Context&; var res: SuiteResult&)
-    log::info("=== RUN '{name}'", get_line_info())
+def test_func(name: string; func: function; args_num: int; var context: rtti::Context&; indenting: string; var res: SuiteResult&)
+    log::info("{indenting}=== RUN '{name}'", get_line_info())
     let beforeFailed = res.failed
     res.total += 1
     let t0 = ref_time_ticks()
@@ -124,10 +124,10 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
                 var selfCtx & = this_context()
                 testing.onRun <- @ <| [[&selfCtx, &context, &res]](name: string; f: function<(t: T?): void>)
                     unsafe
-                        selfCtx |> invoke_in_context("test_func", name, f, 1, context, res)
+                        selfCtx |> invoke_in_context("test_func", name, f, 1, context, indenting + "\t", res)
 
                 testing.onLog <- @ <| (msg: string; at: LineInfo)
-                    log::info("{at.fileInfo != null ? base_name(string(at.fileInfo.name)) : ""}:{int(at.line)}: {msg}", get_line_info())
+                    log::info("{indenting}{at.fileInfo != null ? base_name(string(at.fileInfo.name)) : ""}:{int(at.line)}: {msg}", get_line_info())
 
                 context |> invoke_in_context(func, testing)
                 delete testing
@@ -136,19 +136,19 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
             if !deliberateRecover
                 dt = get_time_usec(t0)
                 res.errors += 1
-                log::info("--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
-                log::info(context.exception, get_line_info())
+                log::info("{indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+                log::info("{indenting}{context.exception}", get_line_info())
                 context |> stackwalk(context.exceptionAt)
                 return
     if failed
         res.failed += 1
     elif skipped
         res.skipped += 1
-        log::info("--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+        log::info("{indenting}--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
     else
         res.passed += 1
 
     if beforeFailed < res.failed
-        log::info("--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+        log::info("{indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
     else
-        log::info("--- PASS '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+        log::info("{indenting}--- PASS '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
