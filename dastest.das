@@ -32,7 +32,7 @@ def private collect_files(input_paths: array<string>; var files: array<string>)
             if !cache |> key_exists(path)
                 let fStat = stat(path)
                 if !fStat.is_valid || !fStat.is_reg
-                    log::error("Invalid file path {path}", get_line_info())
+                    log::error("Invalid file path {path}")
                     continue
                 cache[path] = null
                 files |> push <| path
@@ -56,7 +56,7 @@ def main()
     let runIdx = args |> find_index("--run")
     if runIdx != -1
         let res = suite::test_file(args[runIdx + 1], create_suite_ctx(args, uriPaths))
-        log::info_raw("{jsonResultPrefix}{write_json(JV(res))}", get_line_info())
+        log::info_raw("{jsonResultPrefix}{write_json(JV(res))}")
         return
 
     let totalTime = ref_time_ticks()
@@ -76,9 +76,9 @@ def main()
             let fileDt = get_time_usec(fileTime)
             if status.errors + status.failed == 0
                 if status.total > 0
-                    log::info("PASS {uri} ({double(fileDt)/1000000.0lf}s)", get_line_info())
+                    log::info("PASS {uri} ({double(fileDt)/1000000.0lf}s)")
             else
-                log::info("FAIL {uri} ({double(fileDt)/1000000.0lf}s)", get_line_info())
+                log::info("FAIL {uri} ({double(fileDt)/1000000.0lf}s)")
             res += status
     else
         for file in files
@@ -91,7 +91,7 @@ def main()
             unsafe
                 exitCode = popen(singleTest) <| $(f)
                     if f == null
-                        log::error("Internal error: Failed to execute cmd > {singleTest}", get_line_info())
+                        log::error("Internal error: Failed to execute cmd > {singleTest}")
                         return
                     var readJson = false
                     var jsonResult = ""
@@ -103,32 +103,32 @@ def main()
                         if readJson
                             jsonResult += st
                         else
-                            log::info_raw(st, get_line_info())
+                            log::info_raw(st)
                     var jsError: string
                     var js = jsonResult |> read_json(jsError)
                     if !empty(jsError)
-                        log::error("Internal error: failed to parse json result {jsError}", get_line_info())
+                        log::error("Internal error: failed to parse json result {jsError}")
                     elif js != null
                         parsedResult = true
                         status = SuiteResult(js)
             let fileDt = get_time_usec(fileTime)
             res += status
             if exitCode == 0 && parsedResult && status.failed + status.errors == 0
-                log::info("PASS {uri} ({double(fileDt)/1000000.0lf}s)", get_line_info())
+                log::info("PASS {uri} ({double(fileDt)/1000000.0lf}s)")
             else
-                log::info("FAIL {uri} ({double(fileDt)/1000000.0lf}s)", get_line_info())
+                log::info("FAIL {uri} ({double(fileDt)/1000000.0lf}s)")
                 if exitCode != 0
-                    log::info("exit status {exitCode}", get_line_info())
+                    log::info("exit status {exitCode}")
                 if !parsedResult
                     res.total += 1
                     res.errors += 1
-                    log::error("`{uri}` execution was interrupted, crashed for example", get_line_info())
-                    log::info("to get more information, run the test manually\n> {singleTest}", get_line_info())
+                    log::error("`{uri}` execution was interrupted, crashed for example")
+                    log::info("to get more information, run the test manually\n> {singleTest}")
 
     let resCode = res.failed + res.errors
     let totalDt = get_time_usec(totalTime)
-    log::info("\n{res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped", get_line_info())
-    log::info("{resCode == 0 ? "SUCCESS!" : "FAILED!"} ({double(totalDt)/1000000.0lf}s)", get_line_info())
+    log::info("\n{res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped")
+    log::info("{resCode == 0 ? "SUCCESS!" : "FAILED!"} ({double(totalDt)/1000000.0lf}s)")
     unsafe
         fio::exit(resCode)
 

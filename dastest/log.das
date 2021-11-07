@@ -8,24 +8,26 @@ require uriparser
 
 let verbose = false
 
-[unused_argument(at)]
-def info_raw(msg: string; at: rtti::LineInfo)
+def info_raw(msg: string)
     print("{msg}")
 
-def info(msg: string; at: rtti::LineInfo)
+def info(msg: string)
     if !verbose
         print("{msg}\n")
     else
-        print("{msg} @{file_name_to_uri(string(at.fileInfo.name))}:{at.line}\n")
+        let at = get_line_info(1)
+        print("{msg} @{file_name_to_uri(string(at.fileInfo.name))}#{int(at.line)}\n")
 
-def warn(msg: string; at: rtti::LineInfo)
+def warn(msg: string)
     if !verbose
         print("[W] {msg}\n")
     else
-        print("[W] {msg} @{file_name_to_uri(string(at.fileInfo.name))}:{at.line}\n")
+        let at = get_line_info(1)
+        print("[W] {msg} @{file_name_to_uri(string(at.fileInfo.name))}#{int(at.line)}\n")
 
-def error(msg: string; at: rtti::LineInfo)
+def error(msg: string)
     if !verbose
         print("[E] {msg}\n")
     else
-        print("[E] {msg} @{file_name_to_uri(string(at.fileInfo.name))}:{at.line}\n")
+        let at = get_line_info(1)
+        print("[E] {msg} @{file_name_to_uri(string(at.fileInfo.name))}#{int(at.line)}\n")

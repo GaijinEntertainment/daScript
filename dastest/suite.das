@@ -69,20 +69,20 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                 if !ok
                     res.total += 1
                     res.errors += 1
-                    log::error("Failed to compile {file_name}\n{errors}", get_line_info())
+                    log::error("Failed to compile {file_name}\n{errors}")
                     if program != null
                         for err in program.errors
-                            log::error("{describe(err.at)}: {int(err.cerr)}: {err.what}", get_line_info())
+                            log::error("{describe(err.at)}: {int(err.cerr)}: {err.what}")
                             if !empty(err.extra)
-                                log::info("{err.extra}", get_line_info())
+                                log::info("{err.extra}")
                             if !empty(err.fixme)
-                                log::info("{err.fixme}", get_line_info())
+                                log::info("{err.fixme}")
                     return
                 simulate(program) <| $ (sok; context; serrors)
                     if !sok
                         res.total += 1
                         res.errors += 1
-                        log::error("Failed to compile {file_name}\n{serrors}", get_line_info())
+                        log::error("Failed to compile {file_name}\n{serrors}")
                         return
                     var fileCtx <- [[SuiteFileCtx context:=context, uriPaths=ctx.uriPaths]]
                     let mod = program |> get_this_module()
@@ -119,7 +119,7 @@ def test_func(name: string; func: function<(): void>; var context: SuiteFileCtx)
 
 
 def private test_any_func(name: string; func: function; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
-    log::info("{context.indenting}=== RUN '{name}'", get_line_info())
+    log::info("{context.indenting}=== RUN '{name}'")
     let beforeFailed = res.failed
     res.total += 1
     var dt = 0
@@ -153,7 +153,7 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
 
                 testing.onLog <- @ <| [[&context]](msg: string; at: LineInfo)
                     let uri = at.fileInfo == null ? "" : context.uriPaths ? "{file_name_to_uri(string(at.fileInfo.name))}#" : "{at.fileInfo.name}:"
-                    log::info("{context.indenting}{uri}{int(at.line)}: {msg}", get_line_info())
+                    log::info("{context.indenting}{uri}{int(at.line)}: {msg}")
 
                 *context.context |> invoke_in_context(func, testing)
                 dt = get_time_usec(t0)
@@ -162,17 +162,17 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
             if !deliberateRecover
                 dt = get_time_usec(t0)
                 res.errors += 1
-                log::info("{context.indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
-                log::info("{context.indenting}{context.context.exception}", get_line_info())
+                log::info("{context.indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)")
+                log::info("{context.indenting}{context.context.exception}")
                 *context.context |> stackwalk(context.context.exceptionAt)
                 return
     if failed
         res.failed += 1
     elif skipped
         res.skipped += 1
-        log::info("{context.indenting}--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+        log::info("{context.indenting}--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)")
     else
         res.passed += 1
 
     let status = beforeFailed < res.failed ? "FAIL" : "PASS"
-    log::info("{context.indenting}--- {status} '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+    log::info("{context.indenting}--- {status} '{name}' ({double(dt)/1000000.0lf}s)")
