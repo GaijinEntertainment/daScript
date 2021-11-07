@@ -173,7 +173,10 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
                 dt = get_time_usec(t0)
                 res.errors += 1
                 log::info("{context.indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)")
-                log::info("{context.indenting}{context.context.exception}")
+                if !empty(context.context.exception)
+                    log::info("{context.indenting}{context.context.exception}")
+                if !empty(context.context.last_exception)
+                    log::info("{context.indenting}{context.context.last_exception}")
                 *context.context |> stackwalk(context.context.exceptionAt)
                 return
     if failed
