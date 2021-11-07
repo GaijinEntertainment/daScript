@@ -11,6 +11,12 @@
         CorM_CLONE  = (1<<1)
     };
 
+    enum {
+        OVERRIDE_NONE,
+        OVERRIDE_OVERRIDE,
+        OVERRIDE_SEALED,
+    };
+
     namespace das {
         extern ProgramPtr               g_Program;
         extern FileAccessPtr            g_Access;
@@ -37,6 +43,7 @@
         bool                    init_via_move = false;
         bool                    init_via_clone = false;
         bool                    override = false;
+        bool                    sealed = false;
         bool                    isPrivate = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
@@ -233,6 +240,7 @@
 %token  DAS_TVARIANT        "variant"
 %token  DAS_GENERATOR       "generator"
 %token  DAS_YIELD           "yield"
+%token  DAS_SEALED          "sealed"
 
 /* operators */
 %token  ADDEQU              "+="
@@ -339,7 +347,7 @@
 
 %type <b>               class_or_struct
 %type <b>               copy_or_move
-%type <b>               optional_override
+%type <i>               optional_override
 %type <b>               optional_constant
 %type <b>               kwd_let
 %type <b>               is_public_module
@@ -1773,8 +1781,9 @@ optional_field_annotation
     ;
 
 optional_override
-    :                   { $$ = false; }
-    |   DAS_OVERRIDE    { $$ = true; }
+    :                 { $$ = OVERRIDE_NONE; }
+    |   DAS_OVERRIDE  { $$ = OVERRIDE_OVERRIDE; }
+    |   DAS_SEALED    { $$ = OVERRIDE_SEALED; }
     ;
 
 optional_constant
@@ -1790,7 +1799,8 @@ optional_public_or_private_member_variable
 
 structure_variable_declaration
     :   optional_field_annotation[alist] optional_override[ovr] optional_public_or_private_member_variable[isPrivate] variable_declaration[decl] {
-        $decl->override = $ovr;
+        $decl->override = $ovr == OVERRIDE_OVERRIDE;
+        $decl->sealed = $ovr == OVERRIDE_SEALED;
         $decl->annotation = $alist;
         $decl->isPrivate = $isPrivate;
         $$ = $decl;
@@ -1873,7 +1883,7 @@ struct_variable_declaration_list
                 auto vars = new vector<pair<string,LineInfo>>();
                 vars->emplace_back(make_pair(varName,$func->at));
                 Expression * finit = new ExprAddr($func->at, inThisModule($func->name));
-                if ( $ovr ) {
+                if ( $ovr == OVERRIDE_OVERRIDE ) {
                     finit = new ExprCast($func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
                 }
                 VariableDeclaration * decl = new VariableDeclaration(
@@ -1881,7 +1891,8 @@ struct_variable_declaration_list
                     new TypeDecl(Type::autoinfer),
                     finit
                 );
-                decl->override = $ovr;
+                decl->override = $ovr == OVERRIDE_OVERRIDE;
+                decl->sealed = $ovr == OVERRIDE_SEALED;
                 decl->isPrivate = $isPrivate;
                 $list->push_back(decl);
                 modifyToClassMember($func, g_thisStructure, false, $cnst);
@@ -2348,13 +2359,19 @@ structure_declaration
                                 pDecl->annotation ? *pDecl->annotation : AnnotationArgumentList(),
                                 pDecl->init_via_move, name_at.second);
                             pStruct->fields.back().privateField = pDecl->isPrivate;
+                            pStruct->fields.back().sealed = pDecl->sealed;
                         }
                     } else {
-                        if ( pDecl->override ) {
-                                auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
-                                oldFd->init = init;
-                                oldFd->parentType = oldFd->type->isAuto();
-                                oldFd->privateField = pDecl->isPrivate;
+                        if ( pDecl->sealed || pDecl->override ) {
+                            if ( oldFd->sealed ) {
+                                das_yyerror("structure field "+name_at.first+" is sealed",
+                                    name_at.second, CompilationError::invalid_override);
+                            }
+                            auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
+                            oldFd->init = init;
+                            oldFd->parentType = oldFd->type->isAuto();
+                            oldFd->privateField = pDecl->isPrivate;
+                            oldFd->sealed = pDecl->sealed;
                         } else {
                             das_yyerror("structure field is already declared "+name_at.first
                                 +", use override to replace initial value instead",name_at.second,

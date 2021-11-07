@@ -325,6 +325,7 @@ void YYNEWLINE() {
 <normal>"pass"                                          return DAS_PASS;
 <normal>"reinterpret"                                   return DAS_REINTERPRET;
 <normal>"override"                                      return DAS_OVERRIDE;
+<normal>"sealed"                                        return DAS_SEALED;
 <normal>"abstract"                                      return DAS_ABSTRACT;
 <normal>"expect"                                        return DAS_EXPECT;
 <normal>"table"                                         return DAS_TABLE;

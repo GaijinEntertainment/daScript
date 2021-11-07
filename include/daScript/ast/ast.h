@@ -164,6 +164,7 @@ namespace das
                     bool            capturedRef : 1;
                     bool            doNotDelete : 1;
                     bool            privateField : 1;
+                    bool            sealed : 1;
                 };
                 uint32_t            flags = 0;
             };
@@ -229,6 +230,7 @@ namespace das
                 bool    isLambda : 1;
                 bool    privateStructure : 1;
                 bool    macroInterface : 1;
+                bool    sealed : 1;
             };
             uint32_t    flags = 0;
         };

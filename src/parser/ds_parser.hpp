@@ -65,6 +65,12 @@ extern int das_yydebug;
         CorM_CLONE  = (1<<1)
     };
 
+    enum {
+        OVERRIDE_NONE,
+        OVERRIDE_OVERRIDE,
+        OVERRIDE_SEALED,
+    };
+
     namespace das {
         extern ProgramPtr               g_Program;
         extern FileAccessPtr            g_Access;
@@ -91,6 +97,7 @@ extern int das_yydebug;
         bool                    init_via_move = false;
         bool                    init_via_clone = false;
         bool                    override = false;
+        bool                    sealed = false;
         bool                    isPrivate = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
@@ -113,7 +120,7 @@ extern int das_yydebug;
 
     extern Structure * g_thisStructure;
 
-#line 117 "ds_parser.hpp"
+#line 124 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -212,71 +219,72 @@ extern int das_yydebug;
     DAS_TVARIANT = 347,
     DAS_GENERATOR = 348,
     DAS_YIELD = 349,
-    ADDEQU = 350,
-    SUBEQU = 351,
-    DIVEQU = 352,
-    MULEQU = 353,
-    MODEQU = 354,
-    ANDEQU = 355,
-    OREQU = 356,
-    XOREQU = 357,
-    SHL = 358,
-    SHR = 359,
-    ADDADD = 360,
-    SUBSUB = 361,
-    LEEQU = 362,
-    SHLEQU = 363,
-    SHREQU = 364,
-    GREQU = 365,
-    EQUEQU = 366,
-    NOTEQU = 367,
-    RARROW = 368,
-    LARROW = 369,
-    QQ = 370,
-    QDOT = 371,
-    QBRA = 372,
-    LPIPE = 373,
-    LBPIPE = 374,
-    LAPIPE = 375,
-    LFPIPE = 376,
-    RPIPE = 377,
-    CLONEEQU = 378,
-    ROTL = 379,
-    ROTR = 380,
-    ROTLEQU = 381,
-    ROTREQU = 382,
-    MAPTO = 383,
-    COLCOL = 384,
-    ANDAND = 385,
-    OROR = 386,
-    XORXOR = 387,
-    ANDANDEQU = 388,
-    OROREQU = 389,
-    XORXOREQU = 390,
-    BRABRAB = 391,
-    BRACBRB = 392,
-    CBRCBRB = 393,
-    INTEGER = 394,
-    LONG_INTEGER = 395,
-    UNSIGNED_INTEGER = 396,
-    UNSIGNED_LONG_INTEGER = 397,
-    FLOAT = 398,
-    DOUBLE = 399,
-    NAME = 400,
-    BEGIN_STRING = 401,
-    STRING_CHARACTER = 402,
-    STRING_CHARACTER_ESC = 403,
-    END_STRING = 404,
-    BEGIN_STRING_EXPR = 405,
-    END_STRING_EXPR = 406,
-    END_OF_READ = 407,
-    UNARY_MINUS = 408,
-    UNARY_PLUS = 409,
-    PRE_INC = 410,
-    PRE_DEC = 411,
-    POST_INC = 412,
-    POST_DEC = 413,
-    DEREF = 414
+    DAS_SEALED = 350,
+    ADDEQU = 351,
+    SUBEQU = 352,
+    DIVEQU = 353,
+    MULEQU = 354,
+    MODEQU = 355,
+    ANDEQU = 356,
+    OREQU = 357,
+    XOREQU = 358,
+    SHL = 359,
+    SHR = 360,
+    ADDADD = 361,
+    SUBSUB = 362,
+    LEEQU = 363,
+    SHLEQU = 364,
+    SHREQU = 365,
+    GREQU = 366,
+    EQUEQU = 367,
+    NOTEQU = 368,
+    RARROW = 369,
+    LARROW = 370,
+    QQ = 371,
+    QDOT = 372,
+    QBRA = 373,
+    LPIPE = 374,
+    LBPIPE = 375,
+    LAPIPE = 376,
+    LFPIPE = 377,
+    RPIPE = 378,
+    CLONEEQU = 379,
+    ROTL = 380,
+    ROTR = 381,
+    ROTLEQU = 382,
+    ROTREQU = 383,
+    MAPTO = 384,
+    COLCOL = 385,
+    ANDAND = 386,
+    OROR = 387,
+    XORXOR = 388,
+    ANDANDEQU = 389,
+    OROREQU = 390,
+    XORXOREQU = 391,
+    BRABRAB = 392,
+    BRACBRB = 393,
+    CBRCBRB = 394,
+    INTEGER = 395,
+    LONG_INTEGER = 396,
+    UNSIGNED_INTEGER = 397,
+    UNSIGNED_LONG_INTEGER = 398,
+    FLOAT = 399,
+    DOUBLE = 400,
+    NAME = 401,
+    BEGIN_STRING = 402,
+    STRING_CHARACTER = 403,
+    STRING_CHARACTER_ESC = 404,
+    END_STRING = 405,
+    BEGIN_STRING_EXPR = 406,
+    END_STRING_EXPR = 407,
+    END_OF_READ = 408,
+    UNARY_MINUS = 409,
+    UNARY_PLUS = 410,
+    PRE_INC = 411,
+    PRE_DEC = 412,
+    POST_INC = 413,
+    POST_DEC = 414,
+    DEREF = 415
   };
 #endif
 
@@ -284,7 +292,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 95 "ds_parser.ypp"
+#line 102 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -313,7 +321,7 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 317 "ds_parser.hpp"
+#line 325 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

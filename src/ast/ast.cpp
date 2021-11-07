@@ -186,6 +186,7 @@ namespace das {
         cs->fields.reserve(fields.size());
         for ( auto & fd : fields ) {
             cs->fields.emplace_back(fd.name, fd.type, fd.init, fd.annotation, fd.moveSemantics, fd.at);
+            cs->fields.back().flags = fd.flags;
         }
         cs->at = at;
         cs->module = module;
