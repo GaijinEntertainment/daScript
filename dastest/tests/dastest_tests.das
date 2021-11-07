@@ -67,3 +67,37 @@ def failed_now_test(t: T?)
         panic("this panic should be skipped")
 
     equal(t, res, [[SuiteResult total=1, failed=1]])
+
+
+[test]
+def mixed_tests(t: T?)
+    var ctx <- file_ctx()
+
+    // 1 error
+    var res = test_func("exception test", ctx) <| @@(tt: T?)
+        var i: int?
+        *i = 0
+
+    // 1 success
+    res += test_func("empty test", ctx) <| @@(tt: T?)
+        pass
+
+    // 1 failed now
+    res += test_func("fail now test", ctx) <| @@(tt: T?)
+        tt->failNow()
+        panic("this panic should be skipped")
+
+    // 1 skipped
+    res += test_func("skipped test", ctx) <| @@(tt: T?)
+        tt->skip("skip now")
+        panic("this panic should be skipped")
+
+    // 1 failed
+    res += test_func("fail now test", ctx) <| @@(tt: T?)
+        tt->fail()
+
+    // 1 passed
+    res += test_func("success test", ctx) <| @@(tt: T?)
+        equal(tt, 1, 1)
+
+    equal(t, res, [[SuiteResult total=6, errors=1, failed=2, skipped=1, passed=2]])
