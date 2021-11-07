@@ -9,6 +9,8 @@
 #include "daScript/misc/string_writer.h"
 #include "daScript/misc/debug_break.h"
 
+#include <inttypes.h>
+
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
 namespace das
@@ -258,11 +260,51 @@ namespace das
     }
 
     float fast_to_float ( const char *str ) {
-        return str ? (float)atof(str) : 0.f;
+        return str ? float(atof(str)) : 0.0f;
     }
 
-    int fast_to_int ( const char *str ) {
-        return str ? atoi(str) : 0;
+    int32_t fast_to_int ( const char *str, bool hex ) {
+        if ( !str ) return 0;
+        uint32_t res;
+        if ( hex ) {
+            sscanf(str,"%" SCNx32,&res);
+        } else {
+            sscanf(str,"%" SCNd32,&res);
+        }
+        return res;
+    }
+
+    uint32_t fast_to_uint ( const char *str, bool hex ) {
+        if ( !str ) return 0;
+        uint32_t res;
+        if ( hex ) {
+            sscanf(str,"%" SCNx32,&res);
+        } else {
+            sscanf(str,"%" SCNu32,&res);
+        }
+        return res;
+    }
+
+    int64_t fast_to_int64 ( const char *str, bool hex ) {
+        if ( !str ) return 0;
+        int64_t res;
+        if ( hex ) {
+            sscanf(str,"%" SCNx64,&res);
+        } else {
+            sscanf(str,"%" SCNd64,&res);
+        }
+        return res;
+    }
+
+    uint64_t fast_to_uint64 ( const char *str, bool hex ) {
+        if ( !str ) return 0;
+        uint64_t res;
+        if ( hex ) {
+            sscanf(str,"%" SCNx64,&res);
+        } else {
+            sscanf(str,"%" SCNu64,&res);
+        }
+        return res;
     }
 
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * at ) {
@@ -669,8 +711,18 @@ namespace das
                 SideEffects::none, "string_to_float")->args({"str","context"});
             addExtern<DAS_BIND_FUN(string_to_double)>(*this, lib, "double",
                 SideEffects::none, "string_to_double")->args({"str","context"});
-            addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int",
-                SideEffects::none, "fast_to_int")->arg("value");
+            auto toi = addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int",
+                SideEffects::none, "fast_to_int")->args({"value","hex"});
+            toi->arguments[1]->init = make_smart<ExprConstBool>(false);
+            auto toui =addExtern<DAS_BIND_FUN(fast_to_uint)>(*this, lib, "to_uint",
+                SideEffects::none, "fast_to_uint")->args({"value","hex"});
+            toui->arguments[1]->init = make_smart<ExprConstBool>(false);
+            auto ti64 = addExtern<DAS_BIND_FUN(fast_to_int64)>(*this, lib, "to_int64",
+                SideEffects::none, "fast_to_int64")->args({"value","hex"});
+            ti64->arguments[1]->init = make_smart<ExprConstBool>(false);
+            auto toui64 = addExtern<DAS_BIND_FUN(fast_to_uint64)>(*this, lib, "to_uint64",
+                SideEffects::none, "fast_to_uint64")->args({"value","hex"});
+            toui64->arguments[1]->init = make_smart<ExprConstBool>(false);
             addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float",
                 SideEffects::none, "fast_to_float")->arg("value");
             addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
