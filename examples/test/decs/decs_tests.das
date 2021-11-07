@@ -27,6 +27,19 @@ def main
     test_strings()
     test_decs_macro()
 
+[decs(stage = update)]
+def nested_with_break_and_continue(var p: Particle)
+    p.pos.x += 13.                  // we don't call this one
+    while p.pos.x > 0.0             // it is a compilation only test for break and continue inside loops
+        p.pos.x -= 0.1
+        if (p.pos.x < 5.0)
+            break
+    while p.pos.x > 0.0
+        p.pos.x -= 1.
+        if (p.pos.x < 5.0)
+            continue
+        p.pos.x -= 0.1
+
 def test_query_nested_macro
     print("\n\nTEST NESTED QUERY\n")
     restart()
@@ -361,4 +374,3 @@ def test_create_delete
         delete_entity(d)
     commit()
     debug_dump()
-
