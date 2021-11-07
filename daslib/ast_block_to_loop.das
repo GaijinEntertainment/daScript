@@ -13,17 +13,12 @@ class B2LVisitor : AstVisitor
     failOnReturn : bool
     replaceReturnWithContinue : bool
     requireContinueCond : bool
+    loop_depth : array<int>
     def B2LVisitor(fOnR,rRetWC,rCC:bool)
         failOnReturn = fOnR
         replaceReturnWithContinue = rRetWC
         requireContinueCond = rCC
-    def override preVisitExprBlock(blk:smart_ptr<ExprBlock>) : void
-        if blk.blockFlags.isClosure
-            inClosure ++
-    def override visitExprBlock(blk:smart_ptr<ExprBlock>) : ExpressionPtr
-        if blk.blockFlags.isClosure
-            inClosure --
-        return blk
+        loop_depth |> push(0)
     def override visitExprReturn(expr:smart_ptr<ExprReturn>) : ExpressionPtr
         if inClosure==0 && inArchetype==0
             if failOnReturn
@@ -43,21 +38,42 @@ class B2LVisitor : AstVisitor
                     else
                         return <- new [[ExprContinue() at=expr.at]]
         return expr
+    def override preVisitExprFor(expr:smart_ptr<ExprFor>) : void
+        loop_depth |> back ++
+    def override visitExprFor(expr:smart_ptr<ExprFor>) : ExpressionPtr
+        loop_depth |> back --
+        return expr
+    def override preVisitExprWhile(expr:smart_ptr<ExprWhile>) : void
+        loop_depth |> back ++
+    def override visitExprWhile(expr:smart_ptr<ExprWhile>) : ExpressionPtr
+        loop_depth |> back --
+        return expr
+    def override preVisitExprBlock(blk:smart_ptr<ExprBlock>) : void
+        if blk.blockFlags.isClosure
+            inClosure ++
+            loop_depth |> push(0)
+    def override visitExprBlock(blk:smart_ptr<ExprBlock>) : ExpressionPtr
+        if blk.blockFlags.isClosure
+            inClosure --
+            loop_depth |> pop()
+        return blk
     def override preVisitExprCall(expr:smart_ptr<ExprCall>): void
         if expr.name=="for_each_archetype"
             inArchetype ++
+            loop_depth |> push(0)
     def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
         if expr.name=="for_each_archetype"
+            loop_depth |> pop()
             inArchetype --
         return expr
     def override visitExprBreak(expr:smart_ptr<ExprBreak>) : ExpressionPtr
-        if inClosure!=0 || inArchetype!=0
+        if inClosure!=0 || inArchetype!=0 || loop_depth|>back!=0
             return expr
-        return make_static_assert_false("break is not allowed inside this macros's block", expr.at)
+        return make_static_assert_false("break is not allowed inside this macros's block {loop_depth}", expr.at)
     def override visitExprContinue(expr:smart_ptr<ExprContinue>) : ExpressionPtr
-        if inClosure!=0 || inArchetype!=0
+        if inClosure!=0 || inArchetype!=0 || loop_depth|>back!=0
             return expr
-        return make_static_assert_false("continue is not allowed inside this macros's block", expr.at)
+        return make_static_assert_false("continue is not allowed inside this macros's block {loop_depth}", expr.at)
 
 [macro_function]
 def public convert_block_to_loop(var blk:smart_ptr<Expression>; failOnReturn,replaceReturnWithContinue,requireContinueCond:bool )

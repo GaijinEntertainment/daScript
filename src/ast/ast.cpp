@@ -504,6 +504,7 @@ namespace das {
         cfun->moreFlags = moreFlags;
         cfun->sideEffectFlags = sideEffectFlags;
         cfun->inferStack = inferStack;
+        cfun->classParent = classParent;
         return cfun;
     }
 

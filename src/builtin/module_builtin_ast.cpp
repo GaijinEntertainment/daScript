@@ -1188,6 +1188,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
             // addField<DAS_BIND_MANAGED_FIELD(useFunctions)>("useFunctions");
             // addField<DAS_BIND_MANAGED_FIELD(useGlobalVariables)>("useGlobalVariables");
+            addField<DAS_BIND_MANAGED_FIELD(module)>("classParent", "classParent");
             // use global v
             addFieldEx ( "flags", "flags",
                 offsetof(Function, flags), makeFunctionFlags() );

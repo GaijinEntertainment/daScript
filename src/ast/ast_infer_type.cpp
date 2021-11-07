@@ -2216,6 +2216,15 @@ namespace das {
                                     if ( program->addFunction(pFn) ) {
                                         auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                         if ( program->addFunction(pFnFin) ) {
+                                            if ( func && func->isClassMethod ) {
+                                                // lambda, captured in the class is a method of that class - for the purposes of 'private'
+                                                pFn->isClassMethod = true;
+                                                pFn->classParent = func->classParent;
+                                                DAS_ASSERT(pFn->classParent);
+                                                pFnFin->isClassMethod = true;
+                                                pFnFin->classParent = func->classParent;
+                                                DAS_ASSERT(pFnFin->classParent);
+                                            }
                                             reportAstChanged();
                                             auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at );
                                             // each ( [[ ]]] )
@@ -2323,6 +2332,15 @@ namespace das {
                                 if ( program->addFunction(pFn) ) {
                                     auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                     if ( program->addFunction(pFnFin) ) {
+                                        // lambda, captured in the class is a method of that class - for the purposes of 'private'
+                                        if ( func && func->isClassMethod ) {
+                                            pFn->isClassMethod = true;
+                                            pFn->classParent = func->classParent;
+                                            DAS_ASSERT(pFn->classParent);
+                                            pFnFin->isClassMethod = true;
+                                            pFnFin->classParent = func->classParent;
+                                            DAS_ASSERT(pFnFin->classParent);
+                                        }
                                         reportAstChanged();
                                         auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at );
                                         return ms;
@@ -4244,14 +4262,10 @@ namespace das {
             if ( expr->field && expr->field->privateField ) {
                 bool canLookup = false;
                 if ( func && func->isClassMethod ) {
-                    if  ( func->arguments.size() ) {
-                        auto selfT = func->arguments[0]->type;
-                        if ( selfT->baseType==Type::tStructure && selfT->structType ) {
-                            if ( selfT->isSameType(*expr->value->type,
-                                    RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::yes) ) {
-                                canLookup = true;
-                            }
-                        }
+                    TypeDecl selfT(func->classParent);
+                    if ( selfT.isSameType(*expr->value->type,
+                            RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::yes) ) {
+                        canLookup = true;
                     }
                 }
                 if ( !canLookup ) {

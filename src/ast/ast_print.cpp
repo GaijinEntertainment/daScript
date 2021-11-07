@@ -266,7 +266,7 @@ namespace das {
             if ( fn->shutdown ) { ss << "[finalize]\n"; }
             if ( fn->unsafeDeref ) { ss << "[unsafe_deref]\n"; }
             if ( fn->unsafeOperation ) { ss << "[unsafe_operation]\n"; }
-            if ( fn->isClassMethod ) { ss << "[class_method]\n"; }
+            if ( fn->isClassMethod ) { ss << "[class_method(" << fn->classParent->getMangledName() << ")]\n"; }
             if ( fn->generator ) { ss << "[GENERATOR]\n"; }
             logAnnotations(fn->annotations);
             ss << "def " << (fn->privateFunction ? "private " : "public ") << fn->name;

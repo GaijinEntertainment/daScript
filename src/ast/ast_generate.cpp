@@ -271,6 +271,11 @@ namespace das {
         fn->name = str->name;
         fn->at = fn->atDecl = str->at;
         fn->result = make_smart<TypeDecl>(str);
+        if ( str->isClass ) {
+            fn->isClassMethod = true;
+            fn->classParent = str;
+            DAS_ASSERT(fn->classParent);
+        }
         if ( str->macroInterface ) fn->macroFunction = true;
         auto block = make_smart<ExprBlock>();
         block->at = str->at;
@@ -417,6 +422,11 @@ namespace das {
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = ls->at;
         pFunc->name = "finalize";
+        if ( ls->isClass ) {
+            pFunc->isClassMethod = true;
+            pFunc->classParent = ls.get();
+            DAS_ASSERT(pFunc->classParent);
+        }
         if ( ls->macroInterface ) pFunc->macroFunction = true;
         auto fb = make_smart<ExprBlock>();
         fb->at = ls->at;
@@ -1577,6 +1587,8 @@ namespace das {
         // and done
         func->body = block;
         func->isClassMethod = true;
+        func->classParent = baseClass;
+        DAS_ASSERT(func->classParent);
         verifyGenerated(func->body);
     }
 
@@ -1588,6 +1600,9 @@ namespace das {
         func->atDecl = method->at;
         func->name = baseClass->name;
         func->result = make_smart<TypeDecl>(baseClass);
+        func->isClassMethod = true;
+        func->classParent = baseClass;
+        DAS_ASSERT(func->classParent);
         if ( baseClass->macroInterface ) func->macroFunction = true;
         auto block = make_smart<ExprBlock>();
         block->at = func->at;
@@ -1686,6 +1701,9 @@ namespace das {
         func->atDecl = baseClass->at;
         func->name = fname;
         func->result = make_smart<TypeDecl>(Type::tVoid);
+        func->isClassMethod = true;
+        func->classParent = baseClass;
+        DAS_ASSERT(func->classParent);
         if ( baseClass->macroInterface ) func->macroFunction = true;
         auto block = make_smart<ExprBlock>();
         block->at = func->at;

@@ -683,6 +683,7 @@ namespace das
         Module *            module = nullptr;
         das_set<Function *>     useFunctions;
         das_set<Variable *>     useGlobalVariables;
+        Structure *         classParent = nullptr;
         union {
             struct {
                 bool    builtIn : 1;
