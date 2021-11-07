@@ -70,6 +70,7 @@ struct SuiteFileCtx
     context: rtti::Context?
     uriPaths: bool = false
     indenting: string = ""
+    stackOnRecover: bool = true
 
 
 def private match_test_name(name: string; ctx: SuiteCtx)
@@ -188,10 +189,11 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
                 res.errors += 1
                 log::info("{context.indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)")
                 if !empty(context.context.exception)
-                    log::info("{context.indenting}{context.context.exception}")
+                    log::info("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
                 if !empty(context.context.last_exception)
-                    log::info("{context.indenting}{context.context.last_exception}")
-                *context.context |> stackwalk(context.context.exceptionAt)
+                    log::info("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
+                if context.stackOnRecover
+                    *context.context |> stackwalk(context.context.exceptionAt)
                 return
     if failed
         res.failed += 1
