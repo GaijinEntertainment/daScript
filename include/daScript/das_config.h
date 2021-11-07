@@ -70,3 +70,12 @@ using das_safe_set = std::set<K,C>;
 #ifndef DAS_DEBUGGER
   #define DAS_DEBUGGER  1
 #endif
+
+#ifndef DAS_BIND_EXTERNAL
+  #if defined(_WIN32) && defined(_WIN64)
+    #define DAS_BIND_EXTERNAL 1
+  #else
+    #define DAS_BIND_EXTERNAL 0
+  #endif
+#endif
+
