@@ -43,6 +43,12 @@ struct SuiteCtx
     uriPaths: bool = false
     testNames: array<string>
 
+struct SuiteFileCtx
+    context: smart_ptr<rtti::Context>
+    uriPaths: bool = false
+    indenting: string = ""
+
+
 def private match_test_name(name: string; ctx: SuiteCtx)
     if length(ctx.testNames) == 0
         return true
@@ -50,6 +56,7 @@ def private match_test_name(name: string; ctx: SuiteCtx)
         if name |> starts_with(match)
             return true
     return false
+
 
 def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
     var res: SuiteResult
@@ -77,6 +84,7 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                         res.errors += 1
                         log::error("Failed to compile {file_name}\n{serrors}", get_line_info())
                         return
+                    var fileCtx <- [[SuiteFileCtx context:=context, uriPaths=ctx.uriPaths]]
                     let mod = program |> get_this_module()
                     mod |> module_for_each_function <| $(f)
                         if f.hash == 0u
@@ -92,14 +100,26 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                                     if arg.name == "name"
                                         name = "{arg.sValue}"
                                 if match_test_name(name, ctx)
-                                    test_func(name, func, length(fn.arguments), *context, ctx.uriPaths, "", res)
+                                    test_any_func(name, func, length(fn.arguments), fileCtx, res)
                                 return
     access := null
     return res
 
 
-def test_func(name: string; func: function; args_num: int; var context: rtti::Context&; uri_paths: bool; indenting: string; var res: SuiteResult&)
-    log::info("{indenting}=== RUN '{name}'", get_line_info())
+def test_func(name: string; func: function<(t: T?): void>; var context: SuiteFileCtx): SuiteResult
+    var res: SuiteResult
+    test_any_func(name, func, 1, context, res)
+    return res
+
+
+def test_func(name: string; func: function<(): void>; var context: SuiteFileCtx): SuiteResult
+    var res: SuiteResult
+    test_any_func(name, func, 0, context, res)
+    return res
+
+
+def private test_any_func(name: string; func: function; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+    log::info("{context.indenting}=== RUN '{name}'", get_line_info())
     let beforeFailed = res.failed
     res.total += 1
     var dt = 0
@@ -110,7 +130,7 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
         let t0 = ref_time_ticks()
         try
             if args_num == 0
-                context |> invoke_in_context(func)
+                *context.context |> invoke_in_context(func)
                 dt = get_time_usec(t0)
             else
                 var testing = new T(name, t0)
@@ -125,34 +145,34 @@ def test_func(name: string; func: function; args_num: int; var context: rtti::Co
                     deliberateRecover = true
 
                 var selfCtx & = this_context()
-                testing.onRun <- @ <| [[&selfCtx, &context, &res]](name: string; f: function<(t: T?): void>)
+                testing.onRun <- @ <| [[&selfCtx, &context, &res]](test_name: string; f: function<(t: T?): void>)
+                    var subContext := context
+                    subContext.indenting = "\t" + subContext.indenting
                     unsafe
-                        selfCtx |> invoke_in_context("test_func", name, f, 1, context, uri_paths, indenting + "\t", res)
+                        selfCtx |> invoke_in_context("test_any_func", test_name, f, 1, subContext, res)
 
-                testing.onLog <- @ <| (msg: string; at: LineInfo)
-                    let uri = at.fileInfo == null ? "" : uri_paths ? "{file_name_to_uri(string(at.fileInfo.name))}#" : "{at.fileInfo.name}:"
-                    log::info("{indenting}{uri}{int(at.line)}: {msg}", get_line_info())
+                testing.onLog <- @ <| [[&context]](msg: string; at: LineInfo)
+                    let uri = at.fileInfo == null ? "" : context.uriPaths ? "{file_name_to_uri(string(at.fileInfo.name))}#" : "{at.fileInfo.name}:"
+                    log::info("{context.indenting}{uri}{int(at.line)}: {msg}", get_line_info())
 
-                context |> invoke_in_context(func, testing)
+                *context.context |> invoke_in_context(func, testing)
                 dt = get_time_usec(t0)
                 delete testing
         recover
             if !deliberateRecover
                 dt = get_time_usec(t0)
                 res.errors += 1
-                log::info("{indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
-                log::info("{indenting}{context.exception}", get_line_info())
-                context |> stackwalk(context.exceptionAt)
+                log::info("{context.indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+                log::info("{context.indenting}{context.context.exception}", get_line_info())
+                *context.context |> stackwalk(context.context.exceptionAt)
                 return
     if failed
         res.failed += 1
     elif skipped
         res.skipped += 1
-        log::info("{indenting}--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+        log::info("{context.indenting}--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
     else
         res.passed += 1
 
-    if beforeFailed < res.failed
-        log::info("{indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
-    else
-        log::info("{indenting}--- PASS '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
+    let status = beforeFailed < res.failed ? "FAIL" : "PASS"
+    log::info("{context.indenting}--- {status} '{name}' ({double(dt)/1000000.0lf}s)", get_line_info())
