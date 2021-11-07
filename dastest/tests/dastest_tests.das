@@ -3,11 +3,13 @@ require dastest/testing_boost
 require dastest/suite
 require debugapi
 
+
 def file_ctx()
     var ctx <- [[SuiteFileCtx uriPaths=true]]
     unsafe
         ctx.context = addr(this_context())
     return <- ctx
+
 
 [test]
 def test_deref(t: T?)
@@ -16,8 +18,9 @@ def test_deref(t: T?)
         var i: int?
         *i = 0
 
-    equal(t, res.errors, 1)
     equal(t, res.total, 1)
+    equal(t, res.errors, 1)
+
 
 [test]
 def test_division_by_zero(t: T?)
@@ -26,8 +29,8 @@ def test_division_by_zero(t: T?)
         var div = 0
         tt->log("{1 / div}")
 
-    equal(t, res.errors, 1)
     equal(t, res.total, 1)
+    equal(t, res.errors, 1)
 
 
 [test]

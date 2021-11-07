@@ -12,9 +12,6 @@ def sum_test(t: T?)
     var sum = 0
     for i in range(100000)
         sum += i
-    // print("inside `cool test` 2\n")
-    // var a: int?
-    // *a = 1
     equal(t, sum, 100000 * (100000 - 1) / 2)
     t->log("used time {t->getTimeSec()}")
 
@@ -22,8 +19,8 @@ def sum_test(t: T?)
 [test(name="sub tests")]
 def sub(t: T?)
     // warmup
-    t->run("sub1") <| @@(tt:T?)
-        tt->log("hello sub1")
+    t->run("sub test 1") <| @@(tt:T?)
+        tt->log("sub test message")
     // tear down
 
 
