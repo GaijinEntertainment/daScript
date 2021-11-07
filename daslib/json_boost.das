@@ -180,7 +180,7 @@ def JV(val: uint64): JsonValue?
 
 
 def JV(value): JsonValue?
-    static_if typeinfo(typename value) == "JVon::JsonValue?" || typeinfo(typename value) == "JVon::JsonValue? const"
+    static_if typeinfo(typename value) == "json::JsonValue?" || typeinfo(typename value) == "json::JsonValue? const"
         return value
     static_elif typeinfo(is_pointer value)
         return value == null ? null : _::JV(*value)
