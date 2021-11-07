@@ -722,9 +722,6 @@ namespace debugapi {
         if ( !fn ) context.throw_error_at(call->debugInfo, "can't pinvoke empty string");
         auto simFn = invCtx->findFunction(fn);
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find %s function", fn);
-        if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
-            context.throw_error_at(call->debugInfo, "pinvoke can't invoke private function %s", simFn->mangledName);
-        }
         invCtx->lock();
         vec4f res;
         invCtx->exception = nullptr;
@@ -749,9 +746,6 @@ namespace debugapi {
         if ( !fn.PTR ) context.throw_error_at(call->debugInfo, "pnvoke can't invoke null function");
         auto simFn = fn.PTR;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void *)simFn);
-        if ( simFn->debugInfo->flags & FuncInfo::flag_private ) {
-            context.throw_error_at(call->debugInfo, "pinvoke can't invoke private function %s", simFn->mangledName);
-        }
         invCtx->lock();
         vec4f res;
         invCtx->exception = nullptr;
