@@ -35,6 +35,20 @@ def operator +=(var a: SuiteResult; b: SuiteResult): void
     a.skipped += b.skipped
 
 
+def operator ==(a: SuiteResult; b: SuiteResult): bool
+    return (
+        a.passed == b.passed &&
+        a.failed == b.failed &&
+        a.total == b.total &&
+        a.errors == b.errors &&
+        a.skipped == b.skipped
+    )
+
+
+def operator !=(a: SuiteResult; b: SuiteResult): bool
+    return !(a == b)
+
+
 def SuiteResult(val: JsonValue?)
     let obj & = val as _object
     return [[SuiteResult
