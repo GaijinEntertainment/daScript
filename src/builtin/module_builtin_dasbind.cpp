@@ -54,12 +54,10 @@ namespace das {
 
     typedef vec4f ( * FastCallWrapper ) ( void * fn, vec4f * args );
 
-    __forceinline int64_t Ax ( vec4f x   ) { return v_extract_xi64(v_cast_vec4i(x)); }
     __forceinline vec4f   Rx ( int64_t x ) { return v_cast_vec4f(v_splatsi64(x)); }
-    __forceinline double  Ad ( vec4f x   ) { union { vec4f v; double t; } A; A.v = x; return A.t; }
 
-    #define AX(i)   Ax(args[i])
-    #define AD(i)   Ad(args[i])
+    #define AX(i)   (*(uint64_t *)(args+i))
+    #define AD(i)   (*(double *)(args+i))
 #include "x86_64_wrapper.inc"
     #undef  AX
     #undef  AD
