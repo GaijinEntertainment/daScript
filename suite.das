@@ -12,6 +12,7 @@ require fio
 require testing
 require uriparser
 
+
 struct SuiteResult
     passed: int // number of passed tests
     failed: int // number of failed tests
@@ -20,7 +21,13 @@ struct SuiteResult
     skipped: int // number of skipped tests
 
 
-def operator +=(var a: SuiteResult; b: SuiteResult)
+def operator +(var a: SuiteResult; b: SuiteResult): SuiteResult
+    var res := a
+    res += b
+    return res
+
+
+def operator +=(var a: SuiteResult; b: SuiteResult): void
     a.passed += b.passed
     a.failed += b.failed
     a.total += b.total
@@ -38,13 +45,15 @@ def SuiteResult(val: JsonValue?)
         skipped=int((obj?["skipped"] ?? JV(0lf)) as _number)
     ]]
 
+
 struct SuiteCtx
     dastestRoot: string
     uriPaths: bool = false
     testNames: array<string>
 
+
 struct SuiteFileCtx
-    context: smart_ptr<rtti::Context>
+    context: rtti::Context?
     uriPaths: bool = false
     indenting: string = ""
 
@@ -84,7 +93,9 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                         res.errors += 1
                         log::error("Failed to compile {file_name}\n{serrors}")
                         return
-                    var fileCtx <- [[SuiteFileCtx context:=context, uriPaths=ctx.uriPaths]]
+                    var fileCtx <- [[SuiteFileCtx uriPaths=ctx.uriPaths]]
+                    unsafe
+                        fileCtx.context = reinterpret<Context?> context
                     let mod = program |> get_this_module()
                     mod |> module_for_each_function <| $(f)
                         if f.hash == 0u
@@ -106,13 +117,13 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
     return res
 
 
-def test_func(name: string; func: function<(t: T?): void>; var context: SuiteFileCtx): SuiteResult
+def test_func(name: string; var context: SuiteFileCtx; func: function<(t: T?): void>): SuiteResult
     var res: SuiteResult
     test_any_func(name, func, 1, context, res)
     return res
 
 
-def test_func(name: string; func: function<(): void>; var context: SuiteFileCtx): SuiteResult
+def test_func(name: string; var context: SuiteFileCtx; func: function<(): void>): SuiteResult
     var res: SuiteResult
     test_any_func(name, func, 0, context, res)
     return res
