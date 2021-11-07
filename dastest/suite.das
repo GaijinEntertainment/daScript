@@ -152,8 +152,7 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
                         selfCtx |> invoke_in_context("test_any_func", test_name, f, 1, subContext, res)
 
                 testing.onLog <- @ <| [[&context]](msg: string; at: LineInfo)
-                    let uri = at.fileInfo == null ? "" : context.uriPaths ? "{file_name_to_uri(string(at.fileInfo.name))}#" : "{at.fileInfo.name}:"
-                    log::info("{context.indenting}{uri}{int(at.line)}: {msg}")
+                    log::info("{context.indenting}{file_info_hr(at, context.uriPaths)}: {msg}")
 
                 *context.context |> invoke_in_context(func, testing)
                 dt = get_time_usec(t0)
