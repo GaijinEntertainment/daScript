@@ -5,7 +5,7 @@ require debugapi
 
 
 def file_ctx()
-    var ctx <- [[SuiteFileCtx uriPaths=true]]
+    var ctx <- [[SuiteFileCtx uriPaths=true, stackOnRecover=false]]
     unsafe
         ctx.context = addr(this_context())
     return <- ctx
