@@ -1,4 +1,4 @@
-# DaScript testing framework
+# daScript testing framework
 
 ## Introduction
 
