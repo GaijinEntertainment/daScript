@@ -7,7 +7,15 @@
         {
             "type": "dascript",
             "request": "launch",
-            "name": "daScript: launch",
+            "name": "daScript: test selected",
+            "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${file} --uri-paths",
+            "cwd": "${workspaceFolder}",
+            "connectTimeout": 3,
+        },
+        {
+            "type": "dascript",
+            "request": "launch",
+            "name": "daScript: test all",
             "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${workspaceFolder}/tests --uri-paths",
             "cwd": "${workspaceFolder}",
             "connectTimeout": 3
