@@ -352,6 +352,7 @@
 %type <b>               kwd_let
 %type <b>               is_public_module
 %type <b>               optional_shared
+%type <b>               optional_sealed
 %type <i>               block_or_lambda
 %type <b>               optional_ref
 %type <b>               optional_public_or_private_module
@@ -2269,8 +2270,13 @@ optional_structure_parent
     |   ':' name_in_namespace[name]     { $$ = $name; }
     ;
 
+optional_sealed
+    :                   { $$ = false; }
+    |   DAS_SEALED      { $$ = true; }
+    ;
+
 structure_name
-    : NAME[name] optional_structure_parent[parent] {
+    : optional_sealed[sealed] NAME[name] optional_structure_parent[parent] {
         das_checkName(*$name,tokAt(@name));
         StructurePtr pStruct;
         if ( $parent ) {
@@ -2279,9 +2285,14 @@ structure_name
                 pStruct = structs.back()->clone();
                 pStruct->name = *$name;
                 pStruct->parent = structs.back().get();
+                if ( pStruct->parent->sealed ) {
+                    das_yyerror("can't derive from sealed class or structure "+*$parent,tokAt(@parent),
+                        CompilationError::invalid_override);
+                }
                 pStruct->annotations.clear();
                 pStruct->genCtor = false;
                 pStruct->macroInterface = pStruct->parent && pStruct->parent->macroInterface;
+
             } else if ( structs.size()==0 ) {
                 das_yyerror("parent structure not found "+*$parent,tokAt(@parent),
                     CompilationError::structure_not_found);
@@ -2295,6 +2306,7 @@ structure_name
         if ( !pStruct ) {
             pStruct = make_smart<Structure>(*$name);
         }
+        pStruct->sealed = $sealed;
         if ( !g_Program->addStructure(pStruct) ) {
             das_yyerror("structure is already defined "+*$name,tokAt(@name),
                 CompilationError::structure_already_declared);
