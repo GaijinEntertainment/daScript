@@ -7,7 +7,7 @@ require uriparser
 require fs
 require suite
 require log
-require json_boost
+require daslib/json_boost
 
 
 let jsonResultPrefix = "##dastest##\n"
