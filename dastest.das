@@ -7,7 +7,9 @@ require uriparser
 require fs
 require suite
 require log
+require debugapi
 require daslib/json_boost
+require daslib/jobque_boost
 
 
 let jsonResultPrefix = "##dastest##\n"
@@ -49,6 +51,10 @@ def create_suite_ctx(args: array<string>; uri_paths: bool)
     collect_tests_names(args, ctx.testNames)
     return <- ctx
 
+def private get_float_arg(args: array<string>; name: string; def_val: float): float
+    let idx = find_index(args, name)
+    return idx >= 0 && idx + 1 < length(args) ? float(args[idx + 1]) : def_val
+
 
 [export]
 def main()
@@ -61,13 +67,23 @@ def main()
         log::info_raw("{jsonResultPrefix}{write_json(JV(res))}")
         return
 
+    var res: SuiteResult
     let totalTime = ref_time_ticks()
+
+    let timeout = args |> get_float_arg("--timeout", 600.) // 10min
+    if timeout > 0.
+        unsafe
+            var mainCtx & = this_context()
+            new_thread <| @[[&res, &mainCtx]]
+                fio::sleep(uint(timeout * 1000.))
+                unsafe
+                    mainCtx |> invoke_in_context("timeout_tests", res, totalTime, timeout)
+
     var inputPaths: array<string>
     collect_input_paths(args, inputPaths)
     var files: array<string>
     collect_files(inputPaths, files)
 
-    var res: SuiteResult
     let isolatedMode = args |> has_value("--isolated-mode")
     if !isolatedMode
         let ctx <- create_suite_ctx(args, uriPaths)
@@ -126,7 +142,18 @@ def main()
                     res.errors += 1
                     log::red("`{uri}` execution was interrupted, crashed for example")
                     log::info("to get more information, run the test manually\n> {singleTest}")
+    finish_tests(res, totalTime)
 
+
+[export]
+def timeout_tests(var res: SuiteResult; totalTime: int64; timeout: float)
+    res.errors += 1
+    res.total += 1
+    log::error("Test timed out after {timeout}s")
+    finish_tests(res, totalTime)
+
+
+def finish_tests(res: SuiteResult; totalTime: int64)
     let resCode = res.failed + res.errors
     let totalDt = get_time_usec(totalTime)
     log::info("\n{res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped")
