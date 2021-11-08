@@ -513,6 +513,17 @@ namespace das
         return -1;
     }
 
+    int builtin_find_first_char_of2 ( const char * str, int Ch, int start, Context * context ) {
+        uint32_t strlen = stringLengthSafe ( *context, str );
+        start = clamp_int((start < 0) ? (strlen + start) : start, 0, strlen);
+        for ( uint32_t o=start; o!=strlen; ++o ) {
+            if ( str[o]==Ch ) {
+                return o;
+            }
+        }
+        return -1;
+    }
+
     char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context ) {
         if ( !bytes.size ) return nullptr;
         return context->stringHeap->allocateString(bytes.data, bytes.size);
@@ -677,6 +688,8 @@ namespace das
                 SideEffects::none, "builtin_string_find2")->args({"str","substr"});
             addExtern<DAS_BIND_FUN(builtin_find_first_char_of)>(*this, lib, "find",
                 SideEffects::none, "builtin_find_first_char_of")->args({"str","substr","context"});
+            addExtern<DAS_BIND_FUN(builtin_find_first_char_of2)>(*this, lib, "find",
+                SideEffects::none, "builtin_find_first_char_of2")->args({"str","substr", "start", "context"});
             addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length",
                 SideEffects::none, "builtin_string_length")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse",
