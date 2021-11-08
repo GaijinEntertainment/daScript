@@ -8,17 +8,19 @@
             "type": "dascript",
             "request": "launch",
             "name": "daScript: test selected",
-            "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${file} --uri-paths",
+            "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${file} --uri-paths --color",
             "cwd": "${workspaceFolder}",
             "connectTimeout": 3,
+            "console": "externalTerminal",
         },
         {
             "type": "dascript",
             "request": "launch",
             "name": "daScript: test all",
-            "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${workspaceFolder}/tests --uri-paths",
+            "program": "${config:dascript.compiler} ${workspaceFolder}/dastest.das -- --test ${workspaceFolder}/tests --uri-paths --color",
             "cwd": "${workspaceFolder}",
-            "connectTimeout": 3
+            "connectTimeout": 3,
+            "console": "externalTerminal",
         },
         {
             "type": "dascript",

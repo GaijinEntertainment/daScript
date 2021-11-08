@@ -32,7 +32,7 @@ def private collect_files(input_paths: array<string>; var files: array<string>)
             if !cache |> key_exists(path)
                 let fStat = stat(path)
                 if !fStat.is_valid || !fStat.is_reg
-                    log::error("Invalid file path {path}")
+                    log::error("Invalid file path '{path}'")
                     continue
                 cache[path] = null
                 files |> push <| path
@@ -53,6 +53,7 @@ def create_suite_ctx(args: array<string>; uri_paths: bool)
 def main()
     var args <- get_command_line_arguments()
     let uriPaths = args |> has_value("--uri-paths")
+    log::useTtyColors = args |> has_value("--color")
     let runIdx = args |> find_index("--run")
     if runIdx != -1
         let res = suite::test_file(args[runIdx + 1], create_suite_ctx(args, uriPaths))
@@ -76,14 +77,14 @@ def main()
             let fileDt = get_time_usec(fileTime)
             if status.errors + status.failed == 0
                 if status.total > 0
-                    log::info("PASS {uri} ({double(fileDt)/1000000.0lf}s)")
+                    log::green("PASS {uri} ({double(fileDt)/1000000.0lf}s)")
             else
-                log::info("FAIL {uri} ({double(fileDt)/1000000.0lf}s)")
+                log::red("FAIL {uri} ({double(fileDt)/1000000.0lf}s)")
             res += status
     else
         for file in files
             let uri = uriPaths ? file_name_to_uri(file) : file
-            let singleTest = "{args[0]} {args[1]} -- --run {file}"
+            let singleTest = "{args[0]} {args[1]} -- --run {file} {log::useTtyColors ? " --color" : ""}"
             var exitCode = 0
             var parsedResult = false
             var status: SuiteResult
@@ -114,21 +115,24 @@ def main()
             let fileDt = get_time_usec(fileTime)
             res += status
             if exitCode == 0 && parsedResult && status.failed + status.errors == 0
-                log::info("PASS {uri} ({double(fileDt)/1000000.0lf}s)")
+                log::green("PASS {uri} ({double(fileDt)/1000000.0lf}s)")
             else
-                log::info("FAIL {uri} ({double(fileDt)/1000000.0lf}s)")
+                log::red("FAIL {uri} ({double(fileDt)/1000000.0lf}s)")
                 if exitCode != 0
-                    log::info("exit status {exitCode}")
+                    log::red("exit status {exitCode}")
                 if !parsedResult
                     res.total += 1
                     res.errors += 1
-                    log::error("`{uri}` execution was interrupted, crashed for example")
+                    log::red("`{uri}` execution was interrupted, crashed for example")
                     log::info("to get more information, run the test manually\n> {singleTest}")
 
     let resCode = res.failed + res.errors
     let totalDt = get_time_usec(totalTime)
     log::info("\n{res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped")
-    log::info("{resCode == 0 ? "SUCCESS!" : "FAILED!"} ({double(totalDt)/1000000.0lf}s)")
+    if resCode == 0
+        log::green("SUCCESS! ({double(totalDt)/1000000.0lf}s)")
+    else
+        log::red("FAILED! ({double(totalDt)/1000000.0lf}s)")
     unsafe
         fio::exit(resCode)
 

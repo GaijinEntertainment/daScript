@@ -12,6 +12,7 @@ Inspired by [Golang testing framework](https://pkg.go.dev/testing), this framewo
 - `--test`: Path to the folder with scripts or single script to test
 - `--test-names <namePrefix>`: Run top-level tests matching "namePrefix", such as "namePrefix1"
 - `--uri-paths`: Print uri paths instead of file paths (vscode friendly)
+- `--color`: Print colored output
 
 #### Internal arguments
 - `--isolated-mode`: Run tests in isolated processes, useful to catch crashes
