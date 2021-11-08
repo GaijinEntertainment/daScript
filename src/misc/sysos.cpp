@@ -2,7 +2,7 @@
 
 #include "daScript/misc/sysos.h"
 
-#if defined(_WIN32)
+#if defined(_MSC_VER) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
     #define WIN32_LEAN_AND_MEAN
     #include <windows.h>
     namespace das {

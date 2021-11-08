@@ -25,7 +25,7 @@ namespace das {
     typedef uint64_t (* CdeclCallFunction )( ... );
 #endif
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
     void * getFunction ( const char * fun, const char * lib ) {
         void * libhandle = nullptr;
         libhandle = getLibraryHandle(lib);
@@ -58,8 +58,8 @@ namespace das {
 
     __forceinline vec4f   Rx ( int64_t x ) { return v_cast_vec4f(v_splatsi64(x)); }
 
-    #define AX(i)   (*(uint64_t *)(args+i))
-    #define AD(i)   (*(double *)(args+i))
+    #define AX(i)   (*(uint64_t *)(args+(i)))
+    #define AD(i)   (*(double *)(args+(i)))
 #include "x86_64_wrapper.inc"
     #undef  AX
     #undef  AD
