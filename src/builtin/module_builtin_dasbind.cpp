@@ -5,6 +5,7 @@
 #include "daScript/ast/ast_handle.h"
 
 #include "daScript/simulate/simulate_visit_op.h"
+#include "daScript/simulate/aot_builtin_dasbind.h"
 
 #include "daScript/misc/sysos.h"
 
@@ -138,6 +139,7 @@ namespace das {
             }
             fun->userScenario = true;
             fun->exports = true;
+            fun->noAot = true;      // TODO: generate custom C++ to invoke the call directly
             return true;
         }
         virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & ) {
@@ -277,7 +279,11 @@ namespace das {
             addExtern<DAS_BIND_FUN(safe_pass_string)>(*this, lib, "safe_pass_string",
                 SideEffects::none, "safe_pass_string")
                     ->args({"string"});
-        };
+        }
+        virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
+            tw << "#include \"daScript/simulate/aot_builtin_dasbind.h\"\n";
+            return ModuleAotType::cpp;
+        }
     };
 }
 
