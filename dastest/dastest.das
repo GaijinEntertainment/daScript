@@ -43,7 +43,7 @@ def private collect_files(input_paths: array<string>; var files: array<string>)
 
 def create_suite_ctx(args: array<string>; uri_paths: bool)
     var ctx: SuiteCtx
-    ctx.dastestRoot = dir_name(args[1]) |> join_path <| "dastest"
+    ctx.dastestRoot = dir_name(args[1])
     ctx.uriPaths = uri_paths
     collect_tests_names(args, ctx.testNames)
     return <- ctx
