@@ -192,7 +192,7 @@ namespace das {
 #if !DAS_BIND_EXTERNAL
         virtual bool apply ( const FunctionPtr & fun, ModuleGroup &, const AnnotationArgumentList &, string & err )  override {
             err = "daScript is configured with extern functions disabled";
-            return nullptr;
+            return false;
         }
 #else
         virtual bool apply ( const FunctionPtr & fun, ModuleGroup &, const AnnotationArgumentList &, string & err )  override {
