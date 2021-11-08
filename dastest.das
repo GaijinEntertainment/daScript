@@ -4,9 +4,9 @@ require fio
 require rtti
 require strings
 require uriparser
-require dastest/fs
-require dastest/suite
-require dastest/log
+require fs
+require suite
+require log
 require daslib/json_boost
 
 

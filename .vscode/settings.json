@@ -1,5 +1,0 @@
-{
-    "dascript.project.fileAccessRoots": {
-        "dastest": "${workspaceFolder}/dastest"
-    }
-}
