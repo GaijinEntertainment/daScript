@@ -9,6 +9,7 @@
 
 #include "daScript/misc/sysos.h"
 
+#include <mutex>
 namespace das {
 
 #if DAS_BIND_EXTERNAL
@@ -63,37 +64,99 @@ namespace das {
     #undef  AX
     #undef  AD
 
+    struct BoundFunction {
+        void *  fun;
+        string  name;
+        string  library;
+    };
+
+    das_hash_map<uint64_t,BoundFunction>    g_dasBind;
+    mutex                                   g_dasBindMutex;
+
+    uint64_t lateBind ( const string & name, const string & library, void * fun ) {
+        lock_guard<mutex> guard(g_dasBindMutex);
+        uint64_t hn = hash_blockz64((const uint8_t *)name.c_str());
+        uint64_t hl = hash_blockz64((const uint8_t *)library.c_str());
+        uint64_t hf = hn ^ hl;
+        // printf("%llx %llx %llx %s : %s -> %p\n", hn, hl, hf, name.c_str(), library.c_str(), fun);
+        auto & bf = g_dasBind[hf];
+        if ( !bf.name.empty() ) {
+            DAS_VERIFY(bf.name==name && bf.library==library);
+        } else {
+            bf.name = name;
+            bf.library = library;
+            bf.fun = fun;
+        }
+        return hf;
+    }
+
+    template <typename TT>
+    void withBind ( uint64_t index, TT && block ) {
+        lock_guard<mutex> guard(g_dasBindMutex);
+        auto it = g_dasBind.find(index);
+        if ( it!=g_dasBind.end() ) {
+            block(&it->second);
+        } else {
+            block(nullptr);
+        }
+    }
+
     struct SimNode_ExtCall : SimNode {
-        SimNode_ExtCall ( const LineInfo & a, const char * _library, const char * _name, FastCallWrapper wrp, void * fun ) : SimNode(a) {
-            strncpy(library, _library, sizeof(library));
-            strncpy(name,_name,sizeof(name));
+        SimNode_ExtCall ( const LineInfo & a, uint64_t hc, FastCallWrapper wrp, void * fun ) : SimNode(a) {
+            code = hc;
             wrapper = wrp;
             fnptr = fun;
         }
         SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(ExtCall);
-            V_ARG(library);
-            V_ARG(name);
+            withBind(code,[&]( const BoundFunction * bf ){
+                if ( bf ) {
+                    auto Library = bf->library.c_str();
+                    auto Name = bf->name.c_str();
+                    V_ARG(Library);
+                    V_ARG(Name);
+                } else {
+                    V_ARG(code);
+                }
+            });
             V_END();
         }
         vec4f eval ( Context & context ) {
             context.result = wrapper(fnptr, context.abiArg);
             return context.result;
         }
-        char library[32];
-        char name[64];
+        uint64_t code = 0;
         FastCallWrapper wrapper = nullptr;
         void * fnptr = nullptr;
     };
 
     struct SimNode_ExtCallOpenGL : SimNode_ExtCall {
-        SimNode_ExtCallOpenGL ( const LineInfo & a, const char * _library, const char * _name, FastCallWrapper wrp, void * fun ) :
-            SimNode_ExtCall(a,_library,_name,wrp,fun) {
+        SimNode_ExtCallOpenGL ( const LineInfo & a, uint64_t hc, FastCallWrapper wrp, void * fun ) :
+            SimNode_ExtCall(a,hc,wrp,fun) {
+        }
+        void bind ( Context & context ) {
+            string crash_and_burn;
+            withBind(code,[&](BoundFunction * bf){
+                if ( bf ) {
+                    if ( !bf->fun ) {
+                        fnptr = openGetFunctionAddress(bf->name.c_str());
+                        if ( fnptr ) {
+                            bf->fun = fnptr;
+                        } else {
+                            crash_and_burn = "failed to bind " + bf->name;
+                        }
+                    } else {
+                        fnptr = bf->fun;
+                    }
+                } else {
+                    crash_and_burn = "internal error. missing BoundFunction";
+                }
+            });
+            if ( !crash_and_burn.empty() ) context.throw_error_ex("%s",crash_and_burn.c_str());
         }
         vec4f eval ( Context & context ) {
-            if ( !fnptr ) fnptr = openGetFunctionAddress(name);
-            if ( !fnptr ) context.throw_error_ex("function %s : %s failed to bind", name, library);
+            if ( !fnptr ) bind(context);
             context.result = wrapper(fnptr, context.abiArg);
             return context.result;
         }
@@ -138,7 +201,6 @@ namespace das {
                 return nullptr;
             }
             fun->userScenario = true;
-            fun->exports = true;
             fun->noAot = true;      // TODO: generate custom C++ to invoke the call directly
             return true;
         }
@@ -239,23 +301,26 @@ namespace das {
                 }
             }
             void * funptr = nullptr;
-            if ( api=="opengl" ) {
-                funptr = openGetFunctionAddress(fn_name.c_str());
+            if ( !late ) {
+                if ( api=="opengl" ) {
+                    funptr = openGetFunctionAddress(fn_name.c_str());
+                }
+                if ( !funptr ) {
+                    funptr = getFunctionAddress(libhandle, fn_name.c_str());
+                }
+                if ( !funptr && !late ) {
+                    err = "can't find function " + fn_name + " in library " + library;
+                    return nullptr;
+                }
             }
-            if ( !funptr ) {
-                funptr = getFunctionAddress(libhandle, fn_name.c_str());
-            }
-            if ( !funptr && !late ) {
-                err = "can't find function " + fn_name + " in library " + library;
-                return nullptr;
-            }
+            uint64_t code = lateBind(fn_name, library, funptr);
             auto wrp = getWrapper(fun);
             if ( api=="stdcall") {
-                return context->code->makeNode<SimNode_ExtCall>(fun->at,library.c_str(),fn_name.c_str(),wrp,funptr);
+                return context->code->makeNode<SimNode_ExtCall>(fun->at,code,wrp,funptr);
             } else if ( api=="cdecl" ) {
-                return context->code->makeNode<SimNode_ExtCall>(fun->at,library.c_str(),fn_name.c_str(),wrp,funptr);
+                return context->code->makeNode<SimNode_ExtCall>(fun->at,code,wrp,funptr);
             } else if ( api=="opengl" ) {
-                return context->code->makeNode<SimNode_ExtCallOpenGL>(fun->at,library.c_str(),fn_name.c_str(),wrp,funptr);
+                return context->code->makeNode<SimNode_ExtCallOpenGL>(fun->at,code,wrp,funptr);
             } else {
                 err = "unsupported api " + api;
                 return nullptr;

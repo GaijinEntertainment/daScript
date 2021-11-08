@@ -29,6 +29,19 @@ namespace das
         return offset_basis;
     }
 
+    __forceinline uint64_t hash_blockz64(const uint8_t * block) {
+        const uint64_t fnv_prime = 1099511628211ul;
+        uint64_t fnv_bias = 14695981039346656037ul;
+        uint64_t offset_basis = fnv_bias;
+        for (; *block; block++) {
+            offset_basis = ( offset_basis ^ *block ) * fnv_prime;
+        }
+        if (offset_basis <= HASH_KILLED32) {
+            return fnv_prime;
+        }
+        return offset_basis;
+    }
+
     __forceinline uint32_t hash_block32(const uint8_t * block, uint32_t size) {
         const uint32_t fnv_prime = 16777619;
         const uint32_t fnv_bias = 2166136261;
