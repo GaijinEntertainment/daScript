@@ -159,5 +159,6 @@ namespace das {
         const TBlock<void, char *, char*, const TypeInfo, uint32_t> & block, Context * context, LineInfoArg * lineinfo);
 
     LineInfo getCurrentLineInfo( LineInfoArg * lineInfo );
+    void builtin_expected_errors ( ProgramPtr prog, const TBlock<void,CompilationError,int> & block, Context * context, LineInfoArg * lineInfo );
 }
 

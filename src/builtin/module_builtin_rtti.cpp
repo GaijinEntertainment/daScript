@@ -1042,6 +1042,12 @@ namespace das {
         }
     }
 
+    void builtin_expected_errors ( ProgramPtr prog, const TBlock<void,CompilationError,int> & block, Context * context, LineInfoArg * lineInfo ) {
+        for ( auto er : prog->expectErrors ) {
+            das_invoke<void>::invoke<CompilationError,int>(context,lineInfo,block,er.first,er.second);
+        }
+    }
+
     Func builtin_SimFunction_by_MNH ( Context & context, uint32_t MNH ) {
         Func fn;
         fn.PTR = context.fnByMangledName(MNH);
@@ -1181,6 +1187,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
                 SideEffects::modifyExternal, "rtti_builtin_compile_file")
                     ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_expected_errors)>(*this, lib, "for_each_expected_error",
+                SideEffects::modifyExternal, "builtin_expected_errors")
+                    ->args({"program","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_builtin_simulate)>(*this, lib, "simulate",
                 SideEffects::modifyExternal, "rtti_builtin_simulate")
                     ->args({"program","block","context","line"});

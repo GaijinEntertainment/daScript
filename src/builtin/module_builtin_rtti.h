@@ -24,6 +24,8 @@ DAS_BASE_BIND_ENUM(das::RefMatters,   RefMatters,   no, yes)
 DAS_BASE_BIND_ENUM(das::ConstMatters, ConstMatters, no, yes)
 DAS_BASE_BIND_ENUM(das::TemporaryMatters, TemporaryMatters, no, yes)
 
+DAS_BIND_ENUM_CAST(das::CompilationError)
+
 MAKE_EXTERNAL_TYPE_FACTORY(FileInfo, das::FileInfo)
 MAKE_EXTERNAL_TYPE_FACTORY(LineInfo, das::LineInfo)
 MAKE_EXTERNAL_TYPE_FACTORY(Annotation, das::Annotation)

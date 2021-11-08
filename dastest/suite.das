@@ -92,17 +92,35 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
         using <| $(var cop:CodeOfPolicies#)
             cop.aot_module = true
             compile_file(file_name, access, addr(mg), cop) <| $(ok, program, errors)
+                var expectedErrors : table<CompilationError; int>
+                if program != null
+                    program |> for_each_expected_error <| $ ( err, count )
+                        expectedErrors[err] = count
+                var failed = !ok
                 if !ok
-                    res.total += 1
-                    res.errors += 1
                     log::error("Failed to compile {file_name}\n{errors}")
                     if program != null
+                        failed = false
                         for err in program.errors
-                            log::error("{describe(err.at)}: {int(err.cerr)}: {err.what}")
-                            if !empty(err.extra)
-                                log::info("{err.extra}")
-                            if !empty(err.fixme)
-                                log::info("{err.fixme}")
+                            var count = --expectedErrors[err.cerr]
+                            if count<0
+                                log::error("{describe(err.at)}: {int(err.cerr)}: {err.what}")
+                                if !empty(err.extra)
+                                    log::info("{err.extra}")
+                                if !empty(err.fixme)
+                                    log::info("{err.fixme}")
+                                failed = true
+                for errC,errN in keys(expectedErrors),values(expectedErrors)
+                    if errN > 0
+                        log::error("expect {int(errC)}:{errN} // {errC}")
+                        log::info("Expect declaration count is greater than the actual errors reported")
+                        failed = true
+                if !ok || failed
+                    res.total += 1
+                    if failed
+                        res.errors += 1
+                    else
+                        res.passed += 1
                     return
                 simulate(program) <| $ (sok; context; serrors)
                     if !sok
