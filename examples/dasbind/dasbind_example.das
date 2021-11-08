@@ -16,6 +16,5 @@ def main
     SetConsoleTitle("hello, console title\n")
     ExitProcess(1234)
 
-options log
 
 
