@@ -1,8 +1,13 @@
 
 require dastest/testing_boost
 require dastest/suite
+require dastest/log
 require debugapi
 
+[init]
+def setup()
+    var args <- get_command_line_arguments()
+    log::useTtyColors = args |> has_value("--color")
 
 def file_ctx()
     var ctx <- [[SuiteFileCtx uriPaths=true, stackOnRecover=false]]

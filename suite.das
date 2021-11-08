@@ -187,11 +187,11 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
             if !deliberateRecover
                 dt = get_time_usec(t0)
                 res.errors += 1
-                log::info("{context.indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)")
+                log::red("{context.indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)")
                 if !empty(context.context.exception)
-                    log::info("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
+                    log::red("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
                 if !empty(context.context.last_exception)
-                    log::info("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
+                    log::red("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
                 if context.stackOnRecover
                     *context.context |> stackwalk(context.context.exceptionAt)
                 return
@@ -203,5 +203,7 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
     else
         res.passed += 1
 
-    let status = beforeFailed < res.failed ? "FAIL" : "PASS"
-    log::info("{context.indenting}--- {status} '{name}' ({double(dt)/1000000.0lf}s)")
+    if beforeFailed < res.failed
+        log::red("{context.indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)")
+    else
+        log::green("{context.indenting}--- PASS '{name}' ({double(dt)/1000000.0lf}s)")
