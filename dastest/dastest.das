@@ -45,6 +45,7 @@ def create_suite_ctx(args: array<string>; uri_paths: bool)
     var ctx: SuiteCtx
     ctx.dastestRoot = dir_name(args[1])
     ctx.uriPaths = uri_paths
+    ctx.verbose = args |> has_value("--verbose")
     collect_tests_names(args, ctx.testNames)
     return <- ctx
 

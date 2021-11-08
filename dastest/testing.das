@@ -8,6 +8,7 @@ require strings
 class T
     name: string
     startTick: int64
+    verbose: bool
     onLog: lambda<(msg: string; at: LineInfo): void>
     onFail: lambda<(now: bool): void>
     onSkipNow: lambda<(): void>
@@ -16,9 +17,10 @@ class T
     failed: bool = false
     skipped: bool = false
 
-    def T(name_: string; start_tick: int64)
+    def T(name_: string; start_tick: int64; verbose_:bool)
         name = name_
         startTick = start_tick
+        verbose = verbose_
 
     def const failNow()
         onFail |> invoke(true)
