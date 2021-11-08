@@ -4,10 +4,10 @@ require fio
 require rtti
 require strings
 require uriparser
-require dastest/fs
-require dastest/suite
-require dastest/log
-require daslib/json_boost
+require fs
+require suite
+require log
+require json_boost
 
 
 let jsonResultPrefix = "##dastest##\n"
