@@ -64,6 +64,7 @@ struct SuiteCtx
     dastestRoot: string
     uriPaths: bool = false
     testNames: array<string>
+    verbose: bool = false
 
 
 struct SuiteFileCtx
@@ -71,6 +72,7 @@ struct SuiteFileCtx
     uriPaths: bool = false
     indenting: string = ""
     stackOnRecover: bool = true
+    verbose:bool = false
 
 
 def private match_test_name(name: string; ctx: SuiteCtx)
@@ -108,7 +110,7 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                         res.errors += 1
                         log::error("Failed to compile {file_name}\n{serrors}")
                         return
-                    var fileCtx <- [[SuiteFileCtx uriPaths=ctx.uriPaths]]
+                    var fileCtx <- [[SuiteFileCtx uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
                     unsafe
                         fileCtx.context = reinterpret<Context?> context
                     let mod = program |> get_this_module()
@@ -159,7 +161,7 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
                 *context.context |> invoke_in_context(func)
                 dt = get_time_usec(t0)
             else
-                var testing = new T(name, t0)
+                var testing = new T(name, t0, context.verbose)
                 testing.onFail <- @ <| [[&testing, &failed, &deliberateRecover]](now: bool)
                     testing.failed = true
                     failed = true
