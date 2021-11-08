@@ -1070,7 +1070,7 @@ namespace das {
             lineAt = info ? pp->line : nullptr;
             sp += info ? info->stackSize : pp->stackSize;
             depth --;
-            if ( depth==0 ) return *lineAt;
+            if ( depth==0 ) return lineAt ? *lineAt : LineInfo();
         }
         return LineInfo();
     #else
