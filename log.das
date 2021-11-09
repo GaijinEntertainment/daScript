@@ -65,6 +65,8 @@ def yellow_str(str: string)
 def blue_str(str: string)
     return useTtyColors ? "\x1B[34m{str}\x1B[0m\n" : str
 
+def time_dt_hr(dt: int): string
+    return "({double(dt)/1000000.0lf}s)"
 
 def init_log()
     init_log(get_command_line_arguments())

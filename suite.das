@@ -234,7 +234,7 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
             if !deliberateRecover
                 dt = get_time_usec(t0)
                 res.errors += 1
-                log::red("{context.indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)")
+                log::red("{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
                 if !empty(context.context.exception)
                     log::red("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
                 if !empty(context.context.last_exception)
@@ -246,11 +246,11 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
         res.failed += 1
     elif skipped
         res.skipped += 1
-        log::info("{context.indenting}--- SKIPPED '{name}' ({double(dt)/1000000.0lf}s)")
+        log::info("{context.indenting}--- SKIPPED '{name}' {time_dt_hr(dt)}")
     else
         res.passed += 1
 
     if beforeFailed < res.failed
-        log::red("{context.indenting}--- FAIL '{name}' ({double(dt)/1000000.0lf}s)")
+        log::red("{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
     else
-        log::green("{context.indenting}--- PASS '{name}' ({double(dt)/1000000.0lf}s)")
+        log::green("{context.indenting}--- PASS '{name}' {time_dt_hr(dt)}")

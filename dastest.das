@@ -79,9 +79,9 @@ def main()
             let fileDt = get_time_usec(fileTime)
             if status.errors + status.failed == 0
                 if status.total > 0
-                    log::green("PASS {uri} ({double(fileDt)/1000000.0lf}s)")
+                    log::green("PASS {uri} {time_dt_hr(fileDt)}")
             else
-                log::red("FAIL {uri} ({double(fileDt)/1000000.0lf}s)")
+                log::red("FAIL {uri} {time_dt_hr(fileDt)}")
             res += status
     else
         for file in files
@@ -117,9 +117,9 @@ def main()
             let fileDt = get_time_usec(fileTime)
             res += status
             if exitCode == 0 && parsedResult && status.failed + status.errors == 0
-                log::green("PASS {uri} ({double(fileDt)/1000000.0lf}s)")
+                log::green("PASS {uri} {time_dt_hr(fileDt)}")
             else
-                log::red("FAIL {uri} ({double(fileDt)/1000000.0lf}s)")
+                log::red("FAIL {uri} {time_dt_hr(fileDt)}")
                 if exitCode != 0
                     log::red("exit status {exitCode}")
                 if !parsedResult
@@ -143,9 +143,9 @@ def finish_tests(res: SuiteResult; totalTime: int64)
     let totalDt = get_time_usec(totalTime)
     log::info("\n{res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped")
     if resCode == 0
-        log::green("SUCCESS! ({double(totalDt)/1000000.0lf}s)")
+        log::green("SUCCESS! {time_dt_hr(totalDt)}")
     else
-        log::red("FAILED! ({double(totalDt)/1000000.0lf}s)")
+        log::red("FAILED! {time_dt_hr(totalDt)}")
     unsafe
         fio::exit(resCode)
 
