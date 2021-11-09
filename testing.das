@@ -70,11 +70,15 @@ class T
         return double(getTimeUsec())/1000000.0lf
 
 
-def equal(t: T?; a; b; msg = "")
-    if !(a == b)
-        t->errorAt("{!empty(msg) ? msg : "values differ"}\n\texpected: {a}\n\tgot: {b}", get_line_info(1))
+def equal(t: T?; a; b; msg = ""): bool
+    if a == b
+        return true
+    t->errorAt("{!empty(msg) ? msg : "values differ"}\n\texpected: {a}\n\tgot: {b}", get_line_info(1))
+    return false
 
 
-def success(t: T?; a; msg = "")
-    if !a
-        t->errorAt(!empty(msg) ? msg : "expected success, got failure", get_line_info(1))
+def success(t: T?; a; msg = ""): bool
+    if a
+        return true
+    t->errorAt(!empty(msg) ? msg : "expected success, got failure", get_line_info(1))
+    return false
