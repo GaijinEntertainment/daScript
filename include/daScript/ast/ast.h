@@ -1238,12 +1238,10 @@ namespace das
             };
             uint32_t    flags = 0;
         };
-    public:
         das_map<CompilationError,int>   expectErrors;
-    public:
         AnnotationArgumentList      options;
-    public:
         CodeOfPolicies              policies;
+        vector<tuple<Module *,string,string,bool,LineInfo>> allRequireDecl;
     };
 
     // module parsing routines

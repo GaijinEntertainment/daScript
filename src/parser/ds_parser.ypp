@@ -649,6 +649,7 @@ require_module
     :   require_module_name[name]  is_public_module[pub] {
         auto info = g_Access->getModuleInfo(*$name, g_FileAccessStack.back()->name);
         if ( auto mod = g_Program->addModule(info.moduleName) ) {
+            g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,"",$pub,tokAt(@name)));
             g_Program->thisModule->addDependency(mod, $pub);
             if ( !info.importName.empty() ) {
                 auto ita = das_module_alias.find(info.importName);
@@ -662,6 +663,7 @@ require_module
                 }
             }
         } else {
+            g_Program->allRequireDecl.push_back(make_tuple((Module *)nullptr,*$name,"",$pub,tokAt(@name)));
             das_yyerror("required module not found " + *$name,tokAt(@name),
                 CompilationError::module_not_found);
         }
@@ -670,6 +672,7 @@ require_module
     |   require_module_name[name] DAS_AS NAME[modalias] is_public_module[pub] {
         auto info = g_Access->getModuleInfo(*$name, g_FileAccessStack.back()->name);
         if ( auto mod = g_Program->addModule(info.moduleName) ) {
+            g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,*$modalias,$pub,tokAt(@name)));
             g_Program->thisModule->addDependency(mod, $pub);
             auto ita = das_module_alias.find(*$modalias);
             if ( ita !=das_module_alias.end() ) {
@@ -681,6 +684,7 @@ require_module
                 das_module_alias[*$modalias] = info.moduleName;
             }
         } else {
+            g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,*$modalias,$pub,tokAt(@name)));
             das_yyerror("required module not found " + *$name,tokAt(@name),
                 CompilationError::module_not_found);
         }

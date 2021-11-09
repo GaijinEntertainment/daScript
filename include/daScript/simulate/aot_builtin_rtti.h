@@ -160,5 +160,7 @@ namespace das {
 
     LineInfo getCurrentLineInfo( LineInfoArg * lineInfo );
     void builtin_expected_errors ( ProgramPtr prog, const TBlock<void,CompilationError,int> & block, Context * context, LineInfoArg * lineInfo );
+    void builtin_list_require ( ProgramPtr prog, const TBlock<void,Module *,TTemporary<const char *>,TTemporary<const char *>,bool,const LineInfo &> & block,
+        Context * context, LineInfoArg * lineInfo );
 }
 

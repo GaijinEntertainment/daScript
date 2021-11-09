@@ -1056,6 +1056,15 @@ namespace das {
         }
     }
 
+    void builtin_list_require ( ProgramPtr prog, const TBlock<void,Module *,TTemporary<const char *>,TTemporary<const char *>,bool,const LineInfo &> & block,
+            Context * context, LineInfoArg * lineInfo ) {
+        for ( auto & allR : prog->allRequireDecl ) {
+            das_invoke<void>::invoke<Module *,const char *,const char *,bool,const LineInfo &>(context,lineInfo,block,
+                get<0>(allR),get<1>(allR).c_str(),get<2>(allR).c_str(),get<3>(allR),get<4>(allR));
+        }
+    }
+
+
     Func builtin_SimFunction_by_MNH ( Context & context, uint32_t MNH ) {
         Func fn;
         fn.PTR = context.fnByMangledName(MNH);
@@ -1197,6 +1206,9 @@ namespace das {
                     ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
             addExtern<DAS_BIND_FUN(builtin_expected_errors)>(*this, lib, "for_each_expected_error",
                 SideEffects::modifyExternal, "builtin_expected_errors")
+                    ->args({"program","block","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_list_require)>(*this, lib, "for_each_require_declaration",
+                SideEffects::modifyExternal, "builtin_list_require")
                     ->args({"program","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_builtin_simulate)>(*this, lib, "simulate",
                 SideEffects::modifyExternal, "rtti_builtin_simulate")
