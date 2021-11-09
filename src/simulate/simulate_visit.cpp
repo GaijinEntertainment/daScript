@@ -159,6 +159,14 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_Jit::visit ( SimVisitor & vis ) {
+        uint64_t fptr = (uint64_t) func;
+        V_BEGIN();
+        V_OP(Jit);
+        V_ARG(fptr);
+        V_END();
+    }
+
     SimNode * SimNode_NOP::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(NOP);

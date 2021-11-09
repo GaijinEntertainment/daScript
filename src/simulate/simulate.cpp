@@ -103,6 +103,12 @@ namespace das
         return cast<char *>::to(eval(context));
     }
 
+    vec4f SimNode_Jit::eval ( Context & context ) {
+        auto result = func(&context, context.abiArg, context.abiCMRES);
+        context.result = result;
+        return result;
+    }
+
     vec4f SimNode_NOP::eval ( Context & ) {
         return v_zero();
     }

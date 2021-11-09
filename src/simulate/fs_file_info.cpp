@@ -5,6 +5,7 @@
 #include "daScript/ast/ast.h"
 
 #define DASLIB_MODULE_NAME  "daslib"
+#define DASTEST_MODULE_NAME "dastest"
 
 namespace das {
 #if !DAS_NO_FILEIO
@@ -77,6 +78,11 @@ namespace das {
             if ( ert!=extraRoots.end() ) {
                 info.moduleName = mod_name;
                 info.fileName = ert->second + "/" + mod_name + ".das";
+                return info;
+            }
+            if ( top==DASTEST_MODULE_NAME ) {
+                info.moduleName = mod_name;
+                info.fileName = getDasRoot() + "/" + DASTEST_MODULE_NAME + "/" + info.moduleName + ".das";
                 return info;
             }
         }

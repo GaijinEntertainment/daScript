@@ -82,6 +82,7 @@ namespace das
                 bool    aot : 1;
                 bool    fastcall : 1;
                 bool    builtin : 1;
+                bool    jit : 1;
             };
         };
     };
@@ -104,6 +105,7 @@ namespace das
         virtual bool rtti_node_isBlock() const { return false; }
         virtual bool rtti_node_isInstrument() const { return false; }
         virtual bool rtti_node_isInstrumentFunction() const { return false; }
+        virtual bool rtti_node_isJit() const { return false; }
     protected:
         virtual ~SimNode() {}
     };

@@ -281,6 +281,13 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeSimFunctionFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "SimFunctionFlags";
+        ft->argNames = { "aot", "fastcall", "builtin", "jit" };
+        return ft;
+    }
+
     struct SimFunctionAnnotation : ManagedStructureAnnotation<SimFunction,false> {
         SimFunctionAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("SimFunction", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -288,6 +295,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(debugInfo)>("debugInfo");
             addField<DAS_BIND_MANAGED_FIELD(stackSize)>("stackSize");
             addField<DAS_BIND_MANAGED_FIELD(mangledNameHash)>("mangledNameHash");
+            addFieldEx ( "flags", "flags", offsetof(SimFunction, flags), makeSimFunctionFlags() );
         }
     };
 

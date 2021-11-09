@@ -73,6 +73,9 @@ class T
 def equal(t: T?; a; b; msg = "")
     if !(a == b)
         t->errorAt("{!empty(msg) ? msg : "values differ"}\n\texpected: {a}\n\tgot: {b}", get_line_info(1))
+        return false
+    else
+        return true
 
 
 def success(t: T?; a; msg = "")
