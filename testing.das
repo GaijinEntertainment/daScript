@@ -12,7 +12,7 @@ class T
     onLog: lambda<(msg: string; at: LineInfo): void>
     onFail: lambda<(now: bool): void>
     onSkipNow: lambda<(): void>
-    onRun: lambda<(name: string; fn: function<(t: T?): void>): void>
+    onRun: lambda<(name: string; fn: lambda<(t: T?): void>): void>
 
     failed: bool = false
     skipped: bool = false
@@ -60,7 +60,7 @@ class T
         logAt(msg, at)
         skipNow()
 
-    def const run(sub_name: string; func: function<(t: T?): void>)
+    def const run(sub_name: string; func: lambda<(t: T?): void>)
         onRun |> invoke(sub_name, func)
 
     def const getTimeUsec(): int

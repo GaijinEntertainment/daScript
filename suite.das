@@ -173,7 +173,7 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                                     if arg.name == "name"
                                         name = "{arg.sValue}"
                                 if match_test_name(name, ctx)
-                                    test_any_func(name, func, length(fn.arguments), fileCtx, res)
+                                    test_any(name, func, length(fn.arguments), fileCtx, res)
                                 return
     access := null
     return res
@@ -181,17 +181,32 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
 
 def test_func(name: string; var context: SuiteFileCtx; func: function<(t: T?): void>): SuiteResult
     var res: SuiteResult
-    test_any_func(name, func, 1, context, res)
+    test_any(name, func, 1, context, res)
     return res
 
 
 def test_func(name: string; var context: SuiteFileCtx; func: function<(): void>): SuiteResult
     var res: SuiteResult
-    test_any_func(name, func, 0, context, res)
+    test_any(name, func, 0, context, res)
     return res
 
 
-def private test_any_func(name: string; func: function; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+def test_func(name: string; var context: SuiteFileCtx; func: lambda<(t: T?): void>): SuiteResult
+    var res: SuiteResult
+    test_any(name, func, 1, context, res)
+    return res
+
+
+def test_func(name: string; var context: SuiteFileCtx; func: lambda<(): void>): SuiteResult
+    var res: SuiteResult
+    test_any(name, func, 0, context, res)
+    return res
+
+[export]
+def private test_any_lambda(name: string; func: lambda<(t: T?): void>; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+    test_any(name, func, args_num, context, res)
+
+def private test_any(name: string; func; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
     log::info("{context.indenting}=== RUN '{name}'")
     let beforeFailed = res.failed
     res.total += 1
@@ -218,11 +233,11 @@ def private test_any_func(name: string; func: function; args_num: int; var conte
                     deliberateRecover = true
 
                 var selfCtx & = this_context()
-                testing.onRun <- @ <| [[&selfCtx, &context, &res]](test_name: string; f: function<(t: T?): void>)
+                testing.onRun <- @ <| [[&selfCtx, &context, &res]](test_name: string; f: lambda<(t: T?): void>)
                     var subContext := context
                     subContext.indenting = "\t" + subContext.indenting
                     unsafe
-                        selfCtx |> invoke_in_context("test_any_func", test_name, f, 1, subContext, res)
+                        selfCtx |> invoke_in_context("test_any_lambda", test_name, f, 1, subContext, res)
 
                 testing.onLog <- @ <| [[&context]](msg: string; at: LineInfo)
                     log::info("{context.indenting}{file_info_hr(at, context.uriPaths)}: {msg}")
