@@ -73,7 +73,18 @@ class T
 def equal(t: T?; a; b; msg = ""): bool
     if a == b
         return true
-    t->errorAt("{!empty(msg) ? msg : "values differ"}\n\texpected: {a}\n\tgot: {b}", get_line_info(1))
+    t->errorAt(!empty(msg) ? msg : "values differ", get_line_info(1))
+    t->errorAt("\texpected: {a}", get_line_info(1))
+    t->errorAt("\tgot: {b}", get_line_info(1))
+    return false
+
+
+def strictEqual(t: T?; a; b; msg = ""): bool
+    if a == b
+        return true
+    t->errorAt(!empty(msg) ? msg : "values differ", get_line_info(1))
+    t->errorAt("\texpected: {a}", get_line_info(1))
+    t->fatalAt("\tgot: {b}", get_line_info(1))
     return false
 
 
