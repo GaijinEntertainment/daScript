@@ -97,7 +97,9 @@ namespace  das {
     void addFunctionNumericWithMod(Module & mod, const ModuleLibrary & lib) {
         addFunctionNumeric<TT>(mod, lib);
         //                                     policy       ret   arg1 arg2    name
-        mod.addFunction( make_smart<BuiltInFn<Sim_Mod<TT>, TT,   TT,  TT>  >("%",      lib, "Mod") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Mod<TT>, TT,   TT,  TT>     >("%",      lib, "Mod") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_SetMod<TT>,  void, TT&, TT> >("%=",     lib, "SetMod")
+                        ->setSideEffects(SideEffects::modifyArgument) );
     }
 
     // vector-scalar combinations
