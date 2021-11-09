@@ -473,7 +473,6 @@ namespace das {
         pFunc->generated = true;
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
-        pFunc->privateFunction = true;
         auto fb = make_smart<ExprBlock>();
         fb->at = block->at;
         // fb->list.push_back(genComment("delete this lambda\n"));
