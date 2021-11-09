@@ -7,7 +7,7 @@ require uriparser
 
 
 let verbose = false
-let uriPaths = true
+let uriPaths = false
 
 var useTtyColors = false
 

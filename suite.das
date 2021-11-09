@@ -31,7 +31,7 @@ def private collect_tests_names(args: array<string>; var names: array<string>)
 
 
 def SuiteCtx(args: array<string>): SuiteCtx
-    var ctx: SuiteCtx
+    var ctx <- SuiteCtx()
     let at = get_line_info()
     ctx.dastestRoot = dir_name(at.fileInfo != null ? string(at.fileInfo.name) : args[1])
     ctx.verbose = args |> has_value("--verbose")
@@ -49,7 +49,12 @@ struct SuiteFileCtx
 
 
 def createSuiteFileCtx()
-    var ctx <- [[SuiteFileCtx uriPaths=true, stackOnRecover=false]]
+    return <- SuiteFileCtx(get_command_line_arguments())
+
+
+def SuiteFileCtx(args: array<string>)
+    var ctx <- SuiteFileCtx()
+    ctx.uriPaths = args |> has_value("--uri-paths")
     unsafe
         ctx.context = addr(this_context())
     return <- ctx
