@@ -77,6 +77,11 @@ def equal(t: T?; a; b; msg = "")
     else
         return true
 
+def strictEqual(t: T?; a; b; msg = ""): bool
+    if a == b
+        return true
+    t->fatalAt("{!empty(msg) ? msg : "values differ"}\n\texpected: {a}\n\tgot: {b}", get_line_info(1))
+    return false
 
 def success(t: T?; a; msg = "")
     if !a
