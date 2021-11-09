@@ -67,12 +67,39 @@ struct SuiteCtx
     verbose: bool = false
 
 
+def createSuiteCtx(): SuiteCtx
+    return <- SuiteCtx(get_command_line_arguments())
+
+
+def private collect_tests_names(args: array<string>; var names: array<string>)
+    for i in range(length(args) - 1)
+        if args[i] == "--test-names"
+            names |> push <| args[i + 1]
+
+
+def SuiteCtx(args: array<string>): SuiteCtx
+    var ctx: SuiteCtx
+    let at = get_line_info()
+    ctx.dastestRoot = dir_name(at.fileInfo != null ? string(at.fileInfo.name) : args[1])
+    ctx.verbose = args |> has_value("--verbose")
+    ctx.uriPaths = args |> has_value("--uri-paths")
+    collect_tests_names(args, ctx.testNames)
+    return <- ctx
+
+
 struct SuiteFileCtx
     context: rtti::Context?
     uriPaths: bool = false
     indenting: string = ""
     stackOnRecover: bool = true
     verbose:bool = false
+
+
+def createSuiteFileCtx()
+    var ctx <- [[SuiteFileCtx uriPaths=true, stackOnRecover=false]]
+    unsafe
+        ctx.context = addr(this_context())
+    return <- ctx
 
 
 def private match_test_name(name: string; ctx: SuiteCtx)

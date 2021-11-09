@@ -64,3 +64,11 @@ def yellow_str(str: string)
     return useTtyColors ? "\x1B[33m{str}\x1B[0m\n" : str
 def blue_str(str: string)
     return useTtyColors ? "\x1B[34m{str}\x1B[0m\n" : str
+
+
+def init_log()
+    init_log(get_command_line_arguments())
+
+
+def init_log(args: array<string>)
+    log::useTtyColors = args |> has_value("--color")

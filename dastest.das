@@ -21,12 +21,6 @@ def private collect_input_paths(args: array<string>; var paths: array<string>)
             paths |> push <| args[i + 1]
 
 
-def private collect_tests_names(args: array<string>; var names: array<string>)
-    for i in range(length(args) - 1)
-        if args[i] == "--test-names"
-            names |> push <| args[i + 1]
-
-
 def private collect_files(input_paths: array<string>; var files: array<string>)
     var cache: table<string; void?>
     for path in input_paths
@@ -43,14 +37,6 @@ def private collect_files(input_paths: array<string>; var files: array<string>)
     delete cache
 
 
-def create_suite_ctx(args: array<string>; uri_paths: bool)
-    var ctx: SuiteCtx
-    ctx.dastestRoot = dir_name(args[1])
-    ctx.uriPaths = uri_paths
-    ctx.verbose = args |> has_value("--verbose")
-    collect_tests_names(args, ctx.testNames)
-    return <- ctx
-
 def private get_float_arg(args: array<string>; name: string; def_val: float): float
     let idx = find_index(args, name)
     return idx >= 0 && idx + 1 < length(args) ? float(args[idx + 1]) : def_val
@@ -59,11 +45,10 @@ def private get_float_arg(args: array<string>; name: string; def_val: float): fl
 [export]
 def main()
     var args <- get_command_line_arguments()
-    let uriPaths = args |> has_value("--uri-paths")
-    log::useTtyColors = args |> has_value("--color")
+    log::init_log(args)
     let runIdx = args |> find_index("--run")
     if runIdx != -1
-        let res = suite::test_file(args[runIdx + 1], create_suite_ctx(args, uriPaths))
+        let res = suite::test_file(args[runIdx + 1], SuiteCtx(args))
         log::info_raw("{jsonResultPrefix}{write_json(JV(res))}")
         return
 
@@ -86,7 +71,7 @@ def main()
 
     let isolatedMode = args |> has_value("--isolated-mode")
     if !isolatedMode
-        let ctx <- create_suite_ctx(args, uriPaths)
+        let ctx <- SuiteCtx(args)
         for file in files
             let uri = uriPaths ? file_name_to_uri(file) : file
             let fileTime = ref_time_ticks()
