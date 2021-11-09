@@ -1562,7 +1562,12 @@ namespace das {
             if ( isLocalVec(argT) ) {
                 ss << "(vec4f)";
             }
-            ss << "das_auto_cast<" << describeCppType(that->type, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
+            if ( that->type->isRef() ) {
+                ss << "das_auto_cast_ref<";
+            } else {
+                ss << "das_auto_cast<";
+            }
+            ss << describeCppType(that->type, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
         }
         virtual void preVisitRight ( ExprOp3 * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
@@ -1571,7 +1576,12 @@ namespace das {
             if ( isLocalVec(argT) ) {
                 ss << "(vec4f)";
             }
-            ss << "das_auto_cast<" << describeCppType(that->type, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
+            if ( that->type->isRef() ) {
+                ss << "das_auto_cast_ref<";
+            } else {
+                ss << "das_auto_cast<";
+            }
+            ss << describeCppType(that->type, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
         }
         virtual ExpressionPtr visit ( ExprOp3 * that ) override {
             ss << ")";
@@ -1588,7 +1598,11 @@ namespace das {
                 if ( expr->moveSemantics ) {
                     ss << "das_auto_cast_move<";
                 } else {
-                    ss << "das_auto_cast<";
+                    if ( retT->isRef() ) {
+                        ss << "das_auto_cast_ref<";
+                    } else {
+                        ss << "das_auto_cast<";
+                    }
                 }
                 ss << describeCppType(retT, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
             }

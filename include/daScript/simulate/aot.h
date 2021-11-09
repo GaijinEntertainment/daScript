@@ -49,6 +49,18 @@ namespace das {
     };
 
     template <typename TT>
+    struct das_auto_cast_ref {
+        template <typename QQ>
+        __forceinline static TT & cast ( QQ & expr ) {
+            return expr;
+        }
+        template <typename QQ>
+        __forceinline static const TT & cast ( const QQ & expr ) {
+            return expr;
+        }
+    };
+
+    template <typename TT>
     struct das_auto_cast_move {
         template <typename QQ>
         __forceinline static TT cast ( QQ && expr ) {
