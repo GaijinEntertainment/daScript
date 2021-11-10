@@ -160,13 +160,30 @@ def test_func(name: string; var context: SuiteFileCtx; func: lambda<(): void>): 
     test_any(name, func, 0, context, res)
     return res
 
+
 [export]
 def private test_any_func(name: string; func: function; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
     test_any(name, func, args_num, context, res)
 
+
 [export]
 def private test_any_lambda(name: string; func: lambda; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
     test_any(name, func, args_num, context, res)
+
+
+[export]
+def private sub_test_any_func(name: string; func: function; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+    var subContext := context
+    subContext.indenting = "\t" + subContext.indenting
+    test_any(name, func, args_num, subContext, res)
+
+
+[export]
+def private sub_test_any_lambda(name: string; func: lambda; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+    var subContext := context
+    subContext.indenting = "\t" + subContext.indenting
+    test_any(name, func, args_num, subContext, res)
+
 
 def private test_any(name: string; func; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
     log::info("{context.indenting}=== RUN '{name}'")
@@ -196,13 +213,11 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
 
                 var selfCtx & = this_context()
                 testing.onRun <- @ <| [[&selfCtx, &context, &res]](test_name: string; f: RunT)
-                    var subContext := context
-                    subContext.indenting = "\t" + subContext.indenting
                     unsafe
                         if f is func1
-                            selfCtx |> invoke_in_context("test_any_func", test_name, f as func1, 1, subContext, res)
+                            selfCtx |> invoke_in_context("sub_test_any_func", test_name, f as func1, 1, context, res)
                         if f is lmd1
-                            selfCtx |> invoke_in_context("test_any_lambda", test_name, f as lmd1, 1, subContext, res)
+                            selfCtx |> invoke_in_context("sub_test_any_lambda", test_name, f as lmd1, 1, context, res)
 
                 testing.onLog <- @ <| [[&context]](msg: string; at: LineInfo)
                     log::info("{context.indenting}{file_info_hr(at, context.uriPaths)}: {msg}")
