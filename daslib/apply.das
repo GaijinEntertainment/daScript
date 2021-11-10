@@ -33,6 +33,8 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         var fldT <- clone_type(fld._type)
         if stype.flags.constant
             fldT.flags |= TypeDeclFlags constant
+        if !fldT.isRefType
+            fldT.flags |= TypeDeclFlags ref
         emplace(argT.argTypes, fldT)
         argT.firstType <- new [[TypeDecl() baseType=Type tVoid,at=at]]
         argT.flags = TypeDeclFlags constant
