@@ -56,7 +56,7 @@ def test_create_update_remove( t: T?)
         query(migr) <| $ ( pos:float3; color:float4 )
             panic("somehwow did not remove")
 
-
+[test]
 def test_create_delete( t: T?)
     restart()
     create_entity <| @ ( eid, cmp )
@@ -84,8 +84,9 @@ def test_create_delete( t: T?)
     t->run("verify delete") <| @@ ( t : T? )
         var total = 0
         query <| $ ( name:string )
-            equal ( t, name, "entity_once" )
+            if name!="entity0" && name!="entity_once"
+                t->fatal("deleted something else {name}")
             total ++
-        equal(t, total, 1)
+        equal(t, total, 2)
 
 
