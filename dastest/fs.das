@@ -53,7 +53,10 @@ def fix_path(path: string): string
     return path |> trim_path() |> file_name_to_uri() |> normalize_uri() |> uri_to_file_name()
 
 
-def scan_dir(path: string; var cache: table<string; void?>; var res: array<string>; suffix = ".das")
+def scan_dir(path: string; var cache: table<string; void?>; var res: array<string>; suffix = ".das"): bool
+    let dirStat = stat(path)
+    if !dirStat.is_dir
+        return false
     fio::dir(path) <| $(n)
         if n == "." || n == ".."
             return
@@ -66,3 +69,4 @@ def scan_dir(path: string; var cache: table<string; void?>; var res: array<strin
         elif fStat.is_reg && f |> ends_with(suffix) && !cache |> key_exists(f)
             cache[f] = null
             res |> push(f)
+    return true

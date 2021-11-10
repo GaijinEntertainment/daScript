@@ -21,20 +21,19 @@ def private collect_input_paths(args: array<string>; var paths: array<string>)
             paths |> push <| args[i + 1]
 
 
-def private collect_files(input_paths: array<string>; var files: array<string>)
+def private collect_files(input_paths: array<string>; var files: array<string>): bool
     var cache: table<string; void?>
     for path in input_paths
         if path |> ends_with(".das")
             if !cache |> key_exists(path)
-                let fStat = stat(path)
-                if !fStat.is_valid || !fStat.is_reg
-                    log::error("Invalid file path '{path}'")
-                    continue
                 cache[path] = null
                 files |> push <| path
         else
-            fs::scan_dir(path, cache, files, ".das")
+            if !fs::scan_dir(path, cache, files, ".das")
+                log::error("Unable to scan given path '{path}'")
+                return false
     delete cache
+    return true
 
 
 def private get_float_arg(args: array<string>; name: string; def_val: float): float
@@ -67,7 +66,10 @@ def main()
     var inputPaths: array<string>
     collect_input_paths(args, inputPaths)
     var files: array<string>
-    collect_files(inputPaths, files)
+    if !collect_files(inputPaths, files)
+        unsafe
+            fio::exit(1)
+        return
 
     let isolatedMode = args |> has_value("--isolated-mode")
     if !isolatedMode
