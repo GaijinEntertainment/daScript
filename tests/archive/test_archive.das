@@ -10,14 +10,14 @@ def test_save_and_load_variant ( t:T? )
     // save
     var reference = [[auto [[FooBar a=13.]]; [[FooBar b="hello"]]  ]]
     var data <- mem_archive_save(reference)
-    equal(t, reference[0] as a, 13.)
-    equal(t, reference[1] as b, "hello")
+    t |> equal( reference[0] as a, 13.)
+    t |> equal( reference[1] as b, "hello")
     // load
     var test : FooBar[2]
     data |> mem_archive_load(test)
     delete data
-    equal(t, test[0] as a, 13.)
-    equal(t, test[1] as b, "hello")
+    t |> equal( test[0] as a, 13.)
+    t |> equal( test[1] as b, "hello")
 
 [test]
 def test_save_and_load_mem_table ( t:T? )
@@ -31,9 +31,9 @@ def test_save_and_load_mem_table ( t:T? )
     var test : table<string;int>
     data |> mem_archive_load(test)
     delete data
-    equal(t, length(test), length(reference))
+    t |> equal( length(test), length(reference))
     for k in keys(reference)
-        equal(t, reference[k], test?[k] ?? -100500)
+        t |> equal( reference[k], test?[k] ?? -100500)
 
 [test]
 def test_save_and_load_mem_array ( t:T? )
@@ -44,9 +44,9 @@ def test_save_and_load_mem_array ( t:T? )
     var test : array<int>
     data |> mem_archive_load(test)
     delete data
-    equal(t, length(test), length(reference))
+    t |> equal( length(test), length(reference))
     for i,j in test,reference
-        equal(t, i, j)
+        t |> equal( i, j)
 
 [test]
 def test_save_and_load_mem_dim ( t:T? )
@@ -58,7 +58,7 @@ def test_save_and_load_mem_dim ( t:T? )
     data |> mem_archive_load(test)
     delete data
     for i,j in test,range(5)
-        equal(t, i, j+1)
+        t |> equal( i, j+1)
 
 struct Foo
     a : float
@@ -69,56 +69,56 @@ def test_save_and_load_struct ( t:T? )
     // save
     var reference = [[Foo a=13.,b="hello"]]
     var data <- mem_archive_save(reference)
-    equal(t, reference.a, 13.)
-    equal(t, reference.b, "hello")
+    t |> equal( reference.a, 13.)
+    t |> equal( reference.b, "hello")
     // load
     var test : Foo
     data |> mem_archive_load(test)
     delete data
-    equal(t, test.a, 13.)
-    equal(t, test.b, "hello")
+    t |> equal( test.a, 13.)
+    t |> equal( test.b, "hello")
 
 [test]
 def test_save_and_load_tuple ( t:T? )
     // save
     var reference = [[auto 13.,"hello"]]
     var data <- mem_archive_save(reference)
-    equal(t, reference._0, 13.)
-    equal(t, reference._1, "hello")
+    t |> equal( reference._0, 13.)
+    t |> equal( reference._1, "hello")
     // load
     var test : tuple<float;string>
     data |> mem_archive_load(test)
     delete data
-    equal(t, test._0, 13.)
-    equal(t, test._1, "hello")
+    t |> equal( test._0, 13.)
+    t |> equal( test._1, "hello")
 
 [test]
 def test_save_and_load_mem_archive ( t:T? )
     // save
     var reference = 13ul
     var data <- mem_archive_save(reference)
-    equal(t, reference, 13ul)
-    equal(t, length(data), typeinfo(sizeof reference))
+    t |> equal( reference, 13ul)
+    t |> equal( length(data), typeinfo(sizeof reference))
     // load
     var test : uint64
     data |> mem_archive_load(test)
     delete data
-    equal(t, reference, 13ul)
-    equal(t, test, 13ul)
+    t |> equal( reference, 13ul)
+    t |> equal( test, 13ul)
 
 [test]
 def test_save_and_load_string ( t:T? )
     // save
     var reference = "13ul"
     var data <- mem_archive_save(reference)
-    equal(t, reference, "13ul")
-    equal(t, length(data), typeinfo(sizeof type<int>) + 5)
+    t |> equal( reference, "13ul")
+    t |> equal( length(data), typeinfo(sizeof type<int>) + 5)
     // load
     var test : string
     data |> mem_archive_load(test)
     delete data
-    equal(t, reference, "13ul")
-    equal(t, test, "13ul")
+    t |> equal( reference, "13ul")
+    t |> equal( test, "13ul")
 
 [test]
 def test_save_and_load_manual ( t:T? )
@@ -128,8 +128,8 @@ def test_save_and_load_manual ( t:T? )
     var sarch = [[Archive reading=false, stream=mems]]
     sarch |> serialize(reference)
     var data <- mems->extractData()
-    equal(t, length(data), typeinfo(sizeof reference))
-    equal(t, reference, 13)
+    t |> equal( length(data), typeinfo(sizeof reference))
+    t |> equal( reference, 13)
     // restoring
     var test : int
     var memr = new MemSerializer(data)
@@ -139,9 +139,9 @@ def test_save_and_load_manual ( t:T? )
         t->fatal(memr->getLastError())
     delete data
     // compare
-    equal(t, reference, test)
-    equal(t, test, 13)
-    equal(t, reference, 13)
+    t |> equal( reference, test)
+    t |> equal( test, 13)
+    t |> equal( reference, 13)
 
 [export]
 def main

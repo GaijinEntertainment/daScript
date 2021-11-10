@@ -17,13 +17,13 @@ def test_baisc_stage( t: T? )
             cmp |> set("i", i)
     commit()
     query <| $ ( pos:float3; vel:float3; i:int )
-        equal(t, pos, float3(1+i,2+i,3+i) )
-        equal(t, vel, float3(1,1,1))
+        t |> equal( pos, float3(1+i,2+i,3+i) )
+        t |> equal( vel, float3(1,1,1))
 
-    run(t,"update") <| @ ( t : T?)
+    t |> run("update") <| @ ( t : T?)
         decs_stage("update")
         query <| $ ( pos:float3; vel:float3; i:int )
-            equal(t, pos, float3(1+i,2+i,3+i)+vel )
+            t |> equal( pos, float3(1+i,2+i,3+i)+vel )
 
 
 [decs(stage = update)]
@@ -47,17 +47,17 @@ def test_two_stage( t: T? )
         create_entity <| @ ( eid, cmp )
             cmp.visible := false
     commit()
-    run(t,"make visible and check") <| @ ( t : T?)
+    t |> run("make visible and check") <| @ ( t : T?)
         decs_stage("make_visible")
         decs_stage("check_visible")
-    run(t,"check again") <| @ ( t : T?)
+    t |> run("check again") <| @ ( t : T?)
         query <| $ ( visible:bool )
-            equal(t, visible, true)
-    run(t,"make visible, which is in the other file") <| @ ( t : T?)
+            t |> equal( visible, true)
+    t |> run("make visible, which is in the other file") <| @ ( t : T?)
         decs_stage("make_invisible")
-    run(t,"check one more time") <| @ ( t : T?)
+    t |> run("check one more time") <| @ ( t : T?)
         query <| $ ( visible:bool )
-            equal(t, visible, false)
+            t |> equal( visible, false)
 
 [export]
 def main

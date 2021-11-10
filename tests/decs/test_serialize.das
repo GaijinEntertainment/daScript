@@ -20,7 +20,7 @@ def test_serialize( var t: T? )
             if i<0 || i>=3
                 t->fatal("wrong size")
         query <| $ ( i:int; s:string )
-            equal(t, s, "__{i}__" )
+            t |> equal( s, "__{i}__" )
     invoke(check_it)
     var data <- mem_archive_save(decsState)
     restart()

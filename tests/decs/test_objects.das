@@ -14,8 +14,8 @@ def test_create_object( t: T?)
     var count = 0
     query <| $ ( pos:float3 )
         count ++
-        equal(t, pos, float3(1,2,3))
-    success(t,count==1)                             // make sure its the right one
+        t |> equal( pos, float3(1,2,3))
+    t |> success(count==1)                             // make sure its the right one
 
 [test]
 def test_clone_syntax( t: T?)
@@ -26,8 +26,8 @@ def test_clone_syntax( t: T?)
     var count = 0
     query <| $ ( pos:float3 )
         count ++
-        equal(t, pos, float3(1,2,3))
-    success(t,count==1)
+        t |> equal( pos, float3(1,2,3))
+    t |> success(count==1)
 
 [test]
 def test_type_mismatch( var t: T?)
@@ -39,15 +39,15 @@ def test_type_mismatch( var t: T?)
             cmp |> set("pos", 13)           // mismatch set
         recover
             ok = false
-        // equal(t, ok, false)
+        // t |> equal( ok, false)
         ok = true
         try
             cmp |> get("pos", type<int>)    // mismatch get
         recover
             ok = false
-        // equal(t, ok, false)
+        // t |> equal( ok, false)
         let f123 = cmp |> get("pos", float3(13))
-        equal(t, "1,2,3", "{f123}")
+        t |> equal( "1,2,3", "{f123}")
     finally
         t = null
     commit()
@@ -65,9 +65,9 @@ def test_create_from_templates( t: T?)
     commit()
     var count = 0
     query <| $ ( p:Particle )
-        equal(t, p.pos+float3(1), p.vel)
+        t |> equal( p.pos+float3(1), p.vel)
         count ++
-    success(t, count==3)
+    t |> success( count==3)
 
 [decs_template(prefix)]
 struct Prefixless
@@ -82,9 +82,9 @@ def test_create_from_prefixless_templates( t: T?)
     commit()
     var count = 0
     query <| $ ( p:Prefixless; value:int )  // access the same thing as template, and as value
-        equal(t, p.value, value )
+        t |> equal( p.value, value )
         count ++
-    success(t, count==3)
+    t |> success( count==3)
 
 struct Foo
     pos : float3
@@ -100,5 +100,5 @@ def test_create_via_apply( t: T?)
             cmp |> set ( n, v)
     commit()
     query <| $ ( name : string )
-        equal(t, name, "from template")
+        t |> equal( name, "from template")
 

@@ -13,7 +13,7 @@ def test_arrays( t: T?)
             cmp |> set("i", i)
     commit()
     query <| $ ( values:array<int>; i:int )
-        equal(t, length(values), i+1)
+        t |> equal( length(values), i+1)
         for x,v in range(i+1),values
-            equal(t, x, v)
+            t |> equal( x, v)
 
