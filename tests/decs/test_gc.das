@@ -12,7 +12,7 @@ def test_gc_arrays( t: T?)
             cmp |> set("values", [{for x in range(i+1); x}])
             cmp |> set("i", i)
     commit()
-    t->run("before gc") <| @@ ( t : T? )
+    t->run("before gc") <| @ ( t : T? )
         query <| $ ( values:array<int>; i:int )
             for x,v in range(i+1),values
                 equal(t, x, v)
@@ -20,7 +20,7 @@ def test_gc_arrays( t: T?)
     unsafe
         heap_collect()
     after_gc()
-    t->run("after gc") <| @@ ( t : T? )
+    t->run("after gc") <| @ ( t : T? )
         query <| $ ( values:array<int>; i:int )
             for x,v in range(i+1),values
                 equal(t, x, v)
@@ -32,7 +32,7 @@ def test_gc_strings( t: T?)
         create_entity <| @ ( eid, cmp )
             cmp.txt := "hello_{i}"
     commit()
-    t->run("before string gc") <| @@ ( t : T? )
+    t->run("before string gc") <| @ ( t : T? )
         var i = 0
         query <| $ ( txt:string )
             equal(t, txt, "hello_{i++}")
@@ -41,7 +41,7 @@ def test_gc_strings( t: T?)
     unsafe
         string_heap_collect()
     after_gc()
-    t->run("after string gc") <| @@ ( t : T? )
+    t->run("after string gc") <| @ ( t : T? )
         var j = 0
         query <| $ ( txt:string )
             equal(t, txt, "hello_{j++}")
