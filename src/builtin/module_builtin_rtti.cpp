@@ -1103,6 +1103,14 @@ namespace das {
 
     #include "rtti.das.inc"
 
+    Func builtin_getFunctionByMnh ( uint32_t MNH, Context * context ) {
+        return Func(context->fnByMangledName(MNH));
+    }
+
+    uint32_t builtin_getFunctionMnh ( Func func, Context * ) {
+        return func.PTR ? func.PTR->mangledNameHash : 0;
+    }
+
     class Module_Rtti : public Module {
     public:
         template <typename RecAnn>
@@ -1304,6 +1312,13 @@ namespace das {
             // this context
             addExtern<DAS_BIND_FUN(thisContext), SimNode_ExtFuncCallRef>(*this, lib,  "this_context",
                 SideEffects::accessExternal, "thisContext")->arg("context");
+            // fn-mnh
+            addExtern<DAS_BIND_FUN(builtin_getFunctionByMnh)>(*this, lib, "get_function_by_mangled_name_hash",
+                SideEffects::none, "builtin_getFunctionByMnh")
+                    ->args({"src","context"});
+            addExtern<DAS_BIND_FUN(builtin_getFunctionMnh)>(*this, lib, "get_function_mangled_name_hash",
+                SideEffects::none, "builtin_getFunctionMnh")
+                    ->args({"src","context"});
             // extras
             registerVectorFunctions<AnnotationList>::init(this,lib,false,true);
             registerVectorFunctions<AnnotationArgumentList>::init(this,lib,false,false);

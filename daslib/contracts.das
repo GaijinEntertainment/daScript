@@ -105,7 +105,7 @@ class IsAnyWorkhorseNonPtrMacro : IsAnyType
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
                 if fna.name==argv.name
-                    if !typ.isWorkhorseType && !typ.isPointer && !typ.isString
+                    if !typ.isCtorType && typ.baseType!=Type tBool
                         errors := "argument {argv.name} is not a workhorse raw type, it is {describe(typ)}"
                         return false
         return true
@@ -129,5 +129,16 @@ class IsAnyVariantNonPtrMacro : IsAnyType
                 if fna.name==argv.name
                     if typ.baseType!=Type tVariant
                         errors := "argument {argv.name} is not a variant, it is {describe(typ)}"
+                        return false
+        return true
+
+[contract(name="expect_any_function")]
+class IsAnyFunctionNonPtrMacro : IsAnyType
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if typ.baseType!=Type tFunction
+                        errors := "argument {argv.name} is not a function, it is {describe(typ)}"
                         return false
         return true

@@ -162,5 +162,8 @@ namespace das {
     void builtin_expected_errors ( ProgramPtr prog, const TBlock<void,CompilationError,int> & block, Context * context, LineInfoArg * lineInfo );
     void builtin_list_require ( ProgramPtr prog, const TBlock<void,Module *,TTemporary<const char *>,TTemporary<const char *>,bool,const LineInfo &> & block,
         Context * context, LineInfoArg * lineInfo );
+
+    Func builtin_getFunctionByMnh ( uint32_t MNH, Context * context );
+    uint32_t builtin_getFunctionMnh ( Func func, Context * context );
 }
 

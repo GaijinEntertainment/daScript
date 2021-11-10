@@ -17,7 +17,6 @@ def test_create_object( t: T?)
         equal(t, pos, float3(1,2,3))
     success(t,count==1)                             // make sure its the right one
 
-
 [test]
 def test_clone_syntax( t: T?)
     restart()

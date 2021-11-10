@@ -11,6 +11,7 @@ require daslib/rtti public
 require daslib/algorithm
 require daslib/sort_boost
 require daslib/functional
+require daslib/archive public
 require math
 require strings
 
@@ -21,10 +22,11 @@ struct CTypeInfo
     mangledName : string
     hash : uint
     size : uint
-    eraser  : function<(var arr:array<uint8>):void>
-    clonner : function<(var dst:array<uint8>; src:array<uint8>):void>
-    dumper  : function<(elem:void?):string>
-    gc      : function<(var src:array<uint8>):lambda>
+    eraser     : function<(var arr:array<uint8>):void>
+    clonner    : function<(var dst:array<uint8>; src:array<uint8>):void>
+    serializer : function<(var arch:Archive; var arr:array<uint8>):void>
+    dumper     : function<(elem:void?):string>
+    gc         : function<(var src:array<uint8>):lambda>
 
 struct public Component
     name : string
@@ -150,6 +152,13 @@ def public clone ( var dst:Component; src:Component )
         invoke(src.info.clonner, dst.data, src.data)
     else
         dst.data := src.data
+
+def public serialize ( var arch:Archive; var src:Component )
+    arch |> serialize(src.name)
+    arch |> serialize(src.hash)
+    arch |> serialize(src.stride)
+    arch |> serialize(src.info)
+    invoke(src.info.serializer, arch, src.data)
 
 def public register_decs_stage_call ( name:string; pcall:PassFunction )
     var dpass <- [[DecsPass name=name]]
@@ -518,14 +527,14 @@ def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
             memcpy ( addr(value), addr(cmp[idx].data), typeinfo(sizeof type<TT const-&>))
     return value
 
-def private make_dumper_and_gc ( var cv:ComponentValue; value:auto(TT) )
-    var dumper = @@ <| ( elem:void? )
+def private make_callbacks ( var cv:ComponentValue; value:auto(TT) )
+    cv.info.dumper = @@ <| ( elem:void? )
         if elem==null
             return ""
         unsafe
             var pTT = reinterpret<TT-const-&-#?> elem
             return "{*pTT}"
-    var gc = @@ <| ( var src:array<uint8> ) : lambda
+    cv.info.gc = @@ <| ( var src:array<uint8> ) : lambda
         // the idea with this one is that we make a lambda
         //  which would capture an array of the right size and type
         //  which points to the right data
@@ -540,8 +549,44 @@ def private make_dumper_and_gc ( var cv:ComponentValue; value:auto(TT) )
         finally
             memzero(gc_dummy)
         return <- lmb
-    cv.info.dumper = dumper
-    cv.info.gc = gc
+    cv.info.clonner = @@ <| ( var dst:array<uint8>; src:array<uint8> )
+        if length(src)==0
+            return
+        let stride = typeinfo(sizeof type<TT-const-&-#>)
+        dst |> resize(length(src))
+        let size = length(src) / stride
+        var dsrc, ssrc : array<TT-const-&-#>
+        unsafe
+            _builtin_make_temp_array(dsrc, addr(dst[0]), size )
+            _builtin_make_temp_array(ssrc, addr(src[0]), size )
+        for d,s in dsrc,ssrc
+            d := s
+    cv.info.serializer = @@ <| ( var arch:Archive; var src:array<uint8> )
+        let stride = typeinfo(sizeof type<TT-const-&-#>)
+        if arch.reading
+            var temp : array<TT-const-&-#>
+            arch |> _::serialize(temp)
+            let size = length(temp)
+            src |> resize ( size*stride )
+            if size > 0
+                unsafe
+                    memcpy ( addr(src[0]), addr(temp[0]), size*stride )
+        else
+            var ssrc : array<TT-const-&-#>
+            let size = length(src) / stride
+            unsafe
+                _builtin_make_temp_array(ssrc, addr(src[0]), size )
+            arch |> serialize(ssrc)
+    static_if typeinfo(can_delete type<TT-const-&-#>)
+        cv.info.eraser = @@ <| ( var arr:array<uint8> )
+            if length(arr)==0
+                return
+            let stride = typeinfo(sizeof type<TT-const-&-#>)
+            for i in range(length(arr)/stride)
+                let offset = i * stride
+                unsafe
+                    var adel = reinterpret<TT-const-&-#?> addr(arr[offset])
+                    delete * adel
 
 def private make_component ( name:string; value:auto(TT) )
     var cv = [[ComponentValue name=name]]
@@ -549,29 +594,7 @@ def private make_component ( name:string; value:auto(TT) )
         var tinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
         cv.info = [[CTypeInfo basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo),
             hash=tinfo.hash, size=tinfo.size]]
-        static_if typeinfo(can_delete type<TT-const-&-#>)
-            cv.info.eraser = @@ <| ( var arr:array<uint8> )
-                if length(arr)==0
-                    return
-                let stride = typeinfo(sizeof type<TT-const-&-#>)
-                for i in range(length(arr)/stride)
-                    let offset = i * stride
-                    unsafe
-                        var adel = reinterpret<TT-const-&-#?> addr(arr[offset])
-                        delete * adel
-        cv.info.clonner = @@ <| ( var dst:array<uint8>; src:array<uint8> )
-            if length(src)==0
-                return
-            let stride = typeinfo(sizeof type<TT-const-&-#>)
-            dst |> resize(length(src))
-            let size = length(src) / stride
-            var dsrc, ssrc : array<TT-const-&-#>
-            unsafe
-                _builtin_make_temp_array(dsrc, addr(dst[0]), size )
-                _builtin_make_temp_array(ssrc, addr(src[0]), size )
-            for d,s in dsrc,ssrc
-                d := s
-        make_dumper_and_gc(cv, value)
+        make_callbacks(cv, value)
         memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
     return cv
 

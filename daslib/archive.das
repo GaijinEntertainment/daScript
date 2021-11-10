@@ -8,7 +8,9 @@ require daslib/contracts
 require daslib/apply
 require daslib/safe_addr
 require daslib/templates
+require math
 require strings
+require rtti
 
 class public Serializer
     def abstract write ( bytes:void? implicit; size:int ) : bool
@@ -72,8 +74,33 @@ def public write_raw ( var arch:Archive; var value : auto(TT)& )
     assert(!arch.reading)
     arch.stream->write(safe_addr(value), typeinfo(sizeof type<TT-&>))
 
+[expect_any_enum(value), template(dummy=false)]
+def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&?????? = null )
+    arch |> serialize_raw(value)
+
+[expect_any_function(value), template(dummy=false)]
+def public serialize ( var arch:Archive; var value:auto(TT)&; dummy:TT-&????? = null )
+    if arch.reading
+        var mnh : uint
+        arch |> read_raw(mnh)
+        if mnh != 0u
+            unsafe
+                value = reinterpret<TT-#>(get_function_by_mangled_name_hash(mnh))
+    else
+        var mnh = get_function_mangled_name_hash(value)
+        arch |> write_raw(mnh)
+
 [expect_any_workhorse_raw(value), template(dummy=false)]
-def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-& = [[TT]] )
+def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&???? = null )
+    arch |> serialize_raw(value)
+
+def public serialize ( var arch:Archive; var value : float3x3 )
+    arch |> serialize_raw(value)
+
+def public serialize ( var arch:Archive; var value : float3x4 )
+    arch |> serialize_raw(value)
+
+def public serialize ( var arch:Archive; var value : float4x4 )
     arch |> serialize_raw(value)
 
 [expect_any_struct(value), template(dummy=false)]
@@ -81,14 +108,14 @@ def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&? = nu
     if arch.reading
         delete value
     apply(value) <| $ ( name:string; field )
-        arch |> serialize(field)
+        arch |> _::serialize(field)
 
 [expect_any_tuple(value), template(dummy=false)]
 def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&?? = null )
     if arch.reading
         delete value
     apply(value) <| $ ( name:string; field )
-        arch |> serialize(field)
+        arch |> _::serialize(field)
 
 [expect_any_variant(value), template(dummy=false)]
 def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&??? = null )
@@ -102,11 +129,11 @@ def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&??? = 
         var index = variant_index(value)
         arch |> write_raw(index)
     apply(value) <| $ ( name:string; field )
-        arch |> serialize(field)
+        arch |> _::serialize(field)
 
 def public serialize ( var arch:Archive; var value : auto(TT)[] )
     for element in value
-        arch |> serialize(element)
+        arch |> _::serialize(element)
 
 def public serialize ( var arch:Archive; var value : array<auto(TT)> )
     if arch.reading
@@ -115,12 +142,12 @@ def public serialize ( var arch:Archive; var value : array<auto(TT)> )
         arch |> read_raw(len)
         value |> resize(len)
         for element in value
-            arch |> serialize(element)
+            arch |> _::serialize(element)
     else
         var len = length(value)
         arch |> write_raw(len)
         for element in value
-            arch |> serialize(element)
+            arch |> _::serialize(element)
 
 def public serialize ( var arch:Archive; var value : table<auto(KT);auto(VT)> )
     if arch.reading
@@ -129,15 +156,15 @@ def public serialize ( var arch:Archive; var value : table<auto(KT);auto(VT)> )
         delete value
         for i in range(len)
             var k : KT-const-&-#
-            arch |> serialize(k)
-            arch |> serialize(value[k])
+            arch |> _::serialize(k)
+            arch |> _::serialize(value[k])
     else
         var len = length(value)
         arch |> write_raw(len)
         for k,v in keys(value),values(value)
             var K = k
-            arch |> serialize(K)
-            arch |> serialize(v)
+            arch |> _::serialize(K)
+            arch |> _::serialize(v)
 
 def public serialize ( var arch:Archive; var value : string& )
     unsafe
@@ -154,6 +181,10 @@ def public serialize ( var arch:Archive; var value : string& )
             var len = length(value)
             arch |> write_raw(len)
             arch.stream->write(reinterpret<void?> value, len+1)
+
+def public serialize ( var arch:Archive; var value:auto(TT)? )
+    if arch.reading
+        value = null
 
 def public mem_archive_save ( var t:auto& )
     var mems = new MemSerializer()
