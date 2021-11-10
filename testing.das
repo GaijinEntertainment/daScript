@@ -12,7 +12,7 @@ class T
     onLog: lambda<(msg: string; at: LineInfo): void>
     onFail: lambda<(now: bool): void>
     onSkipNow: lambda<(): void>
-    onRun: lambda<(name: string; fn: lambda<(t: T?): void>): void>
+    onRun: lambda<(name: string; fn: RunT): void>
 
     failed: bool = false
     skipped: bool = false
@@ -60,9 +60,6 @@ class T
         logAt(msg, at)
         skipNow()
 
-    def const run(sub_name: string; func: lambda<(t: T?): void>)
-        onRun |> invoke(sub_name, func)
-
     def const getTimeUsec(): int
         return get_time_usec(startTick)
 
@@ -93,3 +90,14 @@ def success(t: T?; a; msg = ""): bool
         return true
     t->errorAt(!empty(msg) ? msg : "expected success, got failure", get_line_info(1))
     return false
+
+
+typedef RunT = variant<lmd1: lambda<(t: T?): void>; func1: function<(t: T?): void>>
+
+
+def run(t: T?; name: string; var cb: lambda<(t: T?): void>)
+    t.onRun |> invoke(name, [[RunT lmd1<-cb]])
+
+
+def run(t: T?; name: string; func: function<(t: T?): void>)
+    t.onRun |> invoke(name, [[RunT func1=func]])

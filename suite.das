@@ -161,7 +161,11 @@ def test_func(name: string; var context: SuiteFileCtx; func: lambda<(): void>): 
     return res
 
 [export]
-def private test_any_lambda(name: string; func: lambda<(t: T?): void>; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+def private test_any_func(name: string; func: function; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+    test_any(name, func, args_num, context, res)
+
+[export]
+def private test_any_lambda(name: string; func: lambda; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
     test_any(name, func, args_num, context, res)
 
 def private test_any(name: string; func; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
@@ -191,11 +195,14 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
                     deliberateRecover = true
 
                 var selfCtx & = this_context()
-                testing.onRun <- @ <| [[&selfCtx, &context, &res]](test_name: string; f: lambda<(t: T?): void>)
+                testing.onRun <- @ <| [[&selfCtx, &context, &res]](test_name: string; f: RunT)
                     var subContext := context
                     subContext.indenting = "\t" + subContext.indenting
                     unsafe
-                        selfCtx |> invoke_in_context("test_any_lambda", test_name, f, 1, subContext, res)
+                        if f is func1
+                            selfCtx |> invoke_in_context("test_any_func", test_name, f as func1, 1, subContext, res)
+                        if f is lmd1
+                            selfCtx |> invoke_in_context("test_any_lambda", test_name, f as lmd1, 1, subContext, res)
 
                 testing.onLog <- @ <| [[&context]](msg: string; at: LineInfo)
                     log::info("{context.indenting}{file_info_hr(at, context.uriPaths)}: {msg}")
