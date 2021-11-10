@@ -9,7 +9,7 @@ options log
 
 [test]
 def test_apply_variant ( t:T? )
-    t->run("contents") <| @ ( t : T? )
+    run(t,"contents") <| @ ( t : T? )
         apply([[FooBar foo=1]]) <| $ ( name, field )
             if name!="foo"
                 t->fatal("unknown field")
@@ -31,7 +31,7 @@ struct Foo
 
 [test]
 def test_apply_struct ( t:T? )
-    t->run("contents") <| @ ( t : T? )
+    run(t,"contents") <| @ ( t : T? )
         var foo = [[Foo a=1, b="hello"]]
         apply(foo) <| $ ( name, field )
             if name!="a" && name!="b"
@@ -40,7 +40,7 @@ def test_apply_struct ( t:T? )
                 equal(t, field, 1)
             static_elif typeinfo(stripped_typename field)=="string"
                 equal(t, field, "hello")
-    t->run("assign") <| @ ( t : T? )
+    run(t,"assign") <| @ ( t : T? )
         var foo = [[Foo a=1, b="hello"]]
         apply(foo) <| $ ( name, field )
             static_if typeinfo(stripped_typename field)=="int"
@@ -52,7 +52,7 @@ def test_apply_struct ( t:T? )
 
 [test]
 def test_apply_tuple ( t:T? )
-    t->run("contents") <| @ ( t : T? )
+    run(t,"contents") <| @ ( t : T? )
         var foo = [[auto 1, "hello"]]
         apply(foo) <| $ ( name, field )
             if name!="_0" && name!="_1"
@@ -61,7 +61,7 @@ def test_apply_tuple ( t:T? )
                 equal(t, field, 1)
             static_elif typeinfo(stripped_typename field)=="string"
                 equal(t, field, "hello")
-    t->run("assign") <| @ ( t : T? )
+    run(t,"assign") <| @ ( t : T? )
         var foo = [[auto 1, "hello"]]
         apply(foo) <| $ ( name, field )
             static_if typeinfo(stripped_typename field)=="int"
