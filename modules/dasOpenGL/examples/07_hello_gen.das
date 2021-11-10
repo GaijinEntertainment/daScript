@@ -102,6 +102,3 @@ def main
         glUseProgram(0u)
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
-
-options debugger
-require daslib/debug

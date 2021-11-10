@@ -13,5 +13,3 @@ def main
 
     print("lba(5)={lba} lbb(5)={lbb}\n")
 
-options debugger
-require daslib/debug

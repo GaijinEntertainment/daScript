@@ -101,6 +101,3 @@ def main
     var z = 13
     z ++
 
-options debugger
-require daslib/debug
-

@@ -12,6 +12,3 @@ var BOO = 13
 def main
     foo("blah", 1)
     foo("ouch", BOO)
-
-options debugger
-require daslib/debug
