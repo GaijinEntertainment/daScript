@@ -195,12 +195,13 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
     var skipped = false
     unsafe
         let t0 = ref_time_ticks()
+        var testing: T?
         try
             if args_num == 0
                 *context.context |> invoke_in_context(func)
                 dt = get_time_usec(t0)
             else
-                var testing = new T(name, t0, context.verbose)
+                testing = new T(name, t0, context.verbose)
                 testing.onFail <- @ <| [[&testing, &failed, &deliberateRecover]](now: bool)
                     testing.failed = true
                     failed = true
@@ -216,7 +217,7 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
                     unsafe
                         if f is func1
                             selfCtx |> invoke_in_context("sub_test_any_func", test_name, f as func1, 1, context, res)
-                        if f is lmd1
+                        elif f is lmd1
                             selfCtx |> invoke_in_context("sub_test_any_lambda", test_name, f as lmd1, 1, context, res)
 
                 testing.onLog <- @ <| [[&context]](msg: string; at: LineInfo)
@@ -226,6 +227,7 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
                 dt = get_time_usec(t0)
                 delete testing
         recover
+            delete testing
             if !deliberateRecover
                 dt = get_time_usec(t0)
                 res.errors += 1
