@@ -80,6 +80,11 @@ def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&? = nu
     apply(value) <| $ ( name:string; field )
         arch |> serialize(field)
 
+[expect_any_tuple(value)]
+def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&?? = null )
+    apply(value) <| $ ( name:string; field )
+        arch |> serialize(field)
+
 def public serialize ( var arch:Archive; var value : auto(TT)[] )
     for element in value
         arch |> serialize(element)

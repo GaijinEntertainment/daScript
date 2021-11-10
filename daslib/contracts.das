@@ -109,3 +109,14 @@ class IsAnyWorkhorseNonPtrMacro : IsAnyType
                         errors := "argument {argv.name} is not a workhorse raw type, it is {describe(typ)}"
                         return false
         return true
+
+[contract(name="expect_any_tuple")]
+class IsAnyTupleNonPtrMacro : IsAnyType
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if typ.baseType!=Type tTuple
+                        errors := "argument {argv.name} is not a tuple, it is {describe(typ)}"
+                        return false
+        return true

@@ -47,19 +47,32 @@ struct Foo
     b : string
 
 [test]
-def test_save_and_struct ( t:T? )
+def test_save_and_load_struct ( t:T? )
     // save
     var reference = [[Foo a=13.,b="hello"]]
     var data <- mem_archive_save(reference)
     equal(t, reference.a, 13.)
     equal(t, reference.b, "hello")
-    print("data is {data}\n")
     // load
     var test : Foo
     data |> mem_archive_load(test)
     delete data
     equal(t, test.a, 13.)
     equal(t, test.b, "hello")
+
+[test]
+def test_save_and_load_tuple ( t:T? )
+    // save
+    var reference = [[auto 13.,"hello"]]
+    var data <- mem_archive_save(reference)
+    equal(t, reference._0, 13.)
+    equal(t, reference._1, "hello")
+    // load
+    var test : tuple<float;string>
+    data |> mem_archive_load(test)
+    delete data
+    equal(t, test._0, 13.)
+    equal(t, test._1, "hello")
 
 [test]
 def test_save_and_load_mem_archive ( t:T? )
@@ -89,7 +102,6 @@ def test_save_and_load_string ( t:T? )
     equal(t, reference, "13ul")
     equal(t, test, "13ul")
 
-
 [test]
 def test_save_and_load_manual ( t:T? )
     var reference = 13
@@ -117,5 +129,3 @@ def test_save_and_load_manual ( t:T? )
 def main
     pass
 
-options debugger
-require daslib/debug
