@@ -7,6 +7,7 @@ module archive shared private
 require daslib/contracts
 require daslib/apply
 require daslib/safe_addr
+require daslib/templates
 require strings
 
 class public Serializer
@@ -71,16 +72,16 @@ def public write_raw ( var arch:Archive; var value : auto(TT)& )
     assert(!arch.reading)
     arch.stream->write(safe_addr(value), typeinfo(sizeof type<TT-&>))
 
-[expect_any_workhorse_raw(value)]
+[expect_any_workhorse_raw(value), template(dummy=false)]
 def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-& = [[TT]] )
     arch |> serialize_raw(value)
 
-[expect_any_struct(value)]
+[expect_any_struct(value), template(dummy=false)]
 def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&? = null )
     apply(value) <| $ ( name:string; field )
         arch |> serialize(field)
 
-[expect_any_tuple(value)]
+[expect_any_tuple(value), template(dummy=false)]
 def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&?? = null )
     apply(value) <| $ ( name:string; field )
         arch |> serialize(field)
