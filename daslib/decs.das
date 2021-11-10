@@ -575,7 +575,8 @@ def private make_callbacks ( var cv:ComponentValue; value:auto(TT) )
             var ssrc : array<TT-const-&-#>
             let size = length(src) / stride
             unsafe
-                _builtin_make_temp_array(ssrc, addr(src[0]), size )
+                if length(src)>0
+                    _builtin_make_temp_array(ssrc, addr(src[0]), size )
             arch |> serialize(ssrc)
     static_if typeinfo(can_delete type<TT-const-&-#>)
         cv.info.eraser = @@ <| ( var arr:array<uint8> )

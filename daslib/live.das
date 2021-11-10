@@ -22,10 +22,21 @@ var private watchTime = get_clock()
 
 var private liveFunctionLookup : table<string; bool>
 
+var public decsLiveData : array<uint8>
+
 var private liveContext : smart_ptr<Context>
 
 def public get_live_context : smart_ptr<Context>
     return liveContext
+
+[export]
+def saveLiveContext
+    decsLiveData <- mem_archive_save(decsState)
+
+[export]
+def restoreLiveContext
+    if length(decsLiveData) > 0
+        decsLiveData |> mem_archive_load(decsState)
 
 [finalize]
 def private go_offline
@@ -34,7 +45,11 @@ def private go_offline
 def public is_live
     return appLive
 
+def public is_app_live
+    return appPtr != null
+
 def public go_main
+    delete decsLiveData
     appLive = false
     unsafe
         var ctx <- reinterpret<smart_ptr<Context>> addr(this_context())
@@ -45,6 +60,7 @@ def public go_live ( appf, appd : string )
     this_context().name := "Live context"
     appFile = appf
     appDir = appd
+    delete decsLiveData
     recompile()
 
 def private live_lookup(fn)
@@ -117,13 +133,20 @@ def public watch_files
     return any
 
 def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = false )
-    print("set new context {intptr(get_ptr(ptr))}\n")
+    // print("set new context {intptr(get_ptr(ptr))}\n")
     invoke_live("shutdown")
     if appPtr != null
         unsafe
+            // fixup decs if its there
             var pvar = get_context_global_variable(appPtr, "decsState")
             if pvar != null
-                decsState := *(reinterpret<DecsState ?> pvar)
+                var pstate : array<uint8> ? = get_context_global_variable(appPtr, "decsLiveData")
+                assert(pstate!=null)
+                var css <- @ <|
+                    saveLiveContext()
+                invoke_in_context(appPtr, css)
+                decsLiveData := *pstate
+                delete css
     appPtr := ptr
     delete liveFunctionLookup
     if appPtr != null
@@ -132,9 +155,13 @@ def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = 
             // fixup decs if its there
             var pvar = get_context_global_variable(appPtr, "decsState")
             if pvar != null
-                var css <- @ <| [[&decsState]] ( state : DecsState? )
-                    decsState := *state
-                invoke_in_context(appPtr, css, addr(decsState))
+                var pstate : array<uint8> ? = get_context_global_variable(appPtr, "decsLiveData")
+                assert(pstate!=null)
+                var css <- @ <| [[&decsState,&decsLiveData]] ( data : array<uint8># )
+                    decsLiveData := data
+                    restoreLiveContext()
+                    delete decsLiveData
+                invoke_in_context(appPtr, css, decsLiveData)
                 delete css
             // fix-up live context, if its there
             var pctx_var = get_context_global_variable(appPtr, "liveContext")
