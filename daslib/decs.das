@@ -219,9 +219,9 @@ def public debug_dump
                             unsafe
                                 let txt = invoke(c.info.dumper, addr(c.data[offset]))
                                 wr |> write(txt)
-                    print("\t\t{c.name} : {c.info}\n\t\t\t{dump}\n")
+                    print("\t\t{c.name} : {describe(c.info)}\n\t\t\t{dump}\n")
                 else
-                    print("\t\t{c.name} : {c.info}\n")
+                    print("\t\t{c.name} : {describe(c.info)}\n")
     for erq in decsState.ecsQueries
         print("query {erq.hash}\n")
         print("\treq = {erq.req}\n\treqn = {erq.reqn}\n\tarchetypes = {erq.archetypes}\nat = {erq.at.file}:{int(erq.at.line)}\n")
