@@ -78,11 +78,29 @@ def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-& = [[T
 
 [expect_any_struct(value), template(dummy=false)]
 def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&? = null )
+    if arch.reading
+        delete value
     apply(value) <| $ ( name:string; field )
         arch |> serialize(field)
 
 [expect_any_tuple(value), template(dummy=false)]
 def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&?? = null )
+    if arch.reading
+        delete value
+    apply(value) <| $ ( name:string; field )
+        arch |> serialize(field)
+
+[expect_any_variant(value), template(dummy=false)]
+def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&??? = null )
+    if arch.reading
+        delete value
+        var index : int
+        arch |> read_raw(index)
+        unsafe
+            value |> set_variant_index(index)
+    else
+        var index = variant_index(value)
+        arch |> write_raw(index)
     apply(value) <| $ ( name:string; field )
         arch |> serialize(field)
 
@@ -93,6 +111,7 @@ def public serialize ( var arch:Archive; var value : auto(TT)[] )
 def public serialize ( var arch:Archive; var value : array<auto(TT)> )
     if arch.reading
         var len : int
+        delete value
         arch |> read_raw(len)
         value |> resize(len)
         for element in value

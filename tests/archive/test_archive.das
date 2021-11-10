@@ -1,6 +1,24 @@
 require daslib/archive
 require dastest/testing_boost public
 
+variant FooBar
+    a : float
+    b : string
+
+[test]
+def test_save_and_load_variant ( t:T? )
+    // save
+    var reference = [[auto [[FooBar a=13.]]; [[FooBar b="hello"]]  ]]
+    var data <- mem_archive_save(reference)
+    equal(t, reference[0] as a, 13.)
+    equal(t, reference[1] as b, "hello")
+    // load
+    var test : FooBar[2]
+    data |> mem_archive_load(test)
+    delete data
+    equal(t, test[0] as a, 13.)
+    equal(t, test[1] as b, "hello")
+
 [test]
 def test_save_and_load_mem_table ( t:T? )
     // save
