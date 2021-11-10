@@ -204,9 +204,9 @@ namespace das {
         } else if ( baseType==Type::tStructure ) {
             if ( type->structType ) {
                 if ( type->structType->module->name.empty() ) {
-                    stream << "struct " << type->structType->name;
+                    stream << type->structType->name;
                 } else {
-                    stream << "struct " << aotModuleName(type->structType->module) << "::" << type->structType->name;
+                    stream << aotModuleName(type->structType->module) << "::" << type->structType->name;
                 }
             } else {
                 stream << "DAS_COMMENT(unspecified structure) ";

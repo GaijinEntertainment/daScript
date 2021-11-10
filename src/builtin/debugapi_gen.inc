@@ -321,72 +321,72 @@ public:
   static __forceinline Func get_beforeArray ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_beforeArray]);
   }
-  static __forceinline void invoke_beforeArray ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiArray const  & pa, TypeInfo const  & ti ) {
+  static __forceinline void invoke_beforeArray ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiArray const  & pa, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiArray const  &,TypeInfo const  &>
+      <void *,debugapi::DapiArray const  &,TypeInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,pa,ti);
   }
   static __forceinline Func get_afterArray ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_afterArray]);
   }
-  static __forceinline void invoke_afterArray ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiArray const  & pa, TypeInfo const  & ti ) {
+  static __forceinline void invoke_afterArray ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiArray const  & pa, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiArray const  &,TypeInfo const  &>
+      <void *,debugapi::DapiArray const  &,TypeInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,pa,ti);
   }
   static __forceinline Func get_beforeTable ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_beforeTable]);
   }
-  static __forceinline void invoke_beforeTable ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiTable const  & pa, TypeInfo const  & ti ) {
+  static __forceinline void invoke_beforeTable ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiTable const  &,TypeInfo const  &>
+      <void *,debugapi::DapiTable const  &,TypeInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,pa,ti);
   }
   static __forceinline Func get_beforeTableKey ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_beforeTableKey]);
   }
-  static __forceinline void invoke_beforeTableKey ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pk, TypeInfo const  & ki, uint32_t index, bool last ) {
+  static __forceinline void invoke_beforeTableKey ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pk, TypeInfo const  & ki, uint32_t index, bool last ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
+      <void *,debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
         (__context__,nullptr,__funcCall__,
           self,pa,ti,pk,ki,index,last);
   }
   static __forceinline Func get_afterTableKey ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_afterTableKey]);
   }
-  static __forceinline void invoke_afterTableKey ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pk, TypeInfo const  & ki, uint32_t index, bool last ) {
+  static __forceinline void invoke_afterTableKey ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pk, TypeInfo const  & ki, uint32_t index, bool last ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
+      <void *,debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
         (__context__,nullptr,__funcCall__,
           self,pa,ti,pk,ki,index,last);
   }
   static __forceinline Func get_beforeTableValue ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_beforeTableValue]);
   }
-  static __forceinline void invoke_beforeTableValue ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pv, TypeInfo const  & kv, uint32_t index, bool last ) {
+  static __forceinline void invoke_beforeTableValue ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pv, TypeInfo const  & kv, uint32_t index, bool last ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
+      <void *,debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
         (__context__,nullptr,__funcCall__,
           self,pa,ti,pv,kv,index,last);
   }
   static __forceinline Func get_afterTableValue ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_afterTableValue]);
   }
-  static __forceinline void invoke_afterTableValue ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pv, TypeInfo const  & kv, uint32_t index, bool last ) {
+  static __forceinline void invoke_afterTableValue ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti, void * const  pv, TypeInfo const  & kv, uint32_t index, bool last ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
+      <void *,debugapi::DapiTable const  &,TypeInfo const  &,void * const ,TypeInfo const  &,uint32_t,bool>
         (__context__,nullptr,__funcCall__,
           self,pa,ti,pv,kv,index,last);
   }
   static __forceinline Func get_afterTable ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_afterTable]);
   }
-  static __forceinline void invoke_afterTable ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiTable const  & pa, TypeInfo const  & ti ) {
+  static __forceinline void invoke_afterTable ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiTable const  & pa, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiTable const  &,TypeInfo const  &>
+      <void *,debugapi::DapiTable const  &,TypeInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,pa,ti);
   }
@@ -447,36 +447,36 @@ public:
   static __forceinline Func get_beforeLambda ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_beforeLambda]);
   }
-  static __forceinline void invoke_beforeLambda ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiLambda & value, TypeInfo const  & ti ) {
+  static __forceinline void invoke_beforeLambda ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiLambda & value, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiLambda &,TypeInfo const  &>
+      <void *,debugapi::DapiLambda &,TypeInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,value,ti);
   }
   static __forceinline Func get_afterLambda ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_afterLambda]);
   }
-  static __forceinline void invoke_afterLambda ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiLambda & value, TypeInfo const  & ti ) {
+  static __forceinline void invoke_afterLambda ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiLambda & value, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiLambda &,TypeInfo const  &>
+      <void *,debugapi::DapiLambda &,TypeInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,value,ti);
   }
   static __forceinline Func get_beforeIterator ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_beforeIterator]);
   }
-  static __forceinline void invoke_beforeIterator ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiSequence & value, TypeInfo const  & ti ) {
+  static __forceinline void invoke_beforeIterator ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiSequence & value, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiSequence &,TypeInfo const  &>
+      <void *,debugapi::DapiSequence &,TypeInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,value,ti);
   }
   static __forceinline Func get_afterIterator ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_afterIterator]);
   }
-  static __forceinline void invoke_afterIterator ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiSequence & value, TypeInfo const  & ti ) {
+  static __forceinline void invoke_afterIterator ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiSequence & value, TypeInfo const  & ti ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiSequence &,TypeInfo const  &>
+      <void *,debugapi::DapiSequence &,TypeInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,value,ti);
   }
@@ -717,18 +717,18 @@ public:
   static __forceinline Func get_WalkBlock ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_WalkBlock]);
   }
-  static __forceinline void invoke_WalkBlock ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiBlock & value ) {
+  static __forceinline void invoke_WalkBlock ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiBlock & value ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiBlock &>
+      <void *,debugapi::DapiBlock &>
         (__context__,nullptr,__funcCall__,
           self,value);
   }
   static __forceinline Func get_WalkFunction ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_WalkFunction]);
   }
-  static __forceinline void invoke_WalkFunction ( Context * __context__, Func __funcCall__, void * self, struct debugapi::DapiFunc & value ) {
+  static __forceinline void invoke_WalkFunction ( Context * __context__, Func __funcCall__, void * self, debugapi::DapiFunc & value ) {
     das_invoke_function<void>::invoke
-      <void *,struct debugapi::DapiFunc &>
+      <void *,debugapi::DapiFunc &>
         (__context__,nullptr,__funcCall__,
           self,value);
   }
