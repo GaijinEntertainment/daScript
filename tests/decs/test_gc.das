@@ -18,7 +18,7 @@ def test_gc_arrays( t: T?)
                 equal(t, x, v)
     before_gc()
     unsafe
-        heap_collect()
+        heap_collect(true,true)
     after_gc()
     t->run("after gc") <| @ ( t : T? )
         query <| $ ( values:array<int>; i:int )
@@ -39,7 +39,7 @@ def test_gc_strings( t: T?)
         equal(t, i, 3)
     before_gc()
     unsafe
-        string_heap_collect()
+        string_heap_collect(true)
     after_gc()
     t->run("after string gc") <| @ ( t : T? )
         var j = 0
