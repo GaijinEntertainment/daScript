@@ -41,7 +41,7 @@ def SuiteCtx(args: array<string>): SuiteCtx
 
 
 struct SuiteFileCtx
-    context: rtti::Context?
+    [[do_not_delete]] context: rtti::Context?
     uriPaths: bool = false
     indenting: string = ""
     stackOnRecover: bool = true
@@ -133,6 +133,7 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                                 if match_test_name(name, ctx)
                                     test_any(name, func, length(fn.arguments), fileCtx, res)
                                 return
+                    delete fileCtx
     access := null
     return res
 
@@ -176,6 +177,7 @@ def private sub_test_any_func(name: string; func: function; args_num: int; var c
     var subContext := context
     subContext.indenting = "\t" + subContext.indenting
     test_any(name, func, args_num, subContext, res)
+    delete subContext
 
 
 [export]
@@ -183,6 +185,7 @@ def private sub_test_any_lambda(name: string; func: lambda; args_num: int; var c
     var subContext := context
     subContext.indenting = "\t" + subContext.indenting
     test_any(name, func, args_num, subContext, res)
+    delete subContext
 
 
 def private test_any(name: string; func; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
