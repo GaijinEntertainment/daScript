@@ -76,14 +76,17 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
     using <| $(var mg:ModuleGroup#)
         using <| $(var cop:CodeOfPolicies#)
             cop.aot_module = true
-            compile_file(file_name, access, addr(mg), cop) <| $(ok, program, errors)
+            compile_file(file_name, access, addr(mg), cop) <| $(ok, program, output)
                 var expectedErrors : table<CompilationError; int>
                 if program != null
                     program |> for_each_expected_error <| $ ( err, count )
                         expectedErrors[err] = count
                 var failed = !ok
-                if !ok
-                    log::error("Failed to compile {file_name}\n{errors}")
+                if ok
+                    if !empty(output)
+                        log::info("{output}")
+                else
+                    log::error("Failed to compile {file_name}\n{output}")
                     if program != null
                         failed = false
                         for err in program.errors
