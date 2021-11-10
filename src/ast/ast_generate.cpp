@@ -433,8 +433,9 @@ namespace das {
         // now finalize
         bool needUnsafe = false;
         for ( const auto & fl : ls->fields ) {
-            if ( fl.type->needDelete() ) {
+            if ( !fl.type->constant && fl.type->needDelete() ) {
                 if ( !fl.doNotDelete && !fl.capturedRef ) {
+                    if ( fl.type->isPointer() && fl.type->firstType && fl.type->firstType->constant ) continue;
                     auto fva = make_smart<ExprVar>(fl.at, "__this");
                     auto fld = make_smart<ExprField>(fl.at, fva, fl.name);
                     fld->ignoreCaptureConst = true;
@@ -1311,7 +1312,8 @@ namespace das {
         block->at = at;
         bool needUnsafe = false;
         for ( size_t argi=0; argi!=tupleType->argTypes.size(); ++argi ) {
-            if (tupleType->argTypes[argi]->needDelete()) {
+            if ( !tupleType->argTypes[argi]->constant && tupleType->argTypes[argi]->needDelete() ) {
+                if ( tupleType->isPointer() && tupleType->firstType && tupleType->firstType->constant ) continue;
                 string argn = "_" + to_string(argi);
                 auto lv = make_smart<ExprVar>(at, "__this");
                 auto lf = make_smart<ExprField>(at, lv, argn);
@@ -1417,7 +1419,9 @@ namespace das {
         smart_ptr<ExprIfThenElse> topIf, lastIf;
         bool needUnsafe = false;
         for ( size_t argi=0; argi!=variantType->argTypes.size(); ++argi ) {
-            if (variantType->argTypes[argi]->needDelete()) {
+            if ( !variantType->argTypes[argi]->constant && variantType->argTypes[argi]->needDelete() ) {
+                if ( variantType->argTypes[argi]->isPointer() && variantType->argTypes[argi]->firstType
+                    && variantType->argTypes[argi]->firstType->constant ) continue;
                 const string & argn = variantType->argNames[argi];
                 auto lv = make_smart<ExprVar>(at, "__this");
                 auto lf = make_smart<ExprField>(at, lv, argn);

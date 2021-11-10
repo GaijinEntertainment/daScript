@@ -72,7 +72,7 @@ class TemplateMacro : AstFunctionAnnotation
         fclone.annotations |> erase(taidx)
         // name it
         fclone.name := "`template{extra}`{fclone.name}"
-        newcall.name := fclone.name
+        newcall.name := "_::{fclone.name}"
         // result
         compiling_module() |> add_function(fclone)
         return newcall

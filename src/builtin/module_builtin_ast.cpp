@@ -2284,6 +2284,11 @@ namespace das {
         CallMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : CallMacro(n), AstCallMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
+        virtual void preVisit (  Program * prog, Module * mod, ExprCallMacro * expr ) override {
+            if ( auto fnPreVisit = get_preVisit(classPtr) ) {
+                invoke_preVisit(context,fnPreVisit,classPtr,prog,mod,expr);
+            }
+        }
         virtual ExpressionPtr visit (  Program * prog, Module * mod, ExprCallMacro * expr ) override {
             if ( auto fnVisit = get_visit(classPtr) ) {
                 return invoke_visit(context,fnVisit,classPtr,prog,mod,expr);

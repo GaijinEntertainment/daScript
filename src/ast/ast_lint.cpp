@@ -456,7 +456,6 @@ namespace das {
         "intern_strings",               Type::tBool,
         "multiple_contexts",            Type::tBool,
         "persistent_heap",              Type::tBool,
-        "persistent_string_heap",       Type::tBool,
         "heap_size_hint",               Type::tInt,
         "string_heap_size_hint",        Type::tInt,
         "gc",                           Type::tBool,

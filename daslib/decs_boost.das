@@ -208,6 +208,21 @@ enum private DecsQueryType
 
 [call_macro(name="query")]
 class DecsQueryMacro : AstCallMacro
+    def override preVisit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : void
+        let totalArgs = length(expr.arguments)
+        if totalArgs!=1 && totalArgs!=2
+            return
+        let qt = totalArgs==2 ? DecsQueryType eid_query : DecsQueryType query
+        let block_arg_index = totalArgs-1
+        if !(expr.arguments[block_arg_index] is ExprMakeBlock)
+            return
+        var mblk = expr.arguments[block_arg_index] as ExprMakeBlock
+        var qblk = mblk._block as ExprBlock
+        for arg in qblk.arguments
+            if arg._type != null
+                arg._type.flags |= TypeDeclFlags temporary
+                if !arg._type.flags.constant
+                    arg._type.flags |= TypeDeclFlags ref
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         let totalArgs = length(expr.arguments)
         if totalArgs!=1 && totalArgs!=2

@@ -1,5 +1,4 @@
 options persistent_heap = true
-options persistent_string_heap = true
 options gc
 
 options log_compile_time

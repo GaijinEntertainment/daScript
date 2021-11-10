@@ -3,7 +3,6 @@ options no_global_variables = false
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options persistent_heap = true
-options persistent_string_heap = true
 module debug shared
 
 require math

@@ -98,6 +98,9 @@ def operator ==(a, b: decs::EntityId implicit)
 def operator !=(a, b: decs::EntityId implicit)
     return a.id != b.id || a.generation != b.generation
 
+def public describe ( info:CTypeInfo )
+    return "{info.basicType} MNH={info.mangledName} hash={info.hash} size={info.size}"
+
 def public operator . ( var cmp:ComponentMap; name:string ) : ComponentValue &
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if !(idx<length(cmp) && cmp[idx].name==name)
@@ -403,29 +406,14 @@ def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-
         let comp & = arch.components[idx]
         if comp.name==name
             unsafe
-                let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&>))
+                let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
                 if comp.info.hash != cvinfo.hash
-                    panic("component array {name} type mismatch, expecting {comp.info} vs {describe(cvinfo)}")
+                    panic("component array {name} type mismatch, expecting {describe(comp.info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
             unsafe
                 return <- decs_array(type<TT>, comp.data, arch.size)
     panic("component array {name} not found")
     unsafe
         return <- [[array<TT-const-&># ]]
-
-def public get ( arch:Archetype; name:string; value:array<auto(TT)> ) : array<array<TT>>#
-    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
-    if idx<length(arch.components)
-        let comp & = arch.components[idx]
-        if comp.name==name
-            unsafe
-                let cvinfo = addr(typeinfo(rtti_typeinfo type<array<TT>>))
-                if comp.info.hash != cvinfo.hash
-                    panic("component array {name} type mismatch, expecting {comp.info} vs {describe(cvinfo)}")
-            unsafe
-                return <- decs_array(type<array<TT>>, comp.data, arch.size)
-    panic("component array {name} not found")
-    unsafe
-        return <- [[array<array<TT>># ]]
 
 def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&> const#
     unsafe
@@ -437,9 +425,9 @@ def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iter
         let comp & = arch.components[idx]
         if comp.name==name
             unsafe
-                let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&>))
+                let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
                 if comp.info.hash != cvinfo.hash
-                    panic("component array {name} type mismatch, expecting {comp.info} vs {describe(cvinfo)}")
+                    panic("component array {name} type mismatch, expecting {describe(comp.info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
             var it : iterator<TT const &>
             unsafe
                 _builtin_make_fixed_array_iterator(it,addr(comp.data[0]),arch.size,comp.stride)
@@ -526,7 +514,7 @@ def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
         unsafe
             let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
             if cmp[idx].info.hash != cvinfo.hash
-                panic("get component {name} type mismatch, expecting {cmp[idx].info} vs {describe(cvinfo)}")
+                panic("get component {name} type mismatch, expecting {describe(cmp[idx].info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
             memcpy ( addr(value), addr(cmp[idx].data), typeinfo(sizeof type<TT const-&>))
     return value
 
@@ -561,73 +549,39 @@ def private make_component ( name:string; value:auto(TT) )
         var tinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
         cv.info = [[CTypeInfo basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo),
             hash=tinfo.hash, size=tinfo.size]]
-        if tinfo.basicType==Type tString
-            var clonner = @@ <| ( var dst:array<uint8>; src:array<uint8> )
-                if length(src)==0
+        static_if typeinfo(can_delete type<TT-const-&-#>)
+            cv.info.eraser = @@ <| ( var arr:array<uint8> )
+                if length(arr)==0
                     return
-                let stride = typeinfo(sizeof type<string>)
-                dst |> resize(length(src))
-                let size = length(src) / stride
-                var dsrc, ssrc : array<string>
-                unsafe
-                    _builtin_make_temp_array(dsrc, addr(dst[0]), size )
-                    _builtin_make_temp_array(ssrc, addr(src[0]), size )
-                for d,s in dsrc,ssrc
-                    d := s
-            cv.info.clonner = clonner
-        make_dumper_and_gc(cv, value)
-        memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
-    return cv
-
-def private make_component ( name:string; value:array<auto(TT)> )
-    var cv = [[ComponentValue name=name]]
-    unsafe
-        var tinfo = addr(typeinfo(rtti_typeinfo type<array<TT-const-&-#>>))
-        var eraser = @@ <| ( var arr:array<uint8> )
-            if length(arr)==0
-                return
-            let stride = typeinfo(sizeof type<array<TT-const-&-#>>)
-            for i in range(length(arr)/stride)
-                let offset = i * stride
-                unsafe
-                    var adel = reinterpret< array<TT-const-&-#>? > addr(arr[offset])
-                    delete * adel
-        var clonner = @@ <| ( var dst:array<uint8>; src:array<uint8> )
+                let stride = typeinfo(sizeof type<TT-const-&-#>)
+                for i in range(length(arr)/stride)
+                    let offset = i * stride
+                    unsafe
+                        var adel = reinterpret<TT-const-&-#?> addr(arr[offset])
+                        delete * adel
+        cv.info.clonner = @@ <| ( var dst:array<uint8>; src:array<uint8> )
             if length(src)==0
                 return
-            let stride = typeinfo(sizeof type<array<TT-const-&-#>>)
+            let stride = typeinfo(sizeof type<TT-const-&-#>)
             dst |> resize(length(src))
             let size = length(src) / stride
-            var dsrc, ssrc : array<array<TT-const-&-#>>
+            var dsrc, ssrc : array<TT-const-&-#>
             unsafe
                 _builtin_make_temp_array(dsrc, addr(dst[0]), size )
                 _builtin_make_temp_array(ssrc, addr(src[0]), size )
             for d,s in dsrc,ssrc
                 d := s
-        cv.info = [[CTypeInfo basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo),
-            hash=tinfo.hash, size=tinfo.size, eraser=eraser, clonner=clonner]]
         make_dumper_and_gc(cv, value)
         memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
     return cv
 
 def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
-    concept_assert((typeinfo(is_pod value) || typeinfo(is_string value))
-        && typeinfo(sizeof value)<=typeinfo(sizeof cmp[0].data), "unsupported component type {typeinfo(typename value)}")
+    concept_assert(typeinfo(sizeof value)<=typeinfo(sizeof cmp[0].data), "unsupported component type {typeinfo(typename value)} (its too big)")
     let cv = make_component(name, value)
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         if cmp[idx].info.hash != cv.info.hash
-            panic("set component {name} type mismatch, expecting {cmp[idx].info} vs {cv.info}")
-        cmp[idx] = cv           // overwrite
-    else
-        cmp |> push(cv, idx)    // insert new one
-
-def public set ( var cmp:ComponentMap; name:string; value:array<auto(TT)> )
-    let cv = make_component(name, value)
-    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
-    if idx<length(cmp) && cmp[idx].name==name
-        if cmp[idx].info.hash != cv.info.hash
-            panic("set component {name} type mismatch, expecting {cmp[idx].info} vs {cv.info}")
+            panic("set component {name} type mismatch, expecting {describe(cmp[idx].info)} vs vs {describe(cv.info)} MNH={cv.info.mangledName} hash={cv.info.hash} size={cv.info.size}")
         cmp[idx] = cv           // overwrite
     else
         cmp |> push(cv, idx)    // insert new one
@@ -639,3 +593,4 @@ def public remove ( var cmp:ComponentMap; name:string )
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         cmp |> erase(idx)
+

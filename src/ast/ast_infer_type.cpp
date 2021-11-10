@@ -5813,8 +5813,17 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprCallMacro
+        virtual void preVisit ( ExprCallMacro * expr ) override {
+            auto errc = ctx.thisProgram->errors.size();
+            auto thisModule = ctx.thisProgram->thisModule.get();
+            expr->macro->preVisit(ctx.thisProgram, thisModule, expr);
+            if ( errc==ctx.thisProgram->errors.size() ) {
+                error("unsupported call macro " + expr->macro->name,  "", "",
+                    expr->at, CompilationError::unsupported_call_macro);
+            }
+            return Visitor::preVisit(expr);
+        }
         virtual ExpressionPtr visit ( ExprCallMacro * expr ) override {
-            // implement call macro
             auto errc = ctx.thisProgram->errors.size();
             auto thisModule = ctx.thisProgram->thisModule.get();
             auto substitute = expr->macro->visit(ctx.thisProgram, thisModule, expr);

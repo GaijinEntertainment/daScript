@@ -94,6 +94,7 @@ class AstReaderMacro
 
 [macro_interface]
 class AstCallMacro
+    def abstract preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void
     def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
 
 [macro_interface]

@@ -330,15 +330,26 @@ int AstReaderMacro_Adapter::_das_class_method_offset[2];
 class AstCallMacro_Adapter {
 protected:
   enum {
-    __fn_visit = 0,
+    __fn_preVisit = 0,
+    __fn_visit = 1,
   };
 protected:
-  static int _das_class_method_offset[1];
+  static int _das_class_method_offset[2];
 public:
   AstCallMacro_Adapter ( const StructInfo * info ) {
     if ( _das_class_method_offset[0]==0 ) {
+      _das_class_method_offset[__fn_preVisit] = adapt_field_offset("preVisit",info);
       _das_class_method_offset[__fn_visit] = adapt_field_offset("visit",info);
     }
+  }
+  static __forceinline Func get_preVisit ( void * self ) {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisit]);
+  }
+  static __forceinline void invoke_preVisit ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<ExprCallMacro> const  expr ) {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprCallMacro> const >
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,expr);
   }
   static __forceinline Func get_visit ( void * self ) {
     return getDasClassMethod(self,_das_class_method_offset[__fn_visit]);
@@ -350,7 +361,7 @@ public:
           self,prog,mod,expr).marshal();
   }
 };
-int AstCallMacro_Adapter::_das_class_method_offset[1];
+int AstCallMacro_Adapter::_das_class_method_offset[2];
 
 class AstTypeInfoMacro_Adapter {
 protected:

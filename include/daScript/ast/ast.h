@@ -1042,6 +1042,7 @@ namespace das
     struct ExprCallMacro;
     struct CallMacro : ptr_ref_count {
         CallMacro ( const string na = "" ) : name(na) {}
+        virtual void preVisit (  Program *, Module *, ExprCallMacro * ) { }
         virtual ExpressionPtr visit (  Program *, Module *, ExprCallMacro * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
         string name;
