@@ -1,6 +1,30 @@
 require daslib/apply
 require dastest/testing_boost public
 
+variant FooBar
+    foo : int
+    bar : string
+
+options log
+
+[test]
+def test_apply_variant ( t:T? )
+    t->run("contents") <| @ ( t : T? )
+        apply([[FooBar foo=1]]) <| $ ( name, field )
+            if name!="foo"
+                t->fatal("unknown field")
+            static_if typeinfo(stripped_typename field)=="int"
+                equal(t, field, 1)
+            else
+                t->fatal("we got unsupported field here")
+        apply([[FooBar bar="hello"]]) <| $ ( name, field )
+            if name!="bar"
+                t->fatal("unknown field")
+            static_if typeinfo(stripped_typename field)=="string"
+                equal(t, field, "hello")
+            else
+                t->fatal("we got unsupported field here")
+
 struct Foo
     a : int
     b : string

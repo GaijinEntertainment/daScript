@@ -98,6 +98,70 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     fn.body <- blk
     compiling_module() |> add_function(fn)
 
+/*
+    def apply`Foo(self:Foo;arg_field1:block<(name:string,value:field1-type):void>;arg_field2:...)
+        if variant_index(self)==0
+            invoke(arg_field1,"field1",self.field1)
+            return
+        if variant_idnex(self)==2
+            invoke(arg_field2,"field2",self.field2)
+            return
+        ...
+*/
+[macro_function]
+def generateApplyVisitVariant ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
+    assert(stype.baseType==Type tVariant)
+    assert(stype.dim.length==0)
+    var fn <- new [[Function() at=at, atDecl=at, name:=fnname]]                     // def apply`foo : void
+    fn.flags |= FunctionFlags generated
+    fn.flags |= FunctionFlags privateFunction
+    fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
+    var selfT <- clone_type(stype)
+    selfT.flags |= TypeDeclFlags isExplicit
+    selfT.flags |= TypeDeclFlags explicitConst
+    emplace_new(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
+    var blk <- new [[ExprBlock() at=at]]
+    for flda,fldi in stype.argTypes,range(100500)
+        var argT <- new [[TypeDecl() baseType=Type tBlock, at=at]]                         // block<(name:string;x:field1type)>
+        emplace_new(argT.argTypes, new [[TypeDecl() baseType=Type tString, at=at]])
+        var fldT <- clone_type(flda)
+        if stype.flags.constant
+            fldT.flags |= TypeDeclFlags constant
+        if !fldT.isRefType
+            fldT.flags |= TypeDeclFlags ref
+        emplace(argT.argTypes, fldT)
+        argT.firstType <- new [[TypeDecl() baseType=Type tVoid,at=at]]
+        argT.flags = TypeDeclFlags constant
+        let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
+        var argF <- new [[Variable() name:="__arg_{fldname}",at=at,_type <- argT]]   // arg_field1:block...
+        emplace(fn.arguments,argF)
+        var cfield <- new [[ExprInvoke() at=at]]                                    // invoke()
+        var argb <- new [[ExprVar() at=at, name:="__arg_{fldname}"]]                 // arg_field1
+        emplace(cfield.arguments,argb)
+        var argn <- new [[ExprConstString() at=at, value:=fldname]]                     // "name"
+        emplace(cfield.arguments,argn)
+        var argvar <- new [[ExprVar() at=at, name:="__self"]]                           // self
+        var argfld <- new [[ExprAsVariant() at=at, name:=fldname, value <- argvar]]    // self as name
+        emplace(cfield.arguments,argfld)
+        // variant_index(self)==fld
+        var vvidx <- new [[ExprCall() at=at, name:="variant_index"]]
+        vvidx.arguments |> emplace_new <| new [[ExprVar() at=at, name:="__self"]]
+        var vcond <- new [[ExprOp2() at=at, op:="==",
+            left <- vvidx,
+            right <- new [[ExprConstInt() at=at, value=fldi]]
+        ]]
+        // invoke(); return
+        var vblk <- new [[ExprBlock() at=at]]
+        vblk.list |> emplace(cfield)
+        vblk.list |> emplace_new <| new [[ExprReturn() at=at]]
+        // if
+        blk.list |> emplace_new <| new [[ExprIfThenElse() at=at,
+            cond <- vcond,
+            if_true <- vblk
+        ]]
+    fn.body <- blk
+    compiling_module() |> add_function(fn)
+
 
 [call_macro(name="apply")]  // apply(value, block)
 class ApplyMacro : AstCallMacro
@@ -112,9 +176,7 @@ class ApplyMacro : AstCallMacro
             if argT.dim.length != 0
                 macro_error(prog,expr.at,"can't apply to dim")
                 return [[ExpressionPtr]]
-            if argT.baseType == Type tStructure
-                pass
-            elif argT.baseType == Type tTuple
+            if argT.baseType==Type tStructure || argT.baseType==Type tTuple || argT.baseType==Type tVariant
                 pass
             else
                 macro_error(prog,expr.at,"can only apply to {describe(expr.arguments[0]._type)}")
@@ -132,6 +194,10 @@ class ApplyMacro : AstCallMacro
                 callName = "apply`tuple`{intptr(expr)}`{expr.at.line}"
                 nfields = length(argT.argTypes)
                 generateApplyVisitTuple(expr.arguments[0]._type,callName,expr.at)
+            elif argT.baseType == Type tVariant
+                callName = "apply`variant`{intptr(expr)}`{expr.at.line}"
+                nfields = length(argT.argTypes)
+                generateApplyVisitVariant(expr.arguments[0]._type,callName,expr.at)
             else
                 panic("internal error. usupported apply")
             // make a call
