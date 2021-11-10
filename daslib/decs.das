@@ -391,16 +391,16 @@ def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():E
     return false
 
 [template(atype)]
-def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-const-&>#
+def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-const-&-#>#
     assert(length(src)>0)
-    var dest : array<TT -const -&>#
+    var dest : array<TT-const-&-#>#
     unsafe
         _builtin_make_temp_array(dest, addr(src[0]), capacity)
     __builtin_array_lock(dest)
     unsafe
         return <- dest
 
-def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&>#
+def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&-#>#
     let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
         let comp & = arch.components[idx]
@@ -413,9 +413,9 @@ def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-
                 return <- decs_array(type<TT>, comp.data, arch.size)
     panic("component array {name} not found")
     unsafe
-        return <- [[array<TT-const-&># ]]
+        return <- [[array<TT-const-&-#># ]]
 
-def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&> const#
+def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&-#> const#
     unsafe
         return <- get(arch, name, value)
 
