@@ -7,7 +7,9 @@ require uriparser
 require fs
 require suite
 require log
+require debugapi
 require daslib/json_boost
+require daslib/jobque_boost
 
 
 let jsonResultPrefix = "##dastest##\n"
@@ -17,12 +19,6 @@ def private collect_input_paths(args: array<string>; var paths: array<string>)
     for i in range(length(args) - 1)
         if args[i] == "--test"
             paths |> push <| args[i + 1]
-
-
-def private collect_tests_names(args: array<string>; var names: array<string>)
-    for i in range(length(args) - 1)
-        if args[i] == "--test-names"
-            names |> push <| args[i + 1]
 
 
 def private collect_files(input_paths: array<string>; var files: array<string>)
@@ -41,36 +37,41 @@ def private collect_files(input_paths: array<string>; var files: array<string>)
     delete cache
 
 
-def create_suite_ctx(args: array<string>; uri_paths: bool)
-    var ctx: SuiteCtx
-    ctx.dastestRoot = dir_name(args[1])
-    ctx.uriPaths = uri_paths
-    ctx.verbose = args |> has_value("--verbose")
-    collect_tests_names(args, ctx.testNames)
-    return <- ctx
+def private get_float_arg(args: array<string>; name: string; def_val: float): float
+    let idx = find_index(args, name)
+    return idx >= 0 && idx + 1 < length(args) ? float(args[idx + 1]) : def_val
 
 
 [export]
 def main()
     var args <- get_command_line_arguments()
-    let uriPaths = args |> has_value("--uri-paths")
-    log::useTtyColors = args |> has_value("--color")
+    log::init_log(args)
     let runIdx = args |> find_index("--run")
     if runIdx != -1
-        let res = suite::test_file(args[runIdx + 1], create_suite_ctx(args, uriPaths))
+        let res = suite::test_file(args[runIdx + 1], SuiteCtx(args))
         log::info_raw("{jsonResultPrefix}{write_json(JV(res))}")
         return
 
+    var res: SuiteResult
     let totalTime = ref_time_ticks()
+
+    let timeout = args |> get_float_arg("--timeout", 600.) // 10min
+    if timeout > 0.
+        unsafe
+            var mainCtx & = this_context()
+            new_thread <| @[[&res, &mainCtx]]
+                fio::sleep(uint(timeout * 1000.))
+                unsafe
+                    mainCtx |> invoke_in_context("timeout_tests", res, totalTime, timeout)
+
     var inputPaths: array<string>
     collect_input_paths(args, inputPaths)
     var files: array<string>
     collect_files(inputPaths, files)
 
-    var res: SuiteResult
     let isolatedMode = args |> has_value("--isolated-mode")
     if !isolatedMode
-        let ctx <- create_suite_ctx(args, uriPaths)
+        let ctx <- SuiteCtx(args)
         for file in files
             let uri = uriPaths ? file_name_to_uri(file) : file
             let fileTime = ref_time_ticks()
@@ -78,9 +79,9 @@ def main()
             let fileDt = get_time_usec(fileTime)
             if status.errors + status.failed == 0
                 if status.total > 0
-                    log::green("PASS {uri} ({double(fileDt)/1000000.0lf}s)")
+                    log::green("PASS {uri} {time_dt_hr(fileDt)}")
             else
-                log::red("FAIL {uri} ({double(fileDt)/1000000.0lf}s)")
+                log::red("FAIL {uri} {time_dt_hr(fileDt)}")
             res += status
     else
         for file in files
@@ -116,9 +117,9 @@ def main()
             let fileDt = get_time_usec(fileTime)
             res += status
             if exitCode == 0 && parsedResult && status.failed + status.errors == 0
-                log::green("PASS {uri} ({double(fileDt)/1000000.0lf}s)")
+                log::green("PASS {uri} {time_dt_hr(fileDt)}")
             else
-                log::red("FAIL {uri} ({double(fileDt)/1000000.0lf}s)")
+                log::red("FAIL {uri} {time_dt_hr(fileDt)}")
                 if exitCode != 0
                     log::red("exit status {exitCode}")
                 if !parsedResult
@@ -126,14 +127,25 @@ def main()
                     res.errors += 1
                     log::red("`{uri}` execution was interrupted, crashed for example")
                     log::info("to get more information, run the test manually\n> {singleTest}")
+    finish_tests(res, totalTime)
 
+
+[export]
+def timeout_tests(var res: SuiteResult; totalTime: int64; timeout: float)
+    res.errors += 1
+    res.total += 1
+    log::error("Test timed out after {timeout}s")
+    finish_tests(res, totalTime)
+
+
+def finish_tests(res: SuiteResult; totalTime: int64)
     let resCode = res.failed + res.errors
     let totalDt = get_time_usec(totalTime)
     log::info("\n{res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped")
     if resCode == 0
-        log::green("SUCCESS! ({double(totalDt)/1000000.0lf}s)")
+        log::green("SUCCESS! {time_dt_hr(totalDt)}")
     else
-        log::red("FAILED! ({double(totalDt)/1000000.0lf}s)")
+        log::red("FAILED! {time_dt_hr(totalDt)}")
     unsafe
         fio::exit(resCode)
 

@@ -7,7 +7,7 @@ require uriparser
 
 
 let verbose = false
-let uriPaths = true
+let uriPaths = false
 
 var useTtyColors = false
 
@@ -64,3 +64,13 @@ def yellow_str(str: string)
     return useTtyColors ? "\x1B[33m{str}\x1B[0m\n" : str
 def blue_str(str: string)
     return useTtyColors ? "\x1B[34m{str}\x1B[0m\n" : str
+
+def time_dt_hr(dt: int): string
+    return "({double(dt)/1000000.0lf}s)"
+
+def init_log()
+    init_log(get_command_line_arguments())
+
+
+def init_log(args: array<string>)
+    log::useTtyColors = args |> has_value("--color")
