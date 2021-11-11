@@ -268,6 +268,13 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
                 if context.stackOnRecover
                     *context.context |> stackwalk(context.context.exceptionAt)
                 return
+
+    var expectFailure = context.expectFailure
+    if expectFailure && !failed
+        expectFailure = false
+        failed = true
+        log::error("{context.indenting}--- expect test failure, but it's success '{name}' {time_dt_hr(dt)}")
+
     if failed
         res.failed += 1
     elif skipped
@@ -277,7 +284,7 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
         res.passed += 1
 
     if beforeFailed < res.failed
-        errorOrBlue(context.expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
+        errorOrBlue(expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
     else
         log::green("{context.indenting}--- PASS '{name}' {time_dt_hr(dt)}")
 
