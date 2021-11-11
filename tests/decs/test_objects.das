@@ -30,7 +30,7 @@ def test_clone_syntax( t: T?)
     t |> success(count==1)
 
 [test]
-def test_type_mismatch( var t: T?)
+def test_type_mismatch( t:T? )
     restart()
     create_entity <| @ ( eid, cmp )
         cmp.pos := float3(1,2,3)
@@ -48,8 +48,6 @@ def test_type_mismatch( var t: T?)
         // t |> equal( ok, false)
         let f123 = cmp |> get("pos", float3(13))
         t |> equal( "1,2,3", "{f123}")
-    finally
-        t = null
     commit()
 
 [decs_template]

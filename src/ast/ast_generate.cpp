@@ -433,7 +433,7 @@ namespace das {
         // now finalize
         bool needUnsafe = false;
         for ( const auto & fl : ls->fields ) {
-            if ( !fl.type->constant && fl.type->needDelete() ) {
+            if ( !fl.type->constant && !fl.capturedConstant && fl.type->needDelete() ) {
                 if ( !fl.doNotDelete && !fl.capturedRef ) {
                     if ( fl.type->isPointer() && fl.type->firstType && fl.type->firstType->constant ) continue;
                     auto fva = make_smart<ExprVar>(fl.at, "__this");

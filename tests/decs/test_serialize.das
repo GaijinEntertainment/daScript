@@ -5,7 +5,7 @@ require daslib/decs_boost
 require dastest/testing_boost public
 
 [test]
-def test_serialize( var t: T? )
+def test_serialize( t: T? )
     restart()
     for i in range (3)
         create_entity <| @ ( eid, cmp )

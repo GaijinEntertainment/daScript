@@ -6,7 +6,7 @@ require daslib/live
 require fio
 
 [test]
-def test_create_object( var t: T? )
+def test_create_object( t: T? )
     let app_f = "test_live_app.das"
     let app_d = "{get_das_root()}/tests/decs"
     t |> run("go live") <| @ ( t : T? )
