@@ -116,8 +116,7 @@ def build_req_from_args ( qblk:ExprBlock? )
             let detp = a |> is_decs_template
             if detp is yes
                 for f in a._type.structType.fields
-                    if f.init == null
-                        req.req |> push("{detp as yes}{f.name}")
+                    req.req |> push("{detp as yes}{f.name}")
             else
                 req.req |> push(string(a.name))
     for aa in qblk.annotations
@@ -131,15 +130,15 @@ def build_req_from_args ( qblk:ExprBlock? )
     return <- req
 
 [macro_function]
-def getter_name ( a; const_parent:bool )
+def getter_name ( a; const_parent:bool; can_be_optional:bool )
     var getter = "get_ro"
     if typeinfo(stripped_typename a)=="ast::FieldDeclaration"
-        if a.init != null
+        if a.init != null && can_be_optional
             getter = "get_default_ro"
         elif !const_parent
             getter = "get"
     else
-        if a.init != null
+        if a.init != null && can_be_optional
             if a._type.flags.ref || !a._type.flags.constant
                 macro_error(compiling_program(),a.at,"argument {a.name} has default value, it can't be & or var")
                 return ""
@@ -154,7 +153,7 @@ def getter_name ( a; const_parent:bool )
     return getter
 
 [macro_function]
-def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a; prefix,suffix:string; const_parent : bool = false )
+def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a; prefix,suffix:string; const_parent : bool = false; can_be_optional : bool = true )
     let qli = length(qloop.iterators)
     qloop.iterators |> resize( qli + 1 )
     qloop.iterators[qli] := "{prefix}{a.name}{suffix}"
@@ -162,7 +161,7 @@ def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a;
     var ftype <- clone_type(a._type)
     ftype.flags &= ~ TypeDeclFlags constant
     ftype.flags &= ~ TypeDeclFlags ref
-    var getter = getter_name(a,const_parent)
+    var getter = getter_name(a,const_parent,can_be_optional)
     if empty(getter)
         return false
     var cget <- new [[ExprCall() name:=getter, at=a.at]]
@@ -176,11 +175,11 @@ def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a;
     return true
 
 [macro_function]
-def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlock>; a; prefix, suffix:string; const_parent : bool = false )
+def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlock>; a; prefix, suffix:string; const_parent : bool = false; can_be_optional : bool = true )
     var ftype <- clone_type(a._type)
     ftype.flags &= ~ TypeDeclFlags constant
     ftype.flags &= ~ TypeDeclFlags ref
-    var getter = getter_name(a,const_parent)
+    var getter = getter_name(a,const_parent,can_be_optional)
     if empty(getter)
         return false
     var iget : ExpressionPtr
@@ -297,7 +296,7 @@ class DecsQueryMacro : AstCallMacro
                 if detp is yes
                     kaboom |> push <| [[auto string(a.name),detp as yes,"_{a.name}"]]
                     for f in a._type.structType.fields
-                        if !append_index_lookup(arch_name, qlbody, f, detp as yes, "_{a.name}", a._type.flags.constant)
+                        if !append_index_lookup(arch_name, qlbody, f, detp as yes, "_{a.name}", a._type.flags.constant, false)
                             return [[ExpressionPtr]]
                 else
                     if !append_index_lookup(arch_name, qlbody, a, "", "")
@@ -318,7 +317,7 @@ class DecsQueryMacro : AstCallMacro
                 if detp is yes
                     kaboom |> push <| [[auto string(a.name),detp as yes,"_{a.name}"]]
                     for f in a._type.structType.fields
-                        if !append_iterator(arch_name, qloop, f, detp as yes, "_{a.name}", a._type.flags.constant)
+                        if !append_iterator(arch_name, qloop, f, detp as yes, "_{a.name}", a._type.flags.constant, false)
                             return [[ExpressionPtr]]
                 else
                     if !append_iterator(arch_name, qloop, a, "", "")
