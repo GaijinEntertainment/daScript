@@ -44,20 +44,25 @@ struct SuiteFileCtx
     [[do_not_delete]] context: rtti::Context?
     uriPaths: bool = false
     indenting: string = ""
+    verbose: bool = false
     stackOnRecover: bool = true
-    verbose:bool = false
+    expectFailure: bool = false
 
 
-def createSuiteFileCtx()
+def createSuiteFileCtx(): SuiteFileCtx
     return <- SuiteFileCtx(get_command_line_arguments())
 
 
-def SuiteFileCtx(args: array<string>)
+def SuiteFileCtx(args: array<string>): SuiteFileCtx
     var ctx <- SuiteFileCtx()
     ctx.uriPaths = args |> has_value("--uri-paths")
     unsafe
         ctx.context = addr(this_context())
     return <- ctx
+
+
+def SuiteFileCtx(ctx: SuiteCtx): SuiteFileCtx
+    return <- [[SuiteFileCtx uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
 
 
 def private match_test_name(name: string; ctx: SuiteCtx)
@@ -70,6 +75,13 @@ def private match_test_name(name: string; ctx: SuiteCtx)
 
 
 def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
+    var fileCtx <- SuiteFileCtx(ctx)
+    var res = test_file(file_name, ctx, fileCtx)
+    delete fileCtx
+    return res
+
+
+def test_file(file_name: string; ctx: SuiteCtx; file_ctx: SuiteFileCtx): SuiteResult
     var res: SuiteResult
     var access := make_file_access("")
     access |> add_file_access_root("dastest", ctx.dastestRoot)
@@ -85,25 +97,36 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                 if ok
                     if !empty(output)
                         log::info("{output}")
-                else
-                    log::error("Failed to compile {file_name}\n{output}")
+                elif program != null
+                    failed = false
+                    for err in program.errors
+                        let count = --expectedErrors[err.cerr]
+                        if count < 0
+                            failed = true
+
+                if !failed
+                    for errC, errN in keys(expectedErrors), values(expectedErrors)
+                        if errN > 0
+                            failed = true
+                            break
+                if !ok || failed
+                    if failed
+                        log::error("Failed to compile {file_name}\n{output}")
+                    else
+                        log::blue("Failed to compile {file_name}\n{output}")
                     if program != null
-                        failed = false
                         for err in program.errors
-                            var count = --expectedErrors[err.cerr]
-                            if count<0
+                            if expectedErrors[err.cerr] < 0
                                 log::error("{describe(err.at)}: {int(err.cerr)}: {err.what}")
                                 if !empty(err.extra)
                                     log::info("{err.extra}")
                                 if !empty(err.fixme)
                                     log::info("{err.fixme}")
-                                failed = true
-                for errC,errN in keys(expectedErrors),values(expectedErrors)
-                    if errN > 0
-                        log::error("expect {int(errC)}:{errN} // {errC}")
-                        log::info("Expect declaration count is greater than the actual errors reported")
-                        failed = true
-                if !ok || failed
+                    for errC, errN in keys(expectedErrors), values(expectedErrors)
+                        if errN > 0
+                            log::error("expect {int(errC)}:{errN} // {errC}")
+                            log::info("Expect declaration count is greater than the actual errors reported")
+
                     res.total += 1
                     if failed
                         res.errors += 1
@@ -116,7 +139,7 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                         res.errors += 1
                         log::error("Failed to compile {file_name}\n{serrors}")
                         return
-                    var fileCtx <- [[SuiteFileCtx uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
+                    var fileCtx := file_ctx
                     unsafe
                         fileCtx.context = reinterpret<Context?> context
                     let mod = program |> get_this_module()
@@ -237,14 +260,21 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
             if !deliberateRecover
                 dt = get_time_usec(t0)
                 res.errors += 1
-                log::red("{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
+                errorOrBlue(context.expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
                 if !empty(context.context.exception)
-                    log::red("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
+                    errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
                 if !empty(context.context.last_exception)
-                    log::red("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
+                    errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
                 if context.stackOnRecover
                     *context.context |> stackwalk(context.context.exceptionAt)
                 return
+
+    var expectFailure = context.expectFailure
+    if expectFailure && !failed
+        expectFailure = false
+        failed = true
+        log::error("{context.indenting}--- expect test failure, but it's success '{name}' {time_dt_hr(dt)}")
+
     if failed
         res.failed += 1
     elif skipped
@@ -254,6 +284,12 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
         res.passed += 1
 
     if beforeFailed < res.failed
-        log::red("{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
+        errorOrBlue(expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
     else
         log::green("{context.indenting}--- PASS '{name}' {time_dt_hr(dt)}")
+
+def errorOrBlue(expectFailure: bool; msg: string)
+    if expectFailure
+        log::blue(msg)
+    else
+        log::error(msg)
