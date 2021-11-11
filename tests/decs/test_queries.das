@@ -3,6 +3,7 @@ options gc
 
 require daslib/decs_boost
 require dastest/testing_boost public
+require daslib/static_let
 
 [test]
 def test_queries ( t: T? )
@@ -80,7 +81,58 @@ def test_find_query ( t: T? )
         return pos.x==1.
     t |> equal(looked_at,2)
 
+[test]
+def test_query_eid ( t: T? )
+    restart()
+    let EID = create_entity <| @ ( eid, cmp )
+        cmp.pos := float3(1)
+    commit()
+    var count = 0
+    query(EID) <| $ ( pos:float3 )
+        t |> equal(pos, float3(1))
+        count ++
+    t |> equal(count, 1)
+
+[decs_template]
+struct Something
+    a : int
+
+[test]
+def test_query_eid_obj ( t: T? )
+    restart()
+    let EID = create_entity <| @ ( eid, cmp )
+        cmp |> apply_decs_template([[Something a=1]])
+    commit()
+    var count = 0
+    query(EID) <| $ ( s : Something )
+        t |> equal(s.a, 1)
+        count ++
+    t |> equal(count, 1)
+
+[test]
+def test_query_everything ( t: T? )
+    restart()
+    create_entity <| @ ( eid, cmp )
+        cmp.i := 1
+    create_entity <| @ ( eid, cmp )
+        cmp.j := 1
+    create_entity <| @ ( eid, cmp )
+        cmp.i := 2
+        cmp.j := 2
+    commit()
+    query <| $ ( [[optional]]i:int?; j:int=5; k:int=5 )
+        t |> equal(k, 5)    // not in any archetype, always default
+        if i==null
+            t |> equal(j, 1)
+        elif *i==2
+            t |> equal(j, 2)
+        else
+            t |> equal(j, 5)
+
 [export]
 def main
     pass
+
+options debugger
+require daslib/debug
 

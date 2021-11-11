@@ -325,7 +325,7 @@ def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
 
 def public verify_request ( var erq : EcsRequest ) : tuple<ok:bool;error:string>
     if erq.hash==0u || (empty(erq.req) && empty(erq.reqn))
-        return [[auto false, "missing components"]]
+        return [[auto true, ""]]    // this queries just about everything
     for N in erq.reqn   // assuming require_not is typically shorter
         if erq.req |> binary_search(N)
             return [[auto false, "duplicate req and neq {N}"]]
