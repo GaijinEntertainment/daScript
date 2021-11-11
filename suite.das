@@ -44,8 +44,9 @@ struct SuiteFileCtx
     [[do_not_delete]] context: rtti::Context?
     uriPaths: bool = false
     indenting: string = ""
+    verbose: bool = false
     stackOnRecover: bool = true
-    verbose:bool = false
+    expectFailure: bool = false
 
 
 def createSuiteFileCtx()
@@ -248,11 +249,11 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
             if !deliberateRecover
                 dt = get_time_usec(t0)
                 res.errors += 1
-                log::red("{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
+                errorOrBlue(context.expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
                 if !empty(context.context.exception)
-                    log::red("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
+                    errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
                 if !empty(context.context.last_exception)
-                    log::red("{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
+                    errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
                 if context.stackOnRecover
                     *context.context |> stackwalk(context.context.exceptionAt)
                 return
@@ -265,6 +266,12 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
         res.passed += 1
 
     if beforeFailed < res.failed
-        log::red("{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
+        errorOrBlue(context.expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
     else
         log::green("{context.indenting}--- PASS '{name}' {time_dt_hr(dt)}")
+
+def errorOrBlue(expectFailure: bool; msg: string)
+    if expectFailure
+        log::blue(msg)
+    else
+        log::error(msg)
