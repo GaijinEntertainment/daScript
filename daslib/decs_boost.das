@@ -141,10 +141,12 @@ def getter_name ( a; const_parent:bool )
                 macro_error(compiling_program(),a.at,"argument {a.name} has default value, it can't be & or var")
                 return ""
             getter = "get_default_ro"
-        elif a._type.isRef && !a._type.isRefType
+        elif (a._type.isRef && !a._type.isRefType)
             if a._type.flags.constant
                 macro_error(compiling_program(),a.at,"argument {a.name} is both & and constant")
                 return ""
+            getter = "get"
+        elif a._type.isRefType && !a._type.flags.constant
             getter = "get"
     return getter
 
@@ -220,7 +222,6 @@ class DecsQueryMacro : AstCallMacro
         var qblk = mblk._block as ExprBlock
         for arg in qblk.arguments
             if arg._type != null
-                arg._type.flags |= TypeDeclFlags temporary
                 if !arg._type.flags.constant
                     arg._type.flags |= TypeDeclFlags ref
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
