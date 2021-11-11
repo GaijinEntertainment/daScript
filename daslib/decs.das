@@ -20,6 +20,7 @@ typedef ComponentHash = uint
 struct CTypeInfo
     basicType : Type
     mangledName : string
+    fullName : string
     hash : uint
     size : uint
     eraser     : function<(var arr:array<uint8>):void>
@@ -102,7 +103,7 @@ def operator !=(a, b: decs::EntityId implicit)
     return a.id != b.id || a.generation != b.generation
 
 def public describe ( info:CTypeInfo )
-    return "{info.basicType} MNH={info.mangledName} hash={info.hash} size={info.size}"
+    return "{info.fullName} {info.basicType} MNH={info.mangledName} hash={info.hash} size={info.size}"
 
 def public operator . ( var cmp:ComponentMap; name:string ) : ComponentValue &
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
@@ -366,7 +367,7 @@ def public for_eid_archetype ( eid:EntityId implicit; hash:ComponentHash; var er
     var req & = decsState.ecsQueries[qi]
     let aidx = decsState.archetypeLookup[lookup.archetype]
     if aidx == 0
-        panic("archetype not found")
+        return false
     if binary_search(req.archetypes,aidx-1)
         var arch & = decsState.allArchetypes[aidx-1]
         assert(arch.size > 0)
@@ -443,6 +444,21 @@ def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iter
                 _builtin_make_fixed_array_iterator(it,addr(comp.data[0]),arch.size,comp.stride)
             return <- it
     return <- repeat_ref(value,arch.size)
+
+def public get_optional ( arch:Archetype; name:string; value:auto(TT)? ) : iterator<TT-const-&-#?>
+    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
+    if idx<length(arch.components)
+        let comp & = arch.components[idx]
+        if comp.name==name
+            unsafe
+                let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
+                if comp.info.hash != cvinfo.hash
+                    panic("component array {name} type mismatch, expecting {describe(comp.info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
+            var it : iterator<TT-const-&-#?>
+            unsafe
+                _builtin_make_fixed_array_iterator(it,addr(comp.data[0]),arch.size,comp.stride)
+            return <- it
+    return <- repeat([[TT-const-&-#?]],arch.size)
 
 def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var lookup & = decsState.entityLookup[eid.id]
@@ -596,8 +612,9 @@ def private make_component ( name:string; value:auto(TT) )
     var cv = [[ComponentValue name=name]]
     unsafe
         var tinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
+        var tname = typeinfo(fulltypename type<TT-const-&-#>)
         cv.info = [[CTypeInfo basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo),
-            hash=tinfo.hash, size=tinfo.size]]
+            fullName=tname,hash=tinfo.hash, size=tinfo.size]]
         make_callbacks(cv, value)
         memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
     return cv

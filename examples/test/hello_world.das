@@ -1,3 +1,8 @@
+options debugger
+require daslib/debug
+
+require daslib/safe_addr
+
 class A
     name : string
     def func()

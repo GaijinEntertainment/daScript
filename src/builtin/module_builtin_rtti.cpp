@@ -496,6 +496,7 @@ namespace das {
             this->template addField<DAS_BIND_MANAGED_FIELD(enumType)>("enumType");
             this->template addField<DAS_BIND_MANAGED_FIELD(dimSize)>("dimSize");
             this->template addField<DAS_BIND_MANAGED_FIELD(argCount)>("argCount");
+            this->template addField<DAS_BIND_MANAGED_FIELD(flags)>("flags");
             this->template addField<DAS_BIND_MANAGED_FIELD(size)>("size");
             this->template addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             this->template addProperty<DAS_BIND_MANAGED_PROP(isRef)>("isRef");

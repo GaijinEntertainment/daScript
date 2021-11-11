@@ -118,7 +118,8 @@ def build_req_from_args ( qblk:ExprBlock? )
                 for f in a._type.structType.fields
                     req.req |> push("{detp as yes}{f.name}")
             else
-                req.req |> push(string(a.name))
+                if !(find_arg("optional",a.annotation) ?as tBool ?? false)
+                    req.req |> push(string(a.name))
     for aa in qblk.annotations
         let isreq = aa.annotation.name=="REQUIRE"
         let isreqn = aa.annotation.name=="REQUIRE_NOT"
@@ -132,13 +133,21 @@ def build_req_from_args ( qblk:ExprBlock? )
 [macro_function]
 def getter_name ( a; const_parent:bool; can_be_optional:bool )
     var getter = "get_ro"
-    if typeinfo(stripped_typename a)=="ast::FieldDeclaration"
+    static_if typeinfo(stripped_typename a)=="ast::FieldDeclaration"        // part of the desc_template
         if a.init != null && can_be_optional
             getter = "get_default_ro"
         elif !const_parent
             getter = "get"
     else
-        if a.init != null && can_be_optional
+        if find_arg("optional",a.annotation) ?as tBool ?? false
+            if a.init != null
+                macro_error(compiling_program(),a.at,"optional argument {a.name} can't have default value")
+                return ""
+            elif !a._type.isPointer
+                macro_error(compiling_program(),a.at,"optional argument {a.name} must be a pointer")
+                return ""
+            getter = "get_optional"
+        elif a.init != null && can_be_optional
             if a._type.flags.ref || !a._type.flags.constant
                 macro_error(compiling_program(),a.at,"argument {a.name} has default value, it can't be & or var")
                 return ""

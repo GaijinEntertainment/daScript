@@ -2687,6 +2687,7 @@ namespace das {
         }
         if ( expr->typeexpr->isAlias() ) {
             if ( auto eT = inferAlias(expr->typeexpr) ) {
+                eT->sanitize();
                 expr->typeexpr = eT;
                 reportAstChanged();
                 return Visitor::visit(expr);
@@ -2736,6 +2737,7 @@ namespace das {
                 if ( expr->typeexpr->isAlias() ) {
                     if ( auto eT = inferAlias(expr->typeexpr) ) {
                         expr->typeexpr = eT;
+                        eT->sanitize();
                         reportAstChanged();
                         return Visitor::visit(expr);
                     } else if ( !allowMissingType ) {
