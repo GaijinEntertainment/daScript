@@ -52,7 +52,7 @@
 extern int das_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 2 "ds_parser.ypp"
+#line 13 "ds_parser.ypp"
 
     #include "daScript/misc/platform.h"
     #include "daScript/ast/ast.h"
@@ -292,7 +292,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 102 "ds_parser.ypp"
+#line 113 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;

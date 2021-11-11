@@ -1,4 +1,15 @@
 %define api.prefix {das_yy}
+
+/*
+    how to write error messages (style guidelines)
+
+    1. start with lower case
+    2. no . at the end
+    3. no , before any names                    ("invalid name "+blah)
+    4. 'use' word macro for the annotation
+    5. give options where possible              ("try <- instead")
+*/
+
 %code requires {
     #include "daScript/misc/platform.h"
     #include "daScript/ast/ast.h"
@@ -495,7 +506,7 @@ module_declaration
         if ( g_Program->thisModule->name.empty() ) {
             g_Program->thisModule->name = *$name;
         } else if ( g_Program->thisModule->name != *$name ){
-            das_yyerror("this module already has a name, and its " + g_Program->thisModule->name,tokAt(@name),
+            das_yyerror("this module already has a name " + g_Program->thisModule->name,tokAt(@name),
                 CompilationError::module_already_has_a_name);
         }
         if ( !g_Program->policies.ignore_shared_modules ) {
@@ -578,7 +589,7 @@ expr_reader
             for ( auto & x : macros ) {
                 options += "\t" + x->module->name + "::" + x->name + "\n";
             }
-            das_yyerror("too many options for macro " + *$mark +  "\n" + options, tokAt(@mark),
+            das_yyerror("too many options for the reader macro " + *$mark +  "\n" + options, tokAt(@mark),
                 CompilationError::unsupported_read_macro);
         } else if ( yychar != '~' ) {
             das_yyerror("expecting ~ after the reader macro", tokAt(@mark),
@@ -1453,7 +1464,7 @@ expr_block
             swap ( mkb->capture, *$clist );
             delete $clist;
             if ( $bal != 1 ) {   // if its not lambda, can't capture
-                das_yyerror("can only have capture section for lambda",
+                das_yyerror("can only have capture section for the lambda",
                     mkb->at,CompilationError::invalid_capture);
             }
         }
@@ -1464,11 +1475,11 @@ expr_block
                         auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                         string err;
                         if ( !ann->apply(closure, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                            das_yyerror("can't apply annotation\n" + err, tokAt(@annL),
+                            das_yyerror("macro [" +pA->annotation->name + "] failed to apply to the block\n" + err, tokAt(@annL),
                                 CompilationError::invalid_annotation);
                         }
                     } else {
-                        das_yyerror("blocks are only allowed function annotations", tokAt(@annL),
+                        das_yyerror("blocks are only allowed function macros", tokAt(@annL),
                             CompilationError::invalid_annotation);
                     }
                 }
@@ -1732,7 +1743,7 @@ expr
             string candidates;
             if ( enums.size() ) candidates += g_Program->describeCandidates(enums);
             if ( aliases.size() ) candidates += g_Program->describeCandidates(aliases);
-            das_yyerror("too many options for " + *$ena + "\n" + candidates, tokAt(@ena),
+            das_yyerror("too many options for the " + *$ena + "\n" + candidates, tokAt(@ena),
                 CompilationError::type_not_found);
         } else if ( enums.size()==0 && aliases.size()==0 ) {
             das_yyerror("enumeration or bitfield not found " + *$ena, tokAt(@ena),
@@ -1823,7 +1834,7 @@ struct_variable_declaration_list
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
             DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT { das_force_oxford_comma=true; } function_declaration_header[func] ';' {
         if ( !g_thisStructure->isClass ) {
-            das_yyerror("structure can't have member function",
+            das_yyerror("structure can't have a member function",
                 $func->at, CompilationError::invalid_member_function);
         } else if ( $func->isGeneric() ) {
             das_yyerror("generic function can't be a member of a class " + $func->getMangledName(),
@@ -1872,10 +1883,10 @@ struct_variable_declaration_list
         $func->atDecl = tokRangeAt(@from,@block);
         $func->body = $block;
         if ( !g_thisStructure ) {
-            das_yyerror("internal error. member function outside of class.",
+            das_yyerror("internal error or invalid macro. member function is declared outside of a class",
                 $func->at, CompilationError::invalid_member_function);
         } else if ( !g_thisStructure->isClass ) {
-            das_yyerror("structure can't have member function",
+            das_yyerror("structure can't have a member function",
                 $func->at, CompilationError::invalid_member_function);
         } else if ( $func->isGeneric() ) {
             das_yyerror("generic function can't be a member of a class " + $func->getMangledName(),
@@ -1903,11 +1914,11 @@ struct_variable_declaration_list
                 modifyToClassMember($func, g_thisStructure, false, $cnst);
             } else {
                 if ( $ovr ) {
-                    das_yyerror("can't override initializer or finalizer " + $func->getMangledName(),
+                    das_yyerror("can't override an initializer or a finalizer " + $func->getMangledName(),
                         $func->at, CompilationError::invalid_member_function);
                 }
                 if ( $cnst ) {
-                    das_yyerror("can't have constant initializer or finalizer " + $func->getMangledName(),
+                    das_yyerror("can't have a constant initializer or a finalizer " + $func->getMangledName(),
                         $func->at, CompilationError::invalid_member_function);
                 }
                 if ( $func->name!="finalize" ) {
@@ -1933,7 +1944,7 @@ struct_variable_declaration_list
         $$ = $list;
     }
     |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' ';' {
-        das_yyerror("Structure field or class method annotation expected to remain on the same line with field or class.",
+        das_yyerror("structure field or class method annotation expected to remain on the same line with the field or the class",
             tokAt(@annL), CompilationError::syntax_error);
         delete $annL;
         $$ = $list;
@@ -2223,8 +2234,8 @@ enum_declaration
                         auto ann = static_pointer_cast<EnumerationAnnotation>(pA->annotation);
                         string err;
                         if ( !ann->touch(pEnum, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                            das_yyerror("can't 'touch' with enumeration annotation\n" + err,
-                                tokAt(@loc), CompilationError::invalid_annotation);
+                            das_yyerror("macro [" +pA->annotation->name + "] failed to finalize the enumeration " + pEnum->name + "\n" + err, tokAt(@annL),
+                                CompilationError::invalid_annotation);
                         }
                     }
                 }
@@ -2252,8 +2263,8 @@ enum_declaration
                         auto ann = static_pointer_cast<EnumerationAnnotation>(pA->annotation);
                         string err;
                         if ( !ann->touch(pEnum, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                            das_yyerror("can't 'touch' with enumeration annotation\n" + err,
-                                tokAt(@loc), CompilationError::invalid_annotation);
+                            das_yyerror("macro [" +pA->annotation->name + "] failed to finalize the enumeration " +pEnum->name + "\n" + err, tokAt(@annL),
+                                CompilationError::invalid_annotation);
                         }
                     }
                 }
@@ -2290,7 +2301,7 @@ structure_name
                 pStruct->name = *$name;
                 pStruct->parent = structs.back().get();
                 if ( pStruct->parent->sealed ) {
-                    das_yyerror("can't derive from sealed class or structure "+*$parent,tokAt(@parent),
+                    das_yyerror("can't derive from a sealed class or structure "+*$parent,tokAt(@parent),
                         CompilationError::invalid_override);
                 }
                 pStruct->annotations.clear();
@@ -2342,10 +2353,10 @@ structure_declaration
             pStruct->at = tokAt(@ps);
             if ( pStruct->parent && pStruct->parent->isClass != pStruct->isClass ) {
                 if ( pStruct->isClass ) {
-                    das_yyerror("class can only derive from class", pStruct->at,
+                    das_yyerror("class can only derive from a class", pStruct->at,
                         CompilationError::invalid_override);
                 } else {
-                    das_yyerror("struct can only derive from struct", pStruct->at,
+                    das_yyerror("structure can only derive from a structure", pStruct->at,
                         CompilationError::invalid_override);
                 }
             }
@@ -2360,13 +2371,13 @@ structure_declaration
             for ( auto pDecl : *$list ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
                     if ( !pStruct->isClass && pDecl->isPrivate ) {
-                        das_yyerror("only class member can be private, "+name_at.first,name_at.second,
+                        das_yyerror("only class member can be private "+name_at.first,name_at.second,
                             CompilationError::invalid_private);
                     }
                     auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name_at.first);
                     if ( !oldFd ) {
                         if ( pDecl->override ) {
-                            das_yyerror("structure field is not overriding anything, "+name_at.first,name_at.second,
+                            das_yyerror("structure field is not overriding anything "+name_at.first,name_at.second,
                                 CompilationError::invalid_override);
                         } else {
                             auto td = make_smart<TypeDecl>(*pDecl->pTypeDecl);
@@ -2403,12 +2414,12 @@ structure_declaration
                             auto ann = static_pointer_cast<StructureAnnotation>(pA->annotation);
                             string err;
                             if ( !ann->touch(pStruct, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                                das_yyerror("can't 'touch' with structure annotation\n" + err,
+                                das_yyerror("macro [" +pA->annotation->name + "] failed to apply to the structure " + pStruct->name + "\n" + err,
                                     tokAt(@loc), CompilationError::invalid_annotation);
                             }
                         } else if ( pA->annotation->rtti_isStructureTypeAnnotation() ) {
                             if ( $annL->size()!=1 ) {
-                                das_yyerror("structures are only allowed one structure type annotation", tokAt(@loc),
+                                das_yyerror("structures are only allowed one structure macro", tokAt(@loc),
                                     CompilationError::invalid_annotation);
                             } else {
                                 if ( !g_Program->addStructureHandle(pStruct,
@@ -2530,7 +2541,7 @@ bitfield_type_declaration
             $$ = new TypeDecl(Type::tBitfield);
             $$->argNames = *$nl;
             if ( $$->argNames.size()>32 ) {
-                das_yyerror("only 32 different bits allowed",tokAt(@basicType),
+                das_yyerror("only 32 different bits are allowed in a bitfield",tokAt(@basicType),
                     CompilationError::invalid_type);
             }
             $$->at = tokAt(@basicType);
@@ -2732,7 +2743,7 @@ bitfield_alias_declaration
         btype->at = tokAt(@vname);
         btype->argNames = *$list;
         if ( btype->argNames.size()>32 ) {
-            das_yyerror("only 32 different bits allowed",tokAt(@vname),
+            das_yyerror("only 32 different bits are allowed in a bitfield",tokAt(@vname),
                 CompilationError::invalid_type);
         }
         if ( !g_Program->addAlias(btype) ) {
@@ -3062,7 +3073,7 @@ void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, 
             for ( int ai=0; ai!=count; ++ai ) {
                 auto pVarType = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                 if ( pDecl->pInit ) {
-                    das_yyerror("can't have default values in type declaration",
+                    das_yyerror("can't have default values in a type declaration",
                         (*pDecl->pNameList)[ai].second,CompilationError::cant_initialize);
                 }
                 pType->argTypes.push_back(pVarType);
@@ -3095,11 +3106,11 @@ void runFunctionAnnotations ( Function * func, AnnotationList * annL, const Line
                     auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
                     string err;
                     if ( !ann->apply(func, *g_Program->thisModuleGroup, pA->arguments, err) ) {
-                        das_yyerror("can't apply annotation\n" + err,
-                            at, CompilationError::invalid_annotation);
+                        das_yyerror("macro [" +pA->annotation->name + "] failed to apply to a function " + func->name + "\n" + err, at,
+                            CompilationError::invalid_annotation);
                     }
                 } else {
-                    das_yyerror("functions are only allowed function annotations",
+                    das_yyerror("functions are only allowed function macros",
                         at, CompilationError::invalid_annotation);
                 }
             }
