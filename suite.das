@@ -85,25 +85,36 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                 if ok
                     if !empty(output)
                         log::info("{output}")
-                else
-                    log::error("Failed to compile {file_name}\n{output}")
+                elif program != null
+                    failed = false
+                    for err in program.errors
+                        let count = --expectedErrors[err.cerr]
+                        if count < 0
+                            failed = true
+
+                if !failed
+                    for errC, errN in keys(expectedErrors), values(expectedErrors)
+                        if errN > 0
+                            failed = true
+                            break
+                if !ok || failed
+                    if failed
+                        log::error("Failed to compile {file_name}\n{output}")
+                    else
+                        log::blue("Failed to compile {file_name}\n{output}")
                     if program != null
-                        failed = false
                         for err in program.errors
-                            var count = --expectedErrors[err.cerr]
-                            if count<0
+                            if expectedErrors[err.cerr] < 0
                                 log::error("{describe(err.at)}: {int(err.cerr)}: {err.what}")
                                 if !empty(err.extra)
                                     log::info("{err.extra}")
                                 if !empty(err.fixme)
                                     log::info("{err.fixme}")
-                                failed = true
-                for errC,errN in keys(expectedErrors),values(expectedErrors)
-                    if errN > 0
-                        log::error("expect {int(errC)}:{errN} // {errC}")
-                        log::info("Expect declaration count is greater than the actual errors reported")
-                        failed = true
-                if !ok || failed
+                    for errC, errN in keys(expectedErrors), values(expectedErrors)
+                        if errN > 0
+                            log::error("expect {int(errC)}:{errN} // {errC}")
+                            log::info("Expect declaration count is greater than the actual errors reported")
+
                     res.total += 1
                     if failed
                         res.errors += 1

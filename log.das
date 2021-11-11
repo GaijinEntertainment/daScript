@@ -49,6 +49,13 @@ def red(msg: string)
         print(red_str("{msg} @{file_info_hr(get_line_info(1), uriPaths)}\n"))
 
 
+def blue(msg: string)
+    if !verbose
+        print(blue_str("{msg}\n"))
+    else
+        print(blue_str("{msg} @{file_info_hr(get_line_info(1), uriPaths)}\n"))
+
+
 def file_info_hr(at: LineInfo; uri_path: bool)
     return (uri_path
         ? "{file_name_to_uri(at.fileInfo != null ? string(at.fileInfo.name) : "")}#{int(at.line)}"
