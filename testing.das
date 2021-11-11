@@ -9,7 +9,6 @@ class T
     name: string
     startTick: int64
     verbose: bool
-    expectFailure: bool = false
     onLog: lambda<(msg: string; at: LineInfo): void>
     onFail: lambda<(now: bool): void>
     onSkipNow: lambda<(): void>
