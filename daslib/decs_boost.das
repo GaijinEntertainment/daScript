@@ -32,6 +32,9 @@ class DecsReqN : AstFunctionAnnotation {}
 [structure_macro(name="decs_template")]
 class DecsTemplate : AstStructureAnnotation
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        if length(st.fields)==0
+            errors := "expecting at least one field in the desc_template {st.name}"
+            return false
         let ppref = decs_prefix(args)
         let prefix = (ppref is yes) ? (ppref as yes) : "{st.name}_"
         var fnApply <- new [[Function() at=st.at, atDecl=st.at, name:="apply_decs_template"]]
