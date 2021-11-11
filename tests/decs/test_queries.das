@@ -67,6 +67,19 @@ def test_contracts ( t: T? )
             count_c ++
         t |> equal( count_c, 2)
 
+[test]
+def test_find_query ( t: T? )
+    restart()
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp.pos := float3(i)
+    commit()
+    var looked_at = 0
+    find_query <| $ ( pos:float3 )
+        looked_at ++
+        return pos.x==1.
+    t |> equal(looked_at,2)
+
 [export]
 def main
     pass
