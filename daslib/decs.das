@@ -91,6 +91,7 @@ struct public DecsPass
 var public decsState : DecsState
 var private deferActions : array<DeferAction>
 var private decsPasses : array<DecsPass>
+var private insideQuery : int
 
 let INVALID_ENTITY_ID = [[decs::EntityId]]
 
@@ -240,9 +241,9 @@ def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype
     if afound==0
         decsState.allArchetypes |> emplace([[Archetype hash=hash]])
         afound = length(decsState.allArchetypes)
-        invoke(blk, decsState.allArchetypes[afound-1], afound-1, true)
+        ++insideQuery; invoke(blk, decsState.allArchetypes[afound-1], afound-1, true); --insideQuery
     else
-        invoke(blk, decsState.allArchetypes[afound-1], afound-1, false)
+        ++insideQuery; invoke(blk, decsState.allArchetypes[afound-1], afound-1, false); --insideQuery
 
 def private create_archetype ( var arch:Archetype; cmp:ComponentMap; idx:int )
     assert(length(arch.components)==0)
@@ -351,7 +352,7 @@ def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype)
     for aidx in decsState.ecsQueries[qi].archetypes
         var arch & = decsState.allArchetypes[aidx]
         if arch.size > 0
-            invoke ( blk, arch )
+            ++insideQuery; invoke ( blk, arch ); --insideQuery
 
 def public for_eid_archetype ( eid:EntityId implicit; hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype;index:int):void> )
     var lookup & = decsState.entityLookup[eid.id]
@@ -369,7 +370,7 @@ def public for_eid_archetype ( eid:EntityId implicit; hash:ComponentHash; var er
     if binary_search(req.archetypes,aidx-1)
         var arch & = decsState.allArchetypes[aidx-1]
         assert(arch.size > 0)
-        invoke(blk, arch, lookup.index)
+        ++insideQuery; invoke(blk, arch, lookup.index); -- insideQuery
         return true
     else
         panic("archetype not found")
@@ -384,7 +385,7 @@ def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsReq
     for aidx in decsState.ecsQueries[qi].archetypes
         var arch & = decsState.allArchetypes[aidx]
         if arch.size > 0
-            invoke ( blk, arch )
+            ++insideQuery; invoke ( blk, arch ); --insideQuery
 
 def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype):bool> )
     var qi = -1
@@ -395,8 +396,8 @@ def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():E
     for aidx in decsState.ecsQueries[qi].archetypes
         var arch & = decsState.allArchetypes[aidx]
         if arch.size > 0
-            if invoke ( blk, arch )
-                return true
+            ++insideQuery; let res = invoke ( blk, arch ); --insideQuery
+            return res
     return false
 
 [template(atype)]
@@ -513,6 +514,8 @@ def public delete_entity ( entityid:EntityId implicit )
     deferActions |> emplace([[DeferAction action<-deval, eid=entityid]])
 
 def public commit
+    if insideQuery!=0
+        panic("can't call commit from inside query")
     for da in deferActions
         da.action |> invoke(da)
     delete deferActions
