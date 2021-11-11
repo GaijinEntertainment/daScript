@@ -4658,6 +4658,19 @@ namespace das {
                     }
                 }
             }
+            if ( expr->op=="++" || expr->op=="+++" || expr->op=="--" || expr->op=="---" ) {
+                if ( expr->subexpr->type->isWorkhorseType() ) {
+                    if ( !expr->subexpr->type->ref ) {
+                        error(expr->op + " can't be applied to non reference " + describeType(expr->subexpr->type), "", "",
+                            expr->at, CompilationError::operator_not_found);
+                        return Visitor::visit(expr);
+                    } else if ( expr->subexpr->type->constant ) {
+                        error(expr->op + " can't be applied to constant " + describeType(expr->subexpr->type), "", "",
+                            expr->at, CompilationError::operator_not_found);
+                        return Visitor::visit(expr);
+                    }
+                }
+            }
             // infer
             vector<TypeDeclPtr> types = { expr->subexpr->type };
             auto functions = findMatchingFunctions(expr->op, types);
