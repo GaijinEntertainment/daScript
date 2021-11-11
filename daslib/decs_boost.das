@@ -368,13 +368,14 @@ class DecsEcsMacro : AstFunctionAnnotation
             return false
         let passName = argPass as tString
         let passFuncName = "decs`pass`{passName}"
-        var blk <- setup_call_list(passFuncName, func.at)
+        var blk <- setup_call_list(passFuncName, func.at, false, true)
         if length(blk.list)==0
-            var reg <- setup_call_list("register`decs`passes", func.at, true)
+            var reg <- setup_call_list("register`decs`passes", func.at, true, true)
             var regc <- new [[ExprCall() at=func.at, name:="decs::register_decs_stage_call"]]
             regc.arguments |> emplace_new <| new [[ExprConstString() at=func.at, value:=passName]]
             regc.arguments |> emplace_new <| new [[ExprAddr() at=func.at, target:=passFuncName]]
             reg.list |> emplace(regc)
+        func.flags |= FunctionFlags privateFunction
         blk.list |> emplace_new <| new [[ExprCall() at=func.at, name:="_::{func.name}"]]
         var fblk <- new [[ExprBlock() at=func.body.at]]                 // new function block
         var cqq <- make_call(func.at,"query")

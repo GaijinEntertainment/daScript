@@ -190,13 +190,15 @@ def find_unique_generic ( mod : Module?; name : string; canfail:bool = false )
         return [[FunctionPtr]]
     return res
 
-def setup_call_list(name: string; at:LineInfo; isInit:bool = false) : ExprBlock?
+def setup_call_list(name: string; at:LineInfo; isInit:bool = false; isPrivate:bool = false) : ExprBlock?
     var fn <- compiling_module() |> find_unique_function(name)
     if fn == null
         fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
         fn.flags |= FunctionFlags generated
         if isInit
             fn.flags |= FunctionFlags init
+        if isPrivate
+            fn.flags |= FunctionFlags privateFunction
         fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
         var blk <- new [[ExprBlock() at=at]]
         var res = get_ptr(blk)

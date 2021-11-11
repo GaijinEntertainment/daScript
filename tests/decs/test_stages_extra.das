@@ -9,3 +9,7 @@ require dastest/testing_boost public
 [decs(stage="make_invisible")]
 def make_invisible ( var visible:bool )
     visible = false
+
+[decs(stage="check_visible")]
+def check_visible ( visible:bool )
+    assert(visible)
