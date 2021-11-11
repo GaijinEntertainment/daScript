@@ -49,16 +49,20 @@ struct SuiteFileCtx
     expectFailure: bool = false
 
 
-def createSuiteFileCtx()
+def createSuiteFileCtx(): SuiteFileCtx
     return <- SuiteFileCtx(get_command_line_arguments())
 
 
-def SuiteFileCtx(args: array<string>)
+def SuiteFileCtx(args: array<string>): SuiteFileCtx
     var ctx <- SuiteFileCtx()
     ctx.uriPaths = args |> has_value("--uri-paths")
     unsafe
         ctx.context = addr(this_context())
     return <- ctx
+
+
+def SuiteFileCtx(ctx: SuiteCtx): SuiteFileCtx
+    return <- [[SuiteFileCtx uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
 
 
 def private match_test_name(name: string; ctx: SuiteCtx)
@@ -71,6 +75,13 @@ def private match_test_name(name: string; ctx: SuiteCtx)
 
 
 def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
+    var fileCtx <- SuiteFileCtx(ctx)
+    var res = test_file(file_name, ctx, fileCtx)
+    delete fileCtx
+    return res
+
+
+def test_file(file_name: string; ctx: SuiteCtx; file_ctx: SuiteFileCtx): SuiteResult
     var res: SuiteResult
     var access := make_file_access("")
     access |> add_file_access_root("dastest", ctx.dastestRoot)
@@ -128,7 +139,7 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
                         res.errors += 1
                         log::error("Failed to compile {file_name}\n{serrors}")
                         return
-                    var fileCtx <- [[SuiteFileCtx uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
+                    var fileCtx := file_ctx
                     unsafe
                         fileCtx.context = reinterpret<Context?> context
                     let mod = program |> get_this_module()
