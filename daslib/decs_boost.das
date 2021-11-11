@@ -141,7 +141,7 @@ def getter_name ( a; const_parent:bool; can_be_optional:bool )
     else
         if find_arg("optional",a.annotation) ?as tBool ?? false
             if a.init != null
-                macro_error(compiling_program(),a.at,"optional argument {a.name} can't have default value")
+                macro_error(compiling_program(),a.at,"optional argument {a.name} can't have a default value")
                 return ""
             elif !a._type.isPointer
                 macro_error(compiling_program(),a.at,"optional argument {a.name} must be a pointer")
