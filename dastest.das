@@ -1,15 +1,15 @@
 options indenting = 4
 
 require fio
-require rtti
 require strings
 require uriparser
-require fs
-require suite
-require log
 require debugapi
 require daslib/json_boost
 require daslib/jobque_boost
+
+require fs
+require suite
+require log
 
 
 let jsonResultPrefix = "##dastest##\n"

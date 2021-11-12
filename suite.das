@@ -2,17 +2,15 @@ options indenting = 4
 
 module suite shared
 
-require rtti
 require ast
 require strings
 require debugapi
 require fio
-require uriparser
+require daslib/defer
+
 require log
 require testing
 require suite_result public
-
-require daslib/defer
 
 
 struct SuiteCtx
