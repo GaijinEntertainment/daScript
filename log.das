@@ -4,6 +4,7 @@ module log shared
 
 require rtti
 require uriparser
+require strings
 
 
 let verbose = false
@@ -73,7 +74,10 @@ def blue_str(str: string)
     return useTtyColors ? "\x1B[34m{str}\x1B[0m\n" : str
 
 def time_dt_hr(dt: int): string
-    return "({double(dt)/1000000.0lf}s)"
+    return build_string <| $(str)
+        str |> write("(")
+        str |> format("%.6f", double(dt)/1000000.0lf)
+        str |> write("s)")
 
 def init_log()
     init_log(get_command_line_arguments())
