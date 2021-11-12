@@ -56,8 +56,8 @@ def main()
 
     let timeout = args |> get_float_arg("--timeout", 600.) // 10min
     if timeout > 0.
+        var mainCtx & = this_context()
         unsafe
-            var mainCtx & = this_context()
             new_thread <| @[[&res, &mainCtx]]
                 fio::sleep(uint(timeout * 1000.))
                 unsafe
