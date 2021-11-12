@@ -49,19 +49,14 @@ struct SuiteFileCtx
     expectFailure: bool = false
 
 
-def createSuiteFileCtx(): SuiteFileCtx
-    return <- SuiteFileCtx(get_command_line_arguments())
-
-
-def SuiteFileCtx(args: array<string>): SuiteFileCtx
-    var ctx <- SuiteFileCtx()
-    ctx.uriPaths = args |> has_value("--uri-paths")
-    unsafe
-        ctx.context = addr(this_context())
-    return <- ctx
-
-
 def SuiteFileCtx(ctx: SuiteCtx): SuiteFileCtx
+    var res <- internalSuiteFileCtx(ctx)
+    unsafe
+        res.context = addr(this_context())
+    return <- res
+
+
+def private internalSuiteFileCtx(ctx: SuiteCtx): SuiteFileCtx
     return <- [[SuiteFileCtx uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
 
 
@@ -75,7 +70,7 @@ def private match_test_name(name: string; ctx: SuiteCtx)
 
 
 def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
-    var fileCtx <- SuiteFileCtx(ctx)
+    var fileCtx <- internalSuiteFileCtx(ctx)
     var res = test_file(file_name, ctx, fileCtx)
     delete fileCtx
     return res
