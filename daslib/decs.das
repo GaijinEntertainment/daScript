@@ -383,7 +383,6 @@ def public for_eid_archetype ( eid:EntityId implicit; hash:ComponentHash; var er
         ++insideQuery; invoke(blk, arch, lookup.index); -- insideQuery
         return true
     else
-        panic("archetype not found")
         return false
 
 def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype):void> )
