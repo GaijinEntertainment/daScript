@@ -243,6 +243,7 @@ namespace das
         bool isAccessUnused() const;
         bool isCtorInitialized() const;
         string          name;
+        string          aka;        // name alias
         TypeDeclPtr     type;
         ExpressionPtr   init;
         ExpressionPtr   source;     // if its interator variable, this is where the source is

@@ -129,6 +129,23 @@ def test_query_everything ( t: T? )
         else
             t |> equal(j, 5)
 
+[test]
+def test_aka_query ( t:T? )
+    restart()
+    for i in range(10)
+        create_entity <| @ ( eid, cmp )
+            cmp.i := i
+    commit()
+    var tot = 0
+    var equ = 0
+    query <| $ ( i aka j:int )
+        query <| $ ( i:int )
+            tot ++
+            if i==j
+                equ++
+    t |> equal(tot, 100)
+    t |> equal(equ, 10)
+
 [export]
 def main
     pass

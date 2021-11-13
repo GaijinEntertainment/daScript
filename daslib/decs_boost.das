@@ -166,6 +166,11 @@ def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a;
     let qli = length(qloop.iterators)
     qloop.iterators |> resize( qli + 1 )
     qloop.iterators[qli] := "{prefix}{a.name}{suffix}"
+    qloop.iteratorsAka |> resize( qli + 1 )
+    if typeinfo(has_field<_aka> a)
+        qloop.iteratorsAka[qli] := a._aka
+    else
+        qloop.iteratorsAka[qli] := ""
     qloop.iteratorsAt |> push(a.at)
     var ftype <- clone_type(a._type)
     ftype.flags &= ~ TypeDeclFlags constant

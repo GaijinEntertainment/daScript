@@ -441,6 +441,7 @@ namespace das {
         AstExprForAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprFor> ("ExprFor", ml) {
             addField<DAS_BIND_MANAGED_FIELD(iterators)>("iterators");
+            addField<DAS_BIND_MANAGED_FIELD(iteratorsAka)>("iteratorsAka");
             addField<DAS_BIND_MANAGED_FIELD(iteratorsAt)>("iteratorsAt");
             addField<DAS_BIND_MANAGED_FIELD(iteratorVariables)>("iteratorVariables");
             addField<DAS_BIND_MANAGED_FIELD(sources)>("sources");
@@ -1228,6 +1229,7 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(aka)>("_aka");
             addField<DAS_BIND_MANAGED_FIELD(type)>("_type","type");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(source)>("source");

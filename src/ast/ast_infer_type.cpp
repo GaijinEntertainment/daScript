@@ -2989,12 +2989,14 @@ namespace das {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->hasNonTrivialCopy());
                 } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
-                    if ( expr->typeexpr->isStructure() ) {
+                    auto etype = expr->typeexpr;
+                    if ( etype->isPointer() && etype->firstType ) etype = etype->firstType;
+                    if ( etype->isStructure() ) {
                         reportAstChanged();
-                        return make_smart<ExprConstBool>(expr->at, expr->typeexpr->structType->findField(expr->subtrait));
-                    } else if ( expr->typeexpr->isHandle() ) {
+                        return make_smart<ExprConstBool>(expr->at, etype->structType->findField(expr->subtrait));
+                    } else if ( etype->isHandle() ) {
                         reportAstChanged();
-                        auto ft = expr->typeexpr->annotation->makeFieldType(expr->subtrait, false);
+                        auto ft =etype->annotation->makeFieldType(expr->subtrait, false);
                         return make_smart<ExprConstBool>(expr->at, ft!=nullptr);
                     } else {
                         if ( expr->trait=="safe_has_field" ) {
@@ -4532,7 +4534,7 @@ namespace das {
             // local (that on the stack)
             for ( auto it = local.rbegin(); it!=local.rend(); ++it ) {
                 auto var = *it;
-                if ( var->name==expr->name ) {
+                if ( var->name==expr->name || var->aka==expr->name ) {
                     expr->variable = var;
                     expr->local = true;
                     expr->type = make_smart<TypeDecl>(*var->type);
@@ -4550,7 +4552,7 @@ namespace das {
                 ExprBlock * block = *it;
                 int argumentIndex = 0;
                 for ( auto & arg : block->arguments ) {
-                    if ( arg->name==expr->name ) {
+                    if ( arg->name==expr->name || arg->aka==expr->name ) {
                         expr->variable = arg;
                         expr->argumentIndex = argumentIndex;
                         expr->block = true;
@@ -4571,7 +4573,7 @@ namespace das {
             if ( func ) {
                 int argumentIndex = 0;
                 for ( auto & arg : func->arguments ) {
-                    if ( arg->name==expr->name ) {
+                    if ( arg->name==expr->name || arg->aka==expr->name ) {
                         expr->variable = arg;
                         expr->argumentIndex = argumentIndex;
                         expr->argument = true;
@@ -5545,6 +5547,7 @@ namespace das {
                 }
                 auto pVar = make_smart<Variable>();
                 pVar->name = expr->iterators[idx];
+                pVar->aka = expr->iteratorsAka[idx];
                 pVar->at = expr->iteratorsAt[idx];
                 if ( src->type->dim.size() ) {
                     pVar->type = make_smart<TypeDecl>(*src->type);

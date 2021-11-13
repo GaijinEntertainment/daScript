@@ -289,7 +289,9 @@ namespace das {
             if ( arg->isAccessUnused() ) ss << " /*unused*/ ";
             if ( printVarAccess && !arg->access_ref ) ss << "$";
             if ( printVarAccess && !arg->access_pass ) ss << "%";
-            ss << arg->name << ":" << arg->type->describe();
+            ss << arg->name;
+            if ( !arg->aka.empty() ) ss << " aka " << arg->aka;
+            ss << ":" << arg->type->describe();
         }
         virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & arg, Expression * expr ) override {
             Visitor::preVisitArgumentInit(fn,arg,expr);
@@ -361,7 +363,9 @@ namespace das {
                             ss << "] ";
                         }
                         if ( !arg->type->isConst() ) ss << "var ";
-                        ss << arg->name << ":" << arg->type->describe();
+                        ss << arg->name;
+                        if ( !arg->aka.empty() ) ss << " aka " << arg->aka;
+                        ss << ":" << arg->type->describe();
                         if ( arg != block->arguments.back() )
                             ss << "; ";
                     }
@@ -447,7 +451,9 @@ namespace das {
             if ( var->isAccessUnused() ) ss << " /*unused*/ ";
             if ( printVarAccess && !var->access_ref ) ss << "$";
             if ( printVarAccess && !var->access_pass ) ss << "%";
-            ss << var->name << ":" << var->type->describe();
+            ss << var->name;
+            if ( !var->aka.empty() ) ss << " aka " << var->aka;
+            ss << ":" << var->type->describe();
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             if ( !last ) ss << "; ";

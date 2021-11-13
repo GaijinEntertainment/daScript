@@ -454,6 +454,7 @@ namespace das {
     VariablePtr Variable::clone() const {
         auto pVar = make_smart<Variable>();
         pVar->name = name;
+        pVar->aka = aka;
         pVar->type = make_smart<TypeDecl>(*type);
         if ( init )
             pVar->init = init->clone();
@@ -2148,6 +2149,7 @@ namespace das {
         auto cexpr = clonePtr<ExprFor>(expr);
         Expression::clone(cexpr);
         cexpr->iterators = iterators;
+        cexpr->iteratorsAka = iteratorsAka;
         cexpr->iteratorsAt = iteratorsAt;
         cexpr->visibility = visibility;
         for ( auto & src : sources )

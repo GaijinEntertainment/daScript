@@ -82,8 +82,14 @@ extern int das_yydebug;
     }
     using namespace das;
 
+    struct VariableNameAndPosition {
+        string      name;
+        string      aka;
+        LineInfo    at;
+    };
+
     struct VariableDeclaration {
-        VariableDeclaration ( vector<pair<string,LineInfo>> * n, TypeDecl * t, Expression * i )
+        VariableDeclaration ( vector<VariableNameAndPosition> * n, TypeDecl * t, Expression * i )
             : pNameList(n), pTypeDecl(t), pInit(i) {}
         virtual ~VariableDeclaration () {
             if ( pNameList ) delete pNameList;
@@ -91,7 +97,7 @@ extern int das_yydebug;
             if ( pInit ) delete pInit;
             if ( annotation ) delete annotation;
         }
-        vector<pair<string,LineInfo>>   *pNameList;
+        vector<VariableNameAndPosition>   *pNameList;
         TypeDecl                *pTypeDecl;
         Expression              *pInit;
         bool                    init_via_move = false;
@@ -120,7 +126,7 @@ extern int das_yydebug;
 
     extern Structure * g_thisStructure;
 
-#line 124 "ds_parser.hpp"
+#line 130 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -165,126 +171,127 @@ extern int das_yydebug;
     DAS_DEREF = 293,
     DAS_TYPEDEF = 294,
     DAS_WITH = 295,
-    DAS_CAST = 296,
-    DAS_OVERRIDE = 297,
-    DAS_ABSTRACT = 298,
-    DAS_UPCAST = 299,
-    DAS_ITERATOR = 300,
-    DAS_VAR = 301,
-    DAS_ADDR = 302,
-    DAS_CONTINUE = 303,
-    DAS_WHERE = 304,
-    DAS_PASS = 305,
-    DAS_REINTERPRET = 306,
-    DAS_MODULE = 307,
-    DAS_PUBLIC = 308,
-    DAS_LABEL = 309,
-    DAS_GOTO = 310,
-    DAS_IMPLICIT = 311,
-    DAS_EXPLICIT = 312,
-    DAS_SHARED = 313,
-    DAS_PRIVATE = 314,
-    DAS_SMART_PTR = 315,
-    DAS_UNSAFE = 316,
-    DAS_TBOOL = 317,
-    DAS_TVOID = 318,
-    DAS_TSTRING = 319,
-    DAS_TAUTO = 320,
-    DAS_TINT = 321,
-    DAS_TINT2 = 322,
-    DAS_TINT3 = 323,
-    DAS_TINT4 = 324,
-    DAS_TUINT = 325,
-    DAS_TBITFIELD = 326,
-    DAS_TUINT2 = 327,
-    DAS_TUINT3 = 328,
-    DAS_TUINT4 = 329,
-    DAS_TFLOAT = 330,
-    DAS_TFLOAT2 = 331,
-    DAS_TFLOAT3 = 332,
-    DAS_TFLOAT4 = 333,
-    DAS_TRANGE = 334,
-    DAS_TURANGE = 335,
-    DAS_TBLOCK = 336,
-    DAS_TINT64 = 337,
-    DAS_TUINT64 = 338,
-    DAS_TDOUBLE = 339,
-    DAS_TFUNCTION = 340,
-    DAS_TLAMBDA = 341,
-    DAS_TINT8 = 342,
-    DAS_TUINT8 = 343,
-    DAS_TINT16 = 344,
-    DAS_TUINT16 = 345,
-    DAS_TTUPLE = 346,
-    DAS_TVARIANT = 347,
-    DAS_GENERATOR = 348,
-    DAS_YIELD = 349,
-    DAS_SEALED = 350,
-    ADDEQU = 351,
-    SUBEQU = 352,
-    DIVEQU = 353,
-    MULEQU = 354,
-    MODEQU = 355,
-    ANDEQU = 356,
-    OREQU = 357,
-    XOREQU = 358,
-    SHL = 359,
-    SHR = 360,
-    ADDADD = 361,
-    SUBSUB = 362,
-    LEEQU = 363,
-    SHLEQU = 364,
-    SHREQU = 365,
-    GREQU = 366,
-    EQUEQU = 367,
-    NOTEQU = 368,
-    RARROW = 369,
-    LARROW = 370,
-    QQ = 371,
-    QDOT = 372,
-    QBRA = 373,
-    LPIPE = 374,
-    LBPIPE = 375,
-    LAPIPE = 376,
-    LFPIPE = 377,
-    RPIPE = 378,
-    CLONEEQU = 379,
-    ROTL = 380,
-    ROTR = 381,
-    ROTLEQU = 382,
-    ROTREQU = 383,
-    MAPTO = 384,
-    COLCOL = 385,
-    ANDAND = 386,
-    OROR = 387,
-    XORXOR = 388,
-    ANDANDEQU = 389,
-    OROREQU = 390,
-    XORXOREQU = 391,
-    BRABRAB = 392,
-    BRACBRB = 393,
-    CBRCBRB = 394,
-    INTEGER = 395,
-    LONG_INTEGER = 396,
-    UNSIGNED_INTEGER = 397,
-    UNSIGNED_LONG_INTEGER = 398,
-    FLOAT = 399,
-    DOUBLE = 400,
-    NAME = 401,
-    BEGIN_STRING = 402,
-    STRING_CHARACTER = 403,
-    STRING_CHARACTER_ESC = 404,
-    END_STRING = 405,
-    BEGIN_STRING_EXPR = 406,
-    END_STRING_EXPR = 407,
-    END_OF_READ = 408,
-    UNARY_MINUS = 409,
-    UNARY_PLUS = 410,
-    PRE_INC = 411,
-    PRE_DEC = 412,
-    POST_INC = 413,
-    POST_DEC = 414,
-    DEREF = 415
+    DAS_AKA = 296,
+    DAS_CAST = 297,
+    DAS_OVERRIDE = 298,
+    DAS_ABSTRACT = 299,
+    DAS_UPCAST = 300,
+    DAS_ITERATOR = 301,
+    DAS_VAR = 302,
+    DAS_ADDR = 303,
+    DAS_CONTINUE = 304,
+    DAS_WHERE = 305,
+    DAS_PASS = 306,
+    DAS_REINTERPRET = 307,
+    DAS_MODULE = 308,
+    DAS_PUBLIC = 309,
+    DAS_LABEL = 310,
+    DAS_GOTO = 311,
+    DAS_IMPLICIT = 312,
+    DAS_EXPLICIT = 313,
+    DAS_SHARED = 314,
+    DAS_PRIVATE = 315,
+    DAS_SMART_PTR = 316,
+    DAS_UNSAFE = 317,
+    DAS_TBOOL = 318,
+    DAS_TVOID = 319,
+    DAS_TSTRING = 320,
+    DAS_TAUTO = 321,
+    DAS_TINT = 322,
+    DAS_TINT2 = 323,
+    DAS_TINT3 = 324,
+    DAS_TINT4 = 325,
+    DAS_TUINT = 326,
+    DAS_TBITFIELD = 327,
+    DAS_TUINT2 = 328,
+    DAS_TUINT3 = 329,
+    DAS_TUINT4 = 330,
+    DAS_TFLOAT = 331,
+    DAS_TFLOAT2 = 332,
+    DAS_TFLOAT3 = 333,
+    DAS_TFLOAT4 = 334,
+    DAS_TRANGE = 335,
+    DAS_TURANGE = 336,
+    DAS_TBLOCK = 337,
+    DAS_TINT64 = 338,
+    DAS_TUINT64 = 339,
+    DAS_TDOUBLE = 340,
+    DAS_TFUNCTION = 341,
+    DAS_TLAMBDA = 342,
+    DAS_TINT8 = 343,
+    DAS_TUINT8 = 344,
+    DAS_TINT16 = 345,
+    DAS_TUINT16 = 346,
+    DAS_TTUPLE = 347,
+    DAS_TVARIANT = 348,
+    DAS_GENERATOR = 349,
+    DAS_YIELD = 350,
+    DAS_SEALED = 351,
+    ADDEQU = 352,
+    SUBEQU = 353,
+    DIVEQU = 354,
+    MULEQU = 355,
+    MODEQU = 356,
+    ANDEQU = 357,
+    OREQU = 358,
+    XOREQU = 359,
+    SHL = 360,
+    SHR = 361,
+    ADDADD = 362,
+    SUBSUB = 363,
+    LEEQU = 364,
+    SHLEQU = 365,
+    SHREQU = 366,
+    GREQU = 367,
+    EQUEQU = 368,
+    NOTEQU = 369,
+    RARROW = 370,
+    LARROW = 371,
+    QQ = 372,
+    QDOT = 373,
+    QBRA = 374,
+    LPIPE = 375,
+    LBPIPE = 376,
+    LAPIPE = 377,
+    LFPIPE = 378,
+    RPIPE = 379,
+    CLONEEQU = 380,
+    ROTL = 381,
+    ROTR = 382,
+    ROTLEQU = 383,
+    ROTREQU = 384,
+    MAPTO = 385,
+    COLCOL = 386,
+    ANDAND = 387,
+    OROR = 388,
+    XORXOR = 389,
+    ANDANDEQU = 390,
+    OROREQU = 391,
+    XORXOREQU = 392,
+    BRABRAB = 393,
+    BRACBRB = 394,
+    CBRCBRB = 395,
+    INTEGER = 396,
+    LONG_INTEGER = 397,
+    UNSIGNED_INTEGER = 398,
+    UNSIGNED_LONG_INTEGER = 399,
+    FLOAT = 400,
+    DOUBLE = 401,
+    NAME = 402,
+    BEGIN_STRING = 403,
+    STRING_CHARACTER = 404,
+    STRING_CHARACTER_ESC = 405,
+    END_STRING = 406,
+    BEGIN_STRING_EXPR = 407,
+    END_STRING_EXPR = 408,
+    END_OF_READ = 409,
+    UNARY_MINUS = 410,
+    UNARY_PLUS = 411,
+    PRE_INC = 412,
+    PRE_DEC = 413,
+    POST_INC = 414,
+    POST_DEC = 415,
+    DEREF = 416
   };
 #endif
 
@@ -292,7 +299,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 113 "ds_parser.ypp"
+#line 119 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -304,7 +311,7 @@ union DAS_YYSTYPE
     double                          fd;
     string *                        s;
     vector<string> *                pNameList;
-    vector<pair<string,LineInfo>> * pNameWithPosList;
+    vector<VariableNameAndPosition> * pNameWithPosList;
     VariableDeclaration *           pVarDecl;
     vector<VariableDeclaration*> *  pVarDeclList;
     TypeDecl *                      pTypeDecl;
@@ -321,7 +328,7 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 325 "ds_parser.hpp"
+#line 332 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

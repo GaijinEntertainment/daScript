@@ -794,6 +794,7 @@ namespace das
         virtual uint32_t getEvalFlags() const override;
         virtual bool rtti_isFor() const override { return true; }
         vector<string>          iterators;
+        vector<string>          iteratorsAka;
         vector<LineInfo>        iteratorsAt;
         vector<VariablePtr>     iteratorVariables;
         vector<ExpressionPtr>   sources;
