@@ -572,6 +572,8 @@ namespace das
         return expr ? static_pointer_cast<ExprType>(expr) : make_smart<ExprType>();
     }
 
+    bool isLocalOrGlobal ( const ExpressionPtr & expr );
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4324)

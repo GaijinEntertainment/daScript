@@ -5,6 +5,31 @@
 
 namespace das {
 
+    // local or global
+
+    bool isLocalOrGlobal ( const ExpressionPtr & expr ) {
+        if ( expr->rtti_isVar() ) {
+            auto ev = static_pointer_cast<ExprVar>(expr);
+            return ev->local || !(ev->argument || ev->block);
+        } else if ( expr->rtti_isAt() ) {
+            auto ea = static_pointer_cast<ExprAt>(expr);
+            if ( ea->subexpr && ea->subexpr->type && ea->subexpr->type->dim.size() ) {
+                return isLocalOrGlobal(ea->subexpr);
+            }
+        } else if ( expr->rtti_isField() ) {
+            auto ef = static_pointer_cast<ExprField>(expr);
+            if ( ef->value && ef->value->type && (ef->value->type->baseType!=Type::tHandle || ef->value->type->isLocal()) ) {
+                return isLocalOrGlobal(ef->value);
+            }
+        } else if ( expr->rtti_isSwizzle() ) {
+            auto sw = static_pointer_cast<ExprSwizzle>(expr);
+            if ( sw->value ) {
+                return isLocalOrGlobal(sw->value);
+            }
+        }
+        return false;
+    }
+
     // AOT
 
     AotListBase * AotListBase::head = nullptr;
