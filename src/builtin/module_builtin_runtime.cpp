@@ -1118,6 +1118,10 @@ namespace das
         addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash",
             SideEffects::none, "_builtin_hash")
                 ->arg("data");
+        // locks
+        addInterop<builtin_verify_locks,void,vec4f>(*this, lib, "_builtin_verify_locks",
+            SideEffects::modifyArgumentAndExternal, "builtin_verify_locks")
+                ->arg("anything");
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear",
             SideEffects::modifyArgument, "builtin_table_clear")

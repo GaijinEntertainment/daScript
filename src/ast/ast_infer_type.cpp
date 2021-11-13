@@ -2988,6 +2988,9 @@ namespace das {
                 } else if ( expr->trait=="has_nontrivial_copy" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->hasNonTrivialCopy());
+                } else if ( expr->trait=="need_lock_check" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->lockCheck());
                 } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
                     auto etype = expr->typeexpr;
                     if ( etype->isPointer() && etype->firstType ) etype = etype->firstType;
@@ -3672,6 +3675,15 @@ namespace das {
                     error("can't index with the temporary key", "", "",
                         expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
+                }
+                if ( seT->secondType && seT->secondType->lockCheck() ) {
+                    if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
+                        reportAstChanged(); // we promote tab[index] into _at_with_lockcheck(tab,index)
+                        auto pCall = make_smart<ExprCall>(expr->at, "_at_with_lockcheck");
+                        pCall->arguments.push_back(expr->subexpr->clone());
+                        pCall->arguments.push_back(expr->index->clone());
+                        return pCall;
+                    }
                 }
                 expr->type = make_smart<TypeDecl>(*seT->secondType);
                 expr->type->ref = true;

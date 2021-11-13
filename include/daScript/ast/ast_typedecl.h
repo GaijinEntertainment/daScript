@@ -151,6 +151,8 @@ namespace das {
         bool hasClasses( das_set<Structure*> & dep ) const;
         int32_t gcFlags() const;
         int32_t gcFlags( das_set<Structure *> & dep, das_set<Annotation *> & depA ) const;
+        bool lockCheck() const;
+        bool lockCheck( das_set<Structure *> & dep ) const;
         bool hasNonTrivialCtor() const;
         bool hasNonTrivialCtor( das_set<Structure*> & dep ) const;
         bool hasNonTrivialDtor() const;

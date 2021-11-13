@@ -207,6 +207,7 @@ namespace das
             flag_isHandled = 1<<12,
             flag_heapGC = 1<<13,
             flag_stringHeapGC = 1<<14,
+            flag_lockCheck = 1<<15,
         };
         union {
             StructInfo *                structType;
@@ -284,6 +285,7 @@ namespace das
         ,   flag_lambda =       (1<<1)
         ,   flag_heapGC =       (1<<2)
         ,   flag_stringHeapGC = (1<<3)
+        ,   flag_lockCheck =    (1<<4)
         };
         char *      name;
         char *      module_name;

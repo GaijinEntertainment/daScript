@@ -132,6 +132,7 @@ namespace das {
         if ( st.isLambda ) sti->flags |= StructInfo::flag_lambda;
         auto tdecl = TypeDecl((Structure *)&st);
         auto gcf = tdecl.gcFlags();
+        if ( tdecl.lockCheck() ) sti->flags |= StructInfo::flag_lockCheck;
         if ( gcf & TypeDecl::gcFlag_heap ) sti->flags |= StructInfo::flag_heapGC;
         if ( gcf & TypeDecl::gcFlag_stringHeap ) sti->flags |= StructInfo::flag_stringHeapGC;
         sti->count = (uint32_t) st.fields.size();
@@ -183,6 +184,9 @@ namespace das {
             info->annotation_or_name = type->annotation;
         }
         info->flags = 0;
+        if (type->lockCheck()) {
+            info->flags |= TypeInfo::flag_lockCheck;
+        }
         if (type->ref) {
             info->flags |= TypeInfo::flag_ref;
             info->flags |= TypeInfo::flag_refValue;

@@ -888,6 +888,35 @@ namespace das
         return false;
     }
 
+    bool TypeDecl::lockCheck() const {
+        das_set<Structure *> dep;
+        return lockCheck(dep);
+    }
+
+    bool TypeDecl::lockCheck(das_set<Structure *> & dep) const {
+        // logic is 'OR'
+        if ( baseType==Type::tStructure ) {
+            if ( structType ) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                for ( auto fld : structType->fields ) {
+                    if ( fld.type->lockCheck(dep) ) {
+                        return true;
+                    }
+                }
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( const auto & arg : argTypes ) {
+                if ( arg->lockCheck(dep) ) {
+                    return true;
+                }
+            }
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            return true;
+        }
+        return false;
+    }
+
     int32_t TypeDecl::gcFlags() const {
         das_set<Structure *> dep;
         das_set<Annotation *> depA;

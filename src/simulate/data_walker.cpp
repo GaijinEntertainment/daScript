@@ -58,40 +58,44 @@ namespace das {
     }
 
     void DataWalker::walk_tuple ( char * ps, TypeInfo * ti ) {
-        beforeTuple(ps, ti);
-        if ( cancel ) return;
-        int fieldOffset = 0;
-        for ( uint32_t i=0; i!=ti->argCount; ++i ) {
-            bool last = i==(ti->argCount-1);
-            TypeInfo * vi = ti->argTypes[i];
-            auto fa = getTypeAlign(vi) - 1;
-            fieldOffset = (fieldOffset + fa) & ~fa;
-            char * pf = ps + fieldOffset;
-            beforeTupleEntry(ps, ti, pf, vi, last);
+        if ( canVisitTuple(ps,ti) ) {
+            beforeTuple(ps, ti);
             if ( cancel ) return;
-            walk(pf, vi);
-            if ( cancel ) return;
-            afterTupleEntry(ps, ti, pf, vi, last);
-            if ( cancel ) return;
-            fieldOffset += vi->size;
+            int fieldOffset = 0;
+            for ( uint32_t i=0; i!=ti->argCount; ++i ) {
+                bool last = i==(ti->argCount-1);
+                TypeInfo * vi = ti->argTypes[i];
+                auto fa = getTypeAlign(vi) - 1;
+                fieldOffset = (fieldOffset + fa) & ~fa;
+                char * pf = ps + fieldOffset;
+                beforeTupleEntry(ps, ti, pf, vi, last);
+                if ( cancel ) return;
+                walk(pf, vi);
+                if ( cancel ) return;
+                afterTupleEntry(ps, ti, pf, vi, last);
+                if ( cancel ) return;
+                fieldOffset += vi->size;
+            }
+            afterTuple(ps, ti);
         }
-        afterTuple(ps, ti);
     }
 
     void DataWalker::walk_variant ( char * ps, TypeInfo * ti ) {
-        beforeVariant(ps, ti);
-        if ( cancel ) return;
-        int32_t fidx = *((int32_t *)ps);
-        DAS_ASSERTF(uint32_t(fidx)<ti->argCount,"invalid variant index");
-        int fieldOffset = getTypeBaseSize(Type::tInt);
-        TypeInfo * vi = ti->argTypes[fidx];
-        auto fa = getTypeAlign(ti) - 1;
-        fieldOffset = (fieldOffset + fa) & ~fa;
-        char * pf = ps + fieldOffset;
-        if ( cancel ) return;
-        walk(pf, vi);
-        if ( cancel ) return;
-        afterVariant(ps, ti);
+        if ( canVisitVariant(ps,ti) ) {
+            beforeVariant(ps, ti);
+            if ( cancel ) return;
+            int32_t fidx = *((int32_t *)ps);
+            DAS_ASSERTF(uint32_t(fidx)<ti->argCount,"invalid variant index");
+            int fieldOffset = getTypeBaseSize(Type::tInt);
+            TypeInfo * vi = ti->argTypes[fidx];
+            auto fa = getTypeAlign(ti) - 1;
+            fieldOffset = (fieldOffset + fa) & ~fa;
+            char * pf = ps + fieldOffset;
+            if ( cancel ) return;
+            walk(pf, vi);
+            if ( cancel ) return;
+            afterVariant(ps, ti);
+        }
     }
 
     void DataWalker::walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) {
@@ -136,6 +140,7 @@ namespace das {
     }
 
     void DataWalker::walk_table ( Table * tab, TypeInfo * info ) {
+        if ( !canVisitTableData(info) ) return;
         int keySize = info->firstType->size;
         int valueSize = info->secondType->size;
         uint32_t count = 0;
@@ -189,11 +194,13 @@ namespace das {
             }
         } else if ( info->type==Type::tTable ) {
             auto tab = (Table *) pa;
-            beforeTable(tab, info);
-            if ( cancel ) return;
-            walk_table(tab, info);
-            if ( cancel ) return;
-            afterTable(tab, info);
+            if ( canVisitTable(pa,info) ) {
+                beforeTable(tab, info);
+                if ( cancel ) return;
+                walk_table(tab, info);
+                if ( cancel ) return;
+                afterTable(tab, info);
+            }
         } else {
             switch ( info->type ) {
                 case Type::tBool:       Bool(*((bool *)pa)); break;
@@ -226,16 +233,18 @@ namespace das {
                 case Type::fakeContext:     FakeContext(*(Context**)pa); break;
                 case Type::fakeLineInfo:    FakeLineInfo(*(LineInfo**)pa); break;
                 case Type::tPointer:
-                    beforePtr(pa, info);
-                    if ( cancel ) return;
-                    if ( info->firstType && info->firstType->type!=Type::tVoid ) {
-                        walk(*(char**)pa, info->firstType);
+                    if ( canVisitPointer(info) ) {
+                        beforePtr(pa, info);
                         if ( cancel ) return;
-                    } else {
-                        VoidPtr(*(void**)pa);
-                        if ( cancel ) return;
+                        if ( info->firstType && info->firstType->type!=Type::tVoid ) {
+                            walk(*(char**)pa, info->firstType);
+                            if ( cancel ) return;
+                        } else {
+                            VoidPtr(*(void**)pa);
+                            if ( cancel ) return;
+                        }
+                        afterPtr(pa, info);
                     }
-                    afterPtr(pa, info);
                     break;
                 case Type::tStructure:  walk_struct(pa, info->structType); break;
                 case Type::tTuple:      walk_tuple(pa, info); break;
@@ -243,21 +252,29 @@ namespace das {
                 case Type::tBlock:      WalkBlock((Block *)pa); break;
                 case Type::tFunction:   WalkFunction((Func *)pa); break;
                 case Type::tLambda: {
-                        auto ll = (Lambda *) pa;
-                        beforeLambda(ll, info);
-                        walk ( ll->capture, ll->getTypeInfo() );
-                        afterLambda(ll, info);
+                        if ( canVisitLambda(info) ) {
+                            auto ll = (Lambda *) pa;
+                            beforeLambda(ll, info);
+                            if ( cancel ) return;
+                            walk ( ll->capture, ll->getTypeInfo() );
+                            if ( cancel ) return;
+                            afterLambda(ll, info);
+                        }
                     }
                     break;
                 case Type::tIterator: {
-                        auto ll = (Sequence *) pa;
-                        beforeIterator(ll, info);
-                        if ( ll->iter ) {
-                            ll->iter->walk(*this);
-                        } else {
-                            Null(info);
+                        if ( canVisitIterator(info) ) {
+                            auto ll = (Sequence *) pa;
+                            beforeIterator(ll, info);
+                            if ( cancel ) return;
+                            if ( ll->iter ) {
+                                ll->iter->walk(*this);
+                            } else {
+                                Null(info);
+                            }
+                            if ( cancel ) return;
+                            afterIterator(ll, info);
                         }
-                        afterIterator(ll, info);
                     }
                     break;
                 case Type::tHandle:

@@ -33,6 +33,13 @@ namespace das {
         virtual bool canVisitArrayData ( TypeInfo * ti ) { return true; }
         virtual bool canVisitHandle ( char * ps, TypeInfo * ti ) { return true; }
         virtual bool canVisitStructure ( char * ps, StructInfo * si ) { return true; }
+        virtual bool canVisitTuple ( char * ps, TypeInfo * ti ) { return true; }
+        virtual bool canVisitVariant ( char * ps, TypeInfo * ti ) { return true; }
+        virtual bool canVisitTable ( char * ps, TypeInfo * ti ) { return true; }
+        virtual bool canVisitTableData ( TypeInfo * ti ) { return true; }
+        virtual bool canVisitPointer ( TypeInfo * ti ) { return true; }
+        virtual bool canVisitLambda ( TypeInfo * ti ) { return true; }
+        virtual bool canVisitIterator ( TypeInfo * ti ) { return true; }
         virtual void beforeStructure ( char * ps, StructInfo * si ) {}
         virtual void afterStructure ( char * ps, StructInfo * si ) {}
         virtual void afterStructureCancel ( char * ps, StructInfo * si ) {}

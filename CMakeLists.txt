@@ -320,6 +320,7 @@ src/builtin/module_builtin.cpp
 src/builtin/module_builtin_misc_types.cpp
 src/builtin/module_builtin_runtime.cpp
 src/builtin/module_builtin_runtime_sort.cpp
+src/builtin/module_builtin_runtime_lockcheck.cpp
 src/builtin/module_builtin_vector.cpp
 src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_array.cpp
