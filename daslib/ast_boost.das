@@ -367,6 +367,7 @@ def private makeAsOrSafeAs ( expr; var enull:ExpressionPtr )
         left <- vcast,
         right <- enull
     ]]
+    tri.genFlags = expr.genFlags
     return tri
 
 // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")

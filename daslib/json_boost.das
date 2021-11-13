@@ -36,12 +36,14 @@ class private BetterJsonMacro : AstVariantMacro
         if is_json_ptr_value(expr.value._type)
             var vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
             var isv <- new [[ExprIsVariant() at=expr.at, name:=expr.name, value <- vdr ]]
+            isv.genFlags = expr.genFlags
             return isv
         return [[ExpressionPtr]]
     def override visitExprAsVariant(prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant>) : ExpressionPtr
         if is_json_ptr_value(expr.value._type)
             var vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
             var isv <- new [[ExprAsVariant() at=expr.at, name:=expr.name, value <- vdr ]]
+            isv.genFlags = expr.genFlags
             return isv
         return [[ExpressionPtr]]
 
@@ -130,7 +132,7 @@ def from_JV ( var v : JsonValue?; ent: auto(VecT); defV:VecT=[[VecT]]  )
     if v==null
         return defV
     let VecV : auto(VecTT) = VecT()
-    var vo & = v.value as _object
+    var vo & = unsafe(v.value as _object)
     static_if typeinfo(vector_dim VecV)==2
         return VecTT(
             vo["x"].value as _number,

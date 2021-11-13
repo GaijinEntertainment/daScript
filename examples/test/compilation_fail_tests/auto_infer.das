@@ -1,4 +1,4 @@
-expect 31101, 31102:8, 30304:2, 30105:1, 30102:2, 30106, 30113
+expect 31101, 31102:8, 30304:2, 30105:1, 30102:2, 30106, 30113, 31300
 
 let
     a:auto                      // 31101, can't infer, need initializer
@@ -12,6 +12,7 @@ def blk(b:block<(a:int):int>) : int
 def test3
     let v1 = b                          // 31102, can't infer, auto to auto
     let v2 : auto& = 13                 // 30113: local variable v2 initialization type mismatch
+                                        // 31300: local reference to non-local expression is unsafe
     let x = 14  // x:int
     let v3 : auto& = x
     let arr : int[2][3]

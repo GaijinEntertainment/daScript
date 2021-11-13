@@ -229,8 +229,8 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
             dt = get_time_usec(t0)
         else
             testing = new T(name, t0, context.verbose)
-            var selfCtx & = this_context()
             unsafe
+                var selfCtx & = this_context()
                 testing.onFail <- @ <| [[&testing, &failed, &deliberateRecover]](now: bool)
                     testing.failed = true
                     failed = true

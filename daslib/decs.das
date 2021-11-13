@@ -245,7 +245,7 @@ def public debug_dump
         print("\treq = {erq.req}\n\treqn = {erq.reqn}\n\tarchetypes = {erq.archetypes}\nat = {erq.at.file}:{int(erq.at.line)}\n")
 
 def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype; idx:int; isNew:bool ):void> )
-    var afound & = decsState.archetypeLookup[hash]
+    var afound & = unsafe(decsState.archetypeLookup[hash])
     if afound==0
         decsState.allArchetypes |> emplace([[Archetype hash=hash]])
         afound = length(decsState.allArchetypes)
@@ -257,7 +257,7 @@ def private create_archetype ( var arch:Archetype; cmp:ComponentMap; idx:int )
     assert(length(arch.components)==0)
     arch.eidIndex = -1
     for kv,kvi in cmp,range(INT_MAX)
-        var ct & = decsState.componentTypeCheck[kv.name]
+        var ct & = unsafe(decsState.componentTypeCheck[kv.name])
         if ct.hash != 0u
             if kv.info.hash != ct.hash
                 panic("component {kv.name} type mismatch {ct} vs {kv.info}")
@@ -294,8 +294,8 @@ def private create_entity ( var arch:Archetype; eid:EntityId; cmp:ComponentMap )
 def private remove_entity ( var arch:Archetype; di:int )
     arch.size --
     if di!=arch.size    // copy last one in the hole
-        var eid_last & = arch |> get_eid(arch.size)
-        decsState.entityLookup[eid_last.id].index = di
+        var eid_last_id = get_eid(arch,arch.size).id
+        decsState.entityLookup[eid_last_id].index = di
         for c in arch.components
             unsafe
                 memcpy ( addr(c.data[di*c.stride]), addr(c.data[arch.size*c.stride]), c.stride )
@@ -346,7 +346,7 @@ def public compile_request ( var erq : EcsRequest )
 def public lookup_request ( var erq : EcsRequest )
     if erq.hash==0u
         compile_request(erq)
-    var ql & = decsState.queryLookup[erq.hash]
+    var ql & = unsafe(decsState.queryLookup[erq.hash])
     if ql == 0
         for arch,archi in decsState.allArchetypes,range(INT_MAX)
             if erq |> can_process_request(arch)
@@ -360,12 +360,12 @@ def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype)
     var aclone := decsState.ecsQueries[qi].archetypes
     defer_delete(aclone)
     for aidx in aclone
-        var arch & = decsState.allArchetypes[aidx]
+        var arch & = unsafe(decsState.allArchetypes[aidx])
         if arch.size > 0
             ++insideQuery; invoke ( blk, arch ); --insideQuery
 
 def public for_eid_archetype ( eid:EntityId implicit; hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype;index:int):void> )
-    var lookup & = decsState.entityLookup[eid.id]
+    var lookup = decsState.entityLookup[eid.id]
     if lookup.generation != eid.generation
         return false
     var qi = -1
@@ -373,12 +373,11 @@ def public for_eid_archetype ( eid:EntityId implicit; hash:ComponentHash; var er
         qi = *ql - 1
     if qi == -1
         qi = lookup_request(invoke(erq))
-    var req & = decsState.ecsQueries[qi]
     let aidx = decsState.archetypeLookup[lookup.archetype]
     if aidx == 0
         return false
-    if binary_search(req.archetypes,aidx-1)
-        var arch & = decsState.allArchetypes[aidx-1]
+    if binary_search(decsState.ecsQueries[qi].archetypes,aidx-1)
+        var arch & = unsafe(decsState.allArchetypes[aidx-1])
         assert(arch.size > 0)
         ++insideQuery; invoke(blk, arch, lookup.index); -- insideQuery
         return true
@@ -394,7 +393,7 @@ def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsReq
     var aclone := decsState.ecsQueries[qi].archetypes
     defer_delete(aclone)
     for aidx in aclone
-        var arch & = decsState.allArchetypes[aidx]
+        var arch & = unsafe(decsState.allArchetypes[aidx])
         if arch.size > 0
             ++insideQuery; invoke ( blk, arch ); --insideQuery
 
@@ -407,7 +406,7 @@ def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():E
     var aclone := decsState.ecsQueries[qi].archetypes
     defer_delete(aclone)
     for aidx in aclone
-        var arch & = decsState.allArchetypes[aidx]
+        var arch & = unsafe(decsState.allArchetypes[aidx])
         if arch.size > 0
             ++insideQuery; let res = invoke ( blk, arch ); --insideQuery
             return res
@@ -426,7 +425,7 @@ def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-con
 def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&-#>
     let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
-        let comp & = arch.components[idx]
+        let comp & = unsafe(arch.components[idx])
         if comp.name==name
             unsafe
                 let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
@@ -445,7 +444,7 @@ def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-con
 def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iterator<TT const &>
     let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
-        let comp & = arch.components[idx]
+        let comp & = unsafe(arch.components[idx])
         if comp.name==name
             unsafe
                 let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
@@ -460,7 +459,7 @@ def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iter
 def public get_optional ( arch:Archetype; name:string; value:auto(TT)? ) : iterator<TT-const-&-#?>
     let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
-        let comp & = arch.components[idx]
+        let comp & = unsafe(arch.components[idx])
         if comp.name==name
             unsafe
                 let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
@@ -473,28 +472,31 @@ def public get_optional ( arch:Archetype; name:string; value:auto(TT)? ) : itera
     return <- repeat([[TT-const-&-#?]],arch.size)
 
 def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
-    var lookup & = decsState.entityLookup[eid.id]
+    var lookup = decsState.entityLookup[eid.id]
     if lookup.generation != eid.generation
         return
     var cmp : ComponentMap
-    var arch & = decsState.allArchetypes[decsState.archetypeLookup[lookup.archetype]-1]
+    let arch_index = decsState.archetypeLookup[lookup.archetype]-1
     let eidx = decsState.entityLookup[eid.id].index
-    cmp |> reserve ( length(arch.components) )
-    for c in arch.components
-        var value = [[ComponentValue name=c.name, info=c.info]]
-        unsafe
-            memcpy ( addr(value.data), addr(c.data[eidx*c.stride]), c.stride)
-        cmp |> push(value)
-    var old_ahash = arch.hash
+    var old_ahash = 0u
+    if true // note - this scope is for arch &
+        var arch & = unsafe(decsState.allArchetypes[arch_index])
+        cmp |> reserve ( length(arch.components) )
+        for c in arch.components
+            var value = [[ComponentValue name=c.name, info=c.info]]
+            unsafe
+                memcpy ( addr(value.data), addr(c.data[eidx*c.stride]), c.stride)
+            cmp |> push(value)
+        old_ahash = arch.hash
     invoke(blk, eid, cmp)
     cmp |> set("eid", eid)  // necessary?
     var new_ahash = cmp_archetype_hash(cmp)
     if old_ahash == new_ahash
-        for c,comp in arch.components,cmp
+        for c,comp in decsState.allArchetypes[arch_index].components,cmp
             unsafe
                 memcpy ( addr(c.data[eidx*c.stride]), addr(comp.data), c.stride )
     else
-        arch |> remove_entity ( eidx )
+        remove_entity ( decsState.allArchetypes[arch_index], eidx )
         with_archetype(new_ahash) <| $ ( var narch; idx; isNew )
             if isNew
                 narch |> create_archetype(cmp, idx)
@@ -516,13 +518,12 @@ def private create_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
     delete cmp
 
 def private delete_entity_imm ( eid:EntityId )
-    var lookup & = decsState.entityLookup[eid.id]
+    var lookup = decsState.entityLookup[eid.id]
     if lookup.generation == eid.generation
-        var arch & = decsState.allArchetypes[decsState.archetypeLookup[lookup.archetype]-1]
         let di = decsState.entityLookup[eid.id].index
         decsState.entityLookup[eid.id].generation = 0
         decsState.entityFreeList |> push(eid)
-        arch |> remove_entity(di)
+        remove_entity(decsState.allArchetypes[decsState.archetypeLookup[lookup.archetype]-1], di)
 
 def public update_entity ( entityid:EntityId implicit; var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var deval <- @ <| [[<-blk]] ( var act:DeferAction )

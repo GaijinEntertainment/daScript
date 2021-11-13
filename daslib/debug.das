@@ -157,7 +157,7 @@ class DAWalker: DapiDataWalker
     def closeCont()
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             if empty(v.value)
                 v.value = v._type
 
@@ -175,15 +175,15 @@ class DAWalker: DapiDataWalker
         let n = length(varsStack)
         if n > 0
             var ti = type_info(vi)
-            var v & = varsStack[n - 1]
-            *v.children |> emplace([[DAVariable uid=frame.varId++, name=vi.name, _type=describe(ti)]])
             unsafe
+                var v & = unsafe(varsStack[n - 1])
+                *v.children |> emplace([[DAVariable uid=frame.varId++, name=vi.name, _type=describe(ti)]])
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override afterStructureField(ps:void?; si: StructInfo; pv: void?; vi:VarInfo; last: bool): void
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             if v.children == null
                 var ti = type_info(vi)
                 v.value = sprint_data(pv, ti, print_flags_debug)
@@ -196,7 +196,7 @@ class DAWalker: DapiDataWalker
         self->closeCont()
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             if v.children != null
                 v.value = join_with_names(*v.children, inlinePreviewLimit)
             if empty(v.value)
@@ -207,7 +207,7 @@ class DAWalker: DapiDataWalker
         self->closeCont()
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             if v.children != null
                 v.value = join_with_names(*v.children, inlinePreviewLimit)
             if empty(v.value)
@@ -216,7 +216,7 @@ class DAWalker: DapiDataWalker
     def override beforeArrayData(ps: void?; stride: uint; count: uint; ti:TypeInfo): void
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             v.indexedVariables = count
 
     def override beforeArrayElement(ps: void?; ti: TypeInfo; pe: void?; index: uint; last: bool): void
@@ -225,15 +225,15 @@ class DAWalker: DapiDataWalker
         self->startCont()
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
-            *v.children |> emplace([[DAVariable uid=frame.varId++, name="{int64(index)}", _type=describe(ti)]])
             unsafe
+                var v & = unsafe(varsStack[n - 1])
+                *v.children |> emplace([[DAVariable uid=frame.varId++, name="{int64(index)}", _type=describe(ti)]])
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override afterArrayElement(ps: void?; ti: TypeInfo; pe: void?; index: uint; last: bool): void
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             if v.children == null
                 unsafe
                     v.value = sprint_data(pe, addr(ti), print_flags_debug)
@@ -244,7 +244,7 @@ class DAWalker: DapiDataWalker
     def override afterArrayData(ps: void?; stride: uint; count: uint; ti: TypeInfo): void
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             if v.children != null
                 let preview = join(*v.children, inlinePreviewLimit - 5)
                 if !empty(preview)
@@ -255,7 +255,7 @@ class DAWalker: DapiDataWalker
     def override beforeTable(pa: DapiTable; ti: TypeInfo): void
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             v.indexedVariables = pa.size
 
     def override beforeTableKey(pa: DapiTable; ti: TypeInfo; pk: void?; ki: TypeInfo; index: uint; last: bool): void
@@ -264,7 +264,7 @@ class DAWalker: DapiDataWalker
         self->startCont()
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             unsafe
                 *v.children |> emplace([[DAVariable uid=frame.varId++, name=sprint_data(pk, addr(ki), print_flags_debug)]])
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
@@ -274,7 +274,7 @@ class DAWalker: DapiDataWalker
             return
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             v._type = describe(kv)
 
     def override afterTableValue(pa: DapiTable; ti: TypeInfo; pv: void?; kv: TypeInfo; index: uint; last: bool): void
@@ -282,7 +282,7 @@ class DAWalker: DapiDataWalker
             return
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             if v.children == null
                 unsafe
                     v.value = sprint_data(pv, addr(kv), print_flags_debug)
@@ -293,7 +293,7 @@ class DAWalker: DapiDataWalker
     def override afterTable(pa: DapiTable; ti: TypeInfo): void
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             if v.children != null
                 let preview = join_with_names(*v.children, inlinePreviewLimit - 5)
                 if !empty(preview)
@@ -310,7 +310,7 @@ class DAWalker: DapiDataWalker
         self->startCont()
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             *v.children |> emplace([[DAVariable uid=frame.varId++, name="{tupleIndex++}", _type=describe(vi)]])
             unsafe
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
@@ -318,7 +318,7 @@ class DAWalker: DapiDataWalker
     def override afterTupleEntry(ps: void?; ti: TypeInfo; pv: void?; vi: TypeInfo; last: bool): void
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             if v.children == null
                 unsafe
                     v.value = sprint_data(pv, addr(vi), print_flags_debug)
@@ -330,7 +330,7 @@ class DAWalker: DapiDataWalker
         self->closeCont()
         let n = length(varsStack)
         if n > 0
-            var v & = varsStack[n - 1]
+            var v & = unsafe(varsStack[n - 1])
             if v.children != null
                 v.value = join(*v.children, inlinePreviewLimit)
             if empty(v.value)
@@ -461,13 +461,13 @@ class private DAStackWalker: DapiStackWalker
         if stackLen == 0
             return
         for i in range(get_total_variables(*ctx.ctx))
-            let vinfo & = get_variable_info(ctx.ctx, i)
+            let vinfo & = unsafe(get_variable_info(ctx.ctx, i))
             var value: void?
             unsafe
                 value = get_context_global_variable(ctx.ctx, vinfo.name)
             let ti = type_info(vinfo)
 
-            var frame & = ctx.stack[stackLen - 1]
+            var frame & = unsafe(ctx.stack[stackLen - 1])
             var global = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti)]]
 
             if ti != null
@@ -516,7 +516,7 @@ class private DAStackWalker: DapiStackWalker
             return
         let stackLen = length(ctx.stack)
         if stackLen > 0
-            var frame & = ctx.stack[stackLen - 1]
+            var frame & = unsafe(ctx.stack[stackLen - 1])
             var ti = type_info(vinfo)
             var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti)]]
             if ti != null
@@ -534,7 +534,7 @@ class private DAStackWalker: DapiStackWalker
     def override onArgument (inf: FuncInfo; index: int; vinfo: VarInfo; arg: float4)
         let stackLen = length(ctx.stack)
         if  stackLen > 0
-            var frame & = ctx.stack[stackLen-1]
+            var frame & = unsafe(ctx.stack[stackLen-1])
             let ti = type_info(vinfo)
             var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti)]]
             if ti != null
@@ -833,7 +833,7 @@ class private DAgent: DapiDebugAgent
                 let brs = breakpoints |> find(file)
                 var brIdx = 0
                 while brs != null && brIdx < length(*brs)
-                    let br & = (*brs)[brIdx++]
+                    let br & = unsafe((*brs)[brIdx++])
                     // self->log("search break `{file}` {brs} in {file}\n")
                     if br.line != uint(at.line)
                         continue
@@ -868,7 +868,7 @@ class private DAgent: DapiDebugAgent
         self->getContextDataFor(ctx) <| $(var ctxData: DAContext)
             let stackLen = length(ctxData.stack)
             if  stackLen > 0
-                var frame & = ctxData.stack[0]
+                var frame & = unsafe(ctxData.stack[0])
                 var variable = [[DAVariable uid=frame.varId++, name=name, _type=describe(info)]]
                 walker.dataWalker->startWalk(frame, variable) <| $
                     walker.dataWalkerAdapter |> walk_data(data, info)
@@ -1127,7 +1127,7 @@ class private DAServer: Server
         if data != null && data is _object
             let paths = data |> joj("paths")
             if paths != null && paths is _array
-                let pathsList & = paths as _array
+                let pathsList & = unsafe(paths as _array)
                 for it in pathsList
                     if it is _string
                         resPaths |> push(it as _string)
@@ -1136,7 +1136,7 @@ class private DAServer: Server
                 resPaths |> push(cwd)
             let aliases = data |> joj("pathAliases")
             if aliases != null && aliases is _object
-                let aliasesList & = aliases as _object
+                let aliasesList & = unsafe(aliases as _object)
                 for k, v in keys(aliasesList), values(aliasesList)
                     if v is _string
                         pathAliases[k] = v as _string
@@ -1220,7 +1220,7 @@ class private DAServer: Server
                 var idx = frameId
                 var first = true
                 while idx < length(ctxData.stack)
-                    let line & = ctxData.stack[idx]
+                    let line & = unsafe(ctxData.stack[idx])
                     if first || line.spAddr == spAddr
                         globs += length(line.globals)
                         if length(line.variables) > 0
@@ -1259,12 +1259,12 @@ class private DAServer: Server
             let frameId = int(ctxAndFrame % MAX_STACK)
             if frameId >= 0 && frameId < length(ctxData.stack)
                 let kind = uint64(ini.variablesReference) % MAX_VARIABLES
-                let line & = ctxData.stack[frameId]
+                let line & = unsafe(ctxData.stack[frameId])
                 if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS
-                    let vars & = kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : line.globals
+                    let vars & = unsafe(kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : line.globals)
                     let varsNum = length(vars)
                     for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
-                        let v & = vars[idx]
+                        let v & = unsafe(vars[idx])
                         let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
                         res.variables |> emplace([[Variable
                             name=v.name,
@@ -1291,7 +1291,7 @@ class private DAServer: Server
                         if child.children != null
                             let varsNum = length(*child.children)
                             for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
-                                let v & = (*child.children)[idx]
+                                let v & = unsafe((*child.children)[idx])
                                 let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
                                 res.variables |> emplace([[Variable
                                     name=v.name,
@@ -1355,7 +1355,7 @@ class private DAServer: Server
                 var idx = frameId
                 var first = true
                 while !found && idx < length(ctxData.stack)
-                    let line & = ctxData.stack[idx]
+                    let line & = unsafe(ctxData.stack[idx])
                     if first || line.spAddr == spAddr
                         found = line |> find_child_var() <| $(child, varIdx)
                             if child.name == ini.expression

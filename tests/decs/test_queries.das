@@ -133,6 +133,3 @@ def test_query_everything ( t: T? )
 def main
     pass
 
-options debugger
-require daslib/debug
-

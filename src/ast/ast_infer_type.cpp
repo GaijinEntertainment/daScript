@@ -6402,6 +6402,8 @@ namespace das {
                             for ( auto & arg : expr->arguments ) {
                                 pInvoke->arguments.push_back(arg->clone());
                             }
+                            pInvoke->alwaysSafe = expr->alwaysSafe;
+                            pInvoke->userSaidItsSafe = expr->userSaidItsSafe;
                             reportAstChanged();
                             return pInvoke;
                         }

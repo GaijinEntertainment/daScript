@@ -205,6 +205,7 @@ def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlo
                 index <- new [[ExprVar() at=a.at, name:="entity_index"]]
             ]]
     var vlet <- new [[ExprLet() at=a.at, atInit=a.at]]
+    vlet.genFlags |= ExprGenFlags alwaysSafe
     vlet.variables |> emplace_new() <| new [[Variable() at = a.at,
         name := "{prefix}{a.name}{suffix}",
         _type <- clone_type(a._type),

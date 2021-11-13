@@ -2,7 +2,7 @@ def abs(i:int)
     return i<0 ? -i : i
 
 def foo(var bar:array<int>)
-    var b & = bar
+    var b & = unsafe(bar)
     for x in range(10)
         push(b,x)
     return <- b

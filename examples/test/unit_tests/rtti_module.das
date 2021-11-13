@@ -6,7 +6,7 @@ def test:bool
     verify(!is_same_type(typeinfo(rtti_typeinfo 1.0),typeinfo(rtti_typeinfo 2)))
 
     let v : variant<i:int; f:float>
-    let vinfo & = typeinfo(rtti_typeinfo v)
+    let vinfo & = unsafe(typeinfo(rtti_typeinfo v))
     assert(vinfo.argCount==2u)
     for i,n,t in range(2),arg_names(vinfo),arg_types(vinfo)
         if i==0
