@@ -1,12 +1,3 @@
-[submodule "modules/dasGenForEach"]
-	path = modules/dasGenForEach
-	url = git@github.com:olegus8/dasGenForEach.git
-[submodule "modules/dasBinder"]
-	path = modules/dasBinder
-	url = git@github.com:olegus8/dasBinder.git
-[submodule "modules/dasVulkan"]
-	path = modules/dasVulkan
-	url = git@github.com:olegus8/dasVulkan.git
 [submodule "modules/dasGlfw"]
 	path = modules/dasGlfw
 	url = https://github.com/borisbat/dasGlfw.git
