@@ -789,7 +789,7 @@ expression_for_loop
     ;
 
 expression_unsafe
-    :   DAS_UNSAFE[loc] expression_block[block] {
+    :   DAS_UNSAFE[loc]  expression_block[block] {
         auto pUnsafe = new ExprUnsafe(tokAt(@loc));
         pUnsafe->body = ExpressionPtr($block);
         $$ = pUnsafe;
@@ -1788,6 +1788,11 @@ expr
         }
         delete $ena;
         delete $eni;
+    }
+    |   DAS_UNSAFE '(' expr[subexpr] ')' {
+        $subexpr->alwaysSafe = true;
+        $subexpr->userSaidItsSafe = true;
+        $$ = $subexpr;
     }
     ;
 

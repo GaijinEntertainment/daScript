@@ -152,6 +152,19 @@ namespace das {
                     var->at, CompilationError::invalid_name );
             }
         }
+        virtual void preVisitExpression ( Expression * expr ) override {
+            if ( expr->alwaysSafe && expr->userSaidItsSafe ) {
+                auto origin = func->getOrigin();
+                auto fnMod = origin ? origin->module : func->module;
+                if ( fnMod == program->thisModule.get() ) {
+                    anyUnsafe = true;
+                    if ( checkUnsafe ) {
+                        program->error("unsafe function " + func->getMangledName(), "unsafe functions are prohibited by CodeOfPolicies", "",
+                            expr->at, CompilationError::unsafe_function);
+                    }
+                }
+            }
+        }
         bool isValidVarName(const string & str) const {
             return !isCppKeyword(str);
         }

@@ -23,11 +23,11 @@ struct OpenGLGeometryFragment
 def public finalize ( var frag:OpenGLGeometryFragment )
     with frag
         if vao != 0u
-            glDeleteVertexArrays(1,safe_addr(vao))
+            glDeleteVertexArrays(1,unsafe(addr(vao)))
         if vbo != 0u
-            glDeleteBuffers(1,safe_addr(vbo))
+            glDeleteBuffers(1,unsafe(addr(vbo)))
         if ebo != 0u
-            glDeleteBuffers(1,safe_addr(ebo))
+            glDeleteBuffers(1,unsafe(addr(ebo)))
 
 def public create_geometry_fragment ( var geometry:GeometryFragment; kill_geometry:bool=true )
     var fragment : OpenGLGeometryFragment

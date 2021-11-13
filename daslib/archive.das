@@ -6,7 +6,6 @@ module archive shared private
 
 require daslib/contracts
 require daslib/apply
-require daslib/safe_addr
 require daslib/templates
 require math
 require strings
@@ -62,17 +61,17 @@ struct public Archive
 
 def public serialize_raw ( var arch:Archive; var value : auto(TT)& )
     if arch.reading
-        arch.stream->read(safe_addr(value), typeinfo(sizeof type<TT-&>))
+        arch.stream->read(unsafe(addr(value)), typeinfo(sizeof type<TT-&>))
     else
-        arch.stream->write(safe_addr(value), typeinfo(sizeof type<TT-&>))
+        arch.stream->write(unsafe(addr(value)), typeinfo(sizeof type<TT-&>))
 
 def public read_raw ( var arch:Archive; var value : auto(TT)& )
     assert(arch.reading)
-    arch.stream->read(safe_addr(value), typeinfo(sizeof type<TT-&>))
+    arch.stream->read(unsafe(addr(value)), typeinfo(sizeof type<TT-&>))
 
 def public write_raw ( var arch:Archive; var value : auto(TT)& )
     assert(!arch.reading)
-    arch.stream->write(safe_addr(value), typeinfo(sizeof type<TT-&>))
+    arch.stream->write(unsafe(addr(value)), typeinfo(sizeof type<TT-&>))
 
 [expect_any_enum(value), template(dummy=false)]
 def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&?????? = null )

@@ -337,6 +337,11 @@ void YYNEWLINE() {
 <normal>"shared"                                        return DAS_SHARED;
 <normal>"private"                                       return DAS_PRIVATE;
 <normal>"smart_ptr"                                     return DAS_SMART_PTR;
+<normal>unsafe[ \t\r]*\(    {
+    unput('(');
+    YYCOLUMN(das_yycolumn--, "UNPUT (");
+    return DAS_UNSAFE;
+}
 <normal>"unsafe"                                        das_need_oxford_comma = false; return DAS_UNSAFE;
 <normal>"as"                                            return DAS_AS;
 <normal>"is"                                            return DAS_IS;

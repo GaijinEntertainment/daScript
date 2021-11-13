@@ -5,8 +5,6 @@ variant FooBar
     foo : int
     bar : string
 
-options log
-
 [test]
 def test_apply_variant ( t:T? )
     t |> run("contents") <| @ ( t : T? )

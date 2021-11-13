@@ -151,7 +151,7 @@ namespace das {
     TypeDeclPtr makeExprGenFlagsFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprGenFlags";
-        ft->argNames = { "alwaysSafe", "generated" };
+        ft->argNames = { "alwaysSafe", "generated", "userSaidItsSafe" };
         return ft;
     }
 

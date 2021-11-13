@@ -542,6 +542,7 @@ namespace das
             struct {
                 bool    alwaysSafe : 1;
                 bool    generated : 1;
+                bool    userSaidItsSafe : 1;
             };
             uint32_t    genFlags = 0;
         };

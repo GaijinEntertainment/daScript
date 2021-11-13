@@ -73,22 +73,22 @@ def glUniformAny ( location:int; value:int )
     glUniform1i(location, value)
 
 def glUniformAny ( location:int; value:int[] )
-    glUniform1iv(location, length(value), safe_addr(value[0]))
+    glUniform1iv(location, length(value), unsafe(addr(value[0])))
 
 def glUniformAny ( location:int; value:float )
     glUniform1f(location, value)
 
 def glUniformAny ( location:int; value:float[] )
-    glUniform1fv(location, length(value), safe_addr(value[0]))
+    glUniform1fv(location, length(value), unsafe(addr(value[0])))
 
 def glUniformAny ( location:int; value:float2 )
-    glUniform2fv(location, 1, safe_addr(value.x))
+    glUniform2fv(location, 1, unsafe(addr(value.x)))
 
 def glUniformAny ( location:int; value:float3 )
-    glUniform3fv(location, 1, safe_addr(value.x))
+    glUniform3fv(location, 1, unsafe(addr(value.x)))
 
 def glUniformAny ( location:int; value:float4 )
-    glUniform4fv(location, 1, safe_addr(value.x))
+    glUniform4fv(location, 1, unsafe(addr(value.x)))
 
 def glUniformAny ( location:int; value:float4x4 )
     glUniformMatrix4fv(location, value)
@@ -117,7 +117,7 @@ def create_shader ( src:string implicit; shaderType:uint; canfail:bool = false )
     if src==""
         panic("create_shaer with empty shader")
     let s = glCreateShader(shaderType)
-    glShaderSource(s, 1, safe_addr(src), null)
+    glShaderSource(s, 1, unsafe(addr(src)), null)
     glCompileShader(s)
     var status:int
     glGetShaderiv(s, GL_COMPILE_STATUS, safe_addr(status))
@@ -181,7 +181,7 @@ def create_ssbo ( var value:auto& )
     glGenBuffers(1, safe_addr(ssbo))
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo)
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1u, ssbo)
-    glBufferData(GL_SHADER_STORAGE_BUFFER, int64(typeinfo(sizeof value)), safe_addr(value), GL_DYNAMIC_COPY)
+    glBufferData(GL_SHADER_STORAGE_BUFFER, int64(typeinfo(sizeof value)), unsafe(addr(value)), GL_DYNAMIC_COPY)
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0u)
     return ssbo
 
