@@ -2,12 +2,12 @@ options indenting = 4
 
 module suite shared
 
-require rtti
 require ast
 require strings
 require debugapi
 require fio
-require uriparser
+require daslib/defer
+
 require log
 require testing
 require suite_result public
@@ -49,19 +49,14 @@ struct SuiteFileCtx
     expectFailure: bool = false
 
 
-def createSuiteFileCtx(): SuiteFileCtx
-    return <- SuiteFileCtx(get_command_line_arguments())
-
-
-def SuiteFileCtx(args: array<string>): SuiteFileCtx
-    var ctx <- SuiteFileCtx()
-    ctx.uriPaths = args |> has_value("--uri-paths")
-    unsafe
-        ctx.context = addr(this_context())
-    return <- ctx
-
-
 def SuiteFileCtx(ctx: SuiteCtx): SuiteFileCtx
+    var res <- internalSuiteFileCtx(ctx)
+    unsafe
+        res.context = addr(this_context())
+    return <- res
+
+
+def private internalSuiteFileCtx(ctx: SuiteCtx): SuiteFileCtx
     return <- [[SuiteFileCtx uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
 
 
@@ -75,7 +70,7 @@ def private match_test_name(name: string; ctx: SuiteCtx)
 
 
 def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
-    var fileCtx <- SuiteFileCtx(ctx)
+    var fileCtx <- internalSuiteFileCtx(ctx)
     var res = test_file(file_name, ctx, fileCtx)
     delete fileCtx
     return res
@@ -222,15 +217,20 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
     var deliberateRecover = false
     var failed = false
     var skipped = false
-    unsafe
-        let t0 = ref_time_ticks()
-        var testing: T?
-        try
-            if args_num == 0
+    let t0 = ref_time_ticks()
+    var testing: T?
+    defer <| $
+        unsafe
+            delete testing
+    try
+        if args_num == 0
+            unsafe
                 *context.context |> invoke_in_context(func)
-                dt = get_time_usec(t0)
-            else
-                testing = new T(name, t0, context.verbose)
+            dt = get_time_usec(t0)
+        else
+            testing = new T(name, t0, context.verbose)
+            var selfCtx & = this_context()
+            unsafe
                 testing.onFail <- @ <| [[&testing, &failed, &deliberateRecover]](now: bool)
                     testing.failed = true
                     failed = true
@@ -241,33 +241,31 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
                     skipped = true
                     deliberateRecover = true
 
-                var selfCtx & = this_context()
                 testing.onRun <- @ <| [[&selfCtx, &context, &res]](test_name: string; f: RunT)
-                    unsafe
-                        if f is func1
+                    if f is func1
+                        unsafe
                             selfCtx |> invoke_in_context("sub_test_any_func", test_name, f as func1, 1, context, res)
-                        elif f is lmd1
+                    elif f is lmd1
+                        unsafe
                             selfCtx |> invoke_in_context("sub_test_any_lambda", test_name, f as lmd1, 1, context, res)
 
                 testing.onLog <- @ <| [[&context]](msg: string; at: LineInfo)
                     log::info("{context.indenting}{file_info_hr(at, context.uriPaths)}: {msg}")
 
                 *context.context |> invoke_in_context(func, testing)
-                dt = get_time_usec(t0)
-                delete testing
-        recover
-            delete testing
-            if !deliberateRecover
-                dt = get_time_usec(t0)
-                res.errors += 1
-                errorOrBlue(context.expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
-                if !empty(context.context.exception)
-                    errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
-                if !empty(context.context.last_exception)
-                    errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
-                if context.stackOnRecover
-                    *context.context |> stackwalk(context.context.exceptionAt)
-                return
+            dt = get_time_usec(t0)
+    recover
+        if !deliberateRecover
+            dt = get_time_usec(t0)
+            res.errors += 1
+            errorOrBlue(context.expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
+            if !empty(context.context.exception)
+                errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
+            if !empty(context.context.last_exception)
+                errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
+            if context.stackOnRecover
+                *context.context |> stackwalk(context.context.exceptionAt)
+            return
 
     var expectFailure = context.expectFailure
     if expectFailure && !failed
@@ -287,6 +285,7 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
         errorOrBlue(expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
     else
         log::green("{context.indenting}--- PASS '{name}' {time_dt_hr(dt)}")
+
 
 def errorOrBlue(expectFailure: bool; msg: string)
     if expectFailure

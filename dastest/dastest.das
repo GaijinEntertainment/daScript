@@ -1,15 +1,15 @@
 options indenting = 4
 
 require fio
-require rtti
 require strings
 require uriparser
-require fs
-require suite
-require log
 require debugapi
 require daslib/json_boost
 require daslib/jobque_boost
+
+require fs
+require suite
+require log
 
 
 let jsonResultPrefix = "##dastest##\n"
@@ -56,8 +56,8 @@ def main()
 
     let timeout = args |> get_float_arg("--timeout", 600.) // 10min
     if timeout > 0.
+        var mainCtx & = this_context()
         unsafe
-            var mainCtx & = this_context()
             new_thread <| @[[&res, &mainCtx]]
                 fio::sleep(uint(timeout * 1000.))
                 unsafe

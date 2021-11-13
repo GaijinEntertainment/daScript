@@ -3,7 +3,7 @@ options indenting = 4
 module testing shared
 
 require rtti
-require strings
+require strings // to compare strings/das_strings
 
 class T
     name: string
