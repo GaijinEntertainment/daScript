@@ -5692,9 +5692,12 @@ namespace das {
             if ( var->type->ref && !var->init )
                 error("local reference has to be initialized", "", "",
                       var->at, CompilationError::invalid_variable_type);
-            if ( var->type->ref && var->init && !(var->init->alwaysSafe || isLocalOrGlobal(var->init)) && !safeExpression(expr) )
-                error("local reference to non-local expression is unsafe", "", "",
-                    var->at, CompilationError::unsafe);
+            if ( var->type->ref && var->init && !(var->init->alwaysSafe || isLocalOrGlobal(var->init)) && !safeExpression(expr) ) {
+                if ( program->policies.local_ref_is_unsafe ) {
+                    error("local reference to non-local expression is unsafe", "", "",
+                        var->at, CompilationError::unsafe);
+                }
+            }
             if ( var->type->isVoid() )
                 error("local variable can't be declared void", "", "",
                       var->at, CompilationError::invalid_variable_type);
@@ -6403,7 +6406,6 @@ namespace das {
                                 pInvoke->arguments.push_back(arg->clone());
                             }
                             pInvoke->alwaysSafe = expr->alwaysSafe;
-                            pInvoke->userSaidItsSafe = expr->userSaidItsSafe;
                             reportAstChanged();
                             return pInvoke;
                         }
