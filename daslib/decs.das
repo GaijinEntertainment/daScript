@@ -14,6 +14,7 @@ require daslib/functional
 require daslib/archive public
 require math
 require strings
+require daslib/defer
 
 typedef ComponentHash = uint
 
@@ -186,6 +187,8 @@ def operator delete ( var cmp:Component )
     delete cmp.info
 
 def public restart
+    if insideQuery!=0
+        panic("can't call `restart` from inside query")
     delete deferActions
     delete decsState
 
@@ -201,6 +204,8 @@ def private new_entity_id()
     return eid
 
 def public before_gc
+    if insideQuery!=0
+        panic("can't call 'before_gc' from inside query")
     for arch in decsState.allArchetypes
         if arch.size > 0
             for comp in arch.components
@@ -208,6 +213,8 @@ def public before_gc
                     comp.gc_dummy <- invoke(comp.info.gc, comp.data)
 
 def public after_gc
+    if insideQuery!=0
+        panic("can't call 'after_gc' from inside query")
     for arch in decsState.allArchetypes
         if arch.size > 0
             for comp in arch.components
@@ -350,7 +357,9 @@ def public lookup_request ( var erq : EcsRequest )
 
 def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype):void> )
     let qi = lookup_request(erq)
-    for aidx in decsState.ecsQueries[qi].archetypes
+    var aclone := decsState.ecsQueries[qi].archetypes
+    defer_delete(aclone)
+    for aidx in aclone
         var arch & = decsState.allArchetypes[aidx]
         if arch.size > 0
             ++insideQuery; invoke ( blk, arch ); --insideQuery
@@ -383,7 +392,9 @@ def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsReq
         qi = *ql - 1
     if qi == -1
         qi = lookup_request(invoke(erq))
-    for aidx in decsState.ecsQueries[qi].archetypes
+    var aclone := decsState.ecsQueries[qi].archetypes
+    defer_delete(aclone)
+    for aidx in aclone
         var arch & = decsState.allArchetypes[aidx]
         if arch.size > 0
             ++insideQuery; invoke ( blk, arch ); --insideQuery
@@ -394,7 +405,9 @@ def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():E
         qi = *ql - 1
     if qi == -1
         qi = lookup_request(invoke(erq))
-    for aidx in decsState.ecsQueries[qi].archetypes
+    var aclone := decsState.ecsQueries[qi].archetypes
+    defer_delete(aclone)
+    for aidx in aclone
         var arch & = decsState.allArchetypes[aidx]
         if arch.size > 0
             ++insideQuery; let res = invoke ( blk, arch ); --insideQuery
@@ -531,10 +544,11 @@ def public delete_entity ( entityid:EntityId implicit )
 
 def public commit
     if insideQuery!=0
-        panic("can't call commit from inside query")
-    for da in deferActions
+        panic("can't call `commit` from inside query")
+    var actions <- deferActions
+    for da in actions
         da.action |> invoke(da)
-    delete deferActions
+    delete actions
 
 def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name

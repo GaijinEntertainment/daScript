@@ -18,6 +18,10 @@ namespace das {
         return arr.capacity;
     }
 
+    int builtin_array_lock_count ( const Array & arr ) {
+        return arr.lock;
+    }
+
     void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context ) {
         if ( newSize<0 ) context->throw_error_ex("resizing array to negative size %i", newSize);
         array_resize ( *context, pArray, newSize, stride, true );
@@ -63,6 +67,9 @@ namespace das {
                 ->arg("array");
         addExtern<DAS_BIND_FUN(builtin_array_capacity)>(*this, lib, "capacity",
             SideEffects::none, "builtin_array_capacity")
+                ->arg("array");
+        addExtern<DAS_BIND_FUN(builtin_array_lock_count)>(*this, lib, "lock_count",
+            SideEffects::none, "builtin_array_lock_count")
                 ->arg("array");
         // array built-in functions
         addExtern<DAS_BIND_FUN(builtin_array_resize)>(*this, lib, "__builtin_array_resize",
