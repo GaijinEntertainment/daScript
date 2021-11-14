@@ -112,7 +112,7 @@ def test_gc_stress( t: T?)
             i -= subi
         query <| $ ( values:array<int2>; i:int )
             for x,v in range(i+1),values
-                if t |> equal(int2(x,x+13), v )
+                if ! t |> equal(int2(x,x+13), v )
                     break
         before_gc()
         unsafe
@@ -120,5 +120,5 @@ def test_gc_stress( t: T?)
         after_gc()
         query <| $ ( values:array<int2>; i:int )
             for x,v in range(i+1),values
-                if t |> equal(int2(x,x+13), v )
+                if ! t |> equal(int2(x,x+13), v )
                     break
