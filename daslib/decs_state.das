@@ -26,6 +26,7 @@ struct EcsComponentView
     name        : string
     vtype       : string
     values      : string
+    stride      : int
 
 struct EcsArchetypeView
     hash        : uint
@@ -38,7 +39,6 @@ class ContextStateAgent : DapiDebugAgent
         if pState == null
             return
         let decsState = unsafe(reinterpret<DecsState? const> (pState))
-        // report true
         for arch in decsState.allArchetypes
             var arq : EcsArchetypeView
             arq.hash = arch.hash
@@ -47,6 +47,7 @@ class ContextStateAgent : DapiDebugAgent
                 var cv : EcsComponentView
                 cv.name = c.name
                 cv.vtype = c.info.fullName
+                cv.stride = c.stride
                 if length(c.data) > 0
                     var tinfo : TypeInfo const?
                     let fnTypeInfo = c.info.mkTypeInfo
@@ -75,11 +76,11 @@ class ContextStateAgent : DapiDebugAgent
 
 
 [export]
-def opengl_state_agent ( ctx : Context )
-    install_new_debug_agent(new ContextStateAgent(), "opengl")
+def decs_state_agent ( ctx : Context )
+    install_new_debug_agent(new ContextStateAgent(), "decs")
 
 [init,export]
-def private auto_start_opengl_state()
+def private auto_start_decs_state()
     if !is_in_debug_agent_creation()
-        if !has_debug_agent_context("opengl")
-            fork_debug_agent_context(@@opengl_state_agent)
+        if !has_debug_agent_context("decs")
+            fork_debug_agent_context(@@decs_state_agent)
