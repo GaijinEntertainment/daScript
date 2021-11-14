@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_expressions.h"
 
 void das_yybegin(const char * str, uint32_t len);
 int das_yyparse();
@@ -468,6 +469,19 @@ namespace das {
             } else {
                 if (!res->failed())
                     res->markExecutableSymbolUse();
+                if ( res->getDebugger()) {
+                    TextWriter ss;
+                    for ( const auto & arq : res->allRequireDecl ) {
+                        ss << get<1>(arq) << " ";
+                    }
+                    auto rtti_require = make_smart<Variable>();
+                    rtti_require->name = "__rtti_require";
+                    rtti_require->type = make_smart<TypeDecl>(Type::tString);
+                    rtti_require->init = make_smart<ExprConstString>(ss.str());
+                    rtti_require->init->type = make_smart<TypeDecl>(Type::tString);
+                    rtti_require->used = true;
+                    res->thisModule->addVariable(rtti_require);
+                }
                 if (!res->failed())
                     res->removeUnusedSymbols();
                 if (!res->failed())
