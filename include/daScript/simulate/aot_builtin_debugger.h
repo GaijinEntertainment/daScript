@@ -24,4 +24,7 @@ namespace das {
     void clear_instruments ( Context & ctx );
 
     bool has_function ( Context & ctx, const char * name );
+
+    int32_t set_hw_breakpoint ( Context & ctx, void * address, int32_t size, bool writeOnly );
+    bool clear_hw_breakpoint ( int32_t bpi );
 }

@@ -1,6 +1,20 @@
 #pragma once
 
 namespace das {
+
+    enum HwBpType {
+        HwBp_Execute =      0,
+        HwBp_Write =        1,
+        HwBp_ReadWrite =    3,
+    };
+
+    enum HwBpSize {
+        HwBp_1 =    0,
+        HwBp_2 =    1,
+        HwBp_4 =    3,  // yes 3
+        HwBp_8 =    2,
+    };
+
     string getExecutableFileName ( void );
     string getDasRoot ( void );
     void setDasRoot ( const string & dr );
@@ -11,4 +25,8 @@ namespace das {
     void * loadDynamicLibrary ( const char * fileName );
     void * getFunctionAddress ( void * module, const char * func );
     void * getLibraryHandle ( const char * moduleName );
+
+    void hwSetBreakpointHandler ( void (* handler ) ( int, void * ) );
+    int hwBreakpointSet ( void * address, uint64_t len, uint64_t when );
+    bool hwBreakpointClear ( int bp_index );
 }

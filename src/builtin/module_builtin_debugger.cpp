@@ -7,6 +7,7 @@
 #include "daScript/simulate/aot_builtin_debugger.h"
 #include "module_builtin_rtti.h"
 #include "daScript/misc/performance_time.h"
+#include "daScript/misc/sysos.h"
 
 using namespace das;
 
@@ -817,6 +818,37 @@ namespace debugapi {
         return ctx.findFunction(name ? name : "") != nullptr;
     }
 
+    Context * hw_bp_context[4] = { nullptr, nullptr, nullptr, nullptr };
+    bool hw_bp_handler_set = false;
+
+    void hw_bp_handler ( int bp, void * address ) {
+        Context * ctx = hw_bp_context[bp];
+        if ( ctx!=nullptr ) ctx->triggerHwBreakpoint(address, bp);
+    }
+
+    int32_t set_hw_breakpoint ( Context & ctx, void * address, int32_t size, bool writeOnly ) {
+        HwBpSize sz;
+        switch ( size ) {
+        case 1: sz = HwBpSize::HwBp_1; break;
+        case 2: sz = HwBpSize::HwBp_2; break;
+        case 4: sz = HwBpSize::HwBp_4; break;
+        case 8: sz = HwBpSize::HwBp_8; break;
+        default:    return -1;
+        }
+        if ( !hw_bp_handler_set ) hwSetBreakpointHandler(hw_bp_handler);
+        int32_t bp = hwBreakpointSet(address, sz, writeOnly ? HwBpType::HwBp_Write : HwBpType::HwBp_ReadWrite);
+        if ( bp!=-1 ) hw_bp_context[bp] = &ctx;
+        return bp;
+    }
+
+    bool clear_hw_breakpoint ( int32_t bpi ) {
+        if ( hwBreakpointClear(bpi) ) {
+            hw_bp_context[bpi] = nullptr;
+            return true;
+        } else {
+            return false;
+        }
+    }
     class Module_Debugger : public Module {
     public:
         Module_Debugger() : Module("debugapi") {
@@ -975,6 +1007,12 @@ namespace debugapi {
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            // hw breakpoints
+            addExtern<DAS_BIND_FUN(set_hw_breakpoint)>(*this, lib,  "set_hw_breakpoint",
+                SideEffects::modifyExternal, "set_hw_breakpoint")
+                    ->args({"context","address","size","writeOnly"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(clear_hw_breakpoint)>(*this, lib,  "clear_hw_breakpoint",
+                SideEffects::modifyExternal, "clear_hw_breakpoint")->unsafeOperation = true;
             // add builtin module
             compileBuiltinModule("debugger.das",debugger_das,sizeof(debugger_das));
             // lets make sure its all aot ready

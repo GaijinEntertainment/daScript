@@ -1537,6 +1537,12 @@ namespace das
         }
     }
 
+    void Context::triggerHwBreakpoint ( void * addr, int index ) {
+        singleStepMode = true;
+        hwBpAddress = addr;
+        hwBpIndex = index;
+    }
+
     void Context::breakPoint(const LineInfo & at, const char * reason, const char * text) {
         if ( debugger ) {
             bool any = false;

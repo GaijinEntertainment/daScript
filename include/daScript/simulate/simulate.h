@@ -607,7 +607,10 @@ namespace das
 
         __forceinline void singleStep ( const LineInfo & at, bool forceStep ) {
             if ( singleStepMode ) {
-                if ( forceStep || singleStepAt==nullptr || (singleStepAt->fileInfo!=at.fileInfo || singleStepAt->line!=at.line) ) {
+                if ( hwBpIndex!=-1 ) {
+                    breakPoint(at, "exception","hardware breakpoint");
+                    hwBpIndex = -1;
+                } else if ( forceStep || singleStepAt==nullptr || (singleStepAt->fileInfo!=at.fileInfo || singleStepAt->line!=at.line) ) {
                     singleStepAt = &at;
                     bpcallback(at);
                 }
@@ -615,6 +618,7 @@ namespace das
         }
 
         __forceinline void setSingleStep ( bool step ) { singleStepMode = step; }
+        void triggerHwBreakpoint ( void * addr, int index );
 
         __forceinline bool isGlobalPtr ( char * ptr ) const { return globals<=ptr && ptr<(globals+globalsSize); }
         __forceinline bool isSharedPtr ( char * ptr ) const { return shared<=ptr && ptr<(shared+sharedSize); }
@@ -660,8 +664,10 @@ namespace das
         int totalFunctions = 0;
         SimNode * aotInitScript = nullptr;
     protected:
-        bool        debugger = false;
-        bool        singleStepMode = false;
+        bool            debugger = false;
+        volatile bool   singleStepMode = false;
+        void *          hwBpAddress = nullptr;
+        int             hwBpIndex = -1;
         const LineInfo * singleStepAt = nullptr;
     public:
         das_hash_map<uint32_t,SimFunction *> tabMnLookup;
