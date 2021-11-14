@@ -13,6 +13,8 @@ require daslib/templates_boost
 require daslib/strings_boost
 require daslib/ast_block_to_loop
 
+require daslib/decs_state
+
 /*
 from:
     query ( ) <| $ ( pos:float3&; vel:float3; col:uint=0x12345678 )

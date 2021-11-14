@@ -28,6 +28,7 @@ struct CTypeInfo
     clonner    : function<(var dst:array<uint8>; src:array<uint8>):void>
     serializer : function<(var arch:Archive; var arr:array<uint8>):void>
     dumper     : function<(elem:void?):string>
+    mkTypeInfo : function<():TypeInfo const?>
     gc         : function<(var src:array<uint8>):lambda>
 
 struct public Component
@@ -561,6 +562,8 @@ def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
     return value
 
 def private make_callbacks ( var cv:ComponentValue; value:auto(TT) )
+    cv.info.mkTypeInfo = @@ <| ( ) : TypeInfo const?
+        return unsafe(addr(typeinfo(rtti_typeinfo type<array<TT-const-&-#>>)))
     cv.info.dumper = @@ <| ( elem:void? )
         if elem==null
             return ""
