@@ -90,7 +90,7 @@
     namespace das {
         void hwSetBreakpointHandler ( void (*) ( int, void * ) ) { }
         int hwBreakpointSet ( void *, uint64_t, uint64_t ) {
-            return false;
+            return -1;
         }
         bool hwBreakpointClear ( int ) {
             return false;
@@ -119,7 +119,7 @@
     namespace das {
         void hwSetBreakpointHandler ( void (*) ( int, void * ) ) { }
         int hwBreakpointSet ( void *, uint64_t, uint64_t ) {
-            return false;
+            return -1;
         }
         bool hwBreakpointClear ( int ) {
             return false;
@@ -156,7 +156,7 @@
     namespace das {
         void hwSetBreakpointHandler ( void (*) ( int, void * ) ) { }
         int hwBreakpointSet ( void *, uint64_t, uint64_t ) {
-            return false;
+            return -1;
         }
         bool hwBreakpointClear ( int ) {
             return false;
