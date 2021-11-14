@@ -472,11 +472,18 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeStructInfoFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "StructInfoFlags";
+        ft->argNames = { "_class", "_lambda", "heapGC", "stringHeapGC", "lockCheck" };
+        return ft;
+    }
+
     struct StructInfoAnnotation : DebugInfoAnnotation<VarInfo,StructInfo> {
         StructInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("StructInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(module_name)>("module_name");
-            addField<DAS_BIND_MANAGED_FIELD(flags)>("flags");
+            addFieldEx ( "flags", "flags", offsetof(StructInfo, flags), makeStructInfoFlags());
             addField<DAS_BIND_MANAGED_FIELD(size)>("size");
             addField<DAS_BIND_MANAGED_FIELD(init_mnh)>("init_mnh");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
@@ -487,6 +494,15 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeTypeInfoFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "TypeInfoFlags";
+        ft->argNames = { "ref", "refType", "canCopy", "isPod", "isRawPod", "isConst", "isTemp", "isImplicit",
+            "refValue", "hasInitValue", "isSmartPtr", "isSmartPtrNative", "isHandled",
+            "heapGC", "stringHeapGC", "lockCheck" };
+        return ft;
+    }
+
     template <typename TT>
     struct ManagedTypeInfoAnnotation : ManagedStructureAnnotation <TT,false> {
         ManagedTypeInfoAnnotation ( const string & st, ModuleLibrary & ml )
@@ -496,7 +512,7 @@ namespace das {
             this->template addField<DAS_BIND_MANAGED_FIELD(enumType)>("enumType");
             this->template addField<DAS_BIND_MANAGED_FIELD(dimSize)>("dimSize");
             this->template addField<DAS_BIND_MANAGED_FIELD(argCount)>("argCount");
-            this->template addField<DAS_BIND_MANAGED_FIELD(flags)>("flags");
+            this->addFieldEx ( "flags", "flags", offsetof(TT, flags), makeTypeInfoFlags());
             this->template addField<DAS_BIND_MANAGED_FIELD(size)>("size");
             this->template addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             this->template addProperty<DAS_BIND_MANAGED_PROP(isRef)>("isRef");
@@ -583,10 +599,12 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(multiple_contexts)>("multiple_contexts");
             addField<DAS_BIND_MANAGED_FIELD(heap_size_hint)>("heap_size_hint");
             addField<DAS_BIND_MANAGED_FIELD(string_heap_size_hint)>("string_heap_size_hint");
+            addField<DAS_BIND_MANAGED_FIELD(solid_context)>("solid_context");
         // rtti
             addField<DAS_BIND_MANAGED_FIELD(rtti)>("rtti");
         // language
             addField<DAS_BIND_MANAGED_FIELD(no_unsafe)>("no_unsafe");
+            addField<DAS_BIND_MANAGED_FIELD(local_ref_is_unsafe)>("local_ref_is_unsafe");
             addField<DAS_BIND_MANAGED_FIELD(no_global_variables)>("no_global_variables");
             addField<DAS_BIND_MANAGED_FIELD(no_global_variables_at_all)>("no_global_variables_at_all");
             addField<DAS_BIND_MANAGED_FIELD(no_global_heap)>("no_global_heap");
@@ -596,6 +614,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(no_unused_block_arguments)>("no_unused_block_arguments");
             addField<DAS_BIND_MANAGED_FIELD(smart_pointer_by_value_unsafe)>("smart_pointer_by_value_unsafe");
             addField<DAS_BIND_MANAGED_FIELD(allow_block_variable_shadowing)>("allow_block_variable_shadowing");
+            addField<DAS_BIND_MANAGED_FIELD(allow_local_variable_shadowing)>("allow_local_variable_shadowing");
             addField<DAS_BIND_MANAGED_FIELD(allow_shared_lambda)>("allow_shared_lambda");
             addField<DAS_BIND_MANAGED_FIELD(ignore_shared_modules)>("ignore_shared_modules");
             addField<DAS_BIND_MANAGED_FIELD(default_module_public)>("default_module_public");
@@ -1128,6 +1147,8 @@ namespace das {
             // flags
             addAlias(makeProgramFlags());
             addAlias(makeContextCategoryFlags());
+            addAlias(makeTypeInfoFlags());
+            addAlias(makeStructInfoFlags());
             // enums
             addEnumeration(make_smart<EnumerationCompilationError>());
             // type annotations
