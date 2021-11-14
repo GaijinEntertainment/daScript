@@ -5,6 +5,7 @@ require daslib/decs_boost
 require dastest/testing_boost public
 require daslib/random
 require daslib/math
+require daslib/static_let
 
 [test]
 def test_gc_arrays( t: T?)
@@ -71,6 +72,8 @@ def test_arrays_lifetime( t: T?)
 def test_gc_stress( t: T?)
     var seed = random_seed(13)
     restart()
+    static_let <|
+        var TOTAL_EID = 0
     for count in range(100)
         let morei = (random_int(seed) & 31) + 10
         for i in range(morei)
@@ -80,18 +83,20 @@ def test_gc_stress( t: T?)
                 let random_arch = random_int(seed) & 31
                 cmp |> set("arch_{random_arch}", random_arch)
                 cmp.i := i
+                TOTAL_EID ++
         let morej = (random_int(seed) & 31) + 10
         for j in range(morei)
             create_entity <| @ ( eid, cmp )
                 cmp.txt := "text_{eid}"
                 let random_arch = random_int(seed) & 63
                 cmp |> set("arch_{random_arch}", random_arch)
+                TOTAL_EID ++
         let delk = (random_int(seed) & 63)
-        for j in range(delk)
-            query <| $ ( eid:EntityId )
-                let chance = random_int(seed) % 100
-                if chance <= 4
-                    delete_entity(eid)
+        query <| $ ( eid:EntityId )
+            let chance = random_int(seed) % 100
+            if chance <= 13
+                delete_entity(eid)
+                TOTAL_EID --
         before_gc()
         unsafe
             heap_collect(true,true)
@@ -100,7 +105,7 @@ def test_gc_stress( t: T?)
         query <| $ ( eid:EntityId; text:string )
             t |> equal(text, "text_{eid}")
         query <| $ ( var values:array<int2>; var i:int )
-            let addi = (random_int(seed) & 127) + 10
+            let addi = (random_int(seed) & 511) + 10
             for t in range(addi)
                 values |> push(int2(i+t,i+t+13))
             i += addi
@@ -122,3 +127,12 @@ def test_gc_stress( t: T?)
             for x,v in range(i+1),values
                 if ! t |> equal(int2(x,x+13), v )
                     break
+        var te = 0
+        query <| $ ( eid: EntityId )
+            te ++
+        t|> equal(te, TOTAL_EID)
+        te = 0
+        find_query <| $ ( eid: EntityId )
+            te ++
+            return false
+        t|> equal(TOTAL_EID, te)

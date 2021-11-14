@@ -410,7 +410,8 @@ def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():E
         var arch & = unsafe(decsState.allArchetypes[aidx])
         if arch.size > 0
             ++insideQuery; let res = invoke ( blk, arch ); --insideQuery
-            return res
+            if res
+                return true
     return false
 
 [template(atype)]

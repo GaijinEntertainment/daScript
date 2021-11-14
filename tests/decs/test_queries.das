@@ -75,11 +75,23 @@ def test_find_query ( t: T? )
         create_entity <| @ ( eid, cmp )
             cmp.pos := float3(i)
     commit()
-    var looked_at = 0
-    find_query <| $ ( pos:float3 )
-        looked_at ++
-        return pos.x==1.
-    t |> equal(looked_at,2)
+    t |> run("find specific") <| @ ( t : T?)
+        var looked_at = 0
+        find_query <| $ ( pos:float3 )
+            looked_at ++
+            return pos.x==1.
+        t |> equal(looked_at,2)
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp.pos := float3(i)
+            cmp.vel := float3(i)
+    commit()
+    t |> run("check look count") <| @ ( t : T?)
+        var looked_at = 0
+        find_query <| $ ( pos:float3 )
+            looked_at ++
+            return false
+        t |> equal(looked_at, 6)
 
 [test]
 def test_query_eid ( t: T? )
@@ -145,6 +157,8 @@ def test_aka_query ( t:T? )
                 equ++
     t |> equal(tot, 100)
     t |> equal(equ, 10)
+
+
 
 [export]
 def main
