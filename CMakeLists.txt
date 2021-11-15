@@ -617,20 +617,6 @@ target_include_directories(libDasModuleUriparser PUBLIC
 ADD_DEPENDENCIES(libDasModuleUriparser libDaScript libUriParser)
 
 if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
-# Continues development tool
-
-  SET(DASCONTDEV_MAIN_SRC
-  utils/dasContDev/main.cpp
-  ${DAS_MODULES_NEED_INC}
-  )
-  SOURCE_GROUP_FILES("main" DASCONTDEV_MAIN_SRC)
-
-  add_executable(dasContDev ${DASCONTDEV_MAIN_SRC})
-  TARGET_LINK_LIBRARIES(dasContDev libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-  ADD_DEPENDENCIES(dasContDev libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
-  SETUP_CPP11(dasContDev)
-  SETUP_LTO(dasContDev)
-
 # Stand alone command line compiler
 
   SET(DASCRIPT_MAIN_SRC
