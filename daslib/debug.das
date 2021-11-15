@@ -20,6 +20,7 @@ require daslib/apply_in_context
 require daslib/jobque_boost
 require daslib/strings_boost
 require daslib/dap
+require daslib/algorithm
 
 
 let private
@@ -624,6 +625,9 @@ class private DAgent: DapiDebugAgent
     initialStrLimit = uint64(8 * 1024 * 1024)
     strLimit: uint64 = uint64(8 * 1024 * 1024)
 
+    pauseCtx: rtti::Context? = null
+    pauseAt: LineInfo const? = null
+
     def DAgent(var ctx: Context)
         waitConnection = wait_debugger()
         withInstruments = use_instruments()
@@ -752,7 +756,15 @@ class private DAgent: DapiDebugAgent
                 ctxData |> reset_debug_flags()
         self->onPause(ctx, at, reason, text)
 
-    def onPause(var ctx: Context; at:LineInfo; reason, text: string): void
+    def beforePause(ctxData: DAContext; at: LineInfo)
+        pauseCtx = ctxData.ctx
+        pauseAt = unsafe(addr(at))
+
+    def afterPause()
+        pauseCtx = null
+        pauseAt = null
+
+    def onPause(var ctx: Context; at: LineInfo; reason, text: string): void
         if at.fileInfo == null
             return
         if server == null
@@ -769,6 +781,7 @@ class private DAgent: DapiDebugAgent
             while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                 tick_debugger()
             ctxData.continueRequested = false
+            self->afterPause()
             ctx |> set_single_step(!withInstruments || ctxData.stepInRequested || ctxData.stepRequestedStack > 0)
 
     def override onSingleStep(var ctx: Context; at: LineInfo): void
@@ -798,6 +811,7 @@ class private DAgent: DapiDebugAgent
                 self->sendStopped(ctx, ctxData, file, at, "pause", "", -1ul)
                 while ctxData.pauseRequested
                     tick_debugger()
+                self->afterPause()
                 self->reqResume(ctxData)
 
             if ctxData.stepInRequested
@@ -806,6 +820,7 @@ class private DAgent: DapiDebugAgent
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debugger()
                 ctxData.continueRequested = false
+                self->afterPause()
 
             if ctxData.stepRequestedStack > 0
                 if stack_depth(*ctxData.ctx) > ctxData.stepRequestedStack
@@ -814,6 +829,7 @@ class private DAgent: DapiDebugAgent
                 self->sendStopped(ctx, ctxData, file, at, "step", "", -1ul)
                 while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                     tick_debugger()
+                self->afterPause()
                 ctxData.continueRequested = false
 
             if withInstruments
@@ -843,6 +859,7 @@ class private DAgent: DapiDebugAgent
                     while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
                         tick_debugger()
                     ctxData.continueRequested = false
+                    self->afterPause()
                     break
 
     def nextStep(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo)
@@ -887,6 +904,7 @@ class private DAgent: DapiDebugAgent
     def sendStopped(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo; reason, text: string; brId: uint64)
         self->log("<< stopped `{reason}` at {path}:{int(at.line)}")
 
+        self->beforePause(ctxData, at)
         self->nextStep(ctx, ctxData, path, at)
         server->sendStopped(ctxData, reason, text, brId)
 
@@ -1346,32 +1364,16 @@ class private DAServer: Server
     def reqEvaluate(seq: double; command: string; data: JsonValue?)
         var ini <- EvaluateArguments(data)
         defer_delete(ini)
-        var found = false
-        let ctxId = uint64(ini.frameId / double(MAX_STACK))
-        agent->getContextData(ctxId) <| $(var ctxData: DAContext)
-            let frameId = int(ini.frameId % double(MAX_STACK))
-            if frameId >= 0 && frameId < length(ctxData.stack)
-                var spAddr = ctxData.stack[frameId].spAddr
-                var idx = frameId
-                var first = true
-                while !found && idx < length(ctxData.stack)
-                    let line & = unsafe(ctxData.stack[idx])
-                    if first || line.spAddr == spAddr
-                        found = line |> find_child_var() <| $(child, varIdx)
-                            if child.name == ini.expression
-                                var res = [[EvaluateResponse
-                                    result=child.value,
-                                    _type=child._type,
-                                    indexedVariables=double(child.indexedVariables),
-                                    variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + varIdx)]]
-                                self->sendSuccessResponse(seq, command, JV(res))
-                                delete res
-                                return true
-                            return false
-                        first = false
-                    idx += 1
-        if !found
-            self->sendSuccessResponse(seq, command, null)
+        var ctx = self.agent.pauseCtx
+        let at = self.agent.pauseAt
+        var res: EvaluateResponse
+        defer_delete(res)
+        if ctx != null && at != null
+            let evalRes = eval(ini.expression, *ctx, *at)
+            res.result = evalRes.result
+        else
+            res.result = "<n/a>"
+        self->sendSuccessResponse(seq, command, JV(res))
 
     def log(msg: string)
         // print("{msg}\n")
@@ -1410,6 +1412,143 @@ class private DAServer: Server
             "allThreadsStopped"=>JV(false);
             "hitBreakpointIds"=>brId == -1ul ? null : JV([{auto[] JV(brId)}])
         }}))
+
+
+
+class private EvalWalker : DapiStackWalker
+    W : StringBuilderWriter?
+
+    def EvalWalker(var wr: StringBuilderWriter)
+        W = unsafe(addr(wr))
+
+    def override onArgument(info: FuncInfo; index: int; vinfo: VarInfo; arg: float4): void
+        if vinfo.flags.refType
+            let parg = unsafe(reinterpret<void?> arg)
+            *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} & = * reinterpret<{describe(type_info(vinfo))}?> {parg}ul // ref argument\n")
+        else
+            *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = ")
+            if vinfo.basicType==Type tString
+                *W |> write("\"")
+                *W |> write(sprint_data(arg,type_info(vinfo),print_flags humanReadable))
+                *W |> write("\"")
+            else
+                *W |> write(sprint_data(arg,type_info(vinfo),print_flags humanReadable))
+            *W |> write("\n")
+
+    def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
+        if inScope
+            if arg != null
+                if vinfo.flags.ref
+                    unsafe
+                        let pref = unsafe(reinterpret<void??> arg)
+                        var cvinfo = vinfo
+                        cvinfo.flags &= ~ TypeInfoFlags ref
+                        *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = * reinterpret<{describe(type_info(cvinfo))}?> {*pref}ul // already ref\n")
+                else
+                    *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} & = * reinterpret<{describe(type_info(vinfo))}?> {arg}ul\n")
+
+
+def private getStackVariableDefinitions(var ctx:Context; at: LineInfo)
+    let text = build_string <| $ ( st )
+        var walker = new EvalWalker(st)
+        var walker_adapter <- make_stack_walker(walker)
+        walk_stack(walker_adapter,ctx,at)
+        walker_adapter := null
+        unsafe
+            delete walker
+    var lines <- split(text,"\n")
+    lines |> pop
+    lines |> reverse()
+    let res = join(lines,"\n")
+    delete lines
+    return res
+
+
+def private getGlobalVariableDefinitions(var ctx: Context)
+    let text = build_string <| $(st)
+        let tot = get_total_variables(ctx)
+        for vi in range(tot)
+            let vinfo = unsafe(addr(get_variable_info(ctx, vi)))
+            if vinfo.name |> starts_with("__")
+                continue
+            var arg = unsafe(get_context_global_variable(ctx, vinfo.name))
+            if arg != null
+                if vinfo.flags.ref
+                    unsafe
+                        let pref = unsafe(reinterpret<void??> arg)
+                        var cvinfo = vinfo
+                        cvinfo.flags &= ~TypeInfoFlags ref
+                        st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} = * reinterpret<{describe(type_info(*cvinfo))}?> {*pref}ul // already ref\n")
+                else
+                    st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} & = * reinterpret<{describe(type_info(*vinfo))}?> {arg}ul\n")
+    return text
+
+
+def private getRequire(var ctx: Context)
+    let prr = unsafe(get_context_global_variable(ctx,"__rtti_require"))
+    if prr != null
+        let arq = * unsafe(reinterpret<string?> prr)
+        var mrq <- split(arq," ")
+        mrq |> pop
+        let text = build_string <| $(st)
+            for q in mrq
+                st |> write("require {q}\n")
+        delete mrq
+        return text
+    else
+        return "// __rtti_require is missing. module needs to be compiled with `options debugger`\n"
+
+
+def private compileAndRun(text: string): tuple<ok:bool; result:string>
+    var failed = true
+    var result = ""
+    var cop = CodeOfPolicies()
+    cop.allow_local_variable_shadowing = true
+    compile("eval_module", text, cop, false) <| $ (ok; prog; errors)
+        if ok
+            simulate(prog) <| $ (sok; context; serrors)
+                if sok
+                    failed = false
+                    try
+                        unsafe
+                            context |> invoke_in_context("main")
+                    recover
+                        result = "{context.last_exception}\n{describe(context.exceptionAt)}\nexception during eval\n\n{text}"
+                        failed = true
+                    if !failed
+                        let prr = unsafe(get_context_global_variable(context, "G_EVAL_RESULT"))
+                        if prr != null
+                            result = clone_string(* unsafe(reinterpret<string?> prr))
+                else
+                    result = "{serrors}\nfailed to simulate\n\n{text}"
+        else
+            if prog != null && length(prog.errors) > 0
+                let err & = unsafe(prog.errors[0])
+                result = "{err.what}\n{errors}\nfailed to compile\n\n{text}"
+            else
+                result = "{errors}\nfailed to compile\n\n{text}"
+    return [[auto !failed, result]]
+
+
+def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; result:string>
+    let vars = getStackVariableDefinitions(ctx, at)
+    let gvars = getGlobalVariableDefinitions(ctx)
+    let greq = getRequire(ctx)
+    let text = build_string <| $ ( st )
+        st |> write("require rtti\nrequire strings\n")
+        st |> write(greq)
+        st |> write("\nvar G_EVAL_RESULT : string\n")
+        st |> write("[export] def main\n")
+        st |> write("\tunsafe\n")
+        st |> write("// globals:\n")
+        st |> write(gvars)
+        st |> write("// locals:\n")
+        st |> write(vars)
+        st |> write("// EVAL:\n")
+        st |> write("\t\tlet EVAL = {expr}\n")
+        st |> write("\t\tG_EVAL_RESULT = \"\{EVAL\}\"\n")
+    return compileAndRun(text)
+
 
 def private tick_debugger()
     tick_debug_agent("~debug")
