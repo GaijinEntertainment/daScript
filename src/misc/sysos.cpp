@@ -6,15 +6,21 @@
     #define WIN32_LEAN_AND_MEAN
     #include <windows.h>
     namespace das {
-        __forceinline void setBits ( uint64_t & dw, uint64_t lowBit, uint64_t bits, uint64_t newValue ) {
-            uint64_t mask = (uint64_t(1) << bits) - 1;
+
+        __forceinline void setBits ( DWORD64 & dw, int lowBit, int bits, int newValue ) {
+            DWORD64 mask = (DWORD64(1) << bits) - 1;
+            dw = (dw & ~(mask << lowBit)) | (newValue << lowBit);
+        }
+
+        __forceinline void setBits ( DWORD & dw, int lowBit, int bits, int newValue ) {
+            DWORD mask = (DWORD(1) << bits) - 1;
             dw = (dw & ~(mask << lowBit)) | (newValue << lowBit);
         }
 
         bool g_isVHSet = false;
         void ( * g_HwBpHandler ) ( int, void * ) = nullptr;
 
-        long VEH_handler ( struct _EXCEPTION_POINTERS* ExceptionInfo ) {
+        LONG NTAPI VEH_handler ( struct _EXCEPTION_POINTERS* ExceptionInfo ) {
             if ( ExceptionInfo->ContextRecord->Dr6 & 0x0f ) {
                 if ( g_HwBpHandler ) {
                     if ( ExceptionInfo->ContextRecord->Dr6 & 1 ) g_HwBpHandler(0, (void *) ExceptionInfo->ContextRecord->Dr0 );
@@ -31,7 +37,7 @@
             g_HwBpHandler = handler;
         }
 
-        int hwBreakpointSet ( void * address, uint64_t len, uint64_t when ) {
+        int hwBreakpointSet ( void * address, int len, int when ) {
             if ( !g_isVHSet ) {
                 g_isVHSet = true;
                 AddVectoredExceptionHandler(1, VEH_handler);
@@ -42,8 +48,8 @@
             if ( !GetThreadContext(thisThread, &cxt) ) return -1;
             int bp_index = 0;
             for ( bp_index=0; bp_index!=4; ++bp_index ) {
-                uint64_t mask = uint64_t(1) << (bp_index*2);
-        		if ( (cxt.Dr7 & mask) == 0ul ) {
+                uint32_t mask = uint32_t(1) << (bp_index*2);
+        		if ( (uint32_t(cxt.Dr7) & mask) == 0u ) {
                     break;
                 }
             }
@@ -89,7 +95,7 @@
     #include <unistd.h>
     namespace das {
         void hwSetBreakpointHandler ( void (*) ( int, void * ) ) { }
-        int hwBreakpointSet ( void *, uint64_t, uint64_t ) {
+        int hwBreakpointSet ( void *, int, int ) {
             return -1;
         }
         bool hwBreakpointClear ( int ) {
@@ -118,7 +124,7 @@
     #include <limits.h>
     namespace das {
         void hwSetBreakpointHandler ( void (*) ( int, void * ) ) { }
-        int hwBreakpointSet ( void *, uint64_t, uint64_t ) {
+        int hwBreakpointSet ( void *, int, int ) {
             return -1;
         }
         bool hwBreakpointClear ( int ) {
@@ -155,7 +161,7 @@
 #else
     namespace das {
         void hwSetBreakpointHandler ( void (*) ( int, void * ) ) { }
-        int hwBreakpointSet ( void *, uint64_t, uint64_t ) {
+        int hwBreakpointSet ( void *, int, int ) {
             return -1;
         }
         bool hwBreakpointClear ( int ) {

@@ -27,6 +27,6 @@ namespace das {
     void * getLibraryHandle ( const char * moduleName );
 
     void hwSetBreakpointHandler ( void (* handler ) ( int, void * ) );
-    int hwBreakpointSet ( void * address, uint64_t len, uint64_t when );
+    int hwBreakpointSet ( void * address, int len, int when );
     bool hwBreakpointClear ( int bp_index );
 }
