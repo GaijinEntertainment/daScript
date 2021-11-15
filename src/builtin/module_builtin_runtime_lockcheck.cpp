@@ -10,7 +10,7 @@ namespace das
 {
     struct LockDataWalker : DataWalker {
         bool locked = false;
-        virtual bool canVisitArrayData ( TypeInfo * ti ) {
+        virtual bool canVisitArrayData ( TypeInfo * ti ) override {
             return (ti->flags & TypeInfo::flag_lockCheck) == TypeInfo::flag_lockCheck;
         }
         virtual bool canVisitTableData ( TypeInfo * ti ) override {
@@ -31,7 +31,7 @@ namespace das
         virtual bool canVisitIterator ( TypeInfo * ) override {
             return false;
         }
-        virtual bool canVisitStructure ( char *, StructInfo * si ) {
+        virtual bool canVisitStructure ( char *, StructInfo * si ) override {
             return (si->flags & StructInfo::flag_lockCheck) == StructInfo::flag_lockCheck;
         }
         virtual void beforeArray ( Array * pa, TypeInfo * ) override {

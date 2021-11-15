@@ -33,6 +33,7 @@ namespace das {
     template <typename AllocationPolicy>
     class StringWriter : public AllocationPolicy {
     public:
+        virtual ~StringWriter() {}
         template <typename TT>
         StringWriter & write(const char * format, TT value) {
             char buf[128];

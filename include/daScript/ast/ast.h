@@ -61,8 +61,11 @@ namespace das
         LineInfo    at;
         AnnotationArgument () : type(Type::tVoid), iValue(0) {}
         //explicit copy is required to avoid copying union as float and cause FPE
-        AnnotationArgument (const AnnotationArgument&a)
+        AnnotationArgument ( const AnnotationArgument & a )
             : type(a.type), name(a.name), sValue(a.sValue), iValue(a.iValue), at(a.at) {}
+        AnnotationArgument & operator = ( const AnnotationArgument & a ) {
+            type=a.type; name=a.name; sValue=a.sValue; iValue=a.iValue; at=a.at; return *this;
+        }
         AnnotationArgument ( const string & n, const string & s, const LineInfo & loc = LineInfo() )
             : type(Type::tString), name(n), sValue(s), iValue(0), at(loc) {}
         AnnotationArgument ( const string & n, bool b, const LineInfo & loc = LineInfo() )

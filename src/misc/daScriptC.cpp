@@ -161,7 +161,7 @@ int das_program_simulate ( das_program * program, das_context * ctx, das_text_wr
 
 das_error * das_program_get_error ( das_program * program, int index ) {
     auto prog = (Program *) program;
-    if ( index<0 || index>=prog->errors.size() ) return nullptr;
+    if ( index<0 || index>=int(prog->errors.size()) ) return nullptr;
     return (das_error *) &(prog->errors[index]);
 }
 
