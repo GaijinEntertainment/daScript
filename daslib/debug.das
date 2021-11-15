@@ -1499,34 +1499,45 @@ def private getRequire(var ctx: Context)
         return "// __rtti_require is missing. module needs to be compiled with `options debugger`\n"
 
 
-def private compileAndRun(text: string): tuple<ok:bool; result:string>
+def private compileAndRun(text: string; at: LineInfo; selfName: string): tuple<ok:bool; result:string>
     var failed = true
     var result = ""
-    var cop = CodeOfPolicies()
-    cop.allow_local_variable_shadowing = true
-    compile("eval_module", text, cop, false) <| $ (ok; prog; errors)
-        if ok
-            simulate(prog) <| $ (sok; context; serrors)
-                if sok
-                    failed = false
-                    try
-                        unsafe
-                            context |> invoke_in_context("main")
-                    recover
-                        result = "{context.last_exception}\n{describe(context.exceptionAt)}\nexception during eval\n\n{text}"
-                        failed = true
-                    if !failed
-                        let prr = unsafe(get_context_global_variable(context, "G_EVAL_RESULT"))
-                        if prr != null
-                            result = clone_string(* unsafe(reinterpret<string?> prr))
+    var access := make_file_access("")
+    let rootModule = "_eval_module_.das"
+    if at.fileInfo != null
+        let path = "{at.fileInfo.name}"
+        fopen(path, "rb") <| $(fr)
+            if fr != null
+                fmap(fr) <| $(data)
+                    access |> set_file_source("{selfName}.das", string(data))
+    access |> set_file_source(rootModule, text)
+    using <| $(var mg: ModuleGroup#)
+        using <| $(var cop: CodeOfPolicies#)
+            cop.allow_local_variable_shadowing = true
+            compile_file(rootModule, access, addr(mg), cop) <| $ (ok; prog; errors)
+                if ok
+                    simulate(prog) <| $ (sok; context; serrors)
+                        if sok
+                            failed = false
+                            try
+                                unsafe
+                                    context |> invoke_in_context("eval_main__")
+                            recover
+                                result = "{context.last_exception}\n{describe(context.exceptionAt)}\nexception during eval\n\n{text}"
+                                failed = true
+                            if !failed
+                                let prr = unsafe(get_context_global_variable(context, "G_EVAL_RESULT"))
+                                if prr != null
+                                    result = clone_string(* unsafe(reinterpret<string?> prr))
+                        else
+                            result = "{serrors}\nfailed to simulate\n\n{text}"
                 else
-                    result = "{serrors}\nfailed to simulate\n\n{text}"
-        else
-            if prog != null && length(prog.errors) > 0
-                let err & = unsafe(prog.errors[0])
-                result = "{err.what}\n{errors}\nfailed to compile\n\n{text}"
-            else
-                result = "{errors}\nfailed to compile\n\n{text}"
+                    if prog != null && length(prog.errors) > 0
+                        let err & = unsafe(prog.errors[0])
+                        result = "{err.what}\n{errors}\nfailed to compile\n\n{text}"
+                    else
+                        result = "{errors}\nfailed to compile\n\n{text}"
+    access := null
     return [[auto !failed, result]]
 
 
@@ -1534,11 +1545,19 @@ def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; re
     let vars = getStackVariableDefinitions(ctx, at)
     let gvars = getGlobalVariableDefinitions(ctx)
     let greq = getRequire(ctx)
-    let text = build_string <| $ ( st )
+    var selfName = ""
+    let text = build_string <| $ (st)
         st |> write("require rtti\nrequire strings\n")
+        if at.fileInfo != null
+            let path = "{at.fileInfo.name}"
+            var parts <- base_name(path) |> split(".")
+            parts |> pop()
+            selfName = parts |> join(".")
+            delete parts
+            st |> write("require {selfName}\n")
         st |> write(greq)
         st |> write("\nvar G_EVAL_RESULT : string\n")
-        st |> write("[export] def main\n")
+        st |> write("[export] def eval_main__\n")
         st |> write("\tunsafe\n")
         st |> write("// globals:\n")
         st |> write(gvars)
@@ -1547,7 +1566,7 @@ def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; re
         st |> write("// EVAL:\n")
         st |> write("\t\tlet EVAL = {expr}\n")
         st |> write("\t\tG_EVAL_RESULT = \"\{EVAL\}\"\n")
-    return compileAndRun(text)
+    return compileAndRun(text, at, selfName)
 
 
 def private tick_debugger()
