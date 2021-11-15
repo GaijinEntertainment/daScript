@@ -9,12 +9,12 @@
 
         __forceinline void setBits ( DWORD64 & dw, int lowBit, int bits, int newValue ) {
             DWORD64 mask = (DWORD64(1) << bits) - 1;
-            dw = (dw & ~(mask << lowBit)) | (newValue << lowBit);
+            dw = (dw & ~(mask << lowBit)) | (DWORD64(newValue) << lowBit);
         }
 
         __forceinline void setBits ( DWORD & dw, int lowBit, int bits, int newValue ) {
             DWORD mask = (DWORD(1) << bits) - 1;
-            dw = (dw & ~(mask << lowBit)) | (newValue << lowBit);
+            dw = (dw & ~(mask << lowBit)) | (DWORD(newValue) << lowBit);
         }
 
         bool g_isVHSet = false;
