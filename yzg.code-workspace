@@ -65,7 +65,8 @@
 			"format": "cpp",
 			"charconv": "cpp",
 			"optional": "cpp",
-			"forward_list": "cpp"
+			"forward_list": "cpp",
+			"iosfwd": "cpp"
 		},
 		"dascript.experimental": true,
 		"dascript.hovers.verbose": true
