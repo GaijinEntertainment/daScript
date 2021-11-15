@@ -7,6 +7,8 @@ namespace das {
 
     class ClearUnusedSymbols : public Visitor {
     public:
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override { return false; }
         virtual void preVisit(ExprAddr * expr) override {
             Visitor::preVisit(expr);
             if ( expr->func && !expr->func->used && !expr->func->builtIn ) {
@@ -134,6 +136,8 @@ namespace das {
     public:
         TextWriter * tw = nullptr;
     protected:
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override { return false; }
         // global variable declaration
         virtual void preVisitGlobalLet(const VariablePtr & var) override {
             Visitor::preVisitGlobalLet(var);
