@@ -41,10 +41,10 @@ SET(TUTORIAL_02_DASAOT_MAIN_SRC
 tutorial02_dasaot.cpp
 tutorial02aot.h
 tutorial02module.cpp
-${PROJECT_SOURCE_DIR}/utils/dasAot/main.cpp
+${PROJECT_SOURCE_DIR}/utils/daScript/main.cpp
 )
 add_executable(tutorial02_dasAot ${TUTORIAL_02_DASAOT_MAIN_SRC} )
-target_compile_definitions(tutorial02_dasAot PUBLIC MAIN_FUNC_NAME=das_aot_main)
+target_compile_definitions(tutorial02_dasAot PUBLIC MAIN_FUNC_NAME=dascript_dummy_main) # dascript_dummy_main is here to rename main function from daScript
 TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(tutorial02_dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
 SETUP_CPP11(tutorial02_dasAot)

@@ -37,7 +37,7 @@ MACRO(DAS_AOT input genList mainTarget dasAotTool)
         DEPENDS ${dasAotTool}
         OUTPUT  ${out_src}
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
-        COMMAND ${dasAotTool} ${input_src} ${out_src}
+        COMMAND ${dasAotTool} -aot ${input_src} ${out_src}
     )
     list(APPEND ${genList} ${out_src})
     set(custom_name ${mainTarget}_${input_name}_aot)
@@ -58,7 +58,7 @@ MACRO(DAS_AOT_D input genList mainTarget dasAotTool)
         DEPENDS ${dasAotTool}
         OUTPUT  ${out_src}
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
-        COMMAND ${dasAotTool} ${input_src} ${out_src}
+        COMMAND ${dasAotTool} -aot ${input_src} ${out_src}
     )
     list(APPEND ${genList} ${out_src})
 ENDMACRO()
@@ -540,36 +540,16 @@ ELSE()
     MESSAGE(STATUS "dasGenForEach module not found. Pre-generated files will be used.")
 ENDIF()
 
-# AOT compiler
-
-SET(DASAOT_MAIN_SRC
-utils/dasAot/main.cpp
-${DAS_MODULES_NEED_INC}
-)
-SOURCE_GROUP_FILES("main" DASAOT_MAIN_SRC)
-
-if (${DAS_BUILD_TOOLS} MATCHES NO)
-  # build only if required by some target
-  add_executable(dasAot EXCLUDE_FROM_ALL ${DASAOT_MAIN_SRC})
-else()
-  add_executable(dasAot ${DASAOT_MAIN_SRC})
-endif()
-
-TARGET_LINK_LIBRARIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser libDasModuleStdDlg Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(dasAot libDaScript libDaScriptProfile libDaScriptTest libDasModuleUriparser libUriParser libDasModuleStdDlg need_and_resolve ${DAS_MODULES_LIBS})
-SETUP_CPP11(dasAot)
-SETUP_LTO(dasAot)
-
 add_custom_target(dasAotStub)
 SET(AOT_GENERATED_SRC)
-DAS_AOT("daslib/functional.das" AOT_GENERATED_SRC dasAotStub dasAot)
-DAS_AOT("daslib/json.das" AOT_GENERATED_SRC dasAotStub dasAot)
-DAS_AOT("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
-DAS_AOT("daslib/regex.das" AOT_GENERATED_SRC dasAotStub dasAot)
-DAS_AOT("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
-DAS_AOT("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
-DAS_AOT("daslib/random.das" AOT_GENERATED_SRC dasAotStub dasAot)
-DAS_AOT("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub dasAot)
+DAS_AOT("daslib/functional.das" AOT_GENERATED_SRC dasAotStub daScript)
+DAS_AOT("daslib/json.das" AOT_GENERATED_SRC dasAotStub daScript)
+DAS_AOT("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+DAS_AOT("daslib/regex.das" AOT_GENERATED_SRC dasAotStub daScript)
+DAS_AOT("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+DAS_AOT("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+DAS_AOT("daslib/random.das" AOT_GENERATED_SRC dasAotStub daScript)
+DAS_AOT("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
