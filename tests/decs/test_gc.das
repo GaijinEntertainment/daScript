@@ -8,6 +8,53 @@ require daslib/math
 require daslib/static_let
 
 [test]
+def test_archive_arrays( t: T?)
+    restart()
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp |> set("values", [{for x in range(i+1); x}])
+            cmp |> set("i", i)
+    commit()
+    t |> run("before gc") <| @ ( t : T? )
+        var tot = 0
+        query <| $ ( values:array<int>; i:int )
+            tot ++
+            for x,v in range(i+1),values
+                t |> equal( x, v)
+        t |> equal(tot, 3)
+    var data <- mem_archive_save(decsState)
+    restart()
+    data |> mem_archive_load(decsState)
+    t |> run("after gc") <| @ ( t : T? )
+        var tot = 0
+        query <| $ ( values:array<int>; i:int )
+            tot ++
+            for x,v in range(i+1),values
+                t |> equal( x, v)
+        t |> equal(tot, 3)
+
+[test]
+def test_archive_strings( t: T?)
+    restart()
+    for i in range(3)
+        create_entity <| @ ( eid, cmp )
+            cmp.txt := "hello_{i}"
+    commit()
+    t |> run("before string gc") <| @ ( t : T? )
+        var i = 0
+        query <| $ ( txt:string )
+            t |> equal( txt, "hello_{i++}")
+        t |> equal( i, 3)
+    var data <- mem_archive_save(decsState)
+    restart()
+    data |> mem_archive_load(decsState)
+    t |> run("after string gc") <| @ ( t : T? )
+        var j = 0
+        query <| $ ( txt:string )
+            t |> equal( txt, "hello_{j++}")
+        t |> equal( j, 3)
+
+[test]
 def test_gc_arrays( t: T?)
     restart()
     for i in range(3)
@@ -74,7 +121,7 @@ def test_gc_stress( t: T?)
     restart()
     static_let <|
         var TOTAL_EID = 0
-    for count in range(100)
+    for count in range(20)
         let morei = (random_int(seed) & 31) + 10
         for i in range(morei)
             create_entity <| @ ( eid, cmp )
@@ -97,10 +144,11 @@ def test_gc_stress( t: T?)
             if chance <= 13
                 delete_entity(eid)
                 TOTAL_EID --
-        before_gc()
-        unsafe
-            heap_collect(true,true)
-        after_gc()
+        if (random_int(seed) % 100) < 50
+            before_gc()
+            unsafe
+                heap_collect(true,true)
+            after_gc()
         commit()
         query <| $ ( eid:EntityId; text:string )
             t |> equal(text, "text_{eid}")
@@ -119,10 +167,19 @@ def test_gc_stress( t: T?)
             for x,v in range(i+1),values
                 if ! t |> equal(int2(x,x+13), v )
                     break
-        before_gc()
-        unsafe
-            heap_collect(true,true)
-        after_gc()
+
+        let r = random_int(seed) % 3
+        if r == 0
+            pass
+        elif r == 1
+            var data <- mem_archive_save(decsState)
+            restart()
+            data |> mem_archive_load(decsState)
+        else
+            before_gc()
+            unsafe
+                heap_collect(true,true)
+            after_gc()
         query <| $ ( values:array<int2>; i:int )
             for x,v in range(i+1),values
                 if ! t |> equal(int2(x,x+13), v )
@@ -136,3 +193,4 @@ def test_gc_stress( t: T?)
             te ++
             return false
         t|> equal(TOTAL_EID, te)
+
