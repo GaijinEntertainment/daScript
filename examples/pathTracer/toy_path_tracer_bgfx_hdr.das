@@ -137,7 +137,7 @@ def main
     glfwSetWindowSize(window,TRACE_WIDTH,TRACE_HEIGHT)
     glfwMakeContextCurrent(window)
     var pd: bgfx_platform_data_s
-    pd.nwh = glfwGetWin32Window(window)
+    pd.nwh = glfwGetNativeWindow(window)
     bgfx_set_platform_data(safe_addr(pd))
     // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type OPENGL)
     // bgfx_init(TRACE_WIDTH,TRACE_WIDTH,bgfx_renderer_type DIRECT3D12)
