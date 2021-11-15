@@ -5,15 +5,20 @@ using namespace das;
 
 TextPrinter tout;
 
+bool debuggerRequired = false;
 bool pauseAfterErrors = false;
 
 das::Context * get_context ( int stackSize=0 );
 
-void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode ) {
+void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode, const char * introFile = nullptr ) {
     auto access = make_smart<FsFileAccess>();
+    if ( introFile ) {
+        auto fileInfo = make_unique<TextFileInfo>(introFile, uint32_t(strlen(introFile)), false);
+        access->setFileInfo("____intro____", move(fileInfo));
+    }
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
-    policies.debugger = false;   // TODO: from command line
+    policies.debugger = debuggerRequired;
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
@@ -67,6 +72,13 @@ void print_help() {
 
 void require_project_specific_modules();//link time resolved dependencies
 
+const char * debugger_intro =
+    "options debugger\n"
+    "require daslib/debug\n"
+    "[export]\n"
+    "def main {}\n"
+    "\n";
+
 int main(int argc, char * argv[]) {
     if ( argc<=1 ) {
         print_help();
@@ -99,6 +111,8 @@ int main(int argc, char * argv[]) {
             } else if ( cmd=="pause" ) {
                 pauseAfterErrors = true;
                 pauseAfterDone = true;
+            } else if ( cmd=="-das-wait-debugger") {
+                debuggerRequired = true;
             } else if ( !scriptArgs) {
                 print_help();
                 return -1;
@@ -128,6 +142,10 @@ int main(int argc, char * argv[]) {
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();
+    // ask for debugger
+    if ( debuggerRequired ) {
+        compile_and_run("____intro____","main",false,debugger_intro);
+    }
     // compile and run
     for ( const auto & fn : files ) {
         compile_and_run(fn, mainName, outputProgramCode);
