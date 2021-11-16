@@ -220,6 +220,9 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
     policies.debugger = debuggerRequired;
+    if ( debuggerRequired ) {
+        policies.debug_module = getDasRoot() + "/daslib/debug.das";
+    }
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
@@ -277,13 +280,6 @@ void print_help() {
         << "    -q          supress all output\n"
     ;
 }
-
-const char * debugger_intro =
-    "options debugger\n"
-    "require daslib/debug\n"
-    "[export]\n"
-    "def main {}\n"
-    "\n";
 
 #ifndef MAIN_FUNC_NAME
   #define MAIN_FUNC_NAME main
@@ -359,11 +355,6 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();
-    // ask for debugger
-    if ( debuggerRequired ) {
-        compile_and_run("____intro____","main",false,debugger_intro);
-        printf("running with debugger\n");
-    }
     // compile and run
     for ( const auto & fn : files ) {
         compile_and_run(fn, mainName, outputProgramCode);

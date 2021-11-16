@@ -403,7 +403,27 @@ namespace das {
         vector<ModuleInfo> req;
         vector<string> missing, circular, notAllowed;
         das_set<string> dependencies;
-        if ( getPrerequisits(fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
+        if ( getPrerequisits(fileName, access, req, missing, circular, notAllowed,
+                dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
+            if ( policies.debugger ) {
+                bool hasDebugger = false;
+                for ( auto & mod : req ) {
+                    if ( mod.moduleName=="debug") {
+                        hasDebugger = true;
+                        break;
+                    }
+                }
+                if ( !hasDebugger ) {
+                    getPrerequisits(policies.debug_module, access, req, missing, circular, notAllowed,
+                        dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules);
+                    auto finfo = access->getFileInfo(policies.debug_module);
+                    ModuleInfo info;
+                    info.fileName = finfo->name;
+                    info.importName = "";
+                    info.moduleName = "debug";
+                    req.push_back(info);
+                }
+            }
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod.moduleName) ) {
                     auto program = parseDaScript(mod.fileName, access, logs, libGroup, true, true, policies);

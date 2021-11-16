@@ -1131,6 +1131,7 @@ namespace das
         //      1. disables [fastcall]
         //      2. invoke of blocks will have extra prologue overhead
         bool debugger = false;
+        string debug_module;
     };
 
     class Program : public ptr_ref_count {

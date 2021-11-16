@@ -1370,7 +1370,10 @@ class private DAServer: Server
         defer_delete(res)
         if ctx != null && at != null
             let evalRes = eval(ini.expression, *ctx, *at)
-            res.result = evalRes.result
+            if evalRes.ok
+                res.result = empty(g```global.value) ? evalRes.result : g```global.value
+            else
+                res.result = evalRes.result
         else
             res.result = "<n/a>"
         self->sendSuccessResponse(seq, command, JV(res))
@@ -1473,7 +1476,7 @@ def private getGlobalVariableDefinitions(var ctx: Context)
         let tot = get_total_variables(ctx)
         for vi in range(tot)
             let vinfo = unsafe(addr(get_variable_info(ctx, vi)))
-            if vinfo.name |> starts_with("__")
+            if vinfo.name |> starts_with("__") || vinfo.name |> starts_with("g```")
                 continue
             var arg = unsafe(get_context_global_variable(ctx, vinfo.name))
             if arg != null
@@ -1493,7 +1496,6 @@ def getRequire ( var ctx:Context; var self_text:string& )
     let prr = unsafe(get_context_global_variable(ctx,"__rtti_require"))
     if prr != null
         let arq = * unsafe(reinterpret<string?> prr)
-        print("Getting require from context {ctx} = {arq}\n")
         var mrq <- split(arq," ")
         self_text := mrq[length(mrq)-1]
         mrq |> pop
@@ -1526,7 +1528,7 @@ def compileAndRun ( text, self_text:string ) : tuple<ok:bool;result:string>
                             failed = false
                             try
                                 unsafe
-                                    context |> invoke_in_context("eval``call_eval")
+                                    context |> invoke_in_context("eval``call_eval", this_context())
                             recover
                                 result = "{context.last_exception}\n{describe(context.exceptionAt)}\nexception during eval\n\n{text}"
                                 failed = true
@@ -1544,6 +1546,14 @@ def compileAndRun ( text, self_text:string ) : tuple<ok:bool;result:string>
                         result = "{errors}\nfailed to compile\n\n{text}"
     return [[auto !failed, result]]
 
+var g```global : DAVariable
+
+[export]
+def accept_eval_results ( value:void?; info:TypeInfo? )
+    var frame <- [[DAStackFrame() isBlock=false]]
+    g```global <- [[DAVariable uid=frame.varId++, name="`eval", _type=describe(info)]]
+    g```dAgent.walker.dataWalker->startWalk(frame, g```global) <| $
+        g```dAgent.walker.dataWalkerAdapter |> walk_data(value, *info)
 
 def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; result:string>
     let vars = getStackVariableDefinitions(ctx, at)
@@ -1551,10 +1561,10 @@ def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; re
     var self_text : string
     let greq = getRequire(this_context(), self_text)
     let text = build_string <| $ ( st )
-        st |> write("require rtti\nrequire strings\nrequire __current\n")
+        st |> write("require debugapi\nrequire rtti\nrequire strings\nrequire __current\n")
         st |> write(greq)
         st |> write("\nvar G_EVAL_RESULT : string\n")
-        st |> write("[export] def eval``call_eval\n")
+        st |> write("[export] def eval``call_eval(var DEBUG_CONTEXT:Context)\n")
         st |> write("\tunsafe\n")
         st |> write("// globals:\n")
         st |> write(gvars)
@@ -1563,6 +1573,9 @@ def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; re
         st |> write("// EVAL:\n")
         st |> write("\t\tlet EVAL = {expr}\n")
         st |> write("\t\tG_EVAL_RESULT = \"\{EVAL\}\"\n")
+        st |> write("\t\tlet tinfo = typeinfo(rtti_typeinfo EVAL)\n")
+        st |> write("\t\tlet peval = addr(EVAL)\n")
+        st |> write("\t\tDEBUG_CONTEXT |> invoke_in_context(\"accept_eval_results\",peval,tinfo)\n")
     return compileAndRun(text, self_text)
 
 
@@ -1570,9 +1583,12 @@ def private tick_debugger()
     tick_debug_agent("~debug")
     sleep(10u)
 
+var private g```dAgent : DAgent?
+
 [export,unused_argument(ctx)]
 def private start_debug_agent(var ctx: Context)
-    install_new_debug_agent(new DAgent(ctx), "~debug")
+    g```dAgent = new DAgent(ctx)
+    install_new_debug_agent(g```dAgent, "~debug")
 
 [export]
 def private start_agent(force:bool = false): bool
@@ -1583,7 +1599,6 @@ def private start_agent(force:bool = false): bool
         print("dap: debug agent already exists\n")
     set_single_step(this_context(), !use_instruments() || wait_debugger())
     return true
-
 
 [init,export]
 def private auto_start_debug()
