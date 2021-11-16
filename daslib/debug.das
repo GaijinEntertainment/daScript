@@ -28,7 +28,8 @@ let private
     ARGUMENT_VARS = 2ul
     GLOBAL_VARS = 3ul
     STATE_VARS = 4ul
-    BLOCKS_POOL = 1000ul
+    // EVAL_POOL = 1000ul
+    BLOCKS_POOL = 4000ul
 
     MAX_STACK = 1000ul
     MAX_VARIABLES = 100000ul
@@ -630,6 +631,8 @@ class private DAgent: DapiDebugAgent
     pauseCtx: rtti::Context? = null
     pauseAt: LineInfo const? = null
 
+    evalFrame: DAStackFrame <- DAStackFrame()
+
     def DAgent(var ctx: Context)
         waitConnection = wait_debugger()
         withInstruments = use_instruments()
@@ -761,6 +764,8 @@ class private DAgent: DapiDebugAgent
     def beforePause(ctxData: DAContext; at: LineInfo)
         pauseCtx = ctxData.ctx
         pauseAt = unsafe(addr(at))
+        evalFrame.varId = 1000ul //EVAL_POOL
+        delete evalFrame.variables
 
     def afterPause()
         pauseCtx = null
@@ -1275,51 +1280,65 @@ class private DAServer: Server
         defer_delete(res)
         let ctxAndFrame = uint64(ini.variablesReference) / MAX_VARIABLES
         let ctxId = uint64(ctxAndFrame) / MAX_STACK
-        agent->getContextData(ctxId) <| $(var ctxData: DAContext)
-            let frameId = int(ctxAndFrame % MAX_STACK)
-            if frameId >= 0 && frameId < length(ctxData.stack)
-                let kind = uint64(ini.variablesReference) % MAX_VARIABLES
-                let line & = unsafe(ctxData.stack[frameId])
-                if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS
-                    let vars & = unsafe(kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : line.globals)
-                    let varsNum = length(vars)
+        if ctxId == 0ul // eval ctx
+            agent.evalFrame |> find_child_var(uint64(ini.variablesReference)) <| $(child)
+                if child.children != null
+                    let varsNum = length(*child.children)
                     for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
-                        let v & = unsafe(vars[idx])
-                        let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
+                        let v & = unsafe((*child.children)[idx])
                         res.variables |> emplace([[Variable
                             name=v.name,
                             value=v.value,
                             _type=v._type,
                             indexedVariables=double(v.indexedVariables),
-                            variablesReference=double(ref)
+                            variablesReference=double(v.children != null ? v.uid : 0ul)
                         ]])
-                elif kind >= STATE_VARS && kind <= BLOCKS_POOL
-                    for state in line.state
-                        if state.uid == kind
-                            for v in state.vars
-                                let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
-                                res.variables |> emplace([[Variable
-                                    name=v.name,
-                                    value=v.value,
-                                    _type=v._type,
-                                    indexedVariables=double(v.indexedVariables),
-                                    variablesReference=double(ref)
-                                ]])
-                            break
-                else
-                    line |> find_child_var(uint64(kind)) <| $(child)
-                        if child.children != null
-                            let varsNum = length(*child.children)
-                            for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
-                                let v & = unsafe((*child.children)[idx])
-                                let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
-                                res.variables |> emplace([[Variable
-                                    name=v.name,
-                                    value=v.value,
-                                    _type=v._type,
-                                    indexedVariables=double(v.indexedVariables),
-                                    variablesReference=double(ref)
-                                ]])
+        else
+            agent->getContextData(ctxId) <| $(var ctxData: DAContext)
+                let frameId = int(ctxAndFrame % MAX_STACK)
+                if frameId >= 0 && frameId < length(ctxData.stack)
+                    let kind = uint64(ini.variablesReference) % MAX_VARIABLES
+                    let line & = unsafe(ctxData.stack[frameId])
+                    if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS
+                        let vars & = unsafe(kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : line.globals)
+                        let varsNum = length(vars)
+                        for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
+                            let v & = unsafe(vars[idx])
+                            let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
+                            res.variables |> emplace([[Variable
+                                name=v.name,
+                                value=v.value,
+                                _type=v._type,
+                                indexedVariables=double(v.indexedVariables),
+                                variablesReference=double(ref)
+                            ]])
+                    elif kind >= STATE_VARS && kind <= BLOCKS_POOL
+                        for state in line.state
+                            if state.uid == kind
+                                for v in state.vars
+                                    let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
+                                    res.variables |> emplace([[Variable
+                                        name=v.name,
+                                        value=v.value,
+                                        _type=v._type,
+                                        indexedVariables=double(v.indexedVariables),
+                                        variablesReference=double(ref)
+                                    ]])
+                                break
+                    else
+                        line |> find_child_var(uint64(kind)) <| $(child)
+                            if child.children != null
+                                let varsNum = length(*child.children)
+                                for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
+                                    let v & = unsafe((*child.children)[idx])
+                                    let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
+                                    res.variables |> emplace([[Variable
+                                        name=v.name,
+                                        value=v.value,
+                                        _type=v._type,
+                                        indexedVariables=double(v.indexedVariables),
+                                        variablesReference=double(ref)
+                                    ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqContinue(seq: double; command: string; data: JsonValue?)
@@ -1366,18 +1385,36 @@ class private DAServer: Server
     def reqEvaluate(seq: double; command: string; data: JsonValue?)
         var ini <- EvaluateArguments(data)
         defer_delete(ini)
-        var ctx = self.agent.pauseCtx
-        let at = self.agent.pauseAt
         var res: EvaluateResponse
         defer_delete(res)
-        if ctx != null && at != null
-            let evalRes = eval(ini.expression, *ctx, *at)
-            if evalRes.ok
-                res.result = empty(g```global.value) ? evalRes.result : g```global.value
+        var found = false
+        agent.evalFrame |> find_child_var() <| $(child, idx)
+            if child.name == ini.expression
+                found = true
+                res._type = child._type
+                res.result = child.value
+                res.indexedVariables = double(child.indexedVariables)
+                if child.children != null
+                    res.variablesReference = double(child.uid)
+                return true
+            return false
+        if !found
+            var ctx = self.agent.pauseCtx
+            let at = self.agent.pauseAt
+            if ctx != null && at != null
+                let evalRes = eval(ini.expression, *ctx, *at)
+                if evalRes.ok && length(agent.evalFrame.variables) > 0
+                    var evalValue & = unsafe(agent.evalFrame.variables[length(agent.evalFrame.variables) - 1])
+                    evalValue.name = clone_string(ini.expression)
+                    res._type = evalValue._type
+                    res.result = evalValue.value
+                    res.indexedVariables = double(evalValue.indexedVariables)
+                    if evalValue.children != null
+                        res.variablesReference = double(evalValue.uid)
+                else
+                    res.result = evalRes.result
             else
-                res.result = evalRes.result
-        else
-            res.result = "<n/a>"
+                res.result = "<n/a>"
         self->sendSuccessResponse(seq, command, JV(res))
 
     def log(msg: string)
@@ -1473,6 +1510,7 @@ def private getStackVariableDefinitions(var ctx:Context; at: LineInfo)
     delete lines
     return res
 
+
 def private getGlobalVariableDefinitions(var ctx: Context)
     let text = build_string <| $(st)
         let tot = get_total_variables(ctx)
@@ -1493,6 +1531,7 @@ def private getGlobalVariableDefinitions(var ctx: Context)
                 else
                     st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} & = * reinterpret<{describe(type_info(*vinfo))}?> {arg}ul\n")
     return text
+
 
 def getRequire ( var ctx:Context; var self_text:string& )
     let prr = unsafe(get_context_global_variable(ctx,"__rtti_require"))
@@ -1534,10 +1573,6 @@ def compileAndRun ( text, self_text:string ) : tuple<ok:bool;result:string>
                             recover
                                 result = "{context.last_exception}\n{describe(context.exceptionAt)}\nexception during eval\n\n{text}"
                                 failed = true
-                            if !failed
-                                let prr = unsafe(get_context_global_variable(context, "G_EVAL_RESULT"))
-                                if prr != null
-                                    result = clone_string(* unsafe(reinterpret<string?> prr))
                         else
                             result = "{serrors}\nfailed to simulate\n\n{text}"
                 else
@@ -1548,14 +1583,29 @@ def compileAndRun ( text, self_text:string ) : tuple<ok:bool;result:string>
                         result = "{errors}\nfailed to compile\n\n{text}"
     return [[auto !failed, result]]
 
-var g```global : DAVariable
+
+def sanitize_var(var val: DAVariable)
+    val.name = clone_string(val.name)
+    val.value = clone_string(val.value)
+    val._type = clone_string(val._type)
+    if val.children != null
+        for c in *val.children
+            sanitize_var(c)
 
 [export]
 def accept_eval_results ( value:void?; info:TypeInfo? )
-    var frame <- [[DAStackFrame() isBlock=false]]
-    g```global <- [[DAVariable uid=frame.varId++, name="`eval", _type=describe(info)]]
-    g```dAgent.walker.dataWalker->startWalk(frame, g```global) <| $
+    var evalValue <- [[DAVariable uid=g```dAgent.evalFrame.varId++, name="eval", _type=describe(info)]]
+    g```dAgent.walker.dataWalker->startWalk(g```dAgent.evalFrame, evalValue) <| $
         g```dAgent.walker.dataWalkerAdapter |> walk_data(value, *info)
+    if evalValue.children == null
+        unsafe
+            evalValue.value = sprint_data(value, info, print_flags_debug)
+    if empty(evalValue.value)
+        evalValue.value = evalValue._type
+    
+    evalValue |> sanitize_var()
+    g```dAgent.evalFrame.variables |> emplace <| evalValue
+
 
 def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; result:string>
     let vars = getStackVariableDefinitions(ctx, at)
@@ -1565,7 +1615,6 @@ def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; re
     let text = build_string <| $ ( st )
         st |> write("require debugapi\nrequire rtti\nrequire strings\nrequire __current\n")
         st |> write(greq)
-        st |> write("\nvar G_EVAL_RESULT : string\n")
         st |> write("[export] def eval``call_eval(var DEBUG_CONTEXT:Context)\n")
         st |> write("\tunsafe\n")
         st |> write("// globals:\n")
@@ -1574,7 +1623,6 @@ def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; re
         st |> write(vars)
         st |> write("// EVAL:\n")
         st |> write("\t\tlet EVAL = {expr}\n")
-        st |> write("\t\tG_EVAL_RESULT = \"\{EVAL\}\"\n")
         st |> write("\t\tlet tinfo = typeinfo(rtti_typeinfo EVAL)\n")
         st |> write("\t\tlet peval = addr(EVAL)\n")
         st |> write("\t\tDEBUG_CONTEXT |> invoke_in_context(\"accept_eval_results\",peval,tinfo)\n")
