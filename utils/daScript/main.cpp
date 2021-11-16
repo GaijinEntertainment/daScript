@@ -356,6 +356,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     // ask for debugger
     if ( debuggerRequired ) {
         compile_and_run("____intro____","main",false,debugger_intro);
+        printf("running with debugger\n");
     }
     // compile and run
     for ( const auto & fn : files ) {

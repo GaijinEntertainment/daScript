@@ -2,7 +2,7 @@
 // options logCpp
 // options log_nodes
 
-module tpt
+module toy_path_tracer
 
 require path_tracer
 

@@ -1425,6 +1425,9 @@ class private EvalWalker : DapiStackWalker
         if vinfo.flags.refType
             let parg = unsafe(reinterpret<void?> arg)
             *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} & = * reinterpret<{describe(type_info(vinfo))}?> {parg}ul // ref argument\n")
+        elif vinfo.dimSize > 0u
+            let parg = unsafe(reinterpret<void?> arg)
+            *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = * reinterpret<{describe(type_info(vinfo))}?> {parg}ul // ref argument\n")
         else
             *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = ")
             if vinfo.basicType==Type tString
@@ -1444,6 +1447,8 @@ class private EvalWalker : DapiStackWalker
                         var cvinfo = vinfo
                         cvinfo.flags &= ~ TypeInfoFlags ref
                         *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = * reinterpret<{describe(type_info(cvinfo))}?> {*pref}ul // already ref\n")
+                elif vinfo.dimSize > 0u
+                    *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = * reinterpret<{describe(type_info(vinfo))}?> {arg}ul\n")
                 else
                     *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} & = * reinterpret<{describe(type_info(vinfo))}?> {arg}ul\n")
 
@@ -1463,7 +1468,6 @@ def private getStackVariableDefinitions(var ctx:Context; at: LineInfo)
     delete lines
     return res
 
-
 def private getGlobalVariableDefinitions(var ctx: Context)
     let text = build_string <| $(st)
         let tot = get_total_variables(ctx)
@@ -1479,66 +1483,78 @@ def private getGlobalVariableDefinitions(var ctx: Context)
                         var cvinfo = vinfo
                         cvinfo.flags &= ~TypeInfoFlags ref
                         st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} = * reinterpret<{describe(type_info(*cvinfo))}?> {*pref}ul // already ref\n")
+                elif vinfo.dimSize > 0u
+                    st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} = * reinterpret<{describe(type_info(*vinfo))}?> {arg}ul\n")
                 else
                     st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} & = * reinterpret<{describe(type_info(*vinfo))}?> {arg}ul\n")
     return text
 
-
-def private getRequire(var ctx: Context)
+def getRequire ( var ctx:Context; var self_text:string& )
     let prr = unsafe(get_context_global_variable(ctx,"__rtti_require"))
     if prr != null
         let arq = * unsafe(reinterpret<string?> prr)
+        print("Getting require from context {ctx} = {arq}\n")
         var mrq <- split(arq," ")
+        self_text := mrq[length(mrq)-1]
         mrq |> pop
-        let text = build_string <| $(st)
+        let text = build_string <| $ ( st )
             for q in mrq
                 st |> write("require {q}\n")
-        delete mrq
         return text
     else
         return "// __rtti_require is missing. module needs to be compiled with `options debugger`\n"
 
 
-def private compileAndRun(text: string): tuple<ok:bool; result:string>
+def compileAndRun ( text, self_text:string ) : tuple<ok:bool;result:string>
     var failed = true
     var result = ""
-    var cop = CodeOfPolicies()
-    cop.allow_local_variable_shadowing = true
-    compile("eval_module", text, cop, false) <| $ (ok; prog; errors)
-        if ok
-            simulate(prog) <| $ (sok; context; serrors)
-                if sok
-                    failed = false
-                    try
-                        unsafe
-                            context |> invoke_in_context("main")
-                    recover
-                        result = "{context.last_exception}\n{describe(context.exceptionAt)}\nexception during eval\n\n{text}"
-                        failed = true
-                    if !failed
-                        let prr = unsafe(get_context_global_variable(context, "G_EVAL_RESULT"))
-                        if prr != null
-                            result = clone_string(* unsafe(reinterpret<string?> prr))
-                else
-                    result = "{serrors}\nfailed to simulate\n\n{text}"
+    var access := make_file_access("")
+    access |> set_file_source("__project", text)
+    fopen(self_text, "rb") <| $(fr)
+        if fr != null
+            fmap(fr) <| $(data)
+                access |> set_file_source("__current.das", string(data))
         else
-            if prog != null && length(prog.errors) > 0
-                let err & = unsafe(prog.errors[0])
-                result = "{err.what}\n{errors}\nfailed to compile\n\n{text}"
-            else
-                result = "{errors}\nfailed to compile\n\n{text}"
+            print("failed to open `{self_text}`\n")
+    using <| $(var mg:ModuleGroup#)
+        using <| $(var cop:CodeOfPolicies#)
+            cop.allow_local_variable_shadowing = true
+            compile_file("__project",access,addr(mg),cop) <| $(ok,program,errors)
+                if ok
+                    simulate(program) <| $ ( sok; context; serrors )
+                        if sok
+                            failed = false
+                            try
+                                unsafe
+                                    context |> invoke_in_context("eval``call_eval")
+                            recover
+                                result = "{context.last_exception}\n{describe(context.exceptionAt)}\nexception during eval\n\n{text}"
+                                failed = true
+                            if !failed
+                                let prr = unsafe(get_context_global_variable(context, "G_EVAL_RESULT"))
+                                if prr != null
+                                    result = clone_string(* unsafe(reinterpret<string?> prr))
+                        else
+                            result = "{serrors}\nfailed to simulate\n\n{text}"
+                else
+                    if program != null && length(program.errors) > 0
+                        let err & = unsafe(program.errors[0])
+                        result = "{err.what}\n{errors}\nfailed to compile\n\n{text}"
+                    else
+                        result = "{errors}\nfailed to compile\n\n{text}"
     return [[auto !failed, result]]
 
 
 def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; result:string>
     let vars = getStackVariableDefinitions(ctx, at)
     let gvars = getGlobalVariableDefinitions(ctx)
-    let greq = getRequire(ctx)
+    var self_text : string
+    let greq = getRequire(this_context(), self_text)
     let text = build_string <| $ ( st )
-        st |> write("require rtti\nrequire strings\n")
+        st |> write("require rtti\nrequire strings\nrequire __current\n")
         st |> write(greq)
         st |> write("\nvar G_EVAL_RESULT : string\n")
-        st |> write("[export] def main\n")
+        st |> write("[export] def eval``call_eval\n")
         st |> write("\tunsafe\n")
         st |> write("// globals:\n")
         st |> write(gvars)
@@ -1547,7 +1563,7 @@ def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; re
         st |> write("// EVAL:\n")
         st |> write("\t\tlet EVAL = {expr}\n")
         st |> write("\t\tG_EVAL_RESULT = \"\{EVAL\}\"\n")
-    return compileAndRun(text)
+    return compileAndRun(text, self_text)
 
 
 def private tick_debugger()

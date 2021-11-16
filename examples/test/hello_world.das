@@ -1,2 +1,13 @@
+require rtti
+
 struct A
-    x : table<int; int> <- {{ 0 => 1 }}
+    b : int
+
+[export]
+def main
+    var a = [[A b=13]]
+    a.b ++
+    print("{a}\n")
+    print("THIS: {this_context()}\n")
+    breakpoint()
+

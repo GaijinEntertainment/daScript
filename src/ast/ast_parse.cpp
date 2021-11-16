@@ -474,12 +474,14 @@ namespace das {
                     for ( const auto & arq : res->allRequireDecl ) {
                         ss << get<1>(arq) << " ";
                     }
+                    ss << fileName;
                     auto rtti_require = make_smart<Variable>();
                     rtti_require->name = "__rtti_require";
                     rtti_require->type = make_smart<TypeDecl>(Type::tString);
                     rtti_require->init = make_smart<ExprConstString>(ss.str());
                     rtti_require->init->type = make_smart<TypeDecl>(Type::tString);
                     rtti_require->used = true;
+                    rtti_require->private_variable = true;
                     res->thisModule->addVariable(rtti_require);
                 }
                 if (!res->failed())
