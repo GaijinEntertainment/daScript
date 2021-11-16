@@ -310,12 +310,18 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 scriptArgs = true;
             }
             if ( cmd=="main" ) {
-                if (i+1 > argc) {
+                if ( i+1 > argc ) {
                     print_help();
                     return -1;
                 }
                 mainName = argv[i+1];
                 i += 1;
+            } else if ( cmd=="dasroot" ) {
+                if ( i+1 > argc ) {
+                    print_help();
+                    return -1;
+                }
+                setDasRoot(argv[i+1]);
             } else if ( cmd=="log" ) {
                 outputProgramCode = true;
             } else if ( cmd=="args" ) {

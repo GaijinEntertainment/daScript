@@ -605,20 +605,25 @@ if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
   )
   SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
-  # add_executable(daScript MACOSX_BUNDLE ${DASCRIPT_MAIN_SRC})
   add_executable(daScript ${DASCRIPT_MAIN_SRC})
   TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
   ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
   SETUP_CPP11(daScript)
   SETUP_LTO(daScript)
 
-  # IF(APPLE)
-  #   set_target_properties(daScript PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "daScript")
-  #   set_target_properties(daScript PROPERTIES
-  #       MACOSX_BUNDLE_SHORT_VERSION_STRING "0.3"
-  #       MACOSX_BUNDLE_LONG_VERSION_STRING  "daScript 0.3"
-  #       MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/utils/daScript/MacOSXBundleInfo.plist.in)
-  # ENDIF()
+  IF(APPLE)
+    add_executable(daScriptOsx MACOSX_BUNDLE ${DASCRIPT_MAIN_SRC})
+    TARGET_LINK_LIBRARIES(daScriptOsx libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+    ADD_DEPENDENCIES(daScriptOsx libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
+    SETUP_CPP11(daScriptOsx)
+    SETUP_LTO(daScriptOsx)
+
+    set_target_properties(daScriptOsx PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "daScript")
+    set_target_properties(daScriptOsx PROPERTIES
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.3"
+        MACOSX_BUNDLE_LONG_VERSION_STRING  "daScript 0.3"
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/utils/daScript/MacOSXBundleInfo.plist.in)
+  ENDIF()
 
 endif()
 
