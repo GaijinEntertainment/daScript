@@ -463,6 +463,8 @@ class private DAStackWalker: DapiStackWalker
             return
         for i in range(get_total_variables(*ctx.ctx))
             let vinfo & = unsafe(get_variable_info(ctx.ctx, i))
+            if vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require"
+                continue
             var value: void?
             unsafe
                 value = get_context_global_variable(ctx.ctx, vinfo.name)
