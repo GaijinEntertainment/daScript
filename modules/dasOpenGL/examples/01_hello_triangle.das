@@ -8,6 +8,7 @@ require daslib/safe_addr
 var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_color : float3
 var [[inout]] f_color : float3
+var [[out]] f_FragColor : float4
 
 [vertex_program]
 def vs_main
@@ -16,7 +17,7 @@ def vs_main
 
 [fragment_program]
 def fs_main
-    gl_FragColor = float4(f_color, 1.0)
+    f_FragColor = float4(f_color, 1.0)
 
 var program : uint
 var vao : uint

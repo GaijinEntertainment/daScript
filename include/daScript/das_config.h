@@ -74,6 +74,8 @@ using das_safe_set = std::set<K,C>;
 #ifndef DAS_BIND_EXTERNAL
   #if defined(_WIN32) && defined(_WIN64)
     #define DAS_BIND_EXTERNAL 1
+  #elif defined(__APPLE__)
+    #define DAS_BIND_EXTERNAL 1
   #else
     #define DAS_BIND_EXTERNAL 0
   #endif

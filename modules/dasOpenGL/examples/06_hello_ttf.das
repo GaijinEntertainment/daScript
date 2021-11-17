@@ -22,7 +22,7 @@ def main
     glfwMakeContextCurrent(window)
     // create ttf internals, load font
     create_ttf_objects()
-    font <- load_ttf("c:/windows/fonts/times.ttf")
+    font <- load_ttf("{get_das_root()}/modules/dasBGFX/bgfx/bgfx/examples/runtime/font/droidsansmono.ttf")
     // create vertex arrays with quads, which render particular text
     var hw_text <- font |> create_quads("Hello, world")
     // make a translate-scale matrix, so that text is in the middle, and 1.0 wide

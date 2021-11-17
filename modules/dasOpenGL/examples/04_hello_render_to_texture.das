@@ -13,6 +13,7 @@ var [[uniform]] f_offset : float2
 var [[inout]] f_color : float3
 var [[inout]] f_texcoord : float2
 var [[uniform]] f_tex : sampler2D
+var [[out]] f_FragColor : float4
 
 [vertex_program]
 def vs_effect
@@ -30,15 +31,15 @@ def greyscale(color:float3)
 [fragment_program]
 def fs_effect
     let coord = f_texcoord + f_offset
-    gl_FragColor = texture2D(f_tex,coord) * float4(f_color, 1.0)
+    f_FragColor = texture(f_tex,coord) * float4(f_color, 1.0)
 
 [fragment_program]
 def fs_display
     let f = checker(f_texcoord.xy)
-    let trgb = texture2D(f_tex,float2(f_texcoord.x,1.-f_texcoord.y)).xyz
+    let trgb = texture(f_tex,float2(f_texcoord.x,1.-f_texcoord.y)).xyz
     let tgrey = greyscale(trgb)
-    gl_FragColor.xyz = trgb*f + float3(tgrey)*(1.0-f)
-    gl_FragColor.w = 1.
+    f_FragColor.xyz = trgb*f + float3(tgrey)*(1.0-f)
+    f_FragColor.w = 1.
 
 var program, display_program : uint
 var vao : uint

@@ -10,6 +10,7 @@
 #include "daScript/misc/sysos.h"
 
 #include <mutex>
+
 namespace das {
 
 #if DAS_BIND_EXTERNAL
@@ -25,7 +26,7 @@ namespace das {
     typedef uint64_t (* CdeclCallFunction )( ... );
 #endif
 
-#if defined(_MSC_VER) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
+#if (defined(_MSC_VER) && !defined(_GAMING_XBOX) && !defined(_DURANGO)) || defined(__APPLE__)
     void * getFunction ( const char * fun, const char * lib ) {
         void * libhandle = nullptr;
         libhandle = getLibraryHandle(lib);
@@ -38,8 +39,9 @@ namespace das {
         return getFunctionAddress(libhandle, fun);
     }
 
+#if defined(_MSC_VER)
     typedef void * ( __stdcall * FN_wglGetProcAddress ) ( const char * );
-    void * openGetFunctionAddress ( const char * name ) {
+    void * openGlGetFunctionAddress ( const char * name ) {
         auto _wglGetProcAddress = (FN_wglGetProcAddress) getFunction("wglGetProcAddress","Opengl32");
         if  ( _wglGetProcAddress!=nullptr ) {
             if ( auto fn = _wglGetProcAddress(name) ) {
@@ -48,8 +50,20 @@ namespace das {
         }
         return getFunction(name,"Opengl32");
     }
+#elif defined(__APPLE__)
+    void * openGlGetFunctionAddress ( const char * name ) {
+        auto libName = "/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL";
+        void * libhandle = nullptr;
+        libhandle = getLibraryHandle(libName);
+        return getFunctionAddress(libhandle, name);
+    }
 #else
-    void * openGetFunctionAddress ( const char * name ) {
+    void * openGlGetFunctionAddress ( const char * name ) {
+        return nullptr;
+    }
+#endif
+#else
+    void * openGlGetFunctionAddress ( const char * name ) {
         return nullptr;
     }
 #endif
@@ -122,7 +136,7 @@ namespace das {
             });
             V_END();
         }
-        vec4f eval ( Context & context ) {
+        vec4f eval ( Context & context ) override {
             context.result = wrapper(fnptr, context.abiArg);
             return context.result;
         }
@@ -140,7 +154,7 @@ namespace das {
             withBind(code,[&](BoundFunction * bf){
                 if ( bf ) {
                     if ( !bf->fun ) {
-                        fnptr = openGetFunctionAddress(bf->name.c_str());
+                        fnptr = openGlGetFunctionAddress(bf->name.c_str());
                         if ( fnptr ) {
                             bf->fun = fnptr;
                         } else {
@@ -198,13 +212,13 @@ namespace das {
         virtual bool apply ( const FunctionPtr & fun, ModuleGroup &, const AnnotationArgumentList &, string & err )  override {
             if ( fun->arguments.size() >= MAX_WRAPPER_ARGUMENTS ) {
                 err = "function has too many arguments for the current wrapper config";
-                return nullptr;
+                return false;
             }
             fun->userScenario = true;
             fun->noAot = true;      // TODO: generate custom C++ to invoke the call directly
             return true;
         }
-        virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & ) {
+        virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & ) override {
             if ( !call->func ) return nullptr;
             auto needToTransform = false;
             for ( auto & arg : call->arguments ) {
@@ -261,7 +275,7 @@ namespace das {
                 err += "function returns vector type, which is currently not supported by the specified binding";
                 anyTypeErrors = true;
             }
-            if ( anyTypeErrors ) return false;
+            if ( anyTypeErrors ) return nullptr;
             string fn_name;
             string library;
             string api;
@@ -295,7 +309,7 @@ namespace das {
                 if ( !libhandle ) {
                     libhandle = loadDynamicLibrary(library.c_str());
                 }
-                if ( !libhandle ) {
+                if ( !libhandle && !late ) {
                     err = "can't load library " + library;
                     return nullptr;
                 }
@@ -303,7 +317,7 @@ namespace das {
             void * funptr = nullptr;
             if ( !late ) {
                 if ( api=="opengl" ) {
-                    funptr = openGetFunctionAddress(fn_name.c_str());
+                    funptr = openGlGetFunctionAddress(fn_name.c_str());
                 }
                 if ( !funptr ) {
                     funptr = getFunctionAddress(libhandle, fn_name.c_str());

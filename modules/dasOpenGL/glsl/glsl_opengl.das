@@ -19,14 +19,17 @@ class GlslOpenGLShader : GlslShader
 [function_macro(name="vertex_program")]
 class GlslVertexProgram : GlslOpenGLShader
     override shaderType = ShaderType vertex
+    override output_shader_lines = false
 
 [function_macro(name="fragment_program")]
 class GlslPixelProgram : GlslOpenGLShader
     override shaderType = ShaderType fragment
+    override output_shader_lines = false
 
 [function_macro(name="compute_program")]
 class GlslComputeProgram : GlslOpenGLShader
     override shaderType = ShaderType compute
+    override output_shader_lines = false
 
 [macro_function]
 def private generate_bind_uniform_dummy(fnMain:FunctionPtr)

@@ -12,6 +12,7 @@ var [[in, location=2]] v_texcoord : float2
 var [[inout]] f_color : float3
 var [[inout]] f_texcoord : float2
 var [[uniform]] f_tex : sampler2D
+var [[out]] f_FragColor : float4
 
 [vertex_program]
 def vs_main
@@ -21,7 +22,7 @@ def vs_main
 
 [fragment_program]
 def fs_main
-    gl_FragColor = texture2D(f_tex,f_texcoord) * float4(f_color, 1.0)
+    f_FragColor = texture(f_tex,f_texcoord) * float4(f_color, 1.0)
 
 var program : uint
 var vao : uint

@@ -19,6 +19,7 @@ var [[uniform]] f_tex : sampler2D
 var [[uniform, format=rgba8, stage=0, writeonly]] c_destTex : image2D
 var [[ssbo, stage=1]] c_mat : MatTest
 var [[uniform]] c_offset : int
+var [[out]] f_FragColor : float4
 
 [vertex_program]
 def vs_effect
@@ -28,7 +29,7 @@ def vs_effect
 
 [fragment_program]
 def fs_effect
-    gl_FragColor = texture2D(f_tex,f_texcoord) * float4(f_color, 1.0)
+    f_FragColor = texture(f_tex,f_texcoord) * float4(f_color, 1.0)
 
 [compute_program(local_size_x=16,local_size_y=16)]
 def compute_effect

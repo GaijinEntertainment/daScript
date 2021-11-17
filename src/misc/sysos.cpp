@@ -127,7 +127,7 @@
     #include <pthread.h>
     #include <limits.h>
     #include <signal.h>
-
+    #include <dlfcn.h>
     namespace das {
 
         __forceinline void setBits ( uint64_t & dw, int lowBit, int bits, int newValue ) {
@@ -215,17 +215,14 @@
             }
             return 0;
         }
-        void * loadDynamicLibrary ( const char *  ) {
-            // TODO: implement
-            return nullptr;
+        void * loadDynamicLibrary ( const char * lib ) {
+            return dlopen(lib,RTLD_LAZY);
         }
-        void * getFunctionAddress ( void *, const char * ) {
-            // TODO: implement
-            return nullptr;
+        void * getFunctionAddress ( void * lib, const char * name ) {
+            return lib ? dlsym(lib, name) : nullptr;
         }
-        void * getLibraryHandle ( const char *  ) {
-            // TODO: implement
-            return nullptr;
+        void * getLibraryHandle ( const char * lib ) {
+            return dlopen(lib,RTLD_LAZY);
         }
     }
 #else

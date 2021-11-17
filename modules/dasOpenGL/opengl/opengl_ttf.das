@@ -15,6 +15,7 @@ var [[uniform]] v_mvp : float4x4
 var [[inout]] f_texcoord : float2
 var [[uniform]] f_tex : sampler2D
 var [[uniform]] f_tint : float3
+var [[out]] f_FragColor : float4
 
 [vertex_program(name="TTF_VERTEX_SRC")]
 def vs_main
@@ -23,8 +24,8 @@ def vs_main
 
 [fragment_program(name="TTF_FRAGMENT_SRC")]
 def fs_main
-    let tex = texture2D(f_tex,f_texcoord)
-    gl_FragColor = float4(f_tint,tex.w)
+    let tex = texture(f_tex,f_texcoord)
+    f_FragColor = float4(f_tint,tex.w)
 
 [vertex_buffer]
 struct TTF_FontVertex
