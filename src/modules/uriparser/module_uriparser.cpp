@@ -42,6 +42,21 @@ char * das::makeNewGuid( das::Context * context ) {
     return context->stringHeap->allocateString(tw.str());
 }
 
+#elif defined(__APPLE__)
+
+#include <uuid/uuid.h>
+
+char * das::makeNewGuid( das::Context * context ) {
+    union {
+        unsigned char   data[16];
+        uint32_t        data32[4];
+    } data;
+    uuid_generate(data.data);
+    TextWriter tw;
+    tw << HEX << data.data32[0] << "-" << data.data32[1] << "-" << data.data32[2] << "-" << data.data32[3] << DEC;
+    return context->stringHeap->allocateString(tw.str());
+}
+
 #else
 
 char * das::makeNewGuid( Context * context ) {
