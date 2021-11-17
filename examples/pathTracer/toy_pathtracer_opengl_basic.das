@@ -74,7 +74,7 @@ def main
 		panic("can't init glfw")
     defer <|
         glfwTerminate()
-    glfwInitOpenGL(4,3)
+    glfwInitOpenGL(3,3)
     var window = glfwCreateWindow(TRACE_WIDTH, TRACE_HEIGHT, "OpenGL Path tracer", null, null)
     if window==null
 		panic("can't create window")
