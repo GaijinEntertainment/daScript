@@ -99,7 +99,7 @@ def main
 		panic("can't init glfw")
     defer <|
         glfwTerminate()
-    glfwInitOpenGL(4,6,true)
+    glfwInitOpenGL(4,6)
     var window = glfwCreateWindow(1280, 720, "OpenGL - Hello compute shader", null, null)
     if window==null
 		panic("can't create window")

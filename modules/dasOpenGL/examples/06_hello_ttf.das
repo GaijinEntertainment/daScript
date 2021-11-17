@@ -13,7 +13,7 @@ def main
 		panic("can't init glfw")
     defer <|
         glfwTerminate()
-    glfwInitOpenGL(3,3,true)
+    glfwInitOpenGL(3,3)  // todo: figure out why we need compat profile here
     var window = glfwCreateWindow(1280, 720, "OpenGL - Hello opengl_ttf", null, null)
     if window==null
 		panic("can't create window")

@@ -18,6 +18,7 @@ var [[inout]] f_texcoord : float2
 var [[uniform]] f_tex : sampler2D
 var [[uniform, format=rgba32f, stage=0]] c_destTex : image2D
 var [[uniform]] c_frame : int = 0
+var [[out]] f_FragColor : float4
 
 [vertex_program]
 def vs_effect
@@ -30,7 +31,7 @@ def linear_to_RGB ( color : float3 )
 
 [fragment_program]
 def fs_effect
-    gl_FragColor = linear_to_RGB(texture2D(f_tex,f_texcoord).xyz).zyxx
+    f_FragColor = linear_to_RGB(texture2D(f_tex,f_texcoord).xyz).zyxx
 
 [compute_program(local_size_x=16,local_size_y=16)]
 def compute_effect

@@ -26,6 +26,7 @@ var [[uniform, stage=0]] f_tex : sampler2D
 var [[uniform, stage=1]] f_bloom : sampler2D
 var [[uniform, format=rgba32f, stage=0]] c_destTex : image2D
 var [[uniform]] c_frame : int = 0
+var [[out]] f_FragColor : float4
 
 [vertex_program]
 def vs_effect
@@ -41,7 +42,7 @@ def fs_effect
     let color = texture2D(f_tex,f_texcoord)
     let bloom = texture2D(f_bloom,f_texcoord)
     let res = bloom + color
-    gl_FragColor = linear_to_RGB(res.xyz).zyxx
+    f_FragColor = linear_to_RGB(res.xyz).zyxx
 
 [compute_program(version=430,local_size_x=16,local_size_y=16)]
 def compute_effect
