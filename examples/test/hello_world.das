@@ -1,13 +1,11 @@
-require rtti
-
-struct A
-    b : int
+def iliketomoveitmoveit ( var a )
+    return <- a
 
 [export]
 def main
-    var a = [[A b=13]]
-    a.b ++
-    print("{a}\n")
-    print("THIS: {this_context()}\n")
-    breakpoint()
-
+    var a <- [{for x in range(10); x}]
+    print("a = {a}\n")
+    a <- a
+    print("after a = {a}\n")
+    a <- iliketomoveitmoveit(a)
+    print("after aa = {a}\n")

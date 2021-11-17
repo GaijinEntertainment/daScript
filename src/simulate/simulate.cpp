@@ -344,8 +344,10 @@ namespace das
         DAS_PROFILE_NODE
         auto pl = l->evalPtr(context);
         auto pr = r->evalPtr(context);
-        memcpy ( pl, pr, size );
-        memset ( pr, 0, size );
+        if ( pl != pr ) {
+            memcpy ( pl, pr, size );
+            memset ( pr, 0, size );
+        }
         return v_zero();
     }
 
@@ -800,8 +802,10 @@ namespace das
         auto pr = subexpr->evalPtr(context);
         auto pl = context.abiCopyOrMoveResult();
         DAS_ASSERT(pl);
-        memcpy ( pl, pr, size);
-        memset ( pr, 0, size);
+        if ( pl != pr ) {
+            memcpy ( pl, pr, size);
+            memset ( pr, 0, size);
+        }
         context.abiResult() = cast<char *>::from(pl);
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();
@@ -856,8 +860,10 @@ namespace das
         auto pr = subexpr->evalPtr(context);
         auto ba = (BlockArguments *) ( context.stack.sp() + argStackTop );
         auto pl = ba->copyOrMoveResult;
-        memcpy ( pl, pr, size);
-        memset ( pr, 0, size);
+        if ( pl != pr ) {
+            memcpy ( pl, pr, size);
+            memset ( pr, 0, size);
+        }
         context.abiResult() = cast<char *>::from(pl);
         context.stopFlags |= EvalFlags::stopForReturn;
         return v_zero();

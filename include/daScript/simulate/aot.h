@@ -80,8 +80,10 @@ namespace das {
     __forceinline void das_move ( TT & a, const QQ & b ) {
         using TTNC = typename remove_const<TT>::type;
         static_assert(sizeof(TT)<=sizeof(QQ),"can't move from smaller type");
-        memcpy(const_cast<TTNC *>(&a), &b, sizeof(TT));
-        memset((TTNC *)&b, 0, sizeof(TT));
+        if ( ((void*)&a) != ((void *)&b) ) {
+            memcpy(const_cast<TTNC *>(&a), &b, sizeof(TT));
+            memset((TTNC *)&b, 0, sizeof(TT));
+        }
     }
 
     template <typename TT, typename QQ>
