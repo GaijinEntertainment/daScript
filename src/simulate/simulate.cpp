@@ -1570,7 +1570,7 @@ namespace das
     }
 
     void Context::throw_error_at ( const LineInfo & at, const char * message, ... ) {
-        const int PRINT_BUFFER_SIZE = 1024;
+        const int PRINT_BUFFER_SIZE = 8192;
         char buffer[PRINT_BUFFER_SIZE];
         va_list args;
         va_start (args, message);
@@ -1580,7 +1580,7 @@ namespace das
     }
 
     void Context::throw_error_ex ( const char * message, ... ) {
-        const int PRINT_BUFFER_SIZE = 1024;
+        const int PRINT_BUFFER_SIZE = 8192;
         char buffer[PRINT_BUFFER_SIZE];
         va_list args;
         va_start (args, message);
