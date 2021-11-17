@@ -121,15 +121,85 @@
     }
 #elif defined(__APPLE__)
     #include <mach-o/dyld.h>
+    #include <mach/mach_types.h>
+    #include <mach/mach_init.h>
+    #include <mach/thread_act.h>
+    #include <pthread.h>
     #include <limits.h>
+    #include <signal.h>
+
     namespace das {
-        void hwSetBreakpointHandler ( void (*) ( int, void * ) ) { }
-        int hwBreakpointSet ( void *, int, int ) {
-            return -1;
+
+        __forceinline void setBits ( uint64_t & dw, int lowBit, int bits, int newValue ) {
+            uint64_t mask = (uint64_t(1) << bits) - 1;
+            dw = (dw & ~(mask << lowBit)) | (uint64_t(newValue) << lowBit);
         }
-        bool hwBreakpointClear ( int ) {
+
+        bool g_isHandlerSet = false;
+        void ( * g_HwBpHandler ) ( int, void * ) = nullptr;
+
+        void sigTrapHandler ( int ex ) {
+            thread_t mythread = mach_thread_self();
+            struct x86_debug_state dr;
+            mach_msg_type_number_t dr_count = x86_DEBUG_STATE_COUNT;
+            thread_get_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, &dr_count);
+            if ( dr.uds.ds64.__dr6 & 0x0f ) {
+                if ( g_HwBpHandler ) {
+                    if ( dr.uds.ds64.__dr6 & 1 ) g_HwBpHandler(0, (void *) dr.uds.ds64.__dr0 );
+                    if ( dr.uds.ds64.__dr6 & 2 ) g_HwBpHandler(1, (void *) dr.uds.ds64.__dr1 );
+                    if ( dr.uds.ds64.__dr6 & 4 ) g_HwBpHandler(2, (void *) dr.uds.ds64.__dr2 );
+                    if ( dr.uds.ds64.__dr6 & 8 ) g_HwBpHandler(3, (void *) dr.uds.ds64.__dr3 );
+                }
+            }
+        }
+
+        void hwSetBreakpointHandler ( void (* handler ) ( int, void * ) ) {
+            g_HwBpHandler = handler;
+        }
+
+        int hwBreakpointSet ( void * address, int len, int when ) {
+            if ( !g_isHandlerSet ) {
+                g_isHandlerSet = true;
+                signal(SIGTRAP, sigTrapHandler);
+            }
+            thread_t mythread = mach_thread_self();
+            struct x86_debug_state dr;
+            mach_msg_type_number_t dr_count = x86_DEBUG_STATE_COUNT;
+            thread_get_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, &dr_count);
+            int bp_index = 0;
+            for ( bp_index=0; bp_index!=4; ++bp_index ) {
+                uint32_t mask = uint32_t(1) << (bp_index*2);
+        		if ( (uint32_t(dr.uds.ds64.__dr7) & mask) == 0u ) {
+                    break;
+                }
+            }
+            switch ( bp_index ) {
+            case 0:     dr.uds.ds64.__dr0 = intptr_t(address); break;
+            case 1:     dr.uds.ds64.__dr1 = intptr_t(address); break;
+            case 2:     dr.uds.ds64.__dr2 = intptr_t(address); break;
+            case 3:     dr.uds.ds64.__dr3 = intptr_t(address); break;
+            default:    return -1;
+            }
+	        setBits(dr.uds.ds64.__dr7, 16 + (bp_index*4), 2, when);
+	        setBits(dr.uds.ds64.__dr7, 18 + (bp_index*4), 2, len);
+	        setBits(dr.uds.ds64.__dr7, bp_index*2,        1, 1);
+            dr_count = x86_DEBUG_STATE_COUNT;
+            thread_set_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, dr_count);
+            return bp_index;
+        }
+
+        bool hwBreakpointClear ( int bp_index ) {
+            if ( bp_index==-1 ) return false;
+            thread_t mythread = mach_thread_self();
+            struct x86_debug_state dr;
+            mach_msg_type_number_t dr_count = x86_DEBUG_STATE_COUNT;
+            kern_return_t rc = thread_get_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, &dr_count);
+            setBits(dr.uds.ds64.__dr7, bp_index*2, 1, 0);
+            dr_count = x86_DEBUG_STATE_COUNT;
+            rc = thread_set_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, dr_count);
             return false;
         }
+
         size_t getExecutablePathName(char* pathName, size_t pathNameCapacity) {
             uint32_t pathNameSize = 0;
             _NSGetExecutablePath(NULL, &pathNameSize);
