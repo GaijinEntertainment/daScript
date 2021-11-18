@@ -1027,7 +1027,7 @@ namespace das
                 ->args({"iterator","context"});;
         addExtern<DAS_BIND_FUN(builtin_make_lambda_iterator)>(*this, lib,  "_builtin_make_lambda_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_lambda_iterator")
-                ->args({"iterator","lambda","context"});;
+                ->args({"iterator","lambda","context","line"});
         addInterop<builtin_make_enum_iterator,void,vec4f>(*this, lib, "_builtin_make_enum_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_enum_iterator")
                 ->arg("iterator");
