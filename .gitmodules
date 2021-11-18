@@ -10,3 +10,6 @@
 [submodule "modules/dasXbyak"]
 	path = modules/dasXbyak
 	url = https://github.com/borisbat/dasXbyak.git
+[submodule "modules/dasSound"]
+	path = modules/dasSound
+	url = git@github.com:imp5imp5/dasSound.git
