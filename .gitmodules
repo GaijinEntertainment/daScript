@@ -13,3 +13,6 @@
 [submodule "modules/dasSound"]
 	path = modules/dasSound
 	url = git@github.com:imp5imp5/dasSound.git
+[submodule "modules/dasMinfft"]
+	path = modules/dasMinfft
+	url = git@github.com:imp5imp5/dasMinfft.git
