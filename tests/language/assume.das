@@ -15,7 +15,7 @@ def test_assume( t: T? )
     car.bar.foo.a = 1
     assume cbf = car.bar.foo
     t |> equal ( cbf.a, 1 )
-    assume cbfa = car.bar.foo.a
+    assume cbfa = cbf.a
     t |> equal ( cbfa, 1 )
     cbfa ++
     t |> equal ( car.bar.foo.a, 2 )
