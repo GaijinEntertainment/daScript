@@ -931,7 +931,7 @@ namespace das
     void builtin_make_temp_array ( Array & arr, void * data, int size ) {
         arr.data = (char *) data;
         arr.size = arr.capacity = size;
-        arr.lock = 1;
+        arr.lock = 0;
         arr.flags = 0;
     }
 

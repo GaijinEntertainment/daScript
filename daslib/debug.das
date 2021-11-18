@@ -633,7 +633,7 @@ class private DAgent: DapiDebugAgent
 
     evalFrame: DAStackFrame <- DAStackFrame()
 
-    def DAgent(var ctx: Context)
+    def initAgent(var ctx: Context)
         waitConnection = wait_debugger()
         withInstruments = use_instruments()
 
@@ -654,6 +654,7 @@ class private DAgent: DapiDebugAgent
         server.port = port
         unsafe
             server.agent = addr(self)
+        server->make_server_adapter()
         if !server->init(port)
             print("server failed to initialize\n")
             unsafe
@@ -1602,7 +1603,7 @@ def accept_eval_results ( value:void?; info:TypeInfo? )
             evalValue.value = sprint_data(value, info, print_flags_debug)
     if empty(evalValue.value)
         evalValue.value = evalValue._type
-    
+
     evalValue |> sanitize_var()
     g```dAgent.evalFrame.variables |> emplace <| evalValue
 
@@ -1637,7 +1638,8 @@ var private g```dAgent : DAgent?
 
 [export,unused_argument(ctx)]
 def private start_debug_agent(var ctx: Context)
-    g```dAgent = new DAgent(ctx)
+    g```dAgent = new DAgent()
+    g```dAgent->initAgent(ctx)
     install_new_debug_agent(g```dAgent, "~debug")
 
 [export]

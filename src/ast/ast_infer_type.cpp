@@ -4554,6 +4554,7 @@ namespace das {
                 if ( ita->alias==expr->name ) {
                     reportAstChanged();
                     auto csub = ita->subexpr->clone();
+                    // forceAt(csub, ita->at);
                     return csub;
                 }
             }
@@ -5332,7 +5333,6 @@ namespace das {
                 }
                 if ( func->result ) expr->returnType = make_smart<TypeDecl>(*func->result);
             }
-        #if 0
             if ( expr->moveSemantics && expr->subexpr && expr->subexpr->type && expr->subexpr->type->lockCheck() ) {
                 if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
                     bool checkIt = true;
@@ -5350,7 +5350,6 @@ namespace das {
                     }
                 }
             }
-        #endif
             expr->type = make_smart<TypeDecl>();
             return Visitor::visit(expr);
         }
