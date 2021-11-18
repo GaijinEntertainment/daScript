@@ -34,6 +34,7 @@ namespace das {
         virtual bool canVisitMakeStructureBody ( ExprMakeStruct * expr ) { return true; }
         virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) { return true; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) { return false; }
+        virtual bool canVisitWithAliasSubexpression ( ExprAssume * ) { return false; }
         // WHOLE PROGRAM
         virtual void preVisitProgram ( Program * prog ) {}
         virtual void visitProgram ( Program * prog ) {}
@@ -251,6 +252,7 @@ namespace das {
         VISIT_EXPR(ExprNamedCall)
         VISIT_EXPR(ExprIfThenElse)
         VISIT_EXPR(ExprWith)
+        VISIT_EXPR(ExprAssume)
         VISIT_EXPR(ExprWhile)
         VISIT_EXPR(ExprMakeStruct)
         VISIT_EXPR(ExprMakeVariant)

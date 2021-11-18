@@ -177,6 +177,8 @@ namespace das {
                     if ( pWith->body ) {
                         list.push_back(pWith->body);
                     }
+                } else if ( expr->rtti_isAssume() ) {
+                    // do nothing with assume
                 } else {
                     list.push_back(expr);
                 }

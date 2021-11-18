@@ -202,6 +202,7 @@
 %token  DAS_TYPEDEF         "typedef"
 %token  DAS_WITH            "with"
 %token  DAS_AKA             "aka"
+%token  DAS_ASSUME          "assume"
 %token  DAS_CAST            "cast"
 %token  DAS_OVERRIDE        "override"
 %token  DAS_ABSTRACT        "abstract"
@@ -398,6 +399,7 @@
 %type <pExpression>     expressions
 %type <pExpression>     expression_block
 %type <pExpression>     expression_with
+%type <pExpression>     expression_with_alias
 %type <pExpression>     expression_while_loop
 %type <pExpression>     expression_unsafe
 %type <pExpression>     expression_for_loop
@@ -823,6 +825,13 @@ expression_with
     }
     ;
 
+expression_with_alias
+    :   DAS_ASSUME[loc] NAME[aname] '=' { das_need_oxford_comma=true; } expr[subexpr] {
+        $$ = new ExprAssume(tokAt(@loc), *$aname, $subexpr );
+        delete $aname;
+    }
+    ;
+
 annotation_argument_value
     :   string_constant[value]   { $$ = new AnnotationArgument("",*$value); delete $value; }
     |   NAME[value]              { $$ = new AnnotationArgument("",*$value); delete $value; }
@@ -1109,6 +1118,7 @@ expression_any
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_unsafe[subexpr]          { $$ = $subexpr; }
     |   expression_with[subexpr]            { $$ = $subexpr; }
+    |   expression_with_alias[subexpr]      { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
     |   expression_break[subexpr] ';'       { $$ = $subexpr; }
     |   expression_continue[subexpr] ';'    { $$ = $subexpr; }

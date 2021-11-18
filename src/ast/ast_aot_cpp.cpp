@@ -2112,6 +2112,16 @@ namespace das {
             }
             return Visitor::visit(c);
         }
+    // ExprAssume
+        virtual void preVisit ( ExprAssume * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "\n#if 0 // with, note optimizations are off\n";
+        }
+        virtual ExpressionPtr visit ( ExprAssume * expr ) override {
+            Visitor::visit(expr);
+            ss << "\n#endif\n";
+            return expr;
+        }
     // ExprWith
         virtual void preVisit ( ExprWith * expr ) override {
             Visitor::preVisit(expr);

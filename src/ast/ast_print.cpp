@@ -519,6 +519,14 @@ namespace das {
             Visitor::preVisitWithBody(wh,body);
             ss << "\n";
         }
+    // with alias
+        virtual bool canVisitWithAliasSubexpression ( ExprAssume * ) override {
+            return true;
+        }
+        virtual void preVisit ( ExprAssume * wh ) override {
+            Visitor::preVisit(wh);
+            ss << "with " << wh->alias << " = ";
+        }
     // while
         virtual void preVisit ( ExprWhile * wh ) override {
             Visitor::preVisit(wh);

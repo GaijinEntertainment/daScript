@@ -2327,6 +2327,10 @@ namespace das
         return body->simulate(context);
     }
 
+    SimNode * ExprAssume::simulate (Context &) const {
+        return nullptr;
+    }
+
     void ExprWhile::simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Block * blk ) {
         if ( bod->rtti_isBlock() ) {
             auto pBlock = static_pointer_cast<ExprBlock>(bod);
