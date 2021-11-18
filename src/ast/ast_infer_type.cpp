@@ -5013,6 +5013,14 @@ namespace das {
             } else if ( expr->left->type->hasClasses() && !safeExpression(expr) ) {
                 error("moving classes requires unsafe"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::unsafe);
+            } else if ( expr->left->type->lockCheck() || expr->right->type->lockCheck()) {
+                if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
+                    reportAstChanged();
+                    auto pCall = make_smart<ExprCall>(expr->at,"_move_with_lockcheck");
+                    pCall->arguments.push_back(expr->left->clone());
+                    pCall->arguments.push_back(expr->right->clone());
+                    return pCall;
+                }
             }
             expr->type = make_smart<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
@@ -5222,7 +5230,7 @@ namespace das {
                               + describeType(resType) + ", passing " + describeType(expr->subexpr->type), "", "",
                               expr->at, CompilationError::invalid_return_type);
                     }
-                    if ( resType->ref && !expr->subexpr->type->ref ) {
+                    if ( resType->ref && !expr->subexpr->type->isRef() ) {
                         error("incompatible return type, reference matters. expecting "
                               + describeType(resType) + ", passing " + describeType(expr->subexpr->type), "", "",
                               expr->at, CompilationError::invalid_return_type);
@@ -5310,6 +5318,25 @@ namespace das {
                 }
                 if ( func->result ) expr->returnType = make_smart<TypeDecl>(*func->result);
             }
+        #if 0
+            if ( expr->moveSemantics && expr->subexpr && expr->subexpr->type && expr->subexpr->type->lockCheck() ) {
+                if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
+                    bool checkIt = true;
+                    if ( expr->subexpr->rtti_isCall() ) {
+                        auto ccall = static_pointer_cast<ExprCall>(expr->subexpr);
+                        if ( ccall->name=="_return_with_lockcheck" || ccall->name=="__::builtin`_return_with_lockcheck" ) checkIt = false;
+                    }
+                    if ( checkIt ) {
+                        reportAstChanged();
+                        auto pCall = make_smart<ExprCall>(expr->at,"_return_with_lockcheck");
+                        pCall->arguments.push_back(expr->subexpr->clone());
+                        auto pRet = expr->clone();
+                        static_pointer_cast<ExprReturn>(pRet)->subexpr = pCall;
+                        return pRet;
+                    }
+                }
+            }
+        #endif
             expr->type = make_smart<TypeDecl>();
             return Visitor::visit(expr);
         }

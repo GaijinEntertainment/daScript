@@ -28,13 +28,26 @@ def intptr ( p : smart_ptr<auto> ) : uint64
         unsafe
 		    return reinterpret<uint64> p
 
+def _move_with_lockcheck ( var a:auto(valA)&; var b:auto(valB)& )
+    static_if typeinfo(need_lock_check type<valA>)
+        _builtin_verify_locks(a)
+    static_if typeinfo(need_lock_check type<valB>)
+        _builtin_verify_locks(b)
+    a <- b
+
+def _return_with_lockcheck ( var a:auto(valT)& ) : valT&
+    static_if typeinfo(need_lock_check type<valT>)
+        _builtin_verify_locks(a)
+    unsafe
+        return a
+
 def resize(var Arr:array<auto(numT)>;newSize:int)
-    if typeinfo(need_lock_check type<numT>)
+    static_if typeinfo(need_lock_check type<numT>)
         _builtin_verify_locks(Arr)
     __builtin_array_resize(Arr,newSize,typeinfo(sizeof type<numT>))
 
 def reserve(var Arr:array<auto(numT)>;newSize:int)
-    if typeinfo(need_lock_check type<numT>)
+    static_if typeinfo(need_lock_check type<numT>)
         _builtin_verify_locks(Arr)
     __builtin_array_reserve(Arr,newSize,typeinfo(sizeof type<numT>))
 
@@ -43,7 +56,7 @@ def pop(var Arr:array<auto(numT)>)
 
 def push(var Arr:array<auto(numT)>;value:numT const;at:int)
     static_if typeinfo(can_copy value)
-        if typeinfo(need_lock_check type<numT>)
+        static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
         Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type<numT>))] = value
     else
@@ -51,7 +64,7 @@ def push(var Arr:array<auto(numT)>;value:numT const;at:int)
 
 def push(var Arr:array<auto(numT)>;value:numT const)
     static_if typeinfo(can_copy value)
-        if typeinfo(need_lock_check type<numT>)
+        static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
         Arr[__builtin_array_push_back(Arr,typeinfo(sizeof type<numT>))] = value
     else
@@ -59,7 +72,7 @@ def push(var Arr:array<auto(numT)>;value:numT const)
 
 def emplace(var Arr:array<auto(numT)>;var value:numT;at:int)
     static_if typeinfo(can_move value)
-        if typeinfo(need_lock_check type<numT>)
+        static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
         Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type<numT>))] <- value
     else
@@ -67,7 +80,7 @@ def emplace(var Arr:array<auto(numT)>;var value:numT;at:int)
 
 def emplace(var Arr:array<auto(numT)>;var value:numT)
     static_if typeinfo(can_move value)
-        if typeinfo(need_lock_check type<numT>)
+        static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
         Arr[__builtin_array_push_back(Arr,typeinfo(sizeof type<numT>))] <- value
     else
@@ -75,7 +88,7 @@ def emplace(var Arr:array<auto(numT)>;var value:numT)
 
 def push_clone(var Arr:array<auto(numT)>;value:numT implicit;at:int)
     static_if typeinfo(can_clone value)
-        if typeinfo(need_lock_check type<numT>)
+        static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
         Arr[__builtin_array_push_zero(Arr,at,typeinfo(sizeof type<numT>))] := value
     else
@@ -83,7 +96,7 @@ def push_clone(var Arr:array<auto(numT)>;value:numT implicit;at:int)
 
 def push_clone(var Arr:array<auto(numT)>;value:numT implicit)
     static_if typeinfo(can_clone value)
-        if typeinfo(need_lock_check type<numT>)
+        static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
         Arr[__builtin_array_push_back_zero(Arr,typeinfo(sizeof type<numT>))] := value
     else
@@ -116,7 +129,7 @@ def back ( a : array<auto(TT)> const =const ) : TT const &
         return a[l-1]
 
 def erase(var Arr:array<auto(numT)>;at:int)
-    if typeinfo(need_lock_check type<numT>)
+    static_if typeinfo(need_lock_check type<numT>)
         _builtin_verify_locks(Arr)
     __builtin_array_erase(Arr,at,typeinfo(sizeof type<numT>))
 
@@ -171,7 +184,7 @@ def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):valT?
     return __builtin_table_find(Tab,at)
 
 def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT implicit ) : valT &
-    if typeinfo(need_lock_check type<valT>)
+    static_if typeinfo(need_lock_check type<valT>)
         _builtin_verify_locks(Tab)
     unsafe
         return Tab[at]
