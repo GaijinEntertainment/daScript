@@ -333,13 +333,13 @@ def each ( a : array<auto(TT)> ) : iterator<TT&>
 def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT -&>
     concept_assert(typeinfo(is_ref type<argT>),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
     var it : iterator<argT -&>
-    _builtin_make_lambda_iterator(it,lam)
+    _builtin_make_lambda_iterator(it,lam,typeinfo(sizeof type<argT-&>))
     unsafe
         return <- it
 
 def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
     var it : iterator<argT &>
-    _builtin_make_lambda_iterator(it, lam)
+    _builtin_make_lambda_iterator(it,lam,typeinfo(sizeof type<void?>))
     unsafe
         return <- it
 

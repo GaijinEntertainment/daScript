@@ -602,7 +602,7 @@ namespace das
 
     struct LambdaIterator : Iterator {
         using lambdaFunc = bool (*) (Context *,void*, char*);
-        LambdaIterator ( Context & context, const Lambda & ll ) : lambda(ll) {
+        LambdaIterator ( Context & context, const Lambda & ll, int st ) : lambda(ll), stride(st) {
             SimFunction ** fnMnh = (SimFunction **) lambda.capture;
             if (!fnMnh) context.throw_error("invoke null lambda");
             simFunc = *fnMnh;
@@ -622,6 +622,7 @@ namespace das
             }
         }
         virtual bool first ( Context & context, char * ptr ) override {
+            memset(ptr, 0, stride);
             return InvokeLambda(context, ptr);
         }
         virtual bool next  ( Context & context, char * ptr ) override {
@@ -647,12 +648,13 @@ namespace das
         Lambda          lambda;
         SimFunction *   simFunc = nullptr;
         lambdaFunc      aotFunc = nullptr;
+        int             stride = 0;
     };
 
-    void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, Context * context ) {
+    void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context ) {
         char * iter = context->heap->allocate(sizeof(LambdaIterator));
         context->heap->mark_comment(iter, "lambda iterator");
-        new (iter) LambdaIterator(*context, lambda);
+        new (iter) LambdaIterator(*context, lambda, stride);
         result = { (Iterator *) iter };
     }
 
