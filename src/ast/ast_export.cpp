@@ -30,9 +30,14 @@ namespace das {
     public:
         MarkSymbolUse ( bool bid ) : builtInDependencies(bid) {
         }
-        __forceinline void push ( const string & text ) {
+        __forceinline void push ( const VariablePtr & pvar ) {
             if ( !tw ) return;
-            *tw << string(logTab,'\t') << text << "\n";
+            *tw << string(logTab,'\t') << pvar->getMangledName() << "\n";
+            logTab ++;
+        }
+        __forceinline void push ( const FunctionPtr & pfun ) {
+            if ( !tw ) return;
+            *tw << string(logTab,'\t') << pfun->getMangledName() << "\n";
             logTab ++;
         }
         __forceinline void pop () {
@@ -42,7 +47,7 @@ namespace das {
         void propageteVarUse(const VariablePtr & var) {
             assert(var);
             if (var->used) return;
-            push(var->getMangledName());
+            push(var);
             var->used = true;
             for (const auto & gv : var->useGlobalVariables) {
                 propageteVarUse(gv);
@@ -56,7 +61,7 @@ namespace das {
             assert(fn);
             if (fn->used) return;
             if (fn->builtIn) return;
-            push(fn->getMangledName());
+            push(fn);
             fn->used = true;
             for (const auto & gv : fn->useGlobalVariables) {
                 propageteVarUse(gv);
