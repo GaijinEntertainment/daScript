@@ -295,6 +295,7 @@ void YYNEWLINE() {
 <normal>"def"                                           das_need_oxford_comma = false; return DAS_DEF;
 <normal>"with"                                          das_need_oxford_comma = false; return DAS_WITH;
 <normal>"aka"                                           return DAS_AKA;
+<normal>"assume"                                        return DAS_ASSUME;
 <normal>"let"[ \t\r]*\/\/.*\n                           das_need_oxford_comma = false; unput('\n'); return DAS_LET;
 <normal>"let"                                           return DAS_LET;
 <normal>"var"[ \t\r]*\/\/.*\n                           das_need_oxford_comma = false; unput('\n'); return DAS_VAR;

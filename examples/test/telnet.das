@@ -63,6 +63,7 @@ def main
     print("server at {fn} {main_time}\n")
     let port = 9000
     var telnet = new TelnetServer()
+    telnet->make_server_adapter()
     var session : smart_ptr<NetworkServer> <- gc0_restore_smart_ptr("telnet-session")
     if session != null
         print("restoring server after restart\n")

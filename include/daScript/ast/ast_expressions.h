@@ -839,6 +839,18 @@ namespace das
         ExpressionPtr   with, body;
     };
 
+    struct ExprAssume : Expression {
+        ExprAssume() { __rtti = "ExprAssume"; };
+        ExprAssume(const LineInfo & a, const string & al, const ExpressionPtr & se )
+            : Expression(a), alias(al), subexpr(se) { __rtti = "ExprAssume"; }
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isAssume() const override { return true; }
+        string          alias;
+        ExpressionPtr   subexpr;
+    };
+
     template <typename TT>
     struct ExprLikeCall : ExprLooksLikeCall {
         ExprLikeCall () { __rtti = "ExprLikeCall"; };

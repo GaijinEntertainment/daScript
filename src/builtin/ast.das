@@ -234,6 +234,9 @@ class AstVisitor
     def abstract preVisitExprClone(expr:smart_ptr<ExprClone>) : void
     def abstract visitExprClone(expr:smart_ptr<ExprClone>) : ExpressionPtr
     def abstract preVisitExprCloneRight(expr:smart_ptr<ExprClone>;right:ExpressionPtr) : void
+// assume
+    def abstract preVisitExprAssume(expr:smart_ptr<ExprAssume>) : void
+    def abstract visitExprAssume(expr:smart_ptr<ExprAssume>) : ExpressionPtr
 // with
     def abstract preVisitExprWith(expr:smart_ptr<ExprWith>) : void
     def abstract visitExprWith(expr:smart_ptr<ExprWith>) : ExpressionPtr

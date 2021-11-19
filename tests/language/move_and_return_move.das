@@ -18,6 +18,9 @@ def test_moves ( t : T? )
             for i,j in a,range(10)
                 t |> equal(i, j)
 
+def consume ( var a )
+    delete a
+
 [test]
 def test_failed_moves ( t : T? )
     t |> run("basic move it") <| @@ ( t : T? )
@@ -41,6 +44,18 @@ def test_failed_moves ( t : T? )
         try
             for t in a[0]
                 b <- iliketomoveitmoveit(a)
+        recover
+            failed = true
+        t |> success(failed)
+
+    t |> run("consume it") <| @@ ( t : T? )
+        var a : array<array<int>>
+        resize(a, 10)
+        a[0] |> push(1)
+        var failed = false
+        try
+            for t in a[0]
+                consume(iliketomoveitmoveit(a))
         recover
             failed = true
         t |> success(failed)

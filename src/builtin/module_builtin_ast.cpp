@@ -62,6 +62,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprCopy,ExprCopy)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprMove,ExprMove)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprClone,ExprClone)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprWith,ExprWith)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprAssume,ExprAssume)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprWhile,ExprWhile)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprTryCatch,ExprTryCatch)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprIfThenElse,ExprIfThenElse)
@@ -418,6 +419,14 @@ namespace das {
             :  AstExpressionAnnotation<ExprWith> ("ExprWith", ml) {
             addField<DAS_BIND_MANAGED_FIELD(with)>("_with", "with");
             addField<DAS_BIND_MANAGED_FIELD(body)>("body");
+        }
+    };
+
+    struct AstExprAssumeAnnotation : AstExpressionAnnotation<ExprAssume> {
+        AstExprAssumeAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprAssume> ("ExprAssume", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(alias)>("alias", "alias");
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
         }
     };
 
@@ -1518,6 +1527,7 @@ namespace das {
         FN_PREVISIT(ExprMoveRight) = adapt("preVisitExprMoveRight",pClass,info);
         IMPL_ADAPT(ExprClone);
         FN_PREVISIT(ExprCloneRight) = adapt("preVisitExprCloneRight",pClass,info);
+        IMPL_ADAPT(ExprAssume);
         IMPL_ADAPT(ExprWith);
         FN_PREVISIT(ExprWithBody) = adapt("preVisitExprWithBody",pClass,info);
         IMPL_ADAPT(ExprWhile);
@@ -1831,6 +1841,8 @@ namespace das {
     IMPL_BIND_EXPR(ExprClone);
     void VisitorAdapter::preVisitRight ( ExprClone * expr, Expression * right )
         { IMPL_PREVISIT2(ExprCloneRight,ExprClone,ExpressionPtr,right); }
+// assume
+    IMPL_BIND_EXPR(ExprAssume);
 // with
     IMPL_BIND_EXPR(ExprWith);
     void VisitorAdapter::preVisitWithBody ( ExprWith * expr, Expression * body )
@@ -2963,6 +2975,7 @@ namespace das {
             addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprMove>>("ExprMove",lib))->from("ExprOp2");
             addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprClone>>("ExprClone",lib))->from("ExprOp2");
             addExpressionAnnotation(make_smart<AstExprWithAnnotation>(lib))->from("Expression");
+            addExpressionAnnotation(make_smart<AstExprAssumeAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprWhileAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprTryCatchAnnotation>(lib))->from("Expression");
             addExpressionAnnotation(make_smart<AstExprIfThenElseAnnotation>(lib))->from("Expression");

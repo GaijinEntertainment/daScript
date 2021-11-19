@@ -2083,6 +2083,24 @@ namespace das {
         return cexpr;
     }
 
+    // ExprAssume
+
+    ExpressionPtr ExprAssume::visit(Visitor & vis) {
+        vis.preVisit(this);
+        if ( vis.canVisitWithAliasSubexpression(this) ) {
+            subexpr = subexpr->visit(vis);
+        }
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprAssume::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprAssume>(expr);
+        Expression::clone(cexpr);
+        cexpr->alias = alias;
+        cexpr->subexpr = subexpr->clone();
+        return cexpr;
+    }
+
     // ExprUnsafe
 
     ExpressionPtr ExprUnsafe::visit(Visitor & vis) {

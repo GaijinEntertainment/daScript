@@ -8,6 +8,8 @@ require rtti
 class Server
     _server : smart_ptr<NetworkServer>
     def Server
+        pass
+    def make_server_adapter
         let classInfo = class_info(self)
         unsafe
             if !make_server(addr(self),classInfo)

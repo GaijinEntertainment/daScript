@@ -420,8 +420,6 @@ def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-con
     var dest : array<TT-const-&-#>
     unsafe
         _builtin_make_temp_array(dest, addr(src[0]), capacity)
-    __builtin_array_lock(dest)
-    unsafe
         return <- dest
 
 def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&-#>

@@ -51,7 +51,9 @@ namespace das {
         vector<ExprBlock *>     blocks;
         vector<ExprBlock *>     scopes;
         vector<ExprWith *>      with;
+        vector<ExprAssume *>    assume;
         vector<size_t>          varStack;
+        vector<size_t>          assumeStack;
         das_hash_set<int32_t>   labels;
         size_t                  fieldOffset = 0;
         int32_t                 fieldIndex = 0;
@@ -82,8 +84,11 @@ namespace das {
         }
         void pushVarStack() {
             varStack.push_back(local.size());
+            assumeStack.push_back(assume.size());
         }
         void popVarStack()  {
+            assume.resize(assumeStack.back());
+            assumeStack.pop_back();
             local.resize(varStack.back());
             varStack.pop_back();
         }
@@ -4543,6 +4548,16 @@ namespace das {
             expr->argumentIndex = -1;
         }
         virtual ExpressionPtr visit ( ExprVar * expr ) override {
+            // assume (that on the stack)
+            for ( auto it = assume.rbegin(); it!=assume.rend(); ++it ) {
+                auto ita = *it;
+                if ( ita->alias==expr->name ) {
+                    reportAstChanged();
+                    auto csub = ita->subexpr->clone();
+                    // forceAt(csub, ita->at);
+                    return csub;
+                }
+            }
             // local (that on the stack)
             for ( auto it = local.rbegin(); it!=local.rend(); ++it ) {
                 auto var = *it;
@@ -5318,7 +5333,6 @@ namespace das {
                 }
                 if ( func->result ) expr->returnType = make_smart<TypeDecl>(*func->result);
             }
-        #if 0
             if ( expr->moveSemantics && expr->subexpr && expr->subexpr->type && expr->subexpr->type->lockCheck() ) {
                 if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
                     bool checkIt = true;
@@ -5336,7 +5350,6 @@ namespace das {
                     }
                 }
             }
-        #endif
             expr->type = make_smart<TypeDecl>();
             return Visitor::visit(expr);
         }
@@ -5489,6 +5502,11 @@ namespace das {
                 }
             }
             return Visitor::visit(expr);
+        }
+    // ExprAssume
+        virtual void preVisit ( ExprAssume * expr ) override {
+            Visitor::preVisit(expr);
+            assume.push_back(expr);
         }
     // ExprWith
         virtual void preVisit ( ExprWith * expr ) override {
