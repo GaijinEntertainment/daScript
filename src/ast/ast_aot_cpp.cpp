@@ -3317,9 +3317,9 @@ namespace das {
         UseTypeMarker utm;
         visit(utm);
         for ( auto & pm : library.modules ) {
-            for ( const auto & ps : pm->structuresInOrder ) {
+            pm->structures.foreach([&](auto ps){
                 aotVisitor.ss << "namespace " << aotModuleName(ps->module) << " { struct " << ps->name << "; };\n";
-            }
+            });
         }
         for ( auto & pm : library.modules ) {
             if ( pm == thisModule.get() ) {
@@ -3334,13 +3334,13 @@ namespace das {
                 }
             }
             // aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
-            for ( const auto & ps : pm->structuresInOrder ) {
+            pm->structures.foreach([&](auto ps){
                 if ( !remUS || utm.useStructs.find(ps.get())!=utm.useStructs.end() ) {
                     visitStructure(aotVisitor, ps.get());
                 } else {
                     aotVisitor.ss << "// unused structure " << ps->name << "\n";
                 }
-            }
+            });
             // aotVisitor.ss << "\n}; // " << pm->name << "\n";
         }
         // now to the main body

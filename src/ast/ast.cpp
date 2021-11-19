@@ -2864,27 +2864,24 @@ namespace das {
             }
         }
         // structures
-        for ( auto & ist : thatModule->structuresInOrder ) {
-            Structure * pst = ist.get();
+        thatModule->structures.foreach([&](auto & spst){
+            Structure * pst = spst.get();
             if ( vis.canVisitStructure(pst) ) {
                 StructurePtr pstn = visitStructure(vis, pst);
                 if ( pstn.get() != pst ) {
-                    assert(pstn->name==pst->name);
-                    auto istm = thatModule->structures.find(pst->name);
-                    assert ( istm!=thatModule->structures.end() );
-                    istm->second = pstn;
-                    ist = pstn;
+                    thatModule->structures.replace(pst->name, pstn);
+                    spst = pstn;
                 }
             }
-        }
+        });
         // aliases
-        for ( auto & als : thatModule->aliasTypes ) {
-            vis.preVisitAlias(als.second.get(), als.first);
-            vis.preVisit(als.second.get());
-            als.second = als.second->visit(vis);
-            if ( als.second ) als.second = vis.visit(als.second.get());
-            if ( als.second ) als.second = vis.visitAlias(als.second.get(), als.first);
-        }
+        thatModule->aliasTypes.foreach_kv([&](auto alsk, auto & alsv){
+            vis.preVisitAlias(alsv.get(), alsk);
+            vis.preVisit(alsv.get());
+            alsv = alsv->visit(vis);
+            if ( alsv ) alsv = vis.visit(alsv.get());
+            if ( alsv ) alsv = vis.visitAlias(alsv.get(), alsk);
+        });
         // real things
         vis.preVisitProgramBody(this,thatModule);
         // globals

@@ -829,14 +829,13 @@ namespace das {
     void rtti_builtin_module_for_each_structure ( Module * module, const TBlock<void,const StructInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
-        for ( auto & it : module->structures ) {
-            auto structName = it.first;
-            StructInfo * info = helper.makeStructureDebugInfo(*it.second);
+        module->structures.foreach([&](auto structPtr){
+            StructInfo * info = helper.makeStructureDebugInfo(*structPtr);
             vec4f args[1] = {
                 cast<StructInfo *>::from(info)
             };
             context->invoke(block, args, nullptr, at);
-        }
+        });
     }
 
     void rtti_builtin_structure_for_each_annotation ( const StructInfo & info, const Block & block, Context * context, LineInfoArg * at ) {
@@ -892,12 +891,12 @@ namespace das {
     }
 
     void rtti_builtin_module_for_each_annotation ( Module * module, const TBlock<void,const Annotation> & block, Context * context, LineInfoArg * at ) {
-        for ( auto & it : module->handleTypes ) {
+        module->handleTypes.foreach([&](auto annotationPtr){
             vec4f args[1] = {
-                cast<Annotation*>::from(it.second.get())
+                cast<Annotation*>::from(annotationPtr.get())
             };
             context->invoke(block, args, nullptr, at);
-        }
+        });
     }
 
     void rtti_builtin_basic_struct_for_each_field ( const BasicStructureAnnotation & ann,

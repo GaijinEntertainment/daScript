@@ -208,7 +208,7 @@ namespace das {
 
     bool Module::addAlias ( const TypeDeclPtr & at, bool canFail ) {
         if ( at->alias.empty() ) return false;
-        if ( aliasTypes.insert(make_pair(at->alias, move(at))).second ) {
+        if ( aliasTypes.insert(at->alias, at) ) {
             at->module = this;
             return true;
         } else {
@@ -221,7 +221,7 @@ namespace das {
     }
 
     bool Module::addAnnotation ( const AnnotationPtr & ptr, bool canFail ) {
-        if ( handleTypes.insert(make_pair(ptr->name, move(ptr))).second ) {
+        if ( handleTypes.insert(ptr->name, ptr) ) {
             ptr->seal(this);
             return true;
         } else {
@@ -288,21 +288,12 @@ namespace das {
     }
 
     bool Module::removeStructure ( const StructurePtr & st ) {
-        auto it = structures.find(st->name);
-        if ( it!=structures.end() && it->second==st ) {
-            structures.erase(it);
-            auto itO = find ( structuresInOrder.begin(), structuresInOrder.end(), st );
-            structuresInOrder.erase(itO);
-            return true;
-        } else {
-            return false;
-        }
+        return structures.remove(st->name);
     }
 
     bool Module::addStructure ( const StructurePtr & st, bool canFail ) {
-        if ( structures.insert(make_pair(st->name, st)).second ) {
+        if ( structures.insert(st->name, st) ) {
             st->module = this;
-            structuresInOrder.push_back(st);
             return true;
         } else {
             if ( !canFail ) {
@@ -364,8 +355,7 @@ namespace das {
     }
 
     TypeDeclPtr Module::findAlias ( const string & na ) const {
-        auto it = aliasTypes.find(na);
-        return it != aliasTypes.end() ? it->second : TypeDeclPtr();
+        return aliasTypes.find(na);
     }
 
     VariablePtr Module::findVariable ( const string & na ) const {
@@ -386,13 +376,11 @@ namespace das {
     }
 
     StructurePtr Module::findStructure ( const string & na ) const {
-        auto it = structures.find(na);
-        return it != structures.end() ? it->second : StructurePtr();
+        return structures.find(na);
     }
 
     AnnotationPtr Module::findAnnotation ( const string & na ) const {
-        auto it = handleTypes.find(na);
-        return it != handleTypes.end() ? it->second : nullptr;
+        return handleTypes.find(na);
     }
 
     TypeInfoMacroPtr Module::findTypeInfoMacro ( const string & na ) const {
@@ -430,15 +418,15 @@ namespace das {
                 return false;
             }
             // ok, now let's rip content
-            for (auto & at : program->thisModule->aliasTypes) {
-                addAlias(at.second);
-            }
+            program->thisModule->aliasTypes.foreach([&](auto aliasTypePtr){
+                addAlias(aliasTypePtr);
+            });
             for (auto & en : program->thisModule->enumerations) {
                 addEnumeration(en.second);
             }
-            for (auto & st : program->thisModule->structures) {
-                addStructure(st.second);
-            }
+            program->thisModule->structures.foreach([&](auto pst){
+                addStructure(pst);
+            });
             for (auto & gen : program->thisModule->generics) {
                 addGeneric(gen.second);
             }
@@ -457,9 +445,9 @@ namespace das {
             auto ptm = program->thisModule.get();
             if ( ptm->macroContext ) {
                 swap ( macroContext, ptm->macroContext );
-                for ( auto & fna : ptm->handleTypes ) {
-                    addAnnotation(fna.second);
-                }
+                ptm->handleTypes.foreach([&](auto fna){
+                    addAnnotation(fna);
+                });
             }
             variantMacros.insert(variantMacros.end(), ptm->variantMacros.begin(), ptm->variantMacros.end());
             macros.insert(macros.end(), ptm->macros.begin(), ptm->macros.end());
@@ -505,20 +493,20 @@ namespace das {
     void Module::verifyBuiltinNames(uint32_t flags) {
         bool failed = false;
         if ( flags & VerifyBuiltinFlags::verifyAliasTypes ) {
-            for ( auto & it : aliasTypes ) {
-                if ( !isValidBuiltinName(it.first) ) {
-                    DAS_FATAL_LOG("%s - alias type has incorrect name. expecting snake_case\n", it.first.c_str());
+            aliasTypes.foreach_kv([&](auto aliasName, auto aliasTypePtr){
+                if ( !isValidBuiltinName(aliasName) ) {
+                    DAS_FATAL_LOG("%s - alias type has incorrect name. expecting snake_case\n", aliasName.c_str());
                     failed = true;
                 }
-            }
+            });
         }
         if ( flags & VerifyBuiltinFlags::verifyHandleTypes ) {
-            for ( auto & it : handleTypes ) {
-                if ( !isValidBuiltinName(it.first) ) {
-                    DAS_FATAL_LOG("%s - annotation has incorrect name. expecting snake_case\n", it.first.c_str());
+            handleTypes.foreach_kv([&](auto annName, auto annPtr){
+                if ( !isValidBuiltinName(annName) ) {
+                    DAS_FATAL_LOG("%s - annotation has incorrect name. expecting snake_case\n", annName.c_str());
                     failed = true;
                 }
-            }
+            });
         }
         if ( flags & VerifyBuiltinFlags::verifyGlobals ) {
             for ( auto & var : globalsInOrder ) {
@@ -547,8 +535,7 @@ namespace das {
             }
         }
         if ( flags & VerifyBuiltinFlags::verifyStructures ) {
-            for ( auto & it : structures ) {
-                auto st = it.second;
+            structures.foreach([&](auto st){
                 if ( !isValidBuiltinName(st->name) ) {
                     DAS_FATAL_LOG("%s - structure has incorrect name. expecting snake_case\n", st->name.c_str());
                     failed = true;
@@ -561,7 +548,7 @@ namespace das {
                         }
                     }
                 }
-            }
+            });
         }
         if ( flags & VerifyBuiltinFlags::verifyEnums ) {
             for ( auto & it : enumerations ) {

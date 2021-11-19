@@ -229,8 +229,7 @@ namespace das {
         library.foreach([&](Module * mod) -> bool {
             if ( mod->builtIn ) {
                 logs << "// validating " << mod->name << "\n";
-                for ( const auto & ht : mod->handleTypes ) {
-                    const auto & tp = ht.second;
+                mod->handleTypes.foreach([&](auto tp){
                     if ( tp->rtti_isBasicStructureAnnotation() ) {
                         auto bs = static_pointer_cast<BasicStructureAnnotation>(tp);
                         if ( !bs->validationNeverFails ) {
@@ -249,7 +248,7 @@ namespace das {
                             }
                         }
                     }
-                }
+                });
                 for ( const auto & et : mod->enumerations ) {
                     const auto & tp = et.second;
                     auto cppt = make_smart<TypeDecl>(tp);

@@ -2,6 +2,7 @@
 
 #include "daScript/simulate/simulate.h"
 #include "daScript/misc/string_writer.h"
+#include "daScript/misc/safebox.h"
 #include "daScript/misc/vectypes.h"
 #include "daScript/misc/arraytype.h"
 #include "daScript/misc/rangetype.h"
@@ -932,10 +933,9 @@ namespace das
         }
     public:
         smart_ptr<Context>                          macroContext;
-        das_safe_map<string, TypeDeclPtr>           aliasTypes;
-        das_safe_map<string, AnnotationPtr>         handleTypes;
-        das_safe_map<string, StructurePtr>          structures;
-        vector<StructurePtr>                        structuresInOrder;
+        safebox<string,TypeDecl>                    aliasTypes;
+        safebox<string, Annotation>                 handleTypes;
+        safebox<string, Structure>                  structures;
         das_safe_map<string, EnumerationPtr>        enumerations;
         das_safe_map<string, VariablePtr>           globals;
         vector<VariablePtr>                         globalsInOrder;

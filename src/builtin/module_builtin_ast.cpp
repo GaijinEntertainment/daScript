@@ -2739,9 +2739,9 @@ namespace das {
     }
 
     void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDeclPtr> & block, Context * context, LineInfoArg * at ) {
-        for ( auto & td : mod->aliasTypes ) {
-            das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,at,block,td.first.c_str(),td.second);
-        }
+        mod->aliasTypes.foreach_kv([&](auto aliasName, auto aliasType){
+            das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,at,block,aliasName.c_str(),aliasType);
+        });
     }
 
     void for_each_enumeration ( Module * mod, const TBlock<void,EnumerationPtr> & block, Context * context, LineInfoArg * at ) {
@@ -2751,9 +2751,9 @@ namespace das {
     }
 
     void for_each_structure ( Module * mod, const TBlock<void,StructurePtr> & block, Context * context, LineInfoArg * at ) {
-        for ( auto & td : mod->structures ) {
-            das_invoke<void>::invoke<StructurePtr>(context,at,block,td.second);
-        }
+        mod->structures.foreach([&](auto pst){
+            das_invoke<void>::invoke<StructurePtr>(context,at,block,pst);
+        });
     }
 
     void for_each_generic ( Module * mod, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at ) {

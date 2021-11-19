@@ -114,8 +114,8 @@ namespace das
                 }
             }
         }
-        for ( auto & sti : thisModule->structures ) {
-            auto st = sti.second;
+        if ( astChanged ) goto done;
+        thisModule->structures.find_first([&](auto st){
             for ( auto & ann : st->annotations ) {
                 if ( ann->annotation->rtti_isStructureAnnotation() ) {
                     auto sann = static_pointer_cast<StructureAnnotation>(ann->annotation);
@@ -123,10 +123,11 @@ namespace das
                     if ( !sann->patch(st, *thisModuleGroup, ann->arguments, err, astChanged) ) {
                         error("structure annotation patch failed\n", err, "", st->at, CompilationError::annotation_failed );
                     }
-                    if ( astChanged ) goto done;
+                    if ( astChanged ) return true;
                 }
             }
-        }
+            return false;
+        });
     done:;
         return astChanged;
     }
