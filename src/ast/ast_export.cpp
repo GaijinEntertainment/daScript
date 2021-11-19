@@ -260,9 +260,10 @@ namespace das {
             for (auto & var : pm->globalsInOrder) {
                 var->used = false;
             }
-            for (auto & pf : pm->functions) {
-                auto & func = pf.second;
-                func->used = false;
+            for (auto & pfbn : pm->functionsByName ) {
+                for ( auto & pf : pfbn.second ) {
+                    pf->used = false;
+                }
             }
         }
     }
