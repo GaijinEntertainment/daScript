@@ -85,10 +85,11 @@ namespace das {
         }
         void markUsedFunctions( ModuleLibrary & lib, bool forceAll, bool initThis ){
             lib.foreach([&](Module * pm) {
-                for (const auto & it : pm->functions) {
-                    auto fn = it.second;
-                    if ( (forceAll && !fn->macroInit) || fn->exports || fn->init || fn->shutdown || (fn->macroInit && initThis) ) {
-                        propagateFunctionUse(fn);
+                for (auto & pfbn : pm->functionsByName ) {
+                    for ( auto & fn : pfbn.second ) {
+                        if ( (forceAll && !fn->macroInit) || fn->exports || fn->init || fn->shutdown || (fn->macroInit && initThis) ) {
+                            propagateFunctionUse(fn);
+                        }
                     }
                 }
                 return true;
