@@ -103,12 +103,13 @@ namespace das {
             }
         }
         void markModuleUsedFunctions( ModuleLibrary &, Module * inWhichModule ) {
-            for (const auto & it : inWhichModule->functions) {
-                auto fn = it.second;
-                if ( fn->builtIn || fn->macroInit || fn->macroFunction  ) continue;
-                if ( fn->privateFunction && fn->generated && fn->fromGeneric ) continue;    // instances of templates are never roots
-                if ( fn->isClassMethod && fn->classParent->macroInterface ) continue;       // methods of macro interfaces
-                propagateFunctionUse(fn);
+            for (auto & pfbn : inWhichModule->functionsByName ) {
+                for ( auto & fn : pfbn.second ) {
+                    if ( fn->builtIn || fn->macroInit || fn->macroFunction  ) continue;
+                    if ( fn->privateFunction && fn->generated && fn->fromGeneric ) continue;    // instances of templates are never roots
+                    if ( fn->isClassMethod && fn->classParent->macroInterface ) continue;       // methods of macro interfaces
+                    propagateFunctionUse(fn);
+                }
             }
         }
         void RemoveUnusedSymbols ( Module & mod ) {
