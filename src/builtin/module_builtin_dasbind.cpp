@@ -70,11 +70,33 @@ namespace das {
 
     typedef vec4f ( * FastCallWrapper ) ( void * fn, vec4f * args );
 
+    struct FastCallExtraWrapper {
+        int nargs, res, perm;
+        FastCallWrapper wrapper;
+    };
+
     __forceinline vec4f   Rx ( int64_t x ) { return v_cast_vec4f(v_splatsi64(x)); }
 
     #define AX(i)   (*(uint64_t *)(args+(i)))
     #define AD(i)   (*(double *)(args+(i)))
-#include "x86_64_wrapper.inc"
+
+#ifdef _MSC_VER
+#include "win_x86_64_wrapper.inc"
+#else
+#include "systemV_64_wrapper.inc"
+#include "systemV_64_extra_wrapper.inc"
+
+FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
+    for ( auto & t : fastcall64_extra_table ) {
+        if ( t.nargs==nargs && t.res==res && t.perm==perm ) {
+            return t.wrapper;
+        }
+    }
+    return nullptr;
+}
+
+#endif
+
     #undef  AX
     #undef  AD
 
@@ -176,8 +198,8 @@ namespace das {
         }
     };
 
-    FastCallWrapper getWrapper ( Function * fun ) {
-        int args = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? (1<<4) : 0;
+    FastCallWrapper getWrapper ( Function * fun, int nReg ) {
+        int args = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? (1<<nReg) : 0;
         for ( int a=0; a<int(fun->arguments.size()); ++a ) {
             if ( a==4 ) break;
             auto tp = fun->arguments[a]->type->baseType;
@@ -185,7 +207,7 @@ namespace das {
                 args |= (1<<a);
             }
         }
-        args += 32 * int(fun->arguments.size());
+        args += (2<<nReg) * int(fun->arguments.size());
         return fastcall64_table[args];
     }
 
@@ -214,6 +236,34 @@ namespace das {
                 err = "function has too many arguments for the current wrapper config";
                 return false;
             }
+#ifndef _MSC_VER
+            if ( fun->arguments.size()>6 ) {
+                int perm=0;
+                int nargs = int(fun->arguments.size());
+                int res = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? 0 : 1;
+                for ( size_t ai=0; ai!=fun->arguments.size(); ++ai ) {
+                    const auto & arg = fun->arguments[ai];
+                    if ( arg->type->isSimpleType(Type::tFloat) || arg->type->isSimpleType(Type::tDouble) ) {
+                        perm |= (1<<int(ai));
+                    }
+                }
+                // printf("%s %i %i %i\n", fun->name.c_str(), nargs, res, perm);
+                if ( perm>=(1<<7) ) {
+                    auto wrp = getExtraWrapper(nargs,res,perm);
+                    if ( !wrp ) {
+                        string argText;
+                        for ( int i=0; i!=MAX_WRAPPER_ARGUMENTS; ++i ) {
+                            if ( perm & (1<<i) ) {
+                                argText += "|ARG" + to_string(i) + "_D";
+                            }
+                        }
+                        err = "Missing custom SystemV wrapper\n"
+                            "nargs=" + to_string(nargs) + ", res=" + to_string(res) + ", perm=0" + argText + ";";
+                        return false;
+                    }
+                }
+            }
+#endif
             fun->userScenario = true;
             fun->noAot = true;      // TODO: generate custom C++ to invoke the call directly
             return true;
@@ -271,6 +321,22 @@ namespace das {
                     anyTypeErrors = true;
                 }
             }
+#ifndef _MSC_VER
+            int nargs=-1, res=0, perm=0;
+            if ( fun->arguments.size()>6 ) {
+                nargs = int(fun->arguments.size());
+                res = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? 0 : 1;
+                for ( size_t ai=0; ai!=fun->arguments.size(); ++ai ) {
+                    const auto & arg = fun->arguments[ai];
+                    if ( arg->type->isSimpleType(Type::tFloat) || arg->type->isSimpleType(Type::tDouble) ) {
+                        perm |= (1<<int(ai));
+                    }
+                }
+                if ( perm<(1<<7) ) {    // nothing outside of the first 6 is float
+                    nargs = -1;
+                }
+            }
+#endif
             if ( fun->result && !fun->result->isRef() && fun->result->isVectorType() ) {
                 err += "function returns vector type, which is currently not supported by the specified binding";
                 anyTypeErrors = true;
@@ -328,7 +394,11 @@ namespace das {
                 }
             }
             uint64_t code = lateBind(fn_name, library, funptr);
-            auto wrp = getWrapper(fun);
+#ifdef _MSC_VER
+            auto wrp = getWrapper(fun,4);
+#else
+            auto wrp = nargs==-1 ? getWrapper(fun,6) : getExtraWrapper(nargs,res,perm);
+#endif
             if ( api=="stdcall") {
                 return context->code->makeNode<SimNode_ExtCall>(fun->at,code,wrp,funptr);
             } else if ( api=="cdecl" ) {
