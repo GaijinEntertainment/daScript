@@ -555,12 +555,11 @@ namespace das {
         // string heap
         AllocateConstString vstr;
         for (auto & pm : library.modules) {
-            for (auto & pv : pm->globals) {
-                auto & var = pv.second;
+            pm->globals.foreach([&](auto var){
                 if (var->used && var->init) {
                     var->init->visit(vstr);
                 }
-            }
+            });
             for (auto & pf : pm->functions) {
                 auto & func = pf.second;
                 if (func->used) {
@@ -577,11 +576,11 @@ namespace das {
         visit(context);
         // adjust stack size for all the used variables
         for (auto & pm : library.modules) {
-            for (auto & var : pm->globalsInOrder ) {
+            pm->globals.foreach([&](auto var){
                 if ( var->used ) {
                     globalInitStackSize = das::max(globalInitStackSize, var->initStackSize);
                 }
-            }
+            });
         }
         // allocate used variables and functions indices
         totalVariables = 0;
@@ -609,7 +608,7 @@ namespace das {
             logs << "VARIABLE TABLE:\n";
         }
         library.foreach_in_order([&](Module * pm){
-            for (auto & var : pm->globalsInOrder) {
+            pm->globals.foreach([&](auto var){
                 if (var->used) {
                     var->index = totalVariables++;
                     if ( log ) {
@@ -620,7 +619,7 @@ namespace das {
                 else {
                     var->index = -2;
                 }
-            }
+            });
             return true;
         }, thisModule.get());
     }

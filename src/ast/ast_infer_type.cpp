@@ -291,11 +291,15 @@ namespace das {
             if ( auto rT = fptr->result->findAlias(name,true) ) {
                 return rT;
             }
-            for ( auto & gvar : program->thisModule->globalsInOrder ) {
+            TypeDeclPtr rT;
+            program->thisModule->globals.find_first([&](auto gvar){
                 if ( auto vT = gvar->type->findAlias(name,false) ) {
-                    return vT;
+                    rT = vT;
+                    return true;
                 }
-            }
+                return false;
+            });
+            if ( rT ) return rT;
             TypeDeclPtr mtd = program->makeTypeDeclaration(LineInfo(),name);
             return mtd->isAlias() ? nullptr : mtd;
         }
@@ -319,11 +323,15 @@ namespace das {
                     return rT;
                 }
             }
-            for ( auto & gvar : program->thisModule->globalsInOrder ) {
+            TypeDeclPtr rT;
+            program->thisModule->globals.find_first([&](auto gvar){
                 if ( auto vT = gvar->type->findAlias(name) ) {
-                    return vT;
+                    rT = vT;
+                    return true;
                 }
-            }
+                return false;
+            });
+            if ( rT ) return rT;
             TypeDeclPtr mtd = program->makeTypeDeclaration(LineInfo(),name);
             return (!mtd || mtd->isAlias()) ? nullptr : mtd;
         }

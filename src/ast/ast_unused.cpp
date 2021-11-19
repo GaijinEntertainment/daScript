@@ -108,13 +108,12 @@ namespace das {
                     getSideEffects(fn);
                 }
             }
-            for (auto & vI : mod.globals) {
-                auto & gv = vI.second;
+            mod.globals.foreach([&](auto gv){
                 if ( gv->init ) {
                     TrackVariableFlags vaf;
                     gv->init = gv->init->visit(vaf);
                 }
-            }
+            });
         }
     protected:
         void propagateAt ( ExprAt * at ) {

@@ -73,13 +73,12 @@ namespace das {
         }
         void markVarsUsed( ModuleLibrary & lib, bool forceAll ){
             lib.foreach([&](Module * pm) {
-                for (const auto & it : pm->globals) {
-                    auto & var = it.second;
+                pm->globals.foreach([&](auto var){
                     if ( forceAll || var->used ) {
                         var->used = false;
                         propageteVarUse(var);
                     }
-                }
+                });
                 return true;
             }, "*");
         }
@@ -96,11 +95,10 @@ namespace das {
             }, "*");
         }
         void markModuleVarsUsed( ModuleLibrary &, Module * inWhichModule ) {
-            for (const auto & it : inWhichModule->globals) {
-                auto & var = it.second;
+            inWhichModule->globals.foreach([&](auto var){
                 var->used = false;
                 propageteVarUse(var);
-            }
+            });
         }
         void markModuleUsedFunctions( ModuleLibrary &, Module * inWhichModule ) {
             for (auto & pfbn : inWhichModule->functionsByName ) {
@@ -114,9 +112,8 @@ namespace das {
         }
         void RemoveUnusedSymbols ( Module & mod ) {
             das_safe_map<string,FunctionPtr> functions;
-            vector<VariablePtr> globalsInOrder;
+            auto globals = move(mod.globals);
             swap(functions,mod.functions);
-            swap(globalsInOrder, mod.globalsInOrder);
             mod.functionsByName.clear();
             mod.globals.clear();
             for ( auto & fn : functions ) {
@@ -126,13 +123,13 @@ namespace das {
                     }
                 }
             }
-            for ( auto & var : globalsInOrder ) {
+            globals.foreach([&](auto var){
                 if ( var->used ) {
                     if ( !mod.addVariable(var, true) ) {
                         program->error("internal error, failed to add variable " + var->name,"","", var->at );
                     }
                 }
-            }
+            });
         }
     protected:
         ProgramPtr  program;
@@ -259,9 +256,9 @@ namespace das {
 
     void Program::clearSymbolUse() {
         for (auto & pm : library.modules) {
-            for (auto & var : pm->globalsInOrder) {
+            pm->globals.foreach([&](auto var){
                 var->used = false;
-            }
+            });
             for (auto & pfbn : pm->functionsByName ) {
                 for ( auto & pf : pfbn.second ) {
                     pf->used = false;
@@ -329,11 +326,11 @@ namespace das {
     void Program::dumpSymbolUse(TextWriter & logs) {
         logs << "USED SYMBOLS ARE:\n";
         for (auto & pm : library.modules) {
-            for (auto & var : pm->globalsInOrder) {
+            pm->globals.foreach([&](auto var){
                 if ( var->used ) {
                     logs << "let " << var->module->name << "::" << var->name << " : " << var->type->describe() << "\n";
                 }
-            }
+            });
             for (auto & pf : pm->functions) {
                 auto & func = pf.second;
                 if ( func->used  ) {

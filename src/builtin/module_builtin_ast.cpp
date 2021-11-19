@@ -2745,9 +2745,9 @@ namespace das {
     }
 
     void for_each_enumeration ( Module * mod, const TBlock<void,EnumerationPtr> & block, Context * context, LineInfoArg * at ) {
-        for ( auto & td : mod->enumerations ) {
-            das_invoke<void>::invoke<EnumerationPtr>(context,at,block,td.second);
-        }
+        mod->enumerations.foreach([&](auto penum){
+            das_invoke<void>::invoke<EnumerationPtr>(context,at,block,penum);
+        });
     }
 
     void for_each_structure ( Module * mod, const TBlock<void,StructurePtr> & block, Context * context, LineInfoArg * at ) {
@@ -2763,9 +2763,9 @@ namespace das {
     }
 
     void for_each_global ( Module * mod, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at ) {
-        for ( auto & td : mod->globals ) {
-            das_invoke<void>::invoke<VariablePtr>(context,at,block,td.second);
-        }
+        mod->globals.foreach([&](auto var){
+            das_invoke<void>::invoke<VariablePtr>(context,at,block,var);
+        });
     }
 
     void for_each_call_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at ) {

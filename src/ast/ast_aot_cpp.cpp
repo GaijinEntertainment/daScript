@@ -3325,14 +3325,14 @@ namespace das {
             if ( pm == thisModule.get() ) {
                 continue;
             }
-            for ( auto & ite : pm->enumerations ) {
-                auto pe = ite.second.get();
+            pm->enumerations.foreach([&](auto penum){
+                auto pe = penum.get();
                 if ( !remUS || utm.useEnums.find(pe)!=utm.useEnums.end() ) {
                     visitEnumeration(aotVisitor, pe);
                 } else {
                     aotVisitor.ss << "// unused enumeration " << pe->name << "\n";
                 }
-            }
+            });
             // aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
             pm->structures.foreach([&](auto ps){
                 if ( !remUS || utm.useStructs.find(ps.get())!=utm.useStructs.end() ) {

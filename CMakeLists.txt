@@ -374,6 +374,7 @@ include/daScript/misc/string_writer.h
 include/daScript/misc/type_name.h
 include/daScript/misc/memory_model.h
 include/daScript/misc/fnv.h
+include/daScript/misc/safebox.h
 include/daScript/misc/smart_ptr.h
 include/daScript/misc/free_list.h
 include/daScript/misc/sysos.h

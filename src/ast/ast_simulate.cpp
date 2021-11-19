@@ -2798,13 +2798,13 @@ namespace das
         context.sharedSize = 0;
         if ( totalVariables ) {
             for (auto & pm : library.modules ) {
-                for (auto & pvar : pm->globalsInOrder) {
+                pm->globals.foreach([&](auto pvar){
                     if (!pvar->used)
-                        continue;
+                        return;
                     if ( pvar->index<0 ) {
                         error("Internalc compiler errors. Simulating variable which is not used" + pvar->name,
                             "", "", LineInfo());
-                        continue;
+                        return;
                     }
                     auto & gvar = context.globalVariables[pvar->index];
                     gvar.name = context.code->allocateName(pvar->name);
@@ -2820,7 +2820,7 @@ namespace das
                         context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
                     }
                     gvar.mangledNameHash = pvar->getMangledNameHash();
-                }
+                });
             }
         }
         context.globals = (char *) das_aligned_alloc16(context.globalsSize);
@@ -2870,9 +2870,9 @@ namespace das
         }
         if ( totalVariables ) {
             for (auto & pm : library.modules ) {
-                for (auto & pvar : pm->globalsInOrder) {
+                pm->globals.foreach([&](auto pvar){
                     if (!pvar->used)
-                        continue;
+                        return;
                     auto & gvar = context.globalVariables[pvar->index];
                     if ( !folding && pvar->init ) {
                         if ( pvar->init->rtti_isMakeLocal() ) {
@@ -2893,7 +2893,7 @@ namespace das
                     } else {
                         gvar.init = nullptr;
                     }
-                }
+                });
             }
         }
         //
@@ -3041,11 +3041,11 @@ namespace das
         vector<const Variable *> globs;
         globs.reserve(totalVariables);
         for (auto & pm : library.modules) {
-            for (auto & var : pm->globalsInOrder) {
+            pm->globals.foreach([&](auto var){
                 if (var->used) {
                     globs.push_back(var.get());
                 }
-            }
+            });
         }
         uint64_t res = getVariableListAotHash(globs, initHash);
         // add init functions to dependencies

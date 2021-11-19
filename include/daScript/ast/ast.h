@@ -936,17 +936,22 @@ namespace das
         safebox<string,TypeDecl>                    aliasTypes;
         safebox<string, Annotation>                 handleTypes;
         safebox<string, Structure>                  structures;
-        das_safe_map<string, EnumerationPtr>        enumerations;
-        das_safe_map<string, VariablePtr>           globals;
-        vector<VariablePtr>                         globalsInOrder;
+        safebox<string, Enumeration>                enumerations;
+        safebox<string, Variable>                   globals;
+
         das_safe_map<string, FunctionPtr>           functions;          // mangled name 2 function name
         das_map<string, vector<FunctionPtr>>        functionsByName;    // all functions of the same name
+
         das_safe_map<string, FunctionPtr>           generics;           // mangled name 2 generic name
         das_map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
+
         mutable das_map<string, ExprCallFactory>    callThis;
+
         das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
         das_map<uint32_t, uint64_t>                 annotationData;
+
         das_safe_map<Module *,bool>                 requireModule;      // visibility modules
+
         vector<PassMacroPtr>                        macros;             // infer macros (clean infer, assume no errors)
         vector<PassMacroPtr>                        inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
         vector<PassMacroPtr>                        optimizationMacros; // optimization macros

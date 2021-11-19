@@ -761,14 +761,13 @@ namespace das {
     void rtti_builtin_module_for_each_enumeration ( Module * module, const TBlock<void,const EnumInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
-        for ( auto & it : module->enumerations ) {
-            auto structName = it.first;
-            EnumInfo * info = helper.makeEnumDebugInfo(*it.second);
+        module->enumerations.foreach([&](auto penum){
+            EnumInfo * info = helper.makeEnumDebugInfo(*penum);
             vec4f args[1] = {
                 cast<EnumInfo *>::from(info)
             };
             context->invoke(block, args, nullptr, at);
-        }
+        });
     }
 
     RttiValue rtti_builtin_argument_value(const AnnotationArgument & info, Context * context ) {
@@ -880,14 +879,13 @@ namespace das {
     void rtti_builtin_module_for_each_global ( Module * module, const TBlock<void,const VarInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
-        for ( auto & it : module->globals ) {
-            auto varName = it.first;
-            VarInfo * info = helper.makeVariableDebugInfo(*it.second);
+        module->globals.foreach([&](auto var){
+            VarInfo * info = helper.makeVariableDebugInfo(*var);
             vec4f args[1] = {
                 cast<VarInfo *>::from(info)
             };
             context->invoke(block, args, nullptr, at);
-        }
+        });
     }
 
     void rtti_builtin_module_for_each_annotation ( Module * module, const TBlock<void,const Annotation> & block, Context * context, LineInfoArg * at ) {

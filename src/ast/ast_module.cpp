@@ -261,9 +261,8 @@ namespace das {
 
 
     bool Module::addVariable ( const VariablePtr & var, bool canFail ) {
-        if ( globals.insert(make_pair(var->name, var)).second ) {
+        if ( globals.insert(var->name, var) ) {
             var->module = this;
-            globalsInOrder.push_back(var);
             return true;
         } else {
             if ( !canFail ) {
@@ -275,7 +274,7 @@ namespace das {
     }
 
     bool Module::addEnumeration ( const EnumerationPtr & en, bool canFail ) {
-        if ( enumerations.insert(make_pair(en->name, en)).second ) {
+        if ( enumerations.insert(en->name, en) ) {
             en->module = this;
             return true;
         } else {
@@ -359,8 +358,7 @@ namespace das {
     }
 
     VariablePtr Module::findVariable ( const string & na ) const {
-        auto it = globals.find(na);
-        return it != globals.end() ? it->second : VariablePtr();
+        return globals.find(na);
     }
 
     FunctionPtr Module::findFunction ( const string & mangledName ) const {
@@ -389,8 +387,7 @@ namespace das {
     }
 
     EnumerationPtr Module::findEnum ( const string & na ) const {
-        auto it = enumerations.find(na);
-        return it != enumerations.end() ? it->second : nullptr;
+        return enumerations.find(na);
     }
 
     ExprCallFactory * Module::findCall ( const string & na ) const {
@@ -421,18 +418,18 @@ namespace das {
             program->thisModule->aliasTypes.foreach([&](auto aliasTypePtr){
                 addAlias(aliasTypePtr);
             });
-            for (auto & en : program->thisModule->enumerations) {
-                addEnumeration(en.second);
-            }
+            program->thisModule->enumerations.foreach([&](auto penum){
+                addEnumeration(penum);
+            });
             program->thisModule->structures.foreach([&](auto pst){
                 addStructure(pst);
             });
             for (auto & gen : program->thisModule->generics) {
                 addGeneric(gen.second);
             }
-            for (auto & gvar : program->thisModule->globalsInOrder) {
+            program->thisModule->globals.foreach([&](auto gvar){
                 addVariable(gvar);
-            }
+            });
             for (auto & fun : program->thisModule->functions) {
                 addFunction(fun.second);
             }
@@ -509,12 +506,12 @@ namespace das {
             });
         }
         if ( flags & VerifyBuiltinFlags::verifyGlobals ) {
-            for ( auto & var : globalsInOrder ) {
+            globals.foreach([&](auto var){
                 if ( !isValidBuiltinName(var->name) ) {
                     DAS_FATAL_LOG("%s - global variable has incorrect name. expecting snake_case\n", var->name.c_str());
                     failed = true;
                 }
-            }
+            });
         }
         if ( flags & VerifyBuiltinFlags::verifyFunctions ) {
             for ( auto & it : functions ) {
@@ -551,8 +548,7 @@ namespace das {
             });
         }
         if ( flags & VerifyBuiltinFlags::verifyEnums ) {
-            for ( auto & it : enumerations ) {
-                auto en = it.second;
+            enumerations.foreach([&](auto en){
                 if ( !isValidBuiltinName(en->name) ) {
                     DAS_FATAL_LOG("%s - enumeration has incorrect name. expecting snake_case\n", en->name.c_str());
                     failed = true;
@@ -565,7 +561,7 @@ namespace das {
                         }
                     }
                 }
-            }
+            });
         }
         DAS_ASSERTF(!failed, "verifyBuiltinNames failed");
     }

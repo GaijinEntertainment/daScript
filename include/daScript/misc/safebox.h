@@ -31,6 +31,12 @@ namespace das {
             postponed = sb.postponed;
             return * this;
         }
+        void clear() {
+            DAS_ASSERT(!locked);
+            objects.clear();
+            objectsInOrder.clear();
+            postponed.clear();
+        }
         void tryResolve() {
             if ( !locked ) {
                 for ( auto & p : postponed ) {

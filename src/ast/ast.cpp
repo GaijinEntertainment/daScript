@@ -2858,11 +2858,15 @@ namespace das {
 
     void Program::visitModule(Visitor & vis, Module * thatModule, bool visitGenerics) {
         // enumerations
-        for ( auto & ite : thatModule->enumerations ) {
-            if ( vis.canVisitEnumeration(ite.second.get()) ) {
-                ite.second = visitEnumeration(vis, ite.second.get());
+        thatModule->enumerations.foreach([&](auto & penum){
+            if ( vis.canVisitEnumeration(penum.get()) ) {
+                auto penumn = visitEnumeration(vis, penum.get());
+                if ( penumn != penum ) {
+                    thatModule->enumerations.replace(penum->name, penumn);
+                    penum = penumn;
+                }
             }
-        }
+        });
         // structures
         thatModule->structures.foreach([&](auto & spst){
             Structure * pst = spst.get();
@@ -2886,7 +2890,7 @@ namespace das {
         vis.preVisitProgramBody(this,thatModule);
         // globals
         vis.preVisitGlobalLetBody(this);
-        for ( auto & var : thatModule->globalsInOrder ) {
+        thatModule->globals.foreach([&](auto & var){
             if ( vis.canVisitGlobalVariable(var.get()) ) {
                 vis.preVisitGlobalLet(var);
                 if ( var->type ) {
@@ -2899,9 +2903,13 @@ namespace das {
                     var->init = var->init->visit(vis);
                     var->init = vis.visitGlobalLetInit(var, var->init.get());
                 }
-                var = vis.visitGlobalLet(var);
+                auto varn = vis.visitGlobalLet(var);
+                if ( varn!=var ) {
+                    thatModule->globals.replace(var->name, varn);
+                    var = varn;
+                }
             }
-        }
+        });
         vis.visitGlobalLetBody(this);
         // generics
         if ( visitGenerics ) {

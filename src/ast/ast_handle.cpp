@@ -249,8 +249,7 @@ namespace das {
                         }
                     }
                 });
-                for ( const auto & et : mod->enumerations ) {
-                    const auto & tp = et.second;
+                mod->enumerations.foreach([&](auto tp){
                     auto cppt = make_smart<TypeDecl>(tp);
                     auto cppn = describeCppType(cppt);
                     auto baset = tp->makeBaseType();
@@ -258,7 +257,7 @@ namespace das {
                     logs << "\t\tstatic_assert( is_same < underlying_type< " << cppn << " >::type, "
                         << describeCppType(baset) << ">::value,\"mismatching underlying type, expecting "
                             << das_to_string(tp->baseType) << "\");\n";
-                }
+                });
             }
             return true;
         },"*");
