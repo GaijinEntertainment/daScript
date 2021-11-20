@@ -938,15 +938,11 @@ namespace das
         safebox<string, Structure>                  structures;
         safebox<string, Enumeration>                enumerations;
         safebox<string, Variable>                   globals;
-
-        das_safe_map<string, FunctionPtr>           functions;          // mangled name 2 function name
+        safebox<string, Function>                   functions;          // mangled name 2 function name
         das_map<string, vector<FunctionPtr>>        functionsByName;    // all functions of the same name
-
-        das_safe_map<string, FunctionPtr>           generics;           // mangled name 2 generic name
+        safebox<string, Function>                   generics;           // mangled name 2 generic name
         das_map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
-
         mutable das_map<string, ExprCallFactory>    callThis;
-
         das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
         das_map<uint32_t, uint64_t>                 annotationData;
 

@@ -2834,10 +2834,9 @@ namespace das
         das_map<uint32_t,SimFunction *> sharedLookup;
         if ( totalFunctions ) {
             for (auto & pm : library.modules) {
-                for (auto & it : pm->functions) {
-                    auto pfun = it.second;
+                pm->functions.foreach([&](auto pfun){
                     if (pfun->index < 0 || !pfun->used)
-                        continue;
+                        return;
                     auto mangledName = pfun->getMangledName();
                     auto MNH = hash_blockz32((uint8_t *)mangledName.c_str());
                     if ( MNH==0 ) {
@@ -2865,7 +2864,7 @@ namespace das
                     }
                     gfun.code = pfun->simulate(context);
                     lookupFunctionTable.push_back(pfun);
-                }
+                });
             }
         }
         if ( totalVariables ) {
@@ -2927,10 +2926,9 @@ namespace das
         // now call annotation simulate
         das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
-            for (auto & it : pm->functions) {
-                auto pfun = it.second;
+            pm->functions.foreach([&](auto pfun){
                 if (pfun->index < 0 || !pfun->used)
-                    continue;
+                    return;
                 auto & gfun = context.functions[pfun->index];
                 for ( const auto & an : pfun->annotations ) {
                     auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
@@ -2940,7 +2938,7 @@ namespace das
                     }
                 }
                 indexToFunction[pfun->index] = pfun.get();
-            }
+            });
         }
         // verify code and string heaps
 #if DAS_FUSION
@@ -3051,12 +3049,11 @@ namespace das
         // add init functions to dependencies
         const uint64_t fnv_prime = 1099511628211ul;
         for (auto& pm : library.modules) {
-            for (auto& it : pm->functions) {
-                auto pfun = it.second;
+            pm->functions.foreach([&](auto pfun){
                 if (pfun->index < 0 || !pfun->used || !pfun->init)
-                    continue;
+                    return;
                 res = (res ^ pfun->aotHash) * fnv_prime;
-            }
+            });
         }
         return res;
     }
@@ -3067,13 +3064,12 @@ namespace das
         vector<Function *> fnn; fnn.reserve(totalFunctions);
         das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
-            for (auto & it : pm->functions) {
-                auto pfun = it.second;
+            pm->functions.foreach([&](auto pfun){
                 if (pfun->index < 0 || !pfun->used)
-                    continue;
+                    return;
                 fnn.push_back(pfun.get());
                 indexToFunction[pfun->index] = pfun.get();
-            }
+            });
         }
         for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
             if ( !fnn[fni]->noAot ) {

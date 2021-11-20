@@ -871,7 +871,7 @@ namespace das {
     }
 
     ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr ) {
-        if ( expr->type && !expr->type->isAuto() && expr->type->isRef() && !expr->type->isRefType() ) {
+        if ( expr->type && !expr->type->isAutoOrAlias() && expr->type->isRef() && !expr->type->isRefType() ) {
             auto ar2l = make_smart<ExprRef2Value>();
             ar2l->subexpr = expr;
             ar2l->at = expr->at;
@@ -2917,21 +2917,30 @@ namespace das {
         vis.visitGlobalLetBody(this);
         // generics
         if ( visitGenerics ) {
-            for ( auto & fn : thatModule->generics ) {
-                if ( !fn.second->builtIn ) {
-                    fn.second = fn.second->visit(vis);
+            thatModule->generics.foreach([&](auto & fn){
+                if ( !fn->builtIn ) {
+                    auto nfn = fn->visit(vis);
+                    if ( fn != nfn ) {
+                        thatModule->generics.replace(fn->getMangledName(), nfn);
+                        fn = nfn;
+                        DAS_ASSERTF(false,"todo: take care of genericsByName?");
+                    }
                 }
-            }
+            });
         }
         // functions
-        for ( auto & fn : thatModule->functions ) {
-            if ( !fn.second->builtIn ) {
-                if ( vis.canVisitFunction(fn.second.get()) ) {
-                    auto res = fn.second->visit(vis);
-                    fn.second = res;
+        thatModule->functions.foreach([&](auto & fn){
+            if ( !fn->builtIn ) {
+                if ( vis.canVisitFunction(fn.get()) ) {
+                    auto nfn = fn->visit(vis);
+                    if ( fn != nfn ) {
+                        thatModule->functions.replace(fn->getMangledName(), nfn);
+                        fn = nfn;
+                        DAS_ASSERTF(false,"todo: take care of functionsByName?");
+                    }
                 }
             }
-        }
+        });
     }
 
     bool Program::getOptimize() const {

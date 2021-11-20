@@ -560,12 +560,11 @@ namespace das {
                     var->init->visit(vstr);
                 }
             });
-            for (auto & pf : pm->functions) {
-                auto & func = pf.second;
+            pm->functions.foreach([&](auto func){
                 if (func->used) {
                     func->visit(vstr);
                 }
-            }
+            });
         }
         globalStringHeapSize = vstr.bytesTotal;
         // move some variables to CMRES
@@ -591,8 +590,7 @@ namespace das {
             logs << "FUNCTION TABLE:\n";
         }
         for (auto & pm : library.modules) {
-            for (auto & pf : pm->functions) {
-                auto & func = pf.second;
+            pm->functions.foreach([&](auto func){
                 if ( func->used && !func->builtIn ) {
                     func->index = totalFunctions++;
                     if ( log ) {
@@ -602,7 +600,7 @@ namespace das {
                 else {
                     func->index = -2;
                 }
-            }
+            });
         }
         if ( log ) {
             logs << "VARIABLE TABLE:\n";

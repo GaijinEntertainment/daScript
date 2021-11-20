@@ -111,18 +111,17 @@ namespace das {
             }
         }
         void RemoveUnusedSymbols ( Module & mod ) {
-            das_safe_map<string,FunctionPtr> functions;
+            auto functions = move(mod.functions);
             auto globals = move(mod.globals);
-            swap(functions,mod.functions);
             mod.functionsByName.clear();
-            mod.globals.clear();
-            for ( auto & fn : functions ) {
-                if ( fn.second->used ) {
-                    if ( !mod.addFunction(fn.second, true) ) {
-                        program->error("internal error, failed to add function " + fn.first,"","", fn.second->at );
+            // mod.globals.clear();
+            functions.foreach([&](auto fn){
+                if ( fn->used ) {
+                    if ( !mod.addFunction(fn, true) ) {
+                        program->error("internal error, failed to add function " + fn->name,"","", fn->at );
                     }
                 }
-            }
+            });
             globals.foreach([&](auto var){
                 if ( var->used ) {
                     if ( !mod.addVariable(var, true) ) {
@@ -331,12 +330,11 @@ namespace das {
                     logs << "let " << var->module->name << "::" << var->name << " : " << var->type->describe() << "\n";
                 }
             });
-            for (auto & pf : pm->functions) {
-                auto & func = pf.second;
+            pm->functions.foreach([&](auto func){
                 if ( func->used  ) {
                     logs << func->module->name << "::" << func->describe() << "\n";
                 }
-            }
+            });
         }
         logs << "\n\n";
     }

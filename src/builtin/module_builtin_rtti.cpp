@@ -853,27 +853,25 @@ namespace das {
     void rtti_builtin_module_for_each_function ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
-        for ( auto & it : module->functions ) {
-            auto funcName = it.first;
-            FuncInfo * info = helper.makeFunctionDebugInfo(*it.second);
+        module->functions.foreach_kv([&](auto funcName, auto funcPtr){
+            FuncInfo * info = helper.makeFunctionDebugInfo(*funcPtr);
             vec4f args[1] = {
                 cast<FuncInfo *>::from(info)
             };
             context->invoke(block, args, nullptr, at);
-        }
+        });
     }
 
     void rtti_builtin_module_for_each_generic ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
-        for ( auto & it : module->generics ) {
-            auto funcName = it.first;
-            FuncInfo * info = helper.makeFunctionDebugInfo(*it.second);
+        module->generics.foreach_kv([&](auto funcName, auto funcPtr){
+            FuncInfo * info = helper.makeFunctionDebugInfo(*funcPtr);
             vec4f args[1] = {
                 cast<FuncInfo *>::from(info)
             };
             context->invoke(block, args, nullptr, at);
-        }
+        });
     }
 
     void rtti_builtin_module_for_each_global ( Module * module, const TBlock<void,const VarInfo> & block, Context * context, LineInfoArg * at ) {

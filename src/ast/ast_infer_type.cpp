@@ -1627,7 +1627,7 @@ namespace das {
             if ( var->type->ref && var->type->isRefType() ) {   // silently fix a : Foo& into a : Foo
                 var->type->ref = false;
                 auto mname = fn->getMangledName();
-                if ( fn->module->functions.find(mname) != fn->module->functions.end() ) {
+                if ( fn->module->functions.find(mname) ) {
                     error("function already exists in non-ref form", "\t" + fn->describe(Function::DescribeModule::yes), "",
                         var->at, CompilationError::cant_infer_generic );
                     var->type->ref = true;
@@ -6411,7 +6411,7 @@ namespace das {
                         }
                         // now we verify if tail end can indeed be fully inferred
                         if (!program->addFunction(clone)) {
-                            auto exf = program->thisModule->functions[clone->getMangledName()];
+                            auto exf = program->thisModule->functions.find(clone->getMangledName());
                             DAS_ASSERTF(exf, "if we can't add, this means there is function with exactly this mangled name");
                             if (exf->fromGeneric != clone->fromGeneric) { // TODO: getOrigin??
                                 error("can't instance generic " + describeFunction(clone),

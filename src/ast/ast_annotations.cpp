@@ -101,8 +101,7 @@ namespace das
 
     bool Program::patchAnnotations() {
         bool astChanged = false;
-        for ( auto & fni : thisModule->functions ) {
-            auto fn = fni.second;
+        thisModule->functions.foreach([&](auto fn){
             for ( auto & ann : fn->annotations ) {
                 if ( ann->annotation->rtti_isFunctionAnnotation() ) {
                     auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
@@ -110,10 +109,11 @@ namespace das
                     if ( !fann->patch(fn, *thisModuleGroup, ann->arguments, options, err, astChanged) ) {
                         error("function annotation patch failed\n", err, "", fn->at, CompilationError::annotation_failed );
                     }
-                    if ( astChanged ) goto done;
+                    if ( astChanged ) return true;
                 }
             }
-        }
+            return false;
+        });
         if ( astChanged ) goto done;
         thisModule->structures.find_first([&](auto st){
             for ( auto & ann : st->annotations ) {
@@ -133,8 +133,7 @@ namespace das
     }
 
     void Program::fixupAnnotations() {
-        for ( auto & fni : thisModule->functions ) {
-            auto fn = fni.second;
+        thisModule->functions.foreach([&](auto fn){
             for ( auto & ann : fn->annotations ) {
                 if ( ann->annotation->rtti_isFunctionAnnotation() ) {
                     auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
@@ -144,7 +143,7 @@ namespace das
                     }
                 }
             }
-        }
+        });
     }
 
 }

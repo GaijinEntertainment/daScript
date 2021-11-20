@@ -1009,12 +1009,11 @@ namespace das {
         virtual void preVisitProgramBody ( Program * prog, Module * ) override {
             // functions
             ss << "\n";
-            for ( auto & fnI : prog->thisModule->functions ) {
-                auto & fn = fnI.second;
+            prog->thisModule->functions.foreach([&](auto fn){
                 if ( !fn->builtIn && !fn->noAot ) {
                     ss << describeCppFunc(fn.get(),&collector) << ";\n";
                 }
-            }
+            });
             ss << "\n";
         }
     // global let body
@@ -1031,8 +1030,7 @@ namespace das {
             }
         }
         virtual void visitGlobalLetBody ( Program * prog ) override {
-            for ( auto & fnI : program->thisModule->functions ) {
-                auto & fn = fnI.second;
+            program->thisModule->functions.foreach([&](auto fn){
                 if ( fn->init ) {
                     ss << string(tab,'\t');
                     if ( fn->noAot ) {
@@ -1044,7 +1042,7 @@ namespace das {
                         ss << aotFuncName(fn.get()) << "(__context__);\n";
                     }
                 }
-            }
+            });
             tab --;
             ss << "}\n";
             Visitor::visitGlobalLetBody(prog);
@@ -3233,12 +3231,11 @@ namespace das {
     void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers ) {
         vector<Function *> fnn; fnn.reserve(totalFunctions);
         for (auto & pm : library.modules) {
-            for (auto & it : pm->functions) {
-                auto pfun = it.second;
+            pm->functions.foreach([&](auto pfun){
                 if (pfun->index < 0 || !pfun->used)
-                    continue;
+                    return;
                 fnn.push_back(pfun.get());
-            }
+            });
         }
         if ( headers ) {
             logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
@@ -3287,25 +3284,23 @@ namespace das {
         // compute semantic hash for each used function
         int fni = 0;
         for (auto & pm : library.modules) {
-            for (auto & it : pm->functions) {
-                auto pfun = it.second;
+            pm->functions.foreach([&](auto pfun){
                 if (pfun->index < 0 || !pfun->used)
-                    continue;
+                    return;
                 SimFunction * fn = context.getFunction(fni);
                 pfun->hash = getFunctionHash(pfun.get(), fn->code, &context);
                 fni++;
-            }
+            });
         }
         // compute AOT hash for each used function
         // its the same as semantic hash, only takes dependencies into account
         for (auto & pm : library.modules) {
-            for (auto & it : pm->functions) {
-                auto pfun = it.second;
+            pm->functions.foreach([&](auto pfun){
                 if (pfun->index < 0 || !pfun->used)
-                    continue;
+                    return;
                 pfun->aotHash = getFunctionAotHash(pfun.get());
                 fni++;
-            }
+            });
         }
         // now, for that AOT
         setPrintFlags();

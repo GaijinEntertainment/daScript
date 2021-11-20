@@ -1,11 +1,15 @@
-def iliketomoveitmoveit ( var a )
-    return <- a
+require daslib/templates
+
+[template(a)]
+def foo(a:auto(TT))
+    unsafe
+        return <- generator<TT&#> () <| $ ()
+            return false
 
 [export]
 def main
-    var a <- [{for x in range(10); x}]
-    print("a = {a}\n")
-    a <- a
-    print("after a = {a}\n")
-    a <- iliketomoveitmoveit(a)
-    print("after aa = {a}\n")
+    for x in foo(type<int>)
+        print("x = {x}\n")
+
+options log_infer_passes
+

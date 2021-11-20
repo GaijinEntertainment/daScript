@@ -39,11 +39,21 @@ namespace das {
         }
         void tryResolve() {
             if ( !locked ) {
+                // note - the reason for the 'neworder', as oppose to regular push_back into objectsInOrder
+                //  is that there is an order dependency for compiling things like templates, where otherwise
+                //  it would require us to actually check, if the template aliasing has been addressed
+                //  before switching to template`
+                vector<ValueType> neworder;
+                neworder.reserve(postponed.size() + objectsInOrder.size());
                 for ( auto & p : postponed ) {
-                    objectsInOrder.push_back(p.second);
+                    neworder.push_back(p.second);
                     objects[p.first] = p.second;
                 }
+                for ( auto & p : objectsInOrder ) {
+                    neworder.push_back(p);
+                }
                 postponed.clear();
+                swap(objectsInOrder, neworder);
             }
         }
         template <typename TT>
@@ -78,7 +88,9 @@ namespace das {
         }
         bool insert ( const KeyType & key, const ValueType & value ) {
             if ( locked ) {
-                if ( objects.find(key)!=objects.end() ) return false;
+                if ( objects.find(key)!=objects.end() ) {
+                    return false;
+                }
                 for ( auto & pp : postponed ) {
                     if ( pp.first==key ) {
                         return false;
@@ -87,8 +99,12 @@ namespace das {
                 postponed.push_back(make_pair(key,value));
                 return true;
             } else {
-                objectsInOrder.push_back(value);
-                return objects.insert(make_pair(key,value)).second;
+                if ( objects.insert(make_pair(key,value)).second ) {
+                    objectsInOrder.push_back(value);
+                    return true;
+                } else {
+                    return false;
+                }
             }
         }
         void replace ( const KeyType & key, const ValueType & value ) {
@@ -101,6 +117,11 @@ namespace das {
             if ( it!=objects.end() ) {
                 return it->second;
              } else {
+                for ( auto & kv : postponed ) {
+                    if ( kv.first==key ) {
+                        return kv.second;
+                    }
+                }
                 return ValueType();
              }
         }

@@ -94,20 +94,18 @@ namespace das {
         FunctionPtr             func;
     public:
         void MarkSideEffects ( Module & mod ) {
-            for (auto & fnI : mod.functions) {
-                auto & fn = fnI.second;
+            mod.functions.foreach([&](auto fn){
                 if (!fn->builtIn) {
                     fn->knownSideEffects = false;
                     fn->sideEffectFlags &= ~uint32_t(SideEffects::inferredSideEffects);
                 }
-            }
-            for (auto & fnI : mod.functions) {
-                auto & fn = fnI.second;
+            });
+            mod.functions.foreach([&](auto fn){
                 if (!fn->builtIn && !fn->knownSideEffects) {
                     asked.clear();
                     getSideEffects(fn);
                 }
-            }
+            });
             mod.globals.foreach([&](auto gv){
                 if ( gv->init ) {
                     TrackVariableFlags vaf;

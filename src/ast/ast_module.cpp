@@ -325,7 +325,7 @@ namespace das {
                 DAS_FATAL_ERROR;
             }
         }
-        if ( functions.insert(make_pair(mangledName, fn)).second ) {
+        if ( functions.insert(mangledName, fn) ) {
             functionsByName[fn->name].push_back(fn);
             fn->module = this;
             return true;
@@ -340,7 +340,7 @@ namespace das {
 
     bool Module::addGeneric ( const FunctionPtr & fn, bool canFail ) {
         auto mangledName = fn->getMangledName();
-        if ( generics.insert(make_pair(mangledName, fn)).second ) {
+        if ( generics.insert(mangledName, fn) ) {
             genericsByName[fn->name].push_back(fn);
             fn->module = this;
             return true;
@@ -362,8 +362,7 @@ namespace das {
     }
 
     FunctionPtr Module::findFunction ( const string & mangledName ) const {
-        auto it = functions.find(mangledName);
-        return it != functions.end() ? it->second : FunctionPtr();
+        return functions.find(mangledName);
     }
 
     FunctionPtr Module::findUniqueFunction ( const string & mangledName ) const {
@@ -424,15 +423,15 @@ namespace das {
             program->thisModule->structures.foreach([&](auto pst){
                 addStructure(pst);
             });
-            for (auto & gen : program->thisModule->generics) {
-                addGeneric(gen.second);
-            }
+            program->thisModule->generics.foreach([&](auto fn){
+                addGeneric(fn);
+            });
             program->thisModule->globals.foreach([&](auto gvar){
                 addVariable(gvar);
             });
-            for (auto & fun : program->thisModule->functions) {
-                addFunction(fun.second);
-            }
+            program->thisModule->functions.foreach([&](auto fn){
+                addFunction(fn);
+            });
             for (auto & rqm : program->thisModule->requireModule) {
                 if ( rqm.first != this ) {
                     requireModule[rqm.first] |= rqm.second;
@@ -514,22 +513,20 @@ namespace das {
             });
         }
         if ( flags & VerifyBuiltinFlags::verifyFunctions ) {
-            for ( auto & it : functions ) {
-                auto fun = it.second.get();
+            functions.foreach([&](auto fun){
                 if ( !isValidBuiltinName(fun->name, true) ) {
                     DAS_FATAL_LOG("%s - function has incorrect name. expecting snake_case\n", fun->name.c_str());
                     failed = true;
                 }
-            }
+            });
         }
         if ( flags & VerifyBuiltinFlags::verifyGenerics ) {
-            for ( auto & it : generics ) {
-                auto fun = it.second.get();
+            generics.foreach([&](auto fun){
                 if ( !isValidBuiltinName(fun->name) ) {
                     DAS_FATAL_LOG("%s - generic function has incorrect name. expecting snake_case\n", fun->name.c_str());
                     failed = true;
                 }
-            }
+            });
         }
         if ( flags & VerifyBuiltinFlags::verifyStructures ) {
             structures.foreach([&](auto st){
@@ -568,16 +565,15 @@ namespace das {
 
     void Module::verifyAotReady() {
         bool failed = false;
-        for ( auto & it : functions ) {
-            auto fun = it.second.get();
+        functions.foreach([&](auto fun){
             if ( fun->builtIn ) {
-                auto bif = (BuiltInFunction *) fun;
+                auto bif = (BuiltInFunction *) fun.get();
                 if ( !bif->policyBased && bif->cppName.empty() ) {
                     DAS_FATAL_LOG("builtin function %s is missing cppName\n", fun->describe().c_str());
                     failed = true;
                 }
             }
-        }
+        });
         DAS_ASSERTF(!failed, "verifyAotReady failed");
     }
 

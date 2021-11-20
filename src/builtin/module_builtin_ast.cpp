@@ -2485,15 +2485,15 @@ namespace das {
         if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
         vec4f args[1];
         if ( builtin_empty(name) ) {
-            const auto & fnbn = module->functions;
+            auto & fnbn = module->functions;
             context->invokeEx(block, args, nullptr, [&](SimNode * code){
-                for ( auto & nv : fnbn ) {
-                    args[0] = cast<FunctionPtr>::from(nv.second);
+                fnbn.foreach([&](auto fnv){
+                    args[0] = cast<FunctionPtr>::from(fnv);
                     code->eval(*context);
-                }
+                });
             },lineInfo);
         } else {
-            const auto & fnbn = module->functionsByName[name];
+            auto & fnbn = module->functionsByName[name];
             context->invokeEx(block, args, nullptr, [&](SimNode * code){
                 for ( auto & nv : fnbn ) {
                     args[0] = cast<FunctionPtr>::from(nv);
@@ -2507,15 +2507,15 @@ namespace das {
         if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
         vec4f args[1];
         if ( builtin_empty(name) ) {
-            const auto & fnbn = module->generics;
+            auto & fnbn = module->generics;
             context->invokeEx(block, args, nullptr, [&](SimNode * code){
-                for ( auto & nv : fnbn ) {
-                    args[0] = cast<FunctionPtr>::from(nv.second);
+                fnbn.foreach([&](auto nvfn){
+                    args[0] = cast<FunctionPtr>::from(nvfn);
                     code->eval(*context);
-                }
+                });
             },lineInfo);
         } else {
-            const auto & fnbn = module->genericsByName[name];
+            auto & fnbn = module->genericsByName[name];
             context->invokeEx(block, args, nullptr, [&](SimNode * code){
                 for ( auto & nv : fnbn ) {
                     args[0] = cast<FunctionPtr>::from(nv);
@@ -2757,9 +2757,9 @@ namespace das {
     }
 
     void for_each_generic ( Module * mod, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at ) {
-        for ( auto & td : mod->generics ) {
-            das_invoke<void>::invoke<FunctionPtr>(context,at,block,td.second);
-        }
+        mod->generics.foreach([&](auto fn){
+            das_invoke<void>::invoke<FunctionPtr>(context,at,block,fn);
+        });
     }
 
     void for_each_global ( Module * mod, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at ) {
