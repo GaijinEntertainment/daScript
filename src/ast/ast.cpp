@@ -2879,12 +2879,16 @@ namespace das {
             }
         });
         // aliases
-        thatModule->aliasTypes.foreach_kv([&](auto alsk, auto & alsv){
-            vis.preVisitAlias(alsv.get(), alsk);
+        thatModule->aliasTypes.foreach([&](auto & alsv){
+            vis.preVisitAlias(alsv.get(), alsv->alias);
             vis.preVisit(alsv.get());
-            alsv = alsv->visit(vis);
-            if ( alsv ) alsv = vis.visit(alsv.get());
-            if ( alsv ) alsv = vis.visitAlias(alsv.get(), alsk);
+            auto alssv = alsv->visit(vis);
+            if ( alssv ) alssv = vis.visit(alssv.get());
+            if ( alssv ) alsv = vis.visitAlias(alssv.get(), alssv->alias);
+            if ( alssv!=alsv ) {
+                thatModule->aliasTypes.replace(alssv->alias, alssv);
+                alsv = alssv;
+            }
         });
         // real things
         vis.preVisitProgramBody(this,thatModule);
