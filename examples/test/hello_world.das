@@ -11,5 +11,4 @@ def main
     for x in foo(type<int>)
         print("x = {x}\n")
 
-options log_infer_passes
 
