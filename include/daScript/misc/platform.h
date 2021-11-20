@@ -167,7 +167,7 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
 
 #ifndef DAS_ALIGNED_ALLOC
 #define DAS_ALIGNED_ALLOC 1
-inline void *das_aligned_alloc16(uint32_t size) {
+inline void *das_aligned_alloc16(size_t size) {
 #if defined(_MSC_VER)
     return _aligned_malloc(size, 16);
 #else

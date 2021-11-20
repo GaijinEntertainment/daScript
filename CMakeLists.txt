@@ -386,7 +386,9 @@ src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
 src/misc/job_que.cpp
+src/misc/job_que.cpp
 src/misc/daScriptC.cpp
+src/misc/smmalloc_integration.cpp
 )
 list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
@@ -525,10 +527,20 @@ list(SORT DAS_LIB_SRC)
 SOURCE_GROUP_FILES("daslib" DSA_LIB_SRC)
 list(SORT DAS_LIB_SRC)
 
+SET(DAS_SMMALLOC_DIR ${CMAKE_SOURCE_DIR}/3rdparty/smmalloc)
+
+SET(SMMALLOC_SRC
+${DAS_SMMALLOC_DIR}/smmalloc.cpp
+${DAS_SMMALLOC_DIR}/smmalloc.h
+${DAS_SMMALLOC_DIR}/smmalloc_generic.cpp
+${DAS_SMMALLOC_DIR}/smmalloc_tls.cpp
+)
+
 include_directories(include)
 ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC}
     ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC}
-	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC})
+	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${SMMALLOC_SRC})
+target_include_directories(libDaScript PUBLIC ${DAS_SMMALLOC_DIR})
 IF(LINUX_UUID)
 target_link_libraries(libDaScript uuid)
 ENDIF()

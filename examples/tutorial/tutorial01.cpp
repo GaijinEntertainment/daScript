@@ -1,5 +1,4 @@
 #include "daScript/daScript.h"
-#include "msvc32.inc"
 
 using namespace das;
 

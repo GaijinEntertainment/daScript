@@ -1,5 +1,4 @@
 #include "daScript/daScript.h"
-#include "msvc32.inc"
 
 // we need RTTI to bind StructInfo *
 #include "module_builtin_rtti.h"
