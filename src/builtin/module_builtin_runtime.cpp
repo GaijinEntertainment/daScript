@@ -663,7 +663,8 @@ namespace das
     }
 
     void dumpProfileInfo( Context * context ) {
-        context->collectProfileInfo(LOG(LogLevel::say));
+        LOG tp(LogLevel::say);
+        context->collectProfileInfo(tp);
     }
 
     char * collectProfileInfo( Context * context ) {
