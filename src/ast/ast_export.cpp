@@ -165,6 +165,7 @@ namespace das {
         // variable
         virtual void preVisit(ExprVar * expr) override {
             Visitor::preVisit(expr);
+            if (!expr->variable) return;
             if (!expr->local && !expr->argument && !expr->block) {
                 if (func) {
                     func->useGlobalVariables.insert(expr->variable.get());
@@ -188,8 +189,8 @@ namespace das {
         // function call
         virtual void preVisit(ExprCall * call) override {
             Visitor::preVisit(call);
+            if ( !call->func ) return;
             if (builtInDependencies || !call->func->builtIn) {
-                assert(call->func);
                 if (func) {
                     func->useFunctions.insert(call->func);
                 } else if (gVar) {
