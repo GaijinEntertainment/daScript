@@ -945,9 +945,7 @@ namespace das
         mutable das_map<string, ExprCallFactory>    callThis;
         das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
         das_map<uint32_t, uint64_t>                 annotationData;
-
-        das_safe_map<Module *,bool>                 requireModule;      // visibility modules
-
+        das_map<Module *,bool>                      requireModule;      // visibility modules
         vector<PassMacroPtr>                        macros;             // infer macros (clean infer, assume no errors)
         vector<PassMacroPtr>                        inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
         vector<PassMacroPtr>                        optimizationMacros; // optimization macros
