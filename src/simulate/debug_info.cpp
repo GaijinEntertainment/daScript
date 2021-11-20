@@ -579,8 +579,7 @@ namespace das
                 case Type::tVoid:           ss << "v"; break;
                 case Type::tBool:           ss << "b"; break;
                 default:
-                    TextPrinter tp;
-                    tp << "ERROR " << das_to_string(info->type) << "\n";
+                    LOG(LogLevel::error) << "ERROR " << das_to_string(info->type) << "\n";
                     DAS_ASSERT(0 && "we should not be here");
                     break;
             }

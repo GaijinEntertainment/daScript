@@ -50,7 +50,7 @@ namespace das {
     }
 
     void PersistentHeapAllocator::report() {
-        TextPrinter tout;
+        LOG tout;
         for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {
             if ( model.shoe.chunks[si] ) tout << "decks of size " << int((si+1)<<4) << "\n";
             for ( auto ch=model.shoe.chunks[si]; ch; ch=ch->next ) {
@@ -132,7 +132,7 @@ namespace das {
     }
 
     void LinearHeapAllocator::report() {
-        TextPrinter tout;
+        LOG tout;
         for ( auto ch=model.chunk; ch; ch=ch->next ) {
             tout << HEX << intptr_t(ch->data) << DEC << "\t"
                 << ch->offset << " of " << ch->size << "\n";
@@ -267,7 +267,7 @@ namespace das {
     }
 
     void PersistentStringAllocator::report() {
-        TextPrinter tout;
+        LOG tout;
         char buf[33];
         for ( uint32_t si=0; si!=DAS_MAX_SHOE_CUNKS; ++si ) {
             if ( model.shoe.chunks[si] ) tout << "string decks of size " << int((si+1)<<4) << "\n";
@@ -305,7 +305,7 @@ namespace das {
     }
 
     void LinearStringAllocator::report() {
-        TextPrinter tout;
+        LOG tout;
         char buf[33];
         for ( auto ch=model.chunk; ch; ch=ch->next ) {
             tout << HEX << intptr_t(ch->data) << DEC << "\t"

@@ -105,4 +105,31 @@ namespace das {
     protected:
         int pos = 0;
     };
+
+    enum LogLevel {
+        verbose     =   1000
+    ,   say         =   2000
+    ,   warning     =   3000
+    ,   error       =   4000
+    };
+
+    void toLog ( int level, const char * text );
+    int setDefaultLoggerLogLevel ( int level );   // returns previous log level
+
+    class LOG : public TextWriter {
+    public:
+        LOG ( int level = LogLevel::say ) : logLevel(level) {}
+        virtual void output() override {
+            int newPos = tellp();
+            if (newPos != pos) {
+                string st(data.data() + pos, newPos - pos);
+                toLog(logLevel, st.c_str());
+                data.clear();
+                pos = newPos = 0;
+            }
+        }
+    protected:
+        int pos = 0;
+        int logLevel = LogLevel::say;
+    };
 }

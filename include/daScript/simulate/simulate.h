@@ -212,6 +212,7 @@ namespace das
         virtual void onVariable ( Context *, const char *, const char *, TypeInfo *, void * ) {}
         virtual void onTick () {}
         virtual void onCollect ( Context * ) {}
+        virtual bool onLog ( int /*level*/, const char * /*text*/ ) { return false; }
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
 

@@ -663,8 +663,7 @@ namespace das
     }
 
     void dumpProfileInfo( Context * context ) {
-        TextPrinter tout;
-        context->collectProfileInfo(tout);
+        context->collectProfileInfo(LOG(LogLevel::say));
     }
 
     char * collectProfileInfo( Context * context ) {
@@ -1270,8 +1269,18 @@ namespace das
             SideEffects::modifyArgument, "builtin_make_temp_array")
                 ->args({"array","data","size"});
         bmta->unsafeOperation = true;
-                // migrate data
+        // migrate data
         addExtern<DAS_BIND_FUN(is_in_aot)>(*this, lib, "is_in_aot",
             SideEffects::worstDefault, "is_in_aot");
+        // logger
+        addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
+            SideEffects::modifyExternal, "toLog");
+        addExtern<DAS_BIND_FUN(setDefaultLoggerLogLevel)>(*this, lib, "set_default_logger_log_level",
+            SideEffects::modifyExternal, "setDefaultLoggerLogLevel");
+        // log levels
+        addConstant<int>(*this, "LOG_VERBOSE",  LogLevel::verbose);
+        addConstant<int>(*this, "LOG_SAY",      LogLevel::say);
+        addConstant<int>(*this, "LOG_WARNING",  LogLevel::warning);
+        addConstant<int>(*this, "LOG_ERROR",    LogLevel::error);
     }
 }

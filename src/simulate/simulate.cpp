@@ -1471,6 +1471,37 @@ namespace das
         });
     }
 
+    static int defaultLogLevel = LogLevel::say;
+
+    int setDefaultLoggerLogLevel ( int level ) {
+        auto dlogl = defaultLogLevel;
+        defaultLogLevel = level;
+        return dlogl;
+    }
+
+    void toLog ( int level, const char * text ) {
+        bool any = false;
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            any |= pAgent->onLog(int(level), text);
+        });
+        if ( !any && level>=defaultLogLevel ) {
+            const char * marker = "";
+            switch ( level ) {
+                case LogLevel::verbose:     break;
+                case LogLevel::say:         break;
+                case LogLevel::warning:     marker = "[W] "; break;
+                case LogLevel::error:       marker = "[E] "; break;
+            }
+            if ( level>=LogLevel::warning ) {
+                fprintf(stderr,"%s%s\n", marker, text);
+                fflush(stderr);
+            } else {
+                fprintf(stdout,"%s%s\n", marker, text);
+                fflush(stdout);
+            }
+        }
+    }
+
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(*at, "need to specify category");
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);

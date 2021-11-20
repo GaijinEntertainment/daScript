@@ -126,6 +126,16 @@ namespace debugapi {
                 context->unlock();
             }
         }
+        virtual bool onLog ( int level, const char * text ) override {
+            if ( auto fnOnLog = get_onLog(classPtr) ) {
+                context->lock();
+                auto res = invoke_onLog(context,fnOnLog,classPtr,level,(char *)text);
+                context->unlock();
+                return res;
+            } else {
+                return false;
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;

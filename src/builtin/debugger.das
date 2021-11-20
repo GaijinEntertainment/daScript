@@ -17,7 +17,8 @@ class DapiDebugAgent
     def abstract onBreakpoint ( var ctx:Context; at:LineInfo; reason,text:string ) : void
     def abstract onVariable ( var ctx:Context; category,name:string; info:TypeInfo; data:void? ) : void
     def abstract onTick : void
-    def abstract onCollect ( var ctx:Context ): void
+    def abstract onCollect ( var ctx:Context ) : void
+    def abstract onLog ( level:int; text:string# ) : bool
     [[do_not_delete]] thisAgent:DebugAgent?
 
 def install_new_debug_agent ( var agentPtr; category:string )

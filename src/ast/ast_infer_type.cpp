@@ -1257,7 +1257,7 @@ namespace das {
             const char * mnamec = mname.c_str();
             auto mtype = parser.parseTypeFromMangledName ( mnamec, program->library, program->thisModule.get() );
             if ( !type->isSameExactType(*mtype) ) {
-                TextPrinter tp;
+                LOG(LogLevel::error) tp;
                 auto mtname = mtype->getMangledName(true);
                 tp << "Not exactly the same type '" << mname << "` vs `" << mtname << "`\n";
                 if ( mname==mtname ) tp << "however strings match\n";
@@ -3274,7 +3274,6 @@ namespace das {
                 error("can't delete constant expression " + describeType(expr->subexpr->type), "", "",
                       expr->at, CompilationError::bad_delete);
             } else if ( expr->subexpr->type->isPointer() ) {
-                TextPrinter tp;
                 if ( !safeExpression(expr) ) {
                     error("delete of pointer requires unsafe",  "", "",
                         expr->at, CompilationError::unsafe);

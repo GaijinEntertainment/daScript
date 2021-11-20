@@ -30,7 +30,7 @@ namespace das
         vector<string>      keys;
         vector<PtrRange>    ptrRangeStack;
         PtrRange            currentRange;
-        TextPrinter         tp;
+        LOG                 tp;
         int32_t             gcFlags = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
         int32_t             gcAlways = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
         void prepare ( const string & walk_from ) {
@@ -379,7 +379,7 @@ namespace das
     };
 
     void Context::reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly) {
-        TextPrinter tp;
+        LOG tp;
         // now
         HeapReporter walker;
         walker.context = this;

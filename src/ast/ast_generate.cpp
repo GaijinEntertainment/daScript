@@ -80,8 +80,7 @@ namespace das {
     void verifyGenerated ( const ExpressionPtr & expr ) {
         (void)expr;
 #if LOG_GENERATED
-        TextPrinter pp;
-        pp << "VERIFY:\n" << *expr << "\n";
+        LOG() << "VERIFY:\n" << *expr << "\n";
 #endif
 #if VERIFY_GENERATED
         CheckLineInfoVisitor vis;
