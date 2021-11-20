@@ -49,6 +49,7 @@ namespace das {
         template <typename TT>
         void foreach ( TT && closure ) {
             auto saveLock = locked;
+            locked = true;
             for ( auto & obj : objectsInOrder ) {
                 closure(obj);
             }
@@ -58,6 +59,7 @@ namespace das {
         template <typename TT>
         void find_first ( TT && closure ) {
             auto saveLock = locked;
+            locked = true;
             for ( auto & obj : objectsInOrder ) {
                 if ( closure(obj) ) break;
             }
@@ -67,6 +69,7 @@ namespace das {
         template <typename TT>
         void foreach_kv ( TT && closure ) {
             auto saveLock = locked;
+            locked = true;
             for ( auto & obj : objects ) {
                 closure(obj.first, obj.second);
             }
@@ -110,6 +113,7 @@ namespace das {
                 auto ito = das::find ( objectsInOrder.begin(), objectsInOrder.end(), pObj );
                 DAS_ASSERT(ito != objectsInOrder.end() );
                 objectsInOrder.erase(ito);
+                return true;
             } else {
                 return false;
             }
