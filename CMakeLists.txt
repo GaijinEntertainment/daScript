@@ -547,12 +547,6 @@ ENDIF()
 SETUP_CPP11(libDaScript)
 #target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
 
-IF(DAS_GEN_FOR_EACH_INCLUDED)
-    DAS_GEN_FOR_EACH(include/daScript/simulate/for_each.h ${MAX_DAS_FOR_EACH_ARGS})
-ELSE()
-    MESSAGE(STATUS "dasGenForEach module not found. Pre-generated files will be used.")
-ENDIF()
-
 add_custom_target(dasAotStub)
 SET(AOT_GENERATED_SRC)
 DAS_AOT("daslib/functional.das" AOT_GENERATED_SRC dasAotStub daScript)
