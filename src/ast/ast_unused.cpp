@@ -94,24 +94,24 @@ namespace das {
         FunctionPtr             func;
     public:
         void MarkSideEffects ( Module & mod ) {
-            mod.functions.foreach([&](auto fn){
+            for ( auto & fn : mod.functions.each() ) {
                 if (!fn->builtIn) {
                     fn->knownSideEffects = false;
                     fn->sideEffectFlags &= ~uint32_t(SideEffects::inferredSideEffects);
                 }
-            });
-            mod.functions.foreach([&](auto fn){
+            }
+            for ( auto & fn : mod.functions.each() ) {
                 if (!fn->builtIn && !fn->knownSideEffects) {
                     asked.clear();
                     getSideEffects(fn);
                 }
-            });
-            mod.globals.foreach([&](auto gv){
-                if ( gv->init ) {
+            }
+            for ( auto & var : mod.globals.each() ) {
+                if ( var->init ) {
                     TrackVariableFlags vaf;
-                    gv->init = gv->init->visit(vaf);
+                    var->init = var->init->visit(vaf);
                 }
-            });
+            }
         }
     protected:
         void propagateAt ( ExprAt * at ) {

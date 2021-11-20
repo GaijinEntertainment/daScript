@@ -57,7 +57,7 @@ namespace das {
             }
         }
         template <typename TT>
-        void foreach ( TT && closure ) {
+        __forceinline void foreach ( TT && closure ) {
             auto saveLock = locked;
             locked = true;
             for ( auto & obj : objectsInOrder ) {
@@ -67,7 +67,7 @@ namespace das {
             tryResolve();
         }
         template <typename TT>
-        void find_first ( TT && closure ) {
+        __forceinline void find_first ( TT && closure ) {
             auto saveLock = locked;
             locked = true;
             for ( auto & obj : objectsInOrder ) {
@@ -77,7 +77,7 @@ namespace das {
             tryResolve();
         }
         template <typename TT>
-        void foreach_kv ( TT && closure ) {
+        __forceinline void foreach_kv ( TT && closure ) {
             auto saveLock = locked;
             locked = true;
             for ( auto & obj : objects ) {
@@ -139,6 +139,7 @@ namespace das {
                 return false;
             }
         }
+        __forceinline const vector<ValueType> & each () const { return objectsInOrder; }
     protected:
         das_hash_map<KeyType,ValueType>     objects;
         vector<ValueType>                   objectsInOrder;

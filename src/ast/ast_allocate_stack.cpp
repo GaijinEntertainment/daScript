@@ -555,16 +555,16 @@ namespace das {
         // string heap
         AllocateConstString vstr;
         for (auto & pm : library.modules) {
-            pm->globals.foreach([&](auto var){
+            for ( auto & var : pm->globals.each() ) {
                 if (var->used && var->init) {
                     var->init->visit(vstr);
                 }
-            });
-            pm->functions.foreach([&](auto func){
+            }
+            for ( auto & func : pm->functions.each() ) {
                 if (func->used) {
                     func->visit(vstr);
                 }
-            });
+            }
         }
         globalStringHeapSize = vstr.bytesTotal;
         // move some variables to CMRES
@@ -575,11 +575,11 @@ namespace das {
         visit(context);
         // adjust stack size for all the used variables
         for (auto & pm : library.modules) {
-            pm->globals.foreach([&](auto var){
+            for ( auto & var : pm->globals.each() ) {
                 if ( var->used ) {
                     globalInitStackSize = das::max(globalInitStackSize, var->initStackSize);
                 }
-            });
+            }
         }
         // allocate used variables and functions indices
         totalVariables = 0;
@@ -590,7 +590,7 @@ namespace das {
             logs << "FUNCTION TABLE:\n";
         }
         for (auto & pm : library.modules) {
-            pm->functions.foreach([&](auto func){
+            for ( auto & func : pm->functions.each() ) {
                 if ( func->used && !func->builtIn ) {
                     func->index = totalFunctions++;
                     if ( log ) {
@@ -600,13 +600,13 @@ namespace das {
                 else {
                     func->index = -2;
                 }
-            });
+            }
         }
         if ( log ) {
             logs << "VARIABLE TABLE:\n";
         }
         library.foreach_in_order([&](Module * pm){
-            pm->globals.foreach([&](auto var){
+            for ( auto & var : pm->globals.each() ) {
                 if (var->used) {
                     var->index = totalVariables++;
                     if ( log ) {
@@ -617,7 +617,7 @@ namespace das {
                 else {
                     var->index = -2;
                 }
-            });
+            }
             return true;
         }, thisModule.get());
     }

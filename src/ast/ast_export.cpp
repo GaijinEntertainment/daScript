@@ -73,41 +73,37 @@ namespace das {
         }
         void markVarsUsed( ModuleLibrary & lib, bool forceAll ){
             lib.foreach([&](Module * pm) {
-                pm->globals.foreach([&](auto var){
+                for ( auto & var : pm->globals.each() ) {
                     if ( forceAll || var->used ) {
                         var->used = false;
                         propageteVarUse(var);
                     }
-                });
+                }
                 return true;
             }, "*");
         }
         void markUsedFunctions( ModuleLibrary & lib, bool forceAll, bool initThis ){
             lib.foreach([&](Module * pm) {
-                for (auto & pfbn : pm->functionsByName ) {
-                    for ( auto & fn : pfbn.second ) {
-                        if ( (forceAll && !fn->macroInit) || fn->exports || fn->init || fn->shutdown || (fn->macroInit && initThis) ) {
-                            propagateFunctionUse(fn);
-                        }
+                for ( auto & fn : pm->functions.each() ) {
+                    if ( (forceAll && !fn->macroInit) || fn->exports || fn->init || fn->shutdown || (fn->macroInit && initThis) ) {
+                        propagateFunctionUse(fn);
                     }
                 }
                 return true;
             }, "*");
         }
         void markModuleVarsUsed( ModuleLibrary &, Module * inWhichModule ) {
-            inWhichModule->globals.foreach([&](auto var){
+            for ( auto & var : inWhichModule->globals.each() ) {
                 var->used = false;
                 propageteVarUse(var);
-            });
+            }
         }
         void markModuleUsedFunctions( ModuleLibrary &, Module * inWhichModule ) {
-            for (auto & pfbn : inWhichModule->functionsByName ) {
-                for ( auto & fn : pfbn.second ) {
-                    if ( fn->builtIn || fn->macroInit || fn->macroFunction  ) continue;
-                    if ( fn->privateFunction && fn->generated && fn->fromGeneric ) continue;    // instances of templates are never roots
-                    if ( fn->isClassMethod && fn->classParent->macroInterface ) continue;       // methods of macro interfaces
-                    propagateFunctionUse(fn);
-                }
+            for ( auto & fn : inWhichModule->functions.each() ) {
+                if ( fn->builtIn || fn->macroInit || fn->macroFunction  ) continue;
+                if ( fn->privateFunction && fn->generated && fn->fromGeneric ) continue;    // instances of templates are never roots
+                if ( fn->isClassMethod && fn->classParent->macroInterface ) continue;       // methods of macro interfaces
+                propagateFunctionUse(fn);
             }
         }
         void RemoveUnusedSymbols ( Module & mod ) {
@@ -115,20 +111,20 @@ namespace das {
             auto globals = move(mod.globals);
             mod.functionsByName.clear();
             // mod.globals.clear();
-            functions.foreach([&](auto fn){
+            for ( auto & fn : functions.each() ) {
                 if ( fn->used ) {
                     if ( !mod.addFunction(fn, true) ) {
                         program->error("internal error, failed to add function " + fn->name,"","", fn->at );
                     }
                 }
-            });
-            globals.foreach([&](auto var){
+            }
+            for ( auto & var : globals.each() ) {
                 if ( var->used ) {
                     if ( !mod.addVariable(var, true) ) {
                         program->error("internal error, failed to add variable " + var->name,"","", var->at );
                     }
                 }
-            });
+            }
         }
     protected:
         ProgramPtr  program;
@@ -255,13 +251,11 @@ namespace das {
 
     void Program::clearSymbolUse() {
         for (auto & pm : library.modules) {
-            pm->globals.foreach([&](auto var){
+            for ( auto & var : pm->globals.each() ) {
                 var->used = false;
-            });
-            for (auto & pfbn : pm->functionsByName ) {
-                for ( auto & pf : pfbn.second ) {
-                    pf->used = false;
-                }
+            }
+            for ( auto & fn : pm->functions.each() ) {
+                fn->used = false;
             }
         }
     }
@@ -325,16 +319,16 @@ namespace das {
     void Program::dumpSymbolUse(TextWriter & logs) {
         logs << "USED SYMBOLS ARE:\n";
         for (auto & pm : library.modules) {
-            pm->globals.foreach([&](auto var){
+            for ( auto & var : pm->globals.each() ) {
                 if ( var->used ) {
                     logs << "let " << var->module->name << "::" << var->name << " : " << var->type->describe() << "\n";
                 }
-            });
-            pm->functions.foreach([&](auto func){
+            }
+            for ( auto & func : pm->functions.each() ) {
                 if ( func->used  ) {
                     logs << func->module->name << "::" << func->describe() << "\n";
                 }
-            });
+            }
         }
         logs << "\n\n";
     }
