@@ -53,8 +53,19 @@ namespace das {
 		}
 	}
 
+
+	#define DECL_AUTO_RELEASE_PTR(T, n) \
+		T * n = nullptr; \
+		struct DeferRelease_##n \
+		{ \
+			T ** v; \
+			DeferRelease_##n(T ** v_) : v(v_) {} \
+			~DeferRelease_##n() { if (*v) (*v)->Release(); } \
+		} dialogRelease_##n(&n);
+
+
 	string GetSaveFileFromUser ( const char * initialFileName , const char * initialPath, const char * filter ) {
-		IFileSaveDialog * dialog = nullptr;
+		DECL_AUTO_RELEASE_PTR(IFileSaveDialog, dialog);
 		if (FAILED(CoCreateInstance(CLSID_FileSaveDialog, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)))) return string();
 		wstring filterStr;
 		vector<wstring> extensions;
@@ -66,7 +77,7 @@ namespace das {
 		if (FAILED(dialog->SetFileTypes(1, &filterSpec))) return string();
 		if (FAILED(dialog->SetDefaultExtension(extensions[0].c_str()))) return string();
 		if (initialPath && *initialPath) {
-			IShellItem * folder = nullptr;
+			DECL_AUTO_RELEASE_PTR(IShellItem, folder);
 			wstring path = string_to_wstring(initialPath);
 			if (PathIsDirectoryW(path.c_str())) {
 				if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), NULL, IID_PPV_ARGS(&folder)))) {
@@ -79,7 +90,7 @@ namespace das {
 			dialog->SetFileName(fileName.c_str());
 		}
 		dialog->Show(GetHWND());
-		IShellItem * shellItem = nullptr;
+		DECL_AUTO_RELEASE_PTR(IShellItem, shellItem);
 		if (FAILED(dialog->GetResult(&shellItem))) return string();
 		PWSTR filePath = NULL;
 		if (FAILED(shellItem->GetDisplayName(SIGDN_FILESYSPATH, &filePath))) return string();
@@ -89,7 +100,7 @@ namespace das {
 	}
 
 	string GetOpenFileFromUser ( const char * initialPath, const char * filter ) {
-		IFileOpenDialog * dialog = nullptr;
+		DECL_AUTO_RELEASE_PTR(IFileOpenDialog, dialog);
 		if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)))) return string();
 		wstring filterStr;
 		vector<wstring> extensions;
@@ -102,7 +113,7 @@ namespace das {
 		if (FAILED(dialog->SetFileTypes(2, filterSpec))) return string();
 		if (FAILED(dialog->SetDefaultExtension(extensions[0].c_str()))) return string();
 		if (initialPath && *initialPath) {
-			IShellItem * folder = nullptr;
+			DECL_AUTO_RELEASE_PTR(IShellItem, folder);
 			wstring path = string_to_wstring(initialPath);
 			if (PathIsDirectoryW(path.c_str())) {
 				if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), NULL, IID_PPV_ARGS(&folder)))) {
@@ -121,7 +132,7 @@ namespace das {
 			}
 		}
 		dialog->Show(GetHWND());
-		IShellItem * shellItem = nullptr;
+		DECL_AUTO_RELEASE_PTR(IShellItem, shellItem);
 		if (FAILED(dialog->GetResult(&shellItem))) return string();
 		PWSTR filePath = NULL;
 		if (FAILED(shellItem->GetDisplayName(SIGDN_FILESYSPATH, &filePath))) return string();
