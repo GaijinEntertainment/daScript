@@ -133,9 +133,7 @@ def main
 		panic("can't create window")
     defer <|
         glfwDestroyWindow(window)
-    glfwMakeContextCurrent(window)
     glfwSetWindowSize(window,TRACE_WIDTH,TRACE_HEIGHT)
-    glfwMakeContextCurrent(window)
     var pd: bgfx_platform_data_s
     pd.nwh = glfwGetNativeWindow(window)
     bgfx_set_platform_data(safe_addr(pd))
