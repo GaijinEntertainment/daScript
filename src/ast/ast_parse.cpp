@@ -3,9 +3,11 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_expressions.h"
 
-void das_yybegin(const char * str, uint32_t len);
-int das_yyparse();
-int das_yylex_destroy();
+typedef void * yyscan_t;
+int das_yylex_init (yyscan_t * scanner);
+void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner);
+int das_yyparse(yyscan_t yyscanner);
+int das_yylex_destroy(yyscan_t yyscanner);
 
 namespace das {
 
@@ -299,15 +301,19 @@ namespace das {
             return true;
         },"*");
         g_FileAccessStack.clear();
+
+        yyscan_t scanner = nullptr;
+        das_yylex_init(&scanner);
+
         if ( auto fi = access->getFileInfo(fileName) ) {
             g_FileAccessStack.push_back(fi);
             const char * src = nullptr;
             uint32_t len = 0;
             fi->getSourceAndLength(src,len);
             if (isUtf8Text(src, len)) {
-                das_yybegin(src + 3, len-3);
+                das_yybegin(src + 3, len-3, scanner);
             } else {
-                das_yybegin(src, len);
+                das_yybegin(src, len, scanner);
             }
         } else {
             g_Program->error(fileName + " not found", "","",LineInfo());
@@ -317,8 +323,9 @@ namespace das {
             program->isCompiling = false;
             return program;
         }
-        err = das_yyparse();        // TODO: add mutex or make thread safe?
-        das_yylex_destroy();
+        err = das_yyparse(scanner);
+        das_yylex_destroy(scanner);
+
         g_Access.reset();
         g_FileAccessStack.clear();
         if ( err || program->failed() ) {

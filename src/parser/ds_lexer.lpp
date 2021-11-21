@@ -2,6 +2,7 @@
     #include "daScript/misc/platform.h"
     #include <inttypes.h>
     #include "daScript/ast/ast.h"
+
     #include "ds_parser.hpp"
 
     #ifndef SCNi64
@@ -16,10 +17,12 @@
 
     using namespace das;
 
+    union DAS_YYSTYPE;
+    typedef DAS_YYSTYPE YYSTYPE;
+
     #define YY_NO_INPUT
 
-    void das_yyerror(const string & error);
-    void das_yyfatalerror(const string & error, CompilationError cerr = CompilationError::syntax_error);
+    void das_yyfatalerror(DAS_YYLTYPE * lloc, const string & error, CompilationError cerr = CompilationError::syntax_error);
 
     int das_current_line_indent = 0;
     int das_indent_level = 0;
@@ -45,9 +48,9 @@
     }
 
     #define YY_USER_ACTION \
-        das_yylloc.first_line = das_yylloc.last_line = yylineno; \
-        das_yylloc.first_column = das_yycolumn; \
-        das_yylloc.last_column = das_yycolumn + yyleng - 1; \
+        yylloc_param->first_line = yylloc_param->last_line = yylineno; \
+        yylloc_param->first_column = das_yycolumn; \
+        yylloc_param->last_column = das_yycolumn + yyleng - 1; \
         YYCOLUMN (das_yycolumn += yyleng, "YY_USER_ACTION");
 
 #ifdef FLEX_DEBUG
@@ -66,6 +69,8 @@ void YYNEWLINE() {
     YYCOLUMN(das_yycolumn = 0,"NEW LINE");
 }
 
+#define YY_DECL int yylex(DAS_YYSTYPE *yylval_param, DAS_YYLTYPE *yylloc_param, yyscan_t yyscanner)
+
 %}
 
 %option prefix="das_yy"
@@ -73,6 +78,9 @@ void YYNEWLINE() {
 %option never-interactive
 %option nounistd
 %option yylineno
+%option reentrant
+%option bison-bridge
+%option header-file="lex.yy.h"
 
 /* %option debug */
 
@@ -96,7 +104,7 @@ void YYNEWLINE() {
         string incFileName = g_Access->getIncludeFileName(cfi->name,lFile);
         auto info = g_Access->getFileInfo(incFileName);
         if ( !info ) {
-            das_yyfatalerror("can't open "+incFileName);
+            das_yyfatalerror(yylloc_param,"can't open "+incFileName);
         } else {
             g_FileAccessStack.pop_back();
             g_FileAccessStack.push_back(info);
@@ -104,13 +112,13 @@ void YYNEWLINE() {
             YYCOLUMN ( das_yycolumn = lCol, "LINE DIRECTIVE");
         }
     } else {
-        das_yyfatalerror ("can't process line directive " + string(yytext),
+        das_yyfatalerror(yylloc_param,"can't process line directive " + string(yytext),
             CompilationError::invalid_line_directive); return LEXER_ERROR;
     }
 }
-<indent>"*/"                        das_yyfatalerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+<indent>"*/"                        das_yyfatalerror(yylloc_param,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 <indent>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = false;
-<normal>"*/"                        das_yyfatalerror ("Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+<normal>"*/"                        das_yyfatalerror(yylloc_param,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 <normal>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = true;
 <indent>"\/\/"                      BEGIN(cpp_comment);
 <normal>"\/\/"                      BEGIN(cpp_comment);
@@ -131,21 +139,21 @@ void YYNEWLINE() {
 <c_comment>.                        /* skipping comment body */
 <c_comment>[\r\n]                   /* skipping comment eol */
 <c_comment><<EOF>>             {
-    das_yyfatalerror("end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
+    das_yyfatalerror(yylloc_param,"end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
     BEGIN(normal);
 }
 <reader><<EOF>>         {
-    das_yyfatalerror("reader constant exceeds file", CompilationError::string_constant_exceeds_file);
+    das_yyfatalerror(yylloc_param,"reader constant exceeds file", CompilationError::string_constant_exceeds_file);
     BEGIN(normal);
     return END_OF_READ;
 }
 <reader>\n        {
     YYNEWLINE();
-    das_yylval.ch = yytext[0];
+    yylval_param->ch = yytext[0];
     return STRING_CHARACTER;
 }
 <reader>.         {
-    das_yylval.ch = yytext[0];
+    yylval_param->ch = yytext[0];
     return STRING_CHARACTER;
 }
 <strb>\"                {
@@ -160,7 +168,7 @@ void YYNEWLINE() {
     return BEGIN_STRING_EXPR;
 }
 <strb><<EOF>>             {
-    das_yyfatalerror("string constant exceeds file", CompilationError::string_constant_exceeds_file);
+    das_yyfatalerror(yylloc_param,"string constant exceeds file", CompilationError::string_constant_exceeds_file);
     BEGIN(normal);
     return END_STRING;
 }
@@ -168,22 +176,22 @@ void YYNEWLINE() {
     return STRING_CHARACTER_ESC;
 }
 <strb>\\[\{\"\}]        {
-    das_yylval.ch = yytext[1];
+    yylval_param->ch = yytext[1];
     return STRING_CHARACTER;
 }
 <strb>\r              /* do exactly nothing */
 <strb>\n                {
-    das_yylval.ch = *yytext;
+    yylval_param->ch = *yytext;
     YYNEWLINE();
     return STRING_CHARACTER;
 }
 <strb>\t                {
     YYTAB();
-    das_yylval.ch = *yytext;
+    yylval_param->ch = *yytext;
     return STRING_CHARACTER;
 }
 <strb>.                 {
-    das_yylval.ch = *yytext;
+    yylval_param->ch = *yytext;
     return STRING_CHARACTER;
 }
 <indent>[ \t\r]*\n      /* skip empty line */ {
@@ -219,7 +227,7 @@ void YYNEWLINE() {
             #ifdef FLEX_DEBUG
             printf("INVALID INDENT at %i, emit {\n", das_current_line_indent);
             #endif
-            das_yyfatalerror("invalid indentation"); // pretend tab was pressed
+            das_yyfatalerror(yylloc_param,"invalid indentation"); // pretend tab was pressed
             das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);
         }
         das_indent_level++;
@@ -250,7 +258,7 @@ void YYNEWLINE() {
             return 0;
         }
     } else {
-        yypop_buffer_state();
+        yypop_buffer_state(yyscanner);
         g_FileAccessStack.pop_back();
         yylineno = das_line_no.back();
         das_line_no.pop_back();
@@ -266,18 +274,18 @@ void YYNEWLINE() {
     string incFileName = g_Access->getIncludeFileName(cfi->name,yytext);
     auto info = g_Access->getFileInfo(incFileName);
     if ( !info ) {
-        das_yyfatalerror("can't open "+incFileName);
+        das_yyfatalerror(yylloc_param,"can't open "+incFileName);
     } else {
         if ( das_already_include.find(incFileName) == das_already_include.end() ) {
             das_already_include.insert(incFileName);
             g_FileAccessStack.push_back(info);
             das_line_no.push_back(yylineno);
             yylineno = 1;
-            yypush_buffer_state(YY_CURRENT_BUFFER);
+            yypush_buffer_state(YY_CURRENT_BUFFER, yyscanner);
             const char * src = nullptr;
             uint32_t len = 0;
             info->getSourceAndLength(src, len);
-            yy_scan_bytes(src, len);
+            yy_scan_bytes(src, len, yyscanner);
         }
     }
     BEGIN(normal);
@@ -385,26 +393,26 @@ void YYNEWLINE() {
 <normal>"float2"                                        return DAS_TFLOAT2;
 <normal>"float3"                                        return DAS_TFLOAT3;
 <normal>"float4"                                        return DAS_TFLOAT4;
-<normal>[_[:alpha:]][_[:alnum:]\`]*                     das_yylval.s = new string(yytext);  return NAME;    // TODO: track allocations
+<normal>[_[:alpha:]][_[:alnum:]\`]*                     yylval_param->s = new string(yytext);  return NAME;    // TODO: track allocations
 <normal>\"                                  {
         BEGIN(strb);
         return BEGIN_STRING;
     }
-<normal>\'\\b\'                         das_yylval.i = 8; return INTEGER;
-<normal>\'\\t\'                         das_yylval.i = 9; return INTEGER;
-<normal>\'\\n\'                         das_yylval.i = 10; return INTEGER;
-<normal>\'\\f\'                         das_yylval.i = 12; return INTEGER;
-<normal>\'\\r\'                         das_yylval.i = 13; return INTEGER;
-<normal>\'\\\\'                         das_yylval.i = '\\'; return INTEGER;
-<normal>\'.\'                           das_yylval.i = int32_t(yytext[1]); return INTEGER;
+<normal>\'\\b\'                         yylval_param->i = 8; return INTEGER;
+<normal>\'\\t\'                         yylval_param->i = 9; return INTEGER;
+<normal>\'\\n\'                         yylval_param->i = 10; return INTEGER;
+<normal>\'\\f\'                         yylval_param->i = 12; return INTEGER;
+<normal>\'\\r\'                         yylval_param->i = 13; return INTEGER;
+<normal>\'\\\\'                         yylval_param->i = '\\'; return INTEGER;
+<normal>\'.\'                           yylval_param->i = int32_t(yytext[1]); return INTEGER;
 <normal>[0-9]+(u|U)(l|L)                {
         char * endtext = nullptr;
-        das_yylval.ui64 = strtoull(yytext,&endtext,10);
+        yylval_param->ui64 = strtoull(yytext,&endtext,10);
         return ( endtext!=(yytext+strlen(yytext)-2) ) ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
     }
 <normal>[0-9]+(l|L)                     {
         char * endtext = nullptr;
-        das_yylval.i64 = strtoll(yytext,&endtext,10);
+        yylval_param->i64 = strtoll(yytext,&endtext,10);
         return ( endtext!=(yytext+strlen(yytext)-1) ) ? LEXER_ERROR : LONG_INTEGER;
     }
 <normal>[0-9]+(u|U)                     {
@@ -414,9 +422,9 @@ void YYNEWLINE() {
             return LEXER_ERROR;
         } else {
             if ( uint_const>UINT32_MAX ) {
-                das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,"integer constant out of range", CompilationError::integer_constant_out_of_range);
             }
-            das_yylval.ui = uint32_t(uint_const);
+            yylval_param->ui = uint32_t(uint_const);
             return UNSIGNED_INTEGER;
         }
     }
@@ -427,15 +435,15 @@ void YYNEWLINE() {
             return LEXER_ERROR;
         } else {
             if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
-                das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,"integer constant out of range", CompilationError::integer_constant_out_of_range);
             }
-            das_yylval.i = int32_t(int_const);
+            yylval_param->i = int32_t(int_const);
             return INTEGER;
         }
     }
 
-<normal>0[xX][0-9a-fA-F]+(u|U)(l|L)     return sscanf(yytext, "%" SCNx64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
-<normal>0[xX][0-9a-fA-F]+(l|L)          return sscanf(yytext, "%" SCNx64, &das_yylval.ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+<normal>0[xX][0-9a-fA-F]+(u|U)(l|L)     return sscanf(yytext, "%" SCNx64, &yylval_param->ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+<normal>0[xX][0-9a-fA-F]+(l|L)          return sscanf(yytext, "%" SCNx64, &yylval_param->ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
 
 <normal>0[xX][0-9a-fA-F]+(u|U)          {
         uint64_t int_const;
@@ -443,9 +451,9 @@ void YYNEWLINE() {
             return LEXER_ERROR;
         } else {
             if ( int_const>UINT32_MAX ) {
-                das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,"integer constant out of range", CompilationError::integer_constant_out_of_range);
             }
-            das_yylval.ui = uint32_t(int_const);
+            yylval_param->ui = uint32_t(int_const);
             return UNSIGNED_INTEGER;
         }
     }
@@ -456,25 +464,25 @@ void YYNEWLINE() {
             return LEXER_ERROR;
         } else {
             if ( int_const>UINT32_MAX ) {
-                das_yyfatalerror("integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,"integer constant out of range", CompilationError::integer_constant_out_of_range);
             }
-            das_yylval.ui = uint32_t(int_const);
+            yylval_param->ui = uint32_t(int_const);
             return UNSIGNED_INTEGER;
         }
     }
 
-<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
-<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
-<normal>[0-9]+(f|F)                                     return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
-<normal>[0-9]+[eE][+\-]?[0-9]+(f|F)?                    return sscanf(yytext, "%lf", &das_yylval.fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>[0-9]+(f|F)                                     return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
+<normal>[0-9]+[eE][+\-]?[0-9]+(f|F)?                    return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
 
-<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?lf          return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?lf       return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9]+lf                                        return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9]+[eE][+\-]?[0-9]+lf                        return sscanf(yytext, "%lf", &das_yylval.d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?lf          return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?lf       return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+lf                                        return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+[eE][+\-]?[0-9]+lf                        return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>\)                                  {
     if ( !das_nested_parentheses ) {
-        das_yyfatalerror("mismatching parentheses", CompilationError::mismatching_parentheses);
+        das_yyfatalerror(yylloc_param,"mismatching parentheses", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     das_nested_parentheses --;
@@ -486,7 +494,7 @@ void YYNEWLINE() {
 }
 <normal>\]                                  {
     if ( !das_nested_square_braces ) {
-        das_yyfatalerror("mismatching square braces", CompilationError::mismatching_parentheses);
+        das_yyfatalerror(yylloc_param,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     das_nested_square_braces --;
@@ -507,7 +515,7 @@ void YYNEWLINE() {
         }
     } else {
         if ( !das_nested_curly_braces ) {
-            das_yyfatalerror("mismatching curly braces", CompilationError::mismatching_curly_bracers);
+            das_yyfatalerror(yylloc_param,"mismatching curly braces", CompilationError::mismatching_curly_bracers);
             return LEXER_ERROR;
         }
         das_nested_curly_braces --;
@@ -679,7 +687,7 @@ void YYNEWLINE() {
             return 0;
         }
     } else {
-        yypop_buffer_state();
+        yypop_buffer_state(yyscanner);
         g_FileAccessStack.pop_back();
         yylineno = das_line_no.back();
         das_line_no.pop_back();
@@ -689,11 +697,13 @@ void YYNEWLINE() {
 
 %%
 
-void das_yybegin_reader ( void ) {
+void das_yybegin_reader ( yyscan_t yyscanner ) {
+    struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     BEGIN(reader);
 }
 
-void das_yyend_reader ( void ) {
+void das_yyend_reader ( yyscan_t yyscanner ) {
+    struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     BEGIN(normal);
 }
 
@@ -701,14 +711,15 @@ void das_yyend_reader ( void ) {
 extern int das_yydebug;
 #endif
 
-void das_yybegin(const char * str, uint32_t len ) {
+void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
+    struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
+
     g_thisStructure = nullptr;
     das_module_alias.clear();
     das_already_include.clear();
 #if DAS_YYDEBUG
     das_yydebug = 0;
 #endif
-    yylineno = 1;
     das_tab_size = das_def_tab_size;
     das_line_no.clear();
     YYCOLUMN(das_yycolumn = 0,"YYBEGIN");
@@ -723,7 +734,8 @@ void das_yybegin(const char * str, uint32_t len ) {
     das_c_style_depth = 0;
     das_arrow_depth = 0;
     BEGIN(normal);
-    yy_scan_bytes(str, len);
+    yy_scan_bytes(str, len, yyscanner);
+    yylineno = 1;
 }
 
 

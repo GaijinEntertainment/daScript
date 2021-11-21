@@ -71,8 +71,8 @@
     void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = true );
     void runFunctionAnnotations ( Function * func, AnnotationList * annL, const LineInfo & at );
 
-    LineInfo tokAt ( const struct YYLTYPE & li );
-    LineInfo tokRangeAt ( const struct YYLTYPE & li, const struct YYLTYPE & lie );
+    LineInfo tokAt ( const struct DAS_YYLTYPE & li );
+    LineInfo tokRangeAt ( const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
 
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
@@ -97,18 +97,29 @@
 
     using namespace das;
 
-    void das_yyerror (const string & error);
-    void das_yyfatalerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
+    union DAS_YYSTYPE;
+    struct DAS_YYLTYPE;
+
+    #define YY_NO_UNISTD_H
+    #include "lex.yy.h"
+
     void das_yyerror (const string & error, const das::LineInfo & at, das::CompilationError cerr = das::CompilationError::unspecified);
     void das_checkName(const string & name, const LineInfo &at);
-    int yylex();
+    void das_yyerror (DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error);
+    void das_yyfatalerror (const string & error, das::CompilationError cerr = das::CompilationError::syntax_error);
+    int yylex(DAS_YYSTYPE *lvalp, DAS_YYLTYPE *llocp, yyscan_t scanner);
     void yybegin(const char * str);
 
-    void das_yybegin_reader ( void );
-    void das_yyend_reader ( void );
+    void das_yybegin_reader ( yyscan_t yyscanner );
+    void das_yyend_reader ( yyscan_t yyscanner );
 
     __forceinline string inThisModule ( const string & name ) { return "_::" + name; }
 %}
+
+%define api.pure full
+
+%lex-param {yyscan_t scanner}
+%parse-param {yyscan_t scanner}
 
 %locations
 %verbose
@@ -577,12 +588,12 @@ string_builder
 reader_character_sequence
     :   STRING_CHARACTER[char] {
         if ( !g_ReaderMacro->accept(g_Program.get(), g_Program->thisModule.get(), g_ReaderExpr, $char, tokAt(@char)) ) {
-            das_yyend_reader();
+            das_yyend_reader(scanner);
         }
     }
     |   reader_character_sequence[elem]  STRING_CHARACTER[char] {
         if ( !g_ReaderMacro->accept(g_Program.get(), g_Program->thisModule.get(), g_ReaderExpr, $char, tokAt(@char)) ) {
-            das_yyend_reader();
+            das_yyend_reader(scanner);
         }
     }
     ;
@@ -607,7 +618,7 @@ expr_reader
             g_ReaderMacro = macros.back().get();
             g_ReaderExpr = new ExprReader(tokAt(@loc),g_ReaderMacro);
             yyclearin ;
-            das_yybegin_reader();
+            das_yybegin_reader(scanner);
         }
     } reader_character_sequence[seq] {
         g_ReaderExpr->at = tokRangeAt(@loc,@seq);
@@ -3058,15 +3069,15 @@ void das_yyerror(const string & error, const LineInfo & at, CompilationError cer
     g_Program->error(error,"","",at,cerr);
 }
 
-void das_yyfatalerror(const string & error, CompilationError cerr) {
+void das_yyfatalerror(DAS_YYLTYPE * lloc, const string & error, CompilationError cerr) {
     g_Program->error(error,"","",LineInfo(g_FileAccessStack.back(),
-        yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line),cerr);
+        lloc->first_column,lloc->first_line,lloc->last_column,lloc->last_line),cerr);
 }
 
-void das_yyerror(const string & error) {
+void das_yyerror(DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error) {
     if ( !das_supress_errors ) {
         g_Program->error(error,"","",LineInfo(g_FileAccessStack.back(),
-            yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line),
+            lloc->first_column,lloc->first_line,lloc->last_column,lloc->last_line),
                 CompilationError::syntax_error);
     }
 }
@@ -3102,13 +3113,13 @@ void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
     delete list;
 }
 
-LineInfo tokAt ( const struct YYLTYPE & li ) {
+LineInfo tokAt ( const struct DAS_YYLTYPE & li ) {
     return LineInfo(g_FileAccessStack.back(),
         li.first_column,li.first_line,
         li.last_column,li.last_line);
 }
 
-LineInfo tokRangeAt ( const struct YYLTYPE & li, const struct YYLTYPE & lie ) {
+LineInfo tokRangeAt ( const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie ) {
     return LineInfo(g_FileAccessStack.back(),
         li.first_column,li.first_line,
         lie.last_column,lie.last_line);

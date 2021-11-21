@@ -114,8 +114,8 @@ extern int das_yydebug;
     void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = true );
     void runFunctionAnnotations ( Function * func, AnnotationList * annL, const LineInfo & at );
 
-    LineInfo tokAt ( const struct YYLTYPE & li );
-    LineInfo tokRangeAt ( const struct YYLTYPE & li, const struct YYLTYPE & lie );
+    LineInfo tokAt ( const struct DAS_YYLTYPE & li );
+    LineInfo tokRangeAt ( const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
 
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
@@ -300,7 +300,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 119 "ds_parser.ypp"
+#line 130 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -352,8 +352,7 @@ struct DAS_YYLTYPE
 #endif
 
 
-extern DAS_YYSTYPE das_yylval;
-extern DAS_YYLTYPE das_yylloc;
-int das_yyparse (void);
+
+int das_yyparse (yyscan_t scanner);
 
 #endif /* !YY_DAS_YY_DS_PARSER_HPP_INCLUDED  */
