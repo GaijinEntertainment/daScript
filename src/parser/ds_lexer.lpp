@@ -26,8 +26,6 @@
 
     void das_yyfatalerror(DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr = CompilationError::syntax_error);
 
-    vector<int> das_line_no;
-
     #define YY_USER_ACTION \
         yylloc_param->first_line = yylloc_param->last_line = yylineno; \
         yylloc_param->first_column = yyextra->das_yycolumn; \
@@ -241,8 +239,8 @@ void YYNEWLINE(yyscan_t yyscanner);
     } else {
         yypop_buffer_state(yyscanner);
         yyextra->g_FileAccessStack.pop_back();
-        yylineno = das_line_no.back();
-        das_line_no.pop_back();
+        yylineno = yyextra->das_line_no.back();
+        yyextra->das_line_no.pop_back();
     }
 }
 
@@ -260,7 +258,7 @@ void YYNEWLINE(yyscan_t yyscanner);
         if ( yyextra->das_already_include.find(incFileName) == yyextra->das_already_include.end() ) {
             yyextra->das_already_include.insert(incFileName);
             yyextra->g_FileAccessStack.push_back(info);
-            das_line_no.push_back(yylineno);
+            yyextra->das_line_no.push_back(yylineno);
             yylineno = 1;
             yypush_buffer_state(YY_CURRENT_BUFFER, yyscanner);
             const char * src = nullptr;
@@ -670,8 +668,8 @@ void YYNEWLINE(yyscan_t yyscanner);
     } else {
         yypop_buffer_state(yyscanner);
         yyextra->g_FileAccessStack.pop_back();
-        yylineno = das_line_no.back();
-        das_line_no.pop_back();
+        yylineno = yyextra->das_line_no.back();
+        yyextra->das_line_no.pop_back();
     }
 }
 <normal>.                                   return *yytext;
@@ -702,7 +700,7 @@ void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
     das_yydebug = 0;
 #endif
     yyextra->das_tab_size = yyextra->das_def_tab_size;
-    das_line_no.clear();
+    yyextra->das_line_no.clear();
     YYCOLUMN(yyextra->das_yycolumn = 0,"YYBEGIN");
     yyextra->das_current_line_indent = 0;
     yyextra->das_indent_level = 0;
