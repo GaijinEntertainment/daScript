@@ -3,7 +3,7 @@
 
 namespace das
 {
-    extern unsigned ModuleKarma;
+    extern thread_local unsigned ModuleKarma;
     class Module;
 };
 
