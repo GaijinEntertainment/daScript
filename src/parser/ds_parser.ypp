@@ -109,6 +109,7 @@
 
     __forceinline string inThisModule ( const string & name ) { return "_::" + name; }
 
+    #undef yyextra
     #define yyextra (*((das::DasParserState *)(scanner)))
 %}
 
