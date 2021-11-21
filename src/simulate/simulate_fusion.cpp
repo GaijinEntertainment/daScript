@@ -116,13 +116,16 @@ namespace das {
         return typeName.empty() ? name : (name + "<" + typeName + ">");
     }
 
+    mutex g_fusionEngineMutex;
     unique_ptr<FusionEngine> g_fusionEngine;
 
     void resetFusionEngine() {
+        lock_guard<mutex> lock(g_fusionEngineMutex);
         g_fusionEngine.reset();
     }
 
     void createFusionEngine() {
+        lock_guard<mutex> lock(g_fusionEngineMutex);
         if ( !g_fusionEngine ) {
             g_fusionEngine = make_unique<FusionEngine>();
 #if DAS_FUSION
@@ -182,12 +185,15 @@ namespace das {
         }
         virtual SimNode * visit ( SimNode * node ) override {
             auto & ni = info[node];
-            auto & nv = (*g_fusionEngine)[fuseName(ni.name, ni.typeName)];
-            for ( const auto & fe : nv ) {
-                auto newNode = fe->fuse(info, node, context);
-                if ( newNode != node ) {
-                    fuse();
-                    return newNode;
+            auto it = g_fusionEngine->find(fuseName(ni.name, ni.typeName));
+            if ( it != g_fusionEngine->end() ) {
+                auto & nv = it->second;
+                for ( const auto & fe : nv ) {
+                    auto newNode = fe->fuse(info, node, context);
+                    if ( newNode != node ) {
+                        fuse();
+                        return newNode;
+                    }
                 }
             }
             return SimVisitor::visit(node);

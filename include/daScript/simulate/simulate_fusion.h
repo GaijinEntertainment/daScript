@@ -30,7 +30,7 @@ namespace das {
     };
     typedef unique_ptr<FusionPoint> FusionPointPtr;
 
-    typedef das_hash_map<string,vector<FusionPointPtr>> FusionEngine;
+    typedef unordered_map<string,vector<FusionPointPtr>> FusionEngine;   // note: unordered map for thread safety
     extern unique_ptr<FusionEngine> g_fusionEngine;
 
     const char * getSimSourceName(SimSourceType st);
