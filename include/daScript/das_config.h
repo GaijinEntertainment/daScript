@@ -23,6 +23,8 @@
 #include <limits.h>
 #include <setjmp.h>
 
+#include <mutex>
+
 namespace das {using namespace std;}
 
 #if DAS_SKA_HASH

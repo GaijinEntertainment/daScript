@@ -8,7 +8,6 @@
 #include "daScript/misc/debug_break.h"
 
 #include <stdarg.h>
-#include <mutex>
 
 namespace das
 {

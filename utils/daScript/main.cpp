@@ -3,11 +3,6 @@
 
 using namespace das;
 
-namespace das {
-    extern bool g_isInAot;
-    extern ProgramPtr g_Program;
-}
-
 void require_project_specific_modules();//link time resolved dependencies
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
 
@@ -133,9 +128,9 @@ bool compile ( const string & fn, const string & cppFn ) {
                 tw << "\n";
                 tw << "namespace das {\n";
                 tw << "namespace " << program->thisNamespace << " {\n"; // anonymous
-                g_Program = program;
+                daScriptEnvironment::bound->g_Program = program;    // setting it for the AOT macros
                 program->aotCpp(*pctx, tw);
-                g_Program.reset();
+                daScriptEnvironment::bound->g_Program.reset();
                 // list STUFF
                 tw << "\tstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
                 program->registerAotCpp(tw, *pctx, false);
@@ -169,7 +164,6 @@ bool compile ( const string & fn, const string & cppFn ) {
 }
 
 int das_aot_main ( int argc, char * argv[] ) {
-    g_isInAot = true;
     setCommandLineArguments(argc, argv);
     #ifdef _MSC_VER
     _CrtSetReportMode(_CRT_ASSERT, 0);
@@ -206,6 +200,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();
+    daScriptEnvironment::bound->g_isInAot = true;
     bool compiled = compile(argv[2], argv[3]);
     Module::Shutdown();
     return compiled ? 0 : -1;

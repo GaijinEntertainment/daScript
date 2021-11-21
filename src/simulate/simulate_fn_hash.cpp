@@ -178,10 +178,10 @@ namespace das {
         das_hash_set<const Variable *> variables;
     };
 
-    extern ProgramPtr g_Program;
-
     void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line ) {
-        g_Program->markExecutableSymbolUse();
+        auto program = daScriptEnvironment::bound->g_Program;
+        if ( !program ) context->throw_error_at(*line, "Can't collect dependencies outside of compilation.");
+        program->markExecutableSymbolUse();
         DependencyCollector collector;
         collector.collect(fun.get());
         auto vecFunc = collector.getStableDependencies();

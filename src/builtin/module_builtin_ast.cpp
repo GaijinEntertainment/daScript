@@ -2322,9 +2322,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
         }
     };
-
-    extern ProgramPtr g_Program;
-
     struct TypeInfoMacroAdapter : TypeInfoMacro, AstTypeInfoMacro_Adapter {
         TypeInfoMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : TypeInfoMacro(n), AstTypeInfoMacro_Adapter(info), classPtr(pClass), context(ctx) {
@@ -2585,7 +2582,8 @@ namespace das {
                 ann->annotation->name.c_str(), func->name.c_str());
         }
         auto fAnn = (FunctionAnnotation*)ann->annotation.get();
-        if ( !fAnn->apply(func, *g_Program->thisModuleGroup, ann->arguments, err) ) {
+        auto program = daScriptEnvironment::bound->g_Program;
+        if ( !fAnn->apply(func, *program->thisModuleGroup, ann->arguments, err) ) {
             context->throw_error_ex("annotation %s failed to apply to function %s",
                 ann->annotation->name.c_str(), func->name.c_str());
         }
@@ -2615,13 +2613,15 @@ namespace das {
     }
 
     Module * compileModule ( Context * context ) {
-        if ( !g_Program ) context->throw_error("compileModule only available during compilation");
-        return g_Program->thisModule.get();
+        auto program = daScriptEnvironment::bound->g_Program;
+        if ( !program ) context->throw_error("compileModule only available during compilation");
+        return program->thisModule.get();
     }
 
     smart_ptr_raw<Program> compileProgram ( Context * context ) {
-        if ( !g_Program ) context->throw_error("compileProgram only available during compilation");
-        return g_Program;
+        auto program = daScriptEnvironment::bound->g_Program;
+        if ( !program ) context->throw_error("compileProgram only available during compilation");
+        return program;
     }
 
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
@@ -2834,7 +2834,8 @@ namespace das {
 
     ExpressionPtr makeCall ( const LineInfo & at, const char * name ) {
         name = name ? name : "";
-        return g_Program->makeCall(at, name);
+        auto program = daScriptEnvironment::bound->g_Program;
+        return program->makeCall(at, name);
     }
 
     float4 evalSingleExpression ( const ExpressionPtr & expr, bool & ok ) {

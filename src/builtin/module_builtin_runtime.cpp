@@ -52,13 +52,12 @@ namespace das
         }
     };
 
-    extern ProgramPtr g_Program;
-
     struct MacroFunctionAnnotation : MarkFunctionAnnotation {
         MacroFunctionAnnotation() : MarkFunctionAnnotation("_macro") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             func->macroInit = true;
-            g_Program->needMacroModule = true;
+            auto program = daScriptEnvironment::bound->g_Program;
+            program->needMacroModule = true;
             return true;
         };
     };

@@ -275,8 +275,6 @@ namespace das {
 
     // PARSER
 
-    ProgramPtr g_Program;
-
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
 
@@ -289,20 +287,21 @@ namespace das {
                               CodeOfPolicies policies ) {
         auto time0 = ref_time_ticks();
         int err;
-        auto program = g_Program = make_smart<Program>();
+        auto program = make_smart<Program>();
+        daScriptEnvironment::bound->g_Program = program;
         program->promoteToBuiltin = false;
         program->isCompiling = true;
         program->isDependency = isDep;
         program->needMacroModule = false;
-        g_Program->policies = policies;
+        program->policies = policies;
         program->thisModuleGroup = &libGroup;
         libGroup.foreach([&](Module * pm){
-            g_Program->library.addModule(pm);
+            program->library.addModule(pm);
             return true;
         },"*");
         DasParserState parserState;
         parserState.g_Access = access;
-        parserState.g_Program = g_Program;
+        parserState.g_Program = program;
         yyscan_t scanner = nullptr;
         das_yylex_init_extra(&parserState, &scanner);
         if ( auto fi = access->getFileInfo(fileName) ) {
@@ -316,16 +315,16 @@ namespace das {
                 das_yybegin(src, len, scanner);
             }
         } else {
-            g_Program->error(fileName + " not found", "","",LineInfo());
-            g_Program.reset();
+            program->error(fileName + " not found", "","",LineInfo());
             program->isCompiling = false;
+            daScriptEnvironment::bound->g_Program.reset();
             return program;
         }
         err = das_yyparse(scanner);
         das_yylex_destroy(scanner);
         parserState = DasParserState();
         if ( err || program->failed() ) {
-            g_Program.reset();
+            daScriptEnvironment::bound->g_Program.reset();
             sort(program->errors.begin(),program->errors.end());
             program->isCompiling = false;
             return program;
@@ -369,7 +368,7 @@ namespace das {
                     logs << *program;
                 }
             }
-            g_Program.reset();
+            daScriptEnvironment::bound->g_Program.reset();
             sort(program->errors.begin(), program->errors.end());
             program->isCompiling = false;
             if ( !program->failed() ) {

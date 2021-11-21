@@ -275,6 +275,7 @@ SOURCE_GROUP_FILES("vecmath" VECMATH_SRC)
 
 SET(AST_SRC
 src/ast/ast.cpp
+src/ast/ast_tls.cpp
 src/ast/ast_visitor.cpp
 src/ast/ast_generate.cpp
 src/ast/ast_simulate.cpp

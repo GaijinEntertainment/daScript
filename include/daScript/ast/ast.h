@@ -966,20 +966,21 @@ namespace das
         };
     private:
         Module * next = nullptr;
-        static Module * modules;
         unique_ptr<FileInfo>    ownFileInfo;
         FileAccessPtr           promotedAccess;
     };
 
     #define REGISTER_MODULE(ClassName) \
         das::Module * register_##ClassName () { \
-            static ClassName * module_##ClassName = new ClassName(); \
+            das::daScriptEnvironment::ensure(); \
+            ClassName * module_##ClassName = new ClassName(); \
             return module_##ClassName; \
         }
 
     #define REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
         das::Module * register_##ClassName () { \
-            static Namespace::ClassName * module_##ClassName = new Namespace::ClassName(); \
+            das::daScriptEnvironment::ensure(); \
+            Namespace::ClassName * module_##ClassName = new Namespace::ClassName(); \
             return module_##ClassName; \
         }
 
@@ -1312,6 +1313,15 @@ namespace das
         }
         return true;
     }
+
+    struct daScriptEnvironment {
+        ProgramPtr      g_Program;
+        bool            g_isInAot;
+        Module *        modules = nullptr;
+        static thread_local daScriptEnvironment * bound;
+        static thread_local daScriptEnvironment * owned;
+        static void ensure();
+    };
 }
 
 

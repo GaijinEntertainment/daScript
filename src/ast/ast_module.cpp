@@ -42,8 +42,6 @@ namespace das {
 
     // MODULE
 
-    Module * Module::modules = nullptr;
-
     void Module::addDependency ( Module * mod, bool pub ) {
         requireModule[mod] |= pub;
         for ( auto it : mod->requireModule ) {
@@ -68,7 +66,7 @@ namespace das {
             string moduleName, annName;
             splitTypeName(cvtbuf, moduleName, annName);
             info->annotation_or_name = nullptr;
-            for ( auto pm = Module::modules; pm!=nullptr; pm=pm->next ) {
+            for ( auto pm = daScriptEnvironment::bound->modules; pm!=nullptr; pm=pm->next ) {
                 if ( pm->name == moduleName ) {
                     if ( auto annT = pm->findAnnotation(annName) ) {
                         info->annotation_or_name = (TypeAnnotation *) annT.get();
@@ -83,19 +81,22 @@ namespace das {
     void resetFusionEngine();
 
     void Module::Initialize() {
+        daScriptEnvironment::ensure();
         bool all = false;
         while ( !all ) {
             all = true;
-            for ( auto m = modules; m ; m = m->next ) {
+            for ( auto m = daScriptEnvironment::bound->modules; m ; m = m->next ) {
                 all &= m->initDependencies();
             }
         }
     }
 
     void Module::Shutdown() {
+        DAS_ASSERT(daScriptEnvironment::owned!=nullptr);
+        DAS_ASSERT(daScriptEnvironment::bound!=nullptr);
         ReuseGuard<TypeDecl> rguard;
         shutdownDebugAgent();
-        auto m = modules;
+        auto m = daScriptEnvironment::bound->modules;
         while ( m ) {
             auto pM = m;
             m = m->next;
@@ -104,12 +105,17 @@ namespace das {
         clearGlobalAotLibrary();
         resetFusionEngine();
         ReuseAllocator<TypeDecl>::canHold = false;
+        daScriptEnvironment::bound = nullptr;
+        if ( daScriptEnvironment::owned ) {
+            delete daScriptEnvironment::owned;
+            daScriptEnvironment::owned = nullptr;
+        }
     }
 
     void Module::Reset(bool debAg) {
         ReuseGuard<TypeDecl> rguard;
         if ( debAg ) shutdownDebugAgent();
-        auto m = modules;
+        auto m = daScriptEnvironment::bound->modules;
         while ( m ) {
             auto pM = m;
             m = m->next;
@@ -118,13 +124,13 @@ namespace das {
     }
 
     void Module::foreach ( const callable<bool (Module * module)> & func ) {
-        for (auto m = modules; m != nullptr; m = m->next) {
+        for (auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next) {
             if (!func(m)) break;
         }
     }
 
     Module * Module::require ( const string & name ) {
-        for ( auto m = modules; m != nullptr; m = m->next ) {
+        for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
             if ( m->name == name ) {
                 return m;
             }
@@ -133,7 +139,7 @@ namespace das {
     }
 
     Module * Module::requireEx ( const string & name, bool allowPromoted ) {
-        for ( auto m = modules; m != nullptr; m = m->next ) {
+        for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
             if ( allowPromoted || !m->promoted ) {
                 if ( m->name == name ) {
                     return m;
@@ -145,7 +151,7 @@ namespace das {
 
     Type Module::findOption ( const string & name ) {
         Type optT = Type::none;
-        for ( auto m = modules; m != nullptr; m = m->next ) {
+        for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
             auto tt = m->getOptionType(name);
             if ( tt != Type::none ) {
                 DAS_ASSERTF(optT==Type::none, "duplicate module option %s", name.c_str());
@@ -157,8 +163,8 @@ namespace das {
 
     Module::Module ( const string & n ) : name(n) {
         if ( !name.empty() ) {
-            next = modules;
-            modules = this;
+            next = daScriptEnvironment::bound->modules;
+            daScriptEnvironment::bound->modules = this;
             builtIn = true;
         }
         if ( n != "$" ) {
@@ -172,8 +178,8 @@ namespace das {
 
     void Module::promoteToBuiltin(const FileAccessPtr & access) {
         DAS_ASSERTF(!builtIn, "failed to promote. already builtin");
-        next = modules;
-        modules = this;
+        next = daScriptEnvironment::bound->modules;
+        daScriptEnvironment::bound->modules = this;
         builtIn = true;
         promoted = true;
         promotedAccess = access;
@@ -181,8 +187,8 @@ namespace das {
 
     Module::~Module() {
         if ( builtIn ) {
-            Module ** p = &modules;
-            for ( auto m = modules; m != nullptr; p = &m->next, m = m->next ) {
+            Module ** p = &daScriptEnvironment::bound->modules;
+            for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; p = &m->next, m = m->next ) {
                 if ( m == this ) {
                     *p = m->next;
                     return;

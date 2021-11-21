@@ -147,7 +147,9 @@ namespace das {
         ptr += 16;
         das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
+        auto bound = daScriptEnvironment::bound;
         g_jobQue->push([=]() mutable {
+            daScriptEnvironment::bound = bound;
             Lambda flambda(ptr);
             das_invoke_lambda<void>::invoke(forkContext.get(), lineinfo, flambda);
             das_delete<Lambda>::clear(forkContext.get(), flambda);
@@ -171,7 +173,9 @@ namespace das {
         das_invoke_function<void>::invoke(forkContext.get(), lineinfo, fn, ptr, lambda.capture);
         das_delete<Lambda>::clear(context, lambda);
         g_jobQueTotalThreads ++;
+        auto bound = daScriptEnvironment::bound;
         thread([=]() mutable {
+            daScriptEnvironment::bound = bound;
             Lambda flambda(ptr);
             das_invoke_lambda<void>::invoke(forkContext.get(), lineinfo, flambda);
             das_delete<Lambda>::clear(forkContext.get(), flambda);

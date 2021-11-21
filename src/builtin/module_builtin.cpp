@@ -5,6 +5,8 @@
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/sim_policy.h"
 
+#include "daScript/ast/ast.h"
+
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast_policy_types.h"

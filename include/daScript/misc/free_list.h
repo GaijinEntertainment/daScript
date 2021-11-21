@@ -73,7 +73,7 @@ namespace das {
                 hold = hold->next;
                 return data;
             } else {
-                return das_aligned_alloc16(uint32_t(size));
+                return ::operator new(size);
             }
         }
         void operator delete ( void * data ) {
@@ -82,14 +82,14 @@ namespace das {
                 hold = (ReuseChunk *) data;
                 hold->next = next;
             } else {
-                das_aligned_free16(data);
+                ::operator delete(data);
             }
         }
         static void Cleanup() {
             while ( hold ) {
                 auto ptr = hold;
                 hold = hold->next;
-                das_aligned_free16(ptr);
+                ::operator delete(ptr);
             }
         }
     };
