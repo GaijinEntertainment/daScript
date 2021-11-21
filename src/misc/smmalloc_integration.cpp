@@ -37,4 +37,12 @@ void operator delete  ( void* ptr, size_t ) {
     _sm_free(sm_space(), ptr);
 }
 
+void  sm_thread_cache_create() {
+    _sm_allocator_thread_cache_create(sm_space(),  sm::CACHE_WARM, { 8192, 8192, 8192, 8192, 8192 });
+}
+
+void sm_thread_cache_destroy() {
+    _sm_allocator_thread_cache_destroy(sm_space());
+}
+
 #endif

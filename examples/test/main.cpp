@@ -12,8 +12,6 @@
 
 using namespace das;
 
-#include "smmalloc.h"
-
 bool g_reportCompilationFailErrors = false;
 
 TextPrinter tout;

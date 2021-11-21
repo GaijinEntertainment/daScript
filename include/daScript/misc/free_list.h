@@ -64,8 +64,8 @@ namespace das {
 
     template <typename TT>
     struct ReuseAllocator {
-        static ReuseChunk * hold;
-        static bool canHold;
+        static thread_local ReuseChunk * hold;
+        static thread_local bool canHold;
         void * operator new ( size_t size ) {
             DAS_ASSERT(size == sizeof(TT));
             if ( hold ) {
@@ -95,9 +95,9 @@ namespace das {
     };
 
     template <typename TT>
-    ReuseChunk * ReuseAllocator<TT>::hold = nullptr;
+    thread_local ReuseChunk * ReuseAllocator<TT>::hold = nullptr;
     template <typename TT>
-    bool ReuseAllocator<TT>::canHold = true;
+    thread_local bool ReuseAllocator<TT>::canHold = true;
 
     template <typename TT>
     struct ReuseGuard {
