@@ -213,9 +213,18 @@ def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlo
             ]]
     var vlet <- new [[ExprLet() at=a.at, atInit=a.at]]
     vlet.genFlags |= ExprGenFlags alwaysSafe
+    var vtype <- clone_type(a._type)
+    if getter=="get_default_ro"
+        pass
+    elif getter=="get_ro"
+        vtype.flags |= TypeDeclFlags constant
+        vtype.flags |= TypeDeclFlags ref
+    else
+        vtype.flags |= TypeDeclFlags ref
+
     vlet.variables |> emplace_new() <| new [[Variable() at = a.at,
         name := "{prefix}{a.name}{suffix}",
-        _type <- clone_type(a._type),
+        _type <- vtype,
         init <- iget,
         flags = VariableFlags can_shadow
         ]]
@@ -318,7 +327,6 @@ class DecsQueryMacro : AstCallMacro
                 else
                     if !append_index_lookup(arch_name, qlbody, a, "", "")
                         return [[ExpressionPtr]]
-
             for l in qblk.list
                 qlbody.list |> emplace_new <| clone_expression(l)
             for fl in qblk.finalList
