@@ -8,7 +8,7 @@
 typedef void * yyscan_t;
 union YYSTYPE;
 
-#define YY_EXTRA_TYPE das::DasParserState
+#define YY_EXTRA_TYPE das::DasParserState *
 
 #define YY_NO_UNISTD_H
 #include "../parser/lex.yy.h"
@@ -277,9 +277,6 @@ namespace das {
 
     ProgramPtr g_Program;
     FileAccessPtr g_Access;
-    vector<FileInfo *>  g_FileAccessStack;
-    ReaderMacro * g_ReaderMacro = nullptr;
-    ExprReader *  g_ReaderExpr = nullptr;
 
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
@@ -300,21 +297,16 @@ namespace das {
         program->needMacroModule = false;
         g_Program->policies = policies;
         g_Access = access;
-        g_ReaderMacro = nullptr;
-        g_ReaderExpr = nullptr;
         program->thisModuleGroup = &libGroup;
         libGroup.foreach([&](Module * pm){
             g_Program->library.addModule(pm);
             return true;
         },"*");
-        g_FileAccessStack.clear();
-
         DasParserState parserState;
         yyscan_t scanner = nullptr;
-        das_yylex_init_extra(parserState, &scanner);
-
+        das_yylex_init_extra(&parserState, &scanner);
         if ( auto fi = access->getFileInfo(fileName) ) {
-            g_FileAccessStack.push_back(fi);
+            parserState.g_FileAccessStack.push_back(fi);
             const char * src = nullptr;
             uint32_t len = 0;
             fi->getSourceAndLength(src,len);
@@ -327,15 +319,12 @@ namespace das {
             g_Program->error(fileName + " not found", "","",LineInfo());
             g_Program.reset();
             g_Access.reset();
-            g_FileAccessStack.clear();
             program->isCompiling = false;
             return program;
         }
         err = das_yyparse(scanner);
         das_yylex_destroy(scanner);
-
         g_Access.reset();
-        g_FileAccessStack.clear();
         if ( err || program->failed() ) {
             g_Program.reset();
             sort(program->errors.begin(),program->errors.end());

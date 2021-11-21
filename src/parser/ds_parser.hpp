@@ -74,10 +74,6 @@ extern int das_yydebug;
     namespace das {
         extern ProgramPtr               g_Program;
         extern FileAccessPtr            g_Access;
-        extern vector<FileInfo *>       g_FileAccessStack;
-
-        extern ReaderMacro *            g_ReaderMacro;
-        extern ExprReader *             g_ReaderExpr;
     }
     using namespace das;
 
@@ -113,12 +109,12 @@ extern int das_yydebug;
     void varDeclToTypeDecl ( TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = true );
     void runFunctionAnnotations ( Function * func, AnnotationList * annL, const LineInfo & at );
 
-    LineInfo tokAt ( const struct DAS_YYLTYPE & li );
-    LineInfo tokRangeAt ( const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
+    LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
+    LineInfo tokRangeAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
 
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 122 "ds_parser.hpp"
+#line 118 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -292,7 +288,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 126 "ds_parser.ypp"
+#line 123 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -321,7 +317,7 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 325 "ds_parser.hpp"
+#line 321 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

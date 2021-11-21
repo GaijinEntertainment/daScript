@@ -1138,33 +1138,33 @@ static const flex_int32_t yy_rule_can_match_eol[213] =
 
     #define YY_NO_INPUT
 
-    void das_yyfatalerror(DAS_YYLTYPE * lloc, const string & error, CompilationError cerr = CompilationError::syntax_error);
+    void das_yyfatalerror(DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr = CompilationError::syntax_error);
 
     vector<int> das_line_no;
 
     #define YY_USER_ACTION \
         yylloc_param->first_line = yylloc_param->last_line = yylineno; \
-        yylloc_param->first_column = yyextra.das_yycolumn; \
-        yylloc_param->last_column = yyextra.das_yycolumn + yyleng - 1; \
-        YYCOLUMN (yyextra.das_yycolumn += yyleng, "YY_USER_ACTION");
+        yylloc_param->first_column = yyextra->das_yycolumn; \
+        yylloc_param->last_column = yyextra->das_yycolumn + yyleng - 1; \
+        YYCOLUMN (yyextra->das_yycolumn += yyleng, "YY_USER_ACTION");
 
 #ifdef FLEX_DEBUG
     void YYCOLUMN ( int, const char * comment ) {
-        printf("%i:%i %s\n", yyextra.das_yycolumn, yylineno, comment ? comment : "");
+        printf("%i:%i %s\n", yyextra->das_yycolumn, yylineno, comment ? comment : "");
     }
 #else
     #define YYCOLUMN(expr,comment)  ((expr))
 #endif
 
 void YYTAB() {
-    // YYCOLUMN(yyextra.das_yycolumn = (yyextra.das_yycolumn - 1 + yyextra.das_tab_size) & ~(yyextra.das_tab_size-1), "TAB");
+    // YYCOLUMN(yyextra->das_yycolumn = (yyextra->das_yycolumn - 1 + yyextra->das_tab_size) & ~(yyextra->das_tab_size-1), "TAB");
 }
 
 void YYNEWLINE(yyscan_t yyscanner);
 
 #define YY_DECL int yylex(DAS_YYSTYPE *yylval_param, DAS_YYLTYPE *yylloc_param, yyscan_t yyscanner)
 
-#define YY_EXTRA_TYPE das::DasParserState
+#define YY_EXTRA_TYPE das::DasParserState *
 
 #line 1169 "ds_lexer.cpp"
 #define YY_NO_UNISTD_H 1
@@ -1529,19 +1529,19 @@ YY_RULE_SETUP
     char lFile[256];
     if ( sscanf ( yytext, "#%i,%i,\"%255s\"#", &lRow, &lCol, lFile )==3 ) {
         lFile[strlen(lFile)-2] = 0;
-        auto cfi = g_FileAccessStack.back();
+        auto cfi = yyextra->g_FileAccessStack.back();
         string incFileName = g_Access->getIncludeFileName(cfi->name,lFile);
         auto info = g_Access->getFileInfo(incFileName);
         if ( !info ) {
-            das_yyfatalerror(yylloc_param,"can't open "+incFileName);
+            das_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName);
         } else {
-            g_FileAccessStack.pop_back();
-            g_FileAccessStack.push_back(info);
+            yyextra->g_FileAccessStack.pop_back();
+            yyextra->g_FileAccessStack.push_back(info);
             yylineno = lRow;
-            YYCOLUMN ( yyextra.das_yycolumn = lCol, "LINE DIRECTIVE");
+            YYCOLUMN ( yyextra->das_yycolumn = lCol, "LINE DIRECTIVE");
         }
     } else {
-        das_yyfatalerror(yylloc_param,"can't process line directive " + string(yytext),
+        das_yyfatalerror(yylloc_param,yyscanner,"can't process line directive " + string(yytext),
             CompilationError::invalid_line_directive); return LEXER_ERROR;
     }
 }
@@ -1549,22 +1549,22 @@ YY_RULE_SETUP
 case 2:
 YY_RULE_SETUP
 #line 100 "ds_lexer.lpp"
-das_yyfatalerror(yylloc_param,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+das_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
 #line 101 "ds_lexer.lpp"
-BEGIN(c_comment); yyextra.das_c_style_depth = 1; yyextra.das_in_normal = false;
+BEGIN(c_comment); yyextra->das_c_style_depth = 1; yyextra->das_in_normal = false;
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
 #line 102 "ds_lexer.lpp"
-das_yyfatalerror(yylloc_param,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+das_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
 #line 103 "ds_lexer.lpp"
-BEGIN(c_comment); yyextra.das_c_style_depth = 1; yyextra.das_in_normal = true;
+BEGIN(c_comment); yyextra->das_c_style_depth = 1; yyextra->das_in_normal = true;
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
@@ -1594,15 +1594,15 @@ BEGIN(normal);
 case 10:
 YY_RULE_SETUP
 #line 109 "ds_lexer.lpp"
-yyextra.das_c_style_depth ++;
+yyextra->das_c_style_depth ++;
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
 #line 110 "ds_lexer.lpp"
 {
-    yyextra.das_c_style_depth --;
-    if ( yyextra.das_c_style_depth==0 ) {
-        if ( yyextra.das_in_normal ) {
+    yyextra->das_c_style_depth --;
+    if ( yyextra->das_c_style_depth==0 ) {
+        if ( yyextra->das_in_normal ) {
             BEGIN(normal);
         } else {
             BEGIN(indent);
@@ -1624,14 +1624,14 @@ YY_RULE_SETUP
 case YY_STATE_EOF(c_comment):
 #line 122 "ds_lexer.lpp"
 {
-    das_yyfatalerror(yylloc_param,"end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
+    das_yyfatalerror(yylloc_param,yyscanner,"end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
     BEGIN(normal);
 }
 	YY_BREAK
 case YY_STATE_EOF(reader):
 #line 126 "ds_lexer.lpp"
 {
-    das_yyfatalerror(yylloc_param,"reader constant exceeds file", CompilationError::string_constant_exceeds_file);
+    das_yyfatalerror(yylloc_param,yyscanner,"reader constant exceeds file", CompilationError::string_constant_exceeds_file);
     BEGIN(normal);
     return END_OF_READ;
 }
@@ -1667,8 +1667,8 @@ case 17:
 YY_RULE_SETUP
 #line 145 "ds_lexer.lpp"
 {
-    DAS_ASSERT(yyextra.das_nested_sb==0);
-    yyextra.das_nested_sb ++;
+    DAS_ASSERT(yyextra->das_nested_sb==0);
+    yyextra->das_nested_sb ++;
     BEGIN(normal);
     return BEGIN_STRING_EXPR;
 }
@@ -1676,7 +1676,7 @@ YY_RULE_SETUP
 case YY_STATE_EOF(strb):
 #line 151 "ds_lexer.lpp"
 {
-    das_yyfatalerror(yylloc_param,"string constant exceeds file", CompilationError::string_constant_exceeds_file);
+    das_yyfatalerror(yylloc_param,yyscanner,"string constant exceeds file", CompilationError::string_constant_exceeds_file);
     BEGIN(normal);
     return END_STRING;
 }
@@ -1733,7 +1733,7 @@ case 24:
 YY_RULE_SETUP
 #line 178 "ds_lexer.lpp"
 /* skip empty line */ {
-    yyextra.das_current_line_indent = 0;
+    yyextra->das_current_line_indent = 0;
     YYNEWLINE(yyscanner);
 }
 	YY_BREAK
@@ -1741,9 +1741,9 @@ case 25:
 YY_RULE_SETUP
 #line 182 "ds_lexer.lpp"
 {
-    yyextra.das_current_line_indent++;
+    yyextra->das_current_line_indent++;
     #ifdef FLEX_DEBUG
-        printf("[ ], indent=%i\n", yyextra.das_current_line_indent);
+        printf("[ ], indent=%i\n", yyextra->das_current_line_indent);
     #endif
 }
 	YY_BREAK
@@ -1751,9 +1751,9 @@ case 26:
 YY_RULE_SETUP
 #line 188 "ds_lexer.lpp"
 {
-    yyextra.das_current_line_indent = (yyextra.das_current_line_indent + yyextra.das_tab_size) & ~(yyextra.das_tab_size-1);
+    yyextra->das_current_line_indent = (yyextra->das_current_line_indent + yyextra->das_tab_size) & ~(yyextra->das_tab_size-1);
     #ifdef FLEX_DEBUG
-        printf("\\t, cli=%i\n", yyextra.das_current_line_indent);
+        printf("\\t, cli=%i\n", yyextra->das_current_line_indent);
     #endif
     YYTAB();
 }
@@ -1763,8 +1763,8 @@ case 27:
 YY_RULE_SETUP
 #line 195 "ds_lexer.lpp"
 {
-    yyextra.das_current_line_indent = 0;
-    yyextra.das_need_oxford_comma = true;
+    yyextra->das_current_line_indent = 0;
+    yyextra->das_need_oxford_comma = true;
     YYNEWLINE(yyscanner);
     #ifdef FLEX_DEBUG
         printf("new line\n");
@@ -1776,24 +1776,24 @@ YY_RULE_SETUP
 #line 203 "ds_lexer.lpp"
 {
     unput(*yytext);
-    YYCOLUMN(yyextra.das_yycolumn--, "UNPUT");
-    if (yyextra.das_current_line_indent > yyextra.das_indent_level*yyextra.das_tab_size ) {
-        if ( yyextra.das_current_line_indent % yyextra.das_tab_size ) {
+    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT");
+    if (yyextra->das_current_line_indent > yyextra->das_indent_level*yyextra->das_tab_size ) {
+        if ( yyextra->das_current_line_indent % yyextra->das_tab_size ) {
             #ifdef FLEX_DEBUG
-            printf("INVALID INDENT at %i, emit {\n", yyextra.das_current_line_indent);
+            printf("INVALID INDENT at %i, emit {\n", yyextra->das_current_line_indent);
             #endif
-            das_yyfatalerror(yylloc_param,"invalid indentation"); // pretend tab was pressed
-            yyextra.das_current_line_indent = (yyextra.das_current_line_indent + yyextra.das_tab_size) & ~(yyextra.das_tab_size-1);
+            das_yyfatalerror(yylloc_param,yyscanner,"invalid indentation"); // pretend tab was pressed
+            yyextra->das_current_line_indent = (yyextra->das_current_line_indent + yyextra->das_tab_size) & ~(yyextra->das_tab_size-1);
         }
-        yyextra.das_indent_level++;
+        yyextra->das_indent_level++;
         #ifdef FLEX_DEBUG
-        printf("emit {, cli=%i, indent =%i\n", yyextra.das_current_line_indent, yyextra.das_indent_level);
+        printf("emit {, cli=%i, indent =%i\n", yyextra->das_current_line_indent, yyextra->das_indent_level);
         #endif
         return '{';
-    } else if (yyextra.das_current_line_indent < yyextra.das_indent_level*yyextra.das_tab_size ) {
-        yyextra.das_indent_level--;
+    } else if (yyextra->das_current_line_indent < yyextra->das_indent_level*yyextra->das_tab_size ) {
+        yyextra->das_indent_level--;
         #ifdef FLEX_DEBUG
-        printf("emit }, cli=%i, indent =%i\n", yyextra.das_current_line_indent, yyextra.das_indent_level);
+        printf("emit }, cli=%i, indent =%i\n", yyextra->das_current_line_indent, yyextra->das_indent_level);
         #endif
         return '}';
     } else {
@@ -1804,9 +1804,9 @@ YY_RULE_SETUP
 case YY_STATE_EOF(indent):
 #line 229 "ds_lexer.lpp"
 {
-    if ( g_FileAccessStack.size()==1 ) {
-        if ( yyextra.das_indent_level ) {
-            yyextra.das_indent_level--;
+    if ( yyextra->g_FileAccessStack.size()==1 ) {
+        if ( yyextra->das_indent_level ) {
+            yyextra->das_indent_level--;
             unput('\r');
             #ifdef FLEX_DEBUG
             printf("emit }\n");
@@ -1817,7 +1817,7 @@ case YY_STATE_EOF(indent):
         }
     } else {
         yypop_buffer_state(yyscanner);
-        g_FileAccessStack.pop_back();
+        yyextra->g_FileAccessStack.pop_back();
         yylineno = das_line_no.back();
         das_line_no.pop_back();
     }
@@ -1839,15 +1839,15 @@ case 31:
 YY_RULE_SETUP
 #line 253 "ds_lexer.lpp"
 { /* got the include file name */
-    auto cfi = g_FileAccessStack.back();
+    auto cfi = yyextra->g_FileAccessStack.back();
     string incFileName = g_Access->getIncludeFileName(cfi->name,yytext);
     auto info = g_Access->getFileInfo(incFileName);
     if ( !info ) {
-        das_yyfatalerror(yylloc_param,"can't open "+incFileName);
+        das_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName);
     } else {
-        if ( yyextra.das_already_include.find(incFileName) == yyextra.das_already_include.end() ) {
-            yyextra.das_already_include.insert(incFileName);
-            g_FileAccessStack.push_back(info);
+        if ( yyextra->das_already_include.find(incFileName) == yyextra->das_already_include.end() ) {
+            yyextra->das_already_include.insert(incFileName);
+            yyextra->g_FileAccessStack.push_back(info);
             das_line_no.push_back(yylineno);
             yylineno = 1;
             yypush_buffer_state(YY_CURRENT_BUFFER, yyscanner);
@@ -1868,52 +1868,52 @@ BEGIN(include);
 case 33:
 YY_RULE_SETUP
 #line 276 "ds_lexer.lpp"
-/* yyextra.das_need_oxford_comma = false; */ return DAS_FOR;
+/* yyextra->das_need_oxford_comma = false; */ return DAS_FOR;
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
 #line 277 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_WHILE;
+yyextra->das_need_oxford_comma = false; return DAS_WHILE;
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
 #line 278 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_IF;
+yyextra->das_need_oxford_comma = false; return DAS_IF;
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
 #line 279 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_STATIC_IF;
+yyextra->das_need_oxford_comma = false; return DAS_STATIC_IF;
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
 #line 280 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_ELIF;
+yyextra->das_need_oxford_comma = false; return DAS_ELIF;
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
 #line 281 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_STATIC_ELIF;
+yyextra->das_need_oxford_comma = false; return DAS_STATIC_ELIF;
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
 #line 282 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_ELSE;
+yyextra->das_need_oxford_comma = false; return DAS_ELSE;
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
 #line 283 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_FINALLY;
+yyextra->das_need_oxford_comma = false; return DAS_FINALLY;
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
 #line 284 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_DEF;
+yyextra->das_need_oxford_comma = false; return DAS_DEF;
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
 #line 285 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_WITH;
+yyextra->das_need_oxford_comma = false; return DAS_WITH;
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
@@ -1929,7 +1929,7 @@ case 45:
 /* rule 45 can match eol */
 YY_RULE_SETUP
 #line 288 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; unput('\n'); return DAS_LET;
+yyextra->das_need_oxford_comma = false; unput('\n'); return DAS_LET;
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
@@ -1940,7 +1940,7 @@ case 47:
 /* rule 47 can match eol */
 YY_RULE_SETUP
 #line 290 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; unput('\n'); return DAS_VAR;
+yyextra->das_need_oxford_comma = false; unput('\n'); return DAS_VAR;
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
@@ -1950,32 +1950,32 @@ return DAS_VAR;
 case 49:
 YY_RULE_SETUP
 #line 292 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_STRUCT;
+yyextra->das_need_oxford_comma = false; return DAS_STRUCT;
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
 #line 293 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_CLASS;
+yyextra->das_need_oxford_comma = false; return DAS_CLASS;
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
 #line 294 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_ENUM;
+yyextra->das_need_oxford_comma = false; return DAS_ENUM;
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
 #line 295 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_TRY;
+yyextra->das_need_oxford_comma = false; return DAS_TRY;
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
 #line 296 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_CATCH;
+yyextra->das_need_oxford_comma = false; return DAS_CATCH;
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
 #line 297 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_TYPEDEF;
+yyextra->das_need_oxford_comma = false; return DAS_TYPEDEF;
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
@@ -2147,14 +2147,14 @@ YY_RULE_SETUP
 #line 331 "ds_lexer.lpp"
 {
     unput('(');
-    YYCOLUMN(yyextra.das_yycolumn--, "UNPUT (");
+    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT (");
     return DAS_UNSAFE;
 }
 	YY_BREAK
 case 89:
 YY_RULE_SETUP
 #line 336 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; return DAS_UNSAFE;
+yyextra->das_need_oxford_comma = false; return DAS_UNSAFE;
 	YY_BREAK
 case 90:
 YY_RULE_SETUP
@@ -2432,7 +2432,7 @@ YY_RULE_SETUP
             return LEXER_ERROR;
         } else {
             if ( uint_const>UINT32_MAX ) {
-                das_yyfatalerror(yylloc_param,"integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,yyscanner,"integer constant out of range", CompilationError::integer_constant_out_of_range);
             }
             yylval_param->ui = uint32_t(uint_const);
             return UNSIGNED_INTEGER;
@@ -2449,7 +2449,7 @@ YY_RULE_SETUP
             return LEXER_ERROR;
         } else {
             if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
-                das_yyfatalerror(yylloc_param,"integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,yyscanner,"integer constant out of range", CompilationError::integer_constant_out_of_range);
             }
             yylval_param->i = int32_t(int_const);
             return INTEGER;
@@ -2475,7 +2475,7 @@ YY_RULE_SETUP
             return LEXER_ERROR;
         } else {
             if ( int_const>UINT32_MAX ) {
-                das_yyfatalerror(yylloc_param,"integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,yyscanner,"integer constant out of range", CompilationError::integer_constant_out_of_range);
             }
             yylval_param->ui = uint32_t(int_const);
             return UNSIGNED_INTEGER;
@@ -2491,7 +2491,7 @@ YY_RULE_SETUP
             return LEXER_ERROR;
         } else {
             if ( int_const>UINT32_MAX ) {
-                das_yyfatalerror(yylloc_param,"integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,yyscanner,"integer constant out of range", CompilationError::integer_constant_out_of_range);
             }
             yylval_param->ui = uint32_t(int_const);
             return UNSIGNED_INTEGER;
@@ -2542,11 +2542,11 @@ case 155:
 YY_RULE_SETUP
 #line 464 "ds_lexer.lpp"
 {
-    if ( !yyextra.das_nested_parentheses ) {
-        das_yyfatalerror(yylloc_param,"mismatching parentheses", CompilationError::mismatching_parentheses);
+    if ( !yyextra->das_nested_parentheses ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"mismatching parentheses", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
-    yyextra.das_nested_parentheses --;
+    yyextra->das_nested_parentheses --;
     return ')';
 }
 	YY_BREAK
@@ -2554,7 +2554,7 @@ case 156:
 YY_RULE_SETUP
 #line 472 "ds_lexer.lpp"
 {
-    yyextra.das_nested_parentheses ++;
+    yyextra->das_nested_parentheses ++;
     return '(';
 }
 	YY_BREAK
@@ -2562,11 +2562,11 @@ case 157:
 YY_RULE_SETUP
 #line 476 "ds_lexer.lpp"
 {
-    if ( !yyextra.das_nested_square_braces ) {
-        das_yyfatalerror(yylloc_param,"mismatching square braces", CompilationError::mismatching_parentheses);
+    if ( !yyextra->das_nested_square_braces ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
-    yyextra.das_nested_square_braces --;
+    yyextra->das_nested_square_braces --;
     return ']';
 }
 	YY_BREAK
@@ -2574,7 +2574,7 @@ case 158:
 YY_RULE_SETUP
 #line 484 "ds_lexer.lpp"
 {
-    yyextra.das_nested_square_braces ++;
+    yyextra->das_nested_square_braces ++;
     return '[';
 }
 	YY_BREAK
@@ -2582,20 +2582,20 @@ case 159:
 YY_RULE_SETUP
 #line 488 "ds_lexer.lpp"
 {
-    if ( yyextra.das_nested_sb ) {
-        yyextra.das_nested_sb --;
-        if ( !yyextra.das_nested_sb ) {
+    if ( yyextra->das_nested_sb ) {
+        yyextra->das_nested_sb --;
+        if ( !yyextra->das_nested_sb ) {
             BEGIN(strb);
             return END_STRING_EXPR;
         } else {
             return '}';
         }
     } else {
-        if ( !yyextra.das_nested_curly_braces ) {
-            das_yyfatalerror(yylloc_param,"mismatching curly braces", CompilationError::mismatching_curly_bracers);
+        if ( !yyextra->das_nested_curly_braces ) {
+            das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_curly_bracers);
             return LEXER_ERROR;
         }
-        yyextra.das_nested_curly_braces --;
+        yyextra->das_nested_curly_braces --;
         return '}';
     }
 }
@@ -2604,10 +2604,10 @@ case 160:
 YY_RULE_SETUP
 #line 506 "ds_lexer.lpp"
 {
-    if ( yyextra.das_nested_sb ) {
-        yyextra.das_nested_sb ++;
+    if ( yyextra->das_nested_sb ) {
+        yyextra->das_nested_sb ++;
     } else {
-        yyextra.das_nested_curly_braces ++;
+        yyextra->das_nested_curly_braces ++;
     }
     return '{';
 }
@@ -2626,24 +2626,24 @@ case 163:
 /* rule 163 can match eol */
 YY_RULE_SETUP
 #line 516 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; unput('\n'); return LBPIPE;
+yyextra->das_need_oxford_comma = false; unput('\n'); return LBPIPE;
 	YY_BREAK
 case 164:
 /* rule 164 can match eol */
 YY_RULE_SETUP
 #line 517 "ds_lexer.lpp"
-yyextra.das_need_oxford_comma = false; unput('\n'); return LBPIPE;
+yyextra->das_need_oxford_comma = false; unput('\n'); return LBPIPE;
 	YY_BREAK
 case 165:
 YY_RULE_SETUP
 #line 518 "ds_lexer.lpp"
 {
     unput('$');
-    YYCOLUMN(yyextra.das_yycolumn--, "UNPUT $");
-    if ( yyextra.das_nested_parentheses ) {
+    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $");
+    if ( yyextra->das_nested_parentheses ) {
         return LPIPE;
     } else {
-        yyextra.das_need_oxford_comma = false;
+        yyextra->das_need_oxford_comma = false;
         return LBPIPE;
     }
 }
@@ -2653,11 +2653,11 @@ YY_RULE_SETUP
 #line 528 "ds_lexer.lpp"
 {
     unput('@');
-    YYCOLUMN(yyextra.das_yycolumn--, "UNPUT @");
-    if ( yyextra.das_nested_parentheses ) {
+    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT @");
+    if ( yyextra->das_nested_parentheses ) {
         return LPIPE;
     } else {
-        yyextra.das_need_oxford_comma = false;
+        yyextra->das_need_oxford_comma = false;
         return LBPIPE;
     }
 }
@@ -2668,11 +2668,11 @@ YY_RULE_SETUP
 {
     unput('@');
     unput('@');
-    YYCOLUMN(yyextra.das_yycolumn-=2, "UNPUT @@");
-    if ( yyextra.das_nested_parentheses ) {
+    YYCOLUMN(yyextra->das_yycolumn-=2, "UNPUT @@");
+    if ( yyextra->das_nested_parentheses ) {
         return LFPIPE;
     } else {
-        yyextra.das_need_oxford_comma = false;
+        yyextra->das_need_oxford_comma = false;
         return LFPIPE;
     }
 }
@@ -2682,11 +2682,11 @@ YY_RULE_SETUP
 #line 549 "ds_lexer.lpp"
 {
     unput('@');
-    YYCOLUMN(yyextra.das_yycolumn--, "UNPUT @");
-    if ( yyextra.das_nested_parentheses ) {
+    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT @");
+    if ( yyextra->das_nested_parentheses ) {
         return LAPIPE;
     } else {
-        yyextra.das_need_oxford_comma = false;
+        yyextra->das_need_oxford_comma = false;
         return LAPIPE;
     }
 }
@@ -2705,7 +2705,7 @@ case 171:
 YY_RULE_SETUP
 #line 561 "ds_lexer.lpp"
 {
-    yyextra.das_nested_square_braces ++;
+    yyextra->das_nested_square_braces ++;
     return QBRA;
 }
 	YY_BREAK
@@ -2833,10 +2833,10 @@ case 196:
 YY_RULE_SETUP
 #line 589 "ds_lexer.lpp"
 {
-    if ( yyextra.das_arrow_depth ) {
+    if ( yyextra->das_arrow_depth ) {
         unput('>');
         unput('>');
-        YYCOLUMN(yyextra.das_yycolumn-=2, "UNPUT");
+        YYCOLUMN(yyextra->das_yycolumn-=2, "UNPUT");
         return '>';
     } else {
         return ROTR;
@@ -2847,9 +2847,9 @@ case 197:
 YY_RULE_SETUP
 #line 599 "ds_lexer.lpp"
 {
-    if ( yyextra.das_arrow_depth ) {
+    if ( yyextra->das_arrow_depth ) {
         unput('>');
-        YYCOLUMN(yyextra.das_yycolumn--, "UNPUT");
+        YYCOLUMN(yyextra->das_yycolumn--, "UNPUT");
         return '>';
     } else {
         return SHR;
@@ -2895,8 +2895,8 @@ case 205:
 YY_RULE_SETUP
 #line 615 "ds_lexer.lpp"
 {
-        yyextra.das_nested_square_braces ++;
-        yyextra.das_nested_square_braces ++;
+        yyextra->das_nested_square_braces ++;
+        yyextra->das_nested_square_braces ++;
         return BRABRAB;
     }
 	YY_BREAK
@@ -2904,8 +2904,8 @@ case 206:
 YY_RULE_SETUP
 #line 620 "ds_lexer.lpp"
 {
-        yyextra.das_nested_square_braces ++;
-        yyextra.das_nested_curly_braces ++;
+        yyextra->das_nested_square_braces ++;
+        yyextra->das_nested_curly_braces ++;
         return BRACBRB;
     }
 	YY_BREAK
@@ -2913,8 +2913,8 @@ case 207:
 YY_RULE_SETUP
 #line 625 "ds_lexer.lpp"
 {
-        yyextra.das_nested_curly_braces ++;
-        yyextra.das_nested_curly_braces ++;
+        yyextra->das_nested_curly_braces ++;
+        yyextra->das_nested_curly_braces ++;
         return CBRCBRB;
     }
 	YY_BREAK
@@ -2935,15 +2935,15 @@ case 210:
 YY_RULE_SETUP
 #line 634 "ds_lexer.lpp"
 {
-    YYCOLUMN(yyextra.das_yycolumn = 0, "NEW LINE");
-    if  ( !yyextra.das_nested_parentheses && !yyextra.das_nested_curly_braces && !yyextra.das_nested_square_braces ) {
-        bool ns = ((yyextra.das_current_line_indent!=0) && yyextra.das_need_oxford_comma) || yyextra.das_force_oxford_comma;
+    YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
+    if  ( !yyextra->das_nested_parentheses && !yyextra->das_nested_curly_braces && !yyextra->das_nested_square_braces ) {
+        bool ns = ((yyextra->das_current_line_indent!=0) && yyextra->das_need_oxford_comma) || yyextra->das_force_oxford_comma;
         #ifdef FLEX_DEBUG
-        if ( yyextra.das_force_oxford_comma ) printf ( "forcing oxford comma\n");
+        if ( yyextra->das_force_oxford_comma ) printf ( "forcing oxford comma\n");
         #endif
-        yyextra.das_force_oxford_comma = false;
-        yyextra.das_current_line_indent = 0;
-        yyextra.das_need_oxford_comma = true;
+        yyextra->das_force_oxford_comma = false;
+        yyextra->das_current_line_indent = 0;
+        yyextra->das_need_oxford_comma = true;
         BEGIN(indent);
         if ( ns ) {
             #ifdef FLEX_DEBUG
@@ -2957,12 +2957,12 @@ YY_RULE_SETUP
 case YY_STATE_EOF(normal):
 #line 653 "ds_lexer.lpp"
 {
-    if ( g_FileAccessStack.size()==1 ) {
-        YYCOLUMN(yyextra.das_yycolumn = 0,"EOF");
-        if  ( !yyextra.das_nested_parentheses && !yyextra.das_nested_curly_braces && !yyextra.das_nested_square_braces ) {
-            bool ns = (yyextra.das_current_line_indent!=0) && yyextra.das_need_oxford_comma;
-            yyextra.das_current_line_indent = 0;
-            yyextra.das_need_oxford_comma = true;
+    if ( yyextra->g_FileAccessStack.size()==1 ) {
+        YYCOLUMN(yyextra->das_yycolumn = 0,"EOF");
+        if  ( !yyextra->das_nested_parentheses && !yyextra->das_nested_curly_braces && !yyextra->das_nested_square_braces ) {
+            bool ns = (yyextra->das_current_line_indent!=0) && yyextra->das_need_oxford_comma;
+            yyextra->das_current_line_indent = 0;
+            yyextra->das_need_oxford_comma = true;
             BEGIN(indent);
             if ( ns ) {
                 #ifdef FLEX_DEBUG
@@ -2975,7 +2975,7 @@ case YY_STATE_EOF(normal):
         }
     } else {
         yypop_buffer_state(yyscanner);
-        g_FileAccessStack.pop_back();
+        yyextra->g_FileAccessStack.pop_back();
         yylineno = das_line_no.back();
         das_line_no.pop_back();
     }
@@ -4205,25 +4205,27 @@ extern int das_yydebug;
 void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 
-    yyextra.g_thisStructure = nullptr;
-    yyextra.das_module_alias.clear();
-    yyextra.das_already_include.clear();
+    yyextra->g_thisStructure = nullptr;
+    yyextra->das_module_alias.clear();
+    yyextra->das_already_include.clear();
 #if DAS_YYDEBUG
     das_yydebug = 0;
 #endif
-    yyextra.das_tab_size = yyextra.das_def_tab_size;
+    yyextra->das_tab_size = yyextra->das_def_tab_size;
     das_line_no.clear();
-    YYCOLUMN(yyextra.das_yycolumn = 0,"YYBEGIN");
-    yyextra.das_current_line_indent = 0;
-    yyextra.das_indent_level = 0;
-    yyextra.das_nested_parentheses = 0;
-    yyextra.das_nested_curly_braces = 0;
-    yyextra.das_nested_square_braces = 0;
-    yyextra.das_nested_sb = 0;
-    yyextra.das_need_oxford_comma = true;
-    yyextra.das_force_oxford_comma = false;
-    yyextra.das_c_style_depth = 0;
-    yyextra.das_arrow_depth = 0;
+    YYCOLUMN(yyextra->das_yycolumn = 0,"YYBEGIN");
+    yyextra->das_current_line_indent = 0;
+    yyextra->das_indent_level = 0;
+    yyextra->das_nested_parentheses = 0;
+    yyextra->das_nested_curly_braces = 0;
+    yyextra->das_nested_square_braces = 0;
+    yyextra->das_nested_sb = 0;
+    yyextra->das_need_oxford_comma = true;
+    yyextra->das_force_oxford_comma = false;
+    yyextra->das_c_style_depth = 0;
+    yyextra->das_arrow_depth = 0;
+    yyextra->g_ReaderMacro = nullptr;
+    yyextra->g_ReaderExpr = nullptr;
     BEGIN(normal);
     yy_scan_bytes(str, len, yyscanner);
     yylineno = 1;
@@ -4231,7 +4233,7 @@ void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
 
 void YYNEWLINE ( yyscan_t yyscanner ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
-    YYCOLUMN(yyextra.das_yycolumn = 0,"NEW LINE");
+    YYCOLUMN(yyextra->das_yycolumn = 0,"NEW LINE");
 }
 
 
