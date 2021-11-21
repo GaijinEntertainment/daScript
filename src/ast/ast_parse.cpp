@@ -302,6 +302,7 @@ namespace das {
         },"*");
         DasParserState parserState;
         parserState.g_Access = access;
+        parserState.g_Program = g_Program;
         yyscan_t scanner = nullptr;
         das_yylex_init_extra(&parserState, &scanner);
         if ( auto fi = access->getFileInfo(fileName) ) {
@@ -322,6 +323,7 @@ namespace das {
         }
         err = das_yyparse(scanner);
         das_yylex_destroy(scanner);
+        parserState = DasParserState();
         if ( err || program->failed() ) {
             g_Program.reset();
             sort(program->errors.begin(),program->errors.end());

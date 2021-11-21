@@ -26,5 +26,6 @@ namespace das {
         ExprReader * g_ReaderExpr = nullptr;
         vector<FileInfo *> g_FileAccessStack;
         FileAccessPtr g_Access;
+        ProgramPtr g_Program;
     };
 }
