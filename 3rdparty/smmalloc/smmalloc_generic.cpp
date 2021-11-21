@@ -19,7 +19,19 @@
 // 	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // 	THE SOFTWARE.
-#include <malloc.h>
+
+#ifdef _MSC_VER
+	#include <malloc.h>
+#elif defined(__APPLE__)
+	#include <malloc/malloc.h>
+	#include <stdlib.h>
+#elif defined(__linux__)
+	#include <stdlib.h>
+	#include <malloc.h>
+#else
+	#include <stdlib.h>
+#endif
+
 #include "smmalloc.h"
 
 
@@ -51,31 +63,44 @@ void* sm::GenericAllocator::Alloc(sm::GenericAllocator::TInstance instance, size
 	{
 		alignment = 16;
 	}
-	return _aligned_malloc(bytesCount, alignment);
+	#ifdef _MSC_VER
+		return _aligned_malloc(bytesCount, alignment);
+	#else
+		return malloc(bytesCount);	// todo: assume reasonable alignment?
+	#endif
 }
 
 void sm::GenericAllocator::Free(sm::GenericAllocator::TInstance instance, void* p)
 {
 	SMMALLOC_UNUSED(instance);
-	_aligned_free(p);
+	#ifdef _MSC_VER
+		_aligned_free(p);
+	#else
+		free(p);
+	#endif
 }
 
 void* sm::GenericAllocator::Realloc(sm::GenericAllocator::TInstance instance, void* p, size_t bytesCount, size_t alignment)
 {
 	SMMALLOC_UNUSED(instance);
-	return _aligned_realloc(p, bytesCount, alignment);
+	#ifdef _MSC_VER
+		return _aligned_realloc(p, bytesCount, alignment);
+	#else
+		return realloc(p, bytesCount);
+	#endif
 }
 
 size_t sm::GenericAllocator::GetUsableSpace(sm::GenericAllocator::TInstance instance, void* p)
 {
 	SMMALLOC_UNUSED(instance);
 	size_t alignment = DetectAlignment(p);
-	#ifdef __GNUC__
-		if (alignment < sizeof(void*))
-			alignment = sizeof(void*);
-
-		return _msize(p) - alignment - sizeof(void*);
-	#else
+	#ifdef _MSC_VER
 		return _aligned_msize(p, alignment, 0);
+	#elif defined(__APPLE__)
+		return malloc_size(p);
+	#elif defined(__linux__)
+		return malloc_usable_size(p);
+	#else
+		return malloc_size(p);	// ???
 	#endif
 }

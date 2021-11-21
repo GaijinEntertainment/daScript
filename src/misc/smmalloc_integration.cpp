@@ -21,19 +21,19 @@ __forceinline sm_allocator & sm_space() {
     return G_SPACE;
 }
 
-void * operator new[](std::size_t n) throw(std::bad_alloc) {
+void * operator new[](std::size_t n) {
     return _sm_malloc(sm_space(), n, 16);
 }
 
-void operator delete  ( void* ptr ) throw() {
+void operator delete  ( void* ptr ) {
     _sm_free(sm_space(), ptr);
 }
 
-void * operator new(std::size_t n) throw(std::bad_alloc) {
+void * operator new(std::size_t n)  {
     return _sm_malloc(sm_space(), n, 16);
 }
 
-void operator delete  ( void* ptr, size_t ) throw() {
+void operator delete  ( void* ptr, size_t ) {
     _sm_free(sm_space(), ptr);
 }
 
