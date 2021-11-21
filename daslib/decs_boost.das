@@ -215,7 +215,7 @@ def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlo
     vlet.genFlags |= ExprGenFlags alwaysSafe
     var vtype <- clone_type(a._type)
     if getter=="get_default_ro"
-        pass
+        vtype.flags |= TypeDeclFlags constant
     elif getter=="get_ro"
         vtype.flags |= TypeDeclFlags constant
         vtype.flags |= TypeDeclFlags ref
