@@ -59,6 +59,8 @@ extern int das_yydebug;
     #include "daScript/ast/ast_generate.h"
     #include "daScript/ast/ast_expressions.h"
 
+    #include "parser_state.h"
+
     enum {
         CorM_COPY   = 0,
         CorM_MOVE   = (1<<0),
@@ -73,7 +75,6 @@ extern int das_yydebug;
 
     namespace das {
         extern ProgramPtr               g_Program;
-        extern FileAccessPtr            g_Access;
     }
     using namespace das;
 
@@ -114,7 +115,7 @@ extern int das_yydebug;
 
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-#line 118 "ds_parser.hpp"
+#line 119 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -288,7 +289,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 123 "ds_parser.ypp"
+#line 122 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -317,7 +318,7 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 321 "ds_parser.hpp"
+#line 322 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

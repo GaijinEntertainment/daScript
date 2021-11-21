@@ -276,7 +276,6 @@ namespace das {
     // PARSER
 
     ProgramPtr g_Program;
-    FileAccessPtr g_Access;
 
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
@@ -296,13 +295,13 @@ namespace das {
         program->isDependency = isDep;
         program->needMacroModule = false;
         g_Program->policies = policies;
-        g_Access = access;
         program->thisModuleGroup = &libGroup;
         libGroup.foreach([&](Module * pm){
             g_Program->library.addModule(pm);
             return true;
         },"*");
         DasParserState parserState;
+        parserState.g_Access = access;
         yyscan_t scanner = nullptr;
         das_yylex_init_extra(&parserState, &scanner);
         if ( auto fi = access->getFileInfo(fileName) ) {
@@ -318,13 +317,11 @@ namespace das {
         } else {
             g_Program->error(fileName + " not found", "","",LineInfo());
             g_Program.reset();
-            g_Access.reset();
             program->isCompiling = false;
             return program;
         }
         err = das_yyparse(scanner);
         das_yylex_destroy(scanner);
-        g_Access.reset();
         if ( err || program->failed() ) {
             g_Program.reset();
             sort(program->errors.begin(),program->errors.end());

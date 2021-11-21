@@ -2,11 +2,6 @@
 
 namespace das {
 
-    class Structure;
-    struct ReaderMacro;
-    struct ExprReader;
-    struct FileInfo;
-
     struct DasParserState {
         int das_current_line_indent = 0;
         int das_indent_level = 0;
@@ -30,5 +25,6 @@ namespace das {
         ReaderMacro * g_ReaderMacro = nullptr;
         ExprReader * g_ReaderExpr = nullptr;
         vector<FileInfo *> g_FileAccessStack;
+        FileAccessPtr g_Access;
     };
 }

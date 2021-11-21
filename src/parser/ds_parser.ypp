@@ -16,6 +16,8 @@
     #include "daScript/ast/ast_generate.h"
     #include "daScript/ast/ast_expressions.h"
 
+    #include "parser_state.h"
+
     enum {
         CorM_COPY   = 0,
         CorM_MOVE   = (1<<0),
@@ -30,7 +32,6 @@
 
     namespace das {
         extern ProgramPtr               g_Program;
-        extern FileAccessPtr            g_Access;
     }
     using namespace das;
 
@@ -76,8 +77,6 @@
     #include "daScript/misc/platform.h"
     #include "daScript/simulate/debug_info.h"
     #include "daScript/ast/compilation_errors.h"
-
-    #include "parser_state.h"
 
     #ifdef _MSC_VER
     #pragma warning(disable:4262)
@@ -670,7 +669,7 @@ require_module_name
 
 require_module
     :   require_module_name[name]  is_public_module[pub] {
-        auto info = g_Access->getModuleInfo(*$name, yyextra->g_FileAccessStack.back()->name);
+        auto info = yyextra->g_Access->getModuleInfo(*$name, yyextra->g_FileAccessStack.back()->name);
         if ( auto mod = g_Program->addModule(info.moduleName) ) {
             g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,"",$pub,tokAt(scanner,@name)));
             g_Program->thisModule->addDependency(mod, $pub);
@@ -693,7 +692,7 @@ require_module
         delete $name;
     }
     |   require_module_name[name] DAS_AS NAME[modalias] is_public_module[pub] {
-        auto info = g_Access->getModuleInfo(*$name, yyextra->g_FileAccessStack.back()->name);
+        auto info = yyextra->g_Access->getModuleInfo(*$name, yyextra->g_FileAccessStack.back()->name);
         if ( auto mod = g_Program->addModule(info.moduleName) ) {
             g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,*$modalias,$pub,tokAt(scanner,@name)));
             g_Program->thisModule->addDependency(mod, $pub);

@@ -1530,8 +1530,8 @@ YY_RULE_SETUP
     if ( sscanf ( yytext, "#%i,%i,\"%255s\"#", &lRow, &lCol, lFile )==3 ) {
         lFile[strlen(lFile)-2] = 0;
         auto cfi = yyextra->g_FileAccessStack.back();
-        string incFileName = g_Access->getIncludeFileName(cfi->name,lFile);
-        auto info = g_Access->getFileInfo(incFileName);
+        string incFileName = yyextra->g_Access->getIncludeFileName(cfi->name,lFile);
+        auto info = yyextra->g_Access->getFileInfo(incFileName);
         if ( !info ) {
             das_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName);
         } else {
@@ -1840,8 +1840,8 @@ YY_RULE_SETUP
 #line 253 "ds_lexer.lpp"
 { /* got the include file name */
     auto cfi = yyextra->g_FileAccessStack.back();
-    string incFileName = g_Access->getIncludeFileName(cfi->name,yytext);
-    auto info = g_Access->getFileInfo(incFileName);
+    string incFileName = yyextra->g_Access->getIncludeFileName(cfi->name,yytext);
+    auto info = yyextra->g_Access->getFileInfo(incFileName);
     if ( !info ) {
         das_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName);
     } else {
