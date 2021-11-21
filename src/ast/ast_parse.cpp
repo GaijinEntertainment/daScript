@@ -3,11 +3,18 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_expressions.h"
 
+#include "../parser/parser_state.h"5
+
 typedef void * yyscan_t;
-int das_yylex_init (yyscan_t * scanner);
+union YYSTYPE;
+
+#define YY_EXTRA_TYPE das::DasParserState
+
+#define YY_NO_UNISTD_H
+#include "../parser/lex.yy.h"
+
 void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner);
 int das_yyparse(yyscan_t yyscanner);
-int das_yylex_destroy(yyscan_t yyscanner);
 
 namespace das {
 
@@ -302,8 +309,9 @@ namespace das {
         },"*");
         g_FileAccessStack.clear();
 
+        DasParserState parserState;
         yyscan_t scanner = nullptr;
-        das_yylex_init(&scanner);
+        das_yylex_init_extra(parserState, &scanner);
 
         if ( auto fi = access->getFileInfo(fileName) ) {
             g_FileAccessStack.push_back(fi);

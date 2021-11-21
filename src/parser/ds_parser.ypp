@@ -32,7 +32,6 @@
         extern ProgramPtr               g_Program;
         extern FileAccessPtr            g_Access;
         extern vector<FileInfo *>       g_FileAccessStack;
-        extern das_map<string,string>   das_module_alias;
 
         extern ReaderMacro *            g_ReaderMacro;
         extern ExprReader *             g_ReaderExpr;
@@ -75,19 +74,14 @@
     LineInfo tokRangeAt ( const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
 
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
-
-    extern bool das_need_oxford_comma;
-    extern bool das_force_oxford_comma;
-    extern bool das_supress_errors;
-    extern int das_arrow_depth;
-
-    extern Structure * g_thisStructure;
 }
 
 %{
     #include "daScript/misc/platform.h"
     #include "daScript/simulate/debug_info.h"
     #include "daScript/ast/compilation_errors.h"
+
+    #include "parser_state.h"
 
     #ifdef _MSC_VER
     #pragma warning(disable:4262)
@@ -114,6 +108,8 @@
     void das_yyend_reader ( yyscan_t yyscanner );
 
     __forceinline string inThisModule ( const string & name ) { return "_::" + name; }
+
+    #define yyextra (*((das::DasParserState *)(scanner)))
 %}
 
 %define api.pure full
@@ -637,14 +633,13 @@ options_declaration
             swap ( g_Program->options, *$list );
         }
         auto opt = g_Program->options.find("indenting", tInt);
-        extern int das_tab_size, das_def_tab_size;
         if (opt)
         {
             if (opt->iValue != 0 && opt->iValue != 2 && opt->iValue != 4 && opt->iValue != 8)//this is error
-                das_tab_size = das_def_tab_size;
+                yyextra.das_tab_size = yyextra.das_def_tab_size;
             else
-                das_tab_size = opt->iValue ? opt->iValue : das_def_tab_size;//0 is default
-            g_FileAccessStack.back()->tabSize = das_tab_size;
+                yyextra.das_tab_size = opt->iValue ? opt->iValue : yyextra.das_def_tab_size;//0 is default
+            g_FileAccessStack.back()->tabSize = yyextra.das_tab_size;
         }
         delete $list;
     }
@@ -683,14 +678,14 @@ require_module
             g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,"",$pub,tokAt(@name)));
             g_Program->thisModule->addDependency(mod, $pub);
             if ( !info.importName.empty() ) {
-                auto ita = das_module_alias.find(info.importName);
-                if ( ita !=das_module_alias.end() ) {
+                auto ita = yyextra.das_module_alias.find(info.importName);
+                if ( ita !=yyextra.das_module_alias.end() ) {
                     if ( ita->second != info.moduleName ) {
                         das_yyerror("module alias already used " + info.importName + " as " + ita->second,tokAt(@name),
                             CompilationError::module_not_found);
                     }
                 } else {
-                    das_module_alias[info.importName] = info.moduleName;
+                    yyextra.das_module_alias[info.importName] = info.moduleName;
                 }
             }
         } else {
@@ -705,14 +700,14 @@ require_module
         if ( auto mod = g_Program->addModule(info.moduleName) ) {
             g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,*$modalias,$pub,tokAt(@name)));
             g_Program->thisModule->addDependency(mod, $pub);
-            auto ita = das_module_alias.find(*$modalias);
-            if ( ita !=das_module_alias.end() ) {
+            auto ita = yyextra.das_module_alias.find(*$modalias);
+            if ( ita !=yyextra.das_module_alias.end() ) {
                 if ( ita->second != info.moduleName ) {
                     das_yyerror("module alias already used " + *$modalias + " as " + ita->second,tokAt(@name),
                         CompilationError::module_not_found);
                 }
             } else {
-                das_module_alias[*$modalias] = info.moduleName;
+                yyextra.das_module_alias[*$modalias] = info.moduleName;
             }
         } else {
             g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,*$modalias,$pub,tokAt(@name)));
@@ -837,7 +832,7 @@ expression_with
     ;
 
 expression_with_alias
-    :   DAS_ASSUME[loc] NAME[aname] '=' { das_need_oxford_comma=true; } expr[subexpr] {
+    :   DAS_ASSUME[loc] NAME[aname] '=' { yyextra.das_need_oxford_comma=true; } expr[subexpr] {
         $$ = new ExprAssume(tokAt(@loc), *$aname, $subexpr );
         delete $aname;
     }
@@ -1052,7 +1047,7 @@ global_function_declaration
     ;
 
 optional_public_or_private_function
-    :                   { $$ = g_thisStructure ? !g_thisStructure->privateStructure : g_Program->thisModule->isPublic; }
+    :                   { $$ = yyextra.g_thisStructure ? !yyextra.g_thisStructure->privateStructure : g_Program->thisModule->isPublic; }
     |   DAS_PRIVATE     { $$ = false; }
     |   DAS_PUBLIC      { $$ = true; }
     ;
@@ -1205,8 +1200,8 @@ expr_pipe
 name_in_namespace
     :   NAME[name]                             { $$ = $name; }
     |   NAME[namespace] COLCOL NAME[name]      {
-            auto ita = das_module_alias.find(*$namespace);
-            if ( ita == das_module_alias.end() ) {
+            auto ita = yyextra.das_module_alias.find(*$namespace);
+            if ( ita == yyextra.das_module_alias.end() ) {
                 *$namespace += "::";
             } else {
                 *$namespace = ita->second + "::";
@@ -1336,15 +1331,15 @@ expression_let
     ;
 
 expr_cast
-    :   DAS_CAST[loc] '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } expr[subexpr] {
+    :   DAS_CAST[loc] '<' { yyextra.das_arrow_depth ++; } type_declaration[decl] '>' { yyextra.das_arrow_depth --; } expr[subexpr] {
         $$ = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
     }
-    |   DAS_UPCAST[loc] '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } expr[subexpr] {
+    |   DAS_UPCAST[loc] '<' { yyextra.das_arrow_depth ++; } type_declaration[decl] '>' { yyextra.das_arrow_depth --; } expr[subexpr] {
         auto pCast = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
         pCast->upcast = true;
         $$ = pCast;
     }
-    |   DAS_REINTERPRET[loc] '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } expr[subexpr] {
+    |   DAS_REINTERPRET[loc] '<' { yyextra.das_arrow_depth ++; } type_declaration[decl] '>' { yyextra.das_arrow_depth --; } expr[subexpr] {
         auto pCast = new ExprCast(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
         pCast->reinterpret = true;
         $$ = pCast;
@@ -1352,7 +1347,7 @@ expr_cast
     ;
 
 expr_type_decl
-    :  DAS_TYPE[loc] '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } {
+    :  DAS_TYPE[loc] '<' { yyextra.das_arrow_depth ++; } type_declaration[decl] '>' { yyextra.das_arrow_depth --; } {
         $$ = new ExprTypeDecl(tokAt(@loc),TypeDeclPtr($decl));
     }
     ;
@@ -1591,14 +1586,14 @@ func_addr_expr
         $$ = new ExprAddr(tokAt(@loc),*$name);
         delete $name;
     }
-    |   '@' '@'[loc] '<' { das_arrow_depth ++; } type_declaration[blockType] '>' { das_arrow_depth --; } name_in_namespace[name] {
+    |   '@' '@'[loc] '<' { yyextra.das_arrow_depth ++; } type_declaration[blockType] '>' { yyextra.das_arrow_depth --; } name_in_namespace[name] {
         auto expr = new ExprAddr(tokAt(@loc),*$name);
         delete $name;
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
         expr->funcType->firstType = TypeDeclPtr($blockType);
         $$ = expr;
     }
-    |   '@' '@'[loc] '<' { das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { das_arrow_depth --; } name_in_namespace[name] {
+    |   '@' '@'[loc] '<' { yyextra.das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra.das_arrow_depth --; } name_in_namespace[name] {
         auto expr = new ExprAddr(tokAt(@loc),*$name);
         delete $name;
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
@@ -1620,7 +1615,7 @@ expr_field
         $$ = new ExprField(tokAt(@loc), tokAt(@name), ExpressionPtr($subexpr), *$name, true);
         delete $name;
     }
-    |   expr[subexpr] '.'[loc] { das_supress_errors=true; } error { das_supress_errors=false; } {
+    |   expr[subexpr] '.'[loc] { yyextra.das_supress_errors=true; } error { yyextra.das_supress_errors=false; } {
         $$ = new ExprField(tokAt(@loc), tokAt(@loc), ExpressionPtr($subexpr), "");
         yyerrok;
     }
@@ -1712,7 +1707,7 @@ expr
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
             $$ = new ExprOp3(tokAt(@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
         }
-    |   expr[subexpr] DAS_IS[loc] DAS_TYPE '<' { das_arrow_depth ++; } type_declaration[decl] '>' { das_arrow_depth --; } {
+    |   expr[subexpr] DAS_IS[loc] DAS_TYPE '<' { yyextra.das_arrow_depth ++; } type_declaration[decl] '>' { yyextra.das_arrow_depth --; } {
         $$ = new ExprIs(tokAt(@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
     }
     |   expr[subexpr] DAS_IS[loc] NAME[vname] {
@@ -1869,14 +1864,14 @@ struct_variable_declaration_list
         if ( $decl ) $list->push_back($decl);
     }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
-            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT { das_force_oxford_comma=true; } function_declaration_header[func] ';' {
-        if ( !g_thisStructure->isClass ) {
+            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT { yyextra.das_force_oxford_comma=true; } function_declaration_header[func] ';' {
+        if ( !yyextra.g_thisStructure->isClass ) {
             das_yyerror("structure can't have a member function",
                 $func->at, CompilationError::invalid_member_function);
         } else if ( $func->isGeneric() ) {
             das_yyerror("generic function can't be a member of a class " + $func->getMangledName(),
                 $func->at, CompilationError::invalid_member_function);
-        } else if ( $func->name==g_thisStructure->name || $func->name=="finalize" ) {
+        } else if ( $func->name==yyextra.g_thisStructure->name || $func->name=="finalize" ) {
             das_yyerror("initializers and finalizers can't be abstract " + $func->getMangledName(),
                 $func->at, CompilationError::invalid_member_function);
         } else if ( $annL!=nullptr ) {
@@ -1888,15 +1883,15 @@ struct_variable_declaration_list
                 $func->at, CompilationError::invalid_member_function);
         } else {
             auto varName = $func->name;
-            $func->name = g_thisStructure->name + "`" + $func->name;
+            $func->name = yyextra.g_thisStructure->name + "`" + $func->name;
             auto vars = new vector<VariableNameAndPosition>();
             vars->emplace_back(VariableNameAndPosition{varName,"",$func->at});
             TypeDecl * funcType = new TypeDecl(Type::tFunction);
             funcType->at = $func->at;
             swap ( funcType->firstType, $func->result );
             funcType->argTypes.reserve ( $func->arguments.size() );
-            if ( g_thisStructure->isClass ) {
-                funcType->argTypes.push_back(make_smart<TypeDecl>(g_thisStructure));
+            if ( yyextra.g_thisStructure->isClass ) {
+                funcType->argTypes.push_back(make_smart<TypeDecl>(yyextra.g_thisStructure));
                 funcType->argNames.push_back("self");
             }
             for ( auto & arg : $func->arguments ) {
@@ -1919,20 +1914,20 @@ struct_variable_declaration_list
                 function_declaration_header[func] expression_block[block] {
         $func->atDecl = tokRangeAt(@from,@block);
         $func->body = $block;
-        if ( !g_thisStructure ) {
+        if ( !yyextra.g_thisStructure ) {
             das_yyerror("internal error or invalid macro. member function is declared outside of a class",
                 $func->at, CompilationError::invalid_member_function);
-        } else if ( !g_thisStructure->isClass ) {
+        } else if ( !yyextra.g_thisStructure->isClass ) {
             das_yyerror("structure can't have a member function",
                 $func->at, CompilationError::invalid_member_function);
         } else if ( $func->isGeneric() ) {
             das_yyerror("generic function can't be a member of a class " + $func->getMangledName(),
                 $func->at, CompilationError::invalid_member_function);
         } else {
-            $func->privateFunction = g_thisStructure->privateStructure;
-            if ( $func->name != g_thisStructure->name && $func->name != "finalize") {
+            $func->privateFunction = yyextra.g_thisStructure->privateStructure;
+            if ( $func->name != yyextra.g_thisStructure->name && $func->name != "finalize") {
                 auto varName = $func->name;
-                $func->name = g_thisStructure->name + "`" + $func->name;
+                $func->name = yyextra.g_thisStructure->name + "`" + $func->name;
                 auto vars = new vector<VariableNameAndPosition>();
                 vars->emplace_back(VariableNameAndPosition{varName,"",$func->at});
                 Expression * finit = new ExprAddr($func->at, inThisModule($func->name));
@@ -1948,7 +1943,7 @@ struct_variable_declaration_list
                 decl->sealed = $ovr == OVERRIDE_SEALED;
                 decl->isPrivate = $isPrivate;
                 $list->push_back(decl);
-                modifyToClassMember($func, g_thisStructure, false, $cnst);
+                modifyToClassMember($func, yyextra.g_thisStructure, false, $cnst);
             } else {
                 if ( $ovr ) {
                     das_yyerror("can't override an initializer or a finalizer " + $func->getMangledName(),
@@ -1959,15 +1954,15 @@ struct_variable_declaration_list
                         $func->at, CompilationError::invalid_member_function);
                 }
                 if ( $func->name!="finalize" ) {
-                    auto ctr = makeClassConstructor(g_thisStructure, $func);
+                    auto ctr = makeClassConstructor(yyextra.g_thisStructure, $func);
                     if ( !g_Program->addFunction(ctr) ) {
                         das_yyerror("intializer is already defined " + ctr->getMangledName(),
                             ctr->at, CompilationError::function_already_declared);
                     }
-                    $func->name = g_thisStructure->name + "`" + g_thisStructure->name;
-                    modifyToClassMember($func, g_thisStructure, false, false);
+                    $func->name = yyextra.g_thisStructure->name + "`" + yyextra.g_thisStructure->name;
+                    modifyToClassMember($func, yyextra.g_thisStructure, false, false);
                 } else {
-                    modifyToClassMember($func, g_thisStructure, true, false);
+                    modifyToClassMember($func, yyextra.g_thisStructure, true, false);
                 }
             }
             assignDefaultArguments($func);
@@ -2176,7 +2171,7 @@ global_let
         }
         deleteVariableDeclarationList($list);
     }
-    |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] { das_force_oxford_comma=true; } optional_field_annotation[ann] let_variable_declaration[decl] {
+    |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] { yyextra.das_force_oxford_comma=true; } optional_field_annotation[ann] let_variable_declaration[decl] {
         auto pDecl = $decl;
         if ( pDecl->pTypeDecl ) {
             for ( const auto & name_at : *pDecl->pNameList ) {
@@ -2375,7 +2370,7 @@ structure_name
             $$ = nullptr;
         } else {
             $$ = pStruct.get();
-            g_thisStructure = pStruct.get();
+            yyextra.g_thisStructure = pStruct.get();
         }
         delete $name;
     }
@@ -2485,7 +2480,7 @@ structure_declaration
             }
         }
         deleteVariableDeclarationList($list);
-        g_thisStructure = nullptr;
+        yyextra.g_thisStructure = nullptr;
     }
     ;
 
@@ -2601,7 +2596,7 @@ bitfield_bits
     ;
 
 bitfield_type_declaration
-    :   DAS_TBITFIELD[basicType] '<' { das_arrow_depth ++; } bitfield_bits[nl] '>' { das_arrow_depth --; } {
+    :   DAS_TBITFIELD[basicType] '<' { yyextra.das_arrow_depth ++; } bitfield_bits[nl] '>' { yyextra.das_arrow_depth --; } {
             $$ = new TypeDecl(Type::tBitfield);
             $$->argNames = *$nl;
             if ( $$->argNames.size()>32 ) {
@@ -2688,7 +2683,7 @@ type_declaration
         $$->at = tokAt(@typeDecl);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   DAS_SMART_PTR[loc] '<' { das_arrow_depth ++; } type_declaration[typeDecl] '>' { das_arrow_depth --; } {
+    |   DAS_SMART_PTR[loc] '<' { yyextra.das_arrow_depth ++; } type_declaration[typeDecl] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(@loc);
         $$->smartPtr = true;
@@ -2701,18 +2696,18 @@ type_declaration
         $$->firstType->at = tokAt(@typeDecl);
         $$->firstType->firstType = TypeDeclPtr($typeDecl);
     }
-    |   DAS_ARRAY[loc] '<' { das_arrow_depth ++; } type_declaration[typeDecl] '>' { das_arrow_depth --; } {
+    |   DAS_ARRAY[loc] '<' { yyextra.das_arrow_depth ++; } type_declaration[typeDecl] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tArray);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   DAS_TABLE[loc] '<' { das_arrow_depth ++; } type_declaration[keyTypeDecl] ';' type_declaration[valueTypeDecl] '>' { das_arrow_depth --; } {
+    |   DAS_TABLE[loc] '<' { yyextra.das_arrow_depth ++; } type_declaration[keyTypeDecl] ';' type_declaration[valueTypeDecl] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tTable);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($keyTypeDecl);
         $$->secondType = TypeDeclPtr($valueTypeDecl);
     }
-    |   DAS_ITERATOR[loc] '<'  { das_arrow_depth ++; } type_declaration[itTypeDecl] '>' { das_arrow_depth --; } {
+    |   DAS_ITERATOR[loc] '<'  { yyextra.das_arrow_depth ++; } type_declaration[itTypeDecl] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tIterator);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($itTypeDecl);
@@ -2721,12 +2716,12 @@ type_declaration
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
     }
-    |   DAS_TBLOCK[loc] '<'  { das_arrow_depth ++; } type_declaration[blockType] '>' { das_arrow_depth --; } {
+    |   DAS_TBLOCK[loc] '<'  { yyextra.das_arrow_depth ++; } type_declaration[blockType] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
     }
-    |   DAS_TBLOCK[loc] '<'  { das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { das_arrow_depth --; } {
+    |   DAS_TBLOCK[loc] '<'  { yyextra.das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tBlock);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
@@ -2739,12 +2734,12 @@ type_declaration
         $$ = new TypeDecl(Type::tFunction);
         $$->at = tokAt(@loc);
     }
-    |   DAS_TFUNCTION[loc] '<' { das_arrow_depth ++; } type_declaration[blockType] '>' { das_arrow_depth --; } {
+    |   DAS_TFUNCTION[loc] '<' { yyextra.das_arrow_depth ++; } type_declaration[blockType] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tFunction);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
     }
-    |   DAS_TFUNCTION[loc] '<' { das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { das_arrow_depth --; } {
+    |   DAS_TFUNCTION[loc] '<' { yyextra.das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tFunction);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
@@ -2757,12 +2752,12 @@ type_declaration
         $$ = new TypeDecl(Type::tLambda);
         $$->at = tokAt(@loc);
     }
-    |   DAS_TLAMBDA[loc] '<' { das_arrow_depth ++; } type_declaration[blockType] '>' { das_arrow_depth --; } {
+    |   DAS_TLAMBDA[loc] '<' { yyextra.das_arrow_depth ++; } type_declaration[blockType] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tLambda);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($blockType);
     }
-    |   DAS_TLAMBDA[loc] '<' { das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { das_arrow_depth --; } {
+    |   DAS_TLAMBDA[loc] '<' { yyextra.das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tLambda);
         $$->at = tokAt(@loc);
         $$->firstType = TypeDeclPtr($result);
@@ -2771,13 +2766,13 @@ type_declaration
             deleteVariableDeclarationList($list);
         }
     }
-    |   DAS_TTUPLE[loc] '<' { das_arrow_depth ++; } tuple_type_list[list] '>' { das_arrow_depth --; } {
+    |   DAS_TTUPLE[loc] '<' { yyextra.das_arrow_depth ++; } tuple_type_list[list] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tTuple);
         $$->at = tokAt(@loc);
         varDeclToTypeDecl($$, $list, true);
         deleteVariableDeclarationList($list);
     }
-    |   DAS_TVARIANT[loc] '<' { das_arrow_depth ++; } variant_type_list[list] '>' { das_arrow_depth --; } {
+    |   DAS_TVARIANT[loc] '<' { yyextra.das_arrow_depth ++; } variant_type_list[list] '>' { yyextra.das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tVariant);
         $$->at = tokAt(@loc);
         varDeclToTypeDecl($$, $list, true);
@@ -2786,7 +2781,7 @@ type_declaration
     ;
 
 variant_alias_declaration
-    :   DAS_TVARIANT { das_need_oxford_comma=false; } NAME[vname] '{' variant_type_list[list] ';' '}' {
+    :   DAS_TVARIANT { yyextra.das_need_oxford_comma=false; } NAME[vname] '{' variant_type_list[list] ';' '}' {
         auto vtype = make_smart<TypeDecl>(Type::tVariant);
         vtype->alias = *$vname;
         vtype->at = tokAt(@vname);
@@ -2801,7 +2796,7 @@ variant_alias_declaration
     ;
 
 bitfield_alias_declaration
-    :   DAS_TBITFIELD { das_need_oxford_comma=false; } NAME[vname] '{' bitfield_bits[list] ';' '}' {
+    :   DAS_TBITFIELD { yyextra.das_need_oxford_comma=false; } NAME[vname] '{' bitfield_bits[list] ';' '}' {
         auto btype = make_smart<TypeDecl>(Type::tBitfield);
         btype->alias = *$vname;
         btype->at = tokAt(@vname);
@@ -3075,7 +3070,7 @@ void das_yyfatalerror(DAS_YYLTYPE * lloc, const string & error, CompilationError
 }
 
 void das_yyerror(DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error) {
-    if ( !das_supress_errors ) {
+    if ( !yyextra.das_supress_errors ) {
         g_Program->error(error,"","",LineInfo(g_FileAccessStack.back(),
             lloc->first_column,lloc->first_line,lloc->last_column,lloc->last_line),
                 CompilationError::syntax_error);

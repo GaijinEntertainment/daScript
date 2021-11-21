@@ -3,6 +3,8 @@
     #include <inttypes.h>
     #include "daScript/ast/ast.h"
 
+    #include "parser_state.h"
+
     #include "ds_parser.hpp"
 
     #ifndef SCNi64
@@ -24,52 +26,31 @@
 
     void das_yyfatalerror(DAS_YYLTYPE * lloc, const string & error, CompilationError cerr = CompilationError::syntax_error);
 
-    int das_current_line_indent = 0;
-    int das_indent_level = 0;
-    int das_def_tab_size = 4;
-    int das_tab_size = das_def_tab_size;   // only 2,4 or 8
-    int das_nested_parentheses = 0;
-    int das_nested_curly_braces = 0;
-    int das_nested_square_braces = 0;
-    int das_nested_sb = 0;
-    int das_yycolumn = 0;
-    int das_c_style_depth = 0;
-    int das_arrow_depth = 0;
-    bool das_need_oxford_comma = true;
-    bool das_force_oxford_comma = false;
-    bool das_supress_errors = false;
-    bool das_in_normal = false;
     vector<int> das_line_no;
-    das_set<string> das_already_include;
-    Structure * g_thisStructure = nullptr;
-
-    namespace das {
-        das_map<string,string>   das_module_alias;
-    }
 
     #define YY_USER_ACTION \
         yylloc_param->first_line = yylloc_param->last_line = yylineno; \
-        yylloc_param->first_column = das_yycolumn; \
-        yylloc_param->last_column = das_yycolumn + yyleng - 1; \
-        YYCOLUMN (das_yycolumn += yyleng, "YY_USER_ACTION");
+        yylloc_param->first_column = yyextra.das_yycolumn; \
+        yylloc_param->last_column = yyextra.das_yycolumn + yyleng - 1; \
+        YYCOLUMN (yyextra.das_yycolumn += yyleng, "YY_USER_ACTION");
 
 #ifdef FLEX_DEBUG
     void YYCOLUMN ( int, const char * comment ) {
-        printf("%i:%i %s\n", das_yycolumn, yylineno, comment ? comment : "");
+        printf("%i:%i %s\n", yyextra.das_yycolumn, yylineno, comment ? comment : "");
     }
 #else
     #define YYCOLUMN(expr,comment)  ((expr))
 #endif
 
 void YYTAB() {
-    // YYCOLUMN(das_yycolumn = (das_yycolumn - 1 + das_tab_size) & ~(das_tab_size-1), "TAB");
+    // YYCOLUMN(yyextra.das_yycolumn = (yyextra.das_yycolumn - 1 + yyextra.das_tab_size) & ~(yyextra.das_tab_size-1), "TAB");
 }
 
-void YYNEWLINE() {
-    YYCOLUMN(das_yycolumn = 0,"NEW LINE");
-}
+void YYNEWLINE(yyscan_t yyscanner);
 
 #define YY_DECL int yylex(DAS_YYSTYPE *yylval_param, DAS_YYLTYPE *yylloc_param, yyscan_t yyscanner)
+
+#define YY_EXTRA_TYPE das::DasParserState
 
 %}
 
@@ -109,7 +90,7 @@ void YYNEWLINE() {
             g_FileAccessStack.pop_back();
             g_FileAccessStack.push_back(info);
             yylineno = lRow;
-            YYCOLUMN ( das_yycolumn = lCol, "LINE DIRECTIVE");
+            YYCOLUMN ( yyextra.das_yycolumn = lCol, "LINE DIRECTIVE");
         }
     } else {
         das_yyfatalerror(yylloc_param,"can't process line directive " + string(yytext),
@@ -117,19 +98,19 @@ void YYNEWLINE() {
     }
 }
 <indent>"*/"                        das_yyfatalerror(yylloc_param,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
-<indent>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = false;
+<indent>"/*"                        BEGIN(c_comment); yyextra.das_c_style_depth = 1; yyextra.das_in_normal = false;
 <normal>"*/"                        das_yyfatalerror(yylloc_param,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
-<normal>"/*"                        BEGIN(c_comment); das_c_style_depth = 1; das_in_normal = true;
+<normal>"/*"                        BEGIN(c_comment); yyextra.das_c_style_depth = 1; yyextra.das_in_normal = true;
 <indent>"\/\/"                      BEGIN(cpp_comment);
 <normal>"\/\/"                      BEGIN(cpp_comment);
 <cpp_comment>.
 <cpp_comment>\n                     BEGIN(normal); unput('\n');
 <cpp_comment><<EOF>>                BEGIN(normal);
-<c_comment>"/*"                     das_c_style_depth ++;
+<c_comment>"/*"                     yyextra.das_c_style_depth ++;
 <c_comment>"*/" {
-    das_c_style_depth --;
-    if ( das_c_style_depth==0 ) {
-        if ( das_in_normal ) {
+    yyextra.das_c_style_depth --;
+    if ( yyextra.das_c_style_depth==0 ) {
+        if ( yyextra.das_in_normal ) {
             BEGIN(normal);
         } else {
             BEGIN(indent);
@@ -148,7 +129,7 @@ void YYNEWLINE() {
     return END_OF_READ;
 }
 <reader>\n        {
-    YYNEWLINE();
+    YYNEWLINE(yyscanner);
     yylval_param->ch = yytext[0];
     return STRING_CHARACTER;
 }
@@ -162,8 +143,8 @@ void YYNEWLINE() {
     return END_STRING;
 }
 <strb>\{                {
-    DAS_ASSERT(das_nested_sb==0);
-    das_nested_sb ++;
+    DAS_ASSERT(yyextra.das_nested_sb==0);
+    yyextra.das_nested_sb ++;
     BEGIN(normal);
     return BEGIN_STRING_EXPR;
 }
@@ -182,7 +163,7 @@ void YYNEWLINE() {
 <strb>\r              /* do exactly nothing */
 <strb>\n                {
     yylval_param->ch = *yytext;
-    YYNEWLINE();
+    YYNEWLINE(yyscanner);
     return STRING_CHARACTER;
 }
 <strb>\t                {
@@ -195,50 +176,50 @@ void YYNEWLINE() {
     return STRING_CHARACTER;
 }
 <indent>[ \t\r]*\n      /* skip empty line */ {
-    das_current_line_indent = 0;
-    YYNEWLINE();
+    yyextra.das_current_line_indent = 0;
+    YYNEWLINE(yyscanner);
 }
 <indent>" "             {
-    das_current_line_indent++;
+    yyextra.das_current_line_indent++;
     #ifdef FLEX_DEBUG
-        printf("[ ], indent=%i\n", das_current_line_indent);
+        printf("[ ], indent=%i\n", yyextra.das_current_line_indent);
     #endif
 }
 <indent>\t            {
-    das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);
+    yyextra.das_current_line_indent = (yyextra.das_current_line_indent + yyextra.das_tab_size) & ~(yyextra.das_tab_size-1);
     #ifdef FLEX_DEBUG
-        printf("\\t, cli=%i\n", das_current_line_indent);
+        printf("\\t, cli=%i\n", yyextra.das_current_line_indent);
     #endif
     YYTAB();
 }
 <indent>(\/\/.*)*\n     {
-    das_current_line_indent = 0;
-    das_need_oxford_comma = true;
-    YYNEWLINE();
+    yyextra.das_current_line_indent = 0;
+    yyextra.das_need_oxford_comma = true;
+    YYNEWLINE(yyscanner);
     #ifdef FLEX_DEBUG
         printf("new line\n");
     #endif
 }
 <indent>.               {
     unput(*yytext);
-    YYCOLUMN(das_yycolumn--, "UNPUT");
-    if (das_current_line_indent > das_indent_level*das_tab_size ) {
-        if ( das_current_line_indent % das_tab_size ) {
+    YYCOLUMN(yyextra.das_yycolumn--, "UNPUT");
+    if (yyextra.das_current_line_indent > yyextra.das_indent_level*yyextra.das_tab_size ) {
+        if ( yyextra.das_current_line_indent % yyextra.das_tab_size ) {
             #ifdef FLEX_DEBUG
-            printf("INVALID INDENT at %i, emit {\n", das_current_line_indent);
+            printf("INVALID INDENT at %i, emit {\n", yyextra.das_current_line_indent);
             #endif
             das_yyfatalerror(yylloc_param,"invalid indentation"); // pretend tab was pressed
-            das_current_line_indent = (das_current_line_indent + das_tab_size) & ~(das_tab_size-1);
+            yyextra.das_current_line_indent = (yyextra.das_current_line_indent + yyextra.das_tab_size) & ~(yyextra.das_tab_size-1);
         }
-        das_indent_level++;
+        yyextra.das_indent_level++;
         #ifdef FLEX_DEBUG
-        printf("emit {, cli=%i, indent =%i\n", das_current_line_indent, das_indent_level);
+        printf("emit {, cli=%i, indent =%i\n", yyextra.das_current_line_indent, yyextra.das_indent_level);
         #endif
         return '{';
-    } else if (das_current_line_indent < das_indent_level*das_tab_size ) {
-        das_indent_level--;
+    } else if (yyextra.das_current_line_indent < yyextra.das_indent_level*yyextra.das_tab_size ) {
+        yyextra.das_indent_level--;
         #ifdef FLEX_DEBUG
-        printf("emit }, cli=%i, indent =%i\n", das_current_line_indent, das_indent_level);
+        printf("emit }, cli=%i, indent =%i\n", yyextra.das_current_line_indent, yyextra.das_indent_level);
         #endif
         return '}';
     } else {
@@ -247,8 +228,8 @@ void YYNEWLINE() {
 }
 <indent><<EOF>>         {
     if ( g_FileAccessStack.size()==1 ) {
-        if ( das_indent_level ) {
-            das_indent_level--;
+        if ( yyextra.das_indent_level ) {
+            yyextra.das_indent_level--;
             unput('\r');
             #ifdef FLEX_DEBUG
             printf("emit }\n");
@@ -276,8 +257,8 @@ void YYNEWLINE() {
     if ( !info ) {
         das_yyfatalerror(yylloc_param,"can't open "+incFileName);
     } else {
-        if ( das_already_include.find(incFileName) == das_already_include.end() ) {
-            das_already_include.insert(incFileName);
+        if ( yyextra.das_already_include.find(incFileName) == yyextra.das_already_include.end() ) {
+            yyextra.das_already_include.insert(incFileName);
             g_FileAccessStack.push_back(info);
             das_line_no.push_back(yylineno);
             yylineno = 1;
@@ -292,28 +273,28 @@ void YYNEWLINE() {
 }
 
 <normal>"include"                                       BEGIN(include);
-<normal>"for"                                           /* das_need_oxford_comma = false; */ return DAS_FOR;
-<normal>"while"                                         das_need_oxford_comma = false; return DAS_WHILE;
-<normal>"if"                                            das_need_oxford_comma = false; return DAS_IF;
-<normal>"static_if"                                     das_need_oxford_comma = false; return DAS_STATIC_IF;
-<normal>"elif"                                          das_need_oxford_comma = false; return DAS_ELIF;
-<normal>"static_elif"                                   das_need_oxford_comma = false; return DAS_STATIC_ELIF;
-<normal>"else"                                          das_need_oxford_comma = false; return DAS_ELSE;
-<normal>"finally"                                       das_need_oxford_comma = false; return DAS_FINALLY;
-<normal>"def"                                           das_need_oxford_comma = false; return DAS_DEF;
-<normal>"with"                                          das_need_oxford_comma = false; return DAS_WITH;
+<normal>"for"                                           /* yyextra.das_need_oxford_comma = false; */ return DAS_FOR;
+<normal>"while"                                         yyextra.das_need_oxford_comma = false; return DAS_WHILE;
+<normal>"if"                                            yyextra.das_need_oxford_comma = false; return DAS_IF;
+<normal>"static_if"                                     yyextra.das_need_oxford_comma = false; return DAS_STATIC_IF;
+<normal>"elif"                                          yyextra.das_need_oxford_comma = false; return DAS_ELIF;
+<normal>"static_elif"                                   yyextra.das_need_oxford_comma = false; return DAS_STATIC_ELIF;
+<normal>"else"                                          yyextra.das_need_oxford_comma = false; return DAS_ELSE;
+<normal>"finally"                                       yyextra.das_need_oxford_comma = false; return DAS_FINALLY;
+<normal>"def"                                           yyextra.das_need_oxford_comma = false; return DAS_DEF;
+<normal>"with"                                          yyextra.das_need_oxford_comma = false; return DAS_WITH;
 <normal>"aka"                                           return DAS_AKA;
 <normal>"assume"                                        return DAS_ASSUME;
-<normal>"let"[ \t\r]*\/\/.*\n                           das_need_oxford_comma = false; unput('\n'); return DAS_LET;
+<normal>"let"[ \t\r]*\/\/.*\n                           yyextra.das_need_oxford_comma = false; unput('\n'); return DAS_LET;
 <normal>"let"                                           return DAS_LET;
-<normal>"var"[ \t\r]*\/\/.*\n                           das_need_oxford_comma = false; unput('\n'); return DAS_VAR;
+<normal>"var"[ \t\r]*\/\/.*\n                           yyextra.das_need_oxford_comma = false; unput('\n'); return DAS_VAR;
 <normal>"var"                                           return DAS_VAR;
-<normal>"struct"                                        das_need_oxford_comma = false; return DAS_STRUCT;
-<normal>"class"                                         das_need_oxford_comma = false; return DAS_CLASS;
-<normal>"enum"                                          das_need_oxford_comma = false; return DAS_ENUM;
-<normal>"try"                                           das_need_oxford_comma = false; return DAS_TRY;
-<normal>"recover"                                       das_need_oxford_comma = false; return DAS_CATCH;
-<normal>"typedef"                                       das_need_oxford_comma = false; return DAS_TYPEDEF;
+<normal>"struct"                                        yyextra.das_need_oxford_comma = false; return DAS_STRUCT;
+<normal>"class"                                         yyextra.das_need_oxford_comma = false; return DAS_CLASS;
+<normal>"enum"                                          yyextra.das_need_oxford_comma = false; return DAS_ENUM;
+<normal>"try"                                           yyextra.das_need_oxford_comma = false; return DAS_TRY;
+<normal>"recover"                                       yyextra.das_need_oxford_comma = false; return DAS_CATCH;
+<normal>"typedef"                                       yyextra.das_need_oxford_comma = false; return DAS_TYPEDEF;
 <normal>"label"                                         return DAS_LABEL;
 <normal>"goto"                                          return DAS_GOTO;
 <normal>"module"                                        return DAS_MODULE;
@@ -349,10 +330,10 @@ void YYNEWLINE() {
 <normal>"smart_ptr"                                     return DAS_SMART_PTR;
 <normal>unsafe[ \t\r]*\(    {
     unput('(');
-    YYCOLUMN(das_yycolumn--, "UNPUT (");
+    YYCOLUMN(yyextra.das_yycolumn--, "UNPUT (");
     return DAS_UNSAFE;
 }
-<normal>"unsafe"                                        das_need_oxford_comma = false; return DAS_UNSAFE;
+<normal>"unsafe"                                        yyextra.das_need_oxford_comma = false; return DAS_UNSAFE;
 <normal>"as"                                            return DAS_AS;
 <normal>"is"                                            return DAS_IS;
 <normal>"deref"                                         return DAS_DEREF;
@@ -481,104 +462,104 @@ void YYNEWLINE() {
 <normal>[0-9]+lf                                        return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>[0-9]+[eE][+\-]?[0-9]+lf                        return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>\)                                  {
-    if ( !das_nested_parentheses ) {
+    if ( !yyextra.das_nested_parentheses ) {
         das_yyfatalerror(yylloc_param,"mismatching parentheses", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
-    das_nested_parentheses --;
+    yyextra.das_nested_parentheses --;
     return ')';
 }
 <normal>\(                                  {
-    das_nested_parentheses ++;
+    yyextra.das_nested_parentheses ++;
     return '(';
 }
 <normal>\]                                  {
-    if ( !das_nested_square_braces ) {
+    if ( !yyextra.das_nested_square_braces ) {
         das_yyfatalerror(yylloc_param,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
-    das_nested_square_braces --;
+    yyextra.das_nested_square_braces --;
     return ']';
 }
 <normal>\[                                  {
-    das_nested_square_braces ++;
+    yyextra.das_nested_square_braces ++;
     return '[';
 }
 <normal>\}                                  {
-    if ( das_nested_sb ) {
-        das_nested_sb --;
-        if ( !das_nested_sb ) {
+    if ( yyextra.das_nested_sb ) {
+        yyextra.das_nested_sb --;
+        if ( !yyextra.das_nested_sb ) {
             BEGIN(strb);
             return END_STRING_EXPR;
         } else {
             return '}';
         }
     } else {
-        if ( !das_nested_curly_braces ) {
+        if ( !yyextra.das_nested_curly_braces ) {
             das_yyfatalerror(yylloc_param,"mismatching curly braces", CompilationError::mismatching_curly_bracers);
             return LEXER_ERROR;
         }
-        das_nested_curly_braces --;
+        yyextra.das_nested_curly_braces --;
         return '}';
     }
 }
 <normal>\{                                  {
-    if ( das_nested_sb ) {
-        das_nested_sb ++;
+    if ( yyextra.das_nested_sb ) {
+        yyextra.das_nested_sb ++;
     } else {
-        das_nested_curly_braces ++;
+        yyextra.das_nested_curly_braces ++;
     }
     return '{';
 }
 <normal>"\:\:"                              return COLCOL;
 <normal>"\|\>"                              return RPIPE;
-<normal>\<\|[ \t\r]*\/\/.*\n                das_need_oxford_comma = false; unput('\n'); return LBPIPE;
-<normal>\<\|[ \t\r]*\n                      das_need_oxford_comma = false; unput('\n'); return LBPIPE;
+<normal>\<\|[ \t\r]*\/\/.*\n                yyextra.das_need_oxford_comma = false; unput('\n'); return LBPIPE;
+<normal>\<\|[ \t\r]*\n                      yyextra.das_need_oxford_comma = false; unput('\n'); return LBPIPE;
 <normal>\<\|[ \t]\$                         {
     unput('$');
-    YYCOLUMN(das_yycolumn--, "UNPUT $");
-    if ( das_nested_parentheses ) {
+    YYCOLUMN(yyextra.das_yycolumn--, "UNPUT $");
+    if ( yyextra.das_nested_parentheses ) {
         return LPIPE;
     } else {
-        das_need_oxford_comma = false;
+        yyextra.das_need_oxford_comma = false;
         return LBPIPE;
     }
 }
 <normal>\<\|[ \t]\@                         {
     unput('@');
-    YYCOLUMN(das_yycolumn--, "UNPUT @");
-    if ( das_nested_parentheses ) {
+    YYCOLUMN(yyextra.das_yycolumn--, "UNPUT @");
+    if ( yyextra.das_nested_parentheses ) {
         return LPIPE;
     } else {
-        das_need_oxford_comma = false;
+        yyextra.das_need_oxford_comma = false;
         return LBPIPE;
     }
 }
 <normal>\@\@[ \t]*\<\|               {
     unput('@');
     unput('@');
-    YYCOLUMN(das_yycolumn-=2, "UNPUT @@");
-    if ( das_nested_parentheses ) {
+    YYCOLUMN(yyextra.das_yycolumn-=2, "UNPUT @@");
+    if ( yyextra.das_nested_parentheses ) {
         return LFPIPE;
     } else {
-        das_need_oxford_comma = false;
+        yyextra.das_need_oxford_comma = false;
         return LFPIPE;
     }
 }
 <normal>\@[ \t]*\<\|               {
     unput('@');
-    YYCOLUMN(das_yycolumn--, "UNPUT @");
-    if ( das_nested_parentheses ) {
+    YYCOLUMN(yyextra.das_yycolumn--, "UNPUT @");
+    if ( yyextra.das_nested_parentheses ) {
         return LAPIPE;
     } else {
-        das_need_oxford_comma = false;
+        yyextra.das_need_oxford_comma = false;
         return LAPIPE;
     }
 }
 <normal>"\<\|"                              return LPIPE;
 <normal>"\?\?"                              return QQ;
 <normal>"\?\["                              {
-    das_nested_square_braces ++;
+    yyextra.das_nested_square_braces ++;
     return QBRA;
 }
 <normal>"\?\."                              return QDOT;
@@ -606,19 +587,19 @@ void YYNEWLINE() {
 <normal>"\=\="                              return EQUEQU;
 <normal>"\!\="                              return NOTEQU;
 <normal>"\>\>\>" {
-    if ( das_arrow_depth ) {
+    if ( yyextra.das_arrow_depth ) {
         unput('>');
         unput('>');
-        YYCOLUMN(das_yycolumn-=2, "UNPUT");
+        YYCOLUMN(yyextra.das_yycolumn-=2, "UNPUT");
         return '>';
     } else {
         return ROTR;
     }
 }
 <normal>"\>\>" {
-    if ( das_arrow_depth ) {
+    if ( yyextra.das_arrow_depth ) {
         unput('>');
-        YYCOLUMN(das_yycolumn--, "UNPUT");
+        YYCOLUMN(yyextra.das_yycolumn--, "UNPUT");
         return '>';
     } else {
         return SHR;
@@ -632,18 +613,18 @@ void YYNEWLINE() {
 <normal>"\<\<\<\="                          return ROTLEQU;
 <normal>"\=\>"                              return MAPTO;
 <normal>"\[\["                              {
-        das_nested_square_braces ++;
-        das_nested_square_braces ++;
+        yyextra.das_nested_square_braces ++;
+        yyextra.das_nested_square_braces ++;
         return BRABRAB;
     }
 <normal>"\[\{"                              {
-        das_nested_square_braces ++;
-        das_nested_curly_braces ++;
+        yyextra.das_nested_square_braces ++;
+        yyextra.das_nested_curly_braces ++;
         return BRACBRB;
     }
 <normal>"\{\{"                              {
-        das_nested_curly_braces ++;
-        das_nested_curly_braces ++;
+        yyextra.das_nested_curly_braces ++;
+        yyextra.das_nested_curly_braces ++;
         return CBRCBRB;
     }
 <normal>[ \r]                             /* skip white space */
@@ -651,15 +632,15 @@ void YYNEWLINE() {
     YYTAB();
 }
 <normal>(\/\/.*)*\n {
-    YYCOLUMN(das_yycolumn = 0, "NEW LINE");
-    if  ( !das_nested_parentheses && !das_nested_curly_braces && !das_nested_square_braces ) {
-        bool ns = ((das_current_line_indent!=0) && das_need_oxford_comma) || das_force_oxford_comma;
+    YYCOLUMN(yyextra.das_yycolumn = 0, "NEW LINE");
+    if  ( !yyextra.das_nested_parentheses && !yyextra.das_nested_curly_braces && !yyextra.das_nested_square_braces ) {
+        bool ns = ((yyextra.das_current_line_indent!=0) && yyextra.das_need_oxford_comma) || yyextra.das_force_oxford_comma;
         #ifdef FLEX_DEBUG
-        if ( das_force_oxford_comma ) printf ( "forcing oxford comma\n");
+        if ( yyextra.das_force_oxford_comma ) printf ( "forcing oxford comma\n");
         #endif
-        das_force_oxford_comma = false;
-        das_current_line_indent = 0;
-        das_need_oxford_comma = true;
+        yyextra.das_force_oxford_comma = false;
+        yyextra.das_current_line_indent = 0;
+        yyextra.das_need_oxford_comma = true;
         BEGIN(indent);
         if ( ns ) {
             #ifdef FLEX_DEBUG
@@ -671,11 +652,11 @@ void YYNEWLINE() {
 }
 <normal><<EOF>>         {
     if ( g_FileAccessStack.size()==1 ) {
-        YYCOLUMN(das_yycolumn = 0,"EOF");
-        if  ( !das_nested_parentheses && !das_nested_curly_braces && !das_nested_square_braces ) {
-            bool ns = (das_current_line_indent!=0) && das_need_oxford_comma;
-            das_current_line_indent = 0;
-            das_need_oxford_comma = true;
+        YYCOLUMN(yyextra.das_yycolumn = 0,"EOF");
+        if  ( !yyextra.das_nested_parentheses && !yyextra.das_nested_curly_braces && !yyextra.das_nested_square_braces ) {
+            bool ns = (yyextra.das_current_line_indent!=0) && yyextra.das_need_oxford_comma;
+            yyextra.das_current_line_indent = 0;
+            yyextra.das_need_oxford_comma = true;
             BEGIN(indent);
             if ( ns ) {
                 #ifdef FLEX_DEBUG
@@ -714,28 +695,32 @@ extern int das_yydebug;
 void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 
-    g_thisStructure = nullptr;
-    das_module_alias.clear();
-    das_already_include.clear();
+    yyextra.g_thisStructure = nullptr;
+    yyextra.das_module_alias.clear();
+    yyextra.das_already_include.clear();
 #if DAS_YYDEBUG
     das_yydebug = 0;
 #endif
-    das_tab_size = das_def_tab_size;
+    yyextra.das_tab_size = yyextra.das_def_tab_size;
     das_line_no.clear();
-    YYCOLUMN(das_yycolumn = 0,"YYBEGIN");
-    das_current_line_indent = 0;
-    das_indent_level = 0;
-    das_nested_parentheses = 0;
-    das_nested_curly_braces = 0;
-    das_nested_square_braces = 0;
-    das_nested_sb = 0;
-    das_need_oxford_comma = true;
-    das_force_oxford_comma = false;
-    das_c_style_depth = 0;
-    das_arrow_depth = 0;
+    YYCOLUMN(yyextra.das_yycolumn = 0,"YYBEGIN");
+    yyextra.das_current_line_indent = 0;
+    yyextra.das_indent_level = 0;
+    yyextra.das_nested_parentheses = 0;
+    yyextra.das_nested_curly_braces = 0;
+    yyextra.das_nested_square_braces = 0;
+    yyextra.das_nested_sb = 0;
+    yyextra.das_need_oxford_comma = true;
+    yyextra.das_force_oxford_comma = false;
+    yyextra.das_c_style_depth = 0;
+    yyextra.das_arrow_depth = 0;
     BEGIN(normal);
     yy_scan_bytes(str, len, yyscanner);
     yylineno = 1;
 }
 
+void YYNEWLINE ( yyscan_t yyscanner ) {
+    struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
+    YYCOLUMN(yyextra.das_yycolumn = 0,"NEW LINE");
+}
 

@@ -237,19 +237,14 @@ ADD_CUSTOM_TARGET(need_and_resolve ALL DEPENDS ${DAS_MODULES_NEED_INC} ${DAS_MOD
 FLEX(src/parser/ds_lexer.lpp)
 BISON(src/parser/ds_parser.ypp)
 
-# maximum number of arguments for DAS_FOR_EACH macros.
-# increase if needed.
-IF(MSVC)
-    SET(MAX_DAS_FOR_EACH_ARGS 125)
-ELSE()
-    SET(MAX_DAS_FOR_EACH_ARGS 600)
-ENDIF()
 
 SET(PARSER_GENERATED_SRC
 src/parser/ds_parser.hpp
 src/parser/ds_parser.cpp
 src/parser/ds_parser.output
 src/parser/ds_lexer.cpp
+src/parser/lex.yy.h
+src/parser/parser_state.h
 )
 
 SET(PARSER_SRC

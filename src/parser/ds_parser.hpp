@@ -75,7 +75,6 @@ extern int das_yydebug;
         extern ProgramPtr               g_Program;
         extern FileAccessPtr            g_Access;
         extern vector<FileInfo *>       g_FileAccessStack;
-        extern das_map<string,string>   das_module_alias;
 
         extern ReaderMacro *            g_ReaderMacro;
         extern ExprReader *             g_ReaderExpr;
@@ -119,14 +118,7 @@ extern int das_yydebug;
 
     Annotation * findAnnotation ( const string & name, const LineInfo & at );
 
-    extern bool das_need_oxford_comma;
-    extern bool das_force_oxford_comma;
-    extern bool das_supress_errors;
-    extern int das_arrow_depth;
-
-    extern Structure * g_thisStructure;
-
-#line 130 "ds_parser.hpp"
+#line 122 "ds_parser.hpp"
 
 /* Token type.  */
 #ifndef DAS_YYTOKENTYPE
@@ -300,7 +292,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 130 "ds_parser.ypp"
+#line 126 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -329,7 +321,7 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 333 "ds_parser.hpp"
+#line 325 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;
