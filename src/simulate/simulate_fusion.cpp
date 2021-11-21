@@ -116,16 +116,14 @@ namespace das {
         return typeName.empty() ? name : (name + "<" + typeName + ">");
     }
 
-    mutex g_fusionEngineMutex;
-    unique_ptr<FusionEngine> g_fusionEngine;
+    // TODO: at some point we should share fusion engine
+    thread_local unique_ptr<FusionEngine> g_fusionEngine;
 
     void resetFusionEngine() {
-        lock_guard<mutex> lock(g_fusionEngineMutex);
         g_fusionEngine.reset();
     }
 
     void createFusionEngine() {
-        lock_guard<mutex> lock(g_fusionEngineMutex);
         if ( !g_fusionEngine ) {
             g_fusionEngine = make_unique<FusionEngine>();
 #if DAS_FUSION
