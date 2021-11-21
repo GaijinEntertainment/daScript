@@ -4,7 +4,7 @@
 
 namespace das {
     typedef function<SimNode * (Context &)> AotFactory;
-    typedef das_hash_map<uint64_t,AotFactory> AotLibrary;
+    typedef unordered_map<uint64_t,AotFactory> AotLibrary;  // unordered map for thread safety
 
     typedef void ( * RegisterAotFunctions ) ( AotLibrary & );
 
