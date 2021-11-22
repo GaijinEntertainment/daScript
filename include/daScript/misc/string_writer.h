@@ -2,6 +2,44 @@
 
 namespace das {
 
+    #define DAS_SMALL_BUFFER_SIZE   4096
+
+    class SmallBufferPolicy {
+    public:
+        string str() const {            // todo: replace via stringview
+            DAS_VERIFY(size <= DAS_SMALL_BUFFER_SIZE);
+            return string(data, size);
+        }
+        int tellp() const {
+            return size;
+        }
+    protected:
+        __forceinline void append(const char * s, int l) {
+            if ( size + l <= DAS_SMALL_BUFFER_SIZE ) {
+                memcpy ( data+size, s, l );
+                size += l;
+            } else {
+                DAS_FATAL_LOG("DAS_SMALL_BUFFER_SIZE overflow");
+                DAS_FATAL_ERROR;
+            }
+        }
+        __forceinline char * allocate (int l) {
+            if ( size + l <= DAS_SMALL_BUFFER_SIZE ) {
+                char * res = data + size;
+                size += l;
+                return res;
+            } else {
+                DAS_FATAL_LOG("DAS_SMALL_BUFFER_SIZE overflow");
+                DAS_FATAL_ERROR;
+                return nullptr;
+            }
+        }
+        __forceinline void output() {}
+    protected:
+        char    data[DAS_SMALL_BUFFER_SIZE];
+        int32_t size = 0;
+    };
+
     class VectorAllocationPolicy {
     public:
         string str() const {            // todo: replace via stringview
@@ -90,6 +128,8 @@ namespace das {
     };
 
     typedef StringWriter<VectorAllocationPolicy> TextWriter;
+
+    typedef StringWriter<SmallBufferPolicy> FixedBufferTextWriter;
 
     class TextPrinter : public TextWriter {
     public:

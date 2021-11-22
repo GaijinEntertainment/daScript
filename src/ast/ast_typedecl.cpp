@@ -2277,12 +2277,12 @@ namespace das
     }
 
     string TypeDecl::getMangledName ( bool fullName ) const {
-        TextWriter ss;
+        FixedBufferTextWriter ss;
         getMangledName(ss, fullName);
         return ss.str();
     }
 
-    void TypeDecl::getMangledName ( TextWriter & ss, bool fullName ) const {
+    void TypeDecl::getMangledName ( FixedBufferTextWriter & ss, bool fullName ) const {
         if ( constant )     ss << "C";
         if ( ref )          ss << "&";
         if ( temporary )    ss << "#";

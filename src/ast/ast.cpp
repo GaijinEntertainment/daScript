@@ -587,12 +587,12 @@ namespace das {
     }
 
     string Function::getMangledName() const {
-        TextWriter ss;
+        FixedBufferTextWriter ss;
         getMangledName(ss);
         return ss.str();
     }
 
-    void Function::getMangledName(TextWriter & ss) const {
+    void Function::getMangledName(FixedBufferTextWriter & ss) const {
         if ( module && !module->name.empty() ) {
             ss << "@" << module->name << "::";
         }

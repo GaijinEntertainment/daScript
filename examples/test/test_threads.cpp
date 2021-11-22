@@ -167,7 +167,7 @@ int main( int argc, char * argv[] ) {
     }
     setCommandLineArguments(argc,argv);
     for ( int use_aot=0; use_aot!=1; use_aot++ ) {
-        #if 0   // for verbose version
+        #if 1   // for verbose version
             if ( AnyNoiseInTests )
                 tout << (use_aot ? "AOT " : "") << "Baseline:\n";
             test_thread(use_aot!=0);
@@ -175,14 +175,15 @@ int main( int argc, char * argv[] ) {
         if ( AnyNoiseInTests )
             tout << (use_aot ? "AOT " : "") << "Threaded:\n";
         vector<thread> THREADS;
-        auto total_threads = max(1, int(thread::hardware_concurrency()));
+        auto total_threads = max(1, int(thread::hardware_concurrency()-2));
         for ( int i=0; i<total_threads; ++i ) {
             THREADS.emplace_back(thread([=](){
-                for (int j = 0; j != 4; ++j) {
+                for (int j = 0; j != 1; ++j) {
                     test_thread(use_aot != 0);
                 }
             }));
         }
+        test_thread(use_aot!=0);
         for ( auto & th : THREADS ) {
             th.join();
         }
