@@ -902,7 +902,7 @@ namespace das
 
     static std::recursive_mutex g_DebugAgentMutex;
     static das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
-    static bool                  g_isInDebugAgentCreation;
+    static thread_local bool g_isInDebugAgentCreation = false;
 
     template <typename TT>
     void for_each_debug_agent ( const TT & lmbd ) {

@@ -15,7 +15,7 @@ using namespace das;
 #include <sstream>
 
 bool VerboseTests = false;
-bool AnyNoiseInTests = false;
+bool AnyNoiseInTests = true;
 
 string this_thread_id() {
     stringstream ss;
@@ -164,7 +164,7 @@ int main( int argc, char * argv[] ) {
     }
     setCommandLineArguments(argc,argv);
     for ( int use_aot=0; use_aot!=1; use_aot++ ) {
-        #if 1   // for verbose version
+        #if 0   // for verbose version
             if ( AnyNoiseInTests )
                 tout << (use_aot ? "AOT " : "") << "Baseline:\n";
             test_thread(use_aot!=0);
