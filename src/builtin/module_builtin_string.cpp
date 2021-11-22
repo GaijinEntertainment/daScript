@@ -41,9 +41,9 @@ namespace das
         return (cmpLen > strLen) ? false : memcmp(str, cmp, cmpLen) == 0;
     }
 
-    bool builtin_string_startswith2 ( const char * str, const char * cmp, uint32_t cmp_len, Context * context ) {
+    bool builtin_string_startswith2 ( const char * str, const char * cmp, uint32_t cmpLen, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
-        const uint32_t cmpLen = min(cmp_len, stringLengthSafe ( *context, cmp ));
+        cmpLen = min(cmpLen, stringLengthSafe ( *context, cmp ));
         return (cmpLen > strLen) ? false : memcmp(str, cmp, cmpLen) == 0;
     }
 
@@ -677,7 +677,7 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_string_startswith")->args({"str","cmp","context"});
             addExtern<DAS_BIND_FUN(builtin_string_startswith2)>(*this, lib, "starts_with",
-                SideEffects::none, "builtin_string_startswith2")->args({"str","cmp","cmp_len","context"});
+                SideEffects::none, "builtin_string_startswith2")->args({"str","cmp","cmpLen","context"});
             addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip",
                 SideEffects::none, "builtin_string_strip")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right",
