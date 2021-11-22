@@ -93,17 +93,10 @@ namespace das {
 
     class TextPrinter : public TextWriter {
     public:
-        virtual void output() override {
-            int newPos = tellp();
-            if (newPos != pos) {
-                string st(data.data() + pos, newPos - pos);
-                printf("%s", st.c_str());
-                fflush(stdout);
-                pos = newPos;
-            }
-        }
+        virtual void output() override;
     protected:
         int pos = 0;
+        static mutex pmut;
     };
 
     enum LogLevel {

@@ -12,24 +12,6 @@
 
 using namespace das;
 
-mutex global_printer;
-
-class TextPrinterMT : public TextWriter {
-public:
-    virtual void output() override {
-        int newPos = tellp();
-        if (newPos != pos) {
-            string st(data.data() + pos, newPos - pos);
-            lock_guard<mutex> lock(global_printer);
-            printf("%s", st.c_str());
-            fflush(stdout);
-            pos = newPos;
-        }
-    }
-protected:
-    int pos = 0;
-};
-
 #include <sstream>
 
 bool VerboseTests = false;
@@ -43,7 +25,7 @@ string this_thread_id() {
 bool g_reportCompilationFailErrors = false;
 
 bool performance_test ( const string & fn, bool useAot ) {
-    TextPrinterMT tout;
+    TextPrinter tout;
     if ( VerboseTests )
         tout << "[" << this_thread_id() << "]";
     // tout << fn << "\n";
@@ -114,13 +96,12 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
 
 #include <smmalloc.h>
 
-void sm_thread_cache_create();
-void sm_thread_cache_destroy();
+void thread_cache_create();
+void thread_cache_destroy();
 
 void test_thread() {
-    sm_thread_cache_create();
-
-    TextPrinterMT tout;
+    thread_cache_create();
+    TextPrinter tout;
     tout << "test_thread: " << this_thread_id() << "\n";
     if ( VerboseTests )
         tout << "NEED MODULE (" << this_thread_id() << ")\n";
@@ -155,12 +136,13 @@ void test_thread() {
     if ( VerboseTests )
         tout << "Module::Shutdown (" << this_thread_id() << ")\n";
     Module::Shutdown();
-
-    sm_thread_cache_destroy();
+    thread_cache_destroy();
 }
 
+#include <thread>
+
 int main( int argc, char * argv[] ) {
-    TextPrinterMT tout;
+    TextPrinter tout;
     if ( argc>2 ) {
         tout << "daScriptTestThreads [pathToDasRoot]\n";
         return -1;

@@ -50,11 +50,9 @@ namespace das {
 
     // aot library
 
-    unique_ptr<AotLibrary> g_AOT_lib;
-    mutex g_AOT_mutex;
+    thread_local unique_ptr<AotLibrary> g_AOT_lib;
 
     AotLibrary & getGlobalAotLibrary() {
-        lock_guard<mutex> lock(g_AOT_mutex);
         if ( !g_AOT_lib ) {
             g_AOT_lib = make_unique<AotLibrary>();
             AotListBase::registerAot(*g_AOT_lib);
@@ -63,7 +61,6 @@ namespace das {
     }
 
     void clearGlobalAotLibrary() {
-        lock_guard<mutex> lock(g_AOT_mutex);
         g_AOT_lib.reset();
     }
 

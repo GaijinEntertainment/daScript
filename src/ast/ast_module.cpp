@@ -80,8 +80,11 @@ namespace das {
 
     void resetFusionEngine();
 
+    atomic<int> g_envTotal = 0;
+
     void Module::Initialize() {
         daScriptEnvironment::ensure();
+        g_envTotal ++;
         bool all = false;
         while ( !all ) {
             all = true;
@@ -95,7 +98,10 @@ namespace das {
         DAS_ASSERT(daScriptEnvironment::owned!=nullptr);
         DAS_ASSERT(daScriptEnvironment::bound!=nullptr);
         ReuseGuard<TypeDecl> rguard;
-        shutdownDebugAgent();
+        g_envTotal --;
+        if ( g_envTotal==0 ) {
+            shutdownDebugAgent();
+        }
         auto m = daScriptEnvironment::bound->modules;
         while ( m ) {
             auto pM = m;
