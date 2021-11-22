@@ -41,6 +41,12 @@ namespace das
         return (cmpLen > strLen) ? false : memcmp(str, cmp, cmpLen) == 0;
     }
 
+    bool builtin_string_startswith2 ( const char * str, const char * cmp, uint32_t cmp_len, Context * context ) {
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        const uint32_t cmpLen = min(cmp_len, stringLengthSafe ( *context, cmp ));
+        return (cmpLen > strLen) ? false : memcmp(str, cmp, cmpLen) == 0;
+    }
+
     static inline const char* strip_l(const char *str) {
         const char *t = str;
         while (((*t) != '\0') && isspace(*t))
@@ -670,6 +676,8 @@ namespace das
                 SideEffects::none, "builtin_string_ends_with")->args({"str","cmp","context"});
             addExtern<DAS_BIND_FUN(builtin_string_startswith)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_string_startswith")->args({"str","cmp","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_startswith2)>(*this, lib, "starts_with",
+                SideEffects::none, "builtin_string_startswith2")->args({"str","cmp","cmp_len","context"});
             addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip",
                 SideEffects::none, "builtin_string_strip")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right",
