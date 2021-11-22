@@ -86,6 +86,7 @@ void* sm::GenericAllocator::Realloc(sm::GenericAllocator::TInstance instance, vo
 	#ifdef _MSC_VER
 		return _aligned_realloc(p, bytesCount, alignment);
 	#else
+		SMMALLOC_UNUSED(alignment);
 		return realloc(p, bytesCount);
 	#endif
 }
@@ -93,8 +94,8 @@ void* sm::GenericAllocator::Realloc(sm::GenericAllocator::TInstance instance, vo
 size_t sm::GenericAllocator::GetUsableSpace(sm::GenericAllocator::TInstance instance, void* p)
 {
 	SMMALLOC_UNUSED(instance);
-	size_t alignment = DetectAlignment(p);
 	#ifdef _MSC_VER
+		size_t alignment = DetectAlignment(p);
 		return _aligned_msize(p, alignment, 0);
 	#elif defined(__APPLE__)
 		return malloc_size(p);

@@ -63,9 +63,10 @@ test_threads.cpp
 unitTest.h
 )
 
-add_executable(daScriptTestThreads ${UNIT_TEST_SRC} ${THREADS_MAIN_SRC})
+add_executable(daScriptTestThreads ${UNIT_TEST_SRC} ${THREADS_MAIN_SRC} ${TEST_GENERATED_SRC} ${AOT_GENERATED_SRC})
 TARGET_LINK_LIBRARIES(daScriptTestThreads libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(daScriptTestThreads libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
 TARGET_INCLUDE_DIRECTORIES(daScriptTestThreads PUBLIC ${PROJECT_SOURCE_DIR}/examples/test)
 SETUP_CPP11(daScriptTestThreads)
+add_dependencies(daScriptTest daScriptTestAot dasAotStub)
 SETUP_LTO(daScriptTestThreads)

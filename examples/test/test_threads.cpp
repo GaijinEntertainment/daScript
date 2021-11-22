@@ -99,7 +99,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
 void thread_cache_create();
 void thread_cache_destroy();
 
-void test_thread() {
+void test_thread(bool useAot) {
     thread_cache_create();
     TextPrinter tout;
     tout << "test_thread: " << this_thread_id() << "\n";
@@ -126,7 +126,7 @@ void test_thread() {
     tout << "Initialized in " << ((usec0/1000)/1000.0) << " (" << this_thread_id() << ")\n";
     // run em
     uint64_t timeStamp = ref_time_ticks();
-    if ( !run_tests(getDasRoot() +  "/examples/test/unit_tests", performance_test, false) ) {
+    if ( !run_tests(getDasRoot() +  "/examples/test/unit_tests", performance_test, useAot) ) {
         if ( VerboseTests )
             tout << "TESTS FAILED (" << this_thread_id() << ")\n";
     } else {
@@ -154,15 +154,20 @@ int main( int argc, char * argv[] ) {
 #if 0
     test_thread();
 #else
-    vector<thread> THREADS;
-    auto total_threads = 4; // max(1,int(thread::hardware_concurrency()));
-    for ( int i=0; i<total_threads; ++i ) {
-        THREADS.emplace_back(thread([=](){
-            test_thread();
-        }));
-    }
-    for ( auto & th : THREADS ) {
-        th.join();
+    for ( int use_aot=0; use_aot!=2; use_aot++ ) {
+        tout << (use_aot ? "AOT " : "") << "Baseline:\n";
+        test_thread(use_aot!=0);
+        tout << (use_aot ? "AOT " : "") << "Threaded:\n";
+        vector<thread> THREADS;
+        auto total_threads = max(1,int(thread::hardware_concurrency()));
+        for ( int i=0; i<total_threads; ++i ) {
+            THREADS.emplace_back(thread([=](){
+                test_thread(use_aot!=0);
+            }));
+        }
+        for ( auto & th : THREADS ) {
+            th.join();
+        }
     }
 #endif
     return 0;
