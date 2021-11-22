@@ -110,7 +110,6 @@ void test_thread(bool useAot) {
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Strings);
-    NEED_MODULE(Module_UnitTest);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_Ast);
     NEED_MODULE(Module_Debugger);
@@ -119,6 +118,7 @@ void test_thread(bool useAot) {
     NEED_MODULE(Module_JobQue);
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_DASBIND);
+    #include "modules/external_need.inc"
     if ( VerboseTests )
         tout << "Module::Initialize (" << this_thread_id() << ")\n";
     Module::Initialize();
@@ -126,6 +126,11 @@ void test_thread(bool useAot) {
     tout << "Initialized in " << ((usec0/1000)/1000.0) << " (" << this_thread_id() << ")\n";
     // run em
     uint64_t timeStamp = ref_time_ticks();
+#if 1
+    performance_test(getDasRoot() +  "/modules/dasImgui/greyprint/greyprint.das", useAot );
+    int usec = get_time_usec(timeStamp);
+    tout << "Compiled in " << ((usec/1000)/1000.0) << " (" << this_thread_id() << ")\n";
+#else
     if ( !run_tests(getDasRoot() +  "/examples/test/unit_tests", performance_test, useAot) ) {
         if ( VerboseTests )
             tout << "TESTS FAILED (" << this_thread_id() << ")\n";
@@ -133,6 +138,7 @@ void test_thread(bool useAot) {
         int usec = get_time_usec(timeStamp);
         tout << "Passed in " << ((usec/1000)/1000.0) << " (" << this_thread_id() << ")\n";
     }
+#endif
     if ( VerboseTests )
         tout << "Module::Shutdown (" << this_thread_id() << ")\n";
     Module::Shutdown();
@@ -150,26 +156,25 @@ int main( int argc, char * argv[] ) {
         setDasRoot(argv[1]);
     }
     setCommandLineArguments(argc,argv);
-
-#if 0
-    test_thread();
-#else
-    for ( int use_aot=0; use_aot!=2; use_aot++ ) {
-        tout << (use_aot ? "AOT " : "") << "Baseline:\n";
-        test_thread(use_aot!=0);
+    for ( int use_aot=0; use_aot!=1; use_aot++ ) {
+        #if 0   // for verbose version
+            tout << (use_aot ? "AOT " : "") << "Baseline:\n";
+            test_thread(use_aot!=0);
+        #endif
         tout << (use_aot ? "AOT " : "") << "Threaded:\n";
         vector<thread> THREADS;
-        auto total_threads = max(1,int(thread::hardware_concurrency()));
+        auto total_threads = max(1, int(thread::hardware_concurrency()));
         for ( int i=0; i<total_threads; ++i ) {
             THREADS.emplace_back(thread([=](){
-                test_thread(use_aot!=0);
+                for (int j = 0; j < 4; ++j) {
+                    test_thread(use_aot != 0);
+                }
             }));
         }
         for ( auto & th : THREADS ) {
             th.join();
         }
     }
-#endif
     return 0;
 }
 
