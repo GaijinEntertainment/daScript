@@ -647,6 +647,7 @@ namespace das
     public:
         virtual ~Function() {}
         friend TextWriter& operator<< (TextWriter& stream, const Function & func);
+        void getMangledName(TextWriter & ss) const;
         string getMangledName() const;
         uint32_t getMangledNameHash() const;
         VariablePtr findArgument(const string & name);

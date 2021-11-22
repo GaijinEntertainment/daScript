@@ -2278,6 +2278,11 @@ namespace das
 
     string TypeDecl::getMangledName ( bool fullName ) const {
         TextWriter ss;
+        getMangledName(ss, fullName);
+        return ss.str();
+    }
+
+    void TypeDecl::getMangledName ( TextWriter & ss, bool fullName ) const {
         if ( constant )     ss << "C";
         if ( ref )          ss << "&";
         if ( temporary )    ss << "#";
@@ -2313,15 +2318,19 @@ namespace das
             bool first = true;
             for ( auto & arg : argTypes ) {
                 if ( first ) first = false; else ss << ";";
-                ss << arg->getMangledName(fullName);
+                arg->getMangledName(ss, fullName);
             }
             ss << ">";
         }
         if ( firstType ) {
-            ss << "1<" << firstType->getMangledName(fullName) << ">";
+            ss << "1<";
+            firstType->getMangledName(ss, fullName);
+            ss << ">";
         }
         if ( secondType ) {
-            ss << "2<" << secondType->getMangledName(fullName) << ">";
+            ss << "2<";
+            secondType->getMangledName(ss, fullName);
+            ss << ">";
         }
         if ( baseType==Type::tHandle ) {
             ss << "H<";
@@ -2393,7 +2402,6 @@ namespace das
                     break;
             }
         }
-        return ss.str();
     }
 
     void MangledNameParser::error ( const string &, const char * ) {
