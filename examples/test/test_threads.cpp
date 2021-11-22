@@ -98,6 +98,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
 
 void thread_cache_create();
 void thread_cache_destroy();
+void thread_stats();
 
 void test_thread(bool useAot) {
     thread_cache_create();
@@ -142,6 +143,7 @@ void test_thread(bool useAot) {
     if ( VerboseTests )
         tout << "Module::Shutdown (" << this_thread_id() << ")\n";
     Module::Shutdown();
+    thread_stats();
     thread_cache_destroy();
 }
 
@@ -166,7 +168,7 @@ int main( int argc, char * argv[] ) {
         auto total_threads = max(1, int(thread::hardware_concurrency()));
         for ( int i=0; i<total_threads; ++i ) {
             THREADS.emplace_back(thread([=](){
-                for (int j = 0; j < 4; ++j) {
+                for (int j = 0; j != 1; ++j) {
                     test_thread(use_aot != 0);
                 }
             }));
