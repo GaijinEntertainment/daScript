@@ -588,19 +588,14 @@ namespace das {
 
     string Function::getMangledName() const {
         TextWriter ss;
-        getMangledName(ss);
-        return ss.str();
-    }
-
-    void Function::getMangledName(TextWriter & ss) const {
         if ( module && !module->name.empty() ) {
             ss << "@" << module->name << "::";
         }
         ss << name;
         for ( auto & arg : arguments ) {
-            ss << " ";
-            arg->type->getMangledName(ss);
+            ss << " " << arg->type->getMangledName();
         }
+        return ss.str();
     }
 
     uint32_t Function::getMangledNameHash() const {
