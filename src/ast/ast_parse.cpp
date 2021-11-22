@@ -278,6 +278,11 @@ namespace das {
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
 
+    static thread_local int64_t totParse = 0;
+    static thread_local int64_t totInfer = 0;
+    static thread_local int64_t totOpt = 0;
+    static thread_local int64_t totM = 0;
+
     ProgramPtr parseDaScript ( const string & fileName,
                               const FileAccessPtr & access,
                               TextWriter & logs,
@@ -323,6 +328,7 @@ namespace das {
         err = das_yyparse(scanner);
         das_yylex_destroy(scanner);
         parserState = DasParserState();
+        totParse += get_time_usec(time0);
         if ( err || program->failed() ) {
             daScriptEnvironment::bound->g_Program.reset();
             sort(program->errors.begin(),program->errors.end());
@@ -332,7 +338,9 @@ namespace das {
             if ( policies.solid_context || program->options.getBoolOption("solid_context",false) ) {
                 program->thisModule->isSolidContext = true;
             }
+            auto timeI = ref_time_ticks();
             restartInfer: program->inferTypes(logs, libGroup);
+            totInfer += get_time_usec(timeI);
             if ( !program->failed() ) {
                 if ( program->patchAnnotations() ) {
                     goto restartInfer;
@@ -341,11 +349,13 @@ namespace das {
             if ( !program->failed() ) {
                 program->lint(libGroup);
                 program->foldUnsafe();
+                auto timeO = ref_time_ticks();
                 if (program->getOptimize()) {
                     program->optimize(logs,libGroup);
                 } else {
                     program->buildAccessFlags(logs);
                 }
+                totOpt += get_time_usec(timeO);
                 if (!program->failed())
                     program->verifyAndFoldContracts();
                 if (!program->failed()) {
@@ -378,12 +388,14 @@ namespace das {
                             "module Module_Name is required", "", LineInfo(),
                                 CompilationError::module_does_not_have_a_name);
                     }
+                    auto timeM = ref_time_ticks();
                     if (!program->failed())
                         program->markMacroSymbolUse();
                     if (!program->failed())
                         program->allocateStack(logs);
                     if (!program->failed())
                         program->makeMacroModule(logs);
+                    totM += get_time_usec(timeM);
                 }
             }
             if ( program->options.getBoolOption("log_compile_time",false) ) {
@@ -401,12 +413,15 @@ namespace das {
                                 bool exportAll,
                                 CodeOfPolicies policies ) {
         auto time0 = ref_time_ticks();
+        totParse = 0;
         ReuseGuard<TypeDecl> rguard;
         vector<ModuleInfo> req;
         vector<string> missing, circular, notAllowed;
         das_set<string> dependencies;
+        uint64_t preqT = 0;
         if ( getPrerequisits(fileName, access, req, missing, circular, notAllowed,
                 dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
+            preqT = get_time_usec(time0);
             if ( policies.debugger ) {
                 bool hasDebugger = false;
                 for ( auto & mod : req ) {
@@ -526,8 +541,14 @@ namespace das {
                 res->thisNamespace = "_anon_" + to_string(hf);
             }
             if ( res->options.getBoolOption("log_total_compile_time",false) ) {
-                auto dt = get_time_usec(time0) / 1000000.;
-                logs << "compiler took " << dt << "\n";
+                auto totT = get_time_usec(time0);
+                logs << "compiler took " << (totT  / 1000000.) << "\n"
+                     << "\trequire  " << (preqT    / 1000000.) << "\n"
+                     << "\tparse    " << (totParse / 1000000.) << "\n"
+                     << "\tinfer    " << (totInfer / 1000000.) << "\n"
+                     << "\toptimize " << (totOpt   / 1000000.) << "\n"
+                     << "\tmacro    " << (totM     / 1000000.) << "\n"
+                ;
             }
             return res;
         } else {

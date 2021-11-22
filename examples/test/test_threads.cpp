@@ -15,6 +15,7 @@ using namespace das;
 #include <sstream>
 
 bool VerboseTests = false;
+bool AnyNoiseInTests = false;
 
 string this_thread_id() {
     stringstream ss;
@@ -103,7 +104,8 @@ void thread_stats();
 void test_thread(bool useAot) {
     thread_cache_create();
     TextPrinter tout;
-    tout << "test_thread: " << this_thread_id() << "\n";
+    if ( AnyNoiseInTests )
+        tout << "test_thread: " << this_thread_id() << "\n";
     if ( VerboseTests )
         tout << "NEED MODULE (" << this_thread_id() << ")\n";
     uint64_t timeStamp0 = ref_time_ticks();
@@ -124,20 +126,23 @@ void test_thread(bool useAot) {
         tout << "Module::Initialize (" << this_thread_id() << ")\n";
     Module::Initialize();
     int usec0 = get_time_usec(timeStamp0);
-    tout << "Initialized in " << ((usec0/1000)/1000.0) << " (" << this_thread_id() << ")\n";
+    if ( AnyNoiseInTests )
+        tout << "Initialized in " << ((usec0/1000)/1000.0) << " (" << this_thread_id() << ")\n";
     // run em
     uint64_t timeStamp = ref_time_ticks();
 #if 1
     performance_test(getDasRoot() +  "/modules/dasImgui/greyprint/greyprint.das", useAot );
     int usec = get_time_usec(timeStamp);
-    tout << "Compiled in " << ((usec/1000)/1000.0) << " (" << this_thread_id() << ")\n";
+    if ( AnyNoiseInTests )
+        tout << "Compiled in " << ((usec/1000)/1000.0) << " (" << this_thread_id() << ")\n";
 #else
     if ( !run_tests(getDasRoot() +  "/examples/test/unit_tests", performance_test, useAot) ) {
         if ( VerboseTests )
             tout << "TESTS FAILED (" << this_thread_id() << ")\n";
     } else {
         int usec = get_time_usec(timeStamp);
-        tout << "Passed in " << ((usec/1000)/1000.0) << " (" << this_thread_id() << ")\n";
+        if ( AnyNoiseInTests )
+            tout << "Passed in " << ((usec/1000)/1000.0) << " (" << this_thread_id() << ")\n";
     }
 #endif
     if ( VerboseTests )
@@ -159,11 +164,13 @@ int main( int argc, char * argv[] ) {
     }
     setCommandLineArguments(argc,argv);
     for ( int use_aot=0; use_aot!=1; use_aot++ ) {
-        #if 0   // for verbose version
-            tout << (use_aot ? "AOT " : "") << "Baseline:\n";
+        #if 1   // for verbose version
+            if ( AnyNoiseInTests )
+                tout << (use_aot ? "AOT " : "") << "Baseline:\n";
             test_thread(use_aot!=0);
         #endif
-        tout << (use_aot ? "AOT " : "") << "Threaded:\n";
+        if ( AnyNoiseInTests )
+            tout << (use_aot ? "AOT " : "") << "Threaded:\n";
         vector<thread> THREADS;
         auto total_threads = max(1, int(thread::hardware_concurrency()));
         for ( int i=0; i<total_threads; ++i ) {
