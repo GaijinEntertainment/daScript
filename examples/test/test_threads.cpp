@@ -101,6 +101,8 @@ void thread_cache_create();
 void thread_cache_destroy();
 void thread_stats();
 
+void require_project_specific_modules();
+
 void test_thread(bool useAot) {
     thread_cache_create();
     TextPrinter tout;
@@ -121,6 +123,7 @@ void test_thread(bool useAot) {
     NEED_MODULE(Module_JobQue);
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_DASBIND);
+    require_project_specific_modules();
     #include "modules/external_need.inc"
     if ( VerboseTests )
         tout << "Module::Initialize (" << this_thread_id() << ")\n";
@@ -130,7 +133,7 @@ void test_thread(bool useAot) {
         tout << "Initialized in " << ((usec0/1000)/1000.0) << " (" << this_thread_id() << ")\n";
     // run em
     uint64_t timeStamp = ref_time_ticks();
-#if 1
+#if 0
     performance_test(getDasRoot() +  "/modules/dasImgui/greyprint/greyprint.das", useAot );
     int usec = get_time_usec(timeStamp);
     if ( AnyNoiseInTests )

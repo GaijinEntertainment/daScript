@@ -87,10 +87,10 @@ struct EsComponent {
 };
 
 constexpr int g_total = 100000;
-extern das::vector<das::float3>   g_pos;
-extern das::vector<das::float3>   g_vel;
-extern das::vector<das::float3 *> g_velBoxed;
-extern das::vector<EsComponent> g_components;
+thread_local extern das::vector<das::float3>   g_pos;
+thread_local extern das::vector<das::float3>   g_vel;
+thread_local extern das::vector<das::float3 *> g_velBoxed;
+thread_local extern das::vector<EsComponent>   g_components;
 
 void initEsComponents();
 void initEsComponentsTable ();
