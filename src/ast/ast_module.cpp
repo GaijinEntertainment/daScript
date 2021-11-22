@@ -3,6 +3,8 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 
+#include <atomic>
+
 namespace das {
 
     thread_local unsigned ModuleKarma = 0;
@@ -80,7 +82,7 @@ namespace das {
 
     void resetFusionEngine();
 
-    atomic<int> g_envTotal = 0;
+    atomic<int> g_envTotal(0);
 
     void Module::Initialize() {
         daScriptEnvironment::ensure();

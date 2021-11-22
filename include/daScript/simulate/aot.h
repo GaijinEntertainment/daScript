@@ -2526,7 +2526,7 @@ namespace das {
     template <typename CompareFn, typename TT>
     struct scblk {
         template <int dimSize>
-        static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        static __forceinline void srt ( TDim<TT,dimSize> & arr, int32_t, int32_t, CompareFn && cmp, Context *, LineInfoArg * ) {
             sort(arr.data, arr.data + dimSize, cmp);
         }
         template <int dimSize>
@@ -2591,7 +2591,7 @@ namespace das {
 
     template <typename CompareFn, typename TT>
     struct scblk_array {
-        static __forceinline void srt ( Array & arr, int32_t, int32_t, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
+        static __forceinline void srt ( Array & arr, int32_t, int32_t, CompareFn && cmp, Context * context, LineInfoArg * ) {
             if ( arr.size<=1 ) return;
             array_lock(*context, arr);
             auto sdata = (TT *) arr.data;
