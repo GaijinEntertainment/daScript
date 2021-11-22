@@ -933,15 +933,15 @@ namespace das
         }
     public:
         smart_ptr<Context>                          macroContext;
-        safebox<string,TypeDecl>                    aliasTypes;
-        safebox<string, Annotation>                 handleTypes;
-        safebox<string, Structure>                  structures;
-        safebox<string, Enumeration>                enumerations;
-        safebox<string, Variable>                   globals;
-        safebox<string, Function>                   functions;          // mangled name 2 function name
-        das_map<string, vector<FunctionPtr>>        functionsByName;    // all functions of the same name
-        safebox<string, Function>                   generics;           // mangled name 2 generic name
-        das_map<string, vector<FunctionPtr>>        genericsByName;     // all generics of the same name
+        safebox<TypeDecl>                           aliasTypes;
+        safebox<Annotation>                         handleTypes;
+        safebox<Structure>                          structures;
+        safebox<Enumeration>                        enumerations;
+        safebox<Variable>                           globals;
+        safebox<Function>                           functions;          // mangled name 2 function name
+        safebox_map<vector<FunctionPtr>>            functionsByName;    // all functions of the same name
+        safebox<Function>                           generics;           // mangled name 2 generic name
+        safebox_map<vector<FunctionPtr>>            genericsByName;     // all generics of the same name
         mutable das_map<string, ExprCallFactory>    callThis;
         das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
         das_map<uint32_t, uint64_t>                 annotationData;

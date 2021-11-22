@@ -1,12 +1,27 @@
 #pragma once
 
+#include "daScript/misc/fnv.h"
+
 namespace das {
 
-    template <typename KeyType, typename DataType>
+    struct skip_hash {
+        uint64_t operator() ( uint64_t key ) const {
+            return key;
+        };
+    };
+
+    __forceinline uint64_t hash64z ( const char * str ) {
+        return hash_blockz64((const uint8_t *) str);
+    }
+
+    template <typename V>
+    using safebox_map = das_hash_map<uint64_t,V,skip_hash,das::equal_to<uint64_t>>;
+
+    template <typename DataType>
     struct safebox {
     public:
         typedef smart_ptr<DataType> ValueType;
-        typedef safebox<KeyType,ValueType> this_type;
+        typedef safebox<ValueType> this_type;
     public:
         safebox() {}
         safebox( this_type && sb ) {
@@ -76,17 +91,10 @@ namespace das {
             locked = saveLock;
             tryResolve();
         }
-        template <typename TT>
-        __forceinline void foreach_kv ( TT && closure ) {
-            auto saveLock = locked;
-            locked = true;
-            for ( auto & obj : objects ) {
-                closure(obj.first, obj.second);
-            }
-            locked = saveLock;
-            tryResolve();
+        bool insert ( const string & key, const ValueType & value ) {
+            return insert(hash64z(key.c_str()),value);
         }
-        bool insert ( const KeyType & key, const ValueType & value ) {
+        bool insert ( uint64_t key, const ValueType & value ) {
             if ( locked ) {
                 if ( objects.find(key)!=objects.end() ) {
                     return false;
@@ -107,12 +115,18 @@ namespace das {
                 }
             }
         }
-        void replace ( const KeyType & key, const ValueType & value ) {
+        void replace ( const string & key, const ValueType & value ) {
+            return replace(hash64z(key.c_str()),value);
+        }
+        void replace ( uint64_t key, const ValueType & value ) {
             auto it = objects.find(key);
             DAS_ASSERT(it!=objects.end());
             it->second = value;
         }
-        ValueType find ( const KeyType & key ) const {
+        ValueType find ( const string & key ) const {
+            return find(hash64z(key.c_str()));
+        }
+        ValueType find ( uint64_t key ) const {
             auto it = objects.find(key);
             if ( it!=objects.end() ) {
                 return it->second;
@@ -125,7 +139,10 @@ namespace das {
                 return ValueType();
              }
         }
-        bool remove ( const KeyType & key ) {
+        bool remove ( const string & key ) {
+            return remove(hash64z(key.c_str()));
+        }
+        bool remove ( uint64_t key ) {
             DAS_ASSERT(!locked);
             auto it = objects.find(key);
             if ( it != objects.end() ) {
@@ -141,9 +158,9 @@ namespace das {
         }
         __forceinline const vector<ValueType> & each () const { return objectsInOrder; }
     protected:
-        das_hash_map<KeyType,ValueType>     objects;
-        vector<ValueType>                   objectsInOrder;
-        vector<pair<KeyType,ValueType>>     postponed;
-        bool                                locked = false;
+        safebox_map<ValueType>           objects;
+        vector<ValueType>                objectsInOrder;
+        vector<pair<uint64_t,ValueType>> postponed;
+        bool                             locked = false;
     };
 }

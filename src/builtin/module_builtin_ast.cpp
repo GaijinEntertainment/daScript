@@ -2490,7 +2490,7 @@ namespace das {
                 });
             },lineInfo);
         } else {
-            auto & fnbn = module->functionsByName[name];
+            auto & fnbn = module->functionsByName[hash64z(name)];
             context->invokeEx(block, args, nullptr, [&](SimNode * code){
                 for ( auto & nv : fnbn ) {
                     args[0] = cast<FunctionPtr>::from(nv);
@@ -2512,7 +2512,7 @@ namespace das {
                 });
             },lineInfo);
         } else {
-            auto & fnbn = module->genericsByName[name];
+            auto & fnbn = module->genericsByName[hash64z(name)];
             context->invokeEx(block, args, nullptr, [&](SimNode * code){
                 for ( auto & nv : fnbn ) {
                     args[0] = cast<FunctionPtr>::from(nv);
@@ -2739,8 +2739,8 @@ namespace das {
     }
 
     void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDeclPtr> & block, Context * context, LineInfoArg * at ) {
-        mod->aliasTypes.foreach_kv([&](auto aliasName, auto aliasType){
-            das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,at,block,aliasName.c_str(),aliasType);
+        mod->aliasTypes.foreach([&](auto aliasType){
+            das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,at,block,aliasType->alias.c_str(),aliasType);
         });
     }
 

@@ -340,7 +340,7 @@ namespace das {
             }
         }
         if ( functions.insert(mangledName, fn) ) {
-            functionsByName[fn->name].push_back(fn);
+            functionsByName[hash64z(fn->name.c_str())].push_back(fn);
             fn->module = this;
             return true;
         } else {
@@ -355,7 +355,7 @@ namespace das {
     bool Module::addGeneric ( const FunctionPtr & fn, bool canFail ) {
         auto mangledName = fn->getMangledName();
         if ( generics.insert(mangledName, fn) ) {
-            genericsByName[fn->name].push_back(fn);
+            genericsByName[hash64z(fn->name.c_str())].push_back(fn);
             fn->module = this;
             return true;
         } else {
@@ -380,7 +380,7 @@ namespace das {
     }
 
     FunctionPtr Module::findUniqueFunction ( const string & mangledName ) const {
-        auto it = functionsByName.find(mangledName);
+        auto it = functionsByName.find(hash64z(mangledName.c_str()));
         if ( it==functionsByName.end() ) return nullptr;
         if ( it->second.size()!=1 ) return nullptr;
         return it->second[0];
@@ -503,17 +503,17 @@ namespace das {
     void Module::verifyBuiltinNames(uint32_t flags) {
         bool failed = false;
         if ( flags & VerifyBuiltinFlags::verifyAliasTypes ) {
-            aliasTypes.foreach_kv([&](auto aliasName, auto aliasTypePtr){
-                if ( !isValidBuiltinName(aliasName) ) {
-                    DAS_FATAL_LOG("%s - alias type has incorrect name. expecting snake_case\n", aliasName.c_str());
+            aliasTypes.foreach([&](auto aliasTypePtr){
+                if ( !isValidBuiltinName(aliasTypePtr->alias) ) {
+                    DAS_FATAL_LOG("%s - alias type has incorrect name. expecting snake_case\n", aliasTypePtr->alias.c_str());
                     failed = true;
                 }
             });
         }
         if ( flags & VerifyBuiltinFlags::verifyHandleTypes ) {
-            handleTypes.foreach_kv([&](auto annName, auto annPtr){
-                if ( !isValidBuiltinName(annName) ) {
-                    DAS_FATAL_LOG("%s - annotation has incorrect name. expecting snake_case\n", annName.c_str());
+            handleTypes.foreach([&](auto annPtr){
+                if ( !isValidBuiltinName(annPtr->name) ) {
+                    DAS_FATAL_LOG("%s - annotation has incorrect name. expecting snake_case\n", annPtr->name.c_str());
                     failed = true;
                 }
             });

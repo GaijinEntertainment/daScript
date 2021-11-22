@@ -577,8 +577,9 @@ namespace das {
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
+            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->functionsByName.find(funcName);
+                auto itFnList = mod->functionsByName.find(hFuncName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
@@ -612,8 +613,9 @@ namespace das {
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             getSearchModule(moduleName);
+            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->functionsByName.find(funcName);
+                auto itFnList = mod->functionsByName.find(hFuncName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     result.reserve(result.size()+goodFunctions.size());
@@ -631,8 +633,9 @@ namespace das {
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             getSearchModule(moduleName);
+            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->functionsByName.find(funcName);
+                auto itFnList = mod->functionsByName.find(hFuncName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     result.reserve(result.size()+goodFunctions.size());
@@ -651,8 +654,9 @@ namespace das {
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             getSearchModule(moduleName);
+            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->genericsByName.find(funcName);
+                auto itFnList = mod->genericsByName.find(hFuncName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     result.reserve(result.size()+goodFunctions.size());
@@ -670,8 +674,9 @@ namespace das {
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             getSearchModule(moduleName);
+            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->genericsByName.find(funcName);
+                auto itFnList = mod->genericsByName.find(hFuncName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     result.reserve(result.size()+goodFunctions.size());
@@ -932,8 +937,9 @@ namespace das {
             MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
             auto thisModule = program->thisModule.get();
+            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->functionsByName.find(funcName);
+                auto itFnList = mod->functionsByName.find(hFuncName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
@@ -959,8 +965,9 @@ namespace das {
             MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
             auto thisModule = program->thisModule.get();
+            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->functionsByName.find(funcName);
+                auto itFnList = mod->functionsByName.find(hFuncName);
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
@@ -986,8 +993,9 @@ namespace das {
             MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
             auto thisModule = program->thisModule.get();
+            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->genericsByName.find(funcName);
+                auto itFnList = mod->genericsByName.find(hFuncName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
@@ -1011,8 +1019,9 @@ namespace das {
             MatchingFunctions result;
             auto inWhichModule = getSearchModule(moduleName);
             auto thisModule = program->thisModule.get();
+            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->genericsByName.find(funcName);
+                auto itFnList = mod->genericsByName.find(hFuncName);
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
