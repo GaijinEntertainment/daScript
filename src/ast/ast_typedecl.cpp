@@ -1049,7 +1049,7 @@ namespace das
              AllowSubstitute allowSubstitute,
              bool topLevel,
              bool isPassType ) const {
-        if ( topLevel && !isRef() && !isPointer() ) {
+        if ( topLevel && !isPointer() && !isRef()  ) {
             constMatters = ConstMatters::no;
         }
         if ( topLevel && !isTempType() ) {
@@ -1214,7 +1214,7 @@ namespace das
     }
 
     bool TypeDecl::canWrite() const {
-        bool cw = isRef() || baseType==Type::tPointer || baseType==Type::anyArgument;
+        bool cw = baseType==Type::tPointer || baseType==Type::anyArgument || isRef();
         if ( baseType!=Type::tPointer ) {
             cw &= !constant;
         } else if ( firstType ) {
