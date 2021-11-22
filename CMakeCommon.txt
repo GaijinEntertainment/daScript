@@ -22,6 +22,13 @@ MACRO(SETUP_COMPILER)
 	IF(APPLE)
 		ADD_DEFINITIONS(-DITS_PLATFORM_APPLE=1)
 		ADD_DEFINITIONS(-Wall -Wextra -pedantic)
+
+		# UNCOMMENT FOR ASAN
+		# ADD_DEFINITIONS("-fsanitize=address")
+
+		# ADD_DEFINITIONS("-fsanitize=thread")
+		# SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+
         IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 			ADD_COMPILE_OPTIONS(-Wno-pedantic)
 			ADD_COMPILE_OPTIONS(-Wno-ignored-attributes)
