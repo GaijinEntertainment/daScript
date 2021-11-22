@@ -23,7 +23,7 @@
 #endif
 
 __forceinline sm_allocator & sm_space() {
-    static sm_allocator G_SPACE = _sm_allocator_create(8, DAS_SMMALLOC_POOL_SIZE);
+    static sm_allocator G_SPACE = _sm_allocator_create(16, DAS_SMMALLOC_POOL_SIZE);
     return G_SPACE;
 }
 
@@ -46,6 +46,7 @@ void operator delete  ( void* ptr, size_t ) {
 void  thread_cache_create() {
     _sm_allocator_thread_cache_create(sm_space(),  sm::CACHE_WARM, {
         4096, 4096, 4096, 4096, 4096, 4096, 4096, 16384,
+        16384, 16384, 16384, 16384, 16384, 16384, 65536*16, 65536*16,
     });
 }
 

@@ -61,7 +61,7 @@
 #endif
 
 #define SMM_CACHE_LINE_SIZE (64)
-#define SMM_MAX_BUCKET_COUNT (8)
+#define SMM_MAX_BUCKET_COUNT (16)
 
 
 #define SMMALLOC_UNUSED(x) (void)(x)
@@ -118,7 +118,7 @@ namespace sm
 		CACHE_HOT = 2,
 	};
 
-	
+
 	namespace internal
 	{
 		struct TlsPoolBucket;
