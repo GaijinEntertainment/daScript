@@ -455,10 +455,10 @@ struct QueryEsFunctionAnnotation : FunctionAnnotation {
     }
 };
 
-vector<float3>          g_pos;
-vector<float3>          g_vel;
-vector<float3 *>        g_velBoxed;
-vector<EsComponent>     g_components;
+thread_local vector<float3>          g_pos;
+thread_local vector<float3>          g_vel;
+thread_local vector<float3 *>        g_velBoxed;
+thread_local vector<EsComponent>     g_components;
 
 template <typename TT>
 void releaseVec(vector<TT>& vec) {
