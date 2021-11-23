@@ -71,49 +71,16 @@ namespace das {
 
     extern DAS_THREAD_LOCAL ReuseCache * tlsReuseCache;
 
-    __forceinline void * reuse_cache_allocate ( size_t size ) {
-        if ( size==0 ) return nullptr;
-        size = (size+15) & ~15;
-        if ( size<=DAS_MAX_REUSE_SIZE && tlsReuseCache ) {
-            auto bucket = (size >> 4) - 1;
-            auto & hold = tlsReuseCache->hold[bucket];
-            if ( hold ) {
-                void * data = hold;
-                hold = hold->next;
-                return data;
-            } else {
-                return das_aligned_alloc16(size);
-            }
-        } else {
-            return das_aligned_alloc16(size);
-        }
-    }
-
-    __forceinline void reuse_cache_free ( void * ptr, size_t size ) {
-        if ( ptr==nullptr ) return;
-        size = (size+15) & ~15;
-        if ( size<=DAS_MAX_REUSE_SIZE && tlsReuseCache ) {
-            auto bucket = (size >> 4) - 1;
-            auto & hold = tlsReuseCache->hold[bucket];
-            auto next = hold;
-            hold = (ReuseChunk *) ptr;
-            hold->next = next;
-        } else {
-            return das_aligned_free16(ptr);
-        }
-    }
-
-    __forceinline void reuse_cache_free ( void * ptr ) {
-        return reuse_cache_free(ptr, das_aligned_memsize(ptr));
-    }
-
+    void * reuse_cache_allocate ( size_t size );
+    void reuse_cache_free ( void * ptr, size_t size );
+    void reuse_cache_free ( void * ptr );
     void reuse_cache_create();
+    void reuse_cache_clear();
     void reuse_cache_destroy();
 
     template <typename TT>
     struct ReuseAllocator {
         void * operator new ( size_t size ) {
-            DAS_ASSERT(size == sizeof(TT));
             return reuse_cache_allocate(size);
         }
         void * operator new[] ( size_t size ) {
@@ -122,8 +89,66 @@ namespace das {
         void operator delete ( void * data ) {
             return reuse_cache_free(data, sizeof(TT));
         }
-        void operator delete ( void * data, size_t size ) {
-            return reuse_cache_free(data, size);
+        void operator delete[] ( void * data ) {
+            return reuse_cache_free(data);
         }
     };
+
+    struct ReuseAllocatorAny {
+        void * operator new ( size_t size ) {
+            return reuse_cache_allocate(size);
+        }
+        void * operator new[] ( size_t size ) {
+            return reuse_cache_allocate(size);
+        }
+        void operator delete ( void * data ) {
+            return reuse_cache_free(data);
+        }
+        void operator delete[] ( void * data ) {
+            return reuse_cache_free(data);
+        }
+    };
+
+    template <typename T>
+    class stl_reuse_allocator {
+    public:
+        typedef size_t size_type;
+        typedef ptrdiff_t difference_type;
+        typedef T* pointer;
+        typedef const T* const_pointer;
+        typedef T& reference;
+        typedef const T& const_reference;
+        typedef T value_type;
+        stl_reuse_allocator(){}
+        ~stl_reuse_allocator(){}
+        template <class U> struct rebind { typedef stl_reuse_allocator<U> other; };
+        template <class U> stl_reuse_allocator(const stl_reuse_allocator<U>&){}
+        pointer address(reference x) const {return &x;}
+        const_pointer address(const_reference x) const {return &x;}
+        size_type max_size() const throw() {return size_t(-1) / sizeof(value_type);}
+        pointer allocate(size_type n, const void * = nullptr ) {
+            return static_cast<pointer>(reuse_cache_allocate(n*sizeof(T)));
+        }
+        void deallocate(pointer p, size_type n) {
+            reuse_cache_free(p,n);
+        }
+        void construct(pointer p, const T& val) {
+            new(static_cast<void*>(p)) T(val);
+        }
+        void construct(pointer p) {
+            new(static_cast<void*>(p)) T();
+        }
+        void destroy(pointer p) {
+            p->~T();
+        }
+    };
+
+   template <class T1, class T2>
+   bool operator== (const stl_reuse_allocator<T1>&, const stl_reuse_allocator<T2>&) throw() {
+       return true;
+   }
+   template <class T1, class T2>
+   bool operator!= (const stl_reuse_allocator<T1>&, const stl_reuse_allocator<T2>&) throw() {
+       return false;
+   }
 }
