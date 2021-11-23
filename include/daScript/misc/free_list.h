@@ -61,22 +61,19 @@ namespace das {
 #define DAS_MAX_BUCKET_COUNT    (DAS_MAX_REUSE_SIZE>>4)
 
 namespace das {
-    struct ReuseChunk {
-        ReuseChunk * next;
-    };
-
-    struct ReuseCache {
-        ReuseChunk *    hold[DAS_MAX_BUCKET_COUNT];
-    };
-
-    extern DAS_THREAD_LOCAL ReuseCache * tlsReuseCache;
-
     void * reuse_cache_allocate ( size_t size );
     void reuse_cache_free ( void * ptr, size_t size );
     void reuse_cache_free ( void * ptr );
     void reuse_cache_create();
     void reuse_cache_clear();
     void reuse_cache_destroy();
+    void reuse_cache_push();
+    void reuse_cache_pop();
+
+    struct ReuseCacheGuard {
+        ReuseCacheGuard() { reuse_cache_push(); }
+        ~ReuseCacheGuard() { reuse_cache_pop(); }
+    };
 
     template <typename TT>
     struct ReuseAllocator {

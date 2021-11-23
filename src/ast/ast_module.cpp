@@ -86,7 +86,6 @@ namespace das {
 
     void Module::Initialize() {
         daScriptEnvironment::ensure();
-        reuse_cache_create();
         g_envTotal ++;
         bool all = false;
         while ( !all ) {
@@ -100,7 +99,6 @@ namespace das {
     void Module::Shutdown() {
         DAS_ASSERT(daScriptEnvironment::owned!=nullptr);
         DAS_ASSERT(daScriptEnvironment::bound!=nullptr);
-        reuse_cache_destroy();
         g_envTotal --;
         if ( g_envTotal==0 ) {
             shutdownDebugAgent();

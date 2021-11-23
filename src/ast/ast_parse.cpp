@@ -290,6 +290,7 @@ namespace das {
                               bool exportAll,
                               bool isDep,
                               CodeOfPolicies policies ) {
+        ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
         int err;
         auto program = make_smart<Program>();
@@ -412,6 +413,7 @@ namespace das {
                                 ModuleGroup & libGroup,
                                 bool exportAll,
                                 CodeOfPolicies policies ) {
+        ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
         totParse = 0;
         vector<ModuleInfo> req;

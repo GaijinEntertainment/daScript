@@ -102,6 +102,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
 void require_project_specific_modules();
 
 void test_thread(bool useAot) {
+    ReuseCacheGuard guard;
     TextPrinter tout;
     if ( AnyNoiseInTests )
         tout << "test_thread: " << this_thread_id() << "\n";
@@ -109,7 +110,6 @@ void test_thread(bool useAot) {
         tout << "NEED MODULE (" << this_thread_id() << ")\n";
     uint64_t timeStamp0 = ref_time_ticks();
     // register modules
-    reuse_cache_create();
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Strings);
@@ -173,7 +173,7 @@ int main( int argc, char * argv[] ) {
         #endif
         if ( AnyNoiseInTests )
             tout << (use_aot ? "AOT " : "") << "Threaded:\n";
-        vector<thread> THREADS;
+        das_vector<thread> THREADS;
         auto total_threads = max(1, int(thread::hardware_concurrency()-2));
         for ( int i=0; i<total_threads; ++i ) {
             THREADS.emplace_back(thread([=](){

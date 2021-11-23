@@ -31,7 +31,7 @@ namespace das {
     class ModuleLibrary;
     class ModuleGroup;
 
-    struct TypeDecl : ptr_ref_count, ReuseAllocator<TypeDecl> {
+    struct TypeDecl : ptr_ref_count {
         enum {
             dimAuto = -1,
             dimConst = -2,

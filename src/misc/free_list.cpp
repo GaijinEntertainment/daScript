@@ -4,7 +4,26 @@
 
 namespace das {
 
+struct ReuseChunk {
+    ReuseChunk * next;
+};
+
+struct ReuseCache {
+    ReuseChunk *    hold[DAS_MAX_BUCKET_COUNT];
+};
+
 DAS_THREAD_LOCAL ReuseCache * tlsReuseCache = nullptr;
+DAS_THREAD_LOCAL uint32_t tlsReuseCacheCount = 0;
+
+void reuse_cache_push() {
+    if ( tlsReuseCacheCount==0 ) reuse_cache_create();
+    tlsReuseCacheCount ++;
+}
+
+void reuse_cache_pop() {
+    tlsReuseCacheCount --;
+    if ( tlsReuseCacheCount==0 ) reuse_cache_destroy();
+}
 
 void * reuse_cache_allocate ( size_t size ) {
     if ( size==0 ) return nullptr;
