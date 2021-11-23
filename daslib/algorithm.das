@@ -124,7 +124,7 @@ def lower_bound ( a; val )
             return lower_bound(temp_array(a), val)
 
 [expect_any_array(a)]
-def lower_bound ( a; f, l : int; value:auto(TT); less : block<(a, b:TT const-&):bool> )
+def lower_bound ( a; f, l : int; val:auto(TT); less : block<(a, b:TT const-&):bool> )
     static_if typeinfo(stripped_typename a[0]) != typeinfo(stripped_typename val)
         concept_assert(false, "value type {typeinfo(stripped_typename val)} should be the same as array {typeinfo(stripped_typename a)} element type {typeinfo(stripped_typename a[0])}")
         return -1
@@ -133,13 +133,13 @@ def lower_bound ( a; f, l : int; value:auto(TT); less : block<(a, b:TT const-&):
             return lower_bound(temp_array(a), f, l, value, less)
 
 [expect_any_array(a)]
-def lower_bound ( a; value:auto(TT); less : block<(a, b:TT const-&):bool> )
+def lower_bound ( a; val:auto(TT); less : block<(a, b:TT const-&):bool> )
     static_if typeinfo(stripped_typename a[0]) != typeinfo(stripped_typename val)
         concept_assert(false, "value type {typeinfo(stripped_typename val)} should be the same as array {typeinfo(stripped_typename a)} element type {typeinfo(stripped_typename a[0])}")
         return -1
     else
         unsafe
-            return lower_bound(temp_array(a), value, less)
+            return lower_bound(temp_array(a), val, less)
 
 [expect_any_array(a)]
 def binary_search ( a; val )
