@@ -8,19 +8,17 @@
 #define DASTEST_MODULE_NAME "dastest"
 
 namespace das {
-#if !DAS_NO_FILEIO
-
-    unique_ptr<FileInfo> getNewFsFileInfo(const das::string & fileName) {
+#if !defined(DAS_NO_FILEIO)
+    FileInfo * FsFileSystem::tryOpenFile ( const string & fileName ) {
         if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
-
-            fseek(ff,0,SEEK_END);
-            auto sourceLength = uint32_t(ftell(ff));
-            fseek(ff,0,SEEK_SET);
-            char *source = (char *) das_aligned_alloc16(sourceLength);
-            auto info = das::make_unique<TextFileInfo>(source, sourceLength, true);
-            uint32_t bytesRead = uint32_t(fread(source, 1, sourceLength, ff));
+            struct stat st;
+            int fd = fileno((FILE *)ff);
+            fstat(fd, &st);
+            char *source = (char *) das_aligned_alloc16(st.st_size);
+            auto info = new TextFileInfo(source, st.st_size, true);
+            auto bytesRead = fread(source, 1, st.st_size, ff);
             fclose(ff);
-            if (bytesRead == sourceLength) {
+            if (bytesRead == st.st_size) {
                 return info;
             } else {
                 return nullptr;
@@ -30,17 +28,83 @@ namespace das {
         }
     }
 
+    FsReadOnlyCachedFileSystem::~FsReadOnlyCachedFileSystem() {
+        lock_guard<mutex> guard(fsm);
+        files.clear();
+    }
+
+    FileInfo * FsReadOnlyCachedFileSystem::tryOpenFile ( const string & fileName ) {
+        lock_guard<mutex> guard(fsm);
+        // TODO: normalize fileName?
+        auto hname = hash64z(fileName.c_str());
+        auto it_ok = files.insert(make_pair(hname, nullptr));
+        auto & hfile = it_ok.first->second;
+        if ( it_ok.second ) {
+            // we inserted
+            if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
+                struct stat st;
+                int fd = fileno((FILE *)ff);
+                fstat(fd, &st);
+                char *source = (char *) das_aligned_alloc16(st.st_size);
+                hfile.reset(new TextFileInfo(source, st.st_size, true));
+                auto bytesRead = fread(source, 1, st.st_size, ff);
+                fclose(ff);
+                if (bytesRead != st.st_size) {
+                    hfile.release();
+                }
+            } else {
+                it_ok.first->second = nullptr;
+            }
+        }
+        if ( hfile ) {
+            const char * src = nullptr;
+            uint32_t len = 0u;
+            hfile->getSourceAndLength(src, len);
+            return new TextFileInfo(src, len, false);
+        } else {
+            return nullptr;
+        }
+    }
+#endif
+
     FsFileAccess::FsFileAccess()
         : ModuleFileAccess() {
+        createFileSystems();
     }
 
     FsFileAccess::FsFileAccess ( const string & pak, const FileAccessPtr & access )
         : ModuleFileAccess (pak, access) {
+        createFileSystems();
+    }
+
+    void FsFileAccess::createFileSystems() {
+#if !defined(DAS_NO_FILEIO)
+        addFileSystem(new FsFileSystem(),true, true);
+#endif
+    }
+
+    FsFileAccess::~FsFileAccess() {
+        for ( auto & fsp : fileSystems ) {
+            if ( !fsp.second ) {
+                delete fsp.first;
+            }
+        }
+        fileSystems.clear();
+    }
+
+    void FsFileAccess::addFileSystem ( AnyFileSystem * fs, bool firstToTry, bool sharedFs ) {
+        if ( firstToTry ) {
+            fileSystems.insert(fileSystems.begin(), make_pair(fs,sharedFs));
+        } else {
+            fileSystems.push_back(make_pair(fs,sharedFs));
+        }
     }
 
     das::FileInfo * FsFileAccess::getNewFileInfo(const das::string & fileName) {
-        if ( auto info = getNewFsFileInfo(fileName) ) {
-            return setFileInfo(fileName, move(info));
+        for ( auto & fs : fileSystems ) {
+            if ( auto info = fs.first->tryOpenFile(fileName) ) {
+                return setFileInfo(fileName, FileInfoPtr(info));
+            }
         }
         return nullptr;
     }
@@ -88,6 +152,5 @@ namespace das {
         }
         return FileAccess::getModuleInfo(req, from);
     }
-#endif
 }
 
