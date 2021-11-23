@@ -17,6 +17,8 @@ using namespace das;
 bool VerboseTests = false;
 bool AnyNoiseInTests = true;
 
+unique_ptr<FsReadOnlyCachedFileSystem> cache_fs;
+
 string this_thread_id() {
     stringstream ss;
     ss << this_thread::get_id();
@@ -31,6 +33,7 @@ bool performance_test ( const string & fn, bool useAot ) {
         tout << "[" << this_thread_id() << "]";
     // tout << fn << "\n";
     auto fAccess = make_smart<FsFileAccess>();
+    fAccess->addFileSystem(cache_fs.get(), true, true);
     ModuleGroup dummyLibGroup;
     CodeOfPolicies policies;
     policies.aot = useAot;
@@ -95,16 +98,10 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
 #endif
 }
 
-#include <smmalloc.h>
-
-void thread_cache_create();
-void thread_cache_destroy();
-void thread_stats();
 
 void require_project_specific_modules();
 
 void test_thread(bool useAot) {
-    thread_cache_create();
     TextPrinter tout;
     if ( AnyNoiseInTests )
         tout << "test_thread: " << this_thread_id() << "\n";
@@ -151,8 +148,6 @@ void test_thread(bool useAot) {
     if ( VerboseTests )
         tout << "Module::Shutdown (" << this_thread_id() << ")\n";
     Module::Shutdown();
-    thread_stats();
-    thread_cache_destroy();
 }
 
 #include <thread>
@@ -166,6 +161,9 @@ int main( int argc, char * argv[] ) {
         setDasRoot(argv[1]);
     }
     setCommandLineArguments(argc,argv);
+
+    cache_fs.reset(new FsReadOnlyCachedFileSystem());
+
     for ( int use_aot=0; use_aot!=1; use_aot++ ) {
         #if 1   // for verbose version
             if ( AnyNoiseInTests )
@@ -178,7 +176,7 @@ int main( int argc, char * argv[] ) {
         auto total_threads = max(1, int(thread::hardware_concurrency()-2));
         for ( int i=0; i<total_threads; ++i ) {
             THREADS.emplace_back(thread([=](){
-                for (int j = 0; j != 1; ++j) {
+                for (int j = 0; j != 4; ++j) {
                     test_thread(use_aot != 0);
                 }
             }));
@@ -188,6 +186,9 @@ int main( int argc, char * argv[] ) {
             th.join();
         }
     }
+
+    cache_fs.release();
+
     return 0;
 }
 
