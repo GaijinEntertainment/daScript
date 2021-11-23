@@ -131,7 +131,7 @@ void test_thread(bool useAot) {
         tout << "Initialized in " << ((usec0/1000)/1000.0) << " (" << this_thread_id() << ")\n";
     // run em
     uint64_t timeStamp = ref_time_ticks();
-#if 0
+#if 1
     performance_test(getDasRoot() +  "/modules/dasImgui/greyprint/greyprint.das", useAot );
     int usec = get_time_usec(timeStamp);
     if ( AnyNoiseInTests )
@@ -173,7 +173,7 @@ int main( int argc, char * argv[] ) {
         #endif
         if ( AnyNoiseInTests )
             tout << (use_aot ? "AOT " : "") << "Threaded:\n";
-        das_vector<thread> THREADS;
+        vector<thread> THREADS;
         auto total_threads = max(1, int(thread::hardware_concurrency()-2));
         for ( int i=0; i<total_threads; ++i ) {
             THREADS.emplace_back(thread([=](){
