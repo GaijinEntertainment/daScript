@@ -1319,8 +1319,8 @@ namespace das
         ProgramPtr      g_Program;
         bool            g_isInAot;
         Module *        modules = nullptr;
-        static thread_local daScriptEnvironment * bound;
-        static thread_local daScriptEnvironment * owned;
+        static DAS_THREAD_LOCAL daScriptEnvironment * bound;
+        static DAS_THREAD_LOCAL daScriptEnvironment * owned;
         static void ensure();
     };
 }

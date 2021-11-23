@@ -109,6 +109,7 @@ void test_thread(bool useAot) {
         tout << "NEED MODULE (" << this_thread_id() << ")\n";
     uint64_t timeStamp0 = ref_time_ticks();
     // register modules
+    reuse_cache_create();
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Strings);

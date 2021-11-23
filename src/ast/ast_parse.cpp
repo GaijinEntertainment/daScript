@@ -278,10 +278,10 @@ namespace das {
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
 
-    static thread_local int64_t totParse = 0;
-    static thread_local int64_t totInfer = 0;
-    static thread_local int64_t totOpt = 0;
-    static thread_local int64_t totM = 0;
+    static DAS_THREAD_LOCAL int64_t totParse = 0;
+    static DAS_THREAD_LOCAL int64_t totInfer = 0;
+    static DAS_THREAD_LOCAL int64_t totOpt = 0;
+    static DAS_THREAD_LOCAL int64_t totM = 0;
 
     ProgramPtr parseDaScript ( const string & fileName,
                               const FileAccessPtr & access,
@@ -414,7 +414,6 @@ namespace das {
                                 CodeOfPolicies policies ) {
         auto time0 = ref_time_ticks();
         totParse = 0;
-        ReuseGuard<TypeDecl> rguard;
         vector<ModuleInfo> req;
         vector<string> missing, circular, notAllowed;
         das_set<string> dependencies;

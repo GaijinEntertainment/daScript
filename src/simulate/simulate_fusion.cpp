@@ -117,7 +117,7 @@ namespace das {
     }
 
     // TODO: at some point we should share fusion engine
-    thread_local unique_ptr<FusionEngine> g_fusionEngine;
+    DAS_THREAD_LOCAL unique_ptr<FusionEngine> g_fusionEngine;
 
     void resetFusionEngine() {
         g_fusionEngine.reset();

@@ -83,8 +83,6 @@ using das_safe_set = std::set<K,C>;
   #endif
 #endif
 
-#ifndef DAS_SMMALLOC_ENABLED
-  #define DAS_SMMALLOC_ENABLED  1
-#endif
+
 
 

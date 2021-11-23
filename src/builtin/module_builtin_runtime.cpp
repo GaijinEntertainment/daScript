@@ -766,7 +766,7 @@ namespace das
 
     // static storage
 
-    thread_local das_hash_map<uint32_t, void*> g_static_storage;
+    DAS_THREAD_LOCAL das_hash_map<uint32_t, void*> g_static_storage;
 
     void gc0_save_ptr ( char * name, void * data, Context * context, LineInfoArg * line ) {
         uint32_t hash = hash_function ( *context, name );

@@ -57,52 +57,73 @@ namespace das {
 
 #endif
 
+#define DAS_MAX_REUSE_SIZE      256
+#define DAS_MAX_BUCKET_COUNT    (DAS_MAX_REUSE_SIZE>>4)
+
 namespace das {
     struct ReuseChunk {
         ReuseChunk * next;
     };
 
-    template <typename TT>
-    struct ReuseAllocator {
-        static thread_local ReuseChunk * hold;
-        static thread_local bool canHold;
-        void * operator new ( size_t size ) {
-            DAS_ASSERT(size == sizeof(TT));
+    struct ReuseCache {
+        ReuseChunk *    hold[DAS_MAX_BUCKET_COUNT];
+    };
+
+    extern DAS_THREAD_LOCAL ReuseCache * tlsReuseCache;
+
+    __forceinline void * reuse_cache_allocate ( size_t size ) {
+        if ( size==0 ) return nullptr;
+        size = (size+15) & ~15;
+        if ( size<=DAS_MAX_REUSE_SIZE && tlsReuseCache ) {
+            auto bucket = (size >> 4) - 1;
+            auto & hold = tlsReuseCache->hold[bucket];
             if ( hold ) {
                 void * data = hold;
                 hold = hold->next;
                 return data;
             } else {
-                return ::operator new(size);
+                return das_aligned_alloc16(size);
             }
+        } else {
+            return das_aligned_alloc16(size);
+        }
+    }
+
+    __forceinline void reuse_cache_free ( void * ptr, size_t size ) {
+        if ( ptr==nullptr ) return;
+        size = (size+15) & ~15;
+        if ( size<=DAS_MAX_REUSE_SIZE && tlsReuseCache ) {
+            auto bucket = (size >> 4) - 1;
+            auto & hold = tlsReuseCache->hold[bucket];
+            auto next = hold;
+            hold = (ReuseChunk *) ptr;
+            hold->next = next;
+        } else {
+            return das_aligned_free16(ptr);
+        }
+    }
+
+    __forceinline void reuse_cache_free ( void * ptr ) {
+        return reuse_cache_free(ptr, das_aligned_memsize(ptr));
+    }
+
+    void reuse_cache_create();
+    void reuse_cache_destroy();
+
+    template <typename TT>
+    struct ReuseAllocator {
+        void * operator new ( size_t size ) {
+            DAS_ASSERT(size == sizeof(TT));
+            return reuse_cache_allocate(size);
+        }
+        void * operator new[] ( size_t size ) {
+            return reuse_cache_allocate(size);
         }
         void operator delete ( void * data ) {
-            if ( canHold ) {
-                auto next = hold;
-                hold = (ReuseChunk *) data;
-                hold->next = next;
-            } else {
-                ::operator delete(data);
-            }
+            return reuse_cache_free(data, sizeof(TT));
         }
-        static void Cleanup() {
-            while ( hold ) {
-                auto ptr = hold;
-                hold = hold->next;
-                ::operator delete(ptr);
-            }
-        }
-    };
-
-    template <typename TT>
-    thread_local ReuseChunk * ReuseAllocator<TT>::hold = nullptr;
-    template <typename TT>
-    thread_local bool ReuseAllocator<TT>::canHold = true;
-
-    template <typename TT>
-    struct ReuseGuard {
-        ~ReuseGuard() {
-            ReuseAllocator<TT>::Cleanup();
+        void operator delete ( void * data, size_t size ) {
+            return reuse_cache_free(data, size);
         }
     };
 }

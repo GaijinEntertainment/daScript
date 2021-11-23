@@ -186,6 +186,15 @@ inline void das_aligned_free16(void *ptr) {
     free(ptr);
 #endif
 }
+inline size_t das_aligned_memsize(void * ptr){
+#if defined(_MSC_VER)
+    return _aligned_msize(ptr, 16, 0);
+#elif defined(__APPLE__)
+    return malloc_size(ptr);
+#else
+    return malloc_usable_size(ptr);
+#endif
+}
 #endif
 
 #ifndef DAS_TRACK_ALLOCATIONS
@@ -200,6 +209,10 @@ inline void das_aligned_free16(void *ptr) {
 #define _msc_inline_bug __declspec(noinline)
 #else
 #define _msc_inline_bug __forceinline
+#endif
+
+#ifndef DAS_THREAD_LOCAL
+#define DAS_THREAD_LOCAL  thread_local
 #endif
 
 #include "daScript/misc/smart_ptr.h"

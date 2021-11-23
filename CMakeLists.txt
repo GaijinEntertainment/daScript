@@ -382,7 +382,7 @@ src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
 src/misc/job_que.cpp
-src/misc/job_que.cpp
+src/misc/free_list.cpp
 src/misc/daScriptC.cpp
 )
 list(SORT MISC_SRC)

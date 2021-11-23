@@ -7,7 +7,7 @@
 
 namespace das {
 
-    thread_local unsigned ModuleKarma = 0;
+    DAS_THREAD_LOCAL unsigned ModuleKarma = 0;
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
         auto at = name.find("::");
@@ -86,6 +86,7 @@ namespace das {
 
     void Module::Initialize() {
         daScriptEnvironment::ensure();
+        reuse_cache_create();
         g_envTotal ++;
         bool all = false;
         while ( !all ) {
@@ -99,7 +100,7 @@ namespace das {
     void Module::Shutdown() {
         DAS_ASSERT(daScriptEnvironment::owned!=nullptr);
         DAS_ASSERT(daScriptEnvironment::bound!=nullptr);
-        ReuseGuard<TypeDecl> rguard;
+        reuse_cache_destroy();
         g_envTotal --;
         if ( g_envTotal==0 ) {
             shutdownDebugAgent();
@@ -112,7 +113,6 @@ namespace das {
         }
         clearGlobalAotLibrary();
         resetFusionEngine();
-        ReuseAllocator<TypeDecl>::canHold = false;
         daScriptEnvironment::bound = nullptr;
         if ( daScriptEnvironment::owned ) {
             delete daScriptEnvironment::owned;
@@ -121,7 +121,6 @@ namespace das {
     }
 
     void Module::Reset(bool debAg) {
-        ReuseGuard<TypeDecl> rguard;
         if ( debAg ) shutdownDebugAgent();
         auto m = daScriptEnvironment::bound->modules;
         while ( m ) {
