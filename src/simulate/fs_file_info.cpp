@@ -7,6 +7,10 @@
 #define DASLIB_MODULE_NAME  "daslib"
 #define DASTEST_MODULE_NAME "dastest"
 
+#if !defined(DAS_NO_FILEIO)
+#include <sys/stat.h>
+#endif
+
 namespace das {
 #if !defined(DAS_NO_FILEIO)
     FileInfo * FsFileSystem::tryOpenFile ( const string & fileName ) {
@@ -18,7 +22,7 @@ namespace das {
             auto info = new TextFileInfo(source, st.st_size, true);
             auto bytesRead = fread(source, 1, st.st_size, ff);
             fclose(ff);
-            if (bytesRead == st.st_size) {
+            if ( size_t(bytesRead) == size_t(st.st_size) ) {
                 return info;
             } else {
                 return nullptr;
@@ -49,7 +53,7 @@ namespace das {
                 hfile.reset(new TextFileInfo(source, st.st_size, true));
                 auto bytesRead = fread(source, 1, st.st_size, ff);
                 fclose(ff);
-                if (bytesRead != st.st_size) {
+                if ( size_t(bytesRead) != size_t(st.st_size) ) {
                     hfile.release();
                 }
             } else {

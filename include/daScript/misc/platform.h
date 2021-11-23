@@ -186,6 +186,9 @@ inline void das_aligned_free16(void *ptr) {
     free(ptr);
 #endif
 }
+#if defined(__APPLE__)
+#include <malloc/malloc.h>
+#endif
 inline size_t das_aligned_memsize(void * ptr){
 #if defined(_MSC_VER)
     return _aligned_msize(ptr, 16, 0);
