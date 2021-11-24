@@ -157,7 +157,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
                 mangledName += " " + ann->getMangledName();
             }
         }
-        block->annotationDataSid = hash_blockz32((uint8_t *)mangledName.c_str());
+        block->annotationDataSid = hash_blockz64((uint8_t *)mangledName.c_str());
         buildAttributeTable(*tab, block->arguments, err);
         esData->g_esBlockTable.emplace_back(move(tab));
         return err.empty();
@@ -542,8 +542,8 @@ struct dictKeyEqual {
 };
 
 struct dictKeyHash {
-    __forceinline uint32_t operator () ( const char * str ) const {
-        return str ? hash_blockz32((uint8_t *)str) : 16777619;
+    __forceinline uint64_t operator () ( const char * str ) const {
+        return str ? hash_blockz64((uint8_t *)str) : 1099511628211ul;
     }
 };
 

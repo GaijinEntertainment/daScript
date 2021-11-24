@@ -1118,11 +1118,11 @@ namespace das {
 
     #include "rtti.das.inc"
 
-    Func builtin_getFunctionByMnh ( uint32_t MNH, Context * context ) {
+    Func builtin_getFunctionByMnh ( uint64_t MNH, Context * context ) {
         return Func(context->fnByMangledName(MNH));
     }
 
-    uint32_t builtin_getFunctionMnh ( Func func, Context * ) {
+    uint64_t builtin_getFunctionMnh ( Func func, Context * ) {
         return func.PTR ? func.PTR->mangledNameHash : 0;
     }
 

@@ -243,7 +243,7 @@ namespace das
     struct Variable : ptr_ref_count {
         VariablePtr clone() const;
         string getMangledName() const;
-        uint32_t getMangledNameHash() const;
+        uint64_t getMangledNameHash() const;
         bool isAccessUnused() const;
         bool isCtorInitialized() const;
         string          name;
@@ -649,7 +649,7 @@ namespace das
         friend TextWriter& operator<< (TextWriter& stream, const Function & func);
         void getMangledName(FixedBufferTextWriter & ss) const;
         string getMangledName() const;
-        uint32_t getMangledNameHash() const;
+        uint64_t getMangledNameHash() const;
         VariablePtr findArgument(const string & name);
         SimNode * simulate (Context & context) const;
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & arguments );
@@ -945,7 +945,7 @@ namespace das
         safebox_map<vector<FunctionPtr>>            genericsByName;     // all generics of the same name
         mutable das_map<string, ExprCallFactory>    callThis;
         das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
-        das_map<uint32_t, uint64_t>                 annotationData;
+        das_map<uint64_t, uint64_t>                 annotationData;
         das_map<Module *,bool>                      requireModule;      // visibility modules
         vector<PassMacroPtr>                        macros;             // infer macros (clean infer, assume no errors)
         vector<PassMacroPtr>                        inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
@@ -1110,7 +1110,7 @@ namespace das
         bool rtti = false;                              // create extended RTTI
     // language
         bool no_unsafe = false;
-        bool local_ref_is_unsafe = false;               // var a & = ... unsafe. should be
+        bool local_ref_is_unsafe = true;               // var a & = ... unsafe. should be
         bool no_global_variables = false;
         bool no_global_variables_at_all = false;
         bool no_global_heap = false;

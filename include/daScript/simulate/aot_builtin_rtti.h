@@ -163,7 +163,7 @@ namespace das {
     void builtin_list_require ( ProgramPtr prog, const TBlock<void,Module *,TTemporary<const char *>,TTemporary<const char *>,bool,const LineInfo &> & block,
         Context * context, LineInfoArg * lineInfo );
 
-    Func builtin_getFunctionByMnh ( uint32_t MNH, Context * context );
-    uint32_t builtin_getFunctionMnh ( Func func, Context * context );
+    Func builtin_getFunctionByMnh ( uint64_t MNH, Context * context );
+    uint64_t builtin_getFunctionMnh ( Func func, Context * context );
 }
 

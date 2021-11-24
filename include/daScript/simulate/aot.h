@@ -113,25 +113,25 @@ namespace das {
         return a != b;
     }
 
-    template <typename TT, uint32_t mnh>
+    template <typename TT, uint64_t mnh>
     __forceinline TT & das_global ( Context * __context__ ) {
         uint32_t offset =  __context__->globalOffsetByMangledName(mnh);
         return *(TT *)(__context__->globals + offset);
     }
 
-    template <typename TT, uint32_t mnh>
+    template <typename TT, uint64_t mnh>
     __forceinline void das_global_zero ( Context * __context__ ) {
         uint32_t offset =  __context__->globalOffsetByMangledName(mnh);
         memset(__context__->globals + offset, 0, sizeof(TT));
     }
 
-    template <typename TT, uint32_t mnh>
+    template <typename TT, uint64_t mnh>
     __forceinline TT & das_shared ( Context * __context__ ) {
         uint32_t offset =  __context__->globalOffsetByMangledName(mnh);
         return *(TT *)(__context__->shared + offset);
     }
 
-    template <typename TT, uint32_t mnh>
+    template <typename TT, uint64_t mnh>
     __forceinline void das_shared_zero ( Context * __context__ ) {
         uint32_t offset =  __context__->globalOffsetByMangledName(mnh);
         memset(__context__->shared + offset, 0, sizeof(TT));

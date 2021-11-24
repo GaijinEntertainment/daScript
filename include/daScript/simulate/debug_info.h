@@ -219,16 +219,16 @@ namespace das
         TypeInfo **                 argTypes;
         char **                     argNames;
         uint32_t *                  dim;
+        uint64_t                    hash;
         Type                        type;
         uint32_t                    flags;
         uint32_t                    size;
-        uint32_t                    hash;
         uint32_t                    argCount;
         uint32_t                    dimSize;
         TypeInfo() = default;
         TypeInfo (  Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name,
                     TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, char ** _argNames, uint32_t _argCount,
-                    uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size, uint32_t _hash ) {
+                    uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size, uint64_t _hash ) {
             type               = _type;
             if ( _structType )    { structType = _structType; DAS_ASSERT(!_enumType && !_annotation_or_name); }
             else if ( _enumType ) { enumType = _enumType; DAS_ASSERT(!_structType && !_annotation_or_name); }
@@ -269,7 +269,7 @@ namespace das
         VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name,
                 TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, char ** _argNames, uint32_t _argCount,
                 uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size,
-                uint32_t _hash, const char * _name, uint32_t _offset ) :
+                uint64_t _hash, const char * _name, uint32_t _offset ) :
             TypeInfo(_type,_structType,_enumType,_annotation_or_name,
                     _firstType,_secondType,_argTypes,_argNames,_argCount,
                      _dimSize,_dim,_flags,_size,_hash) {
@@ -291,15 +291,15 @@ namespace das
         char *      module_name;
         VarInfo **  fields;
         void *      annotation_list;
+        uint64_t    hash;
         uint32_t    flags;
         int32_t     init_mnh;
-        uint32_t    hash;
         uint32_t    count;
         uint32_t    size;
         StructInfo() = default;
         StructInfo(
             char * _name, char * _module_name, uint32_t _flags, VarInfo ** _fields, uint32_t _count,
-            uint32_t _size, int32_t _init_mnh, void * _annotation_list, uint32_t _hash ) {
+            uint32_t _size, int32_t _init_mnh, void * _annotation_list, uint64_t _hash ) {
                 name =            _name;
                 module_name =     _module_name;
                 flags =           _flags;
@@ -322,7 +322,7 @@ namespace das
         char *              module_name;
         EnumValueInfo **    fields;
         uint32_t            count;
-        uint32_t            hash;
+        uint64_t            hash;
     };
 
     struct LocalVariableInfo : TypeInfo {
@@ -349,14 +349,14 @@ namespace das
         VarInfo **              fields;
         TypeInfo *              result;
         LocalVariableInfo **    locals;
-        uint32_t                hash;
+        uint64_t                hash;
         uint32_t                flags;
         uint32_t                count;
         uint32_t                stackSize;
         uint32_t                localCount;
         FuncInfo() = default;
         FuncInfo( char * _name, char * _cppName, VarInfo ** _fields, uint32_t _count, uint32_t _stackSize,
-                TypeInfo * _result, LocalVariableInfo ** _locals, uint32_t _localCount, uint32_t _hash, uint32_t _flags ) {
+                TypeInfo * _result, LocalVariableInfo ** _locals, uint32_t _localCount, uint64_t _hash, uint32_t _flags ) {
             name =       _name;
             cppName =    _cppName;
             fields =     _fields;

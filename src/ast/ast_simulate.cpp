@@ -2838,7 +2838,7 @@ namespace das
                     if (pfun->index < 0 || !pfun->used)
                         return;
                     auto mangledName = pfun->getMangledName();
-                    auto MNH = hash_blockz32((uint8_t *)mangledName.c_str());
+                    auto MNH = hash_blockz64((uint8_t *)mangledName.c_str());
                     if ( MNH==0 ) {
                         error("Internalc compiler errors. Mangled name hash is zero. Function " + pfun->name,
                             "\tMangled name " + mangledName + " hash is " + to_string(MNH), "",

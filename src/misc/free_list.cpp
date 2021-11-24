@@ -105,11 +105,5 @@ void operator delete ( void * data ) {
 void operator delete[] ( void * data ) {
     return das::reuse_cache_free(data);
 }
-void operator delete[] ( void * data, size_t size ) {
-    return das::reuse_cache_free(data,size);
-}
-void operator delete ( void * data, size_t size ) {
-    return das::reuse_cache_free(data, size);
-}
 
 #endif

@@ -414,7 +414,7 @@ namespace das
 
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         auto uhash = hash_value(context, args[0], call->types[0]);
-        return cast<uint32_t>::from(uhash);
+        return cast<uint64_t>::from(uhash);
     }
 
     uint64_t heap_bytes_allocated ( Context * context ) {
@@ -1116,7 +1116,7 @@ namespace das
         addCall<ExprDebug>          ("debug");
         addCall<ExprMemZero>        ("memzero");
         // hash
-        addInterop<_builtin_hash,uint32_t,vec4f>(*this, lib, "hash",
+        addInterop<_builtin_hash,uint64_t,vec4f>(*this, lib, "hash",
             SideEffects::none, "_builtin_hash")
                 ->arg("data");
         // locks

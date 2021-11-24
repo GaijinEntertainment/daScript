@@ -175,7 +175,7 @@ namespace das
         int32_t                 maxLabelIndex = -1;
         AnnotationList          annotations;
         uint64_t                annotationData = 0;         // to be filled with annotation
-        uint32_t                annotationDataSid = 0;      // to be filled with annotation
+        uint64_t                annotationDataSid = 0;      // to be filled with annotation
         union {
             struct {
                 bool            isClosure : 1;

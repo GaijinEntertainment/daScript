@@ -57,9 +57,9 @@ namespace das
         char *          name;
         VarInfo *       debugInfo;
         SimNode *       init;
+        uint64_t        mangledNameHash;
         uint32_t        size;
         uint32_t        offset;
-        uint32_t        mangledNameHash;
         union {
             struct {
                 bool    shared : 1;
@@ -73,9 +73,9 @@ namespace das
         char *      mangledName;
         SimNode *   code;
         FuncInfo *  debugInfo;
-        uint32_t    stackSize;
-        uint32_t    mangledNameHash;
+        uint64_t    mangledNameHash;
         void *      aotFunction;
+        uint32_t    stackSize;
         union {
             uint32_t    flags;
             struct {
@@ -337,17 +337,17 @@ namespace das
             return totalVariables;
         }
 
-        __forceinline uint32_t globalOffsetByMangledName ( uint32_t mnh ) const {
+        __forceinline uint32_t globalOffsetByMangledName ( uint64_t mnh ) const {
             auto it = tabGMnLookup.find(mnh);
             DAS_ASSERT(it!=tabGMnLookup.end());
             return it->second;
         }
-        __forceinline uint64_t adBySid ( uint32_t sid ) const {
+        __forceinline uint64_t adBySid ( uint64_t sid ) const {
             auto it = tabAdLookup.find(sid);
             DAS_ASSERT(it!=tabAdLookup.end());
             return it->second;
         }
-        __forceinline SimFunction * fnByMangledName ( uint32_t mnh ) {
+        __forceinline SimFunction * fnByMangledName ( uint64_t mnh ) {
             if ( mnh==0 ) return nullptr;
             auto it = tabMnLookup.find(mnh);
             return it!=tabMnLookup.end() ? it->second : nullptr;
@@ -671,9 +671,9 @@ namespace das
         int             hwBpIndex = -1;
         const LineInfo * singleStepAt = nullptr;
     public:
-        das_hash_map<uint32_t,SimFunction *> tabMnLookup;
-        das_hash_map<uint32_t,uint32_t> tabGMnLookup;
-        das_hash_map<uint32_t,uint64_t> tabAdLookup;
+        das_hash_map<uint64_t,SimFunction *> tabMnLookup;
+        das_hash_map<uint64_t,uint32_t> tabGMnLookup;
+        das_hash_map<uint64_t,uint64_t> tabAdLookup;
     public:
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;
@@ -880,7 +880,7 @@ __forceinline void profileNode ( SimNode * node ) {
         virtual vec4f eval ( Context & context ) override;
         SimNode ** list = nullptr;
         uint32_t total = 0;
-        uint32_t annotationDataSid = 0;
+        uint64_t annotationDataSid = 0;
         uint32_t *  labels = nullptr;
         uint32_t    totalLabels = 0;
     };

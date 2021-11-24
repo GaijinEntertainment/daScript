@@ -77,6 +77,19 @@ namespace das {
                 save(data);
             }
         }
+        __forceinline void verify_hash ( uint64_t & data ) {
+            if ( reading ) {
+                uint64_t test = 0;
+                load(test);
+                DEBUG_BIN_DATA("verify, reading %xi\n", test);
+                if ( test != data ) {
+                    error("binary data type mismatch");
+                }
+            } else {
+                DEBUG_BIN_DATA("verify, writing %xi\n", data);
+                save(data);
+            }
+        }
         void close () {
             if ( !reading && bytesAt ) {
                 DEBUG_BIN_DATA("close at %i bytes\n\n", bytesWritten);
@@ -85,14 +98,14 @@ namespace das {
         }
     // data structures
         virtual void beforeStructure ( char *, StructInfo * si ) override {
-            verify(si->hash);
+            verify_hash(si->hash);
         }
         virtual void beforeDim ( char *, TypeInfo * ti ) override {
-            verify(ti->hash);
+            verify_hash(ti->hash);
             verify(ti->dimSize);
         }
         virtual void beforeArray ( Array * pa, TypeInfo * ti ) override {
-            verify(ti->hash);
+            verify_hash(ti->hash);
             if ( reading ) {
                 uint32_t newSize = 0;
                 load(newSize);
@@ -109,7 +122,7 @@ namespace das {
             error("binary serialization of pointers is not supported");
         }
         virtual void beforeHandle ( char *, TypeInfo * ti ) override {
-            verify(ti->hash);
+            verify_hash(ti->hash);
         }
     // types
         virtual void String ( char * & data ) override {
@@ -200,15 +213,15 @@ namespace das {
             DAS_ASSERT(0 && "can't serialize context");
         }
         virtual void WalkEnumeration ( int32_t & data, EnumInfo * ei ) override {
-            verify(ei->hash);
+            verify_hash(ei->hash);
             serialize(data);
         }
         virtual void WalkEnumeration8 ( int8_t & data, EnumInfo * ei ) override {
-            verify(ei->hash);
+            verify_hash(ei->hash);
             serialize(data);
         }
         virtual void WalkEnumeration16 ( int16_t & data, EnumInfo * ei ) override {
-            verify(ei->hash);
+            verify_hash(ei->hash);
             serialize(data);
         }
         virtual void Null ( TypeInfo * ) override {

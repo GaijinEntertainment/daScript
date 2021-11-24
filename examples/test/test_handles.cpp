@@ -375,14 +375,14 @@ int *getPtr() {return &g_st;}
 
 uint2 get_screen_dimensions() {return uint2{1280, 720};}
 
-uint32_t CheckEid ( TestObjectFoo & foo, char * const name, Context * context ) {
+uint64_t CheckEid ( TestObjectFoo & foo, char * const name, Context * context ) {
     if (!name) context->throw_error("invalid id");
     return hash_function(*context, name) + foo.fooData;
 }
 
-uint32_t CheckEidHint ( TestObjectFoo & foo, char * const name, uint32_t hashHint, Context * context ) {
+uint64_t CheckEidHint ( TestObjectFoo & foo, char * const name, uint64_t hashHint, Context * context ) {
     if (!name) context->throw_error("invalid id");
-    uint32_t hv = hash_function(*context, name) + foo.fooData;
+    uint64_t hv = hash_function(*context, name) + foo.fooData;
     if ( hv != hashHint ) context->throw_error("invalid hash value");
     return hashHint;
 }
@@ -394,9 +394,9 @@ struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
         if ( arg->type && arg->type->isString() && arg->type->isConst() && arg->rtti_isConstant() ) {
             auto starg = static_pointer_cast<ExprConstString>(arg);
             if (!starg->getValue().empty()) {
-                uint32_t hv = hash_blockz32((uint8_t *)starg->text.c_str());
-                auto hconst = make_smart<ExprConstUInt>(arg->at, hv);
-                hconst->type = make_smart<TypeDecl>(Type::tUInt);
+                auto hv = hash_blockz64((uint8_t *)starg->text.c_str());
+                auto hconst = make_smart<ExprConstUInt64>(arg->at, hv);
+                hconst->type = make_smart<TypeDecl>(Type::tUInt64);
                 hconst->type->constant = true;
                 auto newCall = static_pointer_cast<ExprCallFunc>(call->clone());
                 newCall->arguments.insert(newCall->arguments.begin() + 2, hconst);

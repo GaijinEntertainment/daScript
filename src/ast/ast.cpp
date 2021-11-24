@@ -472,9 +472,9 @@ namespace das {
         return mn + " " + type->getMangledName();
     }
 
-    uint32_t Variable::getMangledNameHash() const {
+    uint64_t Variable::getMangledNameHash() const {
         auto mangledName = getMangledName();
-        return hash_blockz32((uint8_t *)mangledName.c_str());
+        return hash_blockz64((uint8_t *)mangledName.c_str());
     }
 
     bool Variable::isAccessUnused() const {
@@ -603,9 +603,9 @@ namespace das {
         }
     }
 
-    uint32_t Function::getMangledNameHash() const {
+    uint64_t Function::getMangledNameHash() const {
         auto mangledName = getMangledName();
-        return hash_blockz32((uint8_t *)mangledName.c_str());
+        return hash_blockz64((uint8_t *)mangledName.c_str());
     }
 
     VariablePtr Function::findArgument(const string & na) {

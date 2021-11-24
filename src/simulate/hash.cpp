@@ -9,11 +9,11 @@
 namespace das
 {
     struct HashDataWalker : DataWalker {
-        const uint32_t fnv_prime = 16777619;
-        uint32_t fnv_bias = 2166136261;
+        const uint64_t fnv_prime = 1099511628211ul;
+        uint64_t fnv_bias = 14695981039346656037ul;
         template <typename TT>
         __forceinline void update ( TT & data ) {
-            uint32_t size = sizeof(TT);
+            auto size = sizeof(TT);
             uint8_t * block = (uint8_t *) & data;
             while ( size-- ) {
                 fnv_bias = ( fnv_bias ^ *block++ ) * fnv_prime;
@@ -29,7 +29,7 @@ namespace das
                 fnv_bias = ( fnv_bias ^ *block++ ) * fnv_prime;
             }
         }
-        __forceinline uint32_t getHash ( void ) const {
+        __forceinline uint64_t getHash ( void ) const {
             if (fnv_bias <= HASH_KILLED32) {
                 return fnv_prime;
             }
@@ -64,13 +64,13 @@ namespace das
         virtual void FakeContext ( Context * ) override                 { error("HASH, not expecting context"); }
     };
 
-    uint32_t hash_value ( Context & ctx, void * pX, TypeInfo * info ) {
+    uint64_t hash_value ( Context & ctx, void * pX, TypeInfo * info ) {
         HashDataWalker walker(ctx);
         walker.walk((char*)pX,info);
         return walker.getHash();
     }
 
-    uint32_t hash_value ( Context & ctx, vec4f value, TypeInfo * info ) {
+    uint64_t hash_value ( Context & ctx, vec4f value, TypeInfo * info ) {
         HashDataWalker walker(ctx);
         walker.walk(value,info);
         return walker.getHash();

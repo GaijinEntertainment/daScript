@@ -171,7 +171,7 @@ namespace das {
 
     struct StrHashPred {
         __forceinline size_t operator() ( const StrHashEntry & a ) const {
-            return hash_block32((const uint8_t *)a.ptr, a.length);
+            return hash_block64((const uint8_t *)a.ptr, a.length);
         }
     };
 

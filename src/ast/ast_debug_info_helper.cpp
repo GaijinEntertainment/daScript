@@ -69,7 +69,7 @@ namespace das {
             eni->fields[i]->value = !ev.value ? -1 : getConstExprIntOrUInt(ev.value);
             i ++;
         }
-        eni->hash = hash_blockz32((uint8_t *)mangledName.c_str());
+        eni->hash = hash_blockz64((uint8_t *)mangledName.c_str());
         emn2e[mangledName] = eni;
         return eni;
     }
@@ -100,7 +100,7 @@ namespace das {
         fni->result = makeTypeInfo(nullptr, fn.result);
         fni->locals = nullptr;
         fni->localCount = 0;
-        fni->hash = hash_blockz32((uint8_t *)mangledName.c_str());
+        fni->hash = hash_blockz64((uint8_t *)mangledName.c_str());
         fmn2f[mangledName] = fni;
         return fni;
     }
@@ -155,7 +155,7 @@ namespace das {
         } else {
             sti->annotation_list = nullptr;
         }
-        sti->hash = hash_blockz32((uint8_t *)mangledName.c_str());
+        sti->hash = hash_blockz64((uint8_t *)mangledName.c_str());
         smn2s[mangledName] = sti;
         return sti;
     }
@@ -251,7 +251,7 @@ namespace das {
         }
         auto mangledName = type->getMangledName();
         info->size = type->isAutoOrAlias() ? 0 : type->getSizeOf();
-        info->hash = hash_blockz32((uint8_t *)mangledName.c_str());
+        info->hash = hash_blockz64((uint8_t *)mangledName.c_str());
         debugInfo->lookup[info->hash] = info;
         return info;
     }
@@ -283,7 +283,7 @@ namespace das {
         } else {
             vi->value = v_zero();
         }
-        vi->hash = hash_blockz32((uint8_t *)mangledName.c_str());
+        vi->hash = hash_blockz64((uint8_t *)mangledName.c_str());
         vmn2v[mangledName] = vi;
         return vi;
     }
@@ -310,7 +310,7 @@ namespace das {
         } else {
             vi->value = v_zero();
         }
-        vi->hash = hash_blockz32((uint8_t *)mangledName.c_str());
+        vi->hash = hash_blockz64((uint8_t *)mangledName.c_str());
         vmn2v[mangledName] = vi;
         return vi;
     }
