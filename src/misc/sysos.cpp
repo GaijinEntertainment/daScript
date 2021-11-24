@@ -140,6 +140,7 @@
 
         void sigTrapHandler ( int ex ) {
             thread_t mythread = mach_thread_self();
+        #if defined(__x86_64__)
             struct x86_debug_state dr;
             mach_msg_type_number_t dr_count = x86_DEBUG_STATE_COUNT;
             thread_get_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, &dr_count);
@@ -151,6 +152,7 @@
                     if ( dr.uds.ds64.__dr6 & 8 ) g_HwBpHandler(3, (void *) dr.uds.ds64.__dr3 );
                 }
             }
+        #endif
         }
 
         void hwSetBreakpointHandler ( void (* handler ) ( int, void * ) ) {
@@ -162,6 +164,7 @@
                 g_isHandlerSet = true;
                 signal(SIGTRAP, sigTrapHandler);
             }
+        #if defined(__x86_64__)
             thread_t mythread = mach_thread_self();
             struct x86_debug_state dr;
             mach_msg_type_number_t dr_count = x86_DEBUG_STATE_COUNT;
@@ -186,10 +189,14 @@
             dr_count = x86_DEBUG_STATE_COUNT;
             thread_set_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, dr_count);
             return bp_index;
+        #else
+            return -1;
+        #endif
         }
 
         bool hwBreakpointClear ( int bp_index ) {
             if ( bp_index==-1 ) return false;
+        #if defined(__x86_64__)
             thread_t mythread = mach_thread_self();
             struct x86_debug_state dr;
             mach_msg_type_number_t dr_count = x86_DEBUG_STATE_COUNT;
@@ -197,6 +204,8 @@
             setBits(dr.uds.ds64.__dr7, bp_index*2, 1, 0);
             dr_count = x86_DEBUG_STATE_COUNT;
             rc = thread_set_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, dr_count);
+            return true;
+        #endif
             return false;
         }
 

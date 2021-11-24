@@ -171,10 +171,10 @@ int main( int argc, char * argv[] ) {
                 tout << (use_aot ? "AOT " : "") << "Baseline:\n";
             test_thread(use_aot!=0);
         #endif
-        if ( AnyNoiseInTests )
-            tout << (use_aot ? "AOT " : "") << "Threaded:\n";
         vector<thread> THREADS;
         auto total_threads = max(1, int(thread::hardware_concurrency()-2));
+        if ( AnyNoiseInTests )
+            tout << (use_aot ? "AOT " : "") << "Threaded on " << total_threads << " threads:\n";
         for ( int i=0; i<total_threads; ++i ) {
             THREADS.emplace_back(thread([=](){
                 for (int j = 0; j != 4; ++j) {

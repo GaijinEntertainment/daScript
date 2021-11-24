@@ -324,8 +324,10 @@ int main( int argc, char * argv[] ) {
     // das_track_breakpoint(8);
     // _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     // _CrtSetBreakAlloc(6836533);
+#if defined(_MSC_VER) || defined(__i386__)
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;
+#endif
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
