@@ -1262,6 +1262,14 @@ namespace das {
                 describeVarLocalCppType(ss, var->type);
                 ss << ")";
             }
+            if ( !expr->type->isPointer() && !var->type->ref && expr->type->isAotAlias() && !var->type->isAotAlias() ) {
+                if ( expr->type->alias.empty() ) {
+                    ss << "das_reinterpret<"
+                    << describeCppTypeEx(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::yes) << ">::pass(";
+                } else {
+                    ss << "das_alias<" << expr->type->alias << ">::from(";
+                }
+            }
             if ( var->type->ref ) {
                 ss << "&(";
             }
@@ -1280,6 +1288,9 @@ namespace das {
                 ss << ")";
             }
             if ( var->type->ref ) {
+                ss << ")";
+            }
+            if ( !expr->type->isPointer() && !var->type->ref && expr->type->isAotAlias() && !var->type->isAotAlias() ) {
                 ss << ")";
             }
             if ( var->init_via_move ) {
