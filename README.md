@@ -1,6 +1,8 @@
 # daScript
 daScript - high-performance statically strong typed scripting language
 
+11/24/2021 - 0.3 tag
+
 10/15/2021
   * LANGUAGE CHANGE - bitfields are now strongish type. i.e bitfield vs bitfield<...>
   * misc - massive cleanup of variable lookup. solid_context
