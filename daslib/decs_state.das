@@ -15,10 +15,10 @@ def report_to_debugger ( var ctx:Context; category,name:string; value:auto(TT) )
     report_context_state(ctx, category, name, unsafe(addr(tinfo)), pdata)
 
 struct EcsRequestView
-    hash        : uint
+    hash        : uint64
     REQUIRE     : string
     REQUIRE_NOT : string
-    archetype   : array<uint>
+    archetype   : array<uint64>
     file        : string
     line        : int
 
@@ -29,7 +29,7 @@ struct EcsComponentView
     stride      : int
 
 struct EcsArchetypeView
-    hash        : uint
+    hash        : uint64
     size        : int
     components  : array<EcsComponentView>
 

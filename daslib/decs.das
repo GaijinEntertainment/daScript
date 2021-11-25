@@ -201,7 +201,7 @@ def private new_entity_id()
         decsState.entityFreeList |> pop
     else
         eid.id = uint(length(decsState.entityLookup))
-        decsState.entityLookup |> push([[auto 0,0u,0]])
+        decsState.entityLookup |> push([[auto 0,0ul,0]])
     eid.generation ++
     return eid
 
@@ -479,7 +479,7 @@ def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
     var cmp : ComponentMap
     let arch_index = decsState.archetypeLookup[lookup.archetype]-1
     let eidx = decsState.entityLookup[eid.id].index
-    var old_ahash = 0u
+    var old_ahash = 0ul
     if true // note - this scope is for arch &
         var arch & = unsafe(decsState.allArchetypes[arch_index])
         cmp |> reserve ( length(arch.components) )

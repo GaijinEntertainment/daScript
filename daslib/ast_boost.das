@@ -494,6 +494,10 @@ def private walk_and_convert_basic ( data : uint8?; info:TypeDeclPtr; at:LineInf
             return new [[ExprConstInt() at=at, value=*reinterpret<int?> data]]
         elif info.baseType == Type tUInt
             return new [[ExprConstUInt() at=at, value=*reinterpret<uint?> data]]
+        elif info.baseType == Type tInt64
+            return new [[ExprConstInt64() at=at, value=*reinterpret<int64?> data]]
+        elif info.baseType == Type tUInt64
+            return new [[ExprConstUInt64() at=at, value=*reinterpret<uint64?> data]]
         elif info.baseType == Type tFloat
             return new [[ExprConstFloat() at=at, value=*reinterpret<float?> data]]
         elif info.baseType == Type tDouble

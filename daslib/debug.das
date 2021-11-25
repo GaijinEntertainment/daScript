@@ -134,7 +134,7 @@ class DAWalker: DapiDataWalker
     childrenMax = 500u
     varsStack: array<DAVariable?>
     [[do_not_delete]] frame: DAStackFrame?
-    visited: array<tuple<ps: void?; hash: uint>>
+    visited: array<tuple<ps: void?; hash: uint64>>
     inlinePreviewLimit: int = 50
 
     def startWalk(var f: DAStackFrame; var v: DAVariable; cb: block<(): void>)

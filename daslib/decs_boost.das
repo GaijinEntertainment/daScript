@@ -370,7 +370,7 @@ class DecsQueryMacro : AstCallMacro
                 rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
             rules |> replaceVariable("tag_erq") <| erq_fun
             rules |> replaceBlockArgument("tag_arch") <| arch_name
-            rules |> replaceVariable("tag_req") <| new [[ExprConstUInt() at=expr.at, value=req.hash]]
+            rules |> replaceVariable("tag_req") <| new [[ExprConstUInt64() at=expr.at, value=req.hash]]
             rules |> replaceVariable("tag_loop") <| qtop
         var qres <- move_unquote_block(qblock)
         assert(length(qres.list)==1 && length(qres.finalList)==0)
