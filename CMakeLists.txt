@@ -584,7 +584,7 @@ target_include_directories(libDasModuleUriparser PUBLIC
   ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
   include/modules/uriparser
 )
-ADD_DEPENDENCIES(libDasModuleUriparser libDaScript libUriParser)
+# ADD_DEPENDENCIES(libDasModuleUriparser libUriParser)
 
 if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
 # Stand alone command line compiler
@@ -632,7 +632,7 @@ XXD(examples/test/unit_test.das)
 
 ADD_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC})
 SETUP_CPP11(libDaScriptTest)
-ADD_DEPENDENCIES(libDaScriptTest libDaScript)
+# ADD_DEPENDENCIES(libDaScriptTest libDaScript)
 
 # Test
 if (NOT ${DAS_BUILD_TEST} MATCHES NO)
@@ -649,7 +649,7 @@ SOURCE_GROUP_FILES("source" PROFILE_MAIN_LIB_SRC)
 
 ADD_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
 SETUP_CPP11(libDaScriptProfile)
-ADD_DEPENDENCIES(libDaScriptProfile libDaScript)
+# ADD_DEPENDENCIES(libDaScriptProfile)
 
 if (NOT ${DAS_BUILD_PROFILE} MATCHES NO)
   add_subdirectory(examples/profile)
