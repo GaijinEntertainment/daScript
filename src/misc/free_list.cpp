@@ -99,11 +99,26 @@ void * operator new ( size_t size ) {
 void * operator new[] ( size_t size ) {
     return das::reuse_cache_allocate(size);
 }
+
+#ifdef __APPLE__
+
+void operator delete ( void * data ) _NOEXCEPT {
+    return das::reuse_cache_free(data);
+}
+void operator delete[] ( void * data ) _NOEXCEPT {
+    return das::reuse_cache_free(data);
+}
+
+#else
+
 void operator delete ( void * data ) {
     return das::reuse_cache_free(data);
 }
 void operator delete[] ( void * data ) {
     return das::reuse_cache_free(data);
 }
+
+#endif
+
 
 #endif
