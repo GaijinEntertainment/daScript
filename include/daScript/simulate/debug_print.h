@@ -17,7 +17,7 @@ namespace das {
 
     template <typename Writer>
     struct DebugDataWalker : DataWalker {
-        using loop_point = pair<void *,uint32_t>;
+        using loop_point = pair<void *,uint64_t>;
         Writer & ss;
         PrintFlags flags;
         vector<loop_point> visited;

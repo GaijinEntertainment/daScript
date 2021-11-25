@@ -71,7 +71,7 @@ struct EsAttributeTable {
 
 struct EsPassAttributeTable  : EsAttributeTable {
     das::string pass;
-    uint32_t    mangledNameHash = 0;
+    uint64_t    mangledNameHash = 0;
     int32_t     functionIndex = 0;
 };
 

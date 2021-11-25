@@ -145,7 +145,7 @@ namespace das {
         int valueSize = info->secondType->size;
         uint32_t count = 0;
         for ( uint32_t i=0; i!=tab->capacity; ++i ) {
-            if ( tab->hashes[i] > HASH_KILLED32 ) {
+            if ( tab->hashes[i] > HASH_KILLED64 ) {
                 bool last = (count == (tab->size-1));
                 // key
                 char * key = tab->keys + i*keySize;

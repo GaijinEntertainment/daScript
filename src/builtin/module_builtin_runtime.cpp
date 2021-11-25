@@ -692,7 +692,7 @@ namespace das
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ ) {
         if ( tab.data ) {
             if ( !tab.lock || tab.hopeless ) {
-                uint32_t oldSize = tab.capacity*(szk+szv+sizeof(uint32_t));
+                uint32_t oldSize = tab.capacity*(szk+szv+sizeof(uint64_t));
                 __context__->heap->free(tab.data, oldSize);
             } else {
                 __context__->throw_error("can't delete locked table");
@@ -766,10 +766,10 @@ namespace das
 
     // static storage
 
-    DAS_THREAD_LOCAL das_hash_map<uint32_t, void*> g_static_storage;
+    DAS_THREAD_LOCAL das_hash_map<uint64_t, void*> g_static_storage;
 
     void gc0_save_ptr ( char * name, void * data, Context * context, LineInfoArg * line ) {
-        uint32_t hash = hash_function ( *context, name );
+        uint64_t hash = hash_function ( *context, name );
         if ( g_static_storage.find(hash)!=g_static_storage.end() ) {
             context->throw_error_at(*line, "gc0 already there %s (or hash collision)", name);
         }
@@ -781,7 +781,7 @@ namespace das
     }
 
     void * gc0_restore_ptr ( char * name, Context * context ) {
-        uint32_t hash = hash_function ( *context, name );
+        uint64_t hash = hash_function ( *context, name );
         auto it = g_static_storage.find(hash);
         if ( it!=g_static_storage.end() ) {
             void * res = it->second;
@@ -797,7 +797,7 @@ namespace das
     }
 
     void gc0_reset() {
-        das_hash_map<uint32_t, void*> dummy;
+        decltype(g_static_storage) dummy;
         swap ( g_static_storage, dummy );
     }
 

@@ -79,7 +79,7 @@ namespace das {
     }
 
     void Context::instrumentFunction ( SimFunction * FNPTR, bool isInstrumenting ) {
-        auto instFn = [&](SimFunction * fun, uint32_t fnMnh) {
+        auto instFn = [&](SimFunction * fun, uint64_t fnMnh) {
             if ( !fun->code ) return;
             if ( isInstrumenting ) {
                 if ( !fun->code->rtti_node_isInstrumentFunction() ) {

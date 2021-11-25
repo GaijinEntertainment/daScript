@@ -50,12 +50,12 @@ namespace das
         TableHash ( const TableHash & ) = delete;
         TableHash ( Context * ctx, uint32_t vs ) : context(ctx), valueTypeSize(vs) {}
 
-        __forceinline uint32_t indexFromHash(uint32_t hash, uint32_t shift ) const {
-            return hash >> shift; // i don't know why this is faster, but it is
+        __forceinline uint32_t indexFromHash(uint64_t hash, uint32_t shift ) const {
+            return uint32_t(hash >> shift); // i don't know why this is faster, but it is
         }
 
         __forceinline uint32_t computeShift(uint32_t capacity) {
-            return das_clz(capacity-1);
+            return 32 + das_clz(capacity-1);
         }
 
         __forceinline uint32_t computeMaxLookups(uint32_t capacity) {
@@ -63,7 +63,7 @@ namespace das
             return das::max(uint32_t(minLookups), desired * 6);
         }
 
-        __forceinline int find ( const Table & tab, KeyType key, uint32_t hash ) const {
+        __forceinline int find ( const Table & tab, KeyType key, uint64_t hash ) const {
             uint32_t mask = tab.capacity - 1;
             uint32_t index = indexFromHash(hash, tab.shift);
             uint32_t lastI = (index+tab.maxLookups) & mask;
@@ -71,7 +71,7 @@ namespace das
             auto pHashes = tab.hashes;
             while ( index != lastI ) {
                 auto kh = pHashes[index];
-                if ( kh==HASH_EMPTY32 ) {
+                if ( kh==HASH_EMPTY64 ) {
                     return -1;
                 } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
                     return (int) index;
@@ -81,7 +81,7 @@ namespace das
             return -1;
         }
 
-        __forceinline int insertNew ( Table & tab, uint32_t hash ) const {
+        __forceinline int insertNew ( Table & tab, uint64_t hash ) const {
             // TODO: take key under account and be less agressive?
             uint32_t mask = tab.capacity - 1;
             uint32_t index = indexFromHash(hash, tab.shift);
@@ -89,7 +89,7 @@ namespace das
             auto pHashes = tab.hashes;
             while ( index != lastI ) {
                 auto kh = pHashes[index];
-                if ( kh==HASH_EMPTY32 ) {
+                if ( kh==HASH_EMPTY64 ) {
                     return (int) index;
                 }
                 index = (index + 1) & mask;
@@ -97,7 +97,7 @@ namespace das
             return -1;
         }
 
-        __forceinline int reserve ( Table & tab, KeyType key, uint32_t hash ) {
+        __forceinline int reserve ( Table & tab, KeyType key, uint64_t hash ) {
             for ( ;; ) {
                 uint32_t mask = tab.capacity - 1;
                 uint32_t index = indexFromHash(hash, tab.shift);
@@ -107,14 +107,14 @@ namespace das
                 auto pHashes = tab.hashes;
                 while ( index != lastI ) {
                     auto kh = pHashes[index];
-                    if (kh == HASH_EMPTY32 ) {
+                    if (kh == HASH_EMPTY64 ) {
                         if ( tab.isLocked() ) context->throw_error("can't insert into locked table");
                         if ( insertI != -1u ) index = insertI;
                         pHashes[index] = hash;
                         pKeys[index] = key;
                         tab.size++;
                         return (int)index;
-                    } else if (kh == HASH_KILLED32) {
+                    } else if (kh == HASH_KILLED64) {
                         if ( insertI == -1u ) insertI = index;
                     } else if (kh == hash && KeyCompare<KeyType>()(pKeys[index], key)) {
                         return (int)index;
@@ -127,7 +127,7 @@ namespace das
             }
         }
 
-        __forceinline int erase ( Table & tab, KeyType key, uint32_t hash ) {
+        __forceinline int erase ( Table & tab, KeyType key, uint64_t hash ) {
             uint32_t mask = tab.capacity - 1;
             uint32_t index = indexFromHash(hash, tab.shift);
             uint32_t lastI = (index+tab.maxLookups) & mask;
@@ -135,11 +135,11 @@ namespace das
             auto pHashes = tab.hashes;
             while ( index != lastI ) {
                 auto kh = pHashes[index];
-                if ( kh==HASH_EMPTY32 ) {
+                if ( kh==HASH_EMPTY64 ) {
                     return -1;
                 } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
                     tab.size--;
-                    pHashes[index] = HASH_KILLED32;
+                    pHashes[index] = HASH_KILLED64;
                     memset(tab.data + index*valueTypeSize, 0, valueTypeSize);
                     return (int) index;
                 }
@@ -152,7 +152,7 @@ namespace das
             uint32_t newCapacity = das::max(uint32_t(minCapacity), tab.capacity*2);
         repeatIt:;
             Table newTab;
-            uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint32_t));
+            uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint64_t));
             newTab.data = (char *) context->heap->allocate(memSize);
             context->heap->mark_comment(newTab.data, "table");
             if ( !newTab.data ) {
@@ -160,7 +160,7 @@ namespace das
                 return false;
             }
             newTab.keys = newTab.data + newCapacity * valueTypeSize;
-            newTab.hashes = (uint32_t *)(newTab.keys + newCapacity * sizeof(KeyType));
+            newTab.hashes = (uint64_t *)(newTab.keys + newCapacity * sizeof(KeyType));
             newTab.size = tab.size;
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
@@ -169,7 +169,7 @@ namespace das
             newTab.shift = computeShift(newCapacity);
             memset(newTab.data, 0, newCapacity*valueTypeSize);
             auto pHashes = newTab.hashes;
-            memset(pHashes, 0, newCapacity * sizeof(uint32_t));
+            memset(pHashes, 0, newCapacity * sizeof(uint64_t));
             if ( tab.size ) {
                 auto pKeys = (KeyType *) newTab.keys;
                 auto pOldValues = tab.data;
@@ -178,7 +178,7 @@ namespace das
                 auto pOldHashes = tab.hashes;
                 for ( uint32_t i=0; i!=tab.capacity; ++i ) {
                     auto hash = pOldHashes[i];
-                    if ( hash>HASH_KILLED32 ) {
+                    if ( hash>HASH_KILLED64 ) {
                         int index = insertNew(newTab, hash);
                         if ( index==-1 ) {
                              newCapacity *= 2;
@@ -192,7 +192,7 @@ namespace das
                 }
             }
             if (tab.capacity) {
-                uint32_t oldSize = tab.capacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint32_t));
+                uint32_t oldSize = tab.capacity*(valueTypeSize + sizeof(KeyType) + sizeof(uint64_t));
                 context->heap->free(tab.data, oldSize);
             }
             swap ( newTab, tab );

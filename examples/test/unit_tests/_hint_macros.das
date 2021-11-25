@@ -5,12 +5,12 @@ require rtti
 require daslib/ast_boost public
 
 struct HintLookup
-    tab : table<uint; string>
+    tab : table<uint64; string>
 
 var
     g_non_hints = 0
 
-def get_hint ( lookup : HintLookup; id, defv : string; hint : uint )
+def get_hint ( lookup : HintLookup; id, defv : string; hint : uint64 )
     return lookup.tab ?[ hint ] ?? defv
 
 [tag_function(get_hint_tag)]
@@ -26,7 +26,7 @@ class GetHintFnMacro : AstFunctionAnnotation
                 var new_call := call // <- clone_expression(call)
                 let arg2 = reinterpret<ExprConstString?>(call.arguments[1])
                 let hint = hash("{arg2.value}")
-                emplace_new(new_call.arguments, new [[ExprConstUInt() at=arg2.at, value=hint]])
+                emplace_new(new_call.arguments, new [[ExprConstUInt64() at=arg2.at, value=hint]])
                 return new_call
         return [[ExpressionPtr]]
 

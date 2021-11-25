@@ -238,18 +238,18 @@ namespace das {
         }
         virtual void WalkFunction ( Func * func ) override {
             if ( reading ) {
-                uint32_t mnh;
+                uint64_t mnh;
                 serialize(mnh);
                 func->PTR = context->fnByMangledName(mnh);
             } else {
-                uint32_t mnh = func->PTR ? func->PTR->mangledNameHash : 0;
+                uint64_t mnh = func->PTR ? func->PTR->mangledNameHash : 0;
                 serialize(mnh);
             }
         }
         virtual void beforeLambda ( Lambda * lambda, TypeInfo * ) override {
             TypeInfo * info = nullptr;
             if ( reading ) {
-                uint32_t hash = 0;
+                uint64_t hash = 0;
                 serialize(hash);
                 info = context->debugInfo->lookup[hash];    // TODO: verify if there is capture, all that
                 DAS_ASSERTF(info,"type info not found. how did we get type, which is not in the typeinfo hash?");

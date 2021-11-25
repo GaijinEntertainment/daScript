@@ -39,12 +39,12 @@ namespace das {
                 bool        valueB;
             };
             struct {
-                int32_t     index;
                 union {
                     uint32_t    stackTop;
                     uint32_t    argStackTop;
-                    uint32_t    mangledNameHash;
+                    uint64_t    mangledNameHash;
                 };
+                int32_t     index;
                 uint32_t    offset;
             };
             vec4f __dummy;
@@ -78,12 +78,12 @@ namespace das {
             type = SimSourceType::sCMResOff;
             offset = ofs;
         }
-        __forceinline void setGlobal(uint32_t ofs, uint32_t mnh) {
+        __forceinline void setGlobal(uint32_t ofs, uint64_t mnh) {
             type = SimSourceType::sGlobal;
             mangledNameHash = mnh;
             offset = ofs;
         }
-        __forceinline void setShared(uint32_t ofs, uint32_t mnh) {
+        __forceinline void setShared(uint32_t ofs, uint64_t mnh) {
             type = SimSourceType::sShared;
             mangledNameHash = mnh;
             offset = ofs;
@@ -1644,7 +1644,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // GLOBAL VARIABLE "GET"
     struct SimNode_GetGlobal : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetGlobal ( const LineInfo & at, uint32_t o, uint32_t mnh )
+        SimNode_GetGlobal ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_SourceBase(at) {
             subexpr.setGlobal(o,mnh);
         }
@@ -1657,7 +1657,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <typename TT>
     struct SimNode_GetGlobalR2V : SimNode_GetGlobal {
-        SimNode_GetGlobalR2V ( const LineInfo & at, uint32_t o, uint32_t mnh )
+        SimNode_GetGlobalR2V ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_GetGlobal(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
@@ -1675,7 +1675,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // GLOBAL VARIABLE "GET" BY MANGLED NAME HASH
     struct SimNode_GetGlobalMnh : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetGlobalMnh ( const LineInfo & at, uint32_t o, uint32_t mnh )
+        SimNode_GetGlobalMnh ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_SourceBase(at) {
             subexpr.setGlobal(o,mnh);
         }
@@ -1688,7 +1688,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <typename TT>
     struct SimNode_GetGlobalMnhR2V : SimNode_GetGlobalMnh {
-        SimNode_GetGlobalMnhR2V ( const LineInfo & at, uint32_t o, uint32_t mnh )
+        SimNode_GetGlobalMnhR2V ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_GetGlobalMnh(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
@@ -1706,7 +1706,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // SHARER VARIABLE "GET"
     struct SimNode_GetShared : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetShared ( const LineInfo & at, uint32_t o, uint32_t mnh )
+        SimNode_GetShared ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_SourceBase(at) {
             subexpr.setShared(o,mnh);
         }
@@ -1719,7 +1719,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <typename TT>
     struct SimNode_GetSharedR2V : SimNode_GetShared {
-        SimNode_GetSharedR2V ( const LineInfo & at, uint32_t o, uint32_t mnh )
+        SimNode_GetSharedR2V ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_GetShared(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
@@ -1737,7 +1737,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // SHARER VARIABLE "GET" BY MANGLED NAME HASH
     struct SimNode_GetSharedMnh : SimNode_SourceBase {
         DAS_PTR_NODE;
-        SimNode_GetSharedMnh ( const LineInfo & at, uint32_t o, uint32_t mnh )
+        SimNode_GetSharedMnh ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_SourceBase(at) {
             subexpr.setShared(o,mnh);
         }
@@ -1750,7 +1750,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     template <typename TT>
     struct SimNode_GetSharedMnhR2V : SimNode_GetSharedMnh {
-        SimNode_GetSharedMnhR2V ( const LineInfo & at, uint32_t o, uint32_t mnh )
+        SimNode_GetSharedMnhR2V ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_GetSharedMnh(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
@@ -2348,8 +2348,8 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f       eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            SimFunction * fun = context.fnByMangledName(subexpr.valueU);
-            DAS_ASSERT(fun==nullptr || fun->mangledNameHash==subexpr.valueU);
+            SimFunction * fun = context.fnByMangledName(subexpr.valueU64);
+            DAS_ASSERT(fun==nullptr || fun->mangledNameHash==subexpr.valueU64);
             return cast<SimFunction *>::from(fun);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -2553,8 +2553,8 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     struct SimNodeDebug_InstrumentFunction : SimNode {
-        SimNodeDebug_InstrumentFunction ( const LineInfo & at, SimFunction * simF, int32_t fni, SimNode * se )
-            : SimNode(at), func(simF), fnMnh(fni), subexpr(se) {}
+        SimNodeDebug_InstrumentFunction ( const LineInfo & at, SimFunction * simF, int64_t mnh, SimNode * se )
+            : SimNode(at), func(simF), fnMnh(mnh), subexpr(se) {}
         virtual bool rtti_node_isInstrumentFunction() const override { return true; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
@@ -2575,7 +2575,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_EVAL_NODE
 #undef EVAL_NODE
         SimFunction *   func;
-        uint32_t        fnMnh;
+        uint64_t        fnMnh;
         SimNode *       subexpr;
     };
 

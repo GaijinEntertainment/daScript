@@ -30,7 +30,7 @@ namespace das
             }
         }
         __forceinline uint64_t getHash ( void ) const {
-            if (fnv_bias <= HASH_KILLED32) {
+            if (fnv_bias <= HASH_KILLED64) {
                 return fnv_prime;
             }
             return fnv_bias;

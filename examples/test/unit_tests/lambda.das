@@ -47,3 +47,7 @@ def test
     assert(q==3)
     return true
 
+[export]
+def main
+    test()
+

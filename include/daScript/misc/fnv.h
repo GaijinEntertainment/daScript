@@ -2,8 +2,8 @@
 
 namespace das
 {
-    #define HASH_EMPTY32    0
-    #define HASH_KILLED32    1
+    #define HASH_EMPTY64    0
+    #define HASH_KILLED64    1
 
     // ideas from http://isthe.com/chongo/tech/comp/fnv/
 
@@ -23,7 +23,7 @@ namespace das
         if (size & 1u) {
             offset_basis = (offset_basis ^ *block++) * fnv_prime;
         }
-        if (offset_basis <= HASH_KILLED32) {
+        if (offset_basis <= HASH_KILLED64) {
             return fnv_prime;
         }
         return offset_basis;
@@ -36,7 +36,7 @@ namespace das
         for (; *block; block++) {
             offset_basis = ( offset_basis ^ *block ) * fnv_prime;
         }
-        if (offset_basis <= HASH_KILLED32) {
+        if (offset_basis <= HASH_KILLED64) {
             return fnv_prime;
         }
         return offset_basis;
@@ -59,7 +59,7 @@ namespace das
             }
         }
         __forceinline uint64_t getHash() const  {
-            return (offset_basis <= HASH_KILLED32) ? fnv_prime : offset_basis;
+            return (offset_basis <= HASH_KILLED64) ? fnv_prime : offset_basis;
         }
     };
 }

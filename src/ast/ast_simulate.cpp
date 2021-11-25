@@ -1003,13 +1003,13 @@ namespace das
 
         }
         union {
-            uint32_t    mnh;
+            uint64_t    mnh;
             vec4f       cval;
         } temp;
         temp.cval = v_zero();
         if ( func->module->isSolidContext ) {
             DAS_ASSERT(func->index>=0 && "address of unsued function? how?");
-            temp.mnh = uint32_t(func->index);
+            temp.mnh = func->index;
             return context.code->makeNode<SimNode_FuncConstValue>(at,temp.cval);
         } else {
             temp.mnh = func->getMangledNameHash();
@@ -2010,7 +2010,7 @@ namespace das
             }
         } else {
             DAS_ASSERT(variable->index >= 0 && "using variable which is not used. how?");
-            uint32_t mnh = variable->getMangledNameHash();
+            uint64_t mnh = variable->getMangledNameHash();
             if ( !variable->module->isSolidContext ) {
                 if ( variable->global_shared ) {
                     if ( r2v ) {

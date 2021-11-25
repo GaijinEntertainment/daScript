@@ -23,7 +23,7 @@ namespace das
         bool reportHeap = true;
         bool heapOnly = false;
         bool errorsOnly = false;
-        using loop_point = pair<void *,uint32_t>;
+        using loop_point = pair<void *,uint64_t>;
         vector<loop_point> visited;
         vector<loop_point> visited_handles;
         vector<string>      history;
@@ -467,7 +467,7 @@ namespace das
 
     struct GcMarkStringHeap : DataWalker {
         Context * context = nullptr;
-        using loop_point = pair<void *,uint32_t>;
+        using loop_point = pair<void *,uint64_t>;
         vector<loop_point> visited;
         vector<loop_point> visited_handles;
         das_set<char *> failed;
@@ -600,7 +600,7 @@ namespace das
     struct GcMarkAnyHeap : DataWalker {
         bool markStringHeap = true;
         Context * context = nullptr;
-        using loop_point = pair<void *,uint32_t>;
+        using loop_point = pair<void *,uint64_t>;
         vector<loop_point> visited;
         vector<loop_point> visited_handles;
         vector<PtrRange>    ptrRangeStack;

@@ -2715,7 +2715,7 @@ namespace das {
         char * values = tab->data;
         char * keys = tab->keys;
         for ( uint32_t index=0; index!=tab->capacity; index++, keys+=keyStride, values+=valueStride ) {
-            if ( tab->hashes[index] > HASH_KILLED32 ) {
+            if ( tab->hashes[index] > HASH_KILLED64 ) {
                 das_invoke<void>::invoke<void *,void *>(context,at,blk,(void*)keys,(void*)values);
             }
         }

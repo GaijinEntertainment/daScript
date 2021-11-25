@@ -112,7 +112,7 @@ namespace das
 
     struct Table : Array {
         char *      keys;
-        uint32_t *  hashes;
+        uint64_t *  hashes;
         uint32_t    maxLookups;
         uint32_t    shift;
     };

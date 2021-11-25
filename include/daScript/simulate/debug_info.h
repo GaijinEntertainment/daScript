@@ -293,13 +293,13 @@ namespace das
         void *      annotation_list;
         uint64_t    hash;
         uint32_t    flags;
-        int32_t     init_mnh;
+        uint64_t    init_mnh;
         uint32_t    count;
         uint32_t    size;
         StructInfo() = default;
         StructInfo(
             char * _name, char * _module_name, uint32_t _flags, VarInfo ** _fields, uint32_t _count,
-            uint32_t _size, int32_t _init_mnh, void * _annotation_list, uint64_t _hash ) {
+            uint32_t _size, uint64_t _init_mnh, void * _annotation_list, uint64_t _hash ) {
                 name =            _name;
                 module_name =     _module_name;
                 flags =           _flags;

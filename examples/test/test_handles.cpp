@@ -449,7 +449,7 @@ struct EventRegistrator : StructureAnnotation {
             ExpressionPtr(), AnnotationArgumentList(), false, st->at);
         st->fields.emplace(st->fields.begin(), "eventSize", make_smart<TypeDecl>(Type::tUInt16),
             ExpressionPtr(), AnnotationArgumentList(), false, st->at);
-        st->fields.emplace(st->fields.begin(), "eventType", make_smart<TypeDecl>(Type::tUInt),
+        st->fields.emplace(st->fields.begin(), "eventType", make_smart<TypeDecl>(Type::tUInt64),
             ExpressionPtr(), AnnotationArgumentList(), false, st->at);
         return true;
     }

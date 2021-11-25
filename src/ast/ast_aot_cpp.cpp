@@ -1035,7 +1035,7 @@ namespace das {
                     ss << string(tab,'\t');
                     if ( fn->noAot ) {
                         auto mangledName = fn->getMangledName();
-                        uint32_t hash = fn->getMangledNameHash();
+                        uint64_t hash = fn->getMangledNameHash();
                         ss << "das_invoke_function<void>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*"
                             << mangledName << "*/ " << hash << "u)));\n";
                     } else {
@@ -2361,7 +2361,7 @@ namespace das {
         virtual void preVisit ( ExprAddr * expr ) override {
             if (expr->func) {
                 auto mangledName = expr->func->getMangledName();
-                uint32_t hash = expr->func->getMangledNameHash();
+                uint64_t hash = expr->func->getMangledNameHash();
                 ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
             } else {
                 ss << "Func(0 /*nullptr*/)";
@@ -2995,7 +2995,7 @@ namespace das {
                         ss << "_cmres";
                     }
                     auto mangledName = call->func->getMangledName();
-                    uint32_t hash = call->func->getMangledNameHash();
+                    uint64_t hash = call->func->getMangledNameHash();
                     if ( call->arguments.size()>=1 ) {
                         ss << "<";
                         for ( const auto & arg : call->func->arguments ) {

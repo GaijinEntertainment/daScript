@@ -16,13 +16,14 @@ require math
 require strings
 require daslib/defer
 
-typedef ComponentHash = uint
+typedef ComponentHash = uint64
+typedef TypeHash = uint64
 
 struct CTypeInfo
     basicType : Type
     mangledName : string
     fullName : string
-    hash : uint
+    hash : TypeHash
     size : uint
     eraser     : function<(var arr:array<uint8>):void>
     clonner    : function<(var dst:array<uint8>; src:array<uint8>):void>
@@ -83,7 +84,7 @@ struct public DecsState
     entityLookup : array<tuple<generation:int;archetype:ComponentHash;index:int>>
     componentTypeCheck : table<string; CTypeInfo>
     ecsQueries : array<EcsRequest>
-    queryLookup : table<uint; int>
+    queryLookup : table<ComponentHash; int>
 
 typedef PassFunction = function<():void>
 
@@ -116,7 +117,7 @@ def public operator . ( var cmp:ComponentMap; name:string ) : ComponentValue &
 
 def public set ( var cv:ComponentValue; val:auto )
     var cval = make_component(cv.name, val)
-    assert(cv.info.hash==0u || cv.info.hash==cval.info.hash)
+    assert(cv.info.hash==0ul || cv.info.hash==cval.info.hash)
     cv = cval
 
 def public operator := ( var cv:ComponentValue; val:EntityId )    { set(cv, val); }
@@ -259,7 +260,7 @@ def private create_archetype ( var arch:Archetype; cmp:ComponentMap; idx:int )
     arch.eidIndex = -1
     for kv,kvi in cmp,range(INT_MAX)
         var ct & = unsafe(decsState.componentTypeCheck[kv.name])
-        if ct.hash != 0u
+        if ct.hash != 0ul
             if kv.info.hash != ct.hash
                 panic("component {kv.name} type mismatch {ct} vs {kv.info}")
         else
@@ -306,15 +307,15 @@ def private remove_entity ( var arch:Archetype; di:int )
 def private cmp_archetype_hash ( cmp:ComponentMap )
     var ahash : ComponentHash
     for kv in cmp
-        ahash = (ahash<<<2u) ^ hash(kv.name)
+        ahash = (ahash<<<2ul) ^ hash(kv.name)
     return ahash
 
 def private req_hash ( erq : EcsRequest )
     var ahash : ComponentHash
     for kv in erq.req
-        ahash = (ahash<<<2u) ^ hash(kv)
+        ahash = (ahash<<<2ul) ^ hash(kv)
     for kv in erq.reqn
-        ahash = (ahash<<<2u) ^ ~hash(kv)
+        ahash = (ahash<<<2ul) ^ ~hash(kv)
     return ahash
 
 def public has ( arch:Archetype; name:string )
@@ -332,7 +333,7 @@ def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
     return true
 
 def public verify_request ( var erq : EcsRequest ) : tuple<ok:bool;error:string>
-    if erq.hash==0u || (empty(erq.req) && empty(erq.reqn))
+    if erq.hash==0ul || (empty(erq.req) && empty(erq.reqn))
         return [[auto true, ""]]    // this queries just about everything
     for N in erq.reqn   // assuming require_not is typically shorter
         if erq.req |> binary_search(N)
@@ -345,7 +346,7 @@ def public compile_request ( var erq : EcsRequest )
     erq.hash = req_hash(erq)
 
 def public lookup_request ( var erq : EcsRequest )
-    if erq.hash==0u
+    if erq.hash==0ul
         compile_request(erq)
     var ql & = unsafe(decsState.queryLookup[erq.hash])
     if ql == 0
