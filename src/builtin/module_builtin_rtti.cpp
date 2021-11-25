@@ -1080,7 +1080,7 @@ namespace das {
     }
 
 
-    Func builtin_SimFunction_by_MNH ( Context & context, uint32_t MNH ) {
+    Func builtin_SimFunction_by_MNH ( Context & context, uint64_t MNH ) {
         Func fn;
         fn.PTR = context.fnByMangledName(MNH);
         return fn;

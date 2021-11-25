@@ -139,7 +139,7 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: SuiteFileCtx): SuiteRe
                         fileCtx.context = reinterpret<Context?> context
                     let mod = program |> get_this_module()
                     mod |> module_for_each_function <| $(f)
-                        if f.hash == 0u
+                        if f.hash == 0ul
                             return
                         let func = *context |> get_function_by_mnh(f.hash)
                         let fn <- mod |> find_module_function_via_rtti(func)

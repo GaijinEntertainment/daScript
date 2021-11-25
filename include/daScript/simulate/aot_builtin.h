@@ -16,7 +16,7 @@ namespace das {
     char * builtin_debug_line ( const LineInfo & at, bool fully, Context * context );
     char * builtin_get_typeinfo_mangled_name ( const TypeInfo * typeInfo, Context * context );
     const FuncInfo * builtin_get_function_info_by_mnh ( Context & context, Func fun );
-    Func builtin_SimFunction_by_MNH ( Context & context, uint32_t MNH );
+    Func builtin_SimFunction_by_MNH ( Context & context, uint64_t MNH );
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * );
     void builtin_stackwalk ( bool args, bool vars, Context * context, LineInfoArg * lineInfo );
     void builtin_terminate ( Context * context );
