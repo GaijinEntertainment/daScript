@@ -186,11 +186,21 @@ int das_aot_main ( int argc, char * argv[] ) {
         }
     }
     // register modules
-    NEED_MODULE(Module_BuiltIn);
-    NEED_MODULE(Module_Math);
-    NEED_MODULE(Module_Strings);
-    NEED_MODULE(Module_Rtti);
-    NEED_MODULE(Module_Ast);
+    if (!Module::require("$")) {
+        NEED_MODULE(Module_BuiltIn);
+    }
+    if (!Module::require("math")) {
+        NEED_MODULE(Module_Math);
+    }
+    if (!Module::require("strings")) {
+        NEED_MODULE(Module_Strings);
+    }
+    if (!Module::require("rtti")) {
+        NEED_MODULE(Module_Rtti);
+    }
+    if (!Module::require("ast")) {
+        NEED_MODULE(Module_Ast);
+    }
     NEED_MODULE(Module_Debugger);
     NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);
@@ -242,7 +252,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                     tout<< "WARNING: program is setup as both module, and endpoint.\n";
                 }
                 auto fnVec = pctx->findFunctions(mainFnName.c_str());
-                vector<SimFunction *> fnMVec;
+                das::vector<SimFunction *> fnMVec;
                 for ( auto fnAS : fnVec ) {
                     if ( verifyCall<void>(fnAS->debugInfo, dummyGroup) || verifyCall<bool>(fnAS->debugInfo, dummyGroup) ) {
                         fnMVec.push_back(fnAS);
@@ -289,7 +299,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         return -1;
     }
     setCommandLineArguments(argc,argv);
-    vector<string> files;
+    das::vector<string> files;
     string mainName = "main";
     bool scriptArgs = false;
     bool outputProgramCode = false;
@@ -336,12 +346,24 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         return -1;
     }
     // register modules
-    NEED_MODULE(Module_BuiltIn);
-    NEED_MODULE(Module_Math);
-    NEED_MODULE(Module_Strings);
-    NEED_MODULE(Module_Rtti);
-    NEED_MODULE(Module_Ast);
-    NEED_MODULE(Module_Debugger);
+    if (!Module::require("$")) {
+        NEED_MODULE(Module_BuiltIn);
+    }
+    if (!Module::require("math")) {
+        NEED_MODULE(Module_Math);
+    }
+    if (!Module::require("strings")) {
+        NEED_MODULE(Module_Strings);
+    }
+    if (!Module::require("rtti")) {
+        NEED_MODULE(Module_Rtti);
+    }
+    if (!Module::require("ast")) {
+        NEED_MODULE(Module_Ast);
+    }
+    if (!Module::require("debugapi")) {
+        NEED_MODULE(Module_Debugger);
+    }
     NEED_MODULE(Module_Network);
     NEED_MODULE(Module_UriParser);
     NEED_MODULE(Module_JobQue);

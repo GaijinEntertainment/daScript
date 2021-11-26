@@ -934,9 +934,8 @@ namespace das
         arr.flags = 0;
     }
 
-    bool g_isInAot = false;
     bool is_in_aot ( ) {
-        return g_isInAot;
+        return daScriptEnvironment::bound->g_isInAot;
     }
 
 #define STR_DSTR_REG(OPNAME,EXPR) \

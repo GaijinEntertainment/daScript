@@ -1319,6 +1319,7 @@ namespace das
         ProgramPtr      g_Program;
         bool            g_isInAot;
         Module *        modules = nullptr;
+        int             das_def_tab_size = 4;
         static DAS_THREAD_LOCAL daScriptEnvironment * bound;
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;
         static void ensure();
