@@ -91,6 +91,10 @@ void reuse_cache_destroy() {
 
 }
 
+#if defined(__linux__)
+#define DAS_NO_GLOBAL_NEW_AND_DELETE
+#endif
+
 #if !defined(DAS_NO_GLOBAL_NEW_AND_DELETE)
 
 void * operator new ( size_t size ) {
