@@ -62,6 +62,13 @@ namespace das {
         return nullptr;
     }
 #endif
+#elif defined(__linux__)
+    void * openGlGetFunctionAddress ( const char * name ) {
+        auto libName = "libGL.so";
+        void * libhandle = nullptr;
+        libhandle = getLibraryHandle(libName);
+        return getFunctionAddress(libhandle, name);
+    }
 #else
     void * openGlGetFunctionAddress ( const char * name ) {
         return nullptr;
