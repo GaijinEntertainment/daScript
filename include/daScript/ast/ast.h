@@ -1110,7 +1110,7 @@ namespace das
         bool rtti = false;                              // create extended RTTI
     // language
         bool no_unsafe = false;
-        bool local_ref_is_unsafe = false;               // var a & = ... unsafe. should be
+        bool local_ref_is_unsafe = true;                // var a & = ... unsafe. should be
         bool no_global_variables = false;
         bool no_global_variables_at_all = false;
         bool no_global_heap = false;
