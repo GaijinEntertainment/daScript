@@ -308,6 +308,7 @@ namespace das {
         DasParserState parserState;
         parserState.g_Access = access;
         parserState.g_Program = program;
+        parserState.das_def_tab_size = daScriptEnvironment::bound->das_def_tab_size;
         yyscan_t scanner = nullptr;
         das_yylex_init_extra(&parserState, &scanner);
         if ( auto fi = access->getFileInfo(fileName) ) {
