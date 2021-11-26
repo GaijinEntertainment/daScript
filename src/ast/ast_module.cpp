@@ -135,6 +135,7 @@ namespace das {
     }
 
     Module * Module::require ( const string & name ) {
+        if ( !daScriptEnvironment::bound ) return nullptr;
         for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
             if ( m->name == name ) {
                 return m;
@@ -144,6 +145,7 @@ namespace das {
     }
 
     Module * Module::requireEx ( const string & name, bool allowPromoted ) {
+        if ( !daScriptEnvironment::bound ) return nullptr;
         for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
             if ( allowPromoted || !m->promoted ) {
                 if ( m->name == name ) {
