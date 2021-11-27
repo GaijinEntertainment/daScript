@@ -828,7 +828,10 @@ namespace debugapi {
         return ctx.findFunction(name ? name : "") != nullptr;
     }
 
-    Context * hw_bp_context[4] = { nullptr, nullptr, nullptr, nullptr };
+    Context * hw_bp_context[DAS_MAX_HW_BREAKPOINTS] = {
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+    };
     bool hw_bp_handler_set = false;
 
     void hw_bp_handler ( int bp, void * address ) {

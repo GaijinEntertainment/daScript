@@ -146,12 +146,20 @@
         void ( * g_HwBpHandler ) ( int, void * ) = nullptr;
 
         #if defined(__arm64__)
-            /*
-            uint64_t dist (uint64_t addr, uint64_t val,	int len ) {
+
+            #define ARM64_NUM_WP    16
+
+            __forceinline int fls(int x) {
+                return x ? sizeof(x) * 8 - __builtin_clz(x) : 0;
+            }
+            __forceinline int ffs(int x)   {
+                return __builtin_ffs(x);
+            }
+            uint64_t get_distance_from_watchpoint (uint64_t addr, uint64_t val,	int len ) {
 	            uint64_t wp_low, wp_high;
 	            uint32_t lens, lene;
-	            lens = __ffs(ctrl->len);
-	            lene = __fls(ctrl->len);
+	            lens = ffs(len);
+	            lene = fls(len);
 	            wp_low = val + lens;
 	            wp_high = val + lene;
 	            if (addr < wp_low)
@@ -161,10 +169,28 @@
 	            else
 		            return 0;
             }
-            */
+
+            uint64_t encode_ctrl_reg ( HwBpSize len, HwBpType type, bool enabled ) {
+                uint64_t val = 0;
+                if ( enabled ) val |= 0x1ul;
+                switch ( len ) {
+                    case HwBp_1: val |= (0x01) << 5; break;
+                    case HwBp_2: val |= (0x03) << 5; break;
+                    case HwBp_4: val |= (0x0f) << 5; break;
+                    case HwBp_8: val |= (0xff) << 5; break;
+                }
+                switch ( type ) {
+                    case HwBp_Execute:      val |= (4  )<<3;    break;
+                    case HwBp_Write:        val |= (2  )<<3;    break;  // write=2
+                    case HwBp_ReadWrite:    val |= (1|2)<<3;    break;  // read=1
+                }
+                uint64_t priv = 0;
+                val |= priv << 1;
+                return val;
+            }
         #endif
 
-        void sigTrapHandler ( int ex ) {
+        void sigTrapHandler (int sig, siginfo_t* siginfo, void * ptr) {
             thread_t mythread = mach_thread_self();
         #if defined(__x86_64__)
             struct x86_debug_state dr;
@@ -182,33 +208,34 @@
             arm_debug_state64_t dr;
             mach_msg_type_number_t dr_count = ARM_DEBUG_STATE64_COUNT;
             thread_get_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, &dr_count);
-            for ( int wpi=0; wpi!=4; ++wpi ) {  // assuming there are 4 total
+            uint64_t min_dist = -1ul, dist;
+            int closest_match = 0;
+            ucontext_t * ucontext = (ucontext_t *) ptr;
+            uint64_t addr = ucontext->uc_mcontext->__es.__far;
+            for ( int wpi=0; wpi!=ARM64_NUM_WP; ++wpi ) {  // assuming there are 4 total
                 uint64_t val = dr.__wvr[wpi];
                 uint64_t ctrl_reg = dr.__wcr[wpi];
-                /*
-                static inline void decode_ctrl_reg(u32 reg,
-				   struct arch_hw_breakpoint_ctrl *ctrl)
-                    {
-                        ctrl->enabled	= reg & 0x1;
-                        reg >>= 1;
-                        ctrl->privilege	= reg & 0x3;
-                        reg >>= 2;
-                        ctrl->type	= reg & 0x3;
-                        reg >>= 2;
-                        ctrl->len	= reg & 0xff;
+                bool enabled = ctrl_reg & 1;
+                int len = (ctrl_reg>>5) & 0xff;
+                if ( enabled ) {    // todo: check if we need to test enabled
+                    dist = get_distance_from_watchpoint(addr, val, len);
+                    if (dist < min_dist) {
+                        min_dist = dist;
+                        closest_match = wpi;
                     }
-                */
-                /*
-                 read_wb_reg(AARCH64_DBG_REG_WVR, i);
-                ctrl_reg = read_wb_reg(AARCH64_DBG_REG_WCR, i);
-                decode_ctrl_reg(ctrl_reg, &ctrl);
-                dist = get_distance_from_watchpoint(addr, val, &ctrl);
-                if (dist < min_dist) {
-                    min_dist = dist;
-                    closest_match = i;
+                    if ( dist==0 ) break;
                 }
-                */
             }
+            g_HwBpHandler(closest_match, (void*)addr);
+            // BBATKIN: this is a temporary hack to skip next instruction
+            //  what needs to happen is
+            //      disable bp of that index
+            //      set single step
+            //      release
+            //      get into sigtrap again (happens because single step is set)
+            //      disable single step
+            //      re-enable bp of the right index
+            ucontext->uc_mcontext->__ss.__pc += 4;
         #endif
         }
 
@@ -219,7 +246,14 @@
         int hwBreakpointSet ( void * address, int len, int when ) {
             if ( !g_isHandlerSet ) {
                 g_isHandlerSet = true;
-                signal(SIGTRAP, sigTrapHandler);
+                struct sigaction act;
+                memset (&act, 0, sizeof(act));
+                act.sa_sigaction = sigTrapHandler;
+                act.sa_flags = SA_SIGINFO|SA_ONSTACK;
+                if ( sigaction(SIGTRAP, &act, 0)!=0 ) {
+                    g_isHandlerSet = false;
+                    return -1;
+                }
             }
         #if defined(__x86_64__)
             thread_t mythread = mach_thread_self();
@@ -246,6 +280,24 @@
             dr_count = x86_DEBUG_STATE_COUNT;
             thread_set_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, dr_count);
             return bp_index;
+        #elif defined(__arm64__)
+            thread_t mythread = mach_thread_self();
+            arm_debug_state64_t dr;
+            mach_msg_type_number_t dr_count = ARM_DEBUG_STATE64_COUNT;
+            thread_get_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, &dr_count);
+            int bp_index = 0;
+            for ( bp_index=0; bp_index!=ARM64_NUM_WP; ++bp_index ) {
+                uint64_t ctrl_reg = dr.__wcr[bp_index];
+                bool enabled = ctrl_reg & 1;
+                if ( !enabled ) {
+                    break;
+                }
+            }
+            if ( bp_index<0 || bp_index>=ARM64_NUM_WP ) return -1;
+            dr.__wvr[bp_index] = intptr_t(address);
+            dr.__wcr[bp_index] = encode_ctrl_reg(HwBpSize(len),HwBpType(when),true);
+            thread_set_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, dr_count);
+            return bp_index;
         #else
             return -1;
         #endif
@@ -262,6 +314,13 @@
             dr_count = x86_DEBUG_STATE_COUNT;
             rc = thread_set_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, dr_count);
             return true;
+        #elif defined(__arm64__)
+            thread_t mythread = mach_thread_self();
+            arm_debug_state64_t dr;
+            mach_msg_type_number_t dr_count = ARM_DEBUG_STATE64_COUNT;
+            thread_get_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, &dr_count);
+            dr.__wcr[bp_index] = encode_ctrl_reg(HwBp_1,HwBp_ReadWrite,false);
+            thread_set_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, dr_count);
         #endif
             return false;
         }

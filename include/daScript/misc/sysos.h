@@ -2,6 +2,8 @@
 
 namespace das {
 
+    #define DAS_MAX_HW_BREAKPOINTS  16
+
     enum HwBpType {
         HwBp_Execute =      0,
         HwBp_Write =        1,
