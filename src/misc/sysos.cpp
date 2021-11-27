@@ -130,6 +130,15 @@
     #include <dlfcn.h>
     namespace das {
 
+        /*
+        // ARM64 debug registers
+        __uint64_t __bvr[16];
+        __uint64_t __bcr[16];
+        __uint64_t __wvr[16];
+        __uint64_t __wcr[16];
+        __uint64_t __mdscr_el1;
+        */
+
         __forceinline void setBits ( uint64_t & dw, int lowBit, int bits, int newValue ) {
             uint64_t mask = (uint64_t(1) << bits) - 1;
             dw = (dw & ~(mask << lowBit)) | (uint64_t(newValue) << lowBit);
@@ -137,6 +146,25 @@
 
         bool g_isHandlerSet = false;
         void ( * g_HwBpHandler ) ( int, void * ) = nullptr;
+
+        #if defined(__arm64__)
+            /*
+            uint64_t dist (uint64_t addr, uint64_t val,	int len ) {
+	            uint64_t wp_low, wp_high;
+	            uint32_t lens, lene;
+	            lens = __ffs(ctrl->len);
+	            lene = __fls(ctrl->len);
+	            wp_low = val + lens;
+	            wp_high = val + lene;
+	            if (addr < wp_low)
+		            return wp_low - addr;
+	            else if (addr > wp_high)
+		            return addr - wp_high;
+	            else
+		            return 0;
+            }
+            */
+        #endif
 
         void sigTrapHandler ( int ex ) {
             thread_t mythread = mach_thread_self();
@@ -151,6 +179,37 @@
                     if ( dr.uds.ds64.__dr6 & 4 ) g_HwBpHandler(2, (void *) dr.uds.ds64.__dr2 );
                     if ( dr.uds.ds64.__dr6 & 8 ) g_HwBpHandler(3, (void *) dr.uds.ds64.__dr3 );
                 }
+            }
+        #elif defined(__arm64__)
+            arm_debug_state64_t dr;
+            mach_msg_type_number_t dr_count = ARM_DEBUG_STATE64_COUNT;
+            thread_get_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, &dr_count);
+            for ( int wpi=0; wpi!=4; ++wpi ) {  // assuming there are 4 total
+                uint64_t val = dr.__wvr[wpi];
+                uint64_t ctrl_reg = dr.__wcr[wpi];
+                /*
+                static inline void decode_ctrl_reg(u32 reg,
+				   struct arch_hw_breakpoint_ctrl *ctrl)
+                    {
+                        ctrl->enabled	= reg & 0x1;
+                        reg >>= 1;
+                        ctrl->privilege	= reg & 0x3;
+                        reg >>= 2;
+                        ctrl->type	= reg & 0x3;
+                        reg >>= 2;
+                        ctrl->len	= reg & 0xff;
+                    }
+                */
+                /*
+                 read_wb_reg(AARCH64_DBG_REG_WVR, i);
+                ctrl_reg = read_wb_reg(AARCH64_DBG_REG_WCR, i);
+                decode_ctrl_reg(ctrl_reg, &ctrl);
+                dist = get_distance_from_watchpoint(addr, val, &ctrl);
+                if (dist < min_dist) {
+                    min_dist = dist;
+                    closest_match = i;
+                }
+                */
             }
         #endif
         }
