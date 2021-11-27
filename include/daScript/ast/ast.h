@@ -1317,8 +1317,9 @@ namespace das
 
     struct daScriptEnvironment {
         ProgramPtr      g_Program;
-        bool            g_isInAot;
+        bool            g_isInAot = false;
         Module *        modules = nullptr;
+        int             das_def_tab_size = 4;
         static DAS_THREAD_LOCAL daScriptEnvironment * bound;
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;
         static void ensure();

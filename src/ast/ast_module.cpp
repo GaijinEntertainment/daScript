@@ -135,6 +135,7 @@ namespace das {
     }
 
     Module * Module::require ( const string & name ) {
+        if ( !daScriptEnvironment::bound ) return nullptr;
         for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
             if ( m->name == name ) {
                 return m;
@@ -144,6 +145,7 @@ namespace das {
     }
 
     Module * Module::requireEx ( const string & name, bool allowPromoted ) {
+        if ( !daScriptEnvironment::bound ) return nullptr;
         for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
             if ( allowPromoted || !m->promoted ) {
                 if ( m->name == name ) {
@@ -168,13 +170,22 @@ namespace das {
 
     Module::Module ( const string & n ) : name(n) {
         if ( !name.empty() ) {
+            auto first = daScriptEnvironment::bound->modules;
+            while (first != nullptr)
+            {
+                if (first->name == n) {
+                    DAS_FATAL_LOG("Module `%s` already created", first->name.c_str());
+                    DAS_FATAL_ERROR;
+                }
+                first = first->next;
+            }
             next = daScriptEnvironment::bound->modules;
             daScriptEnvironment::bound->modules = this;
             builtIn = true;
         }
         if ( n != "$" ) {
             requireModule[require("$")] = false;
-        } else {
+        } else if (!name.empty()) {
             requireModule[this] = false;
         }
         isModule = !n.empty();

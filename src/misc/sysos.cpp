@@ -93,6 +93,7 @@
     }
 #elif defined(__linux__)
     #include <unistd.h>
+    #include <dlfcn.h>
     namespace das {
         void hwSetBreakpointHandler ( void (*) ( int, void * ) ) { }
         int hwBreakpointSet ( void *, int, int ) {
@@ -106,17 +107,14 @@
             pathName[pathNameSize] = '\0';
             return pathNameSize;
         }
-        void * loadDynamicLibrary ( const char *  ) {
-            // TODO: implement
-            return nullptr;
+        void * loadDynamicLibrary ( const char * lib ) {
+            return dlopen(lib,RTLD_LAZY);
         }
-        void * getFunctionAddress ( void *, const char * ) {
-            // TODO: implement
-            return nullptr;
+        void * getFunctionAddress ( void * lib, const char * name ) {
+            return lib ? dlsym(lib, name) : nullptr;
         }
-        void * getLibraryHandle ( const char *  ) {
-            // TODO: implement
-            return nullptr;
+        void * getLibraryHandle ( const char * lib ) {
+            return dlopen(lib,RTLD_LAZY);
         }
     }
 #elif defined(__APPLE__)
