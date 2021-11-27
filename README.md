@@ -1,7 +1,132 @@
 # daScript
 daScript - high-performance statically strong typed scripting language
 
+11/26/2021
+  * hardware breakpoints are now supported on mac arm64
+  * linux build is functional again
+
+11/25/2012
+  * better parallel build with msvc under vscode and all around
+  * we can now generate xcode projects again
+
 11/24/2021 - 0.3 tag
+  * hash is now 64 bit function just about anywhere in daScript
+
+11/23/2021
+  * reuse allocator - things work a lot faster when enabled vs crt
+
+11/22/2021
+  * daScript parallel compilation cleanup - daScript parallel compilation
+  * siginificant memory and performance optimizations
+  * bugfix - desc query(eid) to be r\w
+
+11/20/2021
+  * daScript parser cleanup - its now reentrant
+
+11/19/2021
+  * logger - log handling, log levels, all that jazz
+  * safebox container with hashes - can add and iterate
+
+11/18/2021
+  * minfft and sound modules merged in
+  * feature - assume keyword
+
+11/17/2021
+  * checking locked containers all around move
+  * OpenGL3+ bindings for IMGUI
+
+11/16/2021
+  * OpenGL is now up and running on OSX via binder
+  * debugger now has decent eval
+
+11/15/2021
+  * better BGFX integration on OSX
+  * dasAOT and dasContDev discontinued. use daScript for everything now
+  * we now build our own GLFW
+
+11/14/2021
+  * archive and serialization is up and running
+
+11/13/2021
+  * HW breakpoints on PC
+  * DECS state debugger
+  * vulkan and related infrastructure temporarily removed
+
+11/12/2021
+  * local ref is unsafe
+  * clang bind started
+
+11/11/2021
+  * lambda now captures const ref fine
+  * find_query in DECS
+
+11/10/2021
+  * daScript now starts debugger automagically
+  * DECS can now serialize
+  * apply now works with misc types like variant and tuple
+
+11/9/2021
+  * DECS tests
+
+11/8/2021
+  * general language tests (found missing %= operator )
+  * JIT tests
+  * ZYDIS disassembly hooked
+
+11/7/2021
+  * dasbind - we can now dynamically load libraries and bind functions
+
+11/6/2021
+  * classes can now be sealed
+  * member functions and variables can now be private
+
+11/5/2021
+  * file access roots
+  * unit test framework is now merged in
+
+11/4/2021
+  * self keyword no longer necessary when calling class methods
+
+11/3/2021
+  * DECS now supports full-blown types (not just raw pod)
+
+10/30/2021
+  * XBYAK hooked up for inline assembly GENERATOR
+  * operator := and operator delete (clone and finalize aliases)
+  * more overrideable operators (like [], ?[], ., ?., etc)
+
+10/29/2021
+  * BGFX IMGUI
+
+10/28/2021
+  * geometry generation shared between OpenGL and BGFX
+  * shader bindings now generate their own names
+  * defaults and semantics inferred in GLSL
+
+10/27/2021
+  * BGFX - cleaner shader bindings
+  * BGFX - matrices are now uploaded with proper transpose
+
+10/25/2021
+  * BGFX - compute shaders
+  * support for const functions
+  * default arguments now work in class methods
+
+10/24/2021
+  * BGFX - declarations, macros, etc
+
+10/22/2021
+  * popen - we can now run external process safely
+
+10/21/2021
+  * BGFX - module introduced
+
+10/20/2021
+  * das_string vs string - lots of nice operators for comparison etc
+  * live context loopback
+
+10/19/2021
+  * math libraries unification (look_at etc matrices)
 
 10/15/2021
   * LANGUAGE CHANGE - bitfields are now strongish type. i.e bitfield vs bitfield<...>
