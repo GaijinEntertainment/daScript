@@ -218,7 +218,7 @@
                 if ( g_HwBpSingleStepAddr!=ucontext->uc_mcontext->__ss.__pc ) { // and we are no longer on original instr
                     // drop single step mode
                     g_HwBpSingleStepAddr = 0;
-                    dr.__mdscr_el1 ^= 1;
+                    dr.__mdscr_el1 &= ~1ul;
                     // re-enable breakpoints
                     for ( int i=0; i!=ARM64_NUM_WP; ++i ) {
                         if ( g_HwBpMask & (1<<i) ) {
@@ -255,7 +255,7 @@
                 for ( int i=0; i!=ARM64_NUM_WP; ++i ) {
                     if ( dr.__wcr[i] & 1 ) {
                         g_HwBpMask |= 1<<i;
-                        dr.__wcr[i] ^= 1;
+                        dr.__wcr[i] &= ~1ul;
                     }
                 }
                 // and done
