@@ -142,12 +142,15 @@
             dw = (dw & ~(mask << lowBit)) | (uint64_t(newValue) << lowBit);
         }
 
-        bool g_isHandlerSet = false;
-        void ( * g_HwBpHandler ) ( int, void * ) = nullptr;
+        static bool g_isHandlerSet = false;
+        static void ( * g_HwBpHandler ) ( int, void * ) = nullptr;
 
         #if defined(__arm64__)
 
             #define ARM64_NUM_WP    16
+
+            static uint64_t g_HwBpSingleStepAddr = 0;
+            static int      g_HwBpMask = 0;
 
             __forceinline int fls(int x) {
                 return x ? sizeof(x) * 8 - __builtin_clz(x) : 0;
@@ -211,31 +214,53 @@
             uint64_t min_dist = -1ul, dist;
             int closest_match = 0;
             ucontext_t * ucontext = (ucontext_t *) ptr;
-            uint64_t addr = ucontext->uc_mcontext->__es.__far;
-            for ( int wpi=0; wpi!=ARM64_NUM_WP; ++wpi ) {  // assuming there are 4 total
-                uint64_t val = dr.__wvr[wpi];
-                uint64_t ctrl_reg = dr.__wcr[wpi];
-                bool enabled = ctrl_reg & 1;
-                int len = (ctrl_reg>>5) & 0xff;
-                if ( enabled ) {    // todo: check if we need to test enabled
-                    dist = get_distance_from_watchpoint(addr, val, len);
-                    if (dist < min_dist) {
-                        min_dist = dist;
-                        closest_match = wpi;
+            if ( g_HwBpSingleStepAddr ) {   // if we are in single step mode
+                if ( g_HwBpSingleStepAddr!=ucontext->uc_mcontext->__ss.__pc ) { // and we are no longer on original instr
+                    // drop single step mode
+                    g_HwBpSingleStepAddr = 0;
+                    dr.__mdscr_el1 ^= 1;
+                    // re-enable breakpoints
+                    for ( int i=0; i!=ARM64_NUM_WP; ++i ) {
+                        if ( g_HwBpMask & (1<<i) ) {
+                            dr.__wcr[i] |= 1;
+                        }
                     }
-                    if ( dist==0 ) break;
+                    // and done
+                    thread_set_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, dr_count);
                 }
+            } else {
+                // find which breakpoint caused it
+                uint64_t addr = ucontext->uc_mcontext->__es.__far;
+                for ( int wpi=0; wpi!=ARM64_NUM_WP; ++wpi ) {
+                    uint64_t val = dr.__wvr[wpi];
+                    uint64_t ctrl_reg = dr.__wcr[wpi];
+                    bool enabled = ctrl_reg & 1;
+                    int len = (ctrl_reg>>5) & 0xff;
+                    if ( enabled ) {
+                        dist = get_distance_from_watchpoint(addr, val, len);
+                        if (dist < min_dist) {
+                            min_dist = dist;
+                            closest_match = wpi;
+                        }
+                        if ( dist==0 ) break;
+                    }
+                }
+                // call handler of that breakpoint
+                g_HwBpHandler(closest_match, (void*)addr);
+                // save address of this instruction, go to single step mode
+                g_HwBpSingleStepAddr = ucontext->uc_mcontext->__ss.__pc;
+                dr.__mdscr_el1 |= 1;
+                // save hw breakpoints in the mask, disable all hw breakpoints
+                g_HwBpMask = 0;
+                for ( int i=0; i!=ARM64_NUM_WP; ++i ) {
+                    if ( dr.__wcr[i] & 1 ) {
+                        g_HwBpMask |= 1<<i;
+                        dr.__wcr[i] ^= 1;
+                    }
+                }
+                // and done
+                thread_set_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, dr_count);
             }
-            g_HwBpHandler(closest_match, (void*)addr);
-            // BBATKIN: this is a temporary hack to skip next instruction
-            //  what needs to happen is
-            //      disable bp of that index
-            //      set single step
-            //      release
-            //      get into sigtrap again (happens because single step is set)
-            //      disable single step
-            //      re-enable bp of the right index
-            ucontext->uc_mcontext->__ss.__pc += 4;
         #endif
         }
 
