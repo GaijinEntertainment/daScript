@@ -120,3 +120,20 @@ MAKE_EXTERNAL_TYPE_FACTORY(ExprMemZero,das::ExprMemZero);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprReader,das::ExprReader);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprCallMacro,das::ExprCallMacro);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprUnsafe,das::ExprUnsafe);
+
+namespace das {
+
+    class Module_Ast : public Module {
+    public:
+        template <typename TT>
+        smart_ptr<TT> addExpressionAnnotation ( const smart_ptr<TT> & ann );
+        Module_Ast();
+        void registerAdapterAnnotations(ModuleLibrary & lib);
+        void registerAnnotations(ModuleLibrary & lib);
+        void registerFunctions(ModuleLibrary & lib);
+        virtual ModuleAotType aotRequire ( TextWriter & tw ) const override;
+   };
+
+
+
+}

@@ -322,6 +322,8 @@ src/builtin/module_builtin_string.cpp
 src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.cpp
+src/builtin/module_builtin_ast_annotations.cpp
+src/builtin/module_builtin_ast_adapters.cpp
 src/builtin/module_builtin_ast.h
 src/builtin/ast_gen.inc
 src/builtin/module_builtin_fio.cpp
