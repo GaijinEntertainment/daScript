@@ -1517,9 +1517,7 @@ namespace das {
         addExpressionAnnotation(make_smart<AstExprConstEnumerationAnnotation>(lib))->from("ExprConst");
         addExpressionAnnotation(make_smart<AstExprConstBitfieldAnnotation>(lib))->from("ExprConst");
         addExpressionAnnotation(make_smart<AstExprConstStringAnnotation>(lib))->from("ExprConst");
-        addExpressionAnnotation(make_smart<AstExprReaderAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprUnsafeAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprCallMacroAnnotation>(lib))->from("ExprLooksLikeCall");
         // vector functions for custom containers
         addExtern<DAS_BIND_FUN(mks_vector_emplace)>(*this, lib, "emplace",
             SideEffects::modifyArgument, "mks_vector_emplace")
@@ -1533,5 +1531,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(mks_vector_resize)>(*this, lib, "resize",
             SideEffects::modifyArgument, "mks_vector_resize")
                 ->args({"vec","newSize"})->generated = true;
+    }
+    void Module_Ast::registerMacroExpressions(ModuleLibrary & lib){
+        addExpressionAnnotation(make_smart<AstExprReaderAnnotation>(lib))->from("Expression");
+        addExpressionAnnotation(make_smart<AstExprCallMacroAnnotation>(lib))->from("ExprLooksLikeCall");
     }
 }

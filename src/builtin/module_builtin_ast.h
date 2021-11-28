@@ -131,6 +131,7 @@ namespace das {
         void registerAdapterAnnotations(ModuleLibrary & lib);
         void registerAnnotations(ModuleLibrary & lib);
         void registerFunctions(ModuleLibrary & lib);
+        void registerMacroExpressions(ModuleLibrary & lib);
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override;
    };
 

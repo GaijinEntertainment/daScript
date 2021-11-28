@@ -353,6 +353,7 @@ namespace das {
         lib.addModule(Module::require("rtti"));
         registerAnnotations(lib);
         registerAdapterAnnotations(lib);
+        registerMacroExpressions(lib);
         registerFunctions(lib);
         // add builtin module
         compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
