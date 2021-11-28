@@ -50,7 +50,7 @@ def advance(var bodies:body[5])
   for b in bodies
     ++i
     for j in range(i, nbodies)
-      var b2:body& = bodies[j]
+      var b2:body& = unsafe(bodies[j])
       let dx = b.x - b2.x
       let inv_distance = inv_length(dx)
       let mag = inv_distance * inv_distance * inv_distance
