@@ -1,12 +1,12 @@
 file(GLOB PROFILE_SRC
-"tests/*.das"
+"${CMAKE_SOURCE_DIR}/examples/profile/tests/*.das"
 )
 list(SORT PROFILE_SRC)
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC
-main.cpp
-test_profile.h
+${CMAKE_SOURCE_DIR}/examples/profile/main.cpp
+${CMAKE_SOURCE_DIR}/examples/profile/test_profile.h
 )
 list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("source" PROFILE_MAIN_SRC)

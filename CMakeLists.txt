@@ -638,7 +638,7 @@ SETUP_CPP11(libDaScriptTest)
 
 # Test
 if (NOT ${DAS_BUILD_TEST} MATCHES NO)
-  add_subdirectory(examples/test)
+  include(examples/test/CMakeLists.txt)
 endif()
 
 # Profile module
@@ -654,9 +654,9 @@ SETUP_CPP11(libDaScriptProfile)
 # ADD_DEPENDENCIES(libDaScriptProfile)
 
 if (NOT ${DAS_BUILD_PROFILE} MATCHES NO)
-  add_subdirectory(examples/profile)
+  include(examples/profile/CMakeLists.txt)
 endif()
 
 if (NOT ${DAS_BUILD_TUTORIAL} MATCHES NO)
-  add_subdirectory(examples/tutorial)
+  include(examples/tutorial/CMakeLists.txt)
 endif()

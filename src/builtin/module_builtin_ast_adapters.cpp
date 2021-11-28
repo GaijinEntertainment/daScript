@@ -1283,6 +1283,7 @@ namespace das {
             SideEffects::modifyExternal, "addModuleOptimizationMacro")
                 ->args({"module","annotation","context"});
         // reader macro
+        addAnnotation(make_smart<AstReaderMacroAnnotation>(lib));
         addExtern<DAS_BIND_FUN(makeReaderMacro)>(*this, lib,  "make_reader_macro",
             SideEffects::modifyExternal, "makeReaderMacro")
                 ->args({"name","class","info","context"});
@@ -1290,6 +1291,7 @@ namespace das {
             SideEffects::modifyExternal, "addModuleReaderMacro")
                 ->args({"module","annotation","context"});
         // call macro
+        addAnnotation(make_smart<AstCallMacroAnnotation>(lib));
         addExtern<DAS_BIND_FUN(makeCallMacro)>(*this, lib,  "make_call_macro",
             SideEffects::modifyExternal, "makeCallMacro")
                 ->args({"name","class","info","context"});

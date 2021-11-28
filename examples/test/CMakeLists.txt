@@ -1,42 +1,42 @@
 file(GLOB UNIT_TEST_SRC
-"unit_tests/*.das"
+"${CMAKE_SOURCE_DIR}/examples/test/unit_tests/*.das"
 )
 list(SORT UNIT_TEST_SRC)
 SOURCE_GROUP_FILES("unit" UNIT_TEST_SRC)
 
 file(GLOB COMPILATION_FAIL_TEST_SRC
-"compilation_fail_tests/*.das"
+"${CMAKE_SOURCE_DIR}/examples/test/compilation_fail_tests/*.das"
 )
 list(SORT COMPILATION_FAIL_TEST_SRC)
 SOURCE_GROUP_FILES("compilation fail" COMPILATION_FAIL_TEST_SRC)
 
 file(GLOB OPTIMIZATION_SRC
-"optimizations/*.das"
+"${CMAKE_SOURCE_DIR}/examples/test/optimizations/*.das"
 )
 list(SORT OPTIMIZATION_SRC)
 SOURCE_GROUP_FILES("optimizations" OPTIMIZATION_SRC)
 
 file(GLOB RUNTIME_ERRORS_SRC
-"runtime_errors/*.das"
+"${CMAKE_SOURCE_DIR}/examples/test/runtime_errors/*.das"
 )
 list(SORT RUNTIME_ERRORS_SRC)
 SOURCE_GROUP_FILES("runtime_errors" RUNTIME_ERRORS_SRC)
 
 file(GLOB MIX_TEST_SRC
-"*.das"
+"${CMAKE_SOURCE_DIR}/examples/test/misc/*.das"
 )
 list(SORT MIX_TEST_SRC)
 SOURCE_GROUP_FILES("mix" MIX_TEST_SRC)
 
 file(GLOB_RECURSE MODULE_TEST_SRC
-"module/*.*"
+"${CMAKE_SOURCE_DIR}/examples/test/module/*.*"
 )
 list(SORT MODULE_TEST_SRC)
 SOURCE_GROUP_FILES("module" MODULE_TEST_SRC)
 
 SET(TEST_MAIN_SRC
-main.cpp
-unitTest.h
+${CMAKE_SOURCE_DIR}/examples/test/main.cpp
+${CMAKE_SOURCE_DIR}/examples/test/unitTest.h
 )
 list(SORT TEST_MAIN_SRC)
 SOURCE_GROUP_FILES("source" TEST_MAIN_SRC)
@@ -59,8 +59,8 @@ SETUP_LTO(daScriptTest)
 #target_precompile_headers(daScriptTest PUBLIC include/daScript/misc/platform.h)
 
 SET(THREADS_MAIN_SRC
-test_threads.cpp
-unitTest.h
+${CMAKE_SOURCE_DIR}/examples/test/test_threads.cpp
+${CMAKE_SOURCE_DIR}/examples/test/unitTest.h
 )
 
 add_executable(daScriptTestThreads ${UNIT_TEST_SRC} ${THREADS_MAIN_SRC}
