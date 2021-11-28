@@ -1,6 +1,6 @@
 #include "daScript/misc/platform.h"
 
-#include "module_uriparser.h"
+#include "daScript/simulate/aot_builtin_uriparser.h"
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
@@ -205,7 +205,7 @@ public:
             SideEffects::none, "normalize_uri");
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
-        tw << "#include \"modules/uriparser/module_uriparser.h\"\n";
+        tw << "#include \"daScript/simulate/aot_builtin_uriparser.h\"\n";
         return ModuleAotType::cpp;
     }
 };

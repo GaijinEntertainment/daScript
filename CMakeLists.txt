@@ -230,9 +230,38 @@ ADD_CUSTOM_COMMAND(
 
 ADD_CUSTOM_TARGET(need_and_resolve ALL DEPENDS ${DAS_MODULES_NEED_INC} ${DAS_MODULES_RESOLVE_INC})
 
+# libUriParser
+
+SET(URIPARSER_SRCS
+3rdparty/uriparser/src/UriCommon.c
+3rdparty/uriparser/src/UriCompare.c
+3rdparty/uriparser/src/UriEscape.c
+3rdparty/uriparser/src/UriFile.c
+3rdparty/uriparser/src/UriIp4.c
+3rdparty/uriparser/src/UriIp4Base.c
+3rdparty/uriparser/src/UriNormalize.c
+3rdparty/uriparser/src/UriNormalizeBase.c
+3rdparty/uriparser/src/UriParse.c
+3rdparty/uriparser/src/UriParseBase.c
+3rdparty/uriparser/src/UriQuery.c
+3rdparty/uriparser/src/UriRecompose.c
+3rdparty/uriparser/src/UriResolve.c
+3rdparty/uriparser/src/UriShorten.c
+3rdparty/uriparser/src/UriMemory.c
+)
+
+ADD_LIBRARY(libUriParser STATIC ${URIPARSER_SRCS})
+SETUP_CPP11(libUriParser)
+target_compile_definitions(libUriParser PUBLIC URIPARSER_BUILD_CHAR)
+target_compile_definitions(libUriParser PUBLIC URI_STATIC_BUILD)
+target_include_directories(libUriParser PUBLIC
+  ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
+)
+
+# libDaScript
+
 FLEX(src/parser/ds_lexer.lpp)
 BISON(src/parser/ds_parser.ypp)
-
 
 SET(PARSER_GENERATED_SRC
 src/parser/ds_parser.hpp
@@ -325,6 +354,7 @@ src/builtin/module_builtin_ast.cpp
 src/builtin/module_builtin_ast_annotations.cpp
 src/builtin/module_builtin_ast_adapters.cpp
 src/builtin/module_builtin_ast.h
+src/builtin/module_builtin_uriparser.cpp
 src/builtin/ast_gen.inc
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_dasbind.cpp
@@ -487,6 +517,7 @@ include/daScript/simulate/aot_builtin_ast.h
 include/daScript/simulate/aot_builtin_debugger.h
 include/daScript/simulate/aot_builtin_jobque.h
 include/daScript/simulate/aot_builtin_dasbind.h
+include/daScript/simulate/aot_builtin_uriparser.h
 include/daScript/simulate/fs_file_info.h
 src/simulate/fs_file_info.cpp
 ${DAS_MODULES_RESOLVE_INC}
@@ -524,8 +555,12 @@ include_directories(include)
 ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC}
     ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC}
 	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${SMMALLOC_SRC})
-ADD_DEPENDENCIES(libDaScript need_and_resolve)
-target_include_directories(libDaScript PUBLIC ${DAS_SMMALLOC_DIR})
+ADD_DEPENDENCIES(libDaScript need_and_resolve libUriParser)
+target_include_directories(libDaScript PUBLIC
+    ${DAS_SMMALLOC_DIR}
+    ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
+)
+target_link_libraries(libDaScript libUriParser)
 IF(LINUX_UUID)
 target_link_libraries(libDaScript uuid)
 ENDIF()
@@ -545,49 +580,6 @@ DAS_AOT("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
-# libUriParser
-
-SET(URIPARSER_SRCS
-3rdparty/uriparser/src/UriCommon.c
-3rdparty/uriparser/src/UriCompare.c
-3rdparty/uriparser/src/UriEscape.c
-3rdparty/uriparser/src/UriFile.c
-3rdparty/uriparser/src/UriIp4.c
-3rdparty/uriparser/src/UriIp4Base.c
-3rdparty/uriparser/src/UriNormalize.c
-3rdparty/uriparser/src/UriNormalizeBase.c
-3rdparty/uriparser/src/UriParse.c
-3rdparty/uriparser/src/UriParseBase.c
-3rdparty/uriparser/src/UriQuery.c
-3rdparty/uriparser/src/UriRecompose.c
-3rdparty/uriparser/src/UriResolve.c
-3rdparty/uriparser/src/UriShorten.c
-3rdparty/uriparser/src/UriMemory.c
-)
-
-ADD_LIBRARY(libUriParser STATIC ${URIPARSER_SRCS})
-SETUP_CPP11(libUriParser)
-target_compile_definitions(libUriParser PUBLIC URIPARSER_BUILD_CHAR)
-target_compile_definitions(libUriParser PUBLIC URI_STATIC_BUILD)
-target_include_directories(libUriParser PUBLIC
-  ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
-)
-
-# MODULE - uri parser
-
-SET(MODULE_URIPARSE_MAIN_SRC
-include/modules/uriparser/module_uriparser.h
-src/modules/uriparser/module_uriparser.cpp
-)
-
-ADD_LIBRARY(libDasModuleUriparser ${MODULE_URIPARSE_MAIN_SRC})
-SETUP_CPP11(libDasModuleUriparser)
-target_include_directories(libDasModuleUriparser PUBLIC
-  ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
-  include/modules/uriparser
-)
-# ADD_DEPENDENCIES(libDasModuleUriparser libUriParser)
-
 if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
 # Stand alone command line compiler
 
@@ -598,15 +590,15 @@ if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
   SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
   add_executable(daScript ${DASCRIPT_MAIN_SRC})
-  TARGET_LINK_LIBRARIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-  ADD_DEPENDENCIES(daScript libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+  TARGET_LINK_LIBRARIES(daScript libDaScript libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+  ADD_DEPENDENCIES(daScript libDaScript libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
   SETUP_CPP11(daScript)
   SETUP_LTO(daScript)
 
   #IF(APPLE)
   #  add_executable(daScriptOsx MACOSX_BUNDLE ${DASCRIPT_MAIN_SRC})
-  #  TARGET_LINK_LIBRARIES(daScriptOsx libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-  #  ADD_DEPENDENCIES(daScriptOsx libDaScript libDasModuleUriparser libUriParser libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
+  #  TARGET_LINK_LIBRARIES(daScriptOsx libDaScript libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+  #  ADD_DEPENDENCIES(daScriptOsx libDaScript libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
   #  SETUP_CPP11(daScriptOsx)
   #  SETUP_LTO(daScriptOsx)
   #  set_target_properties(daScriptOsx PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "daScript")

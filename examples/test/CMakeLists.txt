@@ -50,8 +50,8 @@ SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC} ${AOT_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDaScriptProfile ${DAS_MODULES_LIBS})
 TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC ${PROJECT_SOURCE_DIR}/examples/test)
 SETUP_CPP11(daScriptTest)
 add_dependencies(daScriptTest daScriptTestAot dasAotStub)
@@ -66,8 +66,8 @@ ${CMAKE_SOURCE_DIR}/examples/test/unitTest.h
 add_executable(daScriptTestThreads ${UNIT_TEST_SRC} ${THREADS_MAIN_SRC}
 #    ${TEST_GENERATED_SRC} ${AOT_GENERATED_SRC}
 )
-TARGET_LINK_LIBRARIES(daScriptTestThreads libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(daScriptTestThreads libDaScript libDaScriptTest libDaScriptProfile libDasModuleUriparser libUriParser ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(daScriptTestThreads libDaScript libDaScriptTest libDaScriptProfile Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(daScriptTestThreads libDaScript libDaScriptTest libDaScriptProfile ${DAS_MODULES_LIBS})
 TARGET_INCLUDE_DIRECTORIES(daScriptTestThreads PUBLIC ${PROJECT_SOURCE_DIR}/examples/test)
 SETUP_CPP11(daScriptTestThreads)
 #add_dependencies(daScriptTest daScriptTestAot dasAotStub)
