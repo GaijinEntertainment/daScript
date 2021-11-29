@@ -9,7 +9,9 @@
 #include "daScript/simulate/hash.h"
 #include "daScript/misc/uric.h"
 
+#ifndef URI_STATIC_BUILD
 #define URI_STATIC_BUILD
+#endif
 #include "uriparser/Uri.h"
 
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(UriTextRangeA,UriTextRangeA)
@@ -239,10 +241,23 @@ struct UriAnnotation  : ManagedStructureAnnotation<Uri> {
         addProperty<DAS_BIND_MANAGED_PROP(status)>("status");
         addField<DAS_BIND_MANAGED_FIELD(uri)>("uri");
     }
+    virtual bool canMove() const override { return true; }
 };
 
 void delete_uri ( Uri & uri ) {
     uri.reset();
+}
+
+void clone_uri ( Uri & uri, const Uri & uriS ) {
+    uri = uriS;
+}
+
+Uri add_base_uri ( const Uri & base, const Uri & relative ) {
+    return relative.addBaseUri(base);
+}
+
+const char * uri_to_string ( const Uri & uri, Context * context ) {
+    return context->stringHeap->allocateString(uri.str());
 }
 
 class Module_UriParser : public Module {
@@ -251,6 +266,7 @@ public:
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();
+        // uri
         addAnnotation(make_smart<UriTextRangeAAnnotation>(lib));
         addAnnotation(make_smart<UriIp4StructAnnotation>(lib));
         addAnnotation(make_smart<UriIp6StructAnnotation>(lib));
@@ -263,38 +279,60 @@ public:
         addCtorAndUsing<Uri>(*this,lib,"Uri","Uri");
         addCtorAndUsing<Uri,const char *>(*this,lib,"Uri","Uri");
         addExtern<DAS_BIND_FUN(delete_uri)> (*this, lib, "finalize",
-            SideEffects::accessExternal, "delete_uri");
+            SideEffects::accessExternal, "delete_uri")
+                ->args({"uri"});
+        addExtern<DAS_BIND_FUN(clone_uri)> (*this, lib, "clone",
+            SideEffects::accessExternal, "clone_uri")
+                ->args({"dest","src"});
+        addExtern<DAS_BIND_FUN(add_base_uri),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, "add_base_uri",
+            SideEffects::accessExternal, "add_base_uri")
+                ->args({"base","relative"});
+        addExtern<DAS_BIND_FUN(uri_to_string)>(*this, lib, "string",
+            SideEffects::accessExternal, "uri_to_string")
+                ->args({"uri","context"});
+        // guid
         addExtern<DAS_BIND_FUN(makeNewGuid)> (*this, lib, "make_new_guid",
-            SideEffects::accessExternal, "makeNewGuid");
+            SideEffects::accessExternal, "makeNewGuid")
+                ->args({"context"});
         addExtern<DAS_BIND_FUN(uri_to_unix_file_name)> (*this, lib, "uri_to_unix_file_name",
-            SideEffects::none, "uri_to_unix_file_name");
+            SideEffects::none, "uri_to_unix_file_name")
+                ->args({"uriStr","context"});
         addExtern<DAS_BIND_FUN(uri_to_windows_file_name)> (*this, lib, "uri_to_windows_file_name",
-            SideEffects::none, "uri_to_windows_file_name");
+            SideEffects::none, "uri_to_windows_file_name")
+                ->args({"uriStr","context"});
         addExtern<DAS_BIND_FUN(unix_file_name_to_uri)> (*this, lib, "unix_file_name_to_uri",
-            SideEffects::none, "unix_file_name_to_uri");
+            SideEffects::none, "unix_file_name_to_uri")
+                ->args({"uriStr","context"});
         addExtern<DAS_BIND_FUN(windows_file_name_to_uri)> (*this, lib, "windows_file_name_to_uri",
-            SideEffects::none, "windows_file_name_to_uri");
+            SideEffects::none, "windows_file_name_to_uri")
+                ->args({"uriStr","context"});
 #ifdef _WIN32
         addExtern<DAS_BIND_FUN(uri_to_windows_file_name)> (*this, lib, "uri_to_file_name",
-            SideEffects::none, "uri_to_windows_file_name");
+            SideEffects::none, "uri_to_windows_file_name")
+                ->args({"uriStr","context"});
         addExtern<DAS_BIND_FUN(windows_file_name_to_uri)> (*this, lib, "file_name_to_uri",
-            SideEffects::none, "windows_file_name_to_uri");
+            SideEffects::none, "windows_file_name_to_uri")
+                ->args({"uriStr","context"});
 #else
         addExtern<DAS_BIND_FUN(uri_to_unix_file_name)> (*this, lib, "uri_to_file_name",
-            SideEffects::none, "uri_to_unix_file_name");
+            SideEffects::none, "uri_to_unix_file_name")
+                ->args({"uriStr","context"});
         addExtern<DAS_BIND_FUN(unix_file_name_to_uri)> (*this, lib, "file_name_to_uri",
-            SideEffects::none, "unix_file_name_to_uri");
+            SideEffects::none, "unix_file_name_to_uri")
+                ->args({"uriStr","context"});
 #endif
         addExtern<DAS_BIND_FUN(escape_uri)> (*this, lib, "escape_uri",
-            SideEffects::none, "escape_uri");
+            SideEffects::none, "escape_uri")
+                ->args({"uriStr","spaceToPlus","normalizeBreaks","context"});
         addExtern<DAS_BIND_FUN(unescape_uri)> (*this, lib, "unescape_uri",
-            SideEffects::none, "unescape_uri");
+            SideEffects::none, "unescape_uri")
+                ->args({"uriStr","context"});
         addExtern<DAS_BIND_FUN(normalize_uri)> (*this, lib, "normalize_uri",
-            SideEffects::none, "normalize_uri");
+            SideEffects::none, "normalize_uri")
+                ->args({"uriStr","context"});
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"daScript/simulate/aot_builtin_uriparser.h\"\n";
-        tw << "#include \"daScript/misc/uric.h\"\n";
         return ModuleAotType::cpp;
     }
 };

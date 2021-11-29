@@ -5,6 +5,13 @@
 
 namespace das {
 
+    Uri::Uri(UriUriA && uriA) {
+        uri = uriA;
+        memset(&uriA, 0, sizeof(UriUriA));
+        isEmpty = false;
+        lastOp = 0;
+    }
+
     Uri::Uri() {
         memset(&uri, 0, sizeof(UriUriA));
         isEmpty = true;
@@ -67,6 +74,18 @@ namespace das {
 
     Uri::~Uri() {
         reset();
+    }
+
+    Uri Uri::addBaseUri ( const Uri & base ) const {
+        UriUriA absoluteDest;
+        auto lOp = uriAddBaseUriA(&absoluteDest, &uri, &base.uri);
+        if ( lOp != URI_SUCCESS ) {
+            uriFreeUriMembersA(&absoluteDest);
+            Uri failed;
+            failed.lastOp = lOp;
+            return failed;
+        }
+        return Uri(move(absoluteDest));
     }
 
     bool Uri::normalize() {

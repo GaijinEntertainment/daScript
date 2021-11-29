@@ -772,13 +772,13 @@ namespace das
             return cppName.empty() ? name : cppName;
         }
         FunctionPtr arg ( const char * argName ) {
-            DAS_ASSERT(arguments.size()==1);
+            DAS_VERIFY(arguments.size()==1);
             arguments[0]->name = argName;
             return this;
         }
         FunctionPtr args ( std::initializer_list<const char *> argList ) {
             if ( argList.size()==0 ) return this;
-            DAS_ASSERT(argList.size()==arguments.size());
+            DAS_VERIFY(argList.size()==arguments.size());
             int argIndex = 0;
             for ( const char * arg : argList ) {
                 arguments[argIndex++]->name = arg;

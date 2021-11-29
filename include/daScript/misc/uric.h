@@ -1,6 +1,8 @@
 #pragma once
 
+#ifndef URI_STATIC_BUILD
 #define URI_STATIC_BUILD
+#endif
 #include "uriparser/Uri.h"
 
 namespace das {
@@ -8,6 +10,7 @@ namespace das {
     class Uri {
     public:
         Uri();
+        Uri(UriUriA && uriA);
         Uri(const char *);
         Uri(const string &);
         Uri(const Uri &);
@@ -17,7 +20,8 @@ namespace das {
         Uri & operator = ( const char * );
         Uri & operator = ( const string & );
         ~Uri();
-        bool status() const { return lastOp==URI_SUCCESS; }
+        Uri addBaseUri ( const Uri & base ) const;
+        int status() const { return lastOp; }
         const char * getErrorPos() const { return errorPos; }
         bool parse ( const char * );
         void reset();
