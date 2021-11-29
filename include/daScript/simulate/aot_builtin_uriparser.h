@@ -7,6 +7,7 @@ namespace das {
     void clone_uri ( Uri & uri, const Uri & uriS );
     Uri add_base_uri ( const Uri & base, const Uri & relative );
     const char * uri_to_string ( const Uri & uri, Context * context );
+    const char * text_range_to_string ( const UriTextRangeA & trange, Context * context );
     char * uri_to_unix_file_name ( char * uristr, Context * context );
     char * uri_to_windows_file_name ( char * uristr, Context * context );
     char * unix_file_name_to_uri ( char * uristr, Context * context );

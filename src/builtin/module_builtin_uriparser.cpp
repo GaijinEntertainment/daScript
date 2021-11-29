@@ -260,6 +260,14 @@ const char * uri_to_string ( const Uri & uri, Context * context ) {
     return context->stringHeap->allocateString(uri.str());
 }
 
+const char * text_range_to_string ( const UriTextRangeA & trange, Context * context ) {
+    if ( auto slen = trange.afterLast - trange.first ) {
+        return context->stringHeap->allocateString(trange.first, slen);
+    } else {
+        return nullptr;
+    }
+}
+
 class Module_UriParser : public Module {
 public:
     Module_UriParser() : Module("uriparser") {
@@ -290,6 +298,9 @@ public:
         addExtern<DAS_BIND_FUN(uri_to_string)>(*this, lib, "string",
             SideEffects::accessExternal, "uri_to_string")
                 ->args({"uri","context"});
+        addExtern<DAS_BIND_FUN(text_range_to_string)>(*this, lib, "string",
+            SideEffects::accessExternal, "text_range_to_string")
+                ->args({"range","context"});
         // guid
         addExtern<DAS_BIND_FUN(makeNewGuid)> (*this, lib, "make_new_guid",
             SideEffects::accessExternal, "makeNewGuid")
