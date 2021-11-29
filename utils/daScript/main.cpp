@@ -169,8 +169,8 @@ int das_aot_main ( int argc, char * argv[] ) {
     _CrtSetReportMode(_CRT_ASSERT, 0);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     #endif
-    if ( argc<3 ) {
-        tout << "daScript -aot <in_script.das> <out_script.das.cpp> [-q] [-j]\n";
+    if ( argc<=3 ) {
+        tout << "daScript -aot <in_script.das> <out_script.das.cpp> [-q] [-j] [-dry-run]\n";
         return -1;
     }
     if ( argc>3  ) {
