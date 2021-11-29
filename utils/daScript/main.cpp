@@ -29,7 +29,7 @@ bool saveToFile ( const string & fname, const string & str ) {
     return true;
 }
 
-bool compile ( const string & fn, const string & cppFn ) {
+bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
     auto access = get_file_access(nullptr);
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
@@ -80,6 +80,10 @@ bool compile ( const string & fn, const string & cppFn ) {
                 }
                 return true;
             },"*");
+            if (dryRun) {
+                tout << "dry run success, no changes will be written";
+                return true;
+            }
             if (noAotOption) {
                 TextWriter noTw;
                 if (!noAotModule)
@@ -169,16 +173,19 @@ int das_aot_main ( int argc, char * argv[] ) {
     _CrtSetReportMode(_CRT_ASSERT, 0);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     #endif
-    if ( argc<3 ) {
-        tout << "daScript -aot <in_script.das> <out_script.das.cpp> [-q] [-j]\n";
+    if ( argc<=3 ) {
+        tout << "daScript -aot <in_script.das> <out_script.das.cpp> [-q] [-j] [-dry-run]\n";
         return -1;
     }
+    bool dryRun = false;
     if ( argc>3  ) {
         for (int ai = 4; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
                 quiet = true;
             } else if ( strcmp(argv[ai],"-p")==0 ) {
                 paranoid_validation = true;
+            } else if ( strcmp(argv[ai],"-dry-run")==0 ) {
+                dryRun = true;
             } else {
                 tout << "unsupported option " << argv[ai];
                 return -1;
@@ -211,7 +218,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     #include "modules/external_need.inc"
     Module::Initialize();
     daScriptEnvironment::bound->g_isInAot = true;
-    bool compiled = compile(argv[2], argv[3]);
+    bool compiled = compile(argv[2], argv[3], dryRun);
     Module::Shutdown();
     return compiled ? 0 : -1;
 }
@@ -283,6 +290,7 @@ void print_help() {
         << "daScript -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
         << "    -p          paranoid validation of CPP AOT\n"
         << "    -q          supress all output\n"
+        << "    -dry-run    no changes will be written\n"
     ;
 }
 
