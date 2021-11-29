@@ -354,6 +354,7 @@ src/builtin/module_builtin_ast.cpp
 src/builtin/module_builtin_ast_annotations.cpp
 src/builtin/module_builtin_ast_adapters.cpp
 src/builtin/module_builtin_ast.h
+src/builtin/module_builtin_uriparser.h
 src/builtin/module_builtin_uriparser.cpp
 src/builtin/ast_gen.inc
 src/builtin/module_builtin_fio.cpp
@@ -406,12 +407,14 @@ include/daScript/misc/callable.h
 include/daScript/misc/debug_break.h
 include/daScript/misc/instance_debugger.h
 include/daScript/misc/job_que.h
+include/daScript/misc/uric.h
 src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
 src/misc/job_que.cpp
 src/misc/free_list.cpp
 src/misc/daScriptC.cpp
+src/misc/uric.cpp
 )
 list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
