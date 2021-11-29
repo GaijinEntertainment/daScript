@@ -21,6 +21,7 @@ namespace das {
         Uri & operator = ( const string & );
         ~Uri();
         Uri addBaseUri ( const Uri & base ) const;
+        Uri removeBaseUri ( const Uri & base ) const;
         int status() const { return lastOp; }
         const char * getErrorPos() const { return errorPos; }
         bool parse ( const char * );

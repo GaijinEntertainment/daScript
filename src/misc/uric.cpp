@@ -88,6 +88,18 @@ namespace das {
         return Uri(move(absoluteDest));
     }
 
+    Uri Uri::removeBaseUri ( const Uri & base ) const {
+        UriUriA dest;
+        auto lOp = uriRemoveBaseUriA(&dest, &uri, &base.uri, URI_FALSE);
+        if ( lOp != URI_SUCCESS ) {
+            uriFreeUriMembersA(&dest);
+            Uri failed;
+            failed.lastOp = lOp;
+            return failed;
+        }
+        return Uri(move(dest));
+    }
+
     bool Uri::normalize() {
         const unsigned int dirtyParts = uriNormalizeSyntaxMaskRequiredA(&uri);
         lastOp = uriNormalizeSyntaxExA(&uri, dirtyParts);
@@ -180,7 +192,7 @@ namespace das {
 
     bool Uri::fromFileNameStr ( const char * fileName, int len ) {
         #ifdef _WIN32
-            return fromWindowsFileName(fileName,len);
+            return fromWindowsFileNameStr(fileName,len);
         #else
             return fromUnixFileNameStr(fileName,len);
         #endif

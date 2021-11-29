@@ -28,7 +28,7 @@ def test_normalize_and_rebase ( t : T? )
         using(uriStr) <| $ ( var uri:Uri# )
             uri |> normalize
             t |> equal(string(uri), "file://somepath/subpath/file.txt#somefrag")
-    t |> run("rebase") <| @@ ( t : T? )
+    t |> run("add base uri") <| @@ ( t : T? )
         unsafe
             var relUri <- Uri("images/any")
             defer_delete(relUri)
@@ -36,6 +36,14 @@ def test_normalize_and_rebase ( t : T? )
             defer_delete(baseUri)
             var uri <- relUri |> add_base_uri(baseUri)
             t |> equal(string(uri),"http://www.google.com/images/any")
+    t |> run("remove base uri") <| @@ ( t : T? )
+        unsafe
+            var absUri <- Uri("http://www.google.com/images/any")
+            defer_delete(absUri)
+            var baseUri <- Uri("http://www.google.com/images")
+            defer_delete(baseUri)
+            var uri <- absUri |> remove_base_uri(baseUri)
+            t |> equal(string(uri),"any")
 
 [test]
 def test_uri_file_name ( t : T? )

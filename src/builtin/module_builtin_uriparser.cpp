@@ -319,11 +319,17 @@ public:
             SideEffects::modifyArgument, "clone_uri")
                 ->args({"dest","src"});
         using add_base_uri_method = DAS_CALL_MEMBER(das::Uri::addBaseUri);
-        addExtern<DAS_CALL_METHOD(add_base_uri_method),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "add_base_uri",SideEffects::none, DAS_CALL_MEMBER_CPP(das::Uri::addBaseUri))
-            ->args({"base","relative"});
+        addExtern<DAS_CALL_METHOD(add_base_uri_method),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "add_base_uri",
+            SideEffects::none, DAS_CALL_MEMBER_CPP(das::Uri::addBaseUri))
+                ->args({"base","relative"});
+        using remove_base_uri_method = DAS_CALL_MEMBER(das::Uri::removeBaseUri);
+        addExtern<DAS_CALL_METHOD(remove_base_uri_method),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "remove_base_uri",
+            SideEffects::none, DAS_CALL_MEMBER_CPP(das::Uri::BaseUri))
+                ->args({"base","relative"});
         using normalize_method = DAS_CALL_MEMBER(das::Uri::normalize);
-        addExtern<DAS_CALL_METHOD(normalize_method)>(*this, lib, "normalize",SideEffects::modifyArgument, DAS_CALL_MEMBER_CPP(das::Uri::normalize))
-            ->args({"uri"});
+        addExtern<DAS_CALL_METHOD(normalize_method)>(*this, lib, "normalize",
+            SideEffects::modifyArgument, DAS_CALL_MEMBER_CPP(das::Uri::normalize))
+                ->args({"uri"});
         addExtern<DAS_BIND_FUN(uri_to_string)>(*this, lib, "string",
             SideEffects::none, "uri_to_string")
                 ->args({"uri","context"});
