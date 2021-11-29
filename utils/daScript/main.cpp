@@ -282,6 +282,13 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
     }
 }
 
+void replace( string& str, const string& from, const string& to ) {
+    size_t it = str.find(from);
+    if( it != string::npos ) {
+        str.replace(it, from.length(), to);
+    }
+}
+
 void print_help() {
     tout
         << "daScript scriptName1 {scriptName2} .. {-main mainFnName} {-log} {-pause} -- {script arguments}\n"
@@ -381,7 +388,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     #include "modules/external_need.inc"
     Module::Initialize();
     // compile and run
-    for ( const auto & fn : files ) {
+    for ( auto & fn : files ) {
+        replace(fn, "_dasroot_", getDasRoot());
         compile_and_run(fn, mainName, outputProgramCode);
     }
     // and done
