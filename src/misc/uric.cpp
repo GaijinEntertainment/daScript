@@ -88,6 +88,21 @@ namespace das {
         return Uri(move(absoluteDest));
     }
 
+    Uri Uri::strip(bool query, bool fragment) const {
+        UriUriA saveUri = uri;
+        if ( query ) {
+            uri.query.first = nullptr;
+            uri.query.afterLast = nullptr;
+        }
+        if ( fragment ) {
+            uri.fragment.first = nullptr;
+            uri.fragment.afterLast = nullptr;
+        }
+        auto text = str();
+        uri = saveUri;
+        return Uri(text);
+    }
+
     Uri Uri::removeBaseUri ( const Uri & base ) const {
         UriUriA dest;
         auto lOp = uriRemoveBaseUriA(&dest, &uri, &base.uri, URI_FALSE);
@@ -200,7 +215,6 @@ namespace das {
 
     bool Uri::fromUnixFileName ( const string & fileName ) {
         return fromUnixFileNameStr(fileName.c_str(),int(fileName.length()));
-
     }
 
     bool Uri::fromWindowsFileName ( const string & fileName ) {
@@ -209,5 +223,21 @@ namespace das {
 
     bool Uri::fromFileName ( const string & fileName ) {
         return fromFileNameStr(fileName.c_str(),int(fileName.length()));
+    }
+
+    vector<pair<string,string>> Uri::query() const {
+        vector<pair<string,string>> res;
+        if ( !isEmpty ) {
+            UriQueryListA * queryList;
+            int itemCount;
+            lastOp = uriDissectQueryMallocA(&queryList, &itemCount, uri.query.first,uri.query.afterLast);
+            if ( lastOp == URI_SUCCESS ) {
+                for ( auto q=queryList; q!=nullptr; q=q->next ) {
+                    res.push_back(make_pair<string,string>(q->key ? q->key : "",q->value ? q->value : ""));
+                }
+            }
+            uriFreeQueryListA(queryList);
+        }
+        return res;
     }
 }

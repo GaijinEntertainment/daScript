@@ -258,7 +258,7 @@ char * uri_to_string ( const Uri & uri, Context * context ) {
 
 char * text_range_to_string ( const UriTextRangeA & trange, Context * context ) {
     if ( auto slen = trange.afterLast - trange.first ) {
-        return context->stringHeap->allocateString(trange.first, slen);
+        return context->stringHeap->allocateString(trange.first, uint32_t(slen));
     } else {
         return nullptr;
     }
@@ -294,6 +294,15 @@ Uri from_unix_file_name ( const char * str ) {
     return uri;
 }
 
+void uri_for_each_query_kv ( const Uri & uri, const TBlock<void,TTemporary<char *>,TTemporary<char*>> & blk, Context * context, LineInfoArg * at ) {
+    for ( const auto & kv : uri.query() ) {
+        vec4f args[2];
+        args[0] = cast<char *>::from(kv.first.c_str());
+        args[1] = cast<char *>::from(kv.second.c_str());
+        context->invoke(blk, args, nullptr, at);
+    }
+}
+
 class Module_UriParser : public Module {
 public:
     Module_UriParser() : Module("uriparser") {
@@ -318,6 +327,10 @@ public:
         addExtern<DAS_BIND_FUN(clone_uri)> (*this, lib, "clone",
             SideEffects::modifyArgument, "clone_uri")
                 ->args({"dest","src"});
+        using strip_uri_method = DAS_CALL_MEMBER(das::Uri::strip);
+        addExtern<DAS_CALL_METHOD(strip_uri_method),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "strip_uri",
+            SideEffects::none, DAS_CALL_MEMBER_CPP(das::Uri::strip))
+                ->args({"uri","query","fragment"});
         using add_base_uri_method = DAS_CALL_MEMBER(das::Uri::addBaseUri);
         addExtern<DAS_CALL_METHOD(add_base_uri_method),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "add_base_uri",
             SideEffects::none, DAS_CALL_MEMBER_CPP(das::Uri::addBaseUri))
@@ -354,6 +367,9 @@ public:
         addExtern<DAS_BIND_FUN(from_unix_file_name),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "uri_from_unix_file_name",
             SideEffects::none, "from_unix_file_name")
                 ->args({"filename"});
+        addExtern<DAS_BIND_FUN(uri_for_each_query_kv)>(*this, lib, "uri_for_each_query_kv",
+            SideEffects::invoke, "uri_for_each_query_kv")
+                ->args({"uri","block","context","lineinfo"});
         // guid
         addExtern<DAS_BIND_FUN(makeNewGuid)> (*this, lib, "make_new_guid",
             SideEffects::accessExternal, "makeNewGuid")

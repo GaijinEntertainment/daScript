@@ -39,6 +39,8 @@ namespace das {
         bool fromUnixFileNameStr ( const char *, int len = -1 );
         bool fromWindowsFileNameStr ( const char *, int len = -1 );
         bool fromFileNameStr ( const char *, int len = -1 );
+        vector<pair<string,string>> query() const;
+        Uri strip(bool query, bool fragment) const;
     protected:
         void clone ( const Uri & uri );
     protected:
@@ -46,7 +48,7 @@ namespace das {
         mutable int lastOp = 0;
         bool    isEmpty = true;
     public: // note - this is public so that we can bind it easier
-        UriUriA uri;
+        mutable UriUriA uri;
     };
 
 }

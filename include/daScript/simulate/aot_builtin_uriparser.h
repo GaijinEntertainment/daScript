@@ -1,8 +1,10 @@
 #pragma once
 
 #include "daScript/misc/uric.h"
+
 namespace das {
     class Context;
+    struct LineInfoArg;
     void delete_uri ( Uri & uri );
     void clone_uri ( Uri & uri, const Uri & uriS );
     char * uri_to_string ( const Uri & uri, Context * context );
@@ -21,4 +23,5 @@ namespace das {
     char * unescape_uri ( char * uristr,Context * context );
     char * normalize_uri ( char * uristr,Context * context );
     char * makeNewGuid( Context * context );
+    void uri_for_each_query_kv ( const Uri & uri, const TBlock<void,TTemporary<char *>,TTemporary<char*>> & blk, Context * context, LineInfoArg * at );
 }
