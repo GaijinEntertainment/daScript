@@ -40,7 +40,7 @@ namespace das {
         bool fromWindowsFileNameStr ( const char *, int len = -1 );
         bool fromFileNameStr ( const char *, int len = -1 );
         vector<pair<string,string>> query() const;
-        Uri strip(bool query, bool fragment) const;
+        Uri strip(bool query = true, bool fragment = true) const;
     protected:
         void clone ( const Uri & uri );
     protected:

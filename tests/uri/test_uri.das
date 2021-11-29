@@ -9,13 +9,13 @@ def test_uri ( t : T? )
     let uriStr = "scheme://userinfo@host:1234/one/two/three?quone=one&qtow=2#someframgnet"
     using(uriStr) <| $ ( var uri:Uri# )
         t |> equal(string(uri), uriStr)
-        t |> equal(string(uri.uri.scheme),"scheme")
-        t |> equal(string(uri.uri.userInfo),"userinfo")
-        t |> equal(string(uri.uri.hostText),"host")
-        t |> equal(string(uri.uri.portText),"1234")
-        t |> equal(string(uri.uri.query),"quone=one&qtow=2")
-        t |> equal(string(uri.uri.fragment),"someframgnet")
-        t |> equal(uri_get_full_path(uri),"one/two/three")
+        t |> equal(uri |> scheme,"scheme")
+        t |> equal(uri |> user_info,"userinfo")
+        t |> equal(uri |> host,"host")
+        t |> equal(uri |> port,"1234")
+        t |> equal(uri |> query,"quone=one&qtow=2")
+        t |> equal(uri |> fragment,"someframgnet")
+        t |> equal(uri |> path,"one/two/three")
         var spath <- uri_split_full_path(uri)
         t |> equal(spath[0], "one")
         t |> equal(spath[1], "two")
@@ -94,16 +94,29 @@ def test_uri_query ( t : T? )
                     t->fatal("not expecting {k}={v}")
             t |> equal(count, 4)
     t |> run("compose query") <| @@ ( t : T? )
-        var qq <- {{
-            "one" => "1";
-            "two" => "2";
-            "three" => "3";
-            "nothing" => ""
-        }}
-        let qstr = uri_compose_query(qq)
         unsafe
-            var quri <- Uri("http://boo.hoo/?" + qstr)
-            print("{string(quri)} QURI\n")
+            var qq <- {{
+                "one" => "1";
+                "two" => "2";
+                "three" => "3";
+                "nothing" => ""
+            }}
+            let path_str = uri_compose_query_in_order(qq)
+            delete qq
+            var quri <- Uri("http://www.google.com")
+            defer_delete(quri)
+            var uri <- uri_compose(
+                quri |> scheme,
+                quri |> user_info,
+                quri |> host,
+                quri |> port,
+                path_str,
+                quri |> query,
+                quri |> fragment
+            )
+            defer_delete(uri)
+            t |> equal(string(uri),"http://www.google.com/nothing&one=1&three=3&two=2")
+
 
 
 
