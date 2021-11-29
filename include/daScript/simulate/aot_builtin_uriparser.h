@@ -5,9 +5,14 @@ namespace das {
     class Context;
     void delete_uri ( Uri & uri );
     void clone_uri ( Uri & uri, const Uri & uriS );
-    Uri add_base_uri ( const Uri & base, const Uri & relative );
-    const char * uri_to_string ( const Uri & uri, Context * context );
-    const char * text_range_to_string ( const UriTextRangeA & trange, Context * context );
+    char * uri_to_string ( const Uri & uri, Context * context );
+    char * text_range_to_string ( const UriTextRangeA & trange, Context * context );
+    char * to_unix_file_name ( const Uri & uri, Context * context );
+    char * to_windows_file_name ( const Uri & uri, Context * context );
+    char * to_file_name ( const Uri & uri, Context * context );
+    Uri from_file_name ( const char * str );
+    Uri from_windows_file_name ( const char * str );
+    Uri from_unix_file_name ( const char * str );
     char * uri_to_unix_file_name ( char * uristr, Context * context );
     char * uri_to_windows_file_name ( char * uristr, Context * context );
     char * unix_file_name_to_uri ( char * uristr, Context * context );

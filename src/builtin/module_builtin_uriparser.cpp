@@ -252,20 +252,46 @@ void clone_uri ( Uri & uri, const Uri & uriS ) {
     uri = uriS;
 }
 
-Uri add_base_uri ( const Uri & base, const Uri & relative ) {
-    return relative.addBaseUri(base);
-}
-
-const char * uri_to_string ( const Uri & uri, Context * context ) {
+char * uri_to_string ( const Uri & uri, Context * context ) {
     return context->stringHeap->allocateString(uri.str());
 }
 
-const char * text_range_to_string ( const UriTextRangeA & trange, Context * context ) {
+char * text_range_to_string ( const UriTextRangeA & trange, Context * context ) {
     if ( auto slen = trange.afterLast - trange.first ) {
         return context->stringHeap->allocateString(trange.first, slen);
     } else {
         return nullptr;
     }
+}
+
+char * to_unix_file_name ( const Uri & uri, Context * context ) {
+    return context->stringHeap->allocateString(uri.toUnixFileName());
+}
+
+char * to_windows_file_name ( const Uri & uri, Context * context ) {
+    return context->stringHeap->allocateString(uri.toWindowsFileName());
+}
+
+char * to_file_name ( const Uri & uri, Context * context ) {
+    return context->stringHeap->allocateString(uri.toFileName());
+}
+
+Uri from_file_name ( const char * str ) {
+    Uri uri;
+    if ( !str ) uri.fromFileNameStr(str);
+    return uri;
+}
+
+Uri from_windows_file_name ( const char * str ) {
+    Uri uri;
+    if ( str ) uri.fromWindowsFileNameStr(str);
+    return uri;
+}
+
+Uri from_unix_file_name ( const char * str ) {
+    Uri uri;
+    if ( str ) uri.fromUnixFileNameStr(str);
+    return uri;
 }
 
 class Module_UriParser : public Module {
@@ -287,20 +313,41 @@ public:
         addCtorAndUsing<Uri>(*this,lib,"Uri","Uri");
         addCtorAndUsing<Uri,const char *>(*this,lib,"Uri","Uri");
         addExtern<DAS_BIND_FUN(delete_uri)> (*this, lib, "finalize",
-            SideEffects::accessExternal, "delete_uri")
+            SideEffects::modifyArgument, "delete_uri")
                 ->args({"uri"});
         addExtern<DAS_BIND_FUN(clone_uri)> (*this, lib, "clone",
-            SideEffects::accessExternal, "clone_uri")
+            SideEffects::modifyArgument, "clone_uri")
                 ->args({"dest","src"});
-        addExtern<DAS_BIND_FUN(add_base_uri),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, "add_base_uri",
-            SideEffects::accessExternal, "add_base_uri")
-                ->args({"base","relative"});
+        using add_base_uri_method = DAS_CALL_MEMBER(das::Uri::addBaseUri);
+        addExtern<DAS_CALL_METHOD(add_base_uri_method),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "add_base_uri",SideEffects::none, DAS_CALL_MEMBER_CPP(das::Uri::addBaseUri))
+            ->args({"base","relative"});
+        using normalize_method = DAS_CALL_MEMBER(das::Uri::normalize);
+        addExtern<DAS_CALL_METHOD(normalize_method)>(*this, lib, "normalize",SideEffects::modifyArgument, DAS_CALL_MEMBER_CPP(das::Uri::normalize))
+            ->args({"uri"});
         addExtern<DAS_BIND_FUN(uri_to_string)>(*this, lib, "string",
-            SideEffects::accessExternal, "uri_to_string")
+            SideEffects::none, "uri_to_string")
                 ->args({"uri","context"});
         addExtern<DAS_BIND_FUN(text_range_to_string)>(*this, lib, "string",
-            SideEffects::accessExternal, "text_range_to_string")
+            SideEffects::none, "text_range_to_string")
                 ->args({"range","context"});
+        addExtern<DAS_BIND_FUN(to_unix_file_name)>(*this, lib, "to_unix_file_name",
+            SideEffects::none, "to_unix_file_name")
+                ->args({"uri","context"});
+        addExtern<DAS_BIND_FUN(to_windows_file_name)>(*this, lib, "to_windows_file_name",
+            SideEffects::none, "to_windows_file_name")
+                ->args({"uri","context"});
+        addExtern<DAS_BIND_FUN(to_file_name)>(*this, lib, "to_file_name",
+            SideEffects::none, "to_file_name")
+                ->args({"uri","context"});
+        addExtern<DAS_BIND_FUN(from_file_name),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "uri_from_file_name",
+            SideEffects::none, "from_file_name")
+                ->args({"filename"});
+        addExtern<DAS_BIND_FUN(from_windows_file_name),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "uri_from_windows_file_name",
+            SideEffects::none, "from_windows_file_name")
+                ->args({"filename"});
+        addExtern<DAS_BIND_FUN(from_unix_file_name),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "uri_from_unix_file_name",
+            SideEffects::none, "from_unix_file_name")
+                ->args({"filename"});
         // guid
         addExtern<DAS_BIND_FUN(makeNewGuid)> (*this, lib, "make_new_guid",
             SideEffects::accessExternal, "makeNewGuid")

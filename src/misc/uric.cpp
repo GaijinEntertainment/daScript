@@ -160,17 +160,16 @@ namespace das {
         #endif
     }
 
-    bool Uri::fromUnixFileName ( const char * fileName, int len ) {
+    bool Uri::fromUnixFileNameStr ( const char * fileName, int len ) {
         vector<char> result;
         if ( len==-1 ) len = int(strlen(fileName));
         result.reserve(3*len + 1);
         lastOp = uriUnixFilenameToUriStringA(fileName, result.data());
         if ( lastOp != URI_SUCCESS) return false;
         return parse(result.data());
-
     }
 
-    bool Uri::fromWindowsFileName ( const char * fileName, int len ) {
+    bool Uri::fromWindowsFileNameStr ( const char * fileName, int len ) {
         vector<char> result;
         if ( len==-1 ) len = int(strlen(fileName));
         result.reserve(8 + 3*len + 1);
@@ -179,24 +178,24 @@ namespace das {
         return parse(result.data());
     }
 
-    bool Uri::fromFileName ( const char * fileName, int len ) {
+    bool Uri::fromFileNameStr ( const char * fileName, int len ) {
         #ifdef _WIN32
             return fromWindowsFileName(fileName,len);
         #else
-            return fromUnixFileName(fileName,len);
+            return fromUnixFileNameStr(fileName,len);
         #endif
     }
 
     bool Uri::fromUnixFileName ( const string & fileName ) {
-        return fromUnixFileName(fileName.c_str(),int(fileName.length()));
+        return fromUnixFileNameStr(fileName.c_str(),int(fileName.length()));
 
     }
 
     bool Uri::fromWindowsFileName ( const string & fileName ) {
-        return fromWindowsFileName(fileName.c_str(),int(fileName.length()));
+        return fromWindowsFileNameStr(fileName.c_str(),int(fileName.length()));
     }
 
     bool Uri::fromFileName ( const string & fileName ) {
-        return fromFileName(fileName.c_str(),int(fileName.length()));
+        return fromFileNameStr(fileName.c_str(),int(fileName.length()));
     }
 }

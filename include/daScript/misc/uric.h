@@ -35,9 +35,9 @@ namespace das {
         bool fromUnixFileName ( const string & );
         bool fromWindowsFileName ( const string & );
         bool fromFileName ( const string & );
-        bool fromUnixFileName ( const char *, int len = -1 );
-        bool fromWindowsFileName ( const char *, int len = -1 );
-        bool fromFileName ( const char *, int len = -1 );
+        bool fromUnixFileNameStr ( const char *, int len = -1 );
+        bool fromWindowsFileNameStr ( const char *, int len = -1 );
+        bool fromFileNameStr ( const char *, int len = -1 );
     protected:
         void clone ( const Uri & uri );
     protected:

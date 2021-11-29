@@ -1,27 +1,8 @@
 require dastest/testing_boost public
 
-require uriparser
+require daslib/uriparser_boost
 require daslib/strings_boost
-
-def get_full_path ( uri:Uri implicit )
-    return build_string() <| $ ( var tw )
-        var pcur = uri.uri.pathHead
-        var first = true
-        while pcur != null
-            if first
-                first = false
-            else
-                tw |> write("/")
-            tw |> write ( string(pcur.text) )
-            pcur = pcur.next
-
-def split_full_path ( uri:Uri implicit )
-    var paths : array<string>
-    var pcur = uri.uri.pathHead
-    while pcur != null
-        paths |> push ( string(pcur.text) )
-        pcur = pcur.next
-    return <- paths
+require daslib/defer
 
 [test]
 def test_uri ( t : T? )
@@ -40,3 +21,40 @@ def test_uri ( t : T? )
         t |> equal(spath[1], "two")
         t |> equal(spath[2], "three")
 
+[test]
+def test_normalize_and_rebase ( t : T? )
+    t |> run("normalize") <| @@ ( t : T? )
+        let uriStr = "file://somepath/./deadend/.././subpath/file.txt#somefrag"
+        using(uriStr) <| $ ( var uri:Uri# )
+            uri |> normalize
+            t |> equal(string(uri), "file://somepath/subpath/file.txt#somefrag")
+    t |> run("rebase") <| @@ ( t : T? )
+        unsafe
+            var relUri <- Uri("images/any")
+            defer_delete(relUri)
+            var baseUri <- Uri("http://www.google.com")
+            defer_delete(baseUri)
+            var uri <- relUri |> add_base_uri(baseUri)
+            t |> equal(string(uri),"http://www.google.com/images/any")
+
+[test]
+def test_uri_file_name ( t : T? )
+    t |> run("to_file_name") <| @@ ( t : T? )
+        let uriStr = "file:///somedir/somefile.txt"
+        using(uriStr) <| $ ( var uri:Uri# )
+            let wfn = uri |> to_windows_file_name
+            let ufn = uri |> to_unix_file_name
+            let afn = uri |> to_file_name
+            t |> equal(wfn, "somedir\\somefile.txt")
+            t |> equal(ufn, "/somedir/somefile.txt")
+            t |> success(wfn==afn || ufn==afn)
+    t |> run("from_windows_file_name") <| @@ ( t : T? )
+        unsafe
+            var uri <- uri_from_windows_file_name("C:\\somedir\\somefile.txt")
+            defer_delete(uri)
+            t |> equal(string(uri), "file:///C:/somedir/somefile.txt")
+    t |> run("from_unix_file_name") <| @@ ( t : T? )
+        unsafe
+            var uri <- uri_from_unix_file_name("/somedir/somefile.txt")
+            defer_delete(uri)
+            t |> equal(string(uri), "file:///somedir/somefile.txt")
