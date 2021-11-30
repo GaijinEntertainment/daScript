@@ -20,23 +20,6 @@
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_le(vec4f a, vec4f b) { return v_cmp_ge(b, a); }
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_lt(vec4f a, vec4f b) { return v_cmp_gt(b, a); }
 
-VECMATH_FINLINE void VECTORCALL v_set_vec3_mem(vec3f &v, float x, float y, float z)
-{
-  float *m = (float*)((char*)&v);
-  m[0] = x; m[1] = y; m[2] = z; m[3] = 0;
-}
-VECMATH_FINLINE void VECTORCALL v_set_vec4_mem(vec4f &v, float x, float y, float z, float w)
-{
-  float *m = (float*)((char*)&v);
-  m[0] = x; m[1] = y; m[2] = z; m[3] = w;
-}
-
-VECMATH_FINLINE void VECTORCALL v_set_vec4i_mem(vec4i &v, int x, int y, int z, int w)
-{
-  int *m = (int*)((char*)&v);
-  m[0] = x; m[1] = y; m[2] = z; m[3] = w;
-}
-
 VECMATH_FINLINE vec4f VECTORCALL v_clamp(vec4f t, vec4f min_val, vec4f max_val)
 {
   return v_max(v_min(t, max_val), min_val);
@@ -226,7 +209,7 @@ VECMATH_FINLINE void VECTORCALL v_mat44_make_persp(mat44f &dest, float wk, float
 #if !_TARGET_SIMD_SSE
 VECMATH_FINLINE void VECTORCALL v_mat33_transpose(mat33f &dest, vec3f col0, vec3f col1, vec3f col2)
 {
-  vec4f tmp0, tmp1, tmp2, tmp3, res0, res1, res2, res3;
+  vec4f tmp0, tmp1, tmp2, tmp3;
   tmp0 = v_merge_hw(col0, col2);
   tmp1 = v_merge_hw(col1, v_zero());//may be v_zero can be replaced with col2
   tmp2 = v_merge_lw(col0, col2);
@@ -238,7 +221,7 @@ VECMATH_FINLINE void VECTORCALL v_mat33_transpose(mat33f &dest, vec3f col0, vec3
 
 VECMATH_FINLINE void VECTORCALL v_mat44_transpose_to_mat33(mat33f &dest, vec3f col0, vec3f col1, vec3f col2, vec3f col3)
 {
-  vec4f tmp0, tmp1, tmp2, tmp3, res0, res1, res2, res3;
+  vec4f tmp0, tmp1, tmp2, tmp3;
   tmp0 = v_merge_hw(col0, col2);
   tmp1 = v_merge_hw(col1, col3);
   tmp2 = v_merge_lw(col0, col2);
