@@ -44,7 +44,6 @@ void * reuse_cache_allocate ( size_t size ) {
 }
 
 void reuse_cache_free ( void * ptr, size_t size ) {
-    if ( ptr==nullptr ) return;
     size = (size+15) & ~15;
     if ( size<=DAS_MAX_REUSE_SIZE && tlsReuseCache ) {
         auto bucket = (size >> 4) - 1;
@@ -107,19 +106,19 @@ void * operator new[] ( size_t size ) {
 #ifdef __APPLE__
 
 void operator delete ( void * data ) _NOEXCEPT {
-    return das::reuse_cache_free(data);
+    if ( data ) das::reuse_cache_free(data);
 }
 void operator delete[] ( void * data ) _NOEXCEPT {
-    return das::reuse_cache_free(data);
+    if ( data ) das::reuse_cache_free(data);
 }
 
 #else
 
 void operator delete ( void * data ) {
-    return das::reuse_cache_free(data);
+    if ( data ) das::reuse_cache_free(data);
 }
 void operator delete[] ( void * data ) {
-    return das::reuse_cache_free(data);
+    if ( data ) das::reuse_cache_free(data);
 }
 
 #endif
