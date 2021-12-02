@@ -2417,7 +2417,7 @@ namespace das
                     result->source_iterators[t] = context.code->makeNode<SimNode_GoodArrayIterator>(
                         sources[t]->at,
                         sources[t]->simulate(context),
-                        sources[t]->type->firstType->getStride());
+                        sources[t]->type->firstType->getSizeOf());
                 } else if ( sources[t]->type->isRange() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_RangeIterator>(
                         sources[t]->at,
@@ -2537,7 +2537,7 @@ namespace das
             for ( int t=0; t!=total; ++t ) {
                 result->sources[t] = sources[t]->simulate(context);
                 if ( sources[t]->type->isGoodArrayType() ) {
-                    result->strides[t] = sources[t]->type->firstType->getStride();
+                    result->strides[t] = sources[t]->type->firstType->getSizeOf();
                 } else {
                     result->strides[t] = sources[t]->type->getStride();
                 }

@@ -44,12 +44,12 @@ def _return_with_lockcheck ( var a:auto(valT)& ) : valT&
 def resize(var Arr:array<auto(numT)>;newSize:int)
     static_if typeinfo(need_lock_check type<numT>)
         _builtin_verify_locks(Arr)
-    __builtin_array_resize(Arr,newSize,typeinfo(sizeof type<numT>))
+    __builtin_array_resize(Arr,newSize,typeinfo(sizeof Arr[0]))
 
 def reserve(var Arr:array<auto(numT)>;newSize:int)
     static_if typeinfo(need_lock_check type<numT>)
         _builtin_verify_locks(Arr)
-    __builtin_array_reserve(Arr,newSize,typeinfo(sizeof type<numT>))
+    __builtin_array_reserve(Arr,newSize,typeinfo(sizeof Arr[0]))
 
 def pop(var Arr:array<auto(numT)>)
     resize(Arr, length(Arr)-1)  // resize will throw if negative
@@ -58,7 +58,7 @@ def push(var Arr:array<auto(numT)>;value:numT const;at:int)
     static_if typeinfo(can_copy value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
-        Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type<numT>))] = value
+        Arr[__builtin_array_push(Arr,at,typeinfo(sizeof Arr[0]))] = value
     else
         concept_assert(false,"can't push value, which can't be copied")
 
@@ -66,7 +66,7 @@ def push(var Arr:array<auto(numT)>;value:numT const)
     static_if typeinfo(can_copy value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
-        Arr[__builtin_array_push_back(Arr,typeinfo(sizeof type<numT>))] = value
+        Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] = value
     else
         concept_assert(false,"can't push value, which can't be copied")
 
@@ -74,7 +74,7 @@ def emplace(var Arr:array<auto(numT)>;var value:numT;at:int)
     static_if typeinfo(can_move value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
-        Arr[__builtin_array_push(Arr,at,typeinfo(sizeof type<numT>))] <- value
+        Arr[__builtin_array_push(Arr,at,typeinfo(sizeof Arr[0]))] <- value
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
@@ -82,7 +82,7 @@ def emplace(var Arr:array<auto(numT)>;var value:numT)
     static_if typeinfo(can_move value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
-        Arr[__builtin_array_push_back(Arr,typeinfo(sizeof type<numT>))] <- value
+        Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] <- value
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
@@ -90,7 +90,7 @@ def push_clone(var Arr:array<auto(numT)>;value:numT implicit;at:int)
     static_if typeinfo(can_clone value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
-        Arr[__builtin_array_push_zero(Arr,at,typeinfo(sizeof type<numT>))] := value
+        Arr[__builtin_array_push_zero(Arr,at,typeinfo(sizeof Arr[0]))] := value
     else
         concept_assert(false,"can't push-clone value, which can't be moved")
 
@@ -98,7 +98,7 @@ def push_clone(var Arr:array<auto(numT)>;value:numT implicit)
     static_if typeinfo(can_clone value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
-        Arr[__builtin_array_push_back_zero(Arr,typeinfo(sizeof type<numT>))] := value
+        Arr[__builtin_array_push_back_zero(Arr,typeinfo(sizeof Arr[0]))] := value
     else
         concept_assert(false,"can't push-clone value, which can't be moved")
 
@@ -131,7 +131,7 @@ def back ( a : array<auto(TT)> const =const ) : TT const &
 def erase(var Arr:array<auto(numT)>;at:int)
     static_if typeinfo(need_lock_check type<numT>)
         _builtin_verify_locks(Arr)
-    __builtin_array_erase(Arr,at,typeinfo(sizeof type<numT>))
+    __builtin_array_erase(Arr,at,typeinfo(sizeof Arr[0]))
 
 [unused_argument(a)]
 def length(a:auto[]):int
@@ -267,7 +267,7 @@ def finalize(var a:array<auto(TT)>)
         for aV in a
             unsafe
                 delete aV
-    __builtin_array_free(a,typeinfo(sizeof type<TT>))
+    __builtin_array_free(a,typeinfo(sizeof a[0]))
 
 def finalize(var a:table<auto(TK);auto(TV)>)
     static_if typeinfo(can_delete type<TV>)
@@ -334,19 +334,19 @@ def each ( a : auto(TT)[] ) : iterator<TT&>
     unsafe
         var parr : void? = reinterpret<void?>(addr(a[0]))
         var it : iterator<TT&>
-        _builtin_make_fixed_array_iterator(it,parr,typeinfo(dim a),typeinfo(sizeof type<TT>))
+        _builtin_make_fixed_array_iterator(it,parr,typeinfo(dim a),typeinfo(sizeof a[0]))
         return <- it
 
 [unsafe_operation]
 def each ( a : array<auto(TT)> ) : iterator<TT&>
     var it : iterator<TT&>
-    _builtin_make_good_array_iterator(it, a, typeinfo(sizeof type<TT>))
+    _builtin_make_good_array_iterator(it, a, typeinfo(sizeof a[0]))
     return <- it
 
 def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT -&>
     concept_assert(typeinfo(is_ref type<argT>),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
     var it : iterator<argT -&>
-    _builtin_make_lambda_iterator(it,lam,typeinfo(sizeof type<argT-&>))
+    _builtin_make_lambda_iterator(it,lam,typeinfo(sizeof type<argT>))
     unsafe
         return <- it
 
@@ -435,10 +435,10 @@ def sort ( var a : auto(TT)[] implicit )
     else
         unsafe
             static_if typeinfo(is_ref_type type<TT>)
-                __builtin_sort_dim_any_cblock ( a, typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                __builtin_sort_dim_any_cblock ( a, typeinfo(sizeof a[0]), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
             else
-                __builtin_sort_dim_any_ref_cblock ( a, typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                __builtin_sort_dim_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
 
 def sort ( var a : array<auto(TT)> implicit )
@@ -457,47 +457,47 @@ def sort ( var a : array<auto(TT)> implicit )
     else
         unsafe
             static_if typeinfo(is_ref_type type<TT>)
-                __builtin_sort_array_any_cblock ( a, typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                __builtin_sort_array_any_cblock ( a, typeinfo(sizeof a[0]), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
             else
-                __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof type<TT>), length(a) ) <| $ ( x, y  : TT ) : bool
+                __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
 
 [builtin_array_sort]
 def sort ( var a : auto(TT)[] implicit; cmp : block<(x,y:TT):bool> )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
-            __builtin_sort_cblock_dim ( a, typeinfo(sizeof type<TT>), length(a), cmp )
+            __builtin_sort_cblock_dim ( a, typeinfo(sizeof a[0]), length(a), cmp )
     static_elif typeinfo(is_vector type<TT>)
         unsafe
-            __builtin_sort_cblock_dim ( a, typeinfo(sizeof type<TT>), length(a), cmp )
+            __builtin_sort_cblock_dim ( a, typeinfo(sizeof a[0]), length(a), cmp )
     static_elif typeinfo(is_string type<TT>)
         unsafe
-            __builtin_sort_cblock_dim ( a, typeinfo(sizeof type<TT>), length(a), cmp )
+            __builtin_sort_cblock_dim ( a, typeinfo(sizeof a[0]), length(a), cmp )
     else
         unsafe
             static_if typeinfo(is_ref_type type<TT>)
-                __builtin_sort_dim_any_cblock ( a, typeinfo(sizeof type<TT>), length(a), cmp )
+                __builtin_sort_dim_any_cblock ( a, typeinfo(sizeof a[0]), length(a), cmp )
             else
-                __builtin_sort_dim_any_ref_cblock ( a, typeinfo(sizeof type<TT>), length(a), cmp )
+                __builtin_sort_dim_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a), cmp )
 
 [builtin_array_sort]
 def sort ( var a : array<auto(TT)> implicit; cmp : block<(x,y:TT):bool> )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
-            __builtin_sort_cblock_array ( a, typeinfo(sizeof type<TT>), length(a), cmp )
+            __builtin_sort_cblock_array ( a, typeinfo(sizeof a[0]), length(a), cmp )
     static_elif typeinfo(is_vector type<TT>)
         unsafe
-            __builtin_sort_cblock_array ( a, typeinfo(sizeof type<TT>), length(a), cmp )
+            __builtin_sort_cblock_array ( a, typeinfo(sizeof a[0]), length(a), cmp )
     static_elif typeinfo(is_string type<TT>)
         unsafe
-            __builtin_sort_cblock_array ( a, typeinfo(sizeof type<TT>), length(a), cmp )
+            __builtin_sort_cblock_array ( a, typeinfo(sizeof a[0]), length(a), cmp )
     else
         unsafe
             static_if typeinfo(is_ref_type type<TT>)
-                __builtin_sort_array_any_cblock ( a, typeinfo(sizeof type<TT>), length(a), cmp )
+                __builtin_sort_array_any_cblock ( a, typeinfo(sizeof a[0]), length(a), cmp )
             else
-                __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof type<TT>), length(a), cmp )
+                __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a), cmp )
 
 def lock ( var a : array<auto(TT)> = const; blk : block<(var x : array<TT># implicit)> )
     __builtin_array_lock(a)

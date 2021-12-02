@@ -552,6 +552,7 @@ def public commit
     delete actions
 
 def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
+    concept_assert(!typeinfo(is_dim value),"dim is not supported as decs component yet")
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         unsafe
@@ -562,6 +563,7 @@ def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
     return value
 
 def private make_callbacks ( var cv:ComponentValue; value:auto(TT) )
+    concept_assert(!typeinfo(is_dim value),"dim is not supported as decs component yet")
     cv.info.mkTypeInfo = @@ <| ( ) : TypeInfo const?
         return unsafe(addr(typeinfo(rtti_typeinfo type<array<TT-const-&-#>>)))
     cv.info.dumper = @@ <| ( elem:void? )
@@ -626,6 +628,7 @@ def private make_callbacks ( var cv:ComponentValue; value:auto(TT) )
                     delete * adel
 
 def private make_component ( name:string; value:auto(TT) )
+    concept_assert(!typeinfo(is_dim value),"dim is not supported as decs component yet")
     var cv = [[ComponentValue name=name]]
     unsafe
         var tinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
@@ -637,6 +640,7 @@ def private make_component ( name:string; value:auto(TT) )
     return cv
 
 def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
+    concept_assert(!typeinfo(is_dim value),"dim is not supported as decs component yet")
     concept_assert(typeinfo(sizeof value)<=typeinfo(sizeof cmp[0].data), "unsupported component type {typeinfo(typename value)} (its too big)")
     let cv = make_component(name, value)
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
