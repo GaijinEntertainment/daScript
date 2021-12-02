@@ -1525,9 +1525,10 @@ namespace das {
             } else {
                 if ( that->type->baseType==Type::tBool ) {
                     ss << " ";
-                    if ( that->op=="&" ) ss << "&&";
-                    else if ( that->op=="|" ) ss << "||";
-                    else if ( that->op=="^" ) ss << "^^";
+                         if ( that->op=="&" )  ss << "&&";
+                    else if ( that->op=="|" )  ss << "||";
+                    else if ( that->op=="^" )  ss << "!=";
+                    else if ( that->op=="^^" ) ss << "!=";
                     else ss << that->op;
                     ss << " ";
                 } else {
