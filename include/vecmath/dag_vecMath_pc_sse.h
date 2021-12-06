@@ -10,7 +10,7 @@
 #pragma once
 
 #if !defined(_TARGET_PC_LINUX) && !defined(_TARGET_PC_MACOSX) && !defined(_TARGET_PC_WIN)\
- && !defined(_TARGET_PS4) && !defined(_TARGET_PS5)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC)
+ && !defined(_TARGET_PS4) && !defined(_TARGET_PS5)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC) && !defined(_TARGET_ANDROID)
   #if __linux__ || __unix__
     #define _TARGET_PC_LINUX 1
   #elif __APPLE__
@@ -168,24 +168,23 @@ VECMATH_FINLINE vec4f VECTORCALL v_cast_vec4f(vec4i a) {return _mm_castsi128_ps(
 
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_vec4i(vec4f a) { return _mm_cvttps_epi32(a); }
 VECMATH_FINLINE vec4f VECTORCALL v_cvt_vec4f(vec4i a) { return _mm_cvtepi32_ps(a); }
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_roundi(vec4f a)  { return _mm_cvtps_epi32(a); }
 
-VECMATH_FINLINE vec4i VECTORCALL v_cvt_floori(vec4f a)
+VECMATH_FINLINE vec4i VECTORCALL sse2_cvt_floori(vec4f a)
 {
   vec4i a_trunc = v_cvt_vec4i(a);
   vec4f a_truncf = v_cvt_vec4f(a_trunc);
   return v_subi(a_trunc, _mm_andnot_si128(v_cast_vec4i(v_cmp_eq(a_truncf, a)), _mm_srli_epi32(v_cast_vec4i(a), 31)));
 }
 
-VECMATH_FINLINE vec4i VECTORCALL v_cvt_ceili(vec4f a)
+VECMATH_FINLINE vec4i VECTORCALL sse2_cvt_ceili(vec4f a)
 {
   vec4f a_add_half = v_add(a, v_andnot(v_cmp_eq(v_cvt_vec4f(_mm_cvtps_epi32(a)), a), V_C_HALF));
   return _mm_cvtps_epi32(a_add_half);
 }
-VECMATH_FINLINE vec4i VECTORCALL v_cvt_roundi(vec4f a)  { return _mm_cvtps_epi32(a); }
-
-VECMATH_FINLINE vec4f VECTORCALL v_floor(vec4f a) { return _mm_cvtepi32_ps(v_cvt_floori(a)); }
-VECMATH_FINLINE vec4f VECTORCALL v_ceil(vec4f a) { return _mm_cvtepi32_ps(v_cvt_ceili(a)); }
-VECMATH_FINLINE vec4f VECTORCALL v_round(vec4f a) { return _mm_cvtepi32_ps(_mm_cvtps_epi32(a)); }
+VECMATH_FINLINE vec4f VECTORCALL sse2_floor(vec4f a) { return _mm_cvtepi32_ps(v_cvt_floori(a)); }
+VECMATH_FINLINE vec4f VECTORCALL sse2_ceil(vec4f a) { return _mm_cvtepi32_ps(v_cvt_ceili(a)); }
+VECMATH_FINLINE vec4f VECTORCALL sse2_round(vec4f a) { return _mm_cvtepi32_ps(_mm_cvtps_epi32(a)); }
 
 #if _TARGET_SIMD_SSE >= 4 || defined(_DAGOR_PROJECT_OPTIONAL_SSE4) || defined(__SSE4_1__)
 VECMATH_FINLINE vec4f VECTORCALL sse4_floor(vec4f a) { return _mm_round_ps(a, _MM_FROUND_TO_NEG_INF|_MM_FROUND_NO_EXC); }
@@ -194,12 +193,26 @@ VECMATH_FINLINE vec4f VECTORCALL sse4_round(vec4f a) { return _mm_round_ps(a, _M
 VECMATH_FINLINE vec4i VECTORCALL sse4_cvt_floori(vec4f a) { return _mm_cvttps_epi32(sse4_floor(a)); }
 VECMATH_FINLINE vec4i VECTORCALL sse4_cvt_ceili(vec4f a)  { return _mm_cvttps_epi32(sse4_ceil(a)); }
 #else // fallback to SSE2
-VECMATH_FINLINE vec4f VECTORCALL sse4_floor(vec4f a) { return v_floor(a); }
-VECMATH_FINLINE vec4f VECTORCALL sse4_ceil(vec4f a) { return v_ceil(a); }
-VECMATH_FINLINE vec4f VECTORCALL sse4_round(vec4f a) { return v_round(a); }
-VECMATH_FINLINE vec4i VECTORCALL sse4_cvt_floori(vec4f a) { return v_cvt_floori(a); }
-VECMATH_FINLINE vec4i VECTORCALL sse4_cvt_ceili(vec4f a)  { return v_cvt_ceili(a); }
+VECMATH_FINLINE vec4f VECTORCALL sse4_floor(vec4f a) { return sse2_floor(a); }
+VECMATH_FINLINE vec4f VECTORCALL sse4_ceil(vec4f a) { return sse2_ceil(a); }
+VECMATH_FINLINE vec4f VECTORCALL sse4_round(vec4f a) { return sse2_round(a); }
+VECMATH_FINLINE vec4i VECTORCALL sse4_cvt_floori(vec4f a) { return sse2_cvt_floori(a); }
+VECMATH_FINLINE vec4i VECTORCALL sse4_cvt_ceili(vec4f a)  { return sse2_cvt_ceili(a); }
 #endif
+#if _TARGET_SIMD_SSE >= 4
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_floori(vec4f a) {return sse4_cvt_floori(a);}
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_ceili(vec4f a) {return sse4_cvt_ceili(a);}
+VECMATH_FINLINE vec4f VECTORCALL v_floor(vec4f a) { return sse4_floor(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_ceil(vec4f a) { return sse4_ceil(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_round(vec4f a) { return sse4_round(a); }
+#else
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_floori(vec4f a) {return sse2_cvt_floori(a);}
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_ceili(vec4f a) {return sse2_cvt_ceili(a);}
+VECMATH_FINLINE vec4f VECTORCALL v_floor(vec4f a) { return sse2_floor(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_ceil(vec4f a) { return sse2_ceil(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_round(vec4f a) { return sse2_round(a); }
+#endif
+
 
 VECMATH_FINLINE vec4f VECTORCALL v_add(vec4f a, vec4f b) { return _mm_add_ps(a, b); }
 VECMATH_FINLINE vec4f VECTORCALL v_sub(vec4f a, vec4f b) { return _mm_sub_ps(a, b); }
@@ -245,20 +258,32 @@ VECMATH_FINLINE vec4i VECTORCALL sse2_packus(vec4i a)
   return _mm_packs_epi32(a, a);
 }
 
+//unsigned mul
+VECMATH_FINLINE vec4i VECTORCALL sse2_muli(vec4i a, vec4i b)
+{
+  __m128i tmp1 = _mm_mul_epu32(a,b); /* mul 2,0*/
+  __m128i tmp2 = _mm_mul_epu32( _mm_srli_si128(a,4), _mm_srli_si128(b,4)); /* mul 3,1 */
+  return _mm_unpacklo_epi32(_mm_shuffle_epi32(tmp1, _MM_SHUFFLE (0,0,2,0)), _mm_shuffle_epi32(tmp2, _MM_SHUFFLE (0,0,2,0))); /* shuffle results to [63..0] and pack */
+}
+
 #if _TARGET_SIMD_SSE >= 4 || defined(_DAGOR_PROJECT_OPTIONAL_SSE4) || defined(__SSE4_1__)
 VECMATH_FINLINE vec4i VECTORCALL sse4_packus(vec4i a, vec4i b) { return _mm_packus_epi32(a, b); }
 VECMATH_FINLINE vec4i VECTORCALL sse4_packus(vec4i a) { return _mm_packus_epi32(a, a); }
+VECMATH_FINLINE vec4i VECTORCALL sse4_muli(vec4i a, vec4i b) { return _mm_mullo_epi32(a, b);}
 #else // fallback to SSE2
 VECMATH_FINLINE vec4i VECTORCALL sse4_packus(vec4i a, vec4i b) { return sse2_packus(a, b); }
 VECMATH_FINLINE vec4i VECTORCALL sse4_packus(vec4i a) { return sse2_packus(a); }
+VECMATH_FINLINE vec4i VECTORCALL sse4_muli(vec4i a, vec4i b) { return sse2_muli(a, b);}
 #endif
 
 #if _TARGET_SIMD_SSE >= 4
 VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a, vec4i b) { return sse4_packus(a, b); }
 VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a) { return sse4_packus(a); }
+VECMATH_FINLINE vec4i VECTORCALL v_muli(vec4i a, vec4i b) { return sse4_muli(a,b); }
 #else
 VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a, vec4i b) { return sse2_packus(a, b); }
 VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a) { return sse2_packus(a); }
+VECMATH_FINLINE vec4i VECTORCALL v_muli(vec4i a, vec4i b) { return sse2_muli(a,b); }
 #endif
 
 VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a, vec4i b) { return _mm_packus_epi16(a,b); }

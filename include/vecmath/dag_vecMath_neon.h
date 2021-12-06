@@ -11,6 +11,8 @@
 
 #include <math.h> //for fabsf, which is used once, and not wise
 
+#define VECMATH_NEON_SQRT_MIN_THRESHOLD_VALUE 1e-16
+
 VECMATH_FINLINE vec4f VECTORCALL v_zero() { return vdupq_n_f32(0); }
 VECMATH_FINLINE vec4f VECTORCALL v_msbit() { return (vec4f)vdupq_n_u32(0x80000000); }
 VECMATH_FINLINE vec4f VECTORCALL v_splat4(const float *a) { return vld1q_dup_f32(a); }
@@ -177,6 +179,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_nmsub_x(vec4f a, vec4f b, vec4f c) { return v
 
 VECMATH_FINLINE vec4i VECTORCALL v_addi(vec4i a, vec4i b) { return vaddq_s32(a, b); }
 VECMATH_FINLINE vec4i VECTORCALL v_subi(vec4i a, vec4i b) { return vsubq_s32(a, b); }
+VECMATH_FINLINE vec4i VECTORCALL v_muli(vec4i a, vec4i b) { return vmulq_s32(a, b); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_rcp_est(vec4f a) { return vrecpeq_f32(a); }
 VECMATH_FINLINE vec4f VECTORCALL v_rcp_iter(vec4f a, vec4f est)
@@ -221,18 +224,27 @@ VECMATH_FINLINE float32x2_t VECTORCALL v_rsqrt_x(float32x2_t a)
 }
 VECMATH_FINLINE vec4f VECTORCALL v_rsqrt_x(vec4f a) { float32x2_t r = v_rsqrt_x(vget_low_f32(a)); return vcombine_f32(r, r); }
 
-VECMATH_FINLINE vec4f VECTORCALL v_sqrt4_fast(vec4f a) { return v_and(v_mul(a, vrsqrteq_f32(a)), v_cmp_gt(a, v_zero())); }
-VECMATH_FINLINE vec4f VECTORCALL v_sqrt4(vec4f a) { return v_and(v_mul(a, v_rsqrt4(a)), v_cmp_gt(a, v_zero())); }
+//sqrt of very small number (~1e-22) returns INF instead of zero, so use bigger threshold (VECMATH_NEON_SQRT_MIN_THRESHOLD_VALUE) then 0
+//added for compatibility with SSE implementation
+VECMATH_FINLINE vec4f VECTORCALL v_sqrt4_fast(vec4f a)
+{
+  return v_and(v_mul(a, vrsqrteq_f32(a)), v_cmp_gt(a, vdupq_n_f32(VECMATH_NEON_SQRT_MIN_THRESHOLD_VALUE)));
+}
+VECMATH_FINLINE vec4f VECTORCALL v_sqrt4(vec4f a)
+{
+  return v_and(v_mul(a, v_rsqrt4(a)), v_cmp_gt(a, vdupq_n_f32(VECMATH_NEON_SQRT_MIN_THRESHOLD_VALUE)));
+}
 VECMATH_FINLINE vec4f VECTORCALL v_sqrt_fast_x(vec4f _a)
 {
   float32x2_t a = vget_low_f32(_a);
-  float32x2_t r = (float32x2_t)vand_s32((int32x2_t)vmul_f32(a, vrsqrte_f32(a)), vcgt_f32(a, vdup_n_f32(0)));
+  float32x2_t r = (float32x2_t)vand_s32((int32x2_t)vmul_f32(a, vrsqrte_f32(a)),
+    vcgt_f32(a, vdup_n_f32(VECMATH_NEON_SQRT_MIN_THRESHOLD_VALUE)));
   return vcombine_f32(r, r);
 }
 VECMATH_FINLINE vec4f VECTORCALL v_sqrt_x(vec4f _a)
 {
   float32x2_t a = vget_low_f32(_a);
-  float32x2_t r = (float32x2_t)vand_s32(vmul_f32(a, v_rsqrt_x(a)), vcgt_f32(a, vdup_n_f32(0)));
+  float32x2_t r = (float32x2_t)vand_s32(vmul_f32(a, v_rsqrt_x(a)), vcgt_f32(a, vdup_n_f32(VECMATH_NEON_SQRT_MIN_THRESHOLD_VALUE)));
   return vcombine_f32(r, r);
 }
 
@@ -702,7 +714,6 @@ VECMATH_FINLINE vec4f VECTORCALL v_mat44_mul_vec3p(mat44f_cref m, vec4f v)
   vec4f xxxx = v_splat_x(v);
   vec4f yyyy = v_splat_y(v);
   vec4f zzzz = v_splat_z(v);
-  vec4f wwww = v_splat_w(v);
   vec4f tmp0, tmp1;
 
   tmp0 = v_mul(m.col0, xxxx);
@@ -778,9 +789,6 @@ VECMATH_FINLINE void VECTORCALL v_mat44_inverse(mat44f &dest, mat44f_cref m)
   vec4f OPMN = v_perm_zwcd(inA3, inA2); // KLOP, IJMN
   vec4f NOPM = v_rot_3(OPMN);
   vec4f PMNO = v_rot_1(OPMN);
-  vec4f KLIJ = v_perm_xyab(inA3, inA2); // KLOP, IJMN
-  vec4f JKLI = v_rot_3(KLIJ);
-  vec4f LIJK = v_rot_1(KLIJ);
 
   vec4f KP_LO_IP_LM_IN_JM_KN_JO = v_nmsub(LLJJ, OMMO, KP_IP_IN_KN);
   vec4f JP_LN_IO_KM_LN_JP_KM_IO = v_nmsub(LKJI, NMPO, JP_IO_LN_KM);
@@ -798,9 +806,6 @@ VECMATH_FINLINE void VECTORCALL v_mat44_inverse(mat44f &dest, mat44f_cref m)
   vec4f tmpA3 = v_mul(NOPM, CH_DG_AH_DE_AF_BE_CF_BG);
   vec4f tmpB3 = v_nmsub(OPMN, BH_DF_AG_CE_DF_BH_CE_AG, tmpA3);
   vec4f out3 = v_nmsub(PMNO, CF_BG_CH_DG_AH_DE_AF_BE, tmpB3);
-  vec4f tmpB4 = v_mul(KLIJ, BH_DF_AG_CE_DF_BH_CE_AG);
-  vec4f tmpA4 = v_nmsub(JKLI, CH_DG_AH_DE_AF_BE_CF_BG, tmpB4);
-  vec4f out4 = v_madd(LIJK, CF_BG_CH_DG_AH_DE_AF_BE, tmpA4);
 
   //det
   vec4f AF_BE_AG_CE_CF_BG_BH_DF = v_perm_zbwa(CH_DG_AH_DE_AF_BE_CF_BG, BH_DF_AG_CE_DF_BH_CE_AG);

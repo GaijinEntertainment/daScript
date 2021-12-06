@@ -207,6 +207,8 @@ VECMATH_FINLINE quat4f VECTORCALL v_lerp_vec4f(vec4f tttt, quat4f a, quat4f b);
 VECMATH_FINLINE vec4i VECTORCALL v_addi(vec4i a, vec4i b);
 //! (a - b)
 VECMATH_FINLINE vec4i VECTORCALL v_subi(vec4i a, vec4i b);
+//! (a * b), signed integers. result is only correctly defined if both operands and result is within [-1<<31, 1<<31) range
+VECMATH_FINLINE vec4i VECTORCALL v_muli(vec4i a, vec4i b);
 
 //! shift left (unsigned integer). bits is immediate value
 VECMATH_FINLINE vec4i VECTORCALL v_slli(vec4i v, int bits);
@@ -803,13 +805,6 @@ VECMATH_FINLINE vec4f VECTORCALL v_insert(float s, vec4f v, int i);
 
 //! promote put scalar to specified place in vector; other elements undefined
 VECMATH_FINLINE vec4f VECTORCALL v_promote(float s, int i);
-
-
-//
-// vector initialization from scalars, slow, to be used on memory only
-//
-VECMATH_FINLINE void VECTORCALL v_set_vec3_mem(vec3f &v, float x, float y, float z);
-VECMATH_FINLINE void VECTORCALL v_set_vec4_mem(vec3f &v, float x, float y, float z, float w);
 
 
 //
