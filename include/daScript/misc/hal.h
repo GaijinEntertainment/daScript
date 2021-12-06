@@ -23,17 +23,6 @@ __forceinline vec4i VECTORCALL v_splats_ptr(const void * a) {
 }
 #endif
 
-__forceinline vec4i v_muli(vec4i a, vec4i b) {
-    union {
-        vec4i       v;
-        int32_t     a[4];
-    } A, B, C;
-    A.v = a;
-    B.v = b;
-    C.a[0] = A.a[0] * B.a[0];   C.a[1] = A.a[1] * B.a[1];   C.a[2] = A.a[2] * B.a[2];   C.a[3] = A.a[3] * B.a[3];
-    return C.v;
-}
-
 __forceinline vec4i v_divi2(vec4i a, vec4i b) {
     union {
         vec4i       v;
