@@ -255,7 +255,7 @@ SETUP_CPP11(libUriParser)
 target_compile_definitions(libUriParser PUBLIC URIPARSER_BUILD_CHAR)
 target_compile_definitions(libUriParser PUBLIC URI_STATIC_BUILD)
 target_include_directories(libUriParser PUBLIC
-  ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
+  ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/include
 )
 
 # libDaScript
