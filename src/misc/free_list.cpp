@@ -90,7 +90,7 @@ void reuse_cache_destroy() {
 
 }
 
-#if defined(__linux__)
+#if defined(__linux__) && !defined(DAS_NO_GLOBAL_NEW_AND_DELETE)
 #define DAS_NO_GLOBAL_NEW_AND_DELETE
 #endif
 
