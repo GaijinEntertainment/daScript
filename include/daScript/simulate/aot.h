@@ -2650,18 +2650,18 @@ namespace das {
         scblk_array<CompareFn,TT>::srtr(arr,elemSize,elemCount,forward<CompareFn>(cmp),context,lineinfo);
     }
 
-    __forceinline vec4f cvt_float4 ( int2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
-    __forceinline vec4f cvt_float4 ( int3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_float2 ( int2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_float3 ( int3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
     __forceinline vec4f cvt_float4 ( int4 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
-    __forceinline vec4f cvt_float4 ( uint2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
-    __forceinline vec4f cvt_float4 ( uint3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_float2 ( uint2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_float3 ( uint3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
     __forceinline vec4f cvt_float4 ( uint4 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
 
-    __forceinline vec4f cvt_int4 ( float2 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
-    __forceinline vec4f cvt_int4 ( float3 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
+    __forceinline vec4f cvt_int2 ( float2 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
+    __forceinline vec4f cvt_int3 ( float3 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
     __forceinline vec4f cvt_int4 ( float4 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
-    __forceinline vec4f cvt_uint4 ( float2 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
-    __forceinline vec4f cvt_uint4 ( float3 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
+    __forceinline vec4f cvt_uint2 ( float2 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
+    __forceinline vec4f cvt_uint3 ( float3 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
     __forceinline vec4f cvt_uint4 ( float4 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
 
     __forceinline vec4f cvt_pass ( int2 i )  { return i; }
