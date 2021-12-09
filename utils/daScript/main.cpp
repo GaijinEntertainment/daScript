@@ -81,7 +81,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 return true;
             },"*");
             if (dryRun) {
-                tout << "dry run success, no changes will be written";
+                tout << "dry run success, no changes will be written\n";
                 return true;
             }
             if (noAotOption) {
