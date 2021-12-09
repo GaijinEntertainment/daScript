@@ -265,12 +265,12 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         // int2
         ADD_VEC_CTOR_1(int2,"int2");
         ADD_VEC_CTOR_2(int2,"int2");
-        addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int2, float2>>("int2",lib,"cvt_int4",false) );
+        addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int2, float2>>("int2",lib,"cvt_int2",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,int2, uint2>>("int2",lib,"cvt_pass",false) );
         // int3
         ADD_VEC_CTOR_1(int3,"int3");
         ADD_VEC_CTOR_3(int3,"int3");
-        addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int3, float3>>("int3",lib,"cvt_int4",false) );
+        addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int3, float3>>("int3",lib,"cvt_int3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,int3, uint3>>("int3",lib,"cvt_pass",false) );
         // int4
         ADD_VEC_CTOR_1(int4,"int4");
@@ -280,12 +280,12 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         // uint2
         ADD_VEC_CTOR_1(uint2,"uint2");
         ADD_VEC_CTOR_2(uint2,"uint2");
-        addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint2,float2>>("uint2",lib,"cvt_uint4",false) );
+        addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint2,float2>>("uint2",lib,"cvt_uint2",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,uint2, int2>>("uint2",lib,"cvt_pass",false) );
         // uint3
         ADD_VEC_CTOR_1(uint3,"uint3");
         ADD_VEC_CTOR_3(uint3,"uint3");
-        addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint3,float3>>("uint3",lib,"cvt_uint4",false) );
+        addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint3,float3>>("uint3",lib,"cvt_uint3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,uint3, int3>>("uint3",lib,"cvt_pass",false) );
         // uint4
         ADD_VEC_CTOR_1(uint4,"uint4");
