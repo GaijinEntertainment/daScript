@@ -55,7 +55,7 @@ def log_cpp_class_adapter ( cpp_file:file; name:string; cinfo:TypeDeclPtr )
     var methods : array<string>
     var types : array<TypeDeclPtr>
     for fld in cinfo.structType.fields
-        if !fld._type.isFunction|| fld.name=="__finalize"
+        if !fld._type.isFunction || fld.name=="__finalize" || fld.init!=null
             continue
         push(methods,"{fld.name}")
         push_clone(types,fld._type)
