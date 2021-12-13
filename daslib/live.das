@@ -6,6 +6,7 @@ options multiple_contexts
 
 module live shared public
 
+require strings
 require daslib/rtti
 require daslib/decs
 require daslib/static_let
@@ -122,6 +123,8 @@ def public watch_files
     watchTime = clk
     var any = false
     dir(appDir) <| $ (fname)
+        if !(ends_with(fname, ".das") || ends_with(fname, ".das_project"))
+            return
         let fileName = "{appDir}\/{fname}"
         var st : FStat
         if stat(fileName,st)
