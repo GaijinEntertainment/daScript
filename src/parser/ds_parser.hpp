@@ -76,42 +76,12 @@ extern int das_yydebug;
 
     using namespace das;
 
-    struct VariableNameAndPosition {
-        string      name;
-        string      aka;
-        LineInfo    at;
-    };
+    #include "parser_impl.h"
 
-    struct VariableDeclaration {
-        VariableDeclaration ( vector<VariableNameAndPosition> * n, TypeDecl * t, Expression * i )
-            : pNameList(n), pTypeDecl(t), pInit(i) {}
-        virtual ~VariableDeclaration () {
-            if ( pNameList ) delete pNameList;
-            delete pTypeDecl;
-            if ( pInit ) delete pInit;
-            if ( annotation ) delete annotation;
-        }
-        vector<VariableNameAndPosition>   *pNameList;
-        TypeDecl                *pTypeDecl;
-        Expression              *pInit;
-        bool                    init_via_move = false;
-        bool                    init_via_clone = false;
-        bool                    override = false;
-        bool                    sealed = false;
-        bool                    isPrivate = false;
-        AnnotationArgumentList  *annotation = nullptr;
-    };
-
-    ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
-    vector<ExpressionPtr> sequenceToList ( Expression * arguments );
-    void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
-    void varDeclToTypeDecl ( yyscan_t scanner, TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = true );
-    void runFunctionAnnotations ( yyscan_t scanner, Function * func, AnnotationList * annL, const LineInfo & at );
     LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
     LineInfo tokRangeAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
-    Annotation * findAnnotation ( yyscan_t scanner, const string & name, const LineInfo & at );
 
-#line 115 "ds_parser.hpp"
+#line 85 "ds_parser.hpp"
 
 /* Token kinds.  */
 #ifndef DAS_YYTOKENTYPE
@@ -290,7 +260,7 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 117 "ds_parser.ypp"
+#line 85 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -319,7 +289,7 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 323 "ds_parser.hpp"
+#line 293 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

@@ -270,6 +270,8 @@ src/parser/ds_parser.output
 src/parser/ds_lexer.cpp
 src/parser/lex.yy.h
 src/parser/parser_state.h
+src/parser/parser_impl.cpp
+src/parser/parser_impl.h
 )
 
 SET(PARSER_SRC
