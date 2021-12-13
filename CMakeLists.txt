@@ -269,14 +269,14 @@ src/parser/ds_parser.cpp
 src/parser/ds_parser.output
 src/parser/ds_lexer.cpp
 src/parser/lex.yy.h
-src/parser/parser_state.h
-src/parser/parser_impl.cpp
-src/parser/parser_impl.h
 )
 
 SET(PARSER_SRC
 src/parser/ds_parser.ypp
 src/parser/ds_lexer.lpp
+src/parser/parser_state.h
+src/parser/parser_impl.cpp
+src/parser/parser_impl.h
 )
 list(SORT PARSER_SRC)
 SOURCE_GROUP_FILES("parser" PARSER_SRC)
@@ -557,10 +557,10 @@ SOURCE_GROUP_FILES("daslib" DSA_LIB_SRC)
 list(SORT DAS_LIB_SRC)
 
 include_directories(include)
-ADD_LIBRARY(libDaScript ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC} ${MISC_SRC} ${SIMULATE_SRC}
-    ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC} ${PARSER_SRC} ${PARSER_GENERATED_SRC}
+ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
+    ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
 	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${SMMALLOC_SRC})
-ADD_DEPENDENCIES(libDaScript need_and_resolve libUriParser)
+# ADD_DEPENDENCIES(libDaScript need_and_resolve libUriParser)
 target_include_directories(libDaScript PUBLIC
     ${DAS_SMMALLOC_DIR}
     ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
@@ -599,7 +599,7 @@ if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
 
   add_executable(daScript ${DASCRIPT_MAIN_SRC})
   TARGET_LINK_LIBRARIES(daScript libDaScript libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-  ADD_DEPENDENCIES(daScript libDaScript libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+  # ADD_DEPENDENCIES(daScript libDaScript libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
   SETUP_CPP11(daScript)
   SETUP_LTO(daScript)
 

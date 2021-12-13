@@ -30,12 +30,6 @@
         CorM_CLONE  = (1<<1)
     };
 
-    enum {
-        OVERRIDE_NONE,
-        OVERRIDE_OVERRIDE,
-        OVERRIDE_SEALED,
-    };
-
     using namespace das;
 
     #include "parser_impl.h"
@@ -70,8 +64,6 @@
 
     void das_yybegin_reader ( yyscan_t yyscanner );
     void das_yyend_reader ( yyscan_t yyscanner );
-
-    __forceinline string inThisModule ( const string & name ) { return "_::" + name; }
 
     #undef yyextra
     #define yyextra (*((das::DasParserState **)(scanner)))
@@ -638,49 +630,10 @@ require_module_name
 
 require_module
     :   require_module_name[name]  is_public_module[pub] {
-        auto info = yyextra->g_Access->getModuleInfo(*$name, yyextra->g_FileAccessStack.back()->name);
-        if ( auto mod = yyextra->g_Program->addModule(info.moduleName) ) {
-            yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,"",$pub,tokAt(scanner,@name)));
-            yyextra->g_Program->thisModule->addDependency(mod, $pub);
-            if ( !info.importName.empty() ) {
-                auto ita = yyextra->das_module_alias.find(info.importName);
-                if ( ita !=yyextra->das_module_alias.end() ) {
-                    if ( ita->second != info.moduleName ) {
-                        das_yyerror(scanner,"module alias already used " + info.importName + " as " + ita->second,tokAt(scanner,@name),
-                            CompilationError::module_not_found);
-                    }
-                } else {
-                    yyextra->das_module_alias[info.importName] = info.moduleName;
-                }
-            }
-        } else {
-            yyextra->g_Program->allRequireDecl.push_back(make_tuple((Module *)nullptr,*$name,"",$pub,tokAt(scanner,@name)));
-            das_yyerror(scanner,"required module not found " + *$name,tokAt(scanner,@name),
-                CompilationError::module_not_found);
-        }
-        delete $name;
+        ast_requireModule(scanner,$name,nullptr,$pub,tokAt(scanner,@name));
     }
     |   require_module_name[name] DAS_AS NAME[modalias] is_public_module[pub] {
-        auto info = yyextra->g_Access->getModuleInfo(*$name, yyextra->g_FileAccessStack.back()->name);
-        if ( auto mod = yyextra->g_Program->addModule(info.moduleName) ) {
-            yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,*$modalias,$pub,tokAt(scanner,@name)));
-            yyextra->g_Program->thisModule->addDependency(mod, $pub);
-            auto ita = yyextra->das_module_alias.find(*$modalias);
-            if ( ita !=yyextra->das_module_alias.end() ) {
-                if ( ita->second != info.moduleName ) {
-                    das_yyerror(scanner,"module alias already used " + *$modalias + " as " + ita->second,tokAt(scanner,@name),
-                        CompilationError::module_not_found);
-                }
-            } else {
-                yyextra->das_module_alias[*$modalias] = info.moduleName;
-            }
-        } else {
-            yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*$name,*$modalias,$pub,tokAt(scanner,@name)));
-            das_yyerror(scanner,"required module not found " + *$name,tokAt(scanner,@name),
-                CompilationError::module_not_found);
-        }
-        delete $name;
-        delete $modalias;
+        ast_requireModule(scanner,$name,$modalias,$pub,tokAt(scanner,@name));
     }
     ;
 
@@ -1019,40 +972,7 @@ optional_public_or_private_function
 
 function_declaration_header
     :  function_name[name] optional_function_argument_list[list] optional_function_type[result] {
-        auto pFunction = make_smart<Function>();
-        pFunction->at = tokAt(scanner,@name);
-        pFunction->name = *$name;
-        pFunction->result = TypeDeclPtr($result);
-        if ( $list ) {
-            for ( auto pDecl : *$list ) {
-                if ( pDecl->pTypeDecl ) {
-                    for ( const auto & name_at : *pDecl->pNameList ) {
-                        if ( !pFunction->findArgument(name_at.name) ) {
-                            VariablePtr pVar = make_smart<Variable>();
-                            pVar->name = name_at.name;
-                            pVar->aka = name_at.aka;
-                            pVar->at = name_at.at;
-                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
-                            if ( pDecl->pInit ) {
-                                pVar->init = ExpressionPtr(pDecl->pInit->clone());
-                                pVar->init_via_move = pDecl->init_via_move;
-                                pVar->init_via_clone = pDecl->init_via_clone;
-                            }
-                            if ( pDecl->annotation ) {
-                                pVar->annotation = *pDecl->annotation;
-                            }
-                            pFunction->arguments.push_back(pVar);
-                        } else {
-                            das_yyerror(scanner,"function argument is already declared " + name_at.name,name_at.at,
-                                CompilationError::argument_already_declared);
-                        }
-                    }
-                }
-            }
-            deleteVariableDeclarationList($list);
-        }
-        delete $name;
-        $$ = pFunction.orphan();
+        $$ = ast_functionDeclarationHeader(scanner,$name,$list,$result,tokAt(scanner,@name));
     }
     ;
 
@@ -1262,36 +1182,7 @@ kwd_let
 
 expression_let
     :   kwd_let let_variable_declaration[decl] {
-        auto pLet = new ExprLet();
-        pLet->at = tokAt(scanner,@kwd_let);
-        pLet->atInit = tokAt(scanner,@decl);
-        if ( $decl->pTypeDecl ) {
-            for ( const auto & name_at : *$decl->pNameList ) {
-                if ( !pLet->find(name_at.name) ) {
-                    VariablePtr pVar = make_smart<Variable>();
-                    pVar->name = name_at.name;
-                    pVar->aka = name_at.aka;
-                    pVar->at = name_at.at;
-                    pVar->type = make_smart<TypeDecl>(*$decl->pTypeDecl);
-                    if ( $decl->pInit ) {
-                        pVar->init = $decl->pInit->clone();
-                        pVar->init_via_move = $decl->init_via_move;
-                        pVar->init_via_clone = $decl->init_via_clone;
-                    }
-                    if ( $kwd_let ) {
-                        pVar->type->constant = true;
-                    } else {
-                        pVar->type->removeConstant = true;
-                    }
-                    pLet->variables.push_back(pVar);
-                } else {
-                    das_yyerror(scanner,"local variable is already declared " + name_at.name,name_at.at,
-                        CompilationError::local_variable_already_declared);
-                }
-            }
-        }
-        delete $decl;
-        $$ = pLet;
+        $$ = ast_Let(scanner,$kwd_let,$decl,tokAt(scanner,@kwd_let),tokAt(scanner,@decl));
     }
     ;
 
@@ -1420,65 +1311,7 @@ expr_block
     }
     |   block_or_lambda[bal] optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
                                 optional_function_type[result] block_or_simple_block[block] {
-        auto mkb = new ExprMakeBlock(tokAt(scanner,@block),ExpressionPtr($block), $bal==1, $bal==2);
-        $$ = mkb;
-        ExprBlock * closure = (ExprBlock *) $block;
-        closure->returnType = TypeDeclPtr($result);
-        if ( $list ) {
-            for ( auto pDecl : *$list ) {
-                if ( pDecl->pTypeDecl ) {
-                    for ( const auto & name_at : *pDecl->pNameList ) {
-                        if ( !closure->findArgument(name_at.name) ) {
-                            VariablePtr pVar = make_smart<Variable>();
-                            pVar->name = name_at.name;
-                            pVar->aka = name_at.aka;
-                            pVar->at = name_at.at;
-                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
-                            if ( pDecl->pInit ) {
-                                pVar->init = ExpressionPtr(pDecl->pInit->clone());
-                                pVar->init_via_move = pDecl->init_via_move;
-                                pVar->init_via_clone = pDecl->init_via_clone;
-                            }
-                            if ( pDecl->annotation ) {
-                                pVar->annotation = *pDecl->annotation;
-                            }
-                            closure->arguments.push_back(pVar);
-                        } else {
-                            das_yyerror(scanner,"block argument is already declared " + name_at.name,
-                                name_at.at,CompilationError::argument_already_declared);
-                        }
-                    }
-                }
-            }
-            deleteVariableDeclarationList($list);
-        }
-        if ( $clist ) {
-            swap ( mkb->capture, *$clist );
-            delete $clist;
-            if ( $bal != 1 ) {   // if its not lambda, can't capture
-                das_yyerror(scanner,"can only have capture section for the lambda",
-                    mkb->at,CompilationError::invalid_capture);
-            }
-        }
-        if ( $annL ) {
-            for ( auto pA : *$annL ) {
-                if ( pA->annotation ) {
-                    if ( pA->annotation->rtti_isFunctionAnnotation() ) {
-                        auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
-                        string err;
-                        if ( !ann->apply(closure, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
-                            das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to apply to the block\n" + err, tokAt(scanner,@annL),
-                                CompilationError::invalid_annotation);
-                        }
-                    } else {
-                        das_yyerror(scanner,"blocks are only allowed function macros", tokAt(scanner,@annL),
-                            CompilationError::invalid_annotation);
-                    }
-                }
-            }
-            swap ( closure->annotations, *$annL );
-            delete $annL;
-        }
+        $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL));
     }
     ;
 
@@ -1727,59 +1560,7 @@ expr
         }
     }
     | name_in_namespace[ena] NAME[eni] {
-        Enumeration * pEnum = nullptr;
-        Expression * resConst = nullptr;
-        auto enums = yyextra->g_Program->findEnum(*$ena);
-        auto aliases = yyextra->g_Program->findAlias(*$ena);
-        if ( enums.size()+aliases.size() > 1 ) {
-            string candidates;
-            if ( enums.size() ) candidates += yyextra->g_Program->describeCandidates(enums);
-            if ( aliases.size() ) candidates += yyextra->g_Program->describeCandidates(aliases);
-            das_yyerror(scanner,"too many options for the " + *$ena + "\n" + candidates, tokAt(scanner,@ena),
-                CompilationError::type_not_found);
-        } else if ( enums.size()==0 && aliases.size()==0 ) {
-            das_yyerror(scanner,"enumeration or bitfield not found " + *$ena, tokAt(scanner,@ena),
-                CompilationError::type_not_found);
-        } else if ( enums.size()==1 ) {
-            pEnum = enums.back().get();
-        } else if ( aliases.size()==1 ) {
-            auto alias = aliases.back();
-            if ( alias->isEnum() ) {
-                pEnum = alias->enumType;
-            } else if ( alias->isBitfield() ) {
-                int bit = alias->findArgumentIndex(*$eni);
-                if ( bit!=-1 ) {
-                    auto td = make_smart<TypeDecl>(*alias);
-                    td->ref = false;
-                    auto bitConst = new ExprConstBitfield(tokAt(scanner,@eni), 1u << bit);
-                    bitConst->bitfieldType = make_smart<TypeDecl>(*alias);
-                    resConst = bitConst;
-                } else {
-                    das_yyerror(scanner,"enumeration or bitfield not found " + *$ena, tokAt(scanner,@ena),
-                        CompilationError::bitfield_not_found);
-                }
-            } else {
-                das_yyerror(scanner,"expecting enumeration or bitfield " + *$ena, tokAt(scanner,@ena),
-                    CompilationError::syntax_error);
-            }
-        }
-        if ( pEnum ) {
-            auto ff = pEnum->find(*$eni);
-            if ( ff.second ) {
-                auto td = make_smart<TypeDecl>(pEnum);
-                resConst = new ExprConstEnumeration(tokAt(scanner,@eni), *$eni, td);
-            } else {
-                das_yyerror(scanner,"enumeraiton value not found " + *$ena + " " + *$eni, tokAt(scanner,@eni),
-                    CompilationError::enumeration_not_found);
-            }
-        }
-        if ( resConst ) {
-            $$ = resConst;
-        } else {
-            $$ = new ExprConstInt(0);   // dummy
-        }
-        delete $ena;
-        delete $eni;
+        $$ = ast_NameName(scanner,$ena,$eni,tokAt(scanner,@ena),tokAt(scanner,@eni));
     }
     |   DAS_UNSAFE '(' expr[subexpr] ')' {
         $subexpr->alwaysSafe = true;
@@ -1830,115 +1611,12 @@ struct_variable_declaration_list
     }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
             DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT { yyextra->das_force_oxford_comma=true; } function_declaration_header[func] ';' {
-        if ( !yyextra->g_thisStructure->isClass ) {
-            das_yyerror(scanner,"structure can't have a member function",
-                $func->at, CompilationError::invalid_member_function);
-        } else if ( $func->isGeneric() ) {
-            das_yyerror(scanner,"generic function can't be a member of a class " + $func->getMangledName(),
-                $func->at, CompilationError::invalid_member_function);
-        } else if ( $func->name==yyextra->g_thisStructure->name || $func->name=="finalize" ) {
-            das_yyerror(scanner,"initializers and finalizers can't be abstract " + $func->getMangledName(),
-                $func->at, CompilationError::invalid_member_function);
-        } else if ( $annL!=nullptr ) {
-            das_yyerror(scanner,"abstract functions can't have annotations " + $func->getMangledName(),
-                $func->at, CompilationError::invalid_member_function);
-            delete $annL;
-        } else if ( $func->result->baseType==Type::autoinfer ) {
-            das_yyerror(scanner,"abstract functions must specify return type explicitly " + $func->getMangledName(),
-                $func->at, CompilationError::invalid_member_function);
-        } else {
-            auto varName = $func->name;
-            $func->name = yyextra->g_thisStructure->name + "`" + $func->name;
-            auto vars = new vector<VariableNameAndPosition>();
-            vars->emplace_back(VariableNameAndPosition{varName,"",$func->at});
-            TypeDecl * funcType = new TypeDecl(Type::tFunction);
-            funcType->at = $func->at;
-            swap ( funcType->firstType, $func->result );
-            funcType->argTypes.reserve ( $func->arguments.size() );
-            if ( yyextra->g_thisStructure->isClass ) {
-                funcType->argTypes.push_back(make_smart<TypeDecl>(yyextra->g_thisStructure));
-                funcType->argNames.push_back("self");
-            }
-            for ( auto & arg : $func->arguments ) {
-                funcType->argTypes.push_back(arg->type);
-                funcType->argNames.push_back(arg->name);
-            }
-            VariableDeclaration * decl = new VariableDeclaration(
-                vars,
-                funcType,
-                nullptr
-            );
-            decl->isPrivate = $isPrivate;
-            $list->push_back(decl);
-        }
-        $func->delRef();
-        $$ = $list;
+        $$ = ast_structVarDefAbstract(scanner,$list,$annL,$isPrivate,$func);
     }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
             DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] optional_override[ovr] optional_constant[cnst]
                 function_declaration_header[func] expression_block[block] {
-        $func->atDecl = tokRangeAt(scanner,@from,@block);
-        $func->body = $block;
-        if ( !yyextra->g_thisStructure ) {
-            das_yyerror(scanner,"internal error or invalid macro. member function is declared outside of a class",
-                $func->at, CompilationError::invalid_member_function);
-        } else if ( !yyextra->g_thisStructure->isClass ) {
-            das_yyerror(scanner,"structure can't have a member function",
-                $func->at, CompilationError::invalid_member_function);
-        } else if ( $func->isGeneric() ) {
-            das_yyerror(scanner,"generic function can't be a member of a class " + $func->getMangledName(),
-                $func->at, CompilationError::invalid_member_function);
-        } else {
-            $func->privateFunction = yyextra->g_thisStructure->privateStructure;
-            if ( $func->name != yyextra->g_thisStructure->name && $func->name != "finalize") {
-                auto varName = $func->name;
-                $func->name = yyextra->g_thisStructure->name + "`" + $func->name;
-                auto vars = new vector<VariableNameAndPosition>();
-                vars->emplace_back(VariableNameAndPosition{varName,"",$func->at});
-                Expression * finit = new ExprAddr($func->at, inThisModule($func->name));
-                if ( $ovr == OVERRIDE_OVERRIDE ) {
-                    finit = new ExprCast($func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
-                }
-                VariableDeclaration * decl = new VariableDeclaration(
-                    vars,
-                    new TypeDecl(Type::autoinfer),
-                    finit
-                );
-                decl->override = $ovr == OVERRIDE_OVERRIDE;
-                decl->sealed = $ovr == OVERRIDE_SEALED;
-                decl->isPrivate = $isPrivate;
-                $list->push_back(decl);
-                modifyToClassMember($func, yyextra->g_thisStructure, false, $cnst);
-            } else {
-                if ( $ovr ) {
-                    das_yyerror(scanner,"can't override an initializer or a finalizer " + $func->getMangledName(),
-                        $func->at, CompilationError::invalid_member_function);
-                }
-                if ( $cnst ) {
-                    das_yyerror(scanner,"can't have a constant initializer or a finalizer " + $func->getMangledName(),
-                        $func->at, CompilationError::invalid_member_function);
-                }
-                if ( $func->name!="finalize" ) {
-                    auto ctr = makeClassConstructor(yyextra->g_thisStructure, $func);
-                    if ( !yyextra->g_Program->addFunction(ctr) ) {
-                        das_yyerror(scanner,"intializer is already defined " + ctr->getMangledName(),
-                            ctr->at, CompilationError::function_already_declared);
-                    }
-                    $func->name = yyextra->g_thisStructure->name + "`" + yyextra->g_thisStructure->name;
-                    modifyToClassMember($func, yyextra->g_thisStructure, false, false);
-                } else {
-                    modifyToClassMember($func, yyextra->g_thisStructure, true, false);
-                }
-            }
-            assignDefaultArguments($func);
-            runFunctionAnnotations(scanner, $func, $annL, tokAt(scanner,@annL));
-            if ( !yyextra->g_Program->addFunction($func) ) {
-                das_yyerror(scanner,"function is already defined " + $func->getMangledName(),
-                    $func->at, CompilationError::function_already_declared);
-            }
-            $func->delRef();
-        }
-        $$ = $list;
+        $$ = ast_structVarDef(scanner,$list,$annL,$isPrivate,$ovr,$cnst,$func,$block,tokRangeAt(scanner,@from,@block),tokAt(scanner,@annL));
     }
     |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' ';' {
         das_yyerror(scanner,"structure field or class method annotation expected to remain on the same line with the field or the class",
@@ -2104,73 +1782,10 @@ optional_public_or_private_variable
 
 global_let
     :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] '{' global_variable_declaration_list[list] '}' {
-        for ( auto pDecl : *$list ) {
-            if ( pDecl->pTypeDecl ) {
-                for ( const auto & name_at : *pDecl->pNameList ) {
-                    VariablePtr pVar = make_smart<Variable>();
-                    pVar->name = name_at.name;
-                    pVar->aka = name_at.aka;
-                    if ( !name_at.aka.empty() ) {
-                        das_yyerror(scanner,"global variable " + name_at.name + " can't have an aka",name_at.at,
-                            CompilationError::invalid_aka);
-                    }
-                    pVar->at = name_at.at;
-                    pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
-                    if ( pDecl->pInit ) {
-                        pVar->init = pDecl->pInit->clone();
-                        pVar->init_via_move = pDecl->init_via_move;
-                        pVar->init_via_clone = pDecl->init_via_clone;
-                    }
-                    if ( $kwd_let ) {
-                        pVar->type->constant = true;
-                    } else {
-                        pVar->type->removeConstant = true;
-                    }
-                    pVar->global_shared = $glob_shar;
-                    pVar->private_variable = !$pub_var;
-                    if ( !yyextra->g_Program->addVariable(pVar) )
-                        das_yyerror(scanner,"global variable is already declared " + name_at.name,name_at.at,
-                            CompilationError::global_variable_already_declared);
-                }
-            }
-        }
-        deleteVariableDeclarationList($list);
+        ast_globalLetList(scanner,$kwd_let,$glob_shar,$pub_var,$list);
     }
     |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] { yyextra->das_force_oxford_comma=true; } optional_field_annotation[ann] let_variable_declaration[decl] {
-        auto pDecl = $decl;
-        if ( pDecl->pTypeDecl ) {
-            for ( const auto & name_at : *pDecl->pNameList ) {
-                VariablePtr pVar = make_smart<Variable>();
-                pVar->name = name_at.name;
-                pVar->aka = name_at.aka;
-                if ( !name_at.aka.empty() ) {
-                    das_yyerror(scanner,"global variable " + name_at.name + " can't have an aka",name_at.at,
-                        CompilationError::invalid_aka);
-                }
-                pVar->at = name_at.at;
-                pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
-                if ( pDecl->pInit ) {
-                    pVar->init = pDecl->pInit->clone();
-                    pVar->init_via_move = pDecl->init_via_move;
-                    pVar->init_via_clone = pDecl->init_via_clone;
-                }
-                if ( $kwd_let ) {
-                    pVar->type->constant = true;
-                } else {
-                    pVar->type->removeConstant = true;
-                }
-                pVar->global_shared = $glob_shar;
-                pVar->private_variable = !$pub_var;
-                if ( $ann ) {
-                    pVar->annotation = move(*$ann);
-                    delete $ann;
-                }
-                if ( !yyextra->g_Program->addVariable(pVar) )
-                    das_yyerror(scanner,"global variable is already declared " + name_at.name,name_at.at,
-                        CompilationError::global_variable_already_declared);
-            }
-        }
-        delete pDecl;
+        ast_globalLet(scanner,$kwd_let,$glob_shar,$pub_var,$ann,$decl);
     }
     ;
 
@@ -2229,61 +1844,10 @@ optional_public_or_private_enum
 
 enum_declaration
     :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] NAME[name] '{' enum_list[pE] '}' {
-        das_checkName(scanner,*$name,tokAt(scanner,@name));
-        auto pEnum = EnumerationPtr($pE);
-        pEnum->at = tokAt(scanner,@name);
-        pEnum->name = *$name;
-        pEnum->isPrivate = !$pubE;
-        if ( $annL ) {
-            for ( auto pA : *$annL ) {
-                if ( pA->annotation ) {
-                    if ( pA->annotation->rtti_isEnumerationAnnotation() ) {
-                        auto ann = static_pointer_cast<EnumerationAnnotation>(pA->annotation);
-                        string err;
-                        if ( !ann->touch(pEnum, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
-                            das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to finalize the enumeration " + pEnum->name + "\n" + err, tokAt(scanner,@annL),
-                                CompilationError::invalid_annotation);
-                        }
-                    }
-                }
-            }
-            swap ( pEnum->annotations, *$annL );
-            delete $annL;
-        }
-        if ( !yyextra->g_Program->addEnumeration(pEnum) ) {
-            das_yyerror(scanner,"enumeration is already defined "+*$name,tokAt(scanner,@pE),
-                CompilationError::enumeration_already_declared);
-        }
-        delete $name;
+        ast_enumDeclaration(scanner,$annL,tokAt(scanner,@annL),$pubE,$name,tokAt(scanner,@name),$pE,tokAt(scanner,@pE),Type::tInt);
     }
     |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] NAME[name] ':' enum_basic_type_declaration[ebt] '{' enum_list[pE] '}' {
-        das_checkName(scanner,*$name,tokAt(scanner,@name));
-        auto pEnum = EnumerationPtr($pE);
-        pEnum->at = tokAt(scanner,@name);
-        pEnum->name = *$name;
-        pEnum->baseType = $ebt;
-        pEnum->isPrivate = !$pubE;
-        if ( $annL ) {
-            for ( auto pA : *$annL ) {
-                if ( pA->annotation ) {
-                    if ( pA->annotation->rtti_isEnumerationAnnotation() ) {
-                        auto ann = static_pointer_cast<EnumerationAnnotation>(pA->annotation);
-                        string err;
-                        if ( !ann->touch(pEnum, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
-                            das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to finalize the enumeration " +pEnum->name + "\n" + err, tokAt(scanner,@annL),
-                                CompilationError::invalid_annotation);
-                        }
-                    }
-                }
-            }
-            swap ( pEnum->annotations, *$annL );
-            delete $annL;
-        }
-        if ( !yyextra->g_Program->addEnumeration(pEnum) ) {
-            das_yyerror(scanner,"enumeration is already defined "+*$name,tokAt(scanner,@pE),
-                CompilationError::enumeration_already_declared);
-        }
-        delete $name;
+        ast_enumDeclaration(scanner,$annL,tokAt(scanner,@annL),$pubE,$name,tokAt(scanner,@name),$pE,tokAt(scanner,@pE),$ebt);
     }
     ;
 

@@ -9,6 +9,12 @@ typedef void * yyscan_t;
 
 namespace das {
 
+    enum {
+        OVERRIDE_NONE,
+        OVERRIDE_OVERRIDE,
+        OVERRIDE_SEALED,
+    };
+
     struct VariableNameAndPosition {
         string      name;
         string      aka;
@@ -51,5 +57,22 @@ namespace das {
         string * parent, const LineInfo & atParent );
     void ast_structureDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & loc, Structure * ps,
         const LineInfo & atPs, vector<VariableDeclaration*> * list );
-
+    void ast_enumDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & atannL, bool pubE,
+        string * name, const LineInfo & atName, Enumeration * pE, const LineInfo & atpE, Type ebt );
+    void ast_globalLetList (  yyscan_t scanner, bool kwd_let, bool glob_shar, bool pub_var, vector<VariableDeclaration*> * list );
+    void ast_globalLet (  yyscan_t scanner, bool kwd_let, bool glob_shar, bool pub_var, AnnotationArgumentList * ann, VariableDeclaration * decl );
+    vector<VariableDeclaration*> * ast_structVarDefAbstract ( yyscan_t scanner, vector<VariableDeclaration*> * list,
+        AnnotationList * annL, bool isPrivate, Function * func );
+    vector<VariableDeclaration*> * ast_structVarDefAbstract ( yyscan_t scanner, vector<VariableDeclaration*> * list,
+        AnnotationList * annL, bool isPrivate, Function * func );
+    vector<VariableDeclaration*> * ast_structVarDef ( yyscan_t scanner, vector<VariableDeclaration*> * list,
+        AnnotationList * annL, bool isPrivate, int ovr, bool cnst, Function * func, Expression * block,
+            const LineInfo & fromBlock, const LineInfo & annLAt );
+    Expression * ast_NameName ( yyscan_t scanner, string * ena, string * eni, const LineInfo & enaAt, const LineInfo & eniAt );
+    Expression * ast_makeBlock ( yyscan_t scanner, int bal, AnnotationList * annL, vector<CaptureEntry> * clist,
+        vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & blockAt, const LineInfo & annLAt );
+    Expression * ast_Let ( yyscan_t scanner, bool kwd_let, VariableDeclaration * decl, const LineInfo & kwd_letAt, const LineInfo & declAt );
+    Function * ast_functionDeclarationHeader ( yyscan_t scanner, string * name, vector<VariableDeclaration*> * list,
+        TypeDecl * result, const LineInfo & nameAt );
+    void ast_requireModule ( yyscan_t scanner, string * name, string * modalias, bool pub, const LineInfo & atName );
 }
