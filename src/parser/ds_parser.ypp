@@ -1451,22 +1451,10 @@ expr
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),ExpressionPtr($subexpr)); }
     |   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(scanner,@loc),ExpressionPtr($subexpr)); }
     |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' optional_capture_list[clist] '(' ')' {
-        auto gen = new ExprMakeGenerator(tokAt(scanner,@loc));
-        gen->iterType = TypeDeclPtr($typeDecl);
-        if ( $clist ) {
-            swap ( gen->capture, *$clist );
-            delete $clist;
-        }
-        $$ = gen;
+        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,nullptr,tokAt(scanner,@loc));
     }
     |   DAS_GENERATOR[loc] '<' type_declaration[typeDecl] '>' optional_capture_list[clist] '(' expr[subexpr] ')' {
-        auto gen = new ExprMakeGenerator(tokAt(scanner,@loc), ExpressionPtr($subexpr));
-        gen->iterType = TypeDeclPtr($typeDecl);
-        if ( $clist ) {
-            swap ( gen->capture, *$clist );
-            delete $clist;
-        }
-        $$ = gen;
+        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,$subexpr,tokAt(scanner,@loc));
     }
     |   expr[subexpr] QQ[loc] expr[dval]           { $$ = new ExprNullCoalescing(tokAt(scanner,@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
@@ -1494,41 +1482,9 @@ expr
     |   expr_method_call[subexpr]               { $$ = $subexpr; }
     |   expr_named_call[subexpr]                { $$ = $subexpr; }
     |   expr_block[subexpr]                     { $$ = $subexpr; }
-    |   expr[fncall] LPIPE[loc] expr[arg] {
-        if ( $fncall->rtti_isCallLikeExpr() ) {
-            auto pCall = (ExprLooksLikeCall *) $fncall;
-            pCall->arguments.push_back(ExpressionPtr($arg));
-            $$ = $fncall;
-        } else if ( $fncall->rtti_isVar() ) {
-            auto pVar = (ExprVar *) $fncall;
-            auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
-            delete pVar;
-            pCall->arguments.push_back(ExpressionPtr($arg));
-            $$ = pCall;
-        } else {
-            das_yyerror(scanner,"can only lpipe into a function call",tokAt(scanner,@loc),CompilationError::cant_pipe);
-            $$ = $fncall;
-        }
-    }
-    |   expr[arg] RPIPE[loc] expr[fncall] {
-        if ( $fncall->rtti_isCallLikeExpr() ) {
-            auto pCall = (ExprLooksLikeCall *) $fncall;
-            pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr($arg));
-            $$ = $fncall;
-        } else if ( $fncall->rtti_isVar() ) {
-            auto pVar = (ExprVar *) $fncall;
-            auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
-            delete pVar;
-            pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr($arg));
-            $$ = pCall;
-        } else {
-            das_yyerror(scanner,"can only lpipe into a function call",tokAt(scanner,@loc),CompilationError::cant_pipe);
-            $$ = $fncall;
-        }
-    }
-    | name_in_namespace[ena] NAME[eni] {
-        $$ = ast_NameName(scanner,$ena,$eni,tokAt(scanner,@ena),tokAt(scanner,@eni));
-    }
+    |   expr[fncall] LPIPE[loc] expr[arg]       { $$ = ast_lpipe(scanner,$fncall,$arg,tokAt(scanner,@loc)); }
+    |   expr[arg] RPIPE[loc] expr[fncall]       { $$ =ast_rpipe(scanner,$arg,$fncall,tokAt(scanner,@loc)); }
+    | name_in_namespace[ena] NAME[eni]          { $$ = ast_NameName(scanner,$ena,$eni,tokAt(scanner,@ena),tokAt(scanner,@eni)); }
     |   DAS_UNSAFE '(' expr[subexpr] ')' {
         $subexpr->alwaysSafe = true;
         $subexpr->userSaidItsSafe = true;

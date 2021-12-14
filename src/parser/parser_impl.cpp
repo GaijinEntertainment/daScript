@@ -727,7 +727,7 @@ namespace das {
         delete name;
     }
 
-    Expression * ast_forLoop ( yyscan_t scanner,  vector<VariableNameAndPosition> * iters, Expression * srcs,
+    Expression * ast_forLoop ( yyscan_t,  vector<VariableNameAndPosition> * iters, Expression * srcs,
         Expression * block, const LineInfo & locAt, const LineInfo & blockAt ) {
         auto pFor = new ExprFor(locAt);
         pFor->visibility = blockAt;
@@ -743,7 +743,7 @@ namespace das {
         return pFor;
     }
 
-    AnnotationArgumentList * ast_annotationArgumentListEntry ( yyscan_t scanner, AnnotationArgumentList * argL, AnnotationArgument * arg ) {
+    AnnotationArgumentList * ast_annotationArgumentListEntry ( yyscan_t, AnnotationArgumentList * argL, AnnotationArgument * arg ) {
         if ( arg->type==Type::none ) {
             for ( auto & sarg : *(arg->aList) ) {
                 sarg.name = arg->name;
@@ -756,5 +756,49 @@ namespace das {
         }
         delete arg;
         return argL;
+    }
+
+    Expression * ast_lpipe ( yyscan_t scanner, Expression * fncall, Expression * arg, const LineInfo & locAt ) {
+        if ( fncall->rtti_isCallLikeExpr() ) {
+            auto pCall = (ExprLooksLikeCall *) fncall;
+            pCall->arguments.push_back(ExpressionPtr(arg));
+            return fncall;
+        } else if ( fncall->rtti_isVar() ) {
+            auto pVar = (ExprVar *) fncall;
+            auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
+            delete pVar;
+            pCall->arguments.push_back(ExpressionPtr(arg));
+            return pCall;
+        } else {
+            das_yyerror(scanner,"can only lpipe into a function call",locAt,CompilationError::cant_pipe);
+            return fncall;
+        }
+    }
+
+    Expression * ast_rpipe ( yyscan_t scanner, Expression * arg, Expression * fncall, const LineInfo & locAt ) {
+        if ( fncall->rtti_isCallLikeExpr() ) {
+            auto pCall = (ExprLooksLikeCall *) fncall;
+            pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr(arg));
+            return fncall;
+        } else if ( fncall->rtti_isVar() ) {
+            auto pVar = (ExprVar *) fncall;
+            auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
+            delete pVar;
+            pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr(arg));
+            return pCall;
+        } else {
+            das_yyerror(scanner,"can only rpipe into a function call",locAt,CompilationError::cant_pipe);
+            return fncall;
+        }
+    }
+
+    Expression * ast_makeGenerator ( yyscan_t, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt ) {
+        auto gen = new ExprMakeGenerator(locAt, subexpr);
+        gen->iterType = TypeDeclPtr(typeDecl);
+        if ( clist ) {
+            swap ( gen->capture, *clist );
+            delete clist;
+        }
+        return gen;
     }
  }

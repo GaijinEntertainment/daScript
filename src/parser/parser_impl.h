@@ -78,4 +78,8 @@ namespace das {
     Expression * ast_forLoop ( yyscan_t scanner,  vector<VariableNameAndPosition> * iters, Expression * srcs,
         Expression * block, const LineInfo & locAt, const LineInfo & blockAt );
     AnnotationArgumentList * ast_annotationArgumentListEntry ( yyscan_t scanner, AnnotationArgumentList * argL, AnnotationArgument * arg );
+    AnnotationArgumentList * ast_annotationArgumentListEntry ( yyscan_t, AnnotationArgumentList * argL, AnnotationArgument * arg );
+    Expression * ast_lpipe ( yyscan_t scanner, Expression * fncall, Expression * arg, const LineInfo & locAt );
+    Expression * ast_rpipe ( yyscan_t scanner, Expression * arg, Expression * fncall, const LineInfo & locAt );
+    Expression * ast_makeGenerator ( yyscan_t scanner, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt );
 }
