@@ -128,6 +128,7 @@ namespace das {
         template <typename TT>
         smart_ptr<TT> addExpressionAnnotation ( const smart_ptr<TT> & ann );
         Module_Ast();
+        void registerFlags(ModuleLibrary & lib);
         void registerAdapterAnnotations(ModuleLibrary & lib);
         void registerAnnotations(ModuleLibrary & lib);
         void registerFunctions(ModuleLibrary & lib);
@@ -135,6 +136,30 @@ namespace das {
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override;
    };
 
-
+    TypeDeclPtr makeExprGenFlagsFlags();
+    TypeDeclPtr makeExprFlagsFlags();
+    TypeDeclPtr makeExprPrintFlagsFlags();
+    TypeDeclPtr makeExprBlockFlags();
+    TypeDeclPtr makeMakeFieldDeclFlags();
+    TypeDeclPtr makeExprAtFlags();
+    TypeDeclPtr makeExprMakeLocalFlags();
+    TypeDeclPtr makeExprMakeStructFlags();
+    TypeDeclPtr makeExprAscendFlags();
+    TypeDeclPtr makeExprCastFlags();
+    TypeDeclPtr makeExprVarFlags();
+    TypeDeclPtr makeExprFieldDerefFlags();
+    TypeDeclPtr makeExprFieldFieldFlags();
+    TypeDeclPtr makeExprSwizzleFieldFlags();
+    TypeDeclPtr makeExprYieldFlags();
+    TypeDeclPtr makeExprReturnFlags();
+    TypeDeclPtr makeExprMakeBlockFlags();
+    TypeDeclPtr makeTypeDeclFlags();
+    TypeDeclPtr makeFieldDeclarationFlags();
+    TypeDeclPtr makeStructureFlags();
+    TypeDeclPtr makeFunctionFlags();
+    TypeDeclPtr makeMoreFunctionFlags();
+    TypeDeclPtr makeFunctionSideEffectFlags();
+    TypeDeclPtr makeVariableFlags();
+    TypeDeclPtr makeVariableAccessFlags();
 
 }

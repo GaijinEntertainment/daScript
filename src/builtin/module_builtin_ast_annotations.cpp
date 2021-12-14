@@ -149,27 +149,6 @@ DAS_BASE_BIND_ENUM(das::CaptureMode, CaptureMode,
     capture_any, capture_by_copy, capture_by_reference, capture_by_clone, capture_by_move)
 
 namespace das {
-    TypeDeclPtr makeExprGenFlagsFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprGenFlags";
-        ft->argNames = { "alwaysSafe", "generated", "userSaidItsSafe" };
-        return ft;
-    }
-
-    TypeDeclPtr makeExprFlagsFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprFlags";
-        ft->argNames = { "constexpression", "noSideEffects", "noNativeSideEffects" };
-        return ft;
-    }
-
-    TypeDeclPtr makeExprPrintFlagsFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprPrintFlags";
-        ft->argNames = { "topLevel", "argLevel", "bottomLevel" };
-        return ft;
-    }
-
     void init_expr ( BasicStructureAnnotation & ann ) {
         ann.addFieldEx("at", "at", offsetof(Expression, at), makeType<LineInfo>(*ann.mlib));
         ann.addFieldEx("_type", "type", offsetof(Expression, type), makeType<TypeDeclPtr>(*ann.mlib));
@@ -212,15 +191,6 @@ namespace das {
         }
     };
 
-    TypeDeclPtr makeExprBlockFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprBlockFlags";
-        ft->argNames = { "isClosure", "hasReturn", "copyOnReturn", "moveOnReturn",
-            "inTheLoop", "finallyBeforeBody", "finallyDisabled","aotSkipMakeBlock",
-            "aotDoNotSkipAnnotationData", "isCollapseable", "needCollapse" };
-        return ft;
-    }
-
     struct AstExprBlockAnnotation : AstExpressionAnnotation<ExprBlock> {
         AstExprBlockAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprBlock> ("ExprBlock", ml) {
@@ -254,13 +224,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(elements)>("elements");
         }
     };
-
-    TypeDeclPtr makeMakeFieldDeclFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "MakeFieldDeclFlags";
-        ft->argNames = { "moveSemantics", "cloneSemantics" };
-        return ft;
-    }
 
     struct AstMakeFieldDeclAnnotation : ManagedStructureAnnotation<MakeFieldDecl> {
         AstMakeFieldDeclAnnotation(ModuleLibrary & ml)
@@ -352,13 +315,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(defaultValue)>("defaultValue");
         }
     };
-
-    TypeDeclPtr makeExprAtFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprAtFlags";
-        ft->argNames = { "r2v", "r2cr", "write", "no_promotion" };
-        return ft;
-    }
 
     template <typename EXPR>
     struct AstExprAtAnnotation : AstExpressionAnnotation<EXPR> {
@@ -470,14 +426,6 @@ namespace das {
         }
     };
 
-    TypeDeclPtr makeExprMakeLocalFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprMakeLocalFlags";
-        ft->argNames = { "useStackRef", "useCMRES", "doesNotNeedSp",
-            "doesNotNeedInit", "initAllFields" };
-        return ft;
-    }
-
     template <typename EXPR>
     struct AstExprMakeLocalAnnotation : AstExpressionAnnotation<EXPR> {
         AstExprMakeLocalAnnotation(const string & na, ModuleLibrary & ml)
@@ -489,13 +437,6 @@ namespace das {
             this->addFieldEx ( "makeFlags", "makeFlags", offsetof(ExprMakeLocal, makeFlags), makeExprMakeLocalFlags() );
         }
     };
-
-    TypeDeclPtr makeExprMakeStructFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprMakeStructFlags";
-        ft->argNames = { "useInitializer", "isNewHandle" };
-        return ft;
-    }
 
     struct AstExprMakeStructAnnotation : AstExprMakeLocalAnnotation<ExprMakeStruct> {
         AstExprMakeStructAnnotation(ModuleLibrary & ml)
@@ -665,13 +606,6 @@ namespace das {
         }
     };
 
-    TypeDeclPtr makeExprAscendFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprAscendFlags";
-        ft->argNames = { "useStackRef", "needTypeInfo" };
-        return ft;
-    }
-
     struct AstExprAscendAnnotation : AstExpressionAnnotation<ExprAscend> {
         AstExprAscendAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprAscend> ("ExprAscend", ml) {
@@ -681,13 +615,6 @@ namespace das {
             addFieldEx ( "ascendFlags", "ascendFlags", offsetof(ExprAscend, ascendFlags), makeExprAscendFlags() );
         }
     };
-
-    TypeDeclPtr makeExprCastFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprCastFlags";
-        ft->argNames = { "upcastCast", "reinterpretCast" };
-        return ft;
-    }
 
     struct AstExprCastAnnotation : AstExpressionAnnotation<ExprCast> {
         AstExprCastAnnotation(ModuleLibrary & ml)
@@ -706,14 +633,6 @@ namespace das {
         }
     };
 
-    TypeDeclPtr makeExprVarFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprVarFlags";
-        ft->argNames = { "local", "argument", "_block",
-            "thisBlock", "r2v", "r2cr", "write" };
-        return ft;
-    }
-
     struct AstExprVarAnnotation : AstExpressionAnnotation<ExprVar> {
         AstExprVarAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprVar> ("ExprVar", ml) {
@@ -724,20 +643,6 @@ namespace das {
             addFieldEx ( "varFlags", "varFlags", offsetof(ExprVar, varFlags), makeExprVarFlags() );
         }
     };
-
-    TypeDeclPtr makeExprFieldDerefFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprFieldDerefFlags";
-        ft->argNames = { "unsafeDeref", "ignoreCaptureConst" };
-        return ft;
-    }
-
-    TypeDeclPtr makeExprFieldFieldFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprFieldFieldFlags";
-        ft->argNames = { "r2v", "r2cr", "write", "no_promotion" };
-        return ft;
-    }
 
     template <typename EXPR>
     struct AstExprFieldAnnotation : AstExpressionAnnotation<EXPR> {
@@ -761,13 +666,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(skipQQ)>("skipQQ");
         }
     };
-
-    TypeDeclPtr makeExprSwizzleFieldFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprSwizzleFieldFlags";
-        ft->argNames = { "r2v", "r2cr", "write" };
-        return ft;
-    }
 
     struct AstExprSwizzleAnnotation : AstExpressionAnnotation<ExprSwizzle> {
         AstExprSwizzleAnnotation(ModuleLibrary & ml)
@@ -793,13 +691,6 @@ namespace das {
         }
     };
 
-    TypeDeclPtr makeExprYieldFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprYieldFlags";
-        ft->argNames = { "moveSemantics" };
-        return ft;
-    }
-
     struct AstExprYieldAnnotation : AstExpressionAnnotation<ExprYield> {
         AstExprYieldAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprYield> ("ExprYield", ml) {
@@ -807,14 +698,6 @@ namespace das {
             addFieldEx ( "returnFlags", "returnFlags", offsetof(ExprYield, returnFlags), makeExprYieldFlags() );
         }
     };
-
-    TypeDeclPtr makeExprReturnFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprReturnFlags";
-        ft->argNames = { "moveSemantics", "returnReference", "returnInBlock",
-            "takeOverRightStack", "returnCallCMRES", "returnCMRES", "fromYield" };
-        return ft;
-    }
 
     struct AstExprReturnAnnotation : AstExpressionAnnotation<ExprReturn> {
         AstExprReturnAnnotation(ModuleLibrary & ml)
@@ -834,13 +717,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(mode)>("mode");
         }
     };
-
-    TypeDeclPtr makeExprMakeBlockFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "ExprMakeBlockFlags";
-        ft->argNames = { "isLambda", "isLocalFunction" };
-        return ft;
-    }
 
     struct AstExprMakeBlockAnnotation : AstExpressionAnnotation<ExprMakeBlock> {
         AstExprMakeBlockAnnotation(ModuleLibrary & ml)
@@ -984,16 +860,6 @@ namespace das {
         }
     };
 
-    TypeDeclPtr makeTypeDeclFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "TypeDeclFlags";
-        ft->argNames = { "ref", "constant", "temporary", "_implicit",
-            "removeRef", "removeConstant", "removeDim",
-            "removeTemporary", "explicitConst", "aotAlias", "smartPtr",
-            "smartPtrNative", "isExplicit", "isNativeDim" };
-        return ft;
-    }
-
     struct AstTypeDeclAnnnotation : ManagedStructureAnnotation <TypeDecl> {
         AstTypeDeclAnnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("TypeDecl", ml) {
@@ -1093,14 +959,6 @@ namespace das {
         }
     };
 
-    TypeDeclPtr makeFieldDeclarationFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "FieldDeclarationFlags";
-        ft->argNames = { "moveSemantics", "parentType", "capturedConstant",
-            "generated", "capturedRef", "doNotDelete", "privateField", "sealed" };
-        return ft;
-    }
-
     struct AstFieldDeclarationAnnotation : ManagedStructureAnnotation<Structure::FieldDeclaration> {
         AstFieldDeclarationAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("FieldDeclaration", ml, "Structure::FieldDeclaration") {
@@ -1116,15 +974,6 @@ namespace das {
         }
     };
 
-    TypeDeclPtr makeStructureFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "StructureFlags";
-        ft->argNames = { "isClass", "genCtor", "cppLayout", "cppLayoutNotPod",
-            "generated", "persistent", "isLambda", "privateStructure",
-            "macroInterface", "sealed" };
-        return ft;
-    }
-
     struct AstStructureAnnotation : ManagedStructureAnnotation<Structure> {
         AstStructureAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("Structure", ml) {
@@ -1139,36 +988,6 @@ namespace das {
             addFieldEx ( "flags", "flags", offsetof(Structure, flags), makeStructureFlags() );
         }
     };
-
-    TypeDeclPtr makeFunctionFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "FunctionFlags";
-        ft->argNames = {
-            "builtIn", "policyBased", "callBased", "interopFn", "hasReturn", "copyOnReturn", "moveOnReturn", "exports",
-            "init", "addr", "used", "fastCall", "knownSideEffects", "hasToRunAtCompileTime", "unsafeOperation", "unsafeDeref",
-            "hasMakeBlock", "aotNeedPrologue", "noAot", "aotHybrid", "aotTemplate", "generated", "privateFunction", "_generator",
-            "_lambda", "firstArgReturnType", "noPointerCast", "isClassMethod", "isTypeConstructor", "shutdown", "anyTemplate", "macroInit"
-        };
-        return ft;
-    }
-
-    TypeDeclPtr makeMoreFunctionFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "MoreFunctionFlags";
-        ft->argNames = {
-            "macroFunction", "needStringCast"
-        };
-        return ft;
-    }
-
-    TypeDeclPtr makeFunctionSideEffectFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "FunctionSideEffectFlags";
-        ft->argNames = { "unsafe", "userScenario","modifyExternal",
-            "modifyArgument","accessGlobal","invoke"
-        };
-        return ft;
-    }
 
     struct AstInferHistoryAnnotation : ManagedStructureAnnotation<InferHistory> {
         AstInferHistoryAnnotation(ModuleLibrary & ml)
@@ -1214,23 +1033,6 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(getOrigin)>("origin","getOrigin");
         }
     };
-
-    TypeDeclPtr makeVariableFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "VariableFlags";
-        ft->argNames = { "init_via_move", "init_via_clone", "used", "aliasCMRES",
-            "marked_used", "global_shared", "do_not_delete", "generated",
-            "capture_as_ref", "can_shadow", "private_variable" };
-        return ft;
-    }
-
-    TypeDeclPtr makeVariableAccessFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
-        ft->alias = "VariableAccessFlags";
-        ft->argNames = { "access_extern", "access_get", "access_ref",
-            "access_init", "access_pass" };
-        return ft;
-    }
 
     struct AstVariableAnnotation : ManagedStructureAnnotation<Variable> {
         AstVariableAnnotation(ModuleLibrary & ml)
@@ -1357,32 +1159,8 @@ namespace das {
         addTypeInfoMacro(make_smart<AstFunctionMacro>());
         // QUOTE
         addCall<ExprQuote>("quote");
-        // FLAGS?
-        addAlias(makeTypeDeclFlags());
-        addAlias(makeFieldDeclarationFlags());
-        addAlias(makeStructureFlags());
-        addAlias(makeExprGenFlagsFlags());
-        addAlias(makeExprFlagsFlags());
-        addAlias(makeExprPrintFlagsFlags());
-        addAlias(makeFunctionFlags());
-        addAlias(makeMoreFunctionFlags());
-        addAlias(makeFunctionSideEffectFlags());
-        addAlias(makeVariableFlags());
-        addAlias(makeVariableAccessFlags());
-        addAlias(makeExprBlockFlags());
-        addAlias(makeExprAtFlags());
-        addAlias(makeExprMakeLocalFlags());
-        addAlias(makeExprAscendFlags());
-        addAlias(makeExprCastFlags());
-        addAlias(makeExprVarFlags());
-        addAlias(makeExprMakeStructFlags());
-        addAlias(makeMakeFieldDeclFlags());
-        addAlias(makeExprFieldDerefFlags());
-        addAlias(makeExprFieldFieldFlags());
-        addAlias(makeExprSwizzleFieldFlags());
-        addAlias(makeExprYieldFlags());
-        addAlias(makeExprReturnFlags());
-        addAlias(makeExprMakeBlockFlags());
+        // flags
+        registerFlags(lib);
         // ENUMS
         addEnumeration(make_smart<EnumerationSideEffects>());
         addEnumeration(make_smart<EnumerationCaptureMode>());
