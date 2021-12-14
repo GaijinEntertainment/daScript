@@ -1274,12 +1274,6 @@ namespace das
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
             SideEffects::modifyExternal, "toLog");
-        addExtern<DAS_BIND_FUN(setDefaultLoggerLogLevel)>(*this, lib, "set_default_logger_log_level",
-            SideEffects::modifyExternal, "setDefaultLoggerLogLevel");
-        addExtern<DAS_BIND_FUN(setVerbosityLogLevel)>(*this, lib, "set_verbosity_log_level",
-            SideEffects::modifyExternal, "setVerbosityLogLevel");
-        addExtern<DAS_BIND_FUN(getVerbosityLogLevel)>(*this, lib, "get_verbosity_log_level",
-            SideEffects::modifyExternal, "getVerbosityLogLevel");
 
         // log levels
         addConstant<int>(*this, "LOG_CRITICAL", LogLevel::critical);

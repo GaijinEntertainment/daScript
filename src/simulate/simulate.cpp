@@ -1470,31 +1470,12 @@ namespace das
         });
     }
 
-    static int defaultLogLevel = LogLevel::debug;
-    static int verbosityLogLevel = LogLevel::debug;
-
-    int setDefaultLoggerLogLevel ( int level ) {
-        auto dlogl = defaultLogLevel;
-        defaultLogLevel = level;
-        return dlogl;
-    }
-
-    int setVerbosityLogLevel ( int verbosity_level ) {
-        auto level = verbosityLogLevel;
-        verbosityLogLevel = verbosity_level;
-        return level;
-    }
-
-    int getVerbosityLogLevel () {
-        return verbosityLogLevel;
-    }
-
     void toLog ( int level, const char * text ) {
         bool any = false;
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             any |= pAgent->onLog(int(level), text);
         });
-        if ( !any && level>=verbosityLogLevel ) {
+        if ( !any ) {
             const char * marker = "";
 
             if ( level >= LogLevel::error )

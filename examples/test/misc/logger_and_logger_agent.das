@@ -11,9 +11,7 @@ def logger_agent ( ctx : Context )
 
 [export]
 def main
-    // set_verbosity_log_level(LOG_DEBUG)
-
-    to_log(LOG_TRACE,   "trace")            // this one will not show, default verbosity log level is set to 'LOG_DEBUG'
+    to_log(LOG_TRACE,   "trace")
     to_log(LOG_DEBUG,   "debug")
     to_log(LOG_INFO,    "info")
     to_log(LOG_WARNING, "warning")

@@ -170,9 +170,6 @@ namespace das {
     };
 
     void toLog ( int level, const char * text );
-    int setDefaultLoggerLogLevel ( int level );   // returns previous log level
-    int setVerbosityLogLevel ( int verbosity_level ); // returns previous verbosity level
-    int getVerbosityLogLevel ();
 
     class LOG : public TextWriter {
     public:
