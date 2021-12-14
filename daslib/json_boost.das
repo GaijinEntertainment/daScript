@@ -214,7 +214,7 @@ def JV(value): JsonValue?
             arr |> push <| _::JV(x)
         return _::JV(arr)
     else
-        print("unsupported type {typeinfo(typename value)}\n")
+        to_log(LOG_ERROR, "JSON: unsupported type {typeinfo(typename value)}\n")
         concept_assert(false, "unknown JV()")
         return null
 

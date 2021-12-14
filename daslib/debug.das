@@ -656,7 +656,7 @@ class private DAgent: DapiDebugAgent
             server.agent = addr(self)
         server->make_server_adapter()
         if !server->init(port)
-            print("server failed to initialize\n")
+            to_log(LOG_ERROR, "debug server failed to initialize\n")
             unsafe
                 delete server
 
@@ -936,15 +936,15 @@ class private DAgent: DapiDebugAgent
                 string_heap_collect()
             alloc = string_heap_bytes_allocated()
             if logStrMemory
-                print("dap: {report}{bytes_hr(alloc)} limit : {bytes_hr(strLimit)}\n")
+                to_log(LOG_DEBUG, "dap: {report}{bytes_hr(alloc)} limit : {bytes_hr(strLimit)}\n")
             if alloc > strLimit
                 strLimit *= uint64(2)
                 if logStrMemory
-                    print("dap: UP string heap limit: {bytes_hr(strLimit)}\n")
+                    to_log(LOG_DEBUG, "dap: UP string heap limit: {bytes_hr(strLimit)}\n")
             elif strLimit > initialStrLimit && alloc < strLimit / uint64(2)
                 strLimit = strLimit / uint64(2)
                 if logStrMemory
-                    print("dap: DOWN string heap limit: {bytes_hr(strLimit)}\n")
+                    to_log(LOG_DEBUG, "dap: DOWN string heap limit: {bytes_hr(strLimit)}\n")
 
     def override onCreateContext(var ctx: Context): void
         // unsafe
@@ -1021,10 +1021,10 @@ class private DAServer: Server
         Server`Server(cast<Server> self)
 
     def override onError(msg:string; code:int)
-        print("[E] dap: server error:{code} - {msg}\n")
+        to_log(LOG_ERROR, "dap: server error:{code} - {msg}\n")
 
     def override onConnect()
-        print("dap: connected ::{port}\n")
+        to_log(LOG_INFO, "dap: connected ::{port}\n")
 
     def override onDisconnect()
         if length(current_string) > 0
@@ -1559,7 +1559,7 @@ def compileAndRun ( text, self_text:string ) : tuple<ok:bool;result:string>
             fmap(fr) <| $(data)
                 access |> set_file_source("__current.das", string(data))
         else
-            print("failed to open `{self_text}`\n")
+            to_log(LOG_ERROR, "failed to open `{self_text}`\n")
     using <| $(var mg:ModuleGroup#)
         using <| $(var cop:CodeOfPolicies#)
             cop.allow_local_variable_shadowing = true
@@ -1646,9 +1646,9 @@ def private start_debug_agent(var ctx: Context)
 def private start_agent(force:bool = false): bool
     if force || !has_debug_agent_context("~debug")
         fork_debug_agent_context(@@start_debug_agent)
-        print(use_instruments() ? "dap: install debug agent (with instruments)\n" : "dap: install debug agent\n")
+        to_log(LOG_INFO, use_instruments() ? "dap: install debug agent (with instruments)\n" : "dap: install debug agent\n")
     else
-        print("dap: debug agent already exists\n")
+        to_log(LOG_WARNING, "dap: debug agent already exists\n")
     set_single_step(this_context(), !use_instruments() || wait_debugger())
     return true
 

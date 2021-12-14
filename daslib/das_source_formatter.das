@@ -451,7 +451,7 @@ def mark_token_context()
 
 def debug_print_tokens()
     for t in tokens
-        print("{t.isInFunctionParam ? ">" : " "}{t.isInType ? "*" : " "} '{t.str}'\n");
+        to_log(LOG_DEBUG, "{t.isInFunctionParam ? ">" : " "}{t.isInType ? "*" : " "} '{t.str}'\n");
 
 
 def generate_source(): string
@@ -706,19 +706,19 @@ def public format_file(file_name: string const&)
     var formatted: string = ""
     fopen(file_name, "rb") <| $(fr)
         if fr == null
-            print("ERROR: cannot open '{file_name}'\n")
+            to_log(LOG_ERROR, "cannot open '{file_name}'\n")
         else
             fmap(fr) <| $(data)
                 unformatted = string(data)
                 formatted = format_source(data)
 
     if debugMode
-        print(formatted)
+        to_log(LOG_DEBUG, formatted)
 
     if !empty(formatted) && formatted != unformatted && !debugMode
         fopen(file_name, "wb") <| $(fw)
             if fw == null
-                print("ERROR: cannot open '{file_name} for write'\n")
+                to_log(LOG_ERROR, "cannot open '{file_name} for write'\n")
             else
                 fw |> fprint(formatted)
 
@@ -748,7 +748,7 @@ def main()
     if !empty(filesListFn)
         fopen(filesListFn, "rb") <| $(f)
             if f == null
-                print("ERROR: cannot open '{filesListFn}'\n")
+                to_log(LOG_ERROR, "cannot open '{filesListFn}'\n")
             else
                 while !feof(f)
                     var file_name = fgets(f)

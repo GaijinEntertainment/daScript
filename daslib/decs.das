@@ -225,10 +225,10 @@ def public after_gc
 
 def public debug_dump
     for arch in decsState.allArchetypes
-        print("archtype {arch.hash} : {arch.size}\n")
+        to_log(LOG_DEBUG, "archtype {arch.hash} : {arch.size}\n")
         // debug(arch)
         for index in range(arch.size)
-            print("\tentity[{index}]\n")
+            to_log(LOG_DEBUG, "\tentity[{index}]\n")
             for c in arch.components
                 if c.info.dumper!=null
                     let dump = build_string() <| $ ( wr )
@@ -239,12 +239,12 @@ def public debug_dump
                             unsafe
                                 let txt = invoke(c.info.dumper, addr(c.data[offset]))
                                 wr |> write(txt)
-                    print("\t\t{c.name} : {describe(c.info)}\n\t\t\t{dump}\n")
+                    to_log(LOG_DEBUG, "\t\t{c.name} : {describe(c.info)}\n\t\t\t{dump}\n")
                 else
-                    print("\t\t{c.name} : {describe(c.info)}\n")
+                    to_log(LOG_DEBUG, "\t\t{c.name} : {describe(c.info)}\n")
     for erq in decsState.ecsQueries
-        print("query {erq.hash}\n")
-        print("\treq = {erq.req}\n\treqn = {erq.reqn}\n\tarchetypes = {erq.archetypes}\nat = {erq.at.file}:{int(erq.at.line)}\n")
+        to_log(LOG_DEBUG, "query {erq.hash}\n")
+        to_log(LOG_DEBUG, "\treq = {erq.req}\n\treqn = {erq.reqn}\n\tarchetypes = {erq.archetypes}\nat = {erq.at.file}:{int(erq.at.line)}\n")
 
 def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype; idx:int; isNew:bool ):void> )
     var afound & = unsafe(decsState.archetypeLookup[hash])
