@@ -560,7 +560,7 @@ include_directories(include)
 ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
     ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
 	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${SMMALLOC_SRC})
-# ADD_DEPENDENCIES(libDaScript need_and_resolve libUriParser)
+ADD_DEPENDENCIES(libDaScript need_and_resolve)
 target_include_directories(libDaScript PUBLIC
     ${DAS_SMMALLOC_DIR}
     ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
@@ -634,7 +634,6 @@ XXD(examples/test/unit_test.das)
 
 ADD_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC})
 SETUP_CPP11(libDaScriptTest)
-# ADD_DEPENDENCIES(libDaScriptTest libDaScript)
 
 # Test
 if (NOT ${DAS_BUILD_TEST} MATCHES NO)
@@ -651,7 +650,6 @@ SOURCE_GROUP_FILES("source" PROFILE_MAIN_LIB_SRC)
 
 ADD_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
 SETUP_CPP11(libDaScriptProfile)
-# ADD_DEPENDENCIES(libDaScriptProfile)
 
 if (NOT ${DAS_BUILD_PROFILE} MATCHES NO)
   include(examples/profile/CMakeLists.txt)

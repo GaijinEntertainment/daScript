@@ -180,7 +180,7 @@ def onInner(var root)
     root |> with_array("inner") <| $(inner)
         for idecl in inner
             assert(idecl is _object)
-            var decl & = idecl as _object
+            var decl & = unsafe(idecl as _object)
             var skip = false
             if decl |> key_exists("loc")
                 decl |> with_object("loc") <| $ ( loc )
@@ -264,7 +264,7 @@ def onEnum(var root)
     root |> with_array("inner") <| $ ( inner )
         for edo in inner
             assert(edo is _object)
-            var ed & = edo as _object
+            var ed & = unsafe(edo as _object)
             if ed["kind"] as _string == "EnumConstantDecl"
                 var cname = ed["name"] as _string
                 ast.enums[fullName].edecl |> push(cname)
@@ -284,7 +284,7 @@ def onVar(var root)
     ]]
 
 def getQualType(var root; field:string="type")
-    var qto & = root[field] as _object
+    var qto & = unsafe(root[field] as _object)
     return qto["qualType"] as _string
 
 def onNumericLiteral(var inner_obj)
@@ -301,7 +301,7 @@ def onInitArg(var root)
     var valueType = ""
     if root |> key_exists("inner")
         root |> with_array("inner") <| $ ( inner )
-            var inner_obj & = inner[0] as _object
+            var inner_obj & = unsafe(inner[0] as _object)
             let kind = inner_obj["kind"] as _string
             if kind=="ImplicitCastExpr"
                 let castKind = inner_obj["castKind"] as _string
@@ -313,7 +313,7 @@ def onInitArg(var root)
                     if valueCategory=="rvalue"
                         if valueType=="const char *"
                             inner_obj |> with_array("inner") <| $ ( iarr )
-                                var iobj & = iarr[0] as _object
+                                var iobj & = unsafe(iarr[0] as _object)
                                 value = iobj["value"] as _string
                         else
                             print("warning: unsupported decay type {valueType}")
@@ -326,7 +326,7 @@ def onInitArg(var root)
             elif kind=="UnaryOperator"
                 let opCode = inner_obj["opcode"] as _string
                 inner_obj |> with_array("inner") <| $ (iinner)
-                    var iinner_obj & = iinner[0] as _object
+                    var iinner_obj & = unsafe(iinner[0] as _object)
                     let ikind = iinner_obj["kind"] as _string
                     if ikind=="IntegerLiteral" || ikind=="FloatingLiteral"
                         let literal = onNumericLiteral(iinner_obj)
@@ -365,7 +365,7 @@ def onFunctionBody(var root; isMethod:bool; ofClass:string="") : ClangFunc
         root |> with_array("inner") <| $ ( inner )
             for fad in inner
                 assert(fad is _object)
-                var ad & = fad as _object
+                var ad & = unsafe(fad as _object)
                 if ad["kind"] as _string == "ParmVarDecl"
                     let fieldName = key_exists(ad,"name") ? (ad["name"] as _string) : ""
                     var fqualType = getQualType(ad)
@@ -908,7 +908,7 @@ def bindHeaders ( fname, outprefix:string )
                     panic("failed to parse, {error}\n")
                 else
                     assert(json is _object)
-                    var root & = json as _object
+                    var root & = unsafe(json as _object)
                     verify( root["kind"] |> is_str <| "TranslationUnitDecl" )
                     onInner(root)
                     // debug(ast,"AST =")
