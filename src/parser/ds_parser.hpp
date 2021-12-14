@@ -53,7 +53,6 @@
 extern int das_yydebug;
 #endif
 /* "%code requires" blocks.  */
-#line 13 "ds_parser.ypp"
 
     #include "daScript/misc/platform.h"
     #include "daScript/ast/ast.h"
@@ -81,7 +80,6 @@ extern int das_yydebug;
     LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
     LineInfo tokRangeAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
 
-#line 85 "ds_parser.hpp"
 
 /* Token kinds.  */
 #ifndef DAS_YYTOKENTYPE
@@ -260,7 +258,6 @@ extern int das_yydebug;
 #if ! defined DAS_YYSTYPE && ! defined DAS_YYSTYPE_IS_DECLARED
 union DAS_YYSTYPE
 {
-#line 83 "ds_parser.ypp"
 
     char                            ch;
     bool                            b;
@@ -289,7 +286,6 @@ union DAS_YYSTYPE
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
 
-#line 293 "ds_parser.hpp"
 
 };
 typedef union DAS_YYSTYPE DAS_YYSTYPE;

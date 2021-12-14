@@ -76,6 +76,7 @@
 
 %locations
 %verbose
+%no-lines
 // %debug
 
 %define parse.error verbose
