@@ -139,19 +139,44 @@ namespace das {
         static mutex pmut;
     };
 
+
+
+
     enum LogLevel {
-        verbose     =   1000
-    ,   say         =   2000
-    ,   warning     =   3000
-    ,   error       =   4000
+
+        // CRITICAL - application can no longer perform its functions, or further execution will cause data corruption.
+        // For example: array overrun, os_debug_break, assertion failure inside compiler.
+        critical    = 50000,
+
+        // ERROR - Error events of considerable importance that will prevent normal program execution,
+        // but might still allow the application to continue running.
+        // For example: an error when opening a file, wrong settings for texture conversion, assertion failure in the script.
+        error       = 40000,
+
+        // WARNING - the error is handled locally, something may cause unexpected behavior of the application.
+        // For example: not all characters have been extracted from keystroke buffer, MSAA level was too high.
+        warning     = 30000,
+
+        // INFO - highlight the progress of the application.
+        // General system start/stop messages, device configuration information.
+        info        = 20000,
+
+        // DEBUG - information useful for application developers. (DEBUG is defaut level)
+        debug       = 10000,
+
+        // TRACE - information useful for developers of subsystems, libraries, daScript etc.
+        // For example: application activation/deactivation, key pressed, texture loaded from a file, sound file loaded.
+        trace       = 0,
     };
 
     void toLog ( int level, const char * text );
     int setDefaultLoggerLogLevel ( int level );   // returns previous log level
+    int setVerbosityLogLevel ( int verbosity_level ); // returns previous verbosity level
+    int getVerbosityLogLevel ();
 
     class LOG : public TextWriter {
     public:
-        LOG ( int level = LogLevel::say ) : logLevel(level) {}
+        LOG ( int level = LogLevel::debug ) : logLevel(level) {}
         virtual void output() override {
             int newPos = tellp();
             if (newPos != pos) {
@@ -163,6 +188,6 @@ namespace das {
         }
     protected:
         int pos = 0;
-        int logLevel = LogLevel::say;
+        int logLevel = LogLevel::debug;
     };
 }

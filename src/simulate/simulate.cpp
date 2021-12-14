@@ -1470,7 +1470,8 @@ namespace das
         });
     }
 
-    static int defaultLogLevel = LogLevel::say;
+    static int defaultLogLevel = LogLevel::debug;
+    static int verbosityLogLevel = LogLevel::debug;
 
     int setDefaultLoggerLogLevel ( int level ) {
         auto dlogl = defaultLogLevel;
@@ -1478,19 +1479,35 @@ namespace das
         return dlogl;
     }
 
+    int setVerbosityLogLevel ( int verbosity_level ) {
+        auto level = verbosityLogLevel;
+        verbosityLogLevel = verbosity_level;
+        return level;
+    }
+
+    int getVerbosityLogLevel () {
+        return verbosityLogLevel;
+    }
+
     void toLog ( int level, const char * text ) {
         bool any = false;
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             any |= pAgent->onLog(int(level), text);
         });
-        if ( !any && level>=defaultLogLevel ) {
+        if ( !any && level>=verbosityLogLevel ) {
             const char * marker = "";
-            switch ( level ) {
-                case LogLevel::verbose:     break;
-                case LogLevel::say:         break;
-                case LogLevel::warning:     marker = "[W] "; break;
-                case LogLevel::error:       marker = "[E] "; break;
-            }
+
+            if ( level >= LogLevel::error )
+                marker = "[E] ";
+            else if ( level >= LogLevel::warning )
+                marker = "[W] ";
+            else if ( level >= LogLevel::info )
+                marker = "[I] ";
+            else if ( level >= LogLevel::debug )
+                marker = "";
+            else if ( level >= LogLevel::trace )
+                marker = "";
+
             if ( level>=LogLevel::warning ) {
                 fprintf(stderr,"%s%s\n", marker, text);
                 fflush(stderr);

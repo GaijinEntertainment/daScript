@@ -11,14 +11,19 @@ def logger_agent ( ctx : Context )
 
 [export]
 def main
-    to_log(LOG_SAY,     "hello, world!")
-    to_log(LOG_VERBOSE, "verbose")          // this one will not show, level is set to 'say'
+    // set_verbosity_log_level(LOG_DEBUG)
+
+    to_log(LOG_TRACE,   "trace")            // this one will not show, default verbosity log level is set to 'LOG_DEBUG'
+    to_log(LOG_DEBUG,   "debug")
+    to_log(LOG_INFO,    "info")
     to_log(LOG_WARNING, "warning")
     to_log(LOG_ERROR,   "error")
 
     fork_debug_agent_context(@@logger_agent)
 
-    to_log(LOG_SAY,     "one more time, hello, world!")
-    to_log(LOG_VERBOSE, "one more time, verbose")
+    to_log(LOG_TRACE,   "one more time, trace")
+    to_log(LOG_DEBUG,   "one more time, debug")
+    to_log(LOG_INFO,    "one more time, info")
     to_log(LOG_WARNING, "one more time, warning")
     to_log(LOG_ERROR,   "one more time, error")
+

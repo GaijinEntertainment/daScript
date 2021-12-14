@@ -48,7 +48,7 @@ namespace das
 #endif
 
     void dumpTrackingLeaks ( ) {
-        LOG tp(LogLevel::say);
+        LOG tp(LogLevel::debug);
 #if DAS_ENABLE_SMART_PTR_TRACKING
         bool any = true;
         tp << "cleaning up tracking...\n";

@@ -379,7 +379,7 @@ namespace das
     };
 
     void Context::reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly) {
-        LOG tp;
+        LOG tp(LogLevel::debug);
         // now
         HeapReporter walker;
         walker.context = this;

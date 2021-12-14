@@ -662,7 +662,7 @@ namespace das
     }
 
     void dumpProfileInfo( Context * context ) {
-        LOG tp(LogLevel::say);
+        LOG tp(LogLevel::debug);
         context->collectProfileInfo(tp);
     }
 
@@ -1276,10 +1276,17 @@ namespace das
             SideEffects::modifyExternal, "toLog");
         addExtern<DAS_BIND_FUN(setDefaultLoggerLogLevel)>(*this, lib, "set_default_logger_log_level",
             SideEffects::modifyExternal, "setDefaultLoggerLogLevel");
+        addExtern<DAS_BIND_FUN(setVerbosityLogLevel)>(*this, lib, "set_verbosity_log_level",
+            SideEffects::modifyExternal, "setVerbosityLogLevel");
+        addExtern<DAS_BIND_FUN(getVerbosityLogLevel)>(*this, lib, "get_verbosity_log_level",
+            SideEffects::modifyExternal, "getVerbosityLogLevel");
+
         // log levels
-        addConstant<int>(*this, "LOG_VERBOSE",  LogLevel::verbose);
-        addConstant<int>(*this, "LOG_SAY",      LogLevel::say);
-        addConstant<int>(*this, "LOG_WARNING",  LogLevel::warning);
+        addConstant<int>(*this, "LOG_CRITICAL", LogLevel::critical);
         addConstant<int>(*this, "LOG_ERROR",    LogLevel::error);
+        addConstant<int>(*this, "LOG_WARNING",  LogLevel::warning);
+        addConstant<int>(*this, "LOG_INFO",     LogLevel::info);
+        addConstant<int>(*this, "LOG_DEBUG",    LogLevel::debug);
+        addConstant<int>(*this, "LOG_TRACE",    LogLevel::trace);
     }
 }
