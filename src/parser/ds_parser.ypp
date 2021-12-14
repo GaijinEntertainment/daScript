@@ -707,18 +707,7 @@ expression_if_then_else
 
 expression_for_loop
     :   DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ';' expression_block[block] {
-        auto pFor = new ExprFor(tokAt(scanner,@loc));
-        pFor->visibility = tokAt(scanner,@block);
-        for ( const auto & np : *$iters ) {
-            pFor->iterators.push_back(np.name);
-            pFor->iteratorsAka.push_back(np.aka);
-            pFor->iteratorsAt.push_back(np.at);
-        }
-        delete $iters;
-        pFor->sources = sequenceToList($srcs);
-        pFor->body = ExpressionPtr($block);
-        ((ExprBlock *)$block)->inTheLoop = true;
-        $$ = pFor;
+        $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block));
     }
     ;
 
@@ -799,32 +788,10 @@ annotation_argument
 
 annotation_argument_list
     :   annotation_argument[arg]  {
-        $$ = new AnnotationArgumentList();
-        if ( $arg->type==Type::none ) {
-            for ( auto & sarg : *($arg->aList) ) {
-                sarg.name = $arg->name;
-                sarg.at = $arg->at;
-                $$->push_back(sarg);
-            }
-            delete $arg->aList;
-        } else {
-            $$->push_back(*$arg);
-        }
-        delete $arg;
+        $$ = ast_annotationArgumentListEntry(scanner,new AnnotationArgumentList(),$arg);
     }
     |   annotation_argument_list[argL] ',' annotation_argument[arg] {
-            $$ = $argL;
-            if ( $arg->type==Type::none ) {
-                for ( auto & sarg : *($arg->aList) ) {
-                    sarg.name = $arg->name;
-                    sarg.at = $arg->at;
-                    $$->push_back(sarg);
-                }
-                delete $arg->aList;
-            } else {
-                $$->push_back(*$arg);
-            }
-            delete $arg;
+        $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
     }
     ;
 

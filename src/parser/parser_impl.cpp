@@ -726,4 +726,35 @@ namespace das {
         }
         delete name;
     }
+
+    Expression * ast_forLoop ( yyscan_t scanner,  vector<VariableNameAndPosition> * iters, Expression * srcs,
+        Expression * block, const LineInfo & locAt, const LineInfo & blockAt ) {
+        auto pFor = new ExprFor(locAt);
+        pFor->visibility = blockAt;
+        for ( const auto & np : *iters ) {
+            pFor->iterators.push_back(np.name);
+            pFor->iteratorsAka.push_back(np.aka);
+            pFor->iteratorsAt.push_back(np.at);
+        }
+        delete iters;
+        pFor->sources = sequenceToList(srcs);
+        pFor->body = ExpressionPtr(block);
+        ((ExprBlock *)block)->inTheLoop = true;
+        return pFor;
+    }
+
+    AnnotationArgumentList * ast_annotationArgumentListEntry ( yyscan_t scanner, AnnotationArgumentList * argL, AnnotationArgument * arg ) {
+        if ( arg->type==Type::none ) {
+            for ( auto & sarg : *(arg->aList) ) {
+                sarg.name = arg->name;
+                sarg.at = arg->at;
+                argL->push_back(*arg);
+            }
+            delete arg->aList;
+        } else {
+            argL->push_back(*arg);
+        }
+        delete arg;
+        return argL;
+    }
  }

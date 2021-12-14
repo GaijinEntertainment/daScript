@@ -75,4 +75,7 @@ namespace das {
     Function * ast_functionDeclarationHeader ( yyscan_t scanner, string * name, vector<VariableDeclaration*> * list,
         TypeDecl * result, const LineInfo & nameAt );
     void ast_requireModule ( yyscan_t scanner, string * name, string * modalias, bool pub, const LineInfo & atName );
+    Expression * ast_forLoop ( yyscan_t scanner,  vector<VariableNameAndPosition> * iters, Expression * srcs,
+        Expression * block, const LineInfo & locAt, const LineInfo & blockAt );
+    AnnotationArgumentList * ast_annotationArgumentListEntry ( yyscan_t scanner, AnnotationArgumentList * argL, AnnotationArgument * arg );
 }
