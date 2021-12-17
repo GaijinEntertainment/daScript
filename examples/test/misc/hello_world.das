@@ -1,19 +1,74 @@
 require uriparser
 
-/*
-    URI = scheme ":" ["//" authority] path ["?" query] ["#" fragment]
-    authority = [userinfo "@"] host [":" port]
-*/
 
 [export]
 def main
-    using("scheme://userinfo@host:1234/one/two/three?quone=one&qtow=2#someframgnet") <| $ ( var uri:Uri# )
-        print("uri = {string(uri)}\n")
 
-    unsafe
-        var uriA <- Uri("blah")
-        var uriB <- Uri("http://www.google.com/")
-        var uriC <- add_base_uri(uriB, uriA)
-        print("uriA = {string(uriA)}\n")
-        print("uriB = {string(uriB)}\n")
-        print("uriC = {string(uriC)} {uriC.status}\n")
+    print("uri size is {typeinfo(sizeof type<Uri>)}\n")
+
+    var dir = "dir"
+    print("\n{dir}\n")
+    Uri("test.das") |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
+
+    dir = "/dir"
+    print("\n{dir}\n")
+    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
+
+    dir = "./dir"
+    print("\n{dir}\n")
+    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
+
+    dir = "file://dir"
+    print("\n{dir}\n")
+    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
+
+    dir = "file:///dir"
+    print("\n{dir}\n")
+    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
+
+    dir = "file://./dir"
+    print("\n{dir}\n")
+    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
+
+
+    // dir = "file://dir/"
+    // print("\n{dir}\n")
+    // Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
+    // Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
+    // Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
+    // Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
+
+    // dir = "file:///dir/"
+    // print("\n{dir}\n")
+    // Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
+    // Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
+    // Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
+    // Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
+
+    dir = "file://./dir/"
+    print("\n{dir}\n")
+    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
+    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
+
+

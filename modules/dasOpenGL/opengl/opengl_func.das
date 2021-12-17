@@ -201,7 +201,7 @@ def glDrawElements ( mode:uint; count:int; _type:uint; indices:void const? impli
 	pass
 
 [extern(opengl,late,name="glGetPointerv",library="Opengl32")]
-def glGetPointerv ( pname:uint; params:void? implicit ) : void
+def glGetPointerv ( pname:uint; params:void?? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glPolygonOffset",library="Opengl32")]
@@ -309,7 +309,7 @@ def glMultiDrawArrays ( mode:uint; first:int const? implicit; count:int const? i
 	pass
 
 [extern(opengl,late,name="glMultiDrawElements",library="Opengl32")]
-def glMultiDrawElements ( mode:uint; count:int const? implicit; _type:uint; indices:void const? implicit; drawcount:int ) : void
+def glMultiDrawElements ( mode:uint; count:int const? implicit; _type:uint; indices:void const? const? implicit; drawcount:int ) : void
 	pass
 
 [extern(opengl,late,name="glPointParameterf",library="Opengl32")]
@@ -409,7 +409,7 @@ def glGetBufferParameteriv ( target:uint; pname:uint; params:int? implicit ) : v
 	pass
 
 [extern(opengl,late,name="glGetBufferPointerv",library="Opengl32")]
-def glGetBufferPointerv ( target:uint; pname:uint; params:void? implicit ) : void
+def glGetBufferPointerv ( target:uint; pname:uint; params:void?? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glBlendEquationSeparate",library="Opengl32")]
@@ -437,7 +437,7 @@ def glAttachShader ( program:uint; shader:uint ) : void
 	pass
 
 [extern(opengl,late,name="glBindAttribLocation",library="Opengl32")]
-def glBindAttribLocation ( program:uint; index:uint; name:string ) : void
+def glBindAttribLocation ( program:uint; index:uint; name:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glCompileShader",library="Opengl32")]
@@ -473,11 +473,11 @@ def glEnableVertexAttribArray ( index:uint ) : void
 	pass
 
 [extern(opengl,late,name="glGetActiveAttrib",library="Opengl32")]
-def glGetActiveAttrib ( program:uint; index:uint; bufSize:int; length:int? implicit; size:int? implicit; _type:uint? implicit; name:string const ) : void
+def glGetActiveAttrib ( program:uint; index:uint; bufSize:int; length:int? implicit; size:int? implicit; _type:uint? implicit; name:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetActiveUniform",library="Opengl32")]
-def glGetActiveUniform ( program:uint; index:uint; bufSize:int; length:int? implicit; size:int? implicit; _type:uint? implicit; name:string const ) : void
+def glGetActiveUniform ( program:uint; index:uint; bufSize:int; length:int? implicit; size:int? implicit; _type:uint? implicit; name:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetAttachedShaders",library="Opengl32")]
@@ -485,7 +485,7 @@ def glGetAttachedShaders ( program:uint; maxCount:int; count:int? implicit; shad
 	pass
 
 [extern(opengl,late,name="glGetAttribLocation",library="Opengl32")]
-def glGetAttribLocation ( program:uint; name:string ) : int
+def glGetAttribLocation ( program:uint; name:string implicit ) : int
 	return [[int]]
 
 [extern(opengl,late,name="glGetProgramiv",library="Opengl32")]
@@ -493,7 +493,7 @@ def glGetProgramiv ( program:uint; pname:uint; params:int? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetProgramInfoLog",library="Opengl32")]
-def glGetProgramInfoLog ( program:uint; bufSize:int; length:int? implicit; infoLog:string const ) : void
+def glGetProgramInfoLog ( program:uint; bufSize:int; length:int? implicit; infoLog:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetShaderiv",library="Opengl32")]
@@ -501,15 +501,15 @@ def glGetShaderiv ( shader:uint; pname:uint; params:int? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetShaderInfoLog",library="Opengl32")]
-def glGetShaderInfoLog ( shader:uint; bufSize:int; length:int? implicit; infoLog:string const ) : void
+def glGetShaderInfoLog ( shader:uint; bufSize:int; length:int? implicit; infoLog:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetShaderSource",library="Opengl32")]
-def glGetShaderSource ( shader:uint; bufSize:int; length:int? implicit; source:string const ) : void
+def glGetShaderSource ( shader:uint; bufSize:int; length:int? implicit; source:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetUniformLocation",library="Opengl32")]
-def glGetUniformLocation ( program:uint; name:string ) : int
+def glGetUniformLocation ( program:uint; name:string implicit ) : int
 	return [[int]]
 
 [extern(opengl,late,name="glGetUniformfv",library="Opengl32")]
@@ -533,7 +533,7 @@ def glGetVertexAttribiv ( index:uint; pname:uint; params:int? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetVertexAttribPointerv",library="Opengl32")]
-def glGetVertexAttribPointerv ( index:uint; pname:uint; pointer:void? implicit ) : void
+def glGetVertexAttribPointerv ( index:uint; pname:uint; pointer:void?? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glIsProgram",library="Opengl32")]
@@ -853,7 +853,7 @@ def glTransformFeedbackVaryings ( program:uint; count:int; varyings:string const
 	pass
 
 [extern(opengl,late,name="glGetTransformFeedbackVarying",library="Opengl32")]
-def glGetTransformFeedbackVarying ( program:uint; index:uint; bufSize:int; length:int? implicit; size:int? implicit; _type:uint? implicit; name:string const ) : void
+def glGetTransformFeedbackVarying ( program:uint; index:uint; bufSize:int; length:int? implicit; size:int? implicit; _type:uint? implicit; name:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glClampColor",library="Opengl32")]
@@ -965,11 +965,11 @@ def glGetUniformuiv ( program:uint; location:int; params:uint? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glBindFragDataLocation",library="Opengl32")]
-def glBindFragDataLocation ( program:uint; color:uint; name:string ) : void
+def glBindFragDataLocation ( program:uint; color:uint; name:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetFragDataLocation",library="Opengl32")]
-def glGetFragDataLocation ( program:uint; name:string ) : int
+def glGetFragDataLocation ( program:uint; name:string implicit ) : int
 	return [[int]]
 
 [extern(opengl,late,name="glUniform1ui",library="Opengl32")]
@@ -1173,11 +1173,11 @@ def glGetActiveUniformsiv ( program:uint; uniformCount:int; uniformIndices:uint 
 	pass
 
 [extern(opengl,late,name="glGetActiveUniformName",library="Opengl32")]
-def glGetActiveUniformName ( program:uint; uniformIndex:uint; bufSize:int; length:int? implicit; uniformName:string const ) : void
+def glGetActiveUniformName ( program:uint; uniformIndex:uint; bufSize:int; length:int? implicit; uniformName:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetUniformBlockIndex",library="Opengl32")]
-def glGetUniformBlockIndex ( program:uint; uniformBlockName:string ) : uint
+def glGetUniformBlockIndex ( program:uint; uniformBlockName:string implicit ) : uint
 	return [[uint]]
 
 [extern(opengl,late,name="glGetActiveUniformBlockiv",library="Opengl32")]
@@ -1185,7 +1185,7 @@ def glGetActiveUniformBlockiv ( program:uint; uniformBlockIndex:uint; pname:uint
 	pass
 
 [extern(opengl,late,name="glGetActiveUniformBlockName",library="Opengl32")]
-def glGetActiveUniformBlockName ( program:uint; uniformBlockIndex:uint; bufSize:int; length:int? implicit; uniformBlockName:string const ) : void
+def glGetActiveUniformBlockName ( program:uint; uniformBlockIndex:uint; bufSize:int; length:int? implicit; uniformBlockName:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glUniformBlockBinding",library="Opengl32")]
@@ -1205,7 +1205,7 @@ def glDrawElementsInstancedBaseVertex ( mode:uint; count:int; _type:uint; indice
 	pass
 
 [extern(opengl,late,name="glMultiDrawElementsBaseVertex",library="Opengl32")]
-def glMultiDrawElementsBaseVertex ( mode:uint; count:int const? implicit; _type:uint; indices:void const? implicit; drawcount:int; basevertex:int const? implicit ) : void
+def glMultiDrawElementsBaseVertex ( mode:uint; count:int const? implicit; _type:uint; indices:void const? const? implicit; drawcount:int; basevertex:int const? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glProvokingVertex",library="Opengl32")]
@@ -1269,11 +1269,11 @@ def glSampleMaski ( maskNumber:uint; mask:uint ) : void
 	pass
 
 [extern(opengl,late,name="glBindFragDataLocationIndexed",library="Opengl32")]
-def glBindFragDataLocationIndexed ( program:uint; colorNumber:uint; index:uint; name:string ) : void
+def glBindFragDataLocationIndexed ( program:uint; colorNumber:uint; index:uint; name:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetFragDataIndex",library="Opengl32")]
-def glGetFragDataIndex ( program:uint; name:string ) : int
+def glGetFragDataIndex ( program:uint; name:string implicit ) : int
 	return [[int]]
 
 [extern(opengl,late,name="glGenSamplers",library="Opengl32")]
@@ -1481,11 +1481,11 @@ def glGetUniformdv ( program:uint; location:int; params:double? implicit ) : voi
 	pass
 
 [extern(opengl,late,name="glGetSubroutineUniformLocation",library="Opengl32")]
-def glGetSubroutineUniformLocation ( program:uint; shadertype:uint; name:string ) : int
+def glGetSubroutineUniformLocation ( program:uint; shadertype:uint; name:string implicit ) : int
 	return [[int]]
 
 [extern(opengl,late,name="glGetSubroutineIndex",library="Opengl32")]
-def glGetSubroutineIndex ( program:uint; shadertype:uint; name:string ) : uint
+def glGetSubroutineIndex ( program:uint; shadertype:uint; name:string implicit ) : uint
 	return [[uint]]
 
 [extern(opengl,late,name="glGetActiveSubroutineUniformiv",library="Opengl32")]
@@ -1493,11 +1493,11 @@ def glGetActiveSubroutineUniformiv ( program:uint; shadertype:uint; index:uint; 
 	pass
 
 [extern(opengl,late,name="glGetActiveSubroutineUniformName",library="Opengl32")]
-def glGetActiveSubroutineUniformName ( program:uint; shadertype:uint; index:uint; bufSize:int; length:int? implicit; name:string const ) : void
+def glGetActiveSubroutineUniformName ( program:uint; shadertype:uint; index:uint; bufSize:int; length:int? implicit; name:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetActiveSubroutineName",library="Opengl32")]
-def glGetActiveSubroutineName ( program:uint; shadertype:uint; index:uint; bufSize:int; length:int? implicit; name:string const ) : void
+def glGetActiveSubroutineName ( program:uint; shadertype:uint; index:uint; bufSize:int; length:int? implicit; name:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glUniformSubroutinesuiv",library="Opengl32")]
@@ -1833,7 +1833,7 @@ def glValidateProgramPipeline ( pipeline:uint ) : void
 	pass
 
 [extern(opengl,late,name="glGetProgramPipelineInfoLog",library="Opengl32")]
-def glGetProgramPipelineInfoLog ( pipeline:uint; bufSize:int; length:int? implicit; infoLog:string const ) : void
+def glGetProgramPipelineInfoLog ( pipeline:uint; bufSize:int; length:int? implicit; infoLog:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glVertexAttribL1d",library="Opengl32")]
@@ -2033,11 +2033,11 @@ def glGetProgramInterfaceiv ( program:uint; programInterface:uint; pname:uint; p
 	pass
 
 [extern(opengl,late,name="glGetProgramResourceIndex",library="Opengl32")]
-def glGetProgramResourceIndex ( program:uint; programInterface:uint; name:string ) : uint
+def glGetProgramResourceIndex ( program:uint; programInterface:uint; name:string implicit ) : uint
 	return [[uint]]
 
 [extern(opengl,late,name="glGetProgramResourceName",library="Opengl32")]
-def glGetProgramResourceName ( program:uint; programInterface:uint; index:uint; bufSize:int; length:int? implicit; name:string const ) : void
+def glGetProgramResourceName ( program:uint; programInterface:uint; index:uint; bufSize:int; length:int? implicit; name:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetProgramResourceiv",library="Opengl32")]
@@ -2045,11 +2045,11 @@ def glGetProgramResourceiv ( program:uint; programInterface:uint; index:uint; pr
 	pass
 
 [extern(opengl,late,name="glGetProgramResourceLocation",library="Opengl32")]
-def glGetProgramResourceLocation ( program:uint; programInterface:uint; name:string ) : int
+def glGetProgramResourceLocation ( program:uint; programInterface:uint; name:string implicit ) : int
 	return [[int]]
 
 [extern(opengl,late,name="glGetProgramResourceLocationIndex",library="Opengl32")]
-def glGetProgramResourceLocationIndex ( program:uint; programInterface:uint; name:string ) : int
+def glGetProgramResourceLocationIndex ( program:uint; programInterface:uint; name:string implicit ) : int
 	return [[int]]
 
 [extern(opengl,late,name="glShaderStorageBlockBinding",library="Opengl32")]
@@ -2101,19 +2101,19 @@ def glDebugMessageControl ( source:uint; _type:uint; severity:uint; count:int; i
 	pass
 
 [extern(opengl,late,name="glDebugMessageInsert",library="Opengl32")]
-def glDebugMessageInsert ( source:uint; _type:uint; id:uint; severity:uint; length:int; buf:string ) : void
+def glDebugMessageInsert ( source:uint; _type:uint; id:uint; severity:uint; length:int; buf:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glDebugMessageCallback",library="Opengl32")]
-def glDebugMessageCallback ( userParam:void const? implicit ) : void
+def glDebugMessageCallback ( callback:void?? implicit; userParam:void const? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetDebugMessageLog",library="Opengl32")]
-def glGetDebugMessageLog ( count:uint; bufSize:int; sources:uint? implicit; types:uint? implicit; ids:uint? implicit; severities:uint? implicit; lengths:int? implicit; messageLog:string const ) : uint
+def glGetDebugMessageLog ( count:uint; bufSize:int; sources:uint? implicit; types:uint? implicit; ids:uint? implicit; severities:uint? implicit; lengths:int? implicit; messageLog:string implicit ) : uint
 	return [[uint]]
 
 [extern(opengl,late,name="glPushDebugGroup",library="Opengl32")]
-def glPushDebugGroup ( source:uint; id:uint; length:int; message:string ) : void
+def glPushDebugGroup ( source:uint; id:uint; length:int; message:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glPopDebugGroup",library="Opengl32")]
@@ -2121,19 +2121,19 @@ def glPopDebugGroup (  ) : void
 	pass
 
 [extern(opengl,late,name="glObjectLabel",library="Opengl32")]
-def glObjectLabel ( identifier:uint; name:uint; length:int; _label:string ) : void
+def glObjectLabel ( identifier:uint; name:uint; length:int; _label:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetObjectLabel",library="Opengl32")]
-def glGetObjectLabel ( identifier:uint; name:uint; bufSize:int; length:int? implicit; _label:string const ) : void
+def glGetObjectLabel ( identifier:uint; name:uint; bufSize:int; length:int? implicit; _label:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glObjectPtrLabel",library="Opengl32")]
-def glObjectPtrLabel ( ptr:void const? implicit; length:int; _label:string ) : void
+def glObjectPtrLabel ( ptr:void const? implicit; length:int; _label:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetObjectPtrLabel",library="Opengl32")]
-def glGetObjectPtrLabel ( ptr:void const? implicit; bufSize:int; length:int? implicit; _label:string const ) : void
+def glGetObjectPtrLabel ( ptr:void const? implicit; bufSize:int; length:int? implicit; _label:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glBufferStorage",library="Opengl32")]
@@ -2253,7 +2253,7 @@ def glGetNamedBufferParameteri64v ( buffer:uint; pname:uint; params:int64? impli
 	pass
 
 [extern(opengl,late,name="glGetNamedBufferPointerv",library="Opengl32")]
-def glGetNamedBufferPointerv ( buffer:uint; pname:uint; params:void? implicit ) : void
+def glGetNamedBufferPointerv ( buffer:uint; pname:uint; params:void?? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetNamedBufferSubData",library="Opengl32")]
@@ -2613,7 +2613,7 @@ def glTextureBarrier (  ) : void
 	pass
 
 [extern(opengl,late,name="glSpecializeShader",library="Opengl32")]
-def glSpecializeShader ( shader:uint; pEntryPoint:string; numSpecializationConstants:uint; pConstantIndex:uint const? implicit; pConstantValue:uint const? implicit ) : void
+def glSpecializeShader ( shader:uint; pEntryPoint:string implicit; numSpecializationConstants:uint; pConstantIndex:uint const? implicit; pConstantValue:uint const? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glMultiDrawArraysIndirectCount",library="Opengl32")]
@@ -2697,7 +2697,7 @@ def glGetVertexAttribLui64vARB ( index:uint; pname:uint; params:uint64? implicit
 	pass
 
 [extern(opengl,late,name="glCreateSyncFromCLeventARB",library="Opengl32")]
-def glCreateSyncFromCLeventARB ( flags:uint ) : void?
+def glCreateSyncFromCLeventARB ( context:void? implicit; event:void? implicit; flags:uint ) : void?
 	return [[void?]]
 
 [extern(opengl,late,name="glDispatchComputeGroupSizeARB",library="Opengl32")]
@@ -2709,15 +2709,15 @@ def glDebugMessageControlARB ( source:uint; _type:uint; severity:uint; count:int
 	pass
 
 [extern(opengl,late,name="glDebugMessageInsertARB",library="Opengl32")]
-def glDebugMessageInsertARB ( source:uint; _type:uint; id:uint; severity:uint; length:int; buf:string ) : void
+def glDebugMessageInsertARB ( source:uint; _type:uint; id:uint; severity:uint; length:int; buf:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glDebugMessageCallbackARB",library="Opengl32")]
-def glDebugMessageCallbackARB ( userParam:void const? implicit ) : void
+def glDebugMessageCallbackARB ( callback:void?? implicit; userParam:void const? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetDebugMessageLogARB",library="Opengl32")]
-def glGetDebugMessageLogARB ( count:uint; bufSize:int; sources:uint? implicit; types:uint? implicit; ids:uint? implicit; severities:uint? implicit; lengths:int? implicit; messageLog:string const ) : uint
+def glGetDebugMessageLogARB ( count:uint; bufSize:int; sources:uint? implicit; types:uint? implicit; ids:uint? implicit; severities:uint? implicit; lengths:int? implicit; messageLog:string implicit ) : uint
 	return [[uint]]
 
 [extern(opengl,late,name="glBlendEquationiARB",library="Opengl32")]
@@ -2761,7 +2761,7 @@ def glFramebufferTextureFaceARB ( target:uint; attachment:uint; texture:uint; le
 	pass
 
 [extern(opengl,late,name="glSpecializeShaderARB",library="Opengl32")]
-def glSpecializeShaderARB ( shader:uint; pEntryPoint:string; numSpecializationConstants:uint; pConstantIndex:uint const? implicit; pConstantValue:uint const? implicit ) : void
+def glSpecializeShaderARB ( shader:uint; pEntryPoint:string implicit; numSpecializationConstants:uint; pConstantIndex:uint const? implicit; pConstantValue:uint const? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glUniform1i64ARB",library="Opengl32")]
@@ -2973,11 +2973,11 @@ def glMinSampleShadingARB ( value:float ) : void
 	pass
 
 [extern(opengl,late,name="glNamedStringARB",library="Opengl32")]
-def glNamedStringARB ( _type:uint; namelen:int; name:string; stringlen:int; _string:string ) : void
+def glNamedStringARB ( _type:uint; namelen:int; name:string implicit; stringlen:int; _string:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glDeleteNamedStringARB",library="Opengl32")]
-def glDeleteNamedStringARB ( namelen:int; name:string ) : void
+def glDeleteNamedStringARB ( namelen:int; name:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glCompileShaderIncludeARB",library="Opengl32")]
@@ -2985,15 +2985,15 @@ def glCompileShaderIncludeARB ( shader:uint; count:int; path:string const? impli
 	pass
 
 [extern(opengl,late,name="glIsNamedStringARB",library="Opengl32")]
-def glIsNamedStringARB ( namelen:int; name:string ) : bool
+def glIsNamedStringARB ( namelen:int; name:string implicit ) : bool
 	return [[bool]]
 
 [extern(opengl,late,name="glGetNamedStringARB",library="Opengl32")]
-def glGetNamedStringARB ( namelen:int; name:string; bufSize:int; stringlen:int? implicit; _string:string const ) : void
+def glGetNamedStringARB ( namelen:int; name:string implicit; bufSize:int; stringlen:int? implicit; _string:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetNamedStringivARB",library="Opengl32")]
-def glGetNamedStringivARB ( namelen:int; name:string; pname:uint; params:int? implicit ) : void
+def glGetNamedStringivARB ( namelen:int; name:string implicit; pname:uint; params:int? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glBufferPageCommitmentARB",library="Opengl32")]
@@ -3049,11 +3049,11 @@ def glGetPerfMonitorCountersAMD ( group:uint; numCounters:int? implicit; maxActi
 	pass
 
 [extern(opengl,late,name="glGetPerfMonitorGroupStringAMD",library="Opengl32")]
-def glGetPerfMonitorGroupStringAMD ( group:uint; bufSize:int; length:int? implicit; groupString:string const ) : void
+def glGetPerfMonitorGroupStringAMD ( group:uint; bufSize:int; length:int? implicit; groupString:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetPerfMonitorCounterStringAMD",library="Opengl32")]
-def glGetPerfMonitorCounterStringAMD ( group:uint; counter:uint; bufSize:int; length:int? implicit; counterString:string const ) : void
+def glGetPerfMonitorCounterStringAMD ( group:uint; counter:uint; bufSize:int; length:int? implicit; counterString:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetPerfMonitorCounterInfoAMD",library="Opengl32")]
@@ -3085,27 +3085,27 @@ def glGetPerfMonitorCounterDataAMD ( monitor:uint; pname:uint; dataSize:int; dat
 	pass
 
 [extern(opengl,late,name="glEGLImageTargetTexStorageEXT",library="Opengl32")]
-def glEGLImageTargetTexStorageEXT ( target:uint; attrib_list:int const? implicit ) : void
+def glEGLImageTargetTexStorageEXT ( target:uint; image:void? implicit; attrib_list:int const? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glEGLImageTargetTextureStorageEXT",library="Opengl32")]
-def glEGLImageTargetTextureStorageEXT ( texture:uint; attrib_list:int const? implicit ) : void
+def glEGLImageTargetTextureStorageEXT ( texture:uint; image:void? implicit; attrib_list:int const? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glLabelObjectEXT",library="Opengl32")]
-def glLabelObjectEXT ( _type:uint; object:uint; length:int; _label:string ) : void
+def glLabelObjectEXT ( _type:uint; object:uint; length:int; _label:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetObjectLabelEXT",library="Opengl32")]
-def glGetObjectLabelEXT ( _type:uint; object:uint; bufSize:int; length:int? implicit; _label:string const ) : void
+def glGetObjectLabelEXT ( _type:uint; object:uint; bufSize:int; length:int? implicit; _label:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glInsertEventMarkerEXT",library="Opengl32")]
-def glInsertEventMarkerEXT ( length:int; marker:string ) : void
+def glInsertEventMarkerEXT ( length:int; marker:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glPushGroupMarkerEXT",library="Opengl32")]
-def glPushGroupMarkerEXT ( length:int; marker:string ) : void
+def glPushGroupMarkerEXT ( length:int; marker:string implicit ) : void
 	pass
 
 [extern(opengl,late,name="glPopGroupMarkerEXT",library="Opengl32")]
@@ -3425,7 +3425,7 @@ def glGetDoubleIndexedvEXT ( target:uint; index:uint; data:double? implicit ) : 
 	pass
 
 [extern(opengl,late,name="glGetPointerIndexedvEXT",library="Opengl32")]
-def glGetPointerIndexedvEXT ( target:uint; index:uint; data:void? implicit ) : void
+def glGetPointerIndexedvEXT ( target:uint; index:uint; data:void?? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glEnableIndexedEXT",library="Opengl32")]
@@ -3541,7 +3541,7 @@ def glGetNamedBufferParameterivEXT ( buffer:uint; pname:uint; params:int? implic
 	pass
 
 [extern(opengl,late,name="glGetNamedBufferPointervEXT",library="Opengl32")]
-def glGetNamedBufferPointervEXT ( buffer:uint; pname:uint; params:void? implicit ) : void
+def glGetNamedBufferPointervEXT ( buffer:uint; pname:uint; params:void?? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetNamedBufferSubDataEXT",library="Opengl32")]
@@ -3773,7 +3773,7 @@ def glGetDoublei_vEXT ( pname:uint; index:uint; params:double? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetPointeri_vEXT",library="Opengl32")]
-def glGetPointeri_vEXT ( pname:uint; index:uint; params:void? implicit ) : void
+def glGetPointeri_vEXT ( pname:uint; index:uint; params:void?? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glNamedProgramStringEXT",library="Opengl32")]
@@ -3965,7 +3965,7 @@ def glGetVertexArrayIntegervEXT ( vaobj:uint; pname:uint; param:int? implicit ) 
 	pass
 
 [extern(opengl,late,name="glGetVertexArrayPointervEXT",library="Opengl32")]
-def glGetVertexArrayPointervEXT ( vaobj:uint; pname:uint; param:void? implicit ) : void
+def glGetVertexArrayPointervEXT ( vaobj:uint; pname:uint; param:void?? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetVertexArrayIntegeri_vEXT",library="Opengl32")]
@@ -3973,7 +3973,7 @@ def glGetVertexArrayIntegeri_vEXT ( vaobj:uint; index:uint; pname:uint; param:in
 	pass
 
 [extern(opengl,late,name="glGetVertexArrayPointeri_vEXT",library="Opengl32")]
-def glGetVertexArrayPointeri_vEXT ( vaobj:uint; index:uint; pname:uint; param:void? implicit ) : void
+def glGetVertexArrayPointeri_vEXT ( vaobj:uint; index:uint; pname:uint; param:void?? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glMapNamedBufferRangeEXT",library="Opengl32")]
@@ -4157,7 +4157,7 @@ def glActiveProgramEXT ( program:uint ) : void
 	pass
 
 [extern(opengl,late,name="glCreateShaderProgramEXT",library="Opengl32")]
-def glCreateShaderProgramEXT ( _type:uint; _string:string ) : uint
+def glCreateShaderProgramEXT ( _type:uint; _string:string implicit ) : uint
 	return [[uint]]
 
 [extern(opengl,late,name="glFramebufferFetchBarrierEXT",library="Opengl32")]
@@ -4197,7 +4197,7 @@ def glGetNextPerfQueryIdINTEL ( queryId:uint; nextQueryId:uint? implicit ) : voi
 	pass
 
 [extern(opengl,late,name="glGetPerfCounterInfoINTEL",library="Opengl32")]
-def glGetPerfCounterInfoINTEL ( queryId:uint; counterId:uint; counterNameLength:uint; counterName:string const; counterDescLength:uint; counterDesc:string const; counterOffset:uint? implicit; counterDataSize:uint? implicit; counterTypeEnum:uint? implicit; counterDataTypeEnum:uint? implicit; rawCounterMaxValue:uint64? implicit ) : void
+def glGetPerfCounterInfoINTEL ( queryId:uint; counterId:uint; counterNameLength:uint; counterName:string implicit; counterDescLength:uint; counterDesc:string implicit; counterOffset:uint? implicit; counterDataSize:uint? implicit; counterTypeEnum:uint? implicit; counterDataTypeEnum:uint? implicit; rawCounterMaxValue:uint64? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetPerfQueryDataINTEL",library="Opengl32")]
@@ -4205,11 +4205,11 @@ def glGetPerfQueryDataINTEL ( queryHandle:uint; flags:uint; dataSize:int; data:v
 	pass
 
 [extern(opengl,late,name="glGetPerfQueryIdByNameINTEL",library="Opengl32")]
-def glGetPerfQueryIdByNameINTEL ( queryName:string const; queryId:uint? implicit ) : void
+def glGetPerfQueryIdByNameINTEL ( queryName:string implicit; queryId:uint? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetPerfQueryInfoINTEL",library="Opengl32")]
-def glGetPerfQueryInfoINTEL ( queryId:uint; queryNameLength:uint; queryName:string const; dataSize:uint? implicit; noCounters:uint? implicit; noInstances:uint? implicit; capsMask:uint? implicit ) : void
+def glGetPerfQueryInfoINTEL ( queryId:uint; queryNameLength:uint; queryName:string implicit; dataSize:uint? implicit; noCounters:uint? implicit; noInstances:uint? implicit; capsMask:uint? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glFramebufferParameteriMESA",library="Opengl32")]
@@ -4353,7 +4353,7 @@ def glIsCommandListNV ( list:uint ) : bool
 	return [[bool]]
 
 [extern(opengl,late,name="glListDrawCommandsStatesClientNV",library="Opengl32")]
-def glListDrawCommandsStatesClientNV ( list:uint; segment:uint; indirects:void const? implicit; sizes:int const? implicit; states:uint const? implicit; fbos:uint const? implicit; count:uint ) : void
+def glListDrawCommandsStatesClientNV ( list:uint; segment:uint; indirects:void const?? implicit; sizes:int const? implicit; states:uint const? implicit; fbos:uint const? implicit; count:uint ) : void
 	pass
 
 [extern(opengl,late,name="glCommandListSegmentsNV",library="Opengl32")]
@@ -4403,6 +4403,10 @@ def glDepthBoundsdNV ( zmin:double; zmax:double ) : void
 [extern(opengl,late,name="glDrawVkImageNV",library="Opengl32")]
 def glDrawVkImageNV ( vkImage:uint64; sampler:uint; x0:float; y0:float; x1:float; y1:float; z:float; s0:float; t0:float; s1:float; t1:float ) : void
 	pass
+
+[extern(opengl,late,name="glGetVkProcAddrNV",library="Opengl32")]
+def glGetVkProcAddrNV ( name:string implicit ) : void??
+	return [[void??]]
 
 [extern(opengl,late,name="glWaitVkSemaphoreNV",library="Opengl32")]
 def glWaitVkSemaphoreNV ( vkSemaphore:uint64 ) : void

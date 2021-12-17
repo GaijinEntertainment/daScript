@@ -20,12 +20,17 @@ DAS_BASE_BIND_ENUM(CXChildVisitResult, CXChildVisitResult, CXChildVisit_Break, C
 
 DAS_BIND_ENUM_CAST(CXCursorKind);
 DAS_BASE_BIND_ENUM_FACTORY(CXCursorKind,"CXCursorKind");
+
+DAS_BIND_ENUM_CAST(CXTypeKind);
+DAS_BASE_BIND_ENUM_FACTORY(CXTypeKind,"CXTypeKind");
+
 #include "dasClangBind_enums.inc"
 
 namespace das {
 
 struct CXType_Annotation : ManagedStructureAnnotation <CXType> {
     CXType_Annotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXType", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(kind)>("kind");
     }
 };
 template <> struct cast_arg<CXType> {
@@ -119,6 +124,7 @@ public:
         // enums
         addEnumeration(make_smart<EnumerationCXChildVisitResult>());
         addEnumeration(make_smart<EnumerationCXCursorKind>());
+        addEnumeration(make_smart<EnumerationCXTypeKind>());
         // aliases for the handles
         addVoidAlias("CXIndex");
         addVoidAlias("CXClientData");
@@ -189,6 +195,12 @@ public:
                 ->args({"type"});
         addExtern<DAS_BIND_FUN(clang_getResultType),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getResultType",
             SideEffects::worstDefault, "clang_getResultType")
+                ->args({"type"});
+        addExtern<DAS_BIND_FUN(clang_getPointeeType),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getPointeeType",
+            SideEffects::worstDefault, "clang_getPointeeType")
+                ->args({"type"});
+        addExtern<DAS_BIND_FUN(clang_isConstQualifiedType)>(*this, lib,  "clang_isConstQualifiedType",
+            SideEffects::worstDefault, "clang_isConstQualifiedType")
                 ->args({"type"});
         // cursor arguments
         addExtern<DAS_BIND_FUN(clang_Cursor_getNumArguments)>(*this, lib,  "clang_Cursor_getNumArguments",
