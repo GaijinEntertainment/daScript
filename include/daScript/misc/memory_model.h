@@ -162,8 +162,7 @@ namespace das {
                     return;
                 }
             }
-            DAS_FATAL_LOG("deleting %p %i, which is not a chunk pointer (or chunk size mismatch)\n", (void *)ptr, size);
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("deleting %p %i, which is not a chunk pointer (or chunk size mismatch)\n", (void *)ptr, size);
         }
         bool mark ( char * ptr, uint32_t size ) {
             size = (size + 15) & ~15;

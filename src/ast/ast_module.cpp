@@ -174,8 +174,7 @@ namespace das {
             while (first != nullptr)
             {
                 if (first->name == n) {
-                    DAS_FATAL_LOG("Module `%s` already created", first->name.c_str());
-                    DAS_FATAL_ERROR;
+                    DAS_FATAL_ERROR("Module `%s` already created", first->name.c_str());
                 }
                 first = first->next;
             }
@@ -235,8 +234,7 @@ namespace das {
             return true;
         } else {
             if ( !canFail ) {
-                DAS_FATAL_LOG("can't add duplicate alias %s to module %s\n",at->alias.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("can't add duplicate alias %s to module %s\n",at->alias.c_str(), name.c_str() );
             }
             return false;
         }
@@ -248,8 +246,7 @@ namespace das {
             return true;
         } else {
             if ( !canFail ) {
-                DAS_FATAL_LOG("can't add duplicate annotation %s to module %s\n", ptr->name.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("can't add duplicate annotation %s to module %s\n", ptr->name.c_str(), name.c_str() );
             }
             return false;
         }
@@ -261,8 +258,7 @@ namespace das {
             return true;
         } else {
             if ( !canFail ) {
-                DAS_FATAL_LOG("can't add duplicate typeinfo macro %s to module %s\n", ptr->name.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("can't add duplicate typeinfo macro %s to module %s\n", ptr->name.c_str(), name.c_str() );
             }
             return false;
         }
@@ -274,8 +270,7 @@ namespace das {
             return true;
         } else {
             if ( !canFail ) {
-                DAS_FATAL_LOG("can't add duplicate reader macro %s to module %s\n", ptr->name.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("can't add duplicate reader macro %s to module %s\n", ptr->name.c_str(), name.c_str() );
             }
             return false;
         }
@@ -288,8 +283,7 @@ namespace das {
             return true;
         } else {
             if ( !canFail ) {
-                DAS_FATAL_LOG("can't add duplicate variable %s to module %s\n", var->name.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("can't add duplicate variable %s to module %s\n", var->name.c_str(), name.c_str() );
             }
             return false;
         }
@@ -301,8 +295,7 @@ namespace das {
             return true;
         } else {
             if ( !canFail ) {
-                DAS_FATAL_LOG("can't add duplicate enumeration %s to module %s\n", en->name.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("can't add duplicate enumeration %s to module %s\n", en->name.c_str(), name.c_str() );
             }
             return false;
         }
@@ -318,8 +311,7 @@ namespace das {
             return true;
         } else {
             if ( !canFail ) {
-                DAS_FATAL_LOG("can't add duplicate structure %s to module %s\n", st->name.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("can't add duplicate structure %s to module %s\n", st->name.c_str(), name.c_str() );
             }
             return false;
         }
@@ -330,8 +322,7 @@ namespace das {
         auto mangledName = fn->getMangledName();
         fn->module = nullptr;
         if ( fn->builtIn && fn->sideEffectFlags==uint32_t(SideEffects::none) && fn->result->isVoid() ) {
-            DAS_FATAL_LOG("can't add function %s to module %s; it has no side effects and no return type\n", mangledName.c_str(), name.c_str() );
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("can't add function %s to module %s; it has no side effects and no return type\n", mangledName.c_str(), name.c_str() );
         }
         if ( fn->builtIn && fn->sideEffectFlags==uint32_t(SideEffects::modifyArgument)  ) {
             bool anyRW = false;
@@ -343,8 +334,7 @@ namespace das {
                 }
             }
             if ( !anyRW ) {
-                DAS_FATAL_LOG("can't add function %s to module %s; modify argument requires non-const ref argument\n", mangledName.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("can't add function %s to module %s; modify argument requires non-const ref argument\n", mangledName.c_str(), name.c_str() );
             }
         }
         if ( functions.insert(mangledName, fn) ) {
@@ -353,8 +343,7 @@ namespace das {
             return true;
         } else {
             if ( !canFail ) {
-                DAS_FATAL_LOG("can't add duplicate function %s to module %s\n", mangledName.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("can't add duplicate function %s to module %s\n", mangledName.c_str(), name.c_str() );
             }
             return false;
         }
@@ -368,8 +357,7 @@ namespace das {
             return true;
         } else {
             if ( !canFail ) {
-                DAS_FATAL_LOG("can't add duplicate generic function %s to module %s\n", mangledName.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("can't add duplicate generic function %s to module %s\n", mangledName.c_str(), name.c_str() );
             }
             return false;
         }
@@ -430,9 +418,7 @@ namespace das {
                 for (auto & err : program->errors) {
                     issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
                 }
-                DAS_FATAL_LOG("%s\n", issues.str().c_str());
-                DAS_FATAL_LOG("builtin module did not compile %s\n", modName.c_str());
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("%s\nbuiltin module did not compile %s\n", issues.str().c_str(), modName.c_str());
                 return false;
             }
             // ok, now let's rip content
@@ -478,8 +464,7 @@ namespace das {
             }
             return true;
         } else {
-            DAS_FATAL_LOG("builtin module did not parse %s\n", modName.c_str());
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("builtin module did not parse %s\n", modName.c_str());
             return false;
         }
     }
@@ -513,7 +498,7 @@ namespace das {
         if ( flags & VerifyBuiltinFlags::verifyAliasTypes ) {
             aliasTypes.foreach([&](auto aliasTypePtr){
                 if ( !isValidBuiltinName(aliasTypePtr->alias) ) {
-                    DAS_FATAL_LOG("%s - alias type has incorrect name. expecting snake_case\n", aliasTypePtr->alias.c_str());
+                    DAS_FATAL_ERROR("%s - alias type has incorrect name. expecting snake_case\n", aliasTypePtr->alias.c_str());
                     failed = true;
                 }
             });
@@ -582,7 +567,9 @@ namespace das {
                 }
             });
         }
-        DAS_ASSERTF(!failed, "verifyBuiltinNames failed");
+        if ( failed ) {
+            DAS_FATAL_ERROR("verifyBuiltinNames failed");
+        }
     }
 
     void Module::verifyAotReady() {
@@ -596,7 +583,9 @@ namespace das {
                 }
             }
         });
-        DAS_ASSERTF(!failed, "verifyAotReady failed");
+        if ( failed ) {
+            DAS_FATAL_ERROR("verifyAotReady failed");
+        }
     }
 
     // MODULE LIBRARY
@@ -740,8 +729,7 @@ namespace das {
         if ( structs.size()==1 ) {
             t->structType = structs.back().get();
         } else {
-            DAS_FATAL_LOG("makeStructureType(%s) failed\n", name.c_str());
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("makeStructureType(%s) failed\n", name.c_str());
             return nullptr;
         }
         return t;
@@ -779,12 +767,11 @@ namespace das {
             if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
                 t->annotation = static_cast<TypeAnnotation*>(handles.back().get());
             } else {
-                DAS_FATAL_LOG("makeHandleType(%s) failed, not a handle type\n", name.c_str());
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("makeHandleType(%s) failed, not a handle type\n", name.c_str());
                 return nullptr;
             }
         } else if ( handles.size()==0 ) {
-            DAS_FATAL_LOG("makeHandleType(%s) failed, missing annotation\n", name.c_str());
+
 #if DAS_ALLOW_ANNOTATION_LOOKUP
             DAS_FATAL_LOG("NEED_MODULE(Module_<name>) with %s needs to be before this module binding.\n", name.c_str());
             DAS_FATAL_LOG("Explicit lib.addModule(require(\"<name>\")); would be preferable.\n");
@@ -797,14 +784,14 @@ namespace das {
                 return true;
             });
 #endif
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("makeHandleType(%s) failed, missing annotation\n", name.c_str());
             return nullptr;
         } else {
-            DAS_FATAL_LOG("makeHandleType(%s) failed, duplicate annotation\n", name.c_str());
+
             for ( auto & h : handles ) {
-                DAS_FATAL_LOG("\t%s::%s\n", h->name.c_str(), name.c_str());
+                DAS_FATAL_LOG("\tduplicate annotation%s::%s\n", h->name.c_str(), name.c_str());
             }
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("makeHandleType(%s) failed, duplicate annotation\n", name.c_str());
             return nullptr;
         }
         return t;
@@ -815,8 +802,7 @@ namespace das {
         if ( enums.size()==1 ) {
             return enums.back()->makeEnumType();
         } else {
-            DAS_FATAL_LOG("makeEnumType(%s) failed\n", name.c_str());
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("makeEnumType(%s) failed\n", name.c_str());
             return nullptr;
         }
     }

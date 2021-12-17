@@ -20,9 +20,7 @@ namespace das {
                 for ( auto & err : program->errors ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
-                DAS_FATAL_LOG("failed to compile: %s\n", pak.c_str());
-                DAS_FATAL_LOG("%s", tout.str().c_str());
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("failed to compile: %s\n%s\n", pak.c_str(), tout.str().c_str());
             } else {
                 context = get_context(program->getContextStackSize());
                 if ( !program->simulate(*context, tout) ) {
@@ -32,9 +30,7 @@ namespace das {
                     }
                     delete context;
                     context = nullptr;
-                    DAS_FATAL_LOG("failed to simulate: %s\n", pak.c_str());
-                    DAS_FATAL_LOG("%s", tout.str().c_str());
-                    DAS_FATAL_ERROR;
+                    DAS_FATAL_ERROR("failed to simulate: %s\n%s", pak.c_str(), tout.str().c_str());
                     return;
                 }
                 modGet = context->findFunction("module_get");
@@ -64,9 +60,7 @@ namespace das {
                 }
             }
         } else {
-            DAS_FATAL_LOG("failed to compile: %s\n", pak.c_str());
-            DAS_FATAL_LOG("%s", tout.str().c_str());
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("failed to compile: %s\n%s", pak.c_str(), tout.str().c_str());
         }
     }
 

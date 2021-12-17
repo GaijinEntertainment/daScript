@@ -138,7 +138,11 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
 #endif
 
 #ifndef DAS_FATAL_ERROR
-#define DAS_FATAL_ERROR { assert(0 && "fatal error"); exit(-1); }
+#define DAS_FATAL_ERROR(...) { \
+    printf(__VA_ARGS__); \
+    assert(0 && "fatal error"); \
+    exit(-1); \
+}
 #endif
 
 #ifndef DAS_ASSERT

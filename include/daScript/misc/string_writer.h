@@ -19,8 +19,7 @@ namespace das {
                 memcpy ( data+size, s, l );
                 size += l;
             } else {
-                DAS_FATAL_LOG("DAS_SMALL_BUFFER_SIZE overflow");
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("DAS_SMALL_BUFFER_SIZE overflow");
             }
         }
         __forceinline char * allocate (int l) {
@@ -29,8 +28,7 @@ namespace das {
                 size += l;
                 return res;
             } else {
-                DAS_FATAL_LOG("DAS_SMALL_BUFFER_SIZE overflow");
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("DAS_SMALL_BUFFER_SIZE overflow");
                 return nullptr;
             }
         }

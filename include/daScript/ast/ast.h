@@ -918,8 +918,7 @@ namespace das
         template <typename TT, typename ...TARG>
         __forceinline void addCall ( const string & fnName, TARG ...args ) {
             if ( callThis.find(fnName)!=callThis.end() ) {
-                DAS_FATAL_LOG("addCall(%s) failed. duplicate call\n", fnName.c_str());
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("addCall(%s) failed. duplicate call\n", fnName.c_str());
             }
             callThis[fnName] = [fnName,args...](const LineInfo & at) {
                 return new TT(at, fnName, args...);

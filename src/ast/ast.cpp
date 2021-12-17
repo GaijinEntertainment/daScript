@@ -764,8 +764,7 @@ namespace das {
             } else if ( result->hasNonTrivialCtor() ) {
                 // we can initialize it locally
             } else {
-                DAS_FATAL_LOG("BuiltInFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("BuiltInFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
             }
         } else {
             copyOnReturn = false;
@@ -797,8 +796,7 @@ namespace das {
                 copyOnReturn = false;
                 moveOnReturn = true;
             } else if ( !result->ref ) {
-                DAS_FATAL_LOG("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
             }
         } else {
             copyOnReturn = false;
@@ -830,8 +828,7 @@ namespace das {
                 copyOnReturn = false;
                 moveOnReturn = true;
             } else if ( !result->ref ) {
-                DAS_FATAL_LOG("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
             }
         } else {
             copyOnReturn = false;
@@ -844,18 +841,16 @@ namespace das {
     void addExternFunc(Module& mod, const FunctionPtr & fnX, bool isCmres, SideEffects seFlags) {
         if (!isCmres) {
             if (fnX->result->isRefType() && !fnX->result->ref) {
-                DAS_FATAL_LOG(
+                DAS_FATAL_ERROR(
                     "addExtern(%s)::failed in module %s\n"
                     "  this function should be bound with addExtern<DAS_BIND_FUNC(%s), SimNode_ExtFuncCallAndCopyOrMove>\n"
                     "  likely cast<> is implemented for the return type, and it should not\n",
                     fnX->name.c_str(), mod.name.c_str(), fnX->name.c_str());
-                DAS_FATAL_ERROR;
             }
         }
         fnX->setSideEffects(seFlags);
         if (!mod.addFunction(fnX)) {
-            DAS_FATAL_LOG("addExtern(%s) failed in module %s\n", fnX->name.c_str(), mod.name.c_str());
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("addExtern(%s) failed in module %s\n", fnX->name.c_str(), mod.name.c_str());
         }
     }
 

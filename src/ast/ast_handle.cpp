@@ -144,8 +144,7 @@ namespace das {
     BasicStructureAnnotation::StructureField & BasicStructureAnnotation::addFieldEx ( const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT ) {
         auto & field = fields[na];
         if ( field.decl ) {
-            DAS_FATAL_LOG("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
         }
         fieldsInOrder.push_back(na);
         field.cppName = cppNa;

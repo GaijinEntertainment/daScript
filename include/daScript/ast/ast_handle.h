@@ -173,8 +173,7 @@ namespace das
         void addProperty ( const string & na, const string & cppNa="" ) {
             auto & field = fields[na];
             if ( field.decl ) {
-                DAS_FATAL_LOG("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
             }
             using resultType = decltype((((ManagedType *)0)->*PROP)());
             field.cppName = (cppNa.empty() ? na : cppNa) + "()";
@@ -207,8 +206,7 @@ namespace das
         void addPropertyExtConst ( const string & na, const string & cppNa="" ) {
             auto & field = fields[na];
             if ( field.decl ) {
-                DAS_FATAL_LOG("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
-                DAS_FATAL_ERROR;
+                DAS_FATAL_ERROR("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
             }
             using resultType = decltype((((ManagedType *)0)->*PROP)());
             field.cppName = (cppNa.empty() ? na : cppNa) + "()";
@@ -617,8 +615,7 @@ namespace das
         pVar->init->constexpression = true;
         pVar->initStackSize = sizeof(Prologue);
         if ( !mod.addVariable(pVar) ) {
-            DAS_FATAL_LOG("addVariable(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("addVariable(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
         }
     }
     __forceinline void addConstant ( Module & mod, const string & name, const string & value ) {
@@ -631,8 +628,7 @@ namespace das
         pVar->init->constexpression = true;
         pVar->initStackSize = sizeof(Prologue);
         if ( !mod.addVariable(pVar) ) {
-            DAS_FATAL_LOG("addVariable(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
-            DAS_FATAL_ERROR;
+            DAS_FATAL_ERROR("addVariable(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
         }
     }
     __forceinline void addConstant ( Module & mod, const string & name, const char * value ) { addConstant(mod, name, string(value)); }
