@@ -748,7 +748,7 @@ namespace das {
             for ( auto & sarg : *(arg->aList) ) {
                 sarg.name = arg->name;
                 sarg.at = arg->at;
-                argL->push_back(*arg);
+                argL->push_back(sarg);
             }
             delete arg->aList;
         } else {
