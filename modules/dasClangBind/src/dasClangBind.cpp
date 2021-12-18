@@ -59,6 +59,7 @@ struct CXIndex_Annotation : ManagedStructureAnnotation <CXIndex> {
 
 struct CXCursor_Annotation : ManagedStructureAnnotation <CXCursor> {
     CXCursor_Annotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCursor", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(kind)>("kind");
     }
 };
 template <> struct cast_arg<CXCursor> {
@@ -183,6 +184,9 @@ public:
         addExtern<DAS_BIND_FUN(clang_getFileName),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getFileName",
             SideEffects::worstDefault, "clang_getFileName")
                 ->args({"cursor"});
+        addExtern<DAS_BIND_FUN(clang_getCursorDisplayName),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getCursorDisplayName",
+            SideEffects::worstDefault, "clang_getCursorDisplayName")
+                ->args({"cursor"});
         // type
         addExtern<DAS_BIND_FUN(clang_getCursorType),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getCursorType",
             SideEffects::worstDefault, "clang_getCursorType")
@@ -209,6 +213,16 @@ public:
         addExtern<DAS_BIND_FUN(clang_Cursor_getArgument),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_Cursor_getArgument",
             SideEffects::worstDefault, "clang_Cursor_getArgument")
                 ->args({"cursor","index"});
+        // enum
+        addExtern<DAS_BIND_FUN(clang_getEnumDeclIntegerType),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getEnumDeclIntegerType",
+            SideEffects::worstDefault, "clang_getEnumDeclIntegerType")
+                ->args({"type"});
+        addExtern<DAS_BIND_FUN(clang_getEnumConstantDeclValue)>(*this, lib,  "clang_getEnumConstantDeclValue",
+            SideEffects::worstDefault, "clang_getEnumConstantDeclValue")
+                ->args({"cursor"});
+        addExtern<DAS_BIND_FUN(clang_getEnumConstantDeclUnsignedValue)>(*this, lib,  "clang_getEnumConstantDeclUnsignedValue",
+            SideEffects::worstDefault, "clang_getEnumConstantDeclUnsignedValue")
+                ->args({"cursor"});
     }
 };
 

@@ -406,7 +406,7 @@ namespace das
         } else if ( info->type==Type::tPointer ) {
             stream << debug_type(info->firstType) << " ?";
         } else if ( info->type==Type::tEnumeration || info->type==Type::tEnumeration8 || info->type==Type::tEnumeration16 ) {
-            stream << (info->enumType->name ? info->enumType->name : "enum");
+            stream << ((info->enumType && info->enumType->name) ? info->enumType->name : "enum");
         } else if ( info->type==Type::tArray ) {
             stream << "array<" << debug_type(info->firstType) << ">";
         } else if ( info->type==Type::tTable ) {
