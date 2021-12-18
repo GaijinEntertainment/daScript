@@ -131,88 +131,15 @@ def clang_argNameToDasArgName ( name:string; ai:uint )
     else
         return unsafe_names?[name] ?? name
 
-// handling defines
-
-var blocked_defines : array<string> <- [{string []
-    "true";
-    "false"
-}]
-
-var private blocked_defines_table : table<string;bool>
-
-var is_const_blocked : lambda<(name:string):bool>
-
-var const_type_table : table<string; string>
-
-def genDefineConstants(fname,prefix:string)
-    var fnames <- [{ auto[] fname }]
-    defer <| { delete fnames; }
-    fnames |> genDefineConstants <| prefix
-
-def getGenConstType ( name, default_name:string )
-    return const_type_table?[name] ?? default_name
-
-def searchAndGenConst ( var regex_def:Regex; defTName,suffix:string; hex:bool; var ofs:table<int; bool>; data:string; var dup:table<string;bool>; hf:FILE const? )
-    regex_foreach(regex_def,data) <| $ ( r )
-        if ! ofs |> key_exists(r.x)
-            let DEF = regex_group(regex_def,1,data)
-            let VAL = regex_group(regex_def,2,data)
-            if DEF |> starts_with("__")
-                to_log(LOG_WARNING, "skipping {DEF} due to name limitations")
-                return true
-            var suf = suffix
-            if hex && suffix=="u"
-                let v = to_uint64(VAL,true)
-                if v > 0xfffffffful
-                    to_log(LOG_INFO, "{DEF} promoted to ul")
-                    suf = "ul"
-            if !blocked_defines_table |> key_exists(DEF)
-                if is_const_blocked==null || !invoke(is_const_blocked,DEF)
-                    let ctt = getGenConstType(DEF,defTName)
-                    if !dup[DEF]
-                        fprint(hf,"let {DEF} = {ctt}({VAL}{suf})\n")
-                        dup[DEF] = true
-        return true
-
-def genDefineConstants(fnames:array<string>; gen_file:string)
-    delete blocked_defines_table
-    for bd in blocked_defines
-        blocked_defines_table[bd] = true
-    var reg_def_hex <- %regex~#define\s+(\w+)\s+(0x[0-9A-Fa-f]+)%%
-    var reg_def_dec <- %regex~#define\s+(\w+)\s+(\d+)%%
-    var reg_def_UINT8 <- %regex~#define\s+(\w+)\s+UINT8_C\s*\((0x[0-9A-Fa-f]+)\)%%
-    var reg_def_UINT16 <- %regex~#define\s+(\w+)\s+UINT16_C\s*\((0x[0-9A-Fa-f]+)\)%%
-    var reg_def_UINT32 <- %regex~#define\s+(\w+)\s+UINT32_C\s*\((0x[0-9A-Fa-f]+)\)%%
-    var reg_def_UINT64 <- %regex~#define\s+(\w+)\s+UINT64_C\s*\((0x[0-9A-Fa-f]+)\)%%
-    fopen(gen_file,"wb") <| $(hf)
-        if hf==null
-            panic("can't write {gen_file}")
-        for fname in fnames
-            fopen(fname,"rb") <| $( f )
-                if f == null
-                    panic("can't open {fname}")
-                var ofs : table<int; bool>
-                let data = fread(f)
-                var dup : table<string; bool>
-                searchAndGenConst(reg_def_hex, "uint", "u", true, ofs, data, dup, hf)
-                searchAndGenConst(reg_def_dec, "int", "", false, ofs, data, dup, hf)
-                searchAndGenConst(reg_def_UINT8, "uint8", "u", true, ofs, data, dup, hf)
-                searchAndGenConst(reg_def_UINT16, "uint16", "u", true, ofs, data, dup, hf)
-                searchAndGenConst(reg_def_UINT32, "uint", "u", true, ofs, data, dup, hf)
-                searchAndGenConst(reg_def_UINT64, "uint64", "ul", true, ofs, data, dup, hf)
-
-let DEFAULT_CLANG_ARGUMENTS <- [{string
-    "-xc++-header";
-    "-std=c++1z"
-}]
-
-class CppGenBind
+class AnyGenBind
     PARSE_FILE_NAME : string
     PARSE_FILE_PREFIX : string
+    ARGV : array<string>
     prevFileName : string
     nspaces : array<string>
-    ARGV : array<string>
-    def CppGenBind ( pfn,pfp:string; args:array<string> )
+    def AnyGenBind ( pfn,pfp:string; args:array<string> )
+        init_args(pfn,pfp,args )
+    def init_args ( pfn,pfp:string; args:array<string> )
         PARSE_FILE_NAME = pfn
         PARSE_FILE_PREFIX = pfp
         ARGV := args
@@ -241,6 +168,157 @@ class CppGenBind
                 wr |> write("::")
             wr |> write(name)
     def parse_FunctionDecl ( var c : CXCursor )
+        pass
+    def parse_Namespace ( var c : CXCursor )
+        let ns = string(clang_getCursorDisplayName(c))
+        nspaces |> push(ns)
+        parse(c)
+        nspaces |> pop
+    def parse_Enum ( var cursor : CXCursor )
+        pass
+    def parse ( var cursor : CXCursor )
+        clang_visitChildren(cursor) <| $ ( var c,parent )
+            var file : CXFile
+            var line, column, offset : uint
+            clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
+            var fname = clang_getFileName(file)
+            peek(fname) <| $ ( fn )
+                if prevFileName != fn
+                    prevFileName := fn
+                    if skip_file(prevFileName)
+                        to_log(LOG_INFO, "skipping {prevFileName}")
+            if !skip_file(prevFileName)
+                let kind = clang_getCursorKind(c)
+                if kind == CXCursorKind CXCursor_TypedefDecl
+                    return CXChildVisitResult CXChildVisit_Continue
+                elif kind == CXCursorKind CXCursor_FunctionDecl
+                    parse_FunctionDecl(c)
+                    return CXChildVisitResult CXChildVisit_Continue
+                elif kind == CXCursorKind CXCursor_StructDecl
+                    return CXChildVisitResult CXChildVisit_Continue
+                elif kind == CXCursorKind CXCursor_Namespace
+                    parse_Namespace(c)
+                    return CXChildVisitResult CXChildVisit_Continue
+                elif kind == CXCursorKind CXCursor_EnumDecl
+                    parse_Enum(c)
+                    return CXChildVisitResult CXChildVisit_Continue
+                else
+                    to_log(LOG_WARNING, "unsupported {c.kind}: {describe(c)}")
+                return CXChildVisitResult CXChildVisit_Recurse
+            else
+                return CXChildVisitResult CXChildVisit_Recurse
+
+class DasGenBind : AnyGenBind
+    blocked_defines_table : table<string;bool>
+    const_type_table : table<string; string>
+    known_type : table<string; string>
+    define_const_file : FILE const?
+    func_decl_file : FILE const?
+    def DasGenBind ( pfn,pfp:string; args:array<string> )
+        init_args(pfn,pfp,args)
+    def setFiles ( dcf, fdf:FILE const? )
+        define_const_file = dcf
+        func_decl_file = fdf
+    def is_const_blocked ( name:string ) : bool
+        return false
+    def getGenConstType ( name, default_name:string )
+        return const_type_table?[name] ?? default_name
+    def searchAndGenConst ( var regex_def:Regex; defTName,suffix:string; hex:bool; var ofs:table<int; bool>; data:string; var dup:table<string;bool> )
+        regex_foreach(regex_def,data) <| $ ( r )
+            if ! ofs |> key_exists(r.x)
+                let DEF = regex_group(regex_def,1,data)
+                let VAL = regex_group(regex_def,2,data)
+                if DEF |> starts_with("__")
+                    to_log(LOG_WARNING, "skipping {DEF} due to name limitations")
+                    return true
+                var suf = suffix
+                if hex && suffix=="u"
+                    let v = to_uint64(VAL,true)
+                    if v > 0xfffffffful
+                        to_log(LOG_INFO, "{DEF} promoted to ul")
+                        suf = "ul"
+                if !blocked_defines_table |> key_exists(DEF)
+                    if is_const_blocked==null || !is_const_blocked(DEF)
+                        let ctt = getGenConstType(DEF,defTName)
+                        if !dup[DEF]
+                            fprint(define_const_file,"let {DEF} = {ctt}({VAL}{suf})\n")
+                            dup[DEF] = true
+            return true
+    def generateConstantsFrom(fnames:array<string>)
+        var reg_def_hex <- %regex~#define\s+(\w+)\s+(0x[0-9A-Fa-f]+)%%
+        var reg_def_dec <- %regex~#define\s+(\w+)\s+(\d+)%%
+        var reg_def_UINT8 <- %regex~#define\s+(\w+)\s+UINT8_C\s*\((0x[0-9A-Fa-f]+)\)%%
+        var reg_def_UINT16 <- %regex~#define\s+(\w+)\s+UINT16_C\s*\((0x[0-9A-Fa-f]+)\)%%
+        var reg_def_UINT32 <- %regex~#define\s+(\w+)\s+UINT32_C\s*\((0x[0-9A-Fa-f]+)\)%%
+        var reg_def_UINT64 <- %regex~#define\s+(\w+)\s+UINT64_C\s*\((0x[0-9A-Fa-f]+)\)%%
+        // for all the files where we need to generate
+        for fname in fnames
+            fopen(fname,"rb") <| $( f )
+                if f == null
+                    panic("can't open {fname}")
+                var ofs : table<int; bool>
+                let data = fread(f)
+                var dup : table<string; bool>
+                searchAndGenConst(reg_def_hex, "uint", "u", true, ofs, data, dup)
+                searchAndGenConst(reg_def_dec, "int", "", false, ofs, data, dup)
+                searchAndGenConst(reg_def_UINT8, "uint8", "u", true, ofs, data, dup)
+                searchAndGenConst(reg_def_UINT16, "uint16", "u", true, ofs, data, dup)
+                searchAndGenConst(reg_def_UINT32, "uint", "u", true, ofs, data, dup)
+                searchAndGenConst(reg_def_UINT64, "uint64", "ul", true, ofs, data, dup)
+    def generateConstants(fname:string)
+        var fnames <- [{ auto[] fname }]
+        defer <| { delete fnames; }
+        fnames |> generateConstantsFrom()
+    def functionArgumentRules : TypeRules
+        return TypeRules char_ptr_is_string | TypeRules function_proto_is_void_ptr | TypeRules top_level_pointers_are_implicit
+    def functionResultRules : TypeRules
+        return TypeRules char_ptr_is_string | TypeRules function_proto_is_void_ptr
+    def clang_knownType ( var nctype:CXType; rules:TypeRules )
+        let ncname = string(clang_getTypeSpelling(nctype))
+        let tname = known_type?[ncname] ?? ""
+        if tname != ""
+            return tname
+        var ctype = clang_getCanonicalType(nctype)
+        return clang_typeToDasType(ctype,rules)
+    def output_dasbind ( function_name:string )
+        fprint(func_decl_file, "[extern(name=\"{function_name}\")]\n")
+    def override parse_FunctionDecl ( var c : CXCursor )
+        let function_name = string(clang_getCursorSpelling(c))
+        var fun_type = clang_getCursorType(c)
+        output_dasbind(function_name)
+        fprint(func_decl_file, "def {function_name} ( ")
+        let narg = clang_Cursor_getNumArguments(c)
+        for ai in urange(narg)
+            if ai != 0u
+                fprint(func_decl_file, "; ")
+            var carg = clang_Cursor_getArgument(c, ai)
+            let arg_name = string(clang_getCursorSpelling(carg))
+            var arg_type = clang_getCursorType(carg)
+            let darg_type = clang_knownType(arg_type,functionArgumentRules())
+            let darg_name = clang_argNameToDasArgName(arg_name,ai)
+            fprint(func_decl_file, "{darg_name}:{darg_type}")
+        fprint(func_decl_file, " ) : ")
+        var res_type = clang_getResultType(fun_type)
+        let dres_type = clang_knownType(res_type,functionResultRules())
+        fprint(func_decl_file, "{dres_type}\n")
+        if res_type.kind==CXTypeKind CXType_Void
+            fprint(func_decl_file, "\tpass\n\n")
+        else
+            fprint(func_decl_file, "\treturn [[{dres_type}]]\n\n")
+    def override generate
+        AnyGenBind`generate(self)
+        generateConstants(open_file_name())
+
+
+let DEFAULT_CLANG_ARGUMENTS <- [{string
+    "-xc++-header";
+    "-std=c++1z"
+}]
+
+class CppGenBind : AnyGenBind
+    def CppGenBind ( pfn,pfp:string; args:array<string> )
+        init_args(pfn,pfp,args)
+    def override parse_FunctionDecl ( var c : CXCursor )
         let function_name = string(clang_getCursorSpelling(c))
         var fun_type = clang_getCanonicalType(clang_getCursorType(c))
         var res_type = clang_getResultType(fun_type)
@@ -260,12 +338,7 @@ class CppGenBind
             let argument_type = string(clang_getTypeSpelling(arg_type))
             print("{argument_type} {arg_name}")
         print(" );\n")
-    def parse_Namespace ( var c : CXCursor )
-        let ns = string(clang_getCursorDisplayName(c))
-        nspaces |> push(ns)
-        parse(c)
-        nspaces |> pop
-    def parse_Enum ( var cursor : CXCursor )
+    def override parse_Enum ( var cursor : CXCursor )
         let en = string(clang_getCursorDisplayName(cursor))
         let ns_en = namespace_name(en)
         print("BIND_ENUM_CAST({ns_en});\n")
@@ -285,34 +358,3 @@ class CppGenBind
                 return CXChildVisitResult CXChildVisit_Recurse
         print("\t\}\n\};\n")
         print("\taddEnumeration(make_smart<Enumeration_{en}>());\n");
-    def parse ( var cursor : CXCursor )
-        clang_visitChildren(cursor) <| $ ( var c,parent )
-            var file : CXFile
-            var line, column, offset : uint
-            clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
-            var fname = clang_getFileName(file)
-            peek(fname) <| $ ( fn )
-                if prevFileName != fn
-                    prevFileName := fn
-                    if skip_file(prevFileName)
-                        print("\tskipping {prevFileName}\n")
-            if !skip_file(prevFileName)
-                let kind = clang_getCursorKind(c)
-                if kind == CXCursorKind CXCursor_TypedefDecl
-                    return CXChildVisitResult CXChildVisit_Continue
-                elif kind == CXCursorKind CXCursor_FunctionDecl
-                    parse_FunctionDecl(c)
-                    return CXChildVisitResult CXChildVisit_Continue
-                elif kind == CXCursorKind CXCursor_StructDecl
-                    return CXChildVisitResult CXChildVisit_Continue
-                elif kind == CXCursorKind CXCursor_Namespace
-                    parse_Namespace(c)
-                    return CXChildVisitResult CXChildVisit_Continue
-                elif kind == CXCursorKind CXCursor_EnumDecl
-                    parse_Enum(c)
-                    return CXChildVisitResult CXChildVisit_Continue
-                else
-                    print("unsupported {c.kind}: {describe(c)}\n")
-                return CXChildVisitResult CXChildVisit_Recurse
-            else
-                return CXChildVisitResult CXChildVisit_Recurse
