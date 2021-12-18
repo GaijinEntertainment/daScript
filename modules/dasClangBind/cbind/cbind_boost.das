@@ -44,42 +44,42 @@ bitfield TypeRules
     top_level_pointers_are_implicit     // for any pointer make it implicit
 
 def clang_typeToDasTypeUnqEx ( var t:CXType; topLevel:bool; rules:TypeRules; var error:string& )
-    if t.kind==CXTypeKind CXType_Void
+    if t.kind==CXTypeKind Void
         return "void"
-    elif t.kind==CXTypeKind CXType_Bool
+    elif t.kind==CXTypeKind Bool
         return "bool"
-    elif t.kind==CXTypeKind CXType_Char_U || t.kind==CXTypeKind CXType_UChar
+    elif t.kind==CXTypeKind Char_U || t.kind==CXTypeKind UChar
         if topLevel && rules.top_level_uint8_is_bool
             return "bool"
         return "uint8"
-    elif t.kind==CXTypeKind CXType_Char_S || t.kind==CXTypeKind CXType_SChar
+    elif t.kind==CXTypeKind Char_S || t.kind==CXTypeKind SChar
         return "int8"
-    elif t.kind==CXTypeKind CXType_Char16 || t.kind==CXTypeKind CXType_Short
+    elif t.kind==CXTypeKind Char16 || t.kind==CXTypeKind Short
         return "int16"
-    elif t.kind==CXTypeKind CXType_WChar || t.kind==CXTypeKind CXType_UShort
+    elif t.kind==CXTypeKind WChar || t.kind==CXTypeKind UShort
         return "uint16"
-    elif t.kind==CXTypeKind CXType_Char32 || t.kind==CXTypeKind CXType_Int
+    elif t.kind==CXTypeKind Char32 || t.kind==CXTypeKind Int
         return "int"
-    elif t.kind==CXTypeKind CXType_UInt
+    elif t.kind==CXTypeKind UInt
         return "uint"
-    elif t.kind==CXTypeKind CXType_Long || t.kind==CXTypeKind CXType_LongLong
+    elif t.kind==CXTypeKind Long || t.kind==CXTypeKind LongLong
         return "int64"
-    elif t.kind==CXTypeKind CXType_ULong || t.kind==CXTypeKind CXType_ULongLong
+    elif t.kind==CXTypeKind ULong || t.kind==CXTypeKind ULongLong
         return "uint64"
-    elif t.kind==CXTypeKind CXType_Float
+    elif t.kind==CXTypeKind Float
         return "float"
-    elif t.kind==CXTypeKind CXType_Double
+    elif t.kind==CXTypeKind Double
         return "double"
-    elif t.kind==CXTypeKind CXType_NullPtr
+    elif t.kind==CXTypeKind NullPtr
         return "void?"
-    elif t.kind==CXTypeKind CXType_Pointer
+    elif t.kind==CXTypeKind Pointer
         var pt = clang_getPointeeType(t)
         var rest : string
-        if rules.char_ptr_is_string && (pt.kind==CXTypeKind CXType_Char_S || pt.kind==CXTypeKind CXType_SChar)
+        if rules.char_ptr_is_string && (pt.kind==CXTypeKind Char_S || pt.kind==CXTypeKind SChar)
             rest = "string"
-        elif rules.uchar_ptr_is_string && (pt.kind==CXTypeKind CXType_Char_U || pt.kind==CXTypeKind CXType_UChar)
+        elif rules.uchar_ptr_is_string && (pt.kind==CXTypeKind Char_U || pt.kind==CXTypeKind UChar)
             rest = "string"
-        elif rules.structure_ptr_is_void_ptr && pt.kind==CXTypeKind CXType_Record
+        elif rules.structure_ptr_is_void_ptr && pt.kind==CXTypeKind Record
             rest = "void?"
         else
             rest = "{clang_typeToDasTypeEx(pt,false,rules,error)}?"
@@ -87,18 +87,18 @@ def clang_typeToDasTypeUnqEx ( var t:CXType; topLevel:bool; rules:TypeRules; var
             return "{rest} implicit"
         else
             return rest
-    elif t.kind==CXTypeKind CXType_Record
+    elif t.kind==CXTypeKind Record
         let rname = string(clang_getTypeSpelling(t))
         if rname |> starts_with("struct ")
             return rname |> slice(7)
         else
             error += "unsupported CXXRecord name {rname}\n"
             return "\u00BF"
-    elif t.kind==CXTypeKind CXType_FunctionProto
+    elif t.kind==CXTypeKind FunctionProto
         if rules.function_proto_is_void_ptr
             return "void?"
         else
-            error += "unsupported CXType_FunctionProto\n"
+            error += "unsupported FunctionProto\n"
             return "\u00BF"
     else
         error += "unsupported type {t.kind}\n"
@@ -189,24 +189,24 @@ class AnyGenBind
                         to_log(LOG_INFO, "skipping {prevFileName}")
             if !skip_file(prevFileName)
                 let kind = clang_getCursorKind(c)
-                if kind == CXCursorKind CXCursor_TypedefDecl
-                    return CXChildVisitResult CXChildVisit_Continue
-                elif kind == CXCursorKind CXCursor_FunctionDecl
+                if kind == CXCursorKind TypedefDecl
+                    return CXChildVisitResult Continue
+                elif kind == CXCursorKind FunctionDecl
                     parse_FunctionDecl(c)
-                    return CXChildVisitResult CXChildVisit_Continue
-                elif kind == CXCursorKind CXCursor_StructDecl
-                    return CXChildVisitResult CXChildVisit_Continue
-                elif kind == CXCursorKind CXCursor_Namespace
+                    return CXChildVisitResult Continue
+                elif kind == CXCursorKind StructDecl
+                    return CXChildVisitResult Continue
+                elif kind == CXCursorKind Namespace
                     parse_Namespace(c)
-                    return CXChildVisitResult CXChildVisit_Continue
-                elif kind == CXCursorKind CXCursor_EnumDecl
+                    return CXChildVisitResult Continue
+                elif kind == CXCursorKind EnumDecl
                     parse_Enum(c)
-                    return CXChildVisitResult CXChildVisit_Continue
+                    return CXChildVisitResult Continue
                 else
                     to_log(LOG_WARNING, "unsupported {c.kind}: {describe(c)}")
-                return CXChildVisitResult CXChildVisit_Recurse
+                return CXChildVisitResult Recurse
             else
-                return CXChildVisitResult CXChildVisit_Recurse
+                return CXChildVisitResult Recurse
 
 class DasGenBind : AnyGenBind
     blocked_defines_table : table<string;bool>
@@ -216,6 +216,8 @@ class DasGenBind : AnyGenBind
     func_decl_file : FILE const?
     def DasGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args)
+        define_const_file = fstdout()
+        func_decl_file = fstdout()
     def setFiles ( dcf, fdf:FILE const? )
         define_const_file = dcf
         func_decl_file = fdf
@@ -301,7 +303,7 @@ class DasGenBind : AnyGenBind
         var res_type = clang_getResultType(fun_type)
         let dres_type = clang_knownType(res_type,functionResultRules())
         fprint(func_decl_file, "{dres_type}\n")
-        if res_type.kind==CXTypeKind CXType_Void
+        if res_type.kind==CXTypeKind Void
             fprint(func_decl_file, "\tpass\n\n")
         else
             fprint(func_decl_file, "\treturn [[{dres_type}]]\n\n")
@@ -316,8 +318,21 @@ let DEFAULT_CLANG_ARGUMENTS <- [{string
 }]
 
 class CppGenBind : AnyGenBind
+    enum_decl_file : FILE const?
+    enum_class_file : FILE const?
+    enum_add_file : FILE const?
+    enum_prefix : table<string; string>
     def CppGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args)
+        set_default_files()
+    def set_default_files
+        enum_decl_file = fstdout()
+        enum_class_file = fstdout()
+        enum_add_file = fstdout()
+    def setEnumFiles ( edecl,eclass,eadd:FILE const? )
+        enum_decl_file = edecl
+        enum_class_file = eclass
+        enum_add_file = eadd
     def override parse_FunctionDecl ( var c : CXCursor )
         let function_name = string(clang_getCursorSpelling(c))
         var fun_type = clang_getCanonicalType(clang_getCursorType(c))
@@ -338,23 +353,35 @@ class CppGenBind : AnyGenBind
             let argument_type = string(clang_getTypeSpelling(arg_type))
             print("{argument_type} {arg_name}")
         print(" );\n")
+    def enum_entry_name ( en, enn:string ) : string
+        let prefix = enum_prefix?[en] ?? en
+        var name = enn
+        if enn |> starts_with("{prefix}_")
+            name = enn |> slice(length(prefix)+1)
+        elif enn |> starts_with(prefix)
+            name = enn |> slice(length(prefix))
+        return unsafe_names?[name] ?? name
     def override parse_Enum ( var cursor : CXCursor )
         let en = string(clang_getCursorDisplayName(cursor))
+        if en==""
+            // TODO: turn global enums into constants?
+            return
         let ns_en = namespace_name(en)
-        print("BIND_ENUM_CAST({ns_en});\n")
-        print("DAS_BASE_BIND_ENUM_GEN({ns_en},{en});\n")
-        print("class Enumeration_{en} : public das::Enumeration \{\n")
-        print("public:\n")
-        print("\tEnumeration{en}() : das::Enumeration(\"{en}\") \{\n")
-        print("\t\texternal = true;\n")
-        print("\t\tcppName = \"{ns_en}\";\n")
-        print("\t\tbaseType = (das::Type) das::ToBasicType< das::underlying_type< {ns_en} >::type >::type;\n")
+        fprint(enum_decl_file, "DAS_BIND_ENUM_CAST({ns_en});\n")
+        fprint(enum_decl_file, "DAS_BASE_BIND_ENUM_GEN({ns_en},{en});\n\n")
+        fprint(enum_class_file, "class Enumeration_{en} : public das::Enumeration \{\n")
+        fprint(enum_class_file, "public:\n")
+        fprint(enum_class_file, "\tEnumeration_{en}() : das::Enumeration(\"{en}\") \{\n")
+        fprint(enum_class_file, "\t\texternal = true;\n")
+        fprint(enum_class_file, "\t\tcppName = \"{ns_en}\";\n")
+        fprint(enum_class_file, "\t\tbaseType = (das::Type) das::ToBasicType< das::underlying_type< {ns_en} >::type >::type;\n")
         clang_visitChildren(cursor) <| $ ( var c,parent )
-            if c.kind==CXCursorKind CXCursor_EnumConstantDecl
+            if c.kind==CXCursorKind EnumConstantDecl
                 let een = string(clang_getCursorDisplayName(c))
-                print("\t\taddIEx(\"{een}\", \"{een}\", int64_t({ns_en}::{een}), das::LineInfo());\n")
-                return CXChildVisitResult CXChildVisit_Continue
+                let deen = enum_entry_name(en, een)
+                fprint(enum_class_file, "\t\taddIEx(\"{deen}\", \"{een}\", int64_t({ns_en}::{een}), das::LineInfo());\n")
+                return CXChildVisitResult Continue
             else
-                return CXChildVisitResult CXChildVisit_Recurse
-        print("\t\}\n\};\n")
-        print("\taddEnumeration(make_smart<Enumeration_{en}>());\n");
+                return CXChildVisitResult Recurse
+        fprint(enum_class_file, "\t\}\n\};\n\n")
+        fprint(enum_add_file, "\taddEnumeration(make_smart<Enumeration_{en}>());\n");
