@@ -38,7 +38,7 @@ def JV ( v : double )
 def JV ( v : bool )
     return new [[JsonValue value <- [[JsValue _bool = v]]]]
 
-def JV ( v : void? )
+def JVNull
     return new [[JsonValue value <- [[JsValue _null = null]]]]
 
 def JV ( var v : table<string;JsonValue?> )
@@ -235,7 +235,7 @@ def private parse_value ( var itv : iterator<Token>; var error : string & ) : Js
     elif ahead is _bool
         return JV(ahead as _bool)
     elif ahead is _null
-        return JV(null)
+        return JVNull()
     else
         error = "{ahead}"
         return null

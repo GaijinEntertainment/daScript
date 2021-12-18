@@ -1450,7 +1450,7 @@ class private DAServer: Server
     def sendStopped(ctx: DAContext; reason, text: string; brId: uint64)
         self->sendEvent("stopped", JV({{
             "reason"=>JV(reason);
-            "text"=>empty(text) ? JV(null) : JV(text);
+            "text"=>empty(text) ? JVNull() : JV(text);
             "threadId"=>JV(double(ctx.id));
             "allThreadsStopped"=>JV(false);
             "hitBreakpointIds"=>brId == -1ul ? null : JV([{auto[] JV(brId)}])
