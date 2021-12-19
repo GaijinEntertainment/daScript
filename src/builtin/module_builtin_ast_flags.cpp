@@ -190,7 +190,7 @@ namespace das {
     TypeDeclPtr makeFunctionSideEffectFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "FunctionSideEffectFlags";
-        ft->argNames = { "unsafe", "userScenario","modifyExternal",
+        ft->argNames = { "_unsafe", "userScenario","modifyExternal",
             "modifyArgument","accessGlobal","invoke"
         };
         return ft;
