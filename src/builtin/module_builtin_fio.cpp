@@ -11,6 +11,7 @@
 #include "daScript/simulate/aot_builtin_time.h"
 
 #include "daScript/misc/performance_time.h"
+#include "daScript/misc/sysos.h"
 
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
 
@@ -433,6 +434,12 @@ namespace das {
 #endif
     }
 
+    char * get_full_file_name ( const char * path, Context * context, LineInfoArg * ) {
+        auto res = normalizeFileName(path);
+        if ( res.length()==0 ) return nullptr;
+        return context->stringHeap->allocateString(res);
+    }
+
     class Module_FIO : public Module {
     public:
         Module_FIO() : Module("fio") {
@@ -524,6 +531,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_popen)>(*this, lib, "popen",
                 SideEffects::modifyExternal, "builtin_popen")
                     ->args({"command","scope","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(get_full_file_name)>(*this, lib, "get_full_file_name",
+                SideEffects::accessExternal, "get_full_file_name")
+                    ->args({"path","context","at"});
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
             // lets verify all names

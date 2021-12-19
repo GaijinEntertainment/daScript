@@ -29,4 +29,6 @@ namespace das {
     const FILE * builtin_stdin();
     const FILE * builtin_stdout();
     const FILE * builtin_stderr();
+    int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
+    char * get_full_file_name ( const char * path, Context * context, LineInfoArg * );
 }
