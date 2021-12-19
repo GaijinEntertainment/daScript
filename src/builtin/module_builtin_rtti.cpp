@@ -313,7 +313,7 @@ namespace das {
     TypeDeclPtr makeProgramFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ProgramFlags";
-        ft->argNames = { "failToCompile", "unsafe", "isCompiling",
+        ft->argNames = { "failToCompile", "_unsafe", "isCompiling",
             "isSimulating", "isCompilingMacros", "needMacroModule"
         };
         return ft;
