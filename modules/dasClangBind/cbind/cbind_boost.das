@@ -432,15 +432,23 @@ class CppGenBind : AnyGenBind
     struct_class_file : FILE const?
     struct_add_file : FILE const?
     struct_postadd_file : FILE const?
+    struct_cast_file : FILE const?
     alias_add_file : FILE const?
     dummy_add_file : FILE const?
     func_file : FILE const?
+    func_file_reg : FILE const?
+    func_file_decl : FILE const?
+    func_count : int
+    func_per_chunk : int = 100500
+    func_chunk_index : int
     swrite : array<StringBuilderWriter?>
     struct_ann : table<string; bool>
+    bind_root : string
+    bind_module : string
     def CppGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args)
-        set_default_files()
-    def set_default_files
+        setDefaultFiles()
+    def setDefaultFiles
         enum_decl_file = fstdout()
         enum_class_file = fstdout()
         enum_add_file = fstdout()
@@ -449,24 +457,79 @@ class CppGenBind : AnyGenBind
         struct_class_file = fstdout()
         struct_add_file = fstdout()
         struct_postadd_file = fstdout()
+        struct_cast_file = fstdout()
         alias_add_file = fstdout()
         dummy_add_file = fstdout()
-        func_file = fstdout()
+        func_file_reg = fstdout()
+        func_file_decl = fstdout()
+    def openFile ( path:string )
+        var f = fopen(path,"wb")
+        if f == null
+            to_log(LOG_ERROR, "can't open CppGenBind output at {path}, defaulting to stdout")
+            f = fstdout()
+        return f
+    def closeFile ( var f:FILE const? & )
+        if f != null && f != fstdout()
+            fclose(f)
+        f = null
+    def openAllFiles
+        setEnumFiles(
+            openFile("{bind_root}/{bind_module}.enum.decl.inc"),
+            openFile("{bind_root}/{bind_module}.enum.class.inc"),
+            openFile("{bind_root}/{bind_module}.enum.add.inc"))
+        setStructFiles (
+            openFile("{bind_root}/{bind_module}.struct.decl.inc"),
+            openFile("{bind_root}/{bind_module}.struct.impl.inc"),
+            openFile("{bind_root}/{bind_module}.struct.class.inc"),
+            openFile("{bind_root}/{bind_module}.struct.add.inc"),
+            openFile("{bind_root}/{bind_module}.struct.postadd.inc"),
+            openFile("{bind_root}/{bind_module}.struct.cast.inc"))
+        setAliasFiles (
+            openFile("{bind_root}/{bind_module}.alias.add.inc"),
+            openFile("{bind_root}/{bind_module}.dummy.add.inc"))
+        setFuncFiles (
+            openFile("{bind_root}/{bind_module}.func.reg.inc"),
+            openFile("{bind_root}/{bind_module}.func.decl.inc"))
+    def closeAllFiles
+        closeFile(enum_decl_file)
+        closeFile(enum_class_file)
+        closeFile(enum_add_file)
+        closeFile(struct_decl_file)
+        closeFile(struct_impl_file)
+        closeFile(struct_class_file)
+        closeFile(struct_add_file)
+        closeFile(struct_postadd_file)
+        closeFile(alias_add_file)
+        closeFile(dummy_add_file)
+        closeLastFuncFile()
     def setEnumFiles ( edecl,eclass,eadd:FILE const? )
         enum_decl_file = edecl
         enum_class_file = eclass
         enum_add_file = eadd
-    def setStructFiles ( sdecl,simpl,sclass,sadd,spostadd:FILE const? )
+    def setStructFiles ( sdecl,simpl,sclass,sadd,spostadd,scast:FILE const? )
         struct_decl_file = sdecl
         struct_impl_file = simpl
         struct_class_file = sclass
         struct_add_file = sadd
         struct_postadd_file = spostadd
+        struct_cast_file = scast
     def setAliasFiles ( af,df:FILE const? )
         alias_add_file = af
         dummy_add_file = df
-    def setFuncFiles ( ff:FILE const? )
-        func_file = ff
+    def setFuncFiles ( ffr,ffd:FILE const? )
+        func_file_reg = ffr
+        func_file_decl = ffd
+    def writeFuncPrefix
+        pass
+    def nextFuncFile
+        return openFile("{bind_root}/{bind_module}.func_{func_chunk_index}.cpp")
+    def writeFuncPostfix
+        pass
+    def closeLastFuncFile
+        if func_file != null
+            writeFuncPostfix()
+            fclose(func_file)
+            func_file = null
     def getBindFldName ( field_name : string ) : string     // note: namespaces form struct
         return unsafe_names?[field_name] ?? field_name
     def substFieldType ( field_name : string ) : string     // note: namespaces form struct
@@ -507,18 +570,29 @@ class CppGenBind : AnyGenBind
             AnyGenBind`parse_Struct(self, c, struct_name)
             writer |> write("\t\}\n\};\n")
             if isArgByValue(struct_namespace_name)
-                writer |> write("template <> struct cast_arg<{struct_namespace_name}> \{\n")
-                writer |> write("\tstatic __forceinline {struct_namespace_name} to ( Context & ctx, SimNode * node ) \{\n")
-                writer |> write("\t\tvec4f res = node->eval(ctx);\n")
-                writer |> write("\t\treturn * cast<{struct_namespace_name} *>::to(res);\n")
-                writer |> write("\t\}\n")
-                writer |> write("\};\n")
+                fprint(struct_cast_file, "template <> struct cast_arg<{struct_namespace_name}> \{\n")
+                fprint(struct_cast_file, "\tstatic __forceinline {struct_namespace_name} to ( Context & ctx, SimNode * node ) \{\n")
+                fprint(struct_cast_file, "\t\tvec4f res = node->eval(ctx);\n")
+                fprint(struct_cast_file, "\t\treturn * cast<{struct_namespace_name} *>::to(res);\n")
+                fprint(struct_cast_file, "\t\}\n")
+                fprint(struct_cast_file, "\};\n")
             swrite |> pop()
         fprint(struct_class_file, "{st}\n")
         fprint(struct_add_file,"auto ann_{struct_name} = make_smart<{struct_name}_GeneratedAnnotation>(lib);\n")
         fprint(struct_add_file,"addAnnotation(ann_{struct_name});\n")
         fprint(struct_postadd_file,"initRecAnnotation(ann_{struct_name},lib);\n")
     def override parse_FunctionDecl ( var c : CXCursor )
+        func_count ++
+        if func_count >= func_per_chunk
+            func_count = 0
+            closeLastFuncFile()
+        if func_file==null
+            func_chunk_index ++
+            func_file = nextFuncFile()
+            writeFuncPrefix()
+            fwrite(func_file_reg, "initFunctions_{func_chunk_index}(lib);\n")
+            fwrite(func_file_decl, "void initFunctions_{func_chunk_index}( ModuleLibrary & lib );\n")
+            func_count = 0
         let function_name = string(clang_getCursorSpelling(c))
         var fun_type = clang_getCanonicalType(clang_getCursorType(c))
         var res_type = clang_getResultType(fun_type)
@@ -580,6 +654,7 @@ class CppGenBind : AnyGenBind
     def override generate
         AnyGenBind`generate(self)
         generateDummy()
+        closeAllFiles()
     def generateDummy
         for k,v in keys(struct_ann),values(struct_ann)
             if !v

@@ -30,6 +30,7 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_CLAN
 		${DAS_CLANG_BIND_DIR}/src/needClangBind.h
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.h
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.cpp
+	# generated binding includes
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.alias.add.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.dummy.add.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.enum.add.inc
@@ -40,7 +41,25 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_CLAN
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.class.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.decl.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.impl.inc
-		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func.add.inc
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.cast.inc
+	# generated functions
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_1.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_2.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_3.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_4.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_5.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_6.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_7.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_8.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_9.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_10.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_11.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_12.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_13.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_14.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_15.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_16.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func_17.cpp
 	)
 
 	ADD_MODULE_LIB(libDasModuleClangBind)

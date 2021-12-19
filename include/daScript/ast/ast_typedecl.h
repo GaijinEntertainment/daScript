@@ -239,6 +239,10 @@ namespace das {
     template<> struct ToBasicType<float>        { enum { type = Type::tFloat }; };
     template<> struct ToBasicType<void>         { enum { type = Type::tVoid }; };
     template<> struct ToBasicType<char>         { enum { type = Type::tInt8 }; };
+#if defined(_MSC_VER)
+    template<> struct ToBasicType<long>             { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<unsigned long>    { enum { type = Type::tUInt }; };
+#endif
 #if defined(__APPLE__)
     // note - under MSVC size_t is unsigned __int64 (or 32) accordingly
     template<> struct ToBasicType<size_t>       { enum { type = sizeof(size_t)==8 ? Type::tUInt64 : Type::tUInt }; };
