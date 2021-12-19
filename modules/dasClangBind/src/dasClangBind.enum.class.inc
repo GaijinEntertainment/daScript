@@ -30,6 +30,19 @@ public:
 	}
 };
 
+class Enumeration_CXGlobalOptFlags : public das::Enumeration {
+public:
+	Enumeration_CXGlobalOptFlags() : das::Enumeration("CXGlobalOptFlags") {
+		external = true;
+		cppName = "CXGlobalOptFlags";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXGlobalOptFlags >::type >::type;
+		addIEx("CXGlobalOpt_None", "CXGlobalOpt_None", int64_t(CXGlobalOptFlags::CXGlobalOpt_None), das::LineInfo());
+		addIEx("CXGlobalOpt_ThreadBackgroundPriorityForIndexing", "CXGlobalOpt_ThreadBackgroundPriorityForIndexing", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForIndexing), das::LineInfo());
+		addIEx("CXGlobalOpt_ThreadBackgroundPriorityForEditing", "CXGlobalOpt_ThreadBackgroundPriorityForEditing", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForEditing), das::LineInfo());
+		addIEx("CXGlobalOpt_ThreadBackgroundPriorityForAll", "CXGlobalOpt_ThreadBackgroundPriorityForAll", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForAll), das::LineInfo());
+	}
+};
+
 class Enumeration_CXDiagnosticSeverity : public das::Enumeration {
 public:
 	Enumeration_CXDiagnosticSeverity() : das::Enumeration("CXDiagnosticSeverity") {
@@ -796,6 +809,45 @@ public:
 	}
 };
 
+class Enumeration_CXObjCPropertyAttrKind : public das::Enumeration {
+public:
+	Enumeration_CXObjCPropertyAttrKind() : das::Enumeration("CXObjCPropertyAttrKind") {
+		external = true;
+		cppName = "CXObjCPropertyAttrKind";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXObjCPropertyAttrKind >::type >::type;
+		addIEx("CXObjCPropertyAttr_noattr", "CXObjCPropertyAttr_noattr", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_noattr), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_readonly", "CXObjCPropertyAttr_readonly", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_readonly), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_getter", "CXObjCPropertyAttr_getter", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_getter), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_assign", "CXObjCPropertyAttr_assign", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_assign), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_readwrite", "CXObjCPropertyAttr_readwrite", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_readwrite), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_retain", "CXObjCPropertyAttr_retain", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_retain), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_copy", "CXObjCPropertyAttr_copy", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_copy), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_nonatomic", "CXObjCPropertyAttr_nonatomic", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_nonatomic), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_setter", "CXObjCPropertyAttr_setter", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_setter), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_atomic", "CXObjCPropertyAttr_atomic", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_atomic), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_weak", "CXObjCPropertyAttr_weak", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_weak), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_strong", "CXObjCPropertyAttr_strong", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_strong), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_unsafe_unretained", "CXObjCPropertyAttr_unsafe_unretained", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_unsafe_unretained), das::LineInfo());
+		addIEx("CXObjCPropertyAttr_class", "CXObjCPropertyAttr_class", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_class), das::LineInfo());
+	}
+};
+
+class Enumeration_CXObjCDeclQualifierKind : public das::Enumeration {
+public:
+	Enumeration_CXObjCDeclQualifierKind() : das::Enumeration("CXObjCDeclQualifierKind") {
+		external = true;
+		cppName = "CXObjCDeclQualifierKind";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXObjCDeclQualifierKind >::type >::type;
+		addIEx("CXObjCDeclQualifier_None", "CXObjCDeclQualifier_None", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_None), das::LineInfo());
+		addIEx("CXObjCDeclQualifier_In", "CXObjCDeclQualifier_In", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_In), das::LineInfo());
+		addIEx("CXObjCDeclQualifier_Inout", "CXObjCDeclQualifier_Inout", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Inout), das::LineInfo());
+		addIEx("CXObjCDeclQualifier_Out", "CXObjCDeclQualifier_Out", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Out), das::LineInfo());
+		addIEx("CXObjCDeclQualifier_Bycopy", "CXObjCDeclQualifier_Bycopy", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Bycopy), das::LineInfo());
+		addIEx("CXObjCDeclQualifier_Byref", "CXObjCDeclQualifier_Byref", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Byref), das::LineInfo());
+		addIEx("CXObjCDeclQualifier_Oneway", "CXObjCDeclQualifier_Oneway", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Oneway), das::LineInfo());
+	}
+};
+
 class Enumeration_CXNameRefFlags : public das::Enumeration {
 public:
 	Enumeration_CXNameRefFlags() : das::Enumeration("CXNameRefFlags") {
@@ -900,6 +952,22 @@ public:
 	}
 };
 
+class Enumeration_CXEvalResultKind : public das::Enumeration {
+public:
+	Enumeration_CXEvalResultKind() : das::Enumeration("CXEvalResultKind") {
+		external = true;
+		cppName = "CXEvalResultKind";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXEvalResultKind >::type >::type;
+		addIEx("CXEval_Int", "CXEval_Int", int64_t(CXEvalResultKind::CXEval_Int), das::LineInfo());
+		addIEx("CXEval_Float", "CXEval_Float", int64_t(CXEvalResultKind::CXEval_Float), das::LineInfo());
+		addIEx("CXEval_ObjCStrLiteral", "CXEval_ObjCStrLiteral", int64_t(CXEvalResultKind::CXEval_ObjCStrLiteral), das::LineInfo());
+		addIEx("CXEval_StrLiteral", "CXEval_StrLiteral", int64_t(CXEvalResultKind::CXEval_StrLiteral), das::LineInfo());
+		addIEx("CXEval_CFStr", "CXEval_CFStr", int64_t(CXEvalResultKind::CXEval_CFStr), das::LineInfo());
+		addIEx("CXEval_Other", "CXEval_Other", int64_t(CXEvalResultKind::CXEval_Other), das::LineInfo());
+		addIEx("CXEval_UnExposed", "CXEval_UnExposed", int64_t(CXEvalResultKind::CXEval_UnExposed), das::LineInfo());
+	}
+};
+
 class Enumeration_CXVisitorResult : public das::Enumeration {
 public:
 	Enumeration_CXVisitorResult() : das::Enumeration("CXVisitorResult") {
@@ -908,6 +976,161 @@ public:
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXVisitorResult >::type >::type;
 		addIEx("CXVisit_Break", "CXVisit_Break", int64_t(CXVisitorResult::CXVisit_Break), das::LineInfo());
 		addIEx("CXVisit_Continue", "CXVisit_Continue", int64_t(CXVisitorResult::CXVisit_Continue), das::LineInfo());
+	}
+};
+
+class Enumeration_CXResult : public das::Enumeration {
+public:
+	Enumeration_CXResult() : das::Enumeration("CXResult") {
+		external = true;
+		cppName = "CXResult";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXResult >::type >::type;
+		addIEx("Success", "CXResult_Success", int64_t(CXResult::CXResult_Success), das::LineInfo());
+		addIEx("Invalid", "CXResult_Invalid", int64_t(CXResult::CXResult_Invalid), das::LineInfo());
+		addIEx("VisitBreak", "CXResult_VisitBreak", int64_t(CXResult::CXResult_VisitBreak), das::LineInfo());
+	}
+};
+
+class Enumeration_CXIdxEntityKind : public das::Enumeration {
+public:
+	Enumeration_CXIdxEntityKind() : das::Enumeration("CXIdxEntityKind") {
+		external = true;
+		cppName = "CXIdxEntityKind";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityKind >::type >::type;
+		addIEx("CXIdxEntity_Unexposed", "CXIdxEntity_Unexposed", int64_t(CXIdxEntityKind::CXIdxEntity_Unexposed), das::LineInfo());
+		addIEx("CXIdxEntity_Typedef", "CXIdxEntity_Typedef", int64_t(CXIdxEntityKind::CXIdxEntity_Typedef), das::LineInfo());
+		addIEx("CXIdxEntity_Function", "CXIdxEntity_Function", int64_t(CXIdxEntityKind::CXIdxEntity_Function), das::LineInfo());
+		addIEx("CXIdxEntity_Variable", "CXIdxEntity_Variable", int64_t(CXIdxEntityKind::CXIdxEntity_Variable), das::LineInfo());
+		addIEx("CXIdxEntity_Field", "CXIdxEntity_Field", int64_t(CXIdxEntityKind::CXIdxEntity_Field), das::LineInfo());
+		addIEx("CXIdxEntity_EnumConstant", "CXIdxEntity_EnumConstant", int64_t(CXIdxEntityKind::CXIdxEntity_EnumConstant), das::LineInfo());
+		addIEx("CXIdxEntity_ObjCClass", "CXIdxEntity_ObjCClass", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCClass), das::LineInfo());
+		addIEx("CXIdxEntity_ObjCProtocol", "CXIdxEntity_ObjCProtocol", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCProtocol), das::LineInfo());
+		addIEx("CXIdxEntity_ObjCCategory", "CXIdxEntity_ObjCCategory", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCCategory), das::LineInfo());
+		addIEx("CXIdxEntity_ObjCInstanceMethod", "CXIdxEntity_ObjCInstanceMethod", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCInstanceMethod), das::LineInfo());
+		addIEx("CXIdxEntity_ObjCClassMethod", "CXIdxEntity_ObjCClassMethod", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCClassMethod), das::LineInfo());
+		addIEx("CXIdxEntity_ObjCProperty", "CXIdxEntity_ObjCProperty", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCProperty), das::LineInfo());
+		addIEx("CXIdxEntity_ObjCIvar", "CXIdxEntity_ObjCIvar", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCIvar), das::LineInfo());
+		addIEx("CXIdxEntity_Enum", "CXIdxEntity_Enum", int64_t(CXIdxEntityKind::CXIdxEntity_Enum), das::LineInfo());
+		addIEx("CXIdxEntity_Struct", "CXIdxEntity_Struct", int64_t(CXIdxEntityKind::CXIdxEntity_Struct), das::LineInfo());
+		addIEx("CXIdxEntity_Union", "CXIdxEntity_Union", int64_t(CXIdxEntityKind::CXIdxEntity_Union), das::LineInfo());
+		addIEx("CXIdxEntity_CXXClass", "CXIdxEntity_CXXClass", int64_t(CXIdxEntityKind::CXIdxEntity_CXXClass), das::LineInfo());
+		addIEx("CXIdxEntity_CXXNamespace", "CXIdxEntity_CXXNamespace", int64_t(CXIdxEntityKind::CXIdxEntity_CXXNamespace), das::LineInfo());
+		addIEx("CXIdxEntity_CXXNamespaceAlias", "CXIdxEntity_CXXNamespaceAlias", int64_t(CXIdxEntityKind::CXIdxEntity_CXXNamespaceAlias), das::LineInfo());
+		addIEx("CXIdxEntity_CXXStaticVariable", "CXIdxEntity_CXXStaticVariable", int64_t(CXIdxEntityKind::CXIdxEntity_CXXStaticVariable), das::LineInfo());
+		addIEx("CXIdxEntity_CXXStaticMethod", "CXIdxEntity_CXXStaticMethod", int64_t(CXIdxEntityKind::CXIdxEntity_CXXStaticMethod), das::LineInfo());
+		addIEx("CXIdxEntity_CXXInstanceMethod", "CXIdxEntity_CXXInstanceMethod", int64_t(CXIdxEntityKind::CXIdxEntity_CXXInstanceMethod), das::LineInfo());
+		addIEx("CXIdxEntity_CXXConstructor", "CXIdxEntity_CXXConstructor", int64_t(CXIdxEntityKind::CXIdxEntity_CXXConstructor), das::LineInfo());
+		addIEx("CXIdxEntity_CXXDestructor", "CXIdxEntity_CXXDestructor", int64_t(CXIdxEntityKind::CXIdxEntity_CXXDestructor), das::LineInfo());
+		addIEx("CXIdxEntity_CXXConversionFunction", "CXIdxEntity_CXXConversionFunction", int64_t(CXIdxEntityKind::CXIdxEntity_CXXConversionFunction), das::LineInfo());
+		addIEx("CXIdxEntity_CXXTypeAlias", "CXIdxEntity_CXXTypeAlias", int64_t(CXIdxEntityKind::CXIdxEntity_CXXTypeAlias), das::LineInfo());
+		addIEx("CXIdxEntity_CXXInterface", "CXIdxEntity_CXXInterface", int64_t(CXIdxEntityKind::CXIdxEntity_CXXInterface), das::LineInfo());
+	}
+};
+
+class Enumeration_CXIdxEntityLanguage : public das::Enumeration {
+public:
+	Enumeration_CXIdxEntityLanguage() : das::Enumeration("CXIdxEntityLanguage") {
+		external = true;
+		cppName = "CXIdxEntityLanguage";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityLanguage >::type >::type;
+		addIEx("CXIdxEntityLang_None", "CXIdxEntityLang_None", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_None), das::LineInfo());
+		addIEx("CXIdxEntityLang_C", "CXIdxEntityLang_C", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_C), das::LineInfo());
+		addIEx("CXIdxEntityLang_ObjC", "CXIdxEntityLang_ObjC", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_ObjC), das::LineInfo());
+		addIEx("CXIdxEntityLang_CXX", "CXIdxEntityLang_CXX", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_CXX), das::LineInfo());
+		addIEx("CXIdxEntityLang_Swift", "CXIdxEntityLang_Swift", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_Swift), das::LineInfo());
+	}
+};
+
+class Enumeration_CXIdxEntityCXXTemplateKind : public das::Enumeration {
+public:
+	Enumeration_CXIdxEntityCXXTemplateKind() : das::Enumeration("CXIdxEntityCXXTemplateKind") {
+		external = true;
+		cppName = "CXIdxEntityCXXTemplateKind";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityCXXTemplateKind >::type >::type;
+		addIEx("CXIdxEntity_NonTemplate", "CXIdxEntity_NonTemplate", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_NonTemplate), das::LineInfo());
+		addIEx("CXIdxEntity_Template", "CXIdxEntity_Template", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_Template), das::LineInfo());
+		addIEx("CXIdxEntity_TemplatePartialSpecialization", "CXIdxEntity_TemplatePartialSpecialization", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_TemplatePartialSpecialization), das::LineInfo());
+		addIEx("CXIdxEntity_TemplateSpecialization", "CXIdxEntity_TemplateSpecialization", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_TemplateSpecialization), das::LineInfo());
+	}
+};
+
+class Enumeration_CXIdxAttrKind : public das::Enumeration {
+public:
+	Enumeration_CXIdxAttrKind() : das::Enumeration("CXIdxAttrKind") {
+		external = true;
+		cppName = "CXIdxAttrKind";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxAttrKind >::type >::type;
+		addIEx("CXIdxAttr_Unexposed", "CXIdxAttr_Unexposed", int64_t(CXIdxAttrKind::CXIdxAttr_Unexposed), das::LineInfo());
+		addIEx("CXIdxAttr_IBAction", "CXIdxAttr_IBAction", int64_t(CXIdxAttrKind::CXIdxAttr_IBAction), das::LineInfo());
+		addIEx("CXIdxAttr_IBOutlet", "CXIdxAttr_IBOutlet", int64_t(CXIdxAttrKind::CXIdxAttr_IBOutlet), das::LineInfo());
+		addIEx("CXIdxAttr_IBOutletCollection", "CXIdxAttr_IBOutletCollection", int64_t(CXIdxAttrKind::CXIdxAttr_IBOutletCollection), das::LineInfo());
+	}
+};
+
+class Enumeration_CXIdxDeclInfoFlags : public das::Enumeration {
+public:
+	Enumeration_CXIdxDeclInfoFlags() : das::Enumeration("CXIdxDeclInfoFlags") {
+		external = true;
+		cppName = "CXIdxDeclInfoFlags";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxDeclInfoFlags >::type >::type;
+		addIEx("CXIdxDeclFlag_Skipped", "CXIdxDeclFlag_Skipped", int64_t(CXIdxDeclInfoFlags::CXIdxDeclFlag_Skipped), das::LineInfo());
+	}
+};
+
+class Enumeration_CXIdxObjCContainerKind : public das::Enumeration {
+public:
+	Enumeration_CXIdxObjCContainerKind() : das::Enumeration("CXIdxObjCContainerKind") {
+		external = true;
+		cppName = "CXIdxObjCContainerKind";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxObjCContainerKind >::type >::type;
+		addIEx("CXIdxObjCContainer_ForwardRef", "CXIdxObjCContainer_ForwardRef", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_ForwardRef), das::LineInfo());
+		addIEx("CXIdxObjCContainer_Interface", "CXIdxObjCContainer_Interface", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_Interface), das::LineInfo());
+		addIEx("CXIdxObjCContainer_Implementation", "CXIdxObjCContainer_Implementation", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_Implementation), das::LineInfo());
+	}
+};
+
+class Enumeration_CXIdxEntityRefKind : public das::Enumeration {
+public:
+	Enumeration_CXIdxEntityRefKind() : das::Enumeration("CXIdxEntityRefKind") {
+		external = true;
+		cppName = "CXIdxEntityRefKind";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityRefKind >::type >::type;
+		addIEx("CXIdxEntityRef_Direct", "CXIdxEntityRef_Direct", int64_t(CXIdxEntityRefKind::CXIdxEntityRef_Direct), das::LineInfo());
+		addIEx("CXIdxEntityRef_Implicit", "CXIdxEntityRef_Implicit", int64_t(CXIdxEntityRefKind::CXIdxEntityRef_Implicit), das::LineInfo());
+	}
+};
+
+class Enumeration_CXSymbolRole : public das::Enumeration {
+public:
+	Enumeration_CXSymbolRole() : das::Enumeration("CXSymbolRole") {
+		external = true;
+		cppName = "CXSymbolRole";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXSymbolRole >::type >::type;
+		addIEx("None", "CXSymbolRole_None", int64_t(CXSymbolRole::CXSymbolRole_None), das::LineInfo());
+		addIEx("Declaration", "CXSymbolRole_Declaration", int64_t(CXSymbolRole::CXSymbolRole_Declaration), das::LineInfo());
+		addIEx("Definition", "CXSymbolRole_Definition", int64_t(CXSymbolRole::CXSymbolRole_Definition), das::LineInfo());
+		addIEx("Reference", "CXSymbolRole_Reference", int64_t(CXSymbolRole::CXSymbolRole_Reference), das::LineInfo());
+		addIEx("Read", "CXSymbolRole_Read", int64_t(CXSymbolRole::CXSymbolRole_Read), das::LineInfo());
+		addIEx("Write", "CXSymbolRole_Write", int64_t(CXSymbolRole::CXSymbolRole_Write), das::LineInfo());
+		addIEx("Call", "CXSymbolRole_Call", int64_t(CXSymbolRole::CXSymbolRole_Call), das::LineInfo());
+		addIEx("Dynamic", "CXSymbolRole_Dynamic", int64_t(CXSymbolRole::CXSymbolRole_Dynamic), das::LineInfo());
+		addIEx("AddressOf", "CXSymbolRole_AddressOf", int64_t(CXSymbolRole::CXSymbolRole_AddressOf), das::LineInfo());
+		addIEx("Implicit", "CXSymbolRole_Implicit", int64_t(CXSymbolRole::CXSymbolRole_Implicit), das::LineInfo());
+	}
+};
+
+class Enumeration_CXIndexOptFlags : public das::Enumeration {
+public:
+	Enumeration_CXIndexOptFlags() : das::Enumeration("CXIndexOptFlags") {
+		external = true;
+		cppName = "CXIndexOptFlags";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIndexOptFlags >::type >::type;
+		addIEx("CXIndexOpt_None", "CXIndexOpt_None", int64_t(CXIndexOptFlags::CXIndexOpt_None), das::LineInfo());
+		addIEx("CXIndexOpt_SuppressRedundantRefs", "CXIndexOpt_SuppressRedundantRefs", int64_t(CXIndexOptFlags::CXIndexOpt_SuppressRedundantRefs), das::LineInfo());
+		addIEx("CXIndexOpt_IndexFunctionLocalSymbols", "CXIndexOpt_IndexFunctionLocalSymbols", int64_t(CXIndexOptFlags::CXIndexOpt_IndexFunctionLocalSymbols), das::LineInfo());
+		addIEx("CXIndexOpt_IndexImplicitTemplateInstantiations", "CXIndexOpt_IndexImplicitTemplateInstantiations", int64_t(CXIndexOptFlags::CXIndexOpt_IndexImplicitTemplateInstantiations), das::LineInfo());
+		addIEx("CXIndexOpt_SuppressWarnings", "CXIndexOpt_SuppressWarnings", int64_t(CXIndexOptFlags::CXIndexOpt_SuppressWarnings), das::LineInfo());
+		addIEx("CXIndexOpt_SkipParsedBodiesInSession", "CXIndexOpt_SkipParsedBodiesInSession", int64_t(CXIndexOptFlags::CXIndexOpt_SkipParsedBodiesInSession), das::LineInfo());
 	}
 };
 

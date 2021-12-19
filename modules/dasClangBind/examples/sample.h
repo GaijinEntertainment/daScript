@@ -3,6 +3,23 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+typedef struct {
+    int a;
+    float b;
+} Goo;
+
+struct StFoo {
+    int     a;
+    float   b[3];
+};
+
+struct StOutFoo {
+    int a;
+    struct StInFoo {
+        int b;
+    };
+};
+
 enum Foo {
     bar1,
     bar2,

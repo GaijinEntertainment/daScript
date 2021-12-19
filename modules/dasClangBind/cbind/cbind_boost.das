@@ -117,6 +117,20 @@ def clang_typeToDasType ( var t:CXType; rules:TypeRules )
         to_log(LOG_ERROR, "\nTYPE ERROR:\n{err}")
     return result
 
+def clang_getCursorLocationDescription ( var c:CXCursor )
+    var file : CXFile
+    var line, column, offset : uint
+    clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
+    var fname = clang_getFileName(file)
+    return "{string(fname)}:{int(line)}:{int(column)}"
+
+
+def clang_isForwardDeclaration ( var cursor:CXCursor )
+    var definition = clang_getCursorDefinition(cursor)
+    if clang_equalCursors(definition, clang_getNullCursor())!=0u
+        return true
+    return clang_equalCursors(cursor, definition)==0u
+
 let private unsafe_names <- {{
     "type"      =>  "_type";
     "string"    =>  "_string";
@@ -137,6 +151,10 @@ class AnyGenBind
     ARGV : array<string>
     prevFileName : string
     nspaces : array<string>
+    emptyStruct : CXCursor
+    hasEmptyStruct : bool
+    emptyEnum : CXCursor
+    hasEmptyEnum : bool
     def AnyGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args )
     def init_args ( pfn,pfp:string; args:array<string> )
@@ -174,7 +192,15 @@ class AnyGenBind
         nspaces |> push(ns)
         parse(c)
         nspaces |> pop
-    def parse_Enum ( var cursor : CXCursor )
+    def parse_Enum ( var cursor : CXCursor; enum_name : string )
+        pass
+    def parse_Struct ( var c : CXCursor; struct_name : string )
+        nspaces |> push(struct_name)
+        parse(c)
+        nspaces |> pop
+    def parse_Field ( var c : CXCursor )
+        pass
+    def parse_Alias ( var c : CXCursor )
         pass
     def parse ( var cursor : CXCursor )
         clang_visitChildren(cursor) <| $ ( var c,parent )
@@ -190,17 +216,64 @@ class AnyGenBind
             if !skip_file(prevFileName)
                 let kind = clang_getCursorKind(c)
                 if kind == CXCursorKind TypedefDecl
+                    let tdn = string(clang_getCursorDisplayName(c))
+                    var tdt = clang_getCanonicalType(clang_getCursorType(c))
+                    if hasEmptyStruct
+                        if tdt.kind == CXTypeKind Record
+                            parse_Struct(emptyStruct, tdn)
+                            hasEmptyStruct = false
+                            return CXChildVisitResult Continue
+                        else
+                            to_log(LOG_ERROR, "typedef of type {tdt.kind} with nameless structure at {clang_getCursorLocationDescription(c)}")
+                            hasEmptyStruct = false
+                    elif hasEmptyEnum
+                        if tdt.kind == CXTypeKind Enum
+                            parse_Enum(emptyEnum, tdn)
+                            hasEmptyEnum = false
+                            return CXChildVisitResult Continue
+                        else
+                            to_log(LOG_ERROR, "typedef of type {tdt.kind} with nameless enumeration at {clang_getCursorLocationDescription(c)}")
+                            hasEmptyEnum = false
+                    elif tdt.kind == CXTypeKind Record
+                        let sn = string(clang_getTypeSpelling(tdt))
+                        if sn == tdn
+                            to_log(LOG_INFO, "skipping typedef struct {sn} {tdn};")
+                            return CXChildVisitResult Continue
+                    elif tdt.kind == CXTypeKind Enum
+                        let sn = string(clang_getTypeSpelling(tdt))
+                        if sn == tdn
+                            to_log(LOG_INFO, "skipping typedef enum {sn} {tdn};")
+                            return CXChildVisitResult Continue
+                    parse_Alias(c)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind FunctionDecl
                     parse_FunctionDecl(c)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind StructDecl
+                    let struct_name = string(clang_getCursorSpelling(c))
+                    if empty(struct_name)
+                        if hasEmptyStruct
+                            to_log(LOG_ERROR, "already in empty struct mode from {clang_getCursorLocationDescription(emptyStruct)}, at {clang_getCursorLocationDescription(c)}")
+                        emptyStruct = c
+                        hasEmptyStruct = true
+                    else
+                        parse_Struct(c, struct_name)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind Namespace
                     parse_Namespace(c)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind EnumDecl
-                    parse_Enum(c)
+                    let enum_name = string(clang_getCursorSpelling(c))
+                    if empty(enum_name)
+                        if hasEmptyEnum
+                            to_log(LOG_ERROR, "already in empty enum mode from {clang_getCursorLocationDescription(emptyEnum)}, at {clang_getCursorLocationDescription(c)}")
+                        emptyEnum = c
+                        hasEmptyEnum = true
+                    else
+                        parse_Enum(c, enum_name)
+                    return CXChildVisitResult Continue
+                elif kind == CXCursorKind FieldDecl
+                    parse_Field(c)
                     return CXChildVisitResult Continue
                 else
                     to_log(LOG_WARNING, "unsupported {c.kind}: {describe(c)}")
@@ -322,6 +395,15 @@ class CppGenBind : AnyGenBind
     enum_class_file : FILE const?
     enum_add_file : FILE const?
     enum_prefix : table<string; string>
+    struct_decl_file : FILE const?
+    struct_impl_file : FILE const?
+    struct_class_file : FILE const?
+    struct_add_file : FILE const?
+    struct_postadd_file : FILE const?
+    alias_add_file : FILE const?
+    dummy_add_file : FILE const?
+    swrite : array<StringBuilderWriter?>
+    struct_ann : table<string; bool>
     def CppGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args)
         set_default_files()
@@ -329,10 +411,68 @@ class CppGenBind : AnyGenBind
         enum_decl_file = fstdout()
         enum_class_file = fstdout()
         enum_add_file = fstdout()
+        struct_decl_file = fstdout()
+        struct_impl_file = fstdout()
+        struct_class_file = fstdout()
+        struct_add_file = fstdout()
+        struct_postadd_file = fstdout()
+        alias_add_file = fstdout()
+        dummy_add_file = fstdout()
     def setEnumFiles ( edecl,eclass,eadd:FILE const? )
         enum_decl_file = edecl
         enum_class_file = eclass
         enum_add_file = eadd
+    def setStructFiles ( sdecl,simpl,sclass,sadd,spostadd:FILE const? )
+        struct_decl_file = sdecl
+        struct_impl_file = simpl
+        struct_class_file = sclass
+        struct_add_file = sadd
+        struct_postadd_file = spostadd
+    def setAliasFiles ( af,df:FILE const? )
+        alias_add_file = af
+        dummy_add_file = df
+    def getBindFldName ( field_name : string ) : string     // note: namespaces form struct
+        return unsafe_names?[field_name] ?? field_name
+    def substFieldType ( field_name : string ) : string     // note: namespaces form struct
+        return ""
+    def override parse_Field ( var c : CXCursor )
+        let field_name = string(clang_getCursorSpelling(c))
+        var field_type = clang_getCanonicalType(clang_getCursorType(c))
+        let field_type_name = string(clang_getTypeSpelling(field_type))
+        var wr = swrite |> back
+        let substType = substFieldType(field_name)
+        if substType |> empty()
+            *wr |> write("\t\taddField<DAS_BIND_MANAGED_FIELD({field_name})>(\"{getBindFldName(field_name)}\",\"{field_name}\");\n")
+        else
+            *wr |> write("\t\taddField<{substType},offsetof(ManagedType,{field_name})>(\"{getBindFldName(field_name)}\",\"{field_name}\")\n")
+            *wr |> write("\t\t\t.adjustAot(\"das_reinterpret<{substType}>::pass(\",\")\");\n")
+    def isLocalType ( name,cppname:string )
+        return false
+    def override parse_Struct ( var c : CXCursor; struct_name : string )
+        let struct_namespace_name = namespace_name(struct_name)
+        if !struct_ann |> key_exists(struct_namespace_name)
+            fprint(struct_decl_file, "MAKE_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n")
+            fprint(struct_impl_file, "IMPLEMENT_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n\n")
+        if clang_isForwardDeclaration(c)
+            struct_ann[struct_namespace_name] = false
+            return
+        struct_ann[struct_namespace_name] = true
+        let st = build_string() <| $ ( var writer:StringBuilderWriter )
+            swrite |> push(unsafe(addr(writer)))
+            writer |> write("struct {struct_name}_GeneratedAnnotation : ManagedStructureAnnotation<{struct_namespace_name}> \{\n")
+            if isLocalType(struct_name,struct_namespace_name)
+                writer |> write("\tvirtual bool isLocal() const override \{ return true; \}\n")
+                writer |> write("\tvirtual bool canBePlacedInContainer() const override \{ return true; \}\n")
+            writer |> write("\t{struct_name}_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation (\"{struct_name}\", ml) \{\n")
+            writer |> write("\t\}\n")
+            writer |> write("\tvoid init () \{\n")
+            AnyGenBind`parse_Struct(self, c, struct_name)
+            writer |> write("\t\}\n\};\n")
+            swrite |> pop()
+        fprint(struct_class_file, "{st}\n")
+        fprint(struct_add_file,"auto ann_{struct_name} = make_smart<{struct_name}_GeneratedAnnotation>(lib);\n")
+        fprint(struct_add_file,"addAnnotation(ann_{struct_name});\n")
+        fprint(struct_postadd_file,"initRecAnnotation(ann_{struct_name},lib);\n")
     def override parse_FunctionDecl ( var c : CXCursor )
         let function_name = string(clang_getCursorSpelling(c))
         var fun_type = clang_getCanonicalType(clang_getCursorType(c))
@@ -361,27 +501,40 @@ class CppGenBind : AnyGenBind
         elif enn |> starts_with(prefix)
             name = enn |> slice(length(prefix))
         return unsafe_names?[name] ?? name
-    def override parse_Enum ( var cursor : CXCursor )
-        let en = string(clang_getCursorDisplayName(cursor))
-        if en==""
-            // TODO: turn global enums into constants?
-            return
-        let ns_en = namespace_name(en)
+    def override parse_Enum ( var cursor : CXCursor; enum_name : string )
+        let ns_en = namespace_name(enum_name)
         fprint(enum_decl_file, "DAS_BIND_ENUM_CAST({ns_en});\n")
-        fprint(enum_decl_file, "DAS_BASE_BIND_ENUM_GEN({ns_en},{en});\n\n")
-        fprint(enum_class_file, "class Enumeration_{en} : public das::Enumeration \{\n")
+        fprint(enum_decl_file, "DAS_BASE_BIND_ENUM_GEN({ns_en},{enum_name});\n\n")
+        fprint(enum_class_file, "class Enumeration_{enum_name} : public das::Enumeration \{\n")
         fprint(enum_class_file, "public:\n")
-        fprint(enum_class_file, "\tEnumeration_{en}() : das::Enumeration(\"{en}\") \{\n")
+        fprint(enum_class_file, "\tEnumeration_{enum_name}() : das::Enumeration(\"{enum_name}\") \{\n")
         fprint(enum_class_file, "\t\texternal = true;\n")
         fprint(enum_class_file, "\t\tcppName = \"{ns_en}\";\n")
         fprint(enum_class_file, "\t\tbaseType = (das::Type) das::ToBasicType< das::underlying_type< {ns_en} >::type >::type;\n")
         clang_visitChildren(cursor) <| $ ( var c,parent )
             if c.kind==CXCursorKind EnumConstantDecl
                 let een = string(clang_getCursorDisplayName(c))
-                let deen = enum_entry_name(en, een)
+                let deen = enum_entry_name(enum_name, een)
                 fprint(enum_class_file, "\t\taddIEx(\"{deen}\", \"{een}\", int64_t({ns_en}::{een}), das::LineInfo());\n")
                 return CXChildVisitResult Continue
             else
                 return CXChildVisitResult Recurse
         fprint(enum_class_file, "\t\}\n\};\n\n")
-        fprint(enum_add_file, "\taddEnumeration(make_smart<Enumeration_{en}>());\n");
+        fprint(enum_add_file, "\taddEnumeration(make_smart<Enumeration_{enum_name}>());\n");
+    def override parse_Alias ( var c : CXCursor )
+        let tdn = string(clang_getCursorDisplayName(c))
+        var tdt = clang_getCanonicalType(clang_getCursorType(c))
+        let tdts = string(clang_getTypeSpelling(tdt))
+        fprint(alias_add_file, "\tauto alias_{tdn} = typeFactory<{tdts}>::make(lib);\n")
+        fprint(alias_add_file, "\talias_{tdn}->alias = \"{tdn}\";\n")
+        fprint(alias_add_file, "\taddAlias(alias_{tdn});\n")
+    def override generate
+        AnyGenBind`generate(self)
+        generateDummy()
+    def generateDummy
+        for k,v in keys(struct_ann),values(struct_ann)
+            if !v
+                let kname = k   // TODO: struct name from sturct namespaced name
+                fprint(dummy_add_file, "addAnnotation(make_smart<DummyTypeAnnotation>(\"{kname}\", \"{k}\", 1, 1));\n")
+
+options debugger

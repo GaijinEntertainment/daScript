@@ -10,22 +10,21 @@
 
 #include "needClangBind.h"
 
-MAKE_TYPE_FACTORY(CXTranslationUnitImpl,CXTranslationUnitImpl);
-MAKE_TYPE_FACTORY(CXCursor,CXCursor);
+
+namespace das {
+    template<> struct ToBasicType<long>             { enum { type = Type::tInt }; };
+    template<> struct ToBasicType<unsigned long>    { enum { type = Type::tUInt }; };
+}
+
 MAKE_TYPE_FACTORY(CXString,CXString);
-MAKE_TYPE_FACTORY(CXUnsavedFile,CXUnsavedFile);
-MAKE_TYPE_FACTORY(CXSourceLocation,CXSourceLocation);
-MAKE_TYPE_FACTORY(CXType,CXType);
+
+#include "dasClangBind.struct.impl.inc"
 
 namespace das {
 
 #include "dasClangBind.enum.class.inc"
+#include "dasClangBind.struct.class.inc"
 
-struct CXType_Annotation : ManagedStructureAnnotation <CXType> {
-    CXType_Annotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXType", ml) {
-        addField<DAS_BIND_MANAGED_FIELD(kind)>("kind");
-    }
-};
 template <> struct cast_arg<CXType> {
     static __forceinline CXType to ( Context & ctx, SimNode * node ) {
         vec4f res = node->eval(ctx);
@@ -33,10 +32,6 @@ template <> struct cast_arg<CXType> {
     }
 };
 
-struct CXSourceLocation_Annotation : ManagedStructureAnnotation <CXSourceLocation> {
-    CXSourceLocation_Annotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXSourceLocation", ml) {
-    }
-};
 template <> struct cast_arg<CXSourceLocation> {
     static __forceinline CXSourceLocation to ( Context & ctx, SimNode * node ) {
         vec4f res = node->eval(ctx);
@@ -44,17 +39,6 @@ template <> struct cast_arg<CXSourceLocation> {
     }
 };
 
-
-struct CXIndex_Annotation : ManagedStructureAnnotation <CXIndex> {
-    CXIndex_Annotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIndex", ml) {
-    }
-};
-
-struct CXCursor_Annotation : ManagedStructureAnnotation <CXCursor> {
-    CXCursor_Annotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCursor", ml) {
-        addField<DAS_BIND_MANAGED_FIELD(kind)>("kind");
-    }
-};
 template <> struct cast_arg<CXCursor> {
     static __forceinline CXCursor to ( Context & ctx, SimNode * node ) {
         vec4f res = node->eval(ctx);
@@ -64,11 +48,6 @@ template <> struct cast_arg<CXCursor> {
 
 struct CXString_Annotation : ManagedStructureAnnotation <CXString> {
     CXString_Annotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXString", ml) {
-    }
-};
-
-struct CXUnsavedFile_Annotation : ManagedStructureAnnotation <CXUnsavedFile> {
-    CXUnsavedFile_Annotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXUnsavedFile", ml) {
     }
 };
 
@@ -114,20 +93,13 @@ Module_ClangBind::Module_ClangBind() : Module("cbind") {
     ModuleLibrary lib;
     lib.addModule(this);
     lib.addBuiltInModule();
-    // enums
-    #include "dasClangBind.enum.add.inc"
-    // aliases for the handles
-    addVoidAlias("CXIndex");
-    addVoidAlias("CXClientData");
-    addVoidAlias("CXFile");
-    // annotations
     addAnnotation(make_smart<CXString_Annotation>(lib));
-    addAnnotation(make_smart<CXIndex_Annotation>(lib));
-    addAnnotation(make_smart<DummyTypeAnnotation>("CXTranslationUnitImpl","CXTranslationUnitImpl",1,1));
-    addAnnotation(make_smart<CXCursor_Annotation>(lib));
-    addAnnotation(make_smart<CXUnsavedFile_Annotation>(lib));
-    addAnnotation(make_smart<CXSourceLocation_Annotation>(lib));
-    addAnnotation(make_smart<CXType_Annotation>(lib));
+    #include "dasClangBind.enum.add.inc"
+    #include "dasClangBind.dummy.add.inc"
+    #include "dasClangBind.struct.add.inc"
+    #include "dasClangBind.struct.postadd.inc"
+    #include "dasClangBind.alias.add.inc"
+
     // string
     addExtern<DAS_BIND_FUN(from_CXString_to_string)>(*this, lib,  "string",
         SideEffects::worstDefault, "from_CXString_to_string")
@@ -177,6 +149,15 @@ Module_ClangBind::Module_ClangBind() : Module("cbind") {
     addExtern<DAS_BIND_FUN(clang_getCursorDisplayName),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getCursorDisplayName",
         SideEffects::worstDefault, "clang_getCursorDisplayName")
             ->args({"cursor"});
+    addExtern<DAS_BIND_FUN(clang_getCursorDefinition),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getCursorDefinition",
+        SideEffects::worstDefault, "clang_getCursorDefinition")
+            ->args({"cursor"});
+    addExtern<DAS_BIND_FUN(clang_getNullCursor),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getNullCursor",
+        SideEffects::worstDefault, "clang_getNullCursor");
+    addExtern<DAS_BIND_FUN(clang_equalCursors)>(*this, lib,  "clang_equalCursors",
+        SideEffects::worstDefault, "clang_equalCursors")
+            ->args({"cursor1","cursor2"});
+
     // type
     addExtern<DAS_BIND_FUN(clang_getCursorType),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getCursorType",
         SideEffects::worstDefault, "clang_getCursorType")

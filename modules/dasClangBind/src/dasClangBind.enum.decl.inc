@@ -4,6 +4,9 @@ DAS_BASE_BIND_ENUM_GEN(CXAvailabilityKind,CXAvailabilityKind);
 DAS_BIND_ENUM_CAST(CXCursor_ExceptionSpecificationKind);
 DAS_BASE_BIND_ENUM_GEN(CXCursor_ExceptionSpecificationKind,CXCursor_ExceptionSpecificationKind);
 
+DAS_BIND_ENUM_CAST(CXGlobalOptFlags);
+DAS_BASE_BIND_ENUM_GEN(CXGlobalOptFlags,CXGlobalOptFlags);
+
 DAS_BIND_ENUM_CAST(CXDiagnosticSeverity);
 DAS_BASE_BIND_ENUM_GEN(CXDiagnosticSeverity,CXDiagnosticSeverity);
 
@@ -76,6 +79,12 @@ DAS_BASE_BIND_ENUM_GEN(CXChildVisitResult,CXChildVisitResult);
 DAS_BIND_ENUM_CAST(CXPrintingPolicyProperty);
 DAS_BASE_BIND_ENUM_GEN(CXPrintingPolicyProperty,CXPrintingPolicyProperty);
 
+DAS_BIND_ENUM_CAST(CXObjCPropertyAttrKind);
+DAS_BASE_BIND_ENUM_GEN(CXObjCPropertyAttrKind,CXObjCPropertyAttrKind);
+
+DAS_BIND_ENUM_CAST(CXObjCDeclQualifierKind);
+DAS_BASE_BIND_ENUM_GEN(CXObjCDeclQualifierKind,CXObjCDeclQualifierKind);
+
 DAS_BIND_ENUM_CAST(CXNameRefFlags);
 DAS_BASE_BIND_ENUM_GEN(CXNameRefFlags,CXNameRefFlags);
 
@@ -91,6 +100,39 @@ DAS_BASE_BIND_ENUM_GEN(CXCodeComplete_Flags,CXCodeComplete_Flags);
 DAS_BIND_ENUM_CAST(CXCompletionContext);
 DAS_BASE_BIND_ENUM_GEN(CXCompletionContext,CXCompletionContext);
 
+DAS_BIND_ENUM_CAST(CXEvalResultKind);
+DAS_BASE_BIND_ENUM_GEN(CXEvalResultKind,CXEvalResultKind);
+
 DAS_BIND_ENUM_CAST(CXVisitorResult);
 DAS_BASE_BIND_ENUM_GEN(CXVisitorResult,CXVisitorResult);
+
+DAS_BIND_ENUM_CAST(CXResult);
+DAS_BASE_BIND_ENUM_GEN(CXResult,CXResult);
+
+DAS_BIND_ENUM_CAST(CXIdxEntityKind);
+DAS_BASE_BIND_ENUM_GEN(CXIdxEntityKind,CXIdxEntityKind);
+
+DAS_BIND_ENUM_CAST(CXIdxEntityLanguage);
+DAS_BASE_BIND_ENUM_GEN(CXIdxEntityLanguage,CXIdxEntityLanguage);
+
+DAS_BIND_ENUM_CAST(CXIdxEntityCXXTemplateKind);
+DAS_BASE_BIND_ENUM_GEN(CXIdxEntityCXXTemplateKind,CXIdxEntityCXXTemplateKind);
+
+DAS_BIND_ENUM_CAST(CXIdxAttrKind);
+DAS_BASE_BIND_ENUM_GEN(CXIdxAttrKind,CXIdxAttrKind);
+
+DAS_BIND_ENUM_CAST(CXIdxDeclInfoFlags);
+DAS_BASE_BIND_ENUM_GEN(CXIdxDeclInfoFlags,CXIdxDeclInfoFlags);
+
+DAS_BIND_ENUM_CAST(CXIdxObjCContainerKind);
+DAS_BASE_BIND_ENUM_GEN(CXIdxObjCContainerKind,CXIdxObjCContainerKind);
+
+DAS_BIND_ENUM_CAST(CXIdxEntityRefKind);
+DAS_BASE_BIND_ENUM_GEN(CXIdxEntityRefKind,CXIdxEntityRefKind);
+
+DAS_BIND_ENUM_CAST(CXSymbolRole);
+DAS_BASE_BIND_ENUM_GEN(CXSymbolRole,CXSymbolRole);
+
+DAS_BIND_ENUM_CAST(CXIndexOptFlags);
+DAS_BASE_BIND_ENUM_GEN(CXIndexOptFlags,CXIndexOptFlags);
 

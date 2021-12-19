@@ -30,9 +30,16 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_CLAN
 		${DAS_CLANG_BIND_DIR}/src/needClangBind.h
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.h
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.cpp
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.alias.add.inc
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.dummy.add.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.enum.add.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.enum.class.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.enum.decl.inc
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.add.inc
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.postadd.inc
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.class.inc
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.decl.inc
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.impl.inc
 	)
 
 	ADD_MODULE_LIB(libDasModuleClangBind)
