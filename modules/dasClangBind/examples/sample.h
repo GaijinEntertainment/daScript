@@ -3,6 +3,20 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+inline int global_function ( float a, const char * b ) { printf("hello, world\n"); }
+
+struct Foo {
+    int a;
+};
+
+Foo & ret_ref_foo();
+
+namespace goo  {
+    Foo ret_foo();
+}
+
+#if 0
+
 typedef struct {
     int a;
     float b;
@@ -39,11 +53,11 @@ enum class FooCC : uint8_t {
     bar3u
 };
 
-inline int global_function ( float a, const char * b ) { printf("hello, world\n"); }
-
 namespace outside {
     void outside_function ( void );
     namespace inside {
         void inside_function ( void );
     }
 }
+
+#endif

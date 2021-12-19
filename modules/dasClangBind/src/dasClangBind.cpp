@@ -10,13 +10,10 @@
 
 #include "needClangBind.h"
 
-
 namespace das {
     template<> struct ToBasicType<long>             { enum { type = Type::tInt }; };
     template<> struct ToBasicType<unsigned long>    { enum { type = Type::tUInt }; };
 }
-
-MAKE_TYPE_FACTORY(CXString,CXString);
 
 #include "dasClangBind.struct.impl.inc"
 
@@ -24,32 +21,6 @@ namespace das {
 
 #include "dasClangBind.enum.class.inc"
 #include "dasClangBind.struct.class.inc"
-
-template <> struct cast_arg<CXType> {
-    static __forceinline CXType to ( Context & ctx, SimNode * node ) {
-        vec4f res = node->eval(ctx);
-        return * cast<CXType *>::to(res);
-    }
-};
-
-template <> struct cast_arg<CXSourceLocation> {
-    static __forceinline CXSourceLocation to ( Context & ctx, SimNode * node ) {
-        vec4f res = node->eval(ctx);
-        return * cast<CXSourceLocation *>::to(res);
-    }
-};
-
-template <> struct cast_arg<CXCursor> {
-    static __forceinline CXCursor to ( Context & ctx, SimNode * node ) {
-        vec4f res = node->eval(ctx);
-        return * cast<CXCursor *>::to(res);
-    }
-};
-
-struct CXString_Annotation : ManagedStructureAnnotation <CXString> {
-    CXString_Annotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXString", ml) {
-    }
-};
 
 char * from_CXString_to_string ( const CXString & cxs, Context * context ) {
     auto cst = clang_getCString(cxs);
@@ -83,30 +54,19 @@ void das_clangVisitChildren ( CXCursor cursor, const TBlock<CXChildVisitResult,C
     );
 };
 
-void Module_ClangBind::addVoidAlias ( const string & aliasName ) {
-    auto CXIndexType = make_smart<TypeDecl>(Type::tPointer);
-    CXIndexType->alias = aliasName;
-    addAlias(CXIndexType);
-}
-
 Module_ClangBind::Module_ClangBind() : Module("cbind") {
     ModuleLibrary lib;
     lib.addModule(this);
     lib.addBuiltInModule();
-    addAnnotation(make_smart<CXString_Annotation>(lib));
     #include "dasClangBind.enum.add.inc"
     #include "dasClangBind.dummy.add.inc"
     #include "dasClangBind.struct.add.inc"
     #include "dasClangBind.struct.postadd.inc"
     #include "dasClangBind.alias.add.inc"
-
-    // string
-    addExtern<DAS_BIND_FUN(from_CXString_to_string)>(*this, lib,  "string",
-        SideEffects::worstDefault, "from_CXString_to_string")
-            ->args({"CXString","context"});
-    addExtern<DAS_BIND_FUN(peek_CXString)>(*this, lib,  "peek",
-        SideEffects::worstDefault, "peek_CXString")
-            ->args({"CXString","blk","context","line"});
+#if 0
+    #include "dasClangBind.func.add.inc"
+#else
+    // MINIMAL SUBSET FOR FASTER COMPILATION DURING WIP
     // index
     addExtern<DAS_BIND_FUN(clang_createIndex)>(*this, lib,  "clang_createIndex",
         SideEffects::worstDefault, "clang_createIndex")
@@ -125,9 +85,6 @@ Module_ClangBind::Module_ClangBind() : Module("cbind") {
         SideEffects::worstDefault, "clang_getTranslationUnitCursor")
             ->args({"unit"});
     // cursor
-    addExtern<DAS_BIND_FUN(das_clangVisitChildren)>(*this, lib,  "clang_visitChildren",
-        SideEffects::worstDefault, "das_clangVisitChildren")
-            ->args({"cursor","block","context","line"});
     addExtern<DAS_BIND_FUN(clang_getCursorSpelling),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getCursorSpelling",
         SideEffects::worstDefault, "clang_getCursorSpelling")
             ->args({"cursor"});
@@ -157,7 +114,6 @@ Module_ClangBind::Module_ClangBind() : Module("cbind") {
     addExtern<DAS_BIND_FUN(clang_equalCursors)>(*this, lib,  "clang_equalCursors",
         SideEffects::worstDefault, "clang_equalCursors")
             ->args({"cursor1","cursor2"});
-
     // type
     addExtern<DAS_BIND_FUN(clang_getCursorType),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,  "clang_getCursorType",
         SideEffects::worstDefault, "clang_getCursorType")
@@ -194,6 +150,17 @@ Module_ClangBind::Module_ClangBind() : Module("cbind") {
     addExtern<DAS_BIND_FUN(clang_getEnumConstantDeclUnsignedValue)>(*this, lib,  "clang_getEnumConstantDeclUnsignedValue",
         SideEffects::worstDefault, "clang_getEnumConstantDeclUnsignedValue")
             ->args({"cursor"});
+#endif
+    addExtern<DAS_BIND_FUN(from_CXString_to_string)>(*this, lib,  "string",
+        SideEffects::worstDefault, "from_CXString_to_string")
+            ->args({"CXString","context"});
+    addExtern<DAS_BIND_FUN(peek_CXString)>(*this, lib,  "peek",
+        SideEffects::worstDefault, "peek_CXString")
+            ->args({"CXString","blk","context","line"});
+    addExtern<DAS_BIND_FUN(das_clangVisitChildren)>(*this, lib,  "clang_visitChildren",
+        SideEffects::worstDefault, "das_clangVisitChildren")
+            ->args({"cursor","block","context","line"});
+
 }
 
 }

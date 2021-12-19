@@ -1,3 +1,17 @@
+class Enumeration_CXErrorCode : public das::Enumeration {
+public:
+	Enumeration_CXErrorCode() : das::Enumeration("CXErrorCode") {
+		external = true;
+		cppName = "CXErrorCode";
+		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXErrorCode >::type >::type;
+		addIEx("CXError_Success", "CXError_Success", int64_t(CXErrorCode::CXError_Success), das::LineInfo());
+		addIEx("CXError_Failure", "CXError_Failure", int64_t(CXErrorCode::CXError_Failure), das::LineInfo());
+		addIEx("CXError_Crashed", "CXError_Crashed", int64_t(CXErrorCode::CXError_Crashed), das::LineInfo());
+		addIEx("CXError_InvalidArguments", "CXError_InvalidArguments", int64_t(CXErrorCode::CXError_InvalidArguments), das::LineInfo());
+		addIEx("CXError_ASTReadError", "CXError_ASTReadError", int64_t(CXErrorCode::CXError_ASTReadError), das::LineInfo());
+	}
+};
+
 class Enumeration_CXAvailabilityKind : public das::Enumeration {
 public:
 	Enumeration_CXAvailabilityKind() : das::Enumeration("CXAvailabilityKind") {
@@ -82,15 +96,6 @@ public:
 		addIEx("Option", "CXDiagnostic_DisplayOption", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayOption), das::LineInfo());
 		addIEx("CategoryId", "CXDiagnostic_DisplayCategoryId", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayCategoryId), das::LineInfo());
 		addIEx("CategoryName", "CXDiagnostic_DisplayCategoryName", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayCategoryName), das::LineInfo());
-	}
-};
-
-class Enumeration_CXErrorCode : public das::Enumeration {
-public:
-	Enumeration_CXErrorCode() : das::Enumeration("CXErrorCode") {
-		external = true;
-		cppName = "CXErrorCode";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXErrorCode >::type >::type;
 	}
 };
 

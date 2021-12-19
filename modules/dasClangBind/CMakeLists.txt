@@ -40,6 +40,7 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_CLAN
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.class.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.decl.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.impl.inc
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.func.add.inc
 	)
 
 	ADD_MODULE_LIB(libDasModuleClangBind)

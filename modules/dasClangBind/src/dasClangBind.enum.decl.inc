@@ -1,3 +1,6 @@
+DAS_BIND_ENUM_CAST(CXErrorCode);
+DAS_BASE_BIND_ENUM_GEN(CXErrorCode,CXErrorCode);
+
 DAS_BIND_ENUM_CAST(CXAvailabilityKind);
 DAS_BASE_BIND_ENUM_GEN(CXAvailabilityKind,CXAvailabilityKind);
 
@@ -15,9 +18,6 @@ DAS_BASE_BIND_ENUM_GEN(CXLoadDiag_Error,CXLoadDiag_Error);
 
 DAS_BIND_ENUM_CAST(CXDiagnosticDisplayOptions);
 DAS_BASE_BIND_ENUM_GEN(CXDiagnosticDisplayOptions,CXDiagnosticDisplayOptions);
-
-DAS_BIND_ENUM_CAST(CXErrorCode);
-DAS_BASE_BIND_ENUM_GEN(CXErrorCode,CXErrorCode);
 
 DAS_BIND_ENUM_CAST(CXTranslationUnit_Flags);
 DAS_BASE_BIND_ENUM_GEN(CXTranslationUnit_Flags,CXTranslationUnit_Flags);

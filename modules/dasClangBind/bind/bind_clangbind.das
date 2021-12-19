@@ -1,12 +1,21 @@
 require cbind/cbind_boost
 require daslib/fio
 require daslib/defer
+require daslib/strings_boost
 
 class ClangGen : CppGenBind
     def ClangGen
         let pfn = "clang-c/Index.h"
         let pfp = "{get_das_root()}/../libclang/include/"
-        init_args(pfn,pfp,DEFAULT_CLANG_ARGUMENTS)
+        let args <- [{string
+            "-xc++-header";
+            "-std=c++1z";
+            "-I{get_full_file_name(pfp)}";
+            "-DWIN32";
+            "-DCINDEX_EXPORTS"
+        }]
+        print("{args}\n")
+        init_args(pfn,pfp,args)
         set_default_files()
         init_enum_prefix()
     def init_enum_prefix
@@ -19,6 +28,15 @@ class ClangGen : CppGenBind
             "CXCursorKind" => "CXCursor";
             "CXChildVisitResult" => "CXChildVisit"
         }}
+    def override isArgByValue ( name:string )
+        return true
+    def override skip_file ( fname:string ) : bool
+        if fname |> ends_with("CXErrorCode.h")
+            return false
+        elif fname |> ends_with("CXString.h")
+            return false
+        return ! fname |> ends_with(PARSE_FILE_NAME)
+
 
 [export]
 def main
@@ -76,6 +94,12 @@ def main
         panic("can't open dummy add\n")
     defer <|
         fclose(dai)
+    // function
+    var fai = fopen("{clangbind_root}/dasClangBind.func.add.inc","wb")
+    if fai==null
+        panic("can't open dummy func add\n")
+    defer <|
+        fclose(fai)
     // generate
     var cgb = new ClangGen()
     defer <|
@@ -84,4 +108,5 @@ def main
     cgb->setEnumFiles ( edi,eci,eai )
     cgb->setStructFiles ( sdi,sii,sci,sai,spai )
     cgb->setAliasFiles ( aai,dai )
+    cgb->setFuncFiles ( fai )
     cgb->generate()

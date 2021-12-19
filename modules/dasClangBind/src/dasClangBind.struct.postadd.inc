@@ -1,3 +1,5 @@
+initRecAnnotation(ann_CXString,lib);
+initRecAnnotation(ann_CXStringSet,lib);
 initRecAnnotation(ann_CXUnsavedFile,lib);
 initRecAnnotation(ann_CXVersion,lib);
 initRecAnnotation(ann_CXFileUniqueID,lib);

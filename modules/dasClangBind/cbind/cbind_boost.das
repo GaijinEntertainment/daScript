@@ -124,12 +124,38 @@ def clang_getCursorLocationDescription ( var c:CXCursor )
     var fname = clang_getFileName(file)
     return "{string(fname)}:{int(line)}:{int(column)}"
 
-
 def clang_isForwardDeclaration ( var cursor:CXCursor )
     var definition = clang_getCursorDefinition(cursor)
     if clang_equalCursors(definition, clang_getNullCursor())!=0u
         return true
     return clang_equalCursors(cursor, definition)==0u
+
+def clang_functionPtrSpelling ( var c : CXCursor )
+    // TODO: calling convention?
+    var fun_type = clang_getCanonicalType(clang_getCursorType(c))
+    var res_type = clang_getResultType(fun_type)
+    let function_result_type = string(clang_getTypeSpelling(res_type))
+    return build_string() <| $ ( str )
+        str |> write("{function_result_type} (*)(")
+        let narg = clang_Cursor_getNumArguments(c)
+        for ai in urange(narg)
+            if ai != 0u
+                str |> write(",")
+            var carg = clang_Cursor_getArgument(c, ai)
+            var arg_type = clang_getCanonicalType(clang_getCursorType(carg))
+            let argument_type = string(clang_getTypeSpelling(arg_type))
+            str |> write("{argument_type}")
+        str |> write(")")
+
+def clang_das_isRef ( var c : CXType )
+    if c.kind == CXTypeKind LValueReference
+        return true
+    return false
+
+def clang_das_isCopyOnReturn ( var c : CXType )
+    if c.kind == CXTypeKind Record
+        return true
+    return false
 
 let private unsafe_names <- {{
     "type"      =>  "_type";
@@ -166,7 +192,7 @@ class AnyGenBind
     def skip_file ( fname:string ) : bool
         return ! fname |> ends_with(PARSE_FILE_NAME)
     def generate
-        var index = clang_createIndex(0,0)
+        var index = clang_createIndex(0,1)
         var unit = clang_parseTranslationUnit(
             index,
             open_file_name(),
@@ -275,8 +301,14 @@ class AnyGenBind
                 elif kind == CXCursorKind FieldDecl
                     parse_Field(c)
                     return CXChildVisitResult Continue
+                elif kind == CXCursorKind VarDecl
+                    let var_decl_name = string(clang_getCursorSpelling(c))
+                    var var_decl_type = clang_getCanonicalType(clang_getCursorType(c))
+                    let var_decl_type_name = string(clang_getTypeSpelling(var_decl_type))
+                    to_log(LOG_WARNING, "VarDecl {var_decl_name}:{var_decl_type_name} at {clang_getCursorLocationDescription(c)}")
+                    return CXChildVisitResult Recurse
                 else
-                    to_log(LOG_WARNING, "unsupported {c.kind}: {describe(c)}")
+                    to_log(LOG_WARNING, "unsupported {c.kind}: {describe(c)} at {clang_getCursorLocationDescription(c)}")
                 return CXChildVisitResult Recurse
             else
                 return CXChildVisitResult Recurse
@@ -402,6 +434,7 @@ class CppGenBind : AnyGenBind
     struct_postadd_file : FILE const?
     alias_add_file : FILE const?
     dummy_add_file : FILE const?
+    func_file : FILE const?
     swrite : array<StringBuilderWriter?>
     struct_ann : table<string; bool>
     def CppGenBind ( pfn,pfp:string; args:array<string> )
@@ -418,6 +451,7 @@ class CppGenBind : AnyGenBind
         struct_postadd_file = fstdout()
         alias_add_file = fstdout()
         dummy_add_file = fstdout()
+        func_file = fstdout()
     def setEnumFiles ( edecl,eclass,eadd:FILE const? )
         enum_decl_file = edecl
         enum_class_file = eclass
@@ -431,6 +465,8 @@ class CppGenBind : AnyGenBind
     def setAliasFiles ( af,df:FILE const? )
         alias_add_file = af
         dummy_add_file = df
+    def setFuncFiles ( ff:FILE const? )
+        func_file = ff
     def getBindFldName ( field_name : string ) : string     // note: namespaces form struct
         return unsafe_names?[field_name] ?? field_name
     def substFieldType ( field_name : string ) : string     // note: namespaces form struct
@@ -448,11 +484,13 @@ class CppGenBind : AnyGenBind
             *wr |> write("\t\t\t.adjustAot(\"das_reinterpret<{substType}>::pass(\",\")\");\n")
     def isLocalType ( name,cppname:string )
         return false
+    def isArgByValue ( name:string )
+        return false
     def override parse_Struct ( var c : CXCursor; struct_name : string )
         let struct_namespace_name = namespace_name(struct_name)
         if !struct_ann |> key_exists(struct_namespace_name)
             fprint(struct_decl_file, "MAKE_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n")
-            fprint(struct_impl_file, "IMPLEMENT_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n\n")
+            fprint(struct_impl_file, "IMPLEMENT_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n")
         if clang_isForwardDeclaration(c)
             struct_ann[struct_namespace_name] = false
             return
@@ -468,6 +506,13 @@ class CppGenBind : AnyGenBind
             writer |> write("\tvoid init () \{\n")
             AnyGenBind`parse_Struct(self, c, struct_name)
             writer |> write("\t\}\n\};\n")
+            if isArgByValue(struct_namespace_name)
+                writer |> write("template <> struct cast_arg<{struct_namespace_name}> \{\n")
+                writer |> write("\tstatic __forceinline {struct_namespace_name} to ( Context & ctx, SimNode * node ) \{\n")
+                writer |> write("\t\tvec4f res = node->eval(ctx);\n")
+                writer |> write("\t\treturn * cast<{struct_namespace_name} *>::to(res);\n")
+                writer |> write("\t\}\n")
+                writer |> write("\};\n")
             swrite |> pop()
         fprint(struct_class_file, "{st}\n")
         fprint(struct_add_file,"auto ann_{struct_name} = make_smart<{struct_name}_GeneratedAnnotation>(lib);\n")
@@ -477,22 +522,26 @@ class CppGenBind : AnyGenBind
         let function_name = string(clang_getCursorSpelling(c))
         var fun_type = clang_getCanonicalType(clang_getCursorType(c))
         var res_type = clang_getResultType(fun_type)
-        let function_result_type = string(clang_getTypeSpelling(res_type))
-        print("{function_result_type} ")
-        if !empty(nspaces)
-            for n in nspaces
-                print("{n}::")
-        print("{function_name} ( ")
+        let bind_enchantation = "{clang_functionPtrSpelling(c)},{function_name}"
+        var extra_enchantation = ""
+        let cpp_enchantation = namespace_name(function_name)
+        if clang_das_isRef(res_type)
+            extra_enchantation = ", SimNode_ExtFuncCallRef"
+        elif clang_das_isCopyOnReturn(res_type)
+            extra_enchantation = ",SimNode_ExtFuncCallAndCopyOrMove"
+        fprint(func_file, "\taddExtern<{bind_enchantation}{extra_enchantation}>(*this,lib,\"{function_name}\",SideEffects::worstDefault,\"{cpp_enchantation}\")")
         let narg = clang_Cursor_getNumArguments(c)
-        for ai in urange(narg)
-            if ai != 0u
-                print(", ")
-            var carg = clang_Cursor_getArgument(c, ai)
-            let arg_name = string(clang_getCursorSpelling(carg))
-            var arg_type = clang_getCanonicalType(clang_getCursorType(carg))
-            let argument_type = string(clang_getTypeSpelling(arg_type))
-            print("{argument_type} {arg_name}")
-        print(" );\n")
+        if narg!=0
+            fprint(func_file,"\n\t\t->args(\{")
+            for ai in urange(narg)
+                if ai != 0u
+                    fprint(func_file,",")
+                var carg = clang_Cursor_getArgument(c, ai)
+                let arg_name = string(clang_getCursorSpelling(carg))
+                fprint(func_file,"\"{arg_name}\"")
+            fprint(func_file,"\});\n")
+        else
+            fprint(func_file,";\n")
     def enum_entry_name ( en, enn:string ) : string
         let prefix = enum_prefix?[en] ?? en
         var name = enn
@@ -520,14 +569,14 @@ class CppGenBind : AnyGenBind
             else
                 return CXChildVisitResult Recurse
         fprint(enum_class_file, "\t\}\n\};\n\n")
-        fprint(enum_add_file, "\taddEnumeration(make_smart<Enumeration_{enum_name}>());\n");
+        fprint(enum_add_file, "addEnumeration(make_smart<Enumeration_{enum_name}>());\n");
     def override parse_Alias ( var c : CXCursor )
         let tdn = string(clang_getCursorDisplayName(c))
         var tdt = clang_getCanonicalType(clang_getCursorType(c))
         let tdts = string(clang_getTypeSpelling(tdt))
-        fprint(alias_add_file, "\tauto alias_{tdn} = typeFactory<{tdts}>::make(lib);\n")
-        fprint(alias_add_file, "\talias_{tdn}->alias = \"{tdn}\";\n")
-        fprint(alias_add_file, "\taddAlias(alias_{tdn});\n")
+        fprint(alias_add_file, "auto alias_{tdn} = typeFactory<{tdts}>::make(lib);\n")
+        fprint(alias_add_file, "alias_{tdn}->alias = \"{tdn}\";\n")
+        fprint(alias_add_file, "addAlias(alias_{tdn});\n\n")
     def override generate
         AnyGenBind`generate(self)
         generateDummy()
@@ -537,4 +586,21 @@ class CppGenBind : AnyGenBind
                 let kname = k   // TODO: struct name from sturct namespaced name
                 fprint(dummy_add_file, "addAnnotation(make_smart<DummyTypeAnnotation>(\"{kname}\", \"{k}\", 1, 1));\n")
 
-options debugger
+
+/*
+print("{function_result_type} ")
+if !empty(nspaces)
+    for n in nspaces
+        print("{n}::")
+print("{function_name} ( ")
+let narg = clang_Cursor_getNumArguments(c)
+for ai in urange(narg)
+    if ai != 0u
+        print(", ")
+    var carg = clang_Cursor_getArgument(c, ai)
+    let arg_name = string(clang_getCursorSpelling(carg))
+    var arg_type = clang_getCanonicalType(clang_getCursorType(carg))
+    let argument_type = string(clang_getTypeSpelling(arg_type))
+    print("{argument_type} {arg_name}")
+print(" );\n")
+*/

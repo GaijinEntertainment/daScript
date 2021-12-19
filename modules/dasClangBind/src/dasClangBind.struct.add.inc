@@ -1,3 +1,7 @@
+auto ann_CXString = make_smart<CXString_GeneratedAnnotation>(lib);
+addAnnotation(ann_CXString);
+auto ann_CXStringSet = make_smart<CXStringSet_GeneratedAnnotation>(lib);
+addAnnotation(ann_CXStringSet);
 auto ann_CXUnsavedFile = make_smart<CXUnsavedFile_GeneratedAnnotation>(lib);
 addAnnotation(ann_CXUnsavedFile);
 auto ann_CXVersion = make_smart<CXVersion_GeneratedAnnotation>(lib);
