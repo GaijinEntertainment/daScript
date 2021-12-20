@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
@@ -5,9 +8,9 @@
 #include "daScript/ast/ast_typefactory_bind.h"
 #include "daScript/simulate/bind_enum.h"
 #include "dasClangBind.h"
-#include "needClangBind.h"
+#include "need_dasClangBind.h"
 namespace das {
-void Module_ClangBind::initFunctions_10( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_10( ModuleLibrary & lib ) {
 	addExtern<CXType (*)(CXType,unsigned int),clang_Type_getTemplateArgumentAsType,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Type_getTemplateArgumentAsType",SideEffects::worstDefault,"clang_Type_getTemplateArgumentAsType")
 		->args({"T","i"});
 	addExtern<CXRefQualifierKind (*)(CXType),clang_Type_getCXXRefQualifier>(*this,lib,"clang_Type_getCXXRefQualifier",SideEffects::worstDefault,"clang_Type_getCXXRefQualifier")

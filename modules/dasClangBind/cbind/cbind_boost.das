@@ -211,6 +211,8 @@ class AnyGenBind
                 wr |> write(n)
                 wr |> write("::")
             wr |> write(name)
+    def skip_function ( var c : CXCursor )
+        return false
     def parse_FunctionDecl ( var c : CXCursor )
         pass
     def parse_Namespace ( var c : CXCursor )
@@ -273,7 +275,11 @@ class AnyGenBind
                     parse_Alias(c)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind FunctionDecl
-                    parse_FunctionDecl(c)
+                    if skip_function(c)
+                        let function_name = string(clang_getCursorSpelling(c))
+                        to_log(LOG_INFO, "skipping {function_name} at {clang_getCursorLocationDescription(c)}")
+                    else
+                        parse_FunctionDecl(c)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind StructDecl
                     let struct_name = string(clang_getCursorSpelling(c))
@@ -438,13 +444,18 @@ class CppGenBind : AnyGenBind
     func_file : FILE const?
     func_file_reg : FILE const?
     func_file_decl : FILE const?
+    module_cpp_file : FILE const?
+    module_h_file : FILE const?
+    module_need_h_file : FILE const?
     func_count : int
     func_per_chunk : int = 100500
     func_chunk_index : int
+    func_to_stdout : bool = true
     swrite : array<StringBuilderWriter?>
     struct_ann : table<string; bool>
     bind_root : string
     bind_module : string
+    bind_das_module : string
     def CppGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args)
         setDefaultFiles()
@@ -462,11 +473,16 @@ class CppGenBind : AnyGenBind
         dummy_add_file = fstdout()
         func_file_reg = fstdout()
         func_file_decl = fstdout()
+        module_cpp_file = fstdout()
+        module_h_file = fstdout()
+        module_need_h_file = fstdout()
     def openFile ( path:string )
         var f = fopen(path,"wb")
         if f == null
             to_log(LOG_ERROR, "can't open CppGenBind output at {path}, defaulting to stdout")
             f = fstdout()
+        f |> fwrite("// this file is generated via dasClangBind\n")
+        f |> fwrite("// all user modifications will be lost after this file is re-generated\n\n")
         return f
     def closeFile ( var f:FILE const? & )
         if f != null && f != fstdout()
@@ -490,6 +506,10 @@ class CppGenBind : AnyGenBind
         setFuncFiles (
             openFile("{bind_root}/{bind_module}.func.reg.inc"),
             openFile("{bind_root}/{bind_module}.func.decl.inc"))
+        setModuleFiles(
+            openFile("{bind_root}/{bind_module}.h"),
+            openFile("{bind_root}/need_{bind_module}.h"),
+            openFile("{bind_root}/{bind_module}.cpp"))
     def closeAllFiles
         closeFile(enum_decl_file)
         closeFile(enum_class_file)
@@ -501,6 +521,9 @@ class CppGenBind : AnyGenBind
         closeFile(struct_postadd_file)
         closeFile(alias_add_file)
         closeFile(dummy_add_file)
+        closeFile(module_cpp_file)
+        closeFile(module_h_file)
+        closeFile(module_need_h_file)
         closeLastFuncFile()
     def setEnumFiles ( edecl,eclass,eadd:FILE const? )
         enum_decl_file = edecl
@@ -519,17 +542,19 @@ class CppGenBind : AnyGenBind
     def setFuncFiles ( ffr,ffd:FILE const? )
         func_file_reg = ffr
         func_file_decl = ffd
-    def writeFuncPrefix
-        pass
+    def setModuleFiles ( mh,mnh,mcpp:FILE const? )
+        module_h_file = mh
+        module_need_h_file = mnh
+        module_cpp_file = mcpp
     def nextFuncFile
-        return openFile("{bind_root}/{bind_module}.func_{func_chunk_index}.cpp")
-    def writeFuncPostfix
-        pass
+        if func_to_stdout
+            return fstdout()
+        else
+            return openFile("{bind_root}/{bind_module}.func_{func_chunk_index}.cpp")
     def closeLastFuncFile
         if func_file != null
             writeFuncPostfix()
-            fclose(func_file)
-            func_file = null
+            closeFile(func_file)
     def getBindFldName ( field_name : string ) : string     // note: namespaces form struct
         return unsafe_names?[field_name] ?? field_name
     def substFieldType ( field_name : string ) : string     // note: namespaces form struct
@@ -654,12 +679,77 @@ class CppGenBind : AnyGenBind
     def override generate
         AnyGenBind`generate(self)
         generateDummy()
+        generateModuleH()
+        generateModuleNeedH()
+        generateModuleCpp()
         closeAllFiles()
     def generateDummy
         for k,v in keys(struct_ann),values(struct_ann)
             if !v
                 let kname = k   // TODO: struct name from sturct namespaced name
                 fprint(dummy_add_file, "addAnnotation(make_smart<DummyTypeAnnotation>(\"{kname}\", \"{k}\", 1, 1));\n")
+    def writeFuncPrefix
+        fwrite(func_file, "#include \"daScript/misc/platform.h\"\n")
+        fwrite(func_file, "#include \"daScript/ast/ast.h\"\n")
+        fwrite(func_file, "#include \"daScript/ast/ast_interop.h\"\n")
+        fwrite(func_file, "#include \"daScript/ast/ast_handle.h\"\n")
+        fwrite(func_file, "#include \"daScript/ast/ast_typefactory_bind.h\"\n")
+        fwrite(func_file, "#include \"daScript/simulate/bind_enum.h\"\n")
+        fwrite(func_file, "#include \"{bind_module}.h\"\n")
+        fwrite(func_file, "#include \"need_{bind_module}.h\"\n")
+        fwrite(func_file, "namespace das \{\n")
+        fwrite(func_file, "void Module_{bind_module}::initFunctions_{func_chunk_index}( ModuleLibrary & lib ) \{\n")
+    def writeFuncPostfix
+        fwrite(func_file, "\}\n\}\n\n")
+    def generateModuleNeedH
+        module_need_h_file |> fwrite("#pragma once\n")
+        module_need_h_file |> fwrite("#include <{PARSE_FILE_NAME}>\n")
+        module_need_h_file |> fwrite("#include \"dasClangBind.enum.decl.inc\"\n")
+        module_need_h_file |> fwrite("#include \"dasClangBind.struct.decl.inc\"\n")
+        module_need_h_file |> fwrite("namespace das \{\n")
+        module_need_h_file |> fwrite("\t#include \"dasClangBind.struct.cast.inc\"\n")
+        module_need_h_file |> fwrite("\}\n\n")
+    def generateModuleCpp
+        module_cpp_file |> fwrite("#include \"daScript/misc/platform.h\"\n")
+        module_cpp_file |> fwrite("#include \"daScript/ast/ast.h\"\n")
+        module_cpp_file |> fwrite("#include \"daScript/ast/ast_interop.h\"\n")
+        module_cpp_file |> fwrite("#include \"daScript/ast/ast_handle.h\"\n")
+        module_cpp_file |> fwrite("#include \"daScript/ast/ast_typefactory_bind.h\"\n")
+        module_cpp_file |> fwrite("#include \"daScript/simulate/bind_enum.h\"\n")
+        module_cpp_file |> fwrite("#include \"{bind_module}.h\"\n")
+        module_cpp_file |> fwrite("#include \"need_{bind_module}.h\"\n")
+        module_cpp_file |> fwrite("#include \"{bind_module}.struct.impl.inc\"\n")
+        module_cpp_file |> fwrite("namespace das \{\n")
+        module_cpp_file |> fwrite("#include \"{bind_module}.enum.class.inc\"\n")
+        module_cpp_file |> fwrite("#include \"{bind_module}.struct.class.inc\"\n")
+        module_cpp_file |> fwrite("Module_{bind_module}::Module_{bind_module}() : Module(\"{bind_das_module}\") \{\n")  // TODO: das module name
+        module_cpp_file |> fwrite("\tModuleLibrary lib;\n")
+        module_cpp_file |> fwrite("\tlib.addModule(this);\n")
+        module_cpp_file |> fwrite("\tlib.addBuiltInModule();\n")
+        module_cpp_file |> fwrite("\t#include \"{bind_module}.enum.add.inc\"\n")
+        module_cpp_file |> fwrite("\t#include \"{bind_module}.dummy.add.inc\"\n")
+        module_cpp_file |> fwrite("\t#include \"{bind_module}.struct.add.inc\"\n")
+        module_cpp_file |> fwrite("\t#include \"{bind_module}.struct.postadd.inc\"\n")
+        module_cpp_file |> fwrite("\t#include \"{bind_module}.alias.add.inc\"\n")
+        module_cpp_file |> fwrite("\t#include \"{bind_module}.func.reg.inc\"\n")
+        module_cpp_file |> fwrite("\tinitMain(lib);\n")
+        module_cpp_file |> fwrite("\}\n")
+        module_cpp_file |> fwrite("}\n")
+        module_cpp_file |> fwrite("REGISTER_MODULE_IN_NAMESPACE(Module_{bind_module},das);\n\n")
+    def generateModuleH
+        module_h_file |> fwrite("#pragma once\n")
+        module_h_file |> fwrite("namespace das \{\n")
+        module_h_file |> fwrite("class Module_{bind_module} : public Module \{\n")
+        module_h_file |> fwrite("public:\n")
+        module_h_file |> fwrite("\tModule_{bind_module}();\n")
+        module_h_file |> fwrite("protected:\n")
+        module_h_file |> fwrite("\tvoid initMain ( ModuleLibrary & lib );\n")
+        module_h_file |> fwrite("\t#include \"dasClangBind.func.decl.inc\"\n")
+        module_h_file |> fwrite("};\n")
+        module_h_file |> fwrite("}\n\n")
+
+
+
 
 
 /*

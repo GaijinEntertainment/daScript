@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 initFunctions_1(lib);
 initFunctions_2(lib);
 initFunctions_3(lib);

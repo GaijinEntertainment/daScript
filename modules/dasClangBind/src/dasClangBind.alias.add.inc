@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 auto alias_CXIndex = typeFactory<void *>::make(lib);
 alias_CXIndex->alias = "CXIndex";
 addAlias(alias_CXIndex);

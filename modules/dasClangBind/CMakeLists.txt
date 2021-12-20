@@ -27,9 +27,11 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_CLAN
 
 	# libDasModuleClangBind
 	SET(DAS_CLANG_BIND_MODULE_SRC
-		${DAS_CLANG_BIND_DIR}/src/needClangBind.h
+		${DAS_CLANG_BIND_DIR}/src/need_dasClangBind.h
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.h
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.cpp
+	# user include
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.main.cpp
 	# generated binding includes
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.alias.add.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.dummy.add.inc
@@ -63,7 +65,7 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_CLAN
 	)
 
 	ADD_MODULE_LIB(libDasModuleClangBind)
-	ADD_MODULE_CPP(ClangBind)
+	ADD_MODULE_CPP(dasClangBind)
 	# ADD_MODULE_NATIVE(CLANG_BIND_boost)
 	ADD_LIBRARY(libDasModuleClangBind ${DAS_CLANG_BIND_MODULE_SRC} ${DAS_CLANG_BIND_MODULE_PLATFORM_SRC})
 	TARGET_LINK_LIBRARIES(libDasModuleClangBind ${CLANG_BIND_LIBRARIES} ${LIBCLANG_LIB}/libclang.lib)

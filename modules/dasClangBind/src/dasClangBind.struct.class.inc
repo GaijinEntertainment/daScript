@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 struct CXString_GeneratedAnnotation : ManagedStructureAnnotation<CXString> {
 	CXString_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXString", ml) {
 	}

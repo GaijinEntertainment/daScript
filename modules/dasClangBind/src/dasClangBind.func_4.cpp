@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
@@ -5,9 +8,9 @@
 #include "daScript/ast/ast_typefactory_bind.h"
 #include "daScript/simulate/bind_enum.h"
 #include "dasClangBind.h"
-#include "needClangBind.h"
+#include "need_dasClangBind.h"
 namespace das {
-void Module_ClangBind::initFunctions_4( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_4( ModuleLibrary & lib ) {
 	addExtern<CXTranslationUnitImpl * (*)(void *,const char *),clang_createTranslationUnit>(*this,lib,"clang_createTranslationUnit",SideEffects::worstDefault,"clang_createTranslationUnit")
 		->args({"CIdx","ast_filename"});
 	addExtern<CXErrorCode (*)(void *,const char *,CXTranslationUnitImpl **),clang_createTranslationUnit2>(*this,lib,"clang_createTranslationUnit2",SideEffects::worstDefault,"clang_createTranslationUnit2")

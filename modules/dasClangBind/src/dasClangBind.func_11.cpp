@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
@@ -5,9 +8,9 @@
 #include "daScript/ast/ast_typefactory_bind.h"
 #include "daScript/simulate/bind_enum.h"
 #include "dasClangBind.h"
-#include "needClangBind.h"
+#include "need_dasClangBind.h"
 namespace das {
-void Module_ClangBind::initFunctions_11( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_11( ModuleLibrary & lib ) {
 	addExtern<void (*)(void *,CXPrintingPolicyProperty,unsigned int),clang_PrintingPolicy_setProperty>(*this,lib,"clang_PrintingPolicy_setProperty",SideEffects::worstDefault,"clang_PrintingPolicy_setProperty")
 		->args({"Policy","Property","Value"});
 	addExtern<void * (*)(CXCursor),clang_getCursorPrintingPolicy>(*this,lib,"clang_getCursorPrintingPolicy",SideEffects::worstDefault,"clang_getCursorPrintingPolicy")

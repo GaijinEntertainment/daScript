@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 addEnumeration(make_smart<Enumeration_CXErrorCode>());
 addEnumeration(make_smart<Enumeration_CXAvailabilityKind>());
 addEnumeration(make_smart<Enumeration_CXCursor_ExceptionSpecificationKind>());

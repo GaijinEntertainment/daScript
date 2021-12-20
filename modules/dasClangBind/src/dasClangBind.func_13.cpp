@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
@@ -5,9 +8,9 @@
 #include "daScript/ast/ast_typefactory_bind.h"
 #include "daScript/simulate/bind_enum.h"
 #include "dasClangBind.h"
-#include "needClangBind.h"
+#include "need_dasClangBind.h"
 namespace das {
-void Module_ClangBind::initFunctions_13( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_13( ModuleLibrary & lib ) {
 	addExtern<unsigned int (*)(CXCursor),clang_CXXMethod_isPureVirtual>(*this,lib,"clang_CXXMethod_isPureVirtual",SideEffects::worstDefault,"clang_CXXMethod_isPureVirtual")
 		->args({"C"});
 	addExtern<unsigned int (*)(CXCursor),clang_CXXMethod_isStatic>(*this,lib,"clang_CXXMethod_isStatic",SideEffects::worstDefault,"clang_CXXMethod_isStatic")

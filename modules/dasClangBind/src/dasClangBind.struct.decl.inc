@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 MAKE_EXTERNAL_TYPE_FACTORY(CXString,CXString);
 MAKE_EXTERNAL_TYPE_FACTORY(CXStringSet,CXStringSet);
 MAKE_EXTERNAL_TYPE_FACTORY(CXTargetInfoImpl,CXTargetInfoImpl);

@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 DAS_BIND_ENUM_CAST(CXErrorCode);
 DAS_BASE_BIND_ENUM_GEN(CXErrorCode,CXErrorCode);
 

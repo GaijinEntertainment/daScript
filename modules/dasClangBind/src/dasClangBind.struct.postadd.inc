@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 initRecAnnotation(ann_CXString,lib);
 initRecAnnotation(ann_CXStringSet,lib);
 initRecAnnotation(ann_CXUnsavedFile,lib);

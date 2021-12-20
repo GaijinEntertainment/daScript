@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 class Enumeration_CXErrorCode : public das::Enumeration {
 public:
 	Enumeration_CXErrorCode() : das::Enumeration("CXErrorCode") {

@@ -1,12 +1,14 @@
-#pragma once
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
 
+#pragma once
 namespace das {
-    class Module_ClangBind : public Module {
-    public:
-        Module_ClangBind();
-    protected:
-#if 1
-#include "dasClangBind.func.decl.inc"
-#endif
-    };
+class Module_dasClangBind : public Module {
+public:
+	Module_dasClangBind();
+protected:
+	void initMain ( ModuleLibrary & lib );
+	#include "dasClangBind.func.decl.inc"
+};
 }
+

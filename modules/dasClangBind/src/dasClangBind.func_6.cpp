@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
@@ -5,9 +8,9 @@
 #include "daScript/ast/ast_typefactory_bind.h"
 #include "daScript/simulate/bind_enum.h"
 #include "dasClangBind.h"
-#include "needClangBind.h"
+#include "need_dasClangBind.h"
 namespace das {
-void Module_ClangBind::initFunctions_6( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_6( ModuleLibrary & lib ) {
 	addExtern<void (*)(CXPlatformAvailability *),clang_disposeCXPlatformAvailability>(*this,lib,"clang_disposeCXPlatformAvailability",SideEffects::worstDefault,"clang_disposeCXPlatformAvailability")
 		->args({"availability"});
 	addExtern<CXCursor (*)(CXCursor),clang_Cursor_getVarDeclInitializer,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Cursor_getVarDeclInitializer",SideEffects::worstDefault,"clang_Cursor_getVarDeclInitializer")

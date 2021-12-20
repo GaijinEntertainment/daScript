@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 template <> struct cast_arg<CXString> {
 	static __forceinline CXString to ( Context & ctx, SimNode * node ) {
 		vec4f res = node->eval(ctx);

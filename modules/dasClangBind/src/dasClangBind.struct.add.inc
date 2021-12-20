@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 auto ann_CXString = make_smart<CXString_GeneratedAnnotation>(lib);
 addAnnotation(ann_CXString);
 auto ann_CXStringSet = make_smart<CXStringSet_GeneratedAnnotation>(lib);

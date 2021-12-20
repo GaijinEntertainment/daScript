@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
@@ -5,9 +8,9 @@
 #include "daScript/ast/ast_typefactory_bind.h"
 #include "daScript/simulate/bind_enum.h"
 #include "dasClangBind.h"
-#include "needClangBind.h"
+#include "need_dasClangBind.h"
 namespace das {
-void Module_ClangBind::initFunctions_3( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_3( ModuleLibrary & lib ) {
 	addExtern<void * (*)(void *),clang_getChildDiagnostics>(*this,lib,"clang_getChildDiagnostics",SideEffects::worstDefault,"clang_getChildDiagnostics")
 		->args({"D"});
 	addExtern<unsigned int (*)(CXTranslationUnitImpl *),clang_getNumDiagnostics>(*this,lib,"clang_getNumDiagnostics",SideEffects::worstDefault,"clang_getNumDiagnostics")

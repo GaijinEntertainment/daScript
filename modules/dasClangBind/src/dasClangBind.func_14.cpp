@@ -1,3 +1,6 @@
+// this file is generated via dasClangBind
+// all user modifications will be lost after this file is re-generated
+
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
@@ -5,9 +8,9 @@
 #include "daScript/ast/ast_typefactory_bind.h"
 #include "daScript/simulate/bind_enum.h"
 #include "dasClangBind.h"
-#include "needClangBind.h"
+#include "need_dasClangBind.h"
 namespace das {
-void Module_ClangBind::initFunctions_14( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_14( ModuleLibrary & lib ) {
 	addExtern<void (*)(void (*)(void *),void *,unsigned int),clang_executeOnThread>(*this,lib,"clang_executeOnThread",SideEffects::worstDefault,"clang_executeOnThread")
 		->args({"fn","user_data","stack_size"});
 	addExtern<CXCompletionChunkKind (*)(void *,unsigned int),clang_getCompletionChunkKind>(*this,lib,"clang_getCompletionChunkKind",SideEffects::worstDefault,"clang_getCompletionChunkKind")
