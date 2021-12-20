@@ -481,7 +481,7 @@ class CppGenBind : AnyGenBind
         if f == null
             to_log(LOG_ERROR, "can't open CppGenBind output at {path}, defaulting to stdout")
             f = fstdout()
-        f |> fwrite("// this file is generated via dasClangBind\n")
+        f |> fwrite("// this file is generated via daScript automatic C++ binder\n")
         f |> fwrite("// all user modifications will be lost after this file is re-generated\n\n")
         return f
     def closeFile ( var f:FILE const? & )
@@ -704,10 +704,10 @@ class CppGenBind : AnyGenBind
     def generateModuleNeedH
         module_need_h_file |> fwrite("#pragma once\n")
         module_need_h_file |> fwrite("#include <{PARSE_FILE_NAME}>\n")
-        module_need_h_file |> fwrite("#include \"dasClangBind.enum.decl.inc\"\n")
-        module_need_h_file |> fwrite("#include \"dasClangBind.struct.decl.inc\"\n")
+        module_need_h_file |> fwrite("#include \"{bind_module}.enum.decl.inc\"\n")
+        module_need_h_file |> fwrite("#include \"{bind_module}.struct.decl.inc\"\n")
         module_need_h_file |> fwrite("namespace das \{\n")
-        module_need_h_file |> fwrite("\t#include \"dasClangBind.struct.cast.inc\"\n")
+        module_need_h_file |> fwrite("\t#include \"{bind_module}.struct.cast.inc\"\n")
         module_need_h_file |> fwrite("\}\n\n")
     def generateModuleCpp
         module_cpp_file |> fwrite("#include \"daScript/misc/platform.h\"\n")
@@ -744,12 +744,33 @@ class CppGenBind : AnyGenBind
         module_h_file |> fwrite("\tModule_{bind_module}();\n")
         module_h_file |> fwrite("protected:\n")
         module_h_file |> fwrite("\tvoid initMain ( ModuleLibrary & lib );\n")
-        module_h_file |> fwrite("\t#include \"dasClangBind.func.decl.inc\"\n")
+        module_h_file |> fwrite("\t#include \"{bind_module}.func.decl.inc\"\n")
         module_h_file |> fwrite("};\n")
         module_h_file |> fwrite("}\n\n")
-
-
-
+    def genCMakeDecl(MODULE_VAR:string)
+        print("\n\n")
+        print("\tSET({MODULE_VAR}_MODULE_SRC\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/need_{bind_module}.h\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.h\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.cpp\n")
+        print("\t# user include\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.main.cpp\n")
+        print("\t# generated binding includes\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.alias.add.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.dummy.add.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.enum.add.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.enum.class.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.enum.decl.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.add.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.postadd.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.class.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.decl.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.impl.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.cast.inc\n")
+        print("\t# generated functions\n")
+        for index in range(1,func_chunk_index+1)
+            print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.func_{index}.cpp\n")
+        print("\t)\n\n")
 
 
 /*

@@ -51,3 +51,4 @@ def main
         unsafe
             delete cgb
     cgb->generate()
+    cgb->genCMakeDecl("DAS_CLANG_BIND")
