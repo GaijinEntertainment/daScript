@@ -411,6 +411,7 @@ include/daScript/misc/debug_break.h
 include/daScript/misc/instance_debugger.h
 include/daScript/misc/job_que.h
 include/daScript/misc/uric.h
+include/daScript/misc/utf8_conv.h
 src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
@@ -418,6 +419,7 @@ src/misc/job_que.cpp
 src/misc/free_list.cpp
 src/misc/daScriptC.cpp
 src/misc/uric.cpp
+src/misc/utf8_conv.cpp
 )
 list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
