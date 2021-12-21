@@ -55,7 +55,7 @@ class GlfwGen : CppGenBind
         module_h_file |> fwrite("\tpublic:\n")
         module_h_file |> fwrite("\t\tvirtual ~Module_{bind_module}();\n")
         module_h_file |> fwrite("\tpublic:\n")
-        module_h_file |> fwrite("\t\tstatic thread_local das_map<GLFWwindow *, GlswCallbacks> g_Callbacks;\n")
+        module_h_file |> fwrite("\t\tstatic thread_local das_map<void *, GlswCallbacks> g_Callbacks;\n")
 
 [export]
 def main

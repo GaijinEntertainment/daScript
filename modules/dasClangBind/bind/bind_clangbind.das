@@ -31,7 +31,38 @@ class ClangGen : CppGenBind
             "CXDiagnosticDisplayOptions" => "CXDiagnostic_Display";
             "CXTypeKind" => "CXType";
             "CXCursorKind" => "CXCursor";
-            "CXChildVisitResult" => "CXChildVisit"
+            "CXChildVisitResult" => "CXChildVisit";
+            "CX_CXXAccessSpecifier" => "CX_CXX";
+            "CXErrorCode" => "CXError";
+            "CXGlobalOptFlags" => "CXGlobalOpt";
+            "CXTranslationUnit_Flags" => "CXTranslationUnit";
+            "CXSaveTranslationUnit_Flags" => "CXSaveTranslationUnit";
+            "CXReparse_Flags" => "CXReparse";
+            "CXTUResourceUsageKind" => "CXTUResourceUsage";
+            "CXLinkageKind" => "CXLinkage";
+            "CXVisibilityKind" => "CXVisibility";
+            "CXLanguageKind" => "CXLanguage";
+            "CXTLSKind" => "CXTLS";
+            "CXTypeNullabilityKind" => "CXTypeNullability";
+            "CXRefQualifierKind" => "CXRefQualifier";
+            "CX_StorageClass" => "CX_SC_";
+            "CXPrintingPolicyProperty" => "CXPrintingPolicy";
+            "CXObjCPropertyAttrKind" => "CXObjCPropertyAttr";
+            "CXObjCDeclQualifierKind" => "CXObjCDeclQualifier";
+            "CXNameRefFlags" => "CXNameRange";
+            "CXTokenKind" => "CXToken";
+            "CXCompletionChunkKind" => "CXCompletionChunk";
+            "CXCodeComplete_Flags" => "CXCodeComplete";
+            "CXEvalResultKind" => "CXEval";
+            "CXVisitorResult" => "CXVisit";
+            "CXIdxEntityKind" => "CXIdxEntity";
+            "CXIdxEntityLanguage" => "CXIdxEntityLang";
+            "CXIdxEntityCXXTemplateKind" => "CXIdxEntity";
+            "CXIdxAttrKind" => "CXIdxAttr";
+            "CXIdxDeclInfoFlags" => "CXIdxDeclFlag";
+            "CXIdxObjCContainerKind" => "CXIdxObjCContainer";
+            "CXIdxEntityRefKind" => "CXIdxEntityRef";
+            "CXIndexOptFlags" => "CXIndexOpt"
         }}
     def override isArgByValue ( name:string )
         return true

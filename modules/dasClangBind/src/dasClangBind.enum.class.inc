@@ -7,11 +7,11 @@ public:
 		external = true;
 		cppName = "CXErrorCode";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXErrorCode >::type >::type;
-		addIEx("CXError_Success", "CXError_Success", int64_t(CXErrorCode::CXError_Success), das::LineInfo());
-		addIEx("CXError_Failure", "CXError_Failure", int64_t(CXErrorCode::CXError_Failure), das::LineInfo());
-		addIEx("CXError_Crashed", "CXError_Crashed", int64_t(CXErrorCode::CXError_Crashed), das::LineInfo());
-		addIEx("CXError_InvalidArguments", "CXError_InvalidArguments", int64_t(CXErrorCode::CXError_InvalidArguments), das::LineInfo());
-		addIEx("CXError_ASTReadError", "CXError_ASTReadError", int64_t(CXErrorCode::CXError_ASTReadError), das::LineInfo());
+		addIEx("Success", "CXError_Success", int64_t(CXErrorCode::CXError_Success), das::LineInfo());
+		addIEx("Failure", "CXError_Failure", int64_t(CXErrorCode::CXError_Failure), das::LineInfo());
+		addIEx("Crashed", "CXError_Crashed", int64_t(CXErrorCode::CXError_Crashed), das::LineInfo());
+		addIEx("InvalidArguments", "CXError_InvalidArguments", int64_t(CXErrorCode::CXError_InvalidArguments), das::LineInfo());
+		addIEx("ASTReadError", "CXError_ASTReadError", int64_t(CXErrorCode::CXError_ASTReadError), das::LineInfo());
 	}
 };
 
@@ -53,10 +53,10 @@ public:
 		external = true;
 		cppName = "CXGlobalOptFlags";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXGlobalOptFlags >::type >::type;
-		addIEx("CXGlobalOpt_None", "CXGlobalOpt_None", int64_t(CXGlobalOptFlags::CXGlobalOpt_None), das::LineInfo());
-		addIEx("CXGlobalOpt_ThreadBackgroundPriorityForIndexing", "CXGlobalOpt_ThreadBackgroundPriorityForIndexing", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForIndexing), das::LineInfo());
-		addIEx("CXGlobalOpt_ThreadBackgroundPriorityForEditing", "CXGlobalOpt_ThreadBackgroundPriorityForEditing", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForEditing), das::LineInfo());
-		addIEx("CXGlobalOpt_ThreadBackgroundPriorityForAll", "CXGlobalOpt_ThreadBackgroundPriorityForAll", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForAll), das::LineInfo());
+		addIEx("None", "CXGlobalOpt_None", int64_t(CXGlobalOptFlags::CXGlobalOpt_None), das::LineInfo());
+		addIEx("ThreadBackgroundPriorityForIndexing", "CXGlobalOpt_ThreadBackgroundPriorityForIndexing", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForIndexing), das::LineInfo());
+		addIEx("ThreadBackgroundPriorityForEditing", "CXGlobalOpt_ThreadBackgroundPriorityForEditing", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForEditing), das::LineInfo());
+		addIEx("ThreadBackgroundPriorityForAll", "CXGlobalOpt_ThreadBackgroundPriorityForAll", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForAll), das::LineInfo());
 	}
 };
 
@@ -108,23 +108,23 @@ public:
 		external = true;
 		cppName = "CXTranslationUnit_Flags";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTranslationUnit_Flags >::type >::type;
-		addIEx("CXTranslationUnit_None", "CXTranslationUnit_None", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_None), das::LineInfo());
-		addIEx("CXTranslationUnit_DetailedPreprocessingRecord", "CXTranslationUnit_DetailedPreprocessingRecord", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_DetailedPreprocessingRecord), das::LineInfo());
-		addIEx("CXTranslationUnit_Incomplete", "CXTranslationUnit_Incomplete", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_Incomplete), das::LineInfo());
-		addIEx("CXTranslationUnit_PrecompiledPreamble", "CXTranslationUnit_PrecompiledPreamble", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_PrecompiledPreamble), das::LineInfo());
-		addIEx("CXTranslationUnit_CacheCompletionResults", "CXTranslationUnit_CacheCompletionResults", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_CacheCompletionResults), das::LineInfo());
-		addIEx("CXTranslationUnit_ForSerialization", "CXTranslationUnit_ForSerialization", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_ForSerialization), das::LineInfo());
-		addIEx("CXTranslationUnit_CXXChainedPCH", "CXTranslationUnit_CXXChainedPCH", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_CXXChainedPCH), das::LineInfo());
-		addIEx("CXTranslationUnit_SkipFunctionBodies", "CXTranslationUnit_SkipFunctionBodies", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_SkipFunctionBodies), das::LineInfo());
-		addIEx("CXTranslationUnit_IncludeBriefCommentsInCodeCompletion", "CXTranslationUnit_IncludeBriefCommentsInCodeCompletion", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_IncludeBriefCommentsInCodeCompletion), das::LineInfo());
-		addIEx("CXTranslationUnit_CreatePreambleOnFirstParse", "CXTranslationUnit_CreatePreambleOnFirstParse", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_CreatePreambleOnFirstParse), das::LineInfo());
-		addIEx("CXTranslationUnit_KeepGoing", "CXTranslationUnit_KeepGoing", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_KeepGoing), das::LineInfo());
-		addIEx("CXTranslationUnit_SingleFileParse", "CXTranslationUnit_SingleFileParse", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_SingleFileParse), das::LineInfo());
-		addIEx("CXTranslationUnit_LimitSkipFunctionBodiesToPreamble", "CXTranslationUnit_LimitSkipFunctionBodiesToPreamble", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_LimitSkipFunctionBodiesToPreamble), das::LineInfo());
-		addIEx("CXTranslationUnit_IncludeAttributedTypes", "CXTranslationUnit_IncludeAttributedTypes", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_IncludeAttributedTypes), das::LineInfo());
-		addIEx("CXTranslationUnit_VisitImplicitAttributes", "CXTranslationUnit_VisitImplicitAttributes", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_VisitImplicitAttributes), das::LineInfo());
-		addIEx("CXTranslationUnit_IgnoreNonErrorsFromIncludedFiles", "CXTranslationUnit_IgnoreNonErrorsFromIncludedFiles", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_IgnoreNonErrorsFromIncludedFiles), das::LineInfo());
-		addIEx("CXTranslationUnit_RetainExcludedConditionalBlocks", "CXTranslationUnit_RetainExcludedConditionalBlocks", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_RetainExcludedConditionalBlocks), das::LineInfo());
+		addIEx("None", "CXTranslationUnit_None", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_None), das::LineInfo());
+		addIEx("DetailedPreprocessingRecord", "CXTranslationUnit_DetailedPreprocessingRecord", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_DetailedPreprocessingRecord), das::LineInfo());
+		addIEx("Incomplete", "CXTranslationUnit_Incomplete", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_Incomplete), das::LineInfo());
+		addIEx("PrecompiledPreamble", "CXTranslationUnit_PrecompiledPreamble", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_PrecompiledPreamble), das::LineInfo());
+		addIEx("CacheCompletionResults", "CXTranslationUnit_CacheCompletionResults", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_CacheCompletionResults), das::LineInfo());
+		addIEx("ForSerialization", "CXTranslationUnit_ForSerialization", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_ForSerialization), das::LineInfo());
+		addIEx("CXXChainedPCH", "CXTranslationUnit_CXXChainedPCH", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_CXXChainedPCH), das::LineInfo());
+		addIEx("SkipFunctionBodies", "CXTranslationUnit_SkipFunctionBodies", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_SkipFunctionBodies), das::LineInfo());
+		addIEx("IncludeBriefCommentsInCodeCompletion", "CXTranslationUnit_IncludeBriefCommentsInCodeCompletion", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_IncludeBriefCommentsInCodeCompletion), das::LineInfo());
+		addIEx("CreatePreambleOnFirstParse", "CXTranslationUnit_CreatePreambleOnFirstParse", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_CreatePreambleOnFirstParse), das::LineInfo());
+		addIEx("KeepGoing", "CXTranslationUnit_KeepGoing", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_KeepGoing), das::LineInfo());
+		addIEx("SingleFileParse", "CXTranslationUnit_SingleFileParse", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_SingleFileParse), das::LineInfo());
+		addIEx("LimitSkipFunctionBodiesToPreamble", "CXTranslationUnit_LimitSkipFunctionBodiesToPreamble", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_LimitSkipFunctionBodiesToPreamble), das::LineInfo());
+		addIEx("IncludeAttributedTypes", "CXTranslationUnit_IncludeAttributedTypes", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_IncludeAttributedTypes), das::LineInfo());
+		addIEx("VisitImplicitAttributes", "CXTranslationUnit_VisitImplicitAttributes", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_VisitImplicitAttributes), das::LineInfo());
+		addIEx("IgnoreNonErrorsFromIncludedFiles", "CXTranslationUnit_IgnoreNonErrorsFromIncludedFiles", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_IgnoreNonErrorsFromIncludedFiles), das::LineInfo());
+		addIEx("RetainExcludedConditionalBlocks", "CXTranslationUnit_RetainExcludedConditionalBlocks", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_RetainExcludedConditionalBlocks), das::LineInfo());
 	}
 };
 
@@ -134,7 +134,7 @@ public:
 		external = true;
 		cppName = "CXSaveTranslationUnit_Flags";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXSaveTranslationUnit_Flags >::type >::type;
-		addIEx("CXSaveTranslationUnit_None", "CXSaveTranslationUnit_None", int64_t(CXSaveTranslationUnit_Flags::CXSaveTranslationUnit_None), das::LineInfo());
+		addIEx("None", "CXSaveTranslationUnit_None", int64_t(CXSaveTranslationUnit_Flags::CXSaveTranslationUnit_None), das::LineInfo());
 	}
 };
 
@@ -157,7 +157,7 @@ public:
 		external = true;
 		cppName = "CXReparse_Flags";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXReparse_Flags >::type >::type;
-		addIEx("CXReparse_None", "CXReparse_None", int64_t(CXReparse_Flags::CXReparse_None), das::LineInfo());
+		addIEx("None", "CXReparse_None", int64_t(CXReparse_Flags::CXReparse_None), das::LineInfo());
 	}
 };
 
@@ -167,24 +167,24 @@ public:
 		external = true;
 		cppName = "CXTUResourceUsageKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTUResourceUsageKind >::type >::type;
-		addIEx("CXTUResourceUsage_AST", "CXTUResourceUsage_AST", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_AST), das::LineInfo());
-		addIEx("CXTUResourceUsage_Identifiers", "CXTUResourceUsage_Identifiers", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Identifiers), das::LineInfo());
-		addIEx("CXTUResourceUsage_Selectors", "CXTUResourceUsage_Selectors", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Selectors), das::LineInfo());
-		addIEx("CXTUResourceUsage_GlobalCompletionResults", "CXTUResourceUsage_GlobalCompletionResults", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_GlobalCompletionResults), das::LineInfo());
-		addIEx("CXTUResourceUsage_SourceManagerContentCache", "CXTUResourceUsage_SourceManagerContentCache", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_SourceManagerContentCache), das::LineInfo());
-		addIEx("CXTUResourceUsage_AST_SideTables", "CXTUResourceUsage_AST_SideTables", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_AST_SideTables), das::LineInfo());
-		addIEx("CXTUResourceUsage_SourceManager_Membuffer_Malloc", "CXTUResourceUsage_SourceManager_Membuffer_Malloc", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_SourceManager_Membuffer_Malloc), das::LineInfo());
-		addIEx("CXTUResourceUsage_SourceManager_Membuffer_MMap", "CXTUResourceUsage_SourceManager_Membuffer_MMap", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_SourceManager_Membuffer_MMap), das::LineInfo());
-		addIEx("CXTUResourceUsage_ExternalASTSource_Membuffer_Malloc", "CXTUResourceUsage_ExternalASTSource_Membuffer_Malloc", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_ExternalASTSource_Membuffer_Malloc), das::LineInfo());
-		addIEx("CXTUResourceUsage_ExternalASTSource_Membuffer_MMap", "CXTUResourceUsage_ExternalASTSource_Membuffer_MMap", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_ExternalASTSource_Membuffer_MMap), das::LineInfo());
-		addIEx("CXTUResourceUsage_Preprocessor", "CXTUResourceUsage_Preprocessor", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Preprocessor), das::LineInfo());
-		addIEx("CXTUResourceUsage_PreprocessingRecord", "CXTUResourceUsage_PreprocessingRecord", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_PreprocessingRecord), das::LineInfo());
-		addIEx("CXTUResourceUsage_SourceManager_DataStructures", "CXTUResourceUsage_SourceManager_DataStructures", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_SourceManager_DataStructures), das::LineInfo());
-		addIEx("CXTUResourceUsage_Preprocessor_HeaderSearch", "CXTUResourceUsage_Preprocessor_HeaderSearch", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Preprocessor_HeaderSearch), das::LineInfo());
-		addIEx("CXTUResourceUsage_MEMORY_IN_BYTES_BEGIN", "CXTUResourceUsage_MEMORY_IN_BYTES_BEGIN", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_MEMORY_IN_BYTES_BEGIN), das::LineInfo());
-		addIEx("CXTUResourceUsage_MEMORY_IN_BYTES_END", "CXTUResourceUsage_MEMORY_IN_BYTES_END", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_MEMORY_IN_BYTES_END), das::LineInfo());
-		addIEx("CXTUResourceUsage_First", "CXTUResourceUsage_First", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_First), das::LineInfo());
-		addIEx("CXTUResourceUsage_Last", "CXTUResourceUsage_Last", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Last), das::LineInfo());
+		addIEx("AST", "CXTUResourceUsage_AST", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_AST), das::LineInfo());
+		addIEx("Identifiers", "CXTUResourceUsage_Identifiers", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Identifiers), das::LineInfo());
+		addIEx("Selectors", "CXTUResourceUsage_Selectors", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Selectors), das::LineInfo());
+		addIEx("GlobalCompletionResults", "CXTUResourceUsage_GlobalCompletionResults", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_GlobalCompletionResults), das::LineInfo());
+		addIEx("SourceManagerContentCache", "CXTUResourceUsage_SourceManagerContentCache", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_SourceManagerContentCache), das::LineInfo());
+		addIEx("AST_SideTables", "CXTUResourceUsage_AST_SideTables", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_AST_SideTables), das::LineInfo());
+		addIEx("SourceManager_Membuffer_Malloc", "CXTUResourceUsage_SourceManager_Membuffer_Malloc", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_SourceManager_Membuffer_Malloc), das::LineInfo());
+		addIEx("SourceManager_Membuffer_MMap", "CXTUResourceUsage_SourceManager_Membuffer_MMap", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_SourceManager_Membuffer_MMap), das::LineInfo());
+		addIEx("ExternalASTSource_Membuffer_Malloc", "CXTUResourceUsage_ExternalASTSource_Membuffer_Malloc", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_ExternalASTSource_Membuffer_Malloc), das::LineInfo());
+		addIEx("ExternalASTSource_Membuffer_MMap", "CXTUResourceUsage_ExternalASTSource_Membuffer_MMap", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_ExternalASTSource_Membuffer_MMap), das::LineInfo());
+		addIEx("Preprocessor", "CXTUResourceUsage_Preprocessor", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Preprocessor), das::LineInfo());
+		addIEx("PreprocessingRecord", "CXTUResourceUsage_PreprocessingRecord", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_PreprocessingRecord), das::LineInfo());
+		addIEx("SourceManager_DataStructures", "CXTUResourceUsage_SourceManager_DataStructures", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_SourceManager_DataStructures), das::LineInfo());
+		addIEx("Preprocessor_HeaderSearch", "CXTUResourceUsage_Preprocessor_HeaderSearch", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Preprocessor_HeaderSearch), das::LineInfo());
+		addIEx("MEMORY_IN_BYTES_BEGIN", "CXTUResourceUsage_MEMORY_IN_BYTES_BEGIN", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_MEMORY_IN_BYTES_BEGIN), das::LineInfo());
+		addIEx("MEMORY_IN_BYTES_END", "CXTUResourceUsage_MEMORY_IN_BYTES_END", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_MEMORY_IN_BYTES_END), das::LineInfo());
+		addIEx("First", "CXTUResourceUsage_First", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_First), das::LineInfo());
+		addIEx("Last", "CXTUResourceUsage_Last", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Last), das::LineInfo());
 	}
 };
 
@@ -474,11 +474,11 @@ public:
 		external = true;
 		cppName = "CXLinkageKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXLinkageKind >::type >::type;
-		addIEx("CXLinkage_Invalid", "CXLinkage_Invalid", int64_t(CXLinkageKind::CXLinkage_Invalid), das::LineInfo());
-		addIEx("CXLinkage_NoLinkage", "CXLinkage_NoLinkage", int64_t(CXLinkageKind::CXLinkage_NoLinkage), das::LineInfo());
-		addIEx("CXLinkage_Internal", "CXLinkage_Internal", int64_t(CXLinkageKind::CXLinkage_Internal), das::LineInfo());
-		addIEx("CXLinkage_UniqueExternal", "CXLinkage_UniqueExternal", int64_t(CXLinkageKind::CXLinkage_UniqueExternal), das::LineInfo());
-		addIEx("CXLinkage_External", "CXLinkage_External", int64_t(CXLinkageKind::CXLinkage_External), das::LineInfo());
+		addIEx("Invalid", "CXLinkage_Invalid", int64_t(CXLinkageKind::CXLinkage_Invalid), das::LineInfo());
+		addIEx("NoLinkage", "CXLinkage_NoLinkage", int64_t(CXLinkageKind::CXLinkage_NoLinkage), das::LineInfo());
+		addIEx("Internal", "CXLinkage_Internal", int64_t(CXLinkageKind::CXLinkage_Internal), das::LineInfo());
+		addIEx("UniqueExternal", "CXLinkage_UniqueExternal", int64_t(CXLinkageKind::CXLinkage_UniqueExternal), das::LineInfo());
+		addIEx("External", "CXLinkage_External", int64_t(CXLinkageKind::CXLinkage_External), das::LineInfo());
 	}
 };
 
@@ -488,10 +488,10 @@ public:
 		external = true;
 		cppName = "CXVisibilityKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXVisibilityKind >::type >::type;
-		addIEx("CXVisibility_Invalid", "CXVisibility_Invalid", int64_t(CXVisibilityKind::CXVisibility_Invalid), das::LineInfo());
-		addIEx("CXVisibility_Hidden", "CXVisibility_Hidden", int64_t(CXVisibilityKind::CXVisibility_Hidden), das::LineInfo());
-		addIEx("CXVisibility_Protected", "CXVisibility_Protected", int64_t(CXVisibilityKind::CXVisibility_Protected), das::LineInfo());
-		addIEx("CXVisibility_Default", "CXVisibility_Default", int64_t(CXVisibilityKind::CXVisibility_Default), das::LineInfo());
+		addIEx("Invalid", "CXVisibility_Invalid", int64_t(CXVisibilityKind::CXVisibility_Invalid), das::LineInfo());
+		addIEx("Hidden", "CXVisibility_Hidden", int64_t(CXVisibilityKind::CXVisibility_Hidden), das::LineInfo());
+		addIEx("Protected", "CXVisibility_Protected", int64_t(CXVisibilityKind::CXVisibility_Protected), das::LineInfo());
+		addIEx("Default", "CXVisibility_Default", int64_t(CXVisibilityKind::CXVisibility_Default), das::LineInfo());
 	}
 };
 
@@ -501,10 +501,10 @@ public:
 		external = true;
 		cppName = "CXLanguageKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXLanguageKind >::type >::type;
-		addIEx("CXLanguage_Invalid", "CXLanguage_Invalid", int64_t(CXLanguageKind::CXLanguage_Invalid), das::LineInfo());
-		addIEx("CXLanguage_C", "CXLanguage_C", int64_t(CXLanguageKind::CXLanguage_C), das::LineInfo());
-		addIEx("CXLanguage_ObjC", "CXLanguage_ObjC", int64_t(CXLanguageKind::CXLanguage_ObjC), das::LineInfo());
-		addIEx("CXLanguage_CPlusPlus", "CXLanguage_CPlusPlus", int64_t(CXLanguageKind::CXLanguage_CPlusPlus), das::LineInfo());
+		addIEx("Invalid", "CXLanguage_Invalid", int64_t(CXLanguageKind::CXLanguage_Invalid), das::LineInfo());
+		addIEx("C", "CXLanguage_C", int64_t(CXLanguageKind::CXLanguage_C), das::LineInfo());
+		addIEx("ObjC", "CXLanguage_ObjC", int64_t(CXLanguageKind::CXLanguage_ObjC), das::LineInfo());
+		addIEx("CPlusPlus", "CXLanguage_CPlusPlus", int64_t(CXLanguageKind::CXLanguage_CPlusPlus), das::LineInfo());
 	}
 };
 
@@ -514,9 +514,9 @@ public:
 		external = true;
 		cppName = "CXTLSKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTLSKind >::type >::type;
-		addIEx("CXTLS_None", "CXTLS_None", int64_t(CXTLSKind::CXTLS_None), das::LineInfo());
-		addIEx("CXTLS_Dynamic", "CXTLS_Dynamic", int64_t(CXTLSKind::CXTLS_Dynamic), das::LineInfo());
-		addIEx("CXTLS_Static", "CXTLS_Static", int64_t(CXTLSKind::CXTLS_Static), das::LineInfo());
+		addIEx("None", "CXTLS_None", int64_t(CXTLSKind::CXTLS_None), das::LineInfo());
+		addIEx("Dynamic", "CXTLS_Dynamic", int64_t(CXTLSKind::CXTLS_Dynamic), das::LineInfo());
+		addIEx("Static", "CXTLS_Static", int64_t(CXTLSKind::CXTLS_Static), das::LineInfo());
 	}
 };
 
@@ -704,11 +704,11 @@ public:
 		external = true;
 		cppName = "CXTypeNullabilityKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTypeNullabilityKind >::type >::type;
-		addIEx("CXTypeNullability_NonNull", "CXTypeNullability_NonNull", int64_t(CXTypeNullabilityKind::CXTypeNullability_NonNull), das::LineInfo());
-		addIEx("CXTypeNullability_Nullable", "CXTypeNullability_Nullable", int64_t(CXTypeNullabilityKind::CXTypeNullability_Nullable), das::LineInfo());
-		addIEx("CXTypeNullability_Unspecified", "CXTypeNullability_Unspecified", int64_t(CXTypeNullabilityKind::CXTypeNullability_Unspecified), das::LineInfo());
-		addIEx("CXTypeNullability_Invalid", "CXTypeNullability_Invalid", int64_t(CXTypeNullabilityKind::CXTypeNullability_Invalid), das::LineInfo());
-		addIEx("CXTypeNullability_NullableResult", "CXTypeNullability_NullableResult", int64_t(CXTypeNullabilityKind::CXTypeNullability_NullableResult), das::LineInfo());
+		addIEx("NonNull", "CXTypeNullability_NonNull", int64_t(CXTypeNullabilityKind::CXTypeNullability_NonNull), das::LineInfo());
+		addIEx("Nullable", "CXTypeNullability_Nullable", int64_t(CXTypeNullabilityKind::CXTypeNullability_Nullable), das::LineInfo());
+		addIEx("Unspecified", "CXTypeNullability_Unspecified", int64_t(CXTypeNullabilityKind::CXTypeNullability_Unspecified), das::LineInfo());
+		addIEx("Invalid", "CXTypeNullability_Invalid", int64_t(CXTypeNullabilityKind::CXTypeNullability_Invalid), das::LineInfo());
+		addIEx("NullableResult", "CXTypeNullability_NullableResult", int64_t(CXTypeNullabilityKind::CXTypeNullability_NullableResult), das::LineInfo());
 	}
 };
 
@@ -733,9 +733,9 @@ public:
 		external = true;
 		cppName = "CXRefQualifierKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXRefQualifierKind >::type >::type;
-		addIEx("CXRefQualifier_None", "CXRefQualifier_None", int64_t(CXRefQualifierKind::CXRefQualifier_None), das::LineInfo());
-		addIEx("CXRefQualifier_LValue", "CXRefQualifier_LValue", int64_t(CXRefQualifierKind::CXRefQualifier_LValue), das::LineInfo());
-		addIEx("CXRefQualifier_RValue", "CXRefQualifier_RValue", int64_t(CXRefQualifierKind::CXRefQualifier_RValue), das::LineInfo());
+		addIEx("None", "CXRefQualifier_None", int64_t(CXRefQualifierKind::CXRefQualifier_None), das::LineInfo());
+		addIEx("LValue", "CXRefQualifier_LValue", int64_t(CXRefQualifierKind::CXRefQualifier_LValue), das::LineInfo());
+		addIEx("RValue", "CXRefQualifier_RValue", int64_t(CXRefQualifierKind::CXRefQualifier_RValue), das::LineInfo());
 	}
 };
 
@@ -745,10 +745,10 @@ public:
 		external = true;
 		cppName = "CX_CXXAccessSpecifier";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CX_CXXAccessSpecifier >::type >::type;
-		addIEx("CX_CXXInvalidAccessSpecifier", "CX_CXXInvalidAccessSpecifier", int64_t(CX_CXXAccessSpecifier::CX_CXXInvalidAccessSpecifier), das::LineInfo());
-		addIEx("CX_CXXPublic", "CX_CXXPublic", int64_t(CX_CXXAccessSpecifier::CX_CXXPublic), das::LineInfo());
-		addIEx("CX_CXXProtected", "CX_CXXProtected", int64_t(CX_CXXAccessSpecifier::CX_CXXProtected), das::LineInfo());
-		addIEx("CX_CXXPrivate", "CX_CXXPrivate", int64_t(CX_CXXAccessSpecifier::CX_CXXPrivate), das::LineInfo());
+		addIEx("InvalidAccessSpecifier", "CX_CXXInvalidAccessSpecifier", int64_t(CX_CXXAccessSpecifier::CX_CXXInvalidAccessSpecifier), das::LineInfo());
+		addIEx("Public", "CX_CXXPublic", int64_t(CX_CXXAccessSpecifier::CX_CXXPublic), das::LineInfo());
+		addIEx("Protected", "CX_CXXProtected", int64_t(CX_CXXAccessSpecifier::CX_CXXProtected), das::LineInfo());
+		addIEx("Private", "CX_CXXPrivate", int64_t(CX_CXXAccessSpecifier::CX_CXXPrivate), das::LineInfo());
 	}
 };
 
@@ -758,14 +758,14 @@ public:
 		external = true;
 		cppName = "CX_StorageClass";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CX_StorageClass >::type >::type;
-		addIEx("CX_SC_Invalid", "CX_SC_Invalid", int64_t(CX_StorageClass::CX_SC_Invalid), das::LineInfo());
-		addIEx("CX_SC_None", "CX_SC_None", int64_t(CX_StorageClass::CX_SC_None), das::LineInfo());
-		addIEx("CX_SC_Extern", "CX_SC_Extern", int64_t(CX_StorageClass::CX_SC_Extern), das::LineInfo());
-		addIEx("CX_SC_Static", "CX_SC_Static", int64_t(CX_StorageClass::CX_SC_Static), das::LineInfo());
-		addIEx("CX_SC_PrivateExtern", "CX_SC_PrivateExtern", int64_t(CX_StorageClass::CX_SC_PrivateExtern), das::LineInfo());
-		addIEx("CX_SC_OpenCLWorkGroupLocal", "CX_SC_OpenCLWorkGroupLocal", int64_t(CX_StorageClass::CX_SC_OpenCLWorkGroupLocal), das::LineInfo());
-		addIEx("CX_SC_Auto", "CX_SC_Auto", int64_t(CX_StorageClass::CX_SC_Auto), das::LineInfo());
-		addIEx("CX_SC_Register", "CX_SC_Register", int64_t(CX_StorageClass::CX_SC_Register), das::LineInfo());
+		addIEx("Invalid", "CX_SC_Invalid", int64_t(CX_StorageClass::CX_SC_Invalid), das::LineInfo());
+		addIEx("None", "CX_SC_None", int64_t(CX_StorageClass::CX_SC_None), das::LineInfo());
+		addIEx("Extern", "CX_SC_Extern", int64_t(CX_StorageClass::CX_SC_Extern), das::LineInfo());
+		addIEx("Static", "CX_SC_Static", int64_t(CX_StorageClass::CX_SC_Static), das::LineInfo());
+		addIEx("PrivateExtern", "CX_SC_PrivateExtern", int64_t(CX_StorageClass::CX_SC_PrivateExtern), das::LineInfo());
+		addIEx("OpenCLWorkGroupLocal", "CX_SC_OpenCLWorkGroupLocal", int64_t(CX_StorageClass::CX_SC_OpenCLWorkGroupLocal), das::LineInfo());
+		addIEx("Auto", "CX_SC_Auto", int64_t(CX_StorageClass::CX_SC_Auto), das::LineInfo());
+		addIEx("Register", "CX_SC_Register", int64_t(CX_StorageClass::CX_SC_Register), das::LineInfo());
 	}
 };
 
@@ -787,33 +787,33 @@ public:
 		external = true;
 		cppName = "CXPrintingPolicyProperty";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXPrintingPolicyProperty >::type >::type;
-		addIEx("CXPrintingPolicy_Indentation", "CXPrintingPolicy_Indentation", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Indentation), das::LineInfo());
-		addIEx("CXPrintingPolicy_SuppressSpecifiers", "CXPrintingPolicy_SuppressSpecifiers", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressSpecifiers), das::LineInfo());
-		addIEx("CXPrintingPolicy_SuppressTagKeyword", "CXPrintingPolicy_SuppressTagKeyword", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressTagKeyword), das::LineInfo());
-		addIEx("CXPrintingPolicy_IncludeTagDefinition", "CXPrintingPolicy_IncludeTagDefinition", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_IncludeTagDefinition), das::LineInfo());
-		addIEx("CXPrintingPolicy_SuppressScope", "CXPrintingPolicy_SuppressScope", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressScope), das::LineInfo());
-		addIEx("CXPrintingPolicy_SuppressUnwrittenScope", "CXPrintingPolicy_SuppressUnwrittenScope", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressUnwrittenScope), das::LineInfo());
-		addIEx("CXPrintingPolicy_SuppressInitializers", "CXPrintingPolicy_SuppressInitializers", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressInitializers), das::LineInfo());
-		addIEx("CXPrintingPolicy_ConstantArraySizeAsWritten", "CXPrintingPolicy_ConstantArraySizeAsWritten", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_ConstantArraySizeAsWritten), das::LineInfo());
-		addIEx("CXPrintingPolicy_AnonymousTagLocations", "CXPrintingPolicy_AnonymousTagLocations", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_AnonymousTagLocations), das::LineInfo());
-		addIEx("CXPrintingPolicy_SuppressStrongLifetime", "CXPrintingPolicy_SuppressStrongLifetime", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressStrongLifetime), das::LineInfo());
-		addIEx("CXPrintingPolicy_SuppressLifetimeQualifiers", "CXPrintingPolicy_SuppressLifetimeQualifiers", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressLifetimeQualifiers), das::LineInfo());
-		addIEx("CXPrintingPolicy_SuppressTemplateArgsInCXXConstructors", "CXPrintingPolicy_SuppressTemplateArgsInCXXConstructors", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressTemplateArgsInCXXConstructors), das::LineInfo());
-		addIEx("CXPrintingPolicy_Bool", "CXPrintingPolicy_Bool", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Bool), das::LineInfo());
-		addIEx("CXPrintingPolicy_Restrict", "CXPrintingPolicy_Restrict", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Restrict), das::LineInfo());
-		addIEx("CXPrintingPolicy_Alignof", "CXPrintingPolicy_Alignof", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Alignof), das::LineInfo());
-		addIEx("CXPrintingPolicy_UnderscoreAlignof", "CXPrintingPolicy_UnderscoreAlignof", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_UnderscoreAlignof), das::LineInfo());
-		addIEx("CXPrintingPolicy_UseVoidForZeroParams", "CXPrintingPolicy_UseVoidForZeroParams", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_UseVoidForZeroParams), das::LineInfo());
-		addIEx("CXPrintingPolicy_TerseOutput", "CXPrintingPolicy_TerseOutput", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_TerseOutput), das::LineInfo());
-		addIEx("CXPrintingPolicy_PolishForDeclaration", "CXPrintingPolicy_PolishForDeclaration", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_PolishForDeclaration), das::LineInfo());
-		addIEx("CXPrintingPolicy_Half", "CXPrintingPolicy_Half", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Half), das::LineInfo());
-		addIEx("CXPrintingPolicy_MSWChar", "CXPrintingPolicy_MSWChar", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_MSWChar), das::LineInfo());
-		addIEx("CXPrintingPolicy_IncludeNewlines", "CXPrintingPolicy_IncludeNewlines", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_IncludeNewlines), das::LineInfo());
-		addIEx("CXPrintingPolicy_MSVCFormatting", "CXPrintingPolicy_MSVCFormatting", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_MSVCFormatting), das::LineInfo());
-		addIEx("CXPrintingPolicy_ConstantsAsWritten", "CXPrintingPolicy_ConstantsAsWritten", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_ConstantsAsWritten), das::LineInfo());
-		addIEx("CXPrintingPolicy_SuppressImplicitBase", "CXPrintingPolicy_SuppressImplicitBase", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressImplicitBase), das::LineInfo());
-		addIEx("CXPrintingPolicy_FullyQualifiedName", "CXPrintingPolicy_FullyQualifiedName", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_FullyQualifiedName), das::LineInfo());
-		addIEx("CXPrintingPolicy_LastProperty", "CXPrintingPolicy_LastProperty", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_LastProperty), das::LineInfo());
+		addIEx("Indentation", "CXPrintingPolicy_Indentation", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Indentation), das::LineInfo());
+		addIEx("SuppressSpecifiers", "CXPrintingPolicy_SuppressSpecifiers", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressSpecifiers), das::LineInfo());
+		addIEx("SuppressTagKeyword", "CXPrintingPolicy_SuppressTagKeyword", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressTagKeyword), das::LineInfo());
+		addIEx("IncludeTagDefinition", "CXPrintingPolicy_IncludeTagDefinition", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_IncludeTagDefinition), das::LineInfo());
+		addIEx("SuppressScope", "CXPrintingPolicy_SuppressScope", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressScope), das::LineInfo());
+		addIEx("SuppressUnwrittenScope", "CXPrintingPolicy_SuppressUnwrittenScope", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressUnwrittenScope), das::LineInfo());
+		addIEx("SuppressInitializers", "CXPrintingPolicy_SuppressInitializers", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressInitializers), das::LineInfo());
+		addIEx("ConstantArraySizeAsWritten", "CXPrintingPolicy_ConstantArraySizeAsWritten", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_ConstantArraySizeAsWritten), das::LineInfo());
+		addIEx("AnonymousTagLocations", "CXPrintingPolicy_AnonymousTagLocations", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_AnonymousTagLocations), das::LineInfo());
+		addIEx("SuppressStrongLifetime", "CXPrintingPolicy_SuppressStrongLifetime", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressStrongLifetime), das::LineInfo());
+		addIEx("SuppressLifetimeQualifiers", "CXPrintingPolicy_SuppressLifetimeQualifiers", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressLifetimeQualifiers), das::LineInfo());
+		addIEx("SuppressTemplateArgsInCXXConstructors", "CXPrintingPolicy_SuppressTemplateArgsInCXXConstructors", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressTemplateArgsInCXXConstructors), das::LineInfo());
+		addIEx("Bool", "CXPrintingPolicy_Bool", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Bool), das::LineInfo());
+		addIEx("Restrict", "CXPrintingPolicy_Restrict", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Restrict), das::LineInfo());
+		addIEx("Alignof", "CXPrintingPolicy_Alignof", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Alignof), das::LineInfo());
+		addIEx("UnderscoreAlignof", "CXPrintingPolicy_UnderscoreAlignof", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_UnderscoreAlignof), das::LineInfo());
+		addIEx("UseVoidForZeroParams", "CXPrintingPolicy_UseVoidForZeroParams", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_UseVoidForZeroParams), das::LineInfo());
+		addIEx("TerseOutput", "CXPrintingPolicy_TerseOutput", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_TerseOutput), das::LineInfo());
+		addIEx("PolishForDeclaration", "CXPrintingPolicy_PolishForDeclaration", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_PolishForDeclaration), das::LineInfo());
+		addIEx("Half", "CXPrintingPolicy_Half", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Half), das::LineInfo());
+		addIEx("MSWChar", "CXPrintingPolicy_MSWChar", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_MSWChar), das::LineInfo());
+		addIEx("IncludeNewlines", "CXPrintingPolicy_IncludeNewlines", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_IncludeNewlines), das::LineInfo());
+		addIEx("MSVCFormatting", "CXPrintingPolicy_MSVCFormatting", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_MSVCFormatting), das::LineInfo());
+		addIEx("ConstantsAsWritten", "CXPrintingPolicy_ConstantsAsWritten", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_ConstantsAsWritten), das::LineInfo());
+		addIEx("SuppressImplicitBase", "CXPrintingPolicy_SuppressImplicitBase", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressImplicitBase), das::LineInfo());
+		addIEx("FullyQualifiedName", "CXPrintingPolicy_FullyQualifiedName", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_FullyQualifiedName), das::LineInfo());
+		addIEx("LastProperty", "CXPrintingPolicy_LastProperty", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_LastProperty), das::LineInfo());
 	}
 };
 
@@ -823,20 +823,20 @@ public:
 		external = true;
 		cppName = "CXObjCPropertyAttrKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXObjCPropertyAttrKind >::type >::type;
-		addIEx("CXObjCPropertyAttr_noattr", "CXObjCPropertyAttr_noattr", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_noattr), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_readonly", "CXObjCPropertyAttr_readonly", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_readonly), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_getter", "CXObjCPropertyAttr_getter", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_getter), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_assign", "CXObjCPropertyAttr_assign", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_assign), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_readwrite", "CXObjCPropertyAttr_readwrite", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_readwrite), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_retain", "CXObjCPropertyAttr_retain", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_retain), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_copy", "CXObjCPropertyAttr_copy", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_copy), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_nonatomic", "CXObjCPropertyAttr_nonatomic", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_nonatomic), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_setter", "CXObjCPropertyAttr_setter", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_setter), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_atomic", "CXObjCPropertyAttr_atomic", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_atomic), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_weak", "CXObjCPropertyAttr_weak", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_weak), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_strong", "CXObjCPropertyAttr_strong", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_strong), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_unsafe_unretained", "CXObjCPropertyAttr_unsafe_unretained", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_unsafe_unretained), das::LineInfo());
-		addIEx("CXObjCPropertyAttr_class", "CXObjCPropertyAttr_class", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_class), das::LineInfo());
+		addIEx("noattr", "CXObjCPropertyAttr_noattr", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_noattr), das::LineInfo());
+		addIEx("readonly", "CXObjCPropertyAttr_readonly", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_readonly), das::LineInfo());
+		addIEx("getter", "CXObjCPropertyAttr_getter", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_getter), das::LineInfo());
+		addIEx("assign", "CXObjCPropertyAttr_assign", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_assign), das::LineInfo());
+		addIEx("readwrite", "CXObjCPropertyAttr_readwrite", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_readwrite), das::LineInfo());
+		addIEx("retain", "CXObjCPropertyAttr_retain", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_retain), das::LineInfo());
+		addIEx("copy", "CXObjCPropertyAttr_copy", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_copy), das::LineInfo());
+		addIEx("nonatomic", "CXObjCPropertyAttr_nonatomic", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_nonatomic), das::LineInfo());
+		addIEx("setter", "CXObjCPropertyAttr_setter", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_setter), das::LineInfo());
+		addIEx("atomic", "CXObjCPropertyAttr_atomic", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_atomic), das::LineInfo());
+		addIEx("weak", "CXObjCPropertyAttr_weak", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_weak), das::LineInfo());
+		addIEx("strong", "CXObjCPropertyAttr_strong", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_strong), das::LineInfo());
+		addIEx("unsafe_unretained", "CXObjCPropertyAttr_unsafe_unretained", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_unsafe_unretained), das::LineInfo());
+		addIEx("class", "CXObjCPropertyAttr_class", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_class), das::LineInfo());
 	}
 };
 
@@ -846,13 +846,13 @@ public:
 		external = true;
 		cppName = "CXObjCDeclQualifierKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXObjCDeclQualifierKind >::type >::type;
-		addIEx("CXObjCDeclQualifier_None", "CXObjCDeclQualifier_None", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_None), das::LineInfo());
-		addIEx("CXObjCDeclQualifier_In", "CXObjCDeclQualifier_In", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_In), das::LineInfo());
-		addIEx("CXObjCDeclQualifier_Inout", "CXObjCDeclQualifier_Inout", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Inout), das::LineInfo());
-		addIEx("CXObjCDeclQualifier_Out", "CXObjCDeclQualifier_Out", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Out), das::LineInfo());
-		addIEx("CXObjCDeclQualifier_Bycopy", "CXObjCDeclQualifier_Bycopy", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Bycopy), das::LineInfo());
-		addIEx("CXObjCDeclQualifier_Byref", "CXObjCDeclQualifier_Byref", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Byref), das::LineInfo());
-		addIEx("CXObjCDeclQualifier_Oneway", "CXObjCDeclQualifier_Oneway", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Oneway), das::LineInfo());
+		addIEx("None", "CXObjCDeclQualifier_None", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_None), das::LineInfo());
+		addIEx("In", "CXObjCDeclQualifier_In", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_In), das::LineInfo());
+		addIEx("Inout", "CXObjCDeclQualifier_Inout", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Inout), das::LineInfo());
+		addIEx("Out", "CXObjCDeclQualifier_Out", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Out), das::LineInfo());
+		addIEx("Bycopy", "CXObjCDeclQualifier_Bycopy", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Bycopy), das::LineInfo());
+		addIEx("Byref", "CXObjCDeclQualifier_Byref", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Byref), das::LineInfo());
+		addIEx("Oneway", "CXObjCDeclQualifier_Oneway", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Oneway), das::LineInfo());
 	}
 };
 
@@ -862,9 +862,9 @@ public:
 		external = true;
 		cppName = "CXNameRefFlags";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXNameRefFlags >::type >::type;
-		addIEx("CXNameRange_WantQualifier", "CXNameRange_WantQualifier", int64_t(CXNameRefFlags::CXNameRange_WantQualifier), das::LineInfo());
-		addIEx("CXNameRange_WantTemplateArgs", "CXNameRange_WantTemplateArgs", int64_t(CXNameRefFlags::CXNameRange_WantTemplateArgs), das::LineInfo());
-		addIEx("CXNameRange_WantSinglePiece", "CXNameRange_WantSinglePiece", int64_t(CXNameRefFlags::CXNameRange_WantSinglePiece), das::LineInfo());
+		addIEx("WantQualifier", "CXNameRange_WantQualifier", int64_t(CXNameRefFlags::CXNameRange_WantQualifier), das::LineInfo());
+		addIEx("WantTemplateArgs", "CXNameRange_WantTemplateArgs", int64_t(CXNameRefFlags::CXNameRange_WantTemplateArgs), das::LineInfo());
+		addIEx("WantSinglePiece", "CXNameRange_WantSinglePiece", int64_t(CXNameRefFlags::CXNameRange_WantSinglePiece), das::LineInfo());
 	}
 };
 
@@ -874,11 +874,11 @@ public:
 		external = true;
 		cppName = "CXTokenKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTokenKind >::type >::type;
-		addIEx("CXToken_Punctuation", "CXToken_Punctuation", int64_t(CXTokenKind::CXToken_Punctuation), das::LineInfo());
-		addIEx("CXToken_Keyword", "CXToken_Keyword", int64_t(CXTokenKind::CXToken_Keyword), das::LineInfo());
-		addIEx("CXToken_Identifier", "CXToken_Identifier", int64_t(CXTokenKind::CXToken_Identifier), das::LineInfo());
-		addIEx("CXToken_Literal", "CXToken_Literal", int64_t(CXTokenKind::CXToken_Literal), das::LineInfo());
-		addIEx("CXToken_Comment", "CXToken_Comment", int64_t(CXTokenKind::CXToken_Comment), das::LineInfo());
+		addIEx("Punctuation", "CXToken_Punctuation", int64_t(CXTokenKind::CXToken_Punctuation), das::LineInfo());
+		addIEx("Keyword", "CXToken_Keyword", int64_t(CXTokenKind::CXToken_Keyword), das::LineInfo());
+		addIEx("Identifier", "CXToken_Identifier", int64_t(CXTokenKind::CXToken_Identifier), das::LineInfo());
+		addIEx("Literal", "CXToken_Literal", int64_t(CXTokenKind::CXToken_Literal), das::LineInfo());
+		addIEx("Comment", "CXToken_Comment", int64_t(CXTokenKind::CXToken_Comment), das::LineInfo());
 	}
 };
 
@@ -888,27 +888,27 @@ public:
 		external = true;
 		cppName = "CXCompletionChunkKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXCompletionChunkKind >::type >::type;
-		addIEx("CXCompletionChunk_Optional", "CXCompletionChunk_Optional", int64_t(CXCompletionChunkKind::CXCompletionChunk_Optional), das::LineInfo());
-		addIEx("CXCompletionChunk_TypedText", "CXCompletionChunk_TypedText", int64_t(CXCompletionChunkKind::CXCompletionChunk_TypedText), das::LineInfo());
-		addIEx("CXCompletionChunk_Text", "CXCompletionChunk_Text", int64_t(CXCompletionChunkKind::CXCompletionChunk_Text), das::LineInfo());
-		addIEx("CXCompletionChunk_Placeholder", "CXCompletionChunk_Placeholder", int64_t(CXCompletionChunkKind::CXCompletionChunk_Placeholder), das::LineInfo());
-		addIEx("CXCompletionChunk_Informative", "CXCompletionChunk_Informative", int64_t(CXCompletionChunkKind::CXCompletionChunk_Informative), das::LineInfo());
-		addIEx("CXCompletionChunk_CurrentParameter", "CXCompletionChunk_CurrentParameter", int64_t(CXCompletionChunkKind::CXCompletionChunk_CurrentParameter), das::LineInfo());
-		addIEx("CXCompletionChunk_LeftParen", "CXCompletionChunk_LeftParen", int64_t(CXCompletionChunkKind::CXCompletionChunk_LeftParen), das::LineInfo());
-		addIEx("CXCompletionChunk_RightParen", "CXCompletionChunk_RightParen", int64_t(CXCompletionChunkKind::CXCompletionChunk_RightParen), das::LineInfo());
-		addIEx("CXCompletionChunk_LeftBracket", "CXCompletionChunk_LeftBracket", int64_t(CXCompletionChunkKind::CXCompletionChunk_LeftBracket), das::LineInfo());
-		addIEx("CXCompletionChunk_RightBracket", "CXCompletionChunk_RightBracket", int64_t(CXCompletionChunkKind::CXCompletionChunk_RightBracket), das::LineInfo());
-		addIEx("CXCompletionChunk_LeftBrace", "CXCompletionChunk_LeftBrace", int64_t(CXCompletionChunkKind::CXCompletionChunk_LeftBrace), das::LineInfo());
-		addIEx("CXCompletionChunk_RightBrace", "CXCompletionChunk_RightBrace", int64_t(CXCompletionChunkKind::CXCompletionChunk_RightBrace), das::LineInfo());
-		addIEx("CXCompletionChunk_LeftAngle", "CXCompletionChunk_LeftAngle", int64_t(CXCompletionChunkKind::CXCompletionChunk_LeftAngle), das::LineInfo());
-		addIEx("CXCompletionChunk_RightAngle", "CXCompletionChunk_RightAngle", int64_t(CXCompletionChunkKind::CXCompletionChunk_RightAngle), das::LineInfo());
-		addIEx("CXCompletionChunk_Comma", "CXCompletionChunk_Comma", int64_t(CXCompletionChunkKind::CXCompletionChunk_Comma), das::LineInfo());
-		addIEx("CXCompletionChunk_ResultType", "CXCompletionChunk_ResultType", int64_t(CXCompletionChunkKind::CXCompletionChunk_ResultType), das::LineInfo());
-		addIEx("CXCompletionChunk_Colon", "CXCompletionChunk_Colon", int64_t(CXCompletionChunkKind::CXCompletionChunk_Colon), das::LineInfo());
-		addIEx("CXCompletionChunk_SemiColon", "CXCompletionChunk_SemiColon", int64_t(CXCompletionChunkKind::CXCompletionChunk_SemiColon), das::LineInfo());
-		addIEx("CXCompletionChunk_Equal", "CXCompletionChunk_Equal", int64_t(CXCompletionChunkKind::CXCompletionChunk_Equal), das::LineInfo());
-		addIEx("CXCompletionChunk_HorizontalSpace", "CXCompletionChunk_HorizontalSpace", int64_t(CXCompletionChunkKind::CXCompletionChunk_HorizontalSpace), das::LineInfo());
-		addIEx("CXCompletionChunk_VerticalSpace", "CXCompletionChunk_VerticalSpace", int64_t(CXCompletionChunkKind::CXCompletionChunk_VerticalSpace), das::LineInfo());
+		addIEx("Optional", "CXCompletionChunk_Optional", int64_t(CXCompletionChunkKind::CXCompletionChunk_Optional), das::LineInfo());
+		addIEx("TypedText", "CXCompletionChunk_TypedText", int64_t(CXCompletionChunkKind::CXCompletionChunk_TypedText), das::LineInfo());
+		addIEx("Text", "CXCompletionChunk_Text", int64_t(CXCompletionChunkKind::CXCompletionChunk_Text), das::LineInfo());
+		addIEx("Placeholder", "CXCompletionChunk_Placeholder", int64_t(CXCompletionChunkKind::CXCompletionChunk_Placeholder), das::LineInfo());
+		addIEx("Informative", "CXCompletionChunk_Informative", int64_t(CXCompletionChunkKind::CXCompletionChunk_Informative), das::LineInfo());
+		addIEx("CurrentParameter", "CXCompletionChunk_CurrentParameter", int64_t(CXCompletionChunkKind::CXCompletionChunk_CurrentParameter), das::LineInfo());
+		addIEx("LeftParen", "CXCompletionChunk_LeftParen", int64_t(CXCompletionChunkKind::CXCompletionChunk_LeftParen), das::LineInfo());
+		addIEx("RightParen", "CXCompletionChunk_RightParen", int64_t(CXCompletionChunkKind::CXCompletionChunk_RightParen), das::LineInfo());
+		addIEx("LeftBracket", "CXCompletionChunk_LeftBracket", int64_t(CXCompletionChunkKind::CXCompletionChunk_LeftBracket), das::LineInfo());
+		addIEx("RightBracket", "CXCompletionChunk_RightBracket", int64_t(CXCompletionChunkKind::CXCompletionChunk_RightBracket), das::LineInfo());
+		addIEx("LeftBrace", "CXCompletionChunk_LeftBrace", int64_t(CXCompletionChunkKind::CXCompletionChunk_LeftBrace), das::LineInfo());
+		addIEx("RightBrace", "CXCompletionChunk_RightBrace", int64_t(CXCompletionChunkKind::CXCompletionChunk_RightBrace), das::LineInfo());
+		addIEx("LeftAngle", "CXCompletionChunk_LeftAngle", int64_t(CXCompletionChunkKind::CXCompletionChunk_LeftAngle), das::LineInfo());
+		addIEx("RightAngle", "CXCompletionChunk_RightAngle", int64_t(CXCompletionChunkKind::CXCompletionChunk_RightAngle), das::LineInfo());
+		addIEx("Comma", "CXCompletionChunk_Comma", int64_t(CXCompletionChunkKind::CXCompletionChunk_Comma), das::LineInfo());
+		addIEx("ResultType", "CXCompletionChunk_ResultType", int64_t(CXCompletionChunkKind::CXCompletionChunk_ResultType), das::LineInfo());
+		addIEx("Colon", "CXCompletionChunk_Colon", int64_t(CXCompletionChunkKind::CXCompletionChunk_Colon), das::LineInfo());
+		addIEx("SemiColon", "CXCompletionChunk_SemiColon", int64_t(CXCompletionChunkKind::CXCompletionChunk_SemiColon), das::LineInfo());
+		addIEx("Equal", "CXCompletionChunk_Equal", int64_t(CXCompletionChunkKind::CXCompletionChunk_Equal), das::LineInfo());
+		addIEx("HorizontalSpace", "CXCompletionChunk_HorizontalSpace", int64_t(CXCompletionChunkKind::CXCompletionChunk_HorizontalSpace), das::LineInfo());
+		addIEx("VerticalSpace", "CXCompletionChunk_VerticalSpace", int64_t(CXCompletionChunkKind::CXCompletionChunk_VerticalSpace), das::LineInfo());
 	}
 };
 
@@ -918,11 +918,11 @@ public:
 		external = true;
 		cppName = "CXCodeComplete_Flags";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXCodeComplete_Flags >::type >::type;
-		addIEx("CXCodeComplete_IncludeMacros", "CXCodeComplete_IncludeMacros", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeMacros), das::LineInfo());
-		addIEx("CXCodeComplete_IncludeCodePatterns", "CXCodeComplete_IncludeCodePatterns", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeCodePatterns), das::LineInfo());
-		addIEx("CXCodeComplete_IncludeBriefComments", "CXCodeComplete_IncludeBriefComments", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeBriefComments), das::LineInfo());
-		addIEx("CXCodeComplete_SkipPreamble", "CXCodeComplete_SkipPreamble", int64_t(CXCodeComplete_Flags::CXCodeComplete_SkipPreamble), das::LineInfo());
-		addIEx("CXCodeComplete_IncludeCompletionsWithFixIts", "CXCodeComplete_IncludeCompletionsWithFixIts", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeCompletionsWithFixIts), das::LineInfo());
+		addIEx("IncludeMacros", "CXCodeComplete_IncludeMacros", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeMacros), das::LineInfo());
+		addIEx("IncludeCodePatterns", "CXCodeComplete_IncludeCodePatterns", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeCodePatterns), das::LineInfo());
+		addIEx("IncludeBriefComments", "CXCodeComplete_IncludeBriefComments", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeBriefComments), das::LineInfo());
+		addIEx("SkipPreamble", "CXCodeComplete_SkipPreamble", int64_t(CXCodeComplete_Flags::CXCodeComplete_SkipPreamble), das::LineInfo());
+		addIEx("IncludeCompletionsWithFixIts", "CXCodeComplete_IncludeCompletionsWithFixIts", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeCompletionsWithFixIts), das::LineInfo());
 	}
 };
 
@@ -966,13 +966,13 @@ public:
 		external = true;
 		cppName = "CXEvalResultKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXEvalResultKind >::type >::type;
-		addIEx("CXEval_Int", "CXEval_Int", int64_t(CXEvalResultKind::CXEval_Int), das::LineInfo());
-		addIEx("CXEval_Float", "CXEval_Float", int64_t(CXEvalResultKind::CXEval_Float), das::LineInfo());
-		addIEx("CXEval_ObjCStrLiteral", "CXEval_ObjCStrLiteral", int64_t(CXEvalResultKind::CXEval_ObjCStrLiteral), das::LineInfo());
-		addIEx("CXEval_StrLiteral", "CXEval_StrLiteral", int64_t(CXEvalResultKind::CXEval_StrLiteral), das::LineInfo());
-		addIEx("CXEval_CFStr", "CXEval_CFStr", int64_t(CXEvalResultKind::CXEval_CFStr), das::LineInfo());
-		addIEx("CXEval_Other", "CXEval_Other", int64_t(CXEvalResultKind::CXEval_Other), das::LineInfo());
-		addIEx("CXEval_UnExposed", "CXEval_UnExposed", int64_t(CXEvalResultKind::CXEval_UnExposed), das::LineInfo());
+		addIEx("Int", "CXEval_Int", int64_t(CXEvalResultKind::CXEval_Int), das::LineInfo());
+		addIEx("Float", "CXEval_Float", int64_t(CXEvalResultKind::CXEval_Float), das::LineInfo());
+		addIEx("ObjCStrLiteral", "CXEval_ObjCStrLiteral", int64_t(CXEvalResultKind::CXEval_ObjCStrLiteral), das::LineInfo());
+		addIEx("StrLiteral", "CXEval_StrLiteral", int64_t(CXEvalResultKind::CXEval_StrLiteral), das::LineInfo());
+		addIEx("CFStr", "CXEval_CFStr", int64_t(CXEvalResultKind::CXEval_CFStr), das::LineInfo());
+		addIEx("Other", "CXEval_Other", int64_t(CXEvalResultKind::CXEval_Other), das::LineInfo());
+		addIEx("UnExposed", "CXEval_UnExposed", int64_t(CXEvalResultKind::CXEval_UnExposed), das::LineInfo());
 	}
 };
 
@@ -982,8 +982,8 @@ public:
 		external = true;
 		cppName = "CXVisitorResult";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXVisitorResult >::type >::type;
-		addIEx("CXVisit_Break", "CXVisit_Break", int64_t(CXVisitorResult::CXVisit_Break), das::LineInfo());
-		addIEx("CXVisit_Continue", "CXVisit_Continue", int64_t(CXVisitorResult::CXVisit_Continue), das::LineInfo());
+		addIEx("Break", "CXVisit_Break", int64_t(CXVisitorResult::CXVisit_Break), das::LineInfo());
+		addIEx("Continue", "CXVisit_Continue", int64_t(CXVisitorResult::CXVisit_Continue), das::LineInfo());
 	}
 };
 
@@ -1005,33 +1005,33 @@ public:
 		external = true;
 		cppName = "CXIdxEntityKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityKind >::type >::type;
-		addIEx("CXIdxEntity_Unexposed", "CXIdxEntity_Unexposed", int64_t(CXIdxEntityKind::CXIdxEntity_Unexposed), das::LineInfo());
-		addIEx("CXIdxEntity_Typedef", "CXIdxEntity_Typedef", int64_t(CXIdxEntityKind::CXIdxEntity_Typedef), das::LineInfo());
-		addIEx("CXIdxEntity_Function", "CXIdxEntity_Function", int64_t(CXIdxEntityKind::CXIdxEntity_Function), das::LineInfo());
-		addIEx("CXIdxEntity_Variable", "CXIdxEntity_Variable", int64_t(CXIdxEntityKind::CXIdxEntity_Variable), das::LineInfo());
-		addIEx("CXIdxEntity_Field", "CXIdxEntity_Field", int64_t(CXIdxEntityKind::CXIdxEntity_Field), das::LineInfo());
-		addIEx("CXIdxEntity_EnumConstant", "CXIdxEntity_EnumConstant", int64_t(CXIdxEntityKind::CXIdxEntity_EnumConstant), das::LineInfo());
-		addIEx("CXIdxEntity_ObjCClass", "CXIdxEntity_ObjCClass", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCClass), das::LineInfo());
-		addIEx("CXIdxEntity_ObjCProtocol", "CXIdxEntity_ObjCProtocol", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCProtocol), das::LineInfo());
-		addIEx("CXIdxEntity_ObjCCategory", "CXIdxEntity_ObjCCategory", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCCategory), das::LineInfo());
-		addIEx("CXIdxEntity_ObjCInstanceMethod", "CXIdxEntity_ObjCInstanceMethod", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCInstanceMethod), das::LineInfo());
-		addIEx("CXIdxEntity_ObjCClassMethod", "CXIdxEntity_ObjCClassMethod", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCClassMethod), das::LineInfo());
-		addIEx("CXIdxEntity_ObjCProperty", "CXIdxEntity_ObjCProperty", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCProperty), das::LineInfo());
-		addIEx("CXIdxEntity_ObjCIvar", "CXIdxEntity_ObjCIvar", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCIvar), das::LineInfo());
-		addIEx("CXIdxEntity_Enum", "CXIdxEntity_Enum", int64_t(CXIdxEntityKind::CXIdxEntity_Enum), das::LineInfo());
-		addIEx("CXIdxEntity_Struct", "CXIdxEntity_Struct", int64_t(CXIdxEntityKind::CXIdxEntity_Struct), das::LineInfo());
-		addIEx("CXIdxEntity_Union", "CXIdxEntity_Union", int64_t(CXIdxEntityKind::CXIdxEntity_Union), das::LineInfo());
-		addIEx("CXIdxEntity_CXXClass", "CXIdxEntity_CXXClass", int64_t(CXIdxEntityKind::CXIdxEntity_CXXClass), das::LineInfo());
-		addIEx("CXIdxEntity_CXXNamespace", "CXIdxEntity_CXXNamespace", int64_t(CXIdxEntityKind::CXIdxEntity_CXXNamespace), das::LineInfo());
-		addIEx("CXIdxEntity_CXXNamespaceAlias", "CXIdxEntity_CXXNamespaceAlias", int64_t(CXIdxEntityKind::CXIdxEntity_CXXNamespaceAlias), das::LineInfo());
-		addIEx("CXIdxEntity_CXXStaticVariable", "CXIdxEntity_CXXStaticVariable", int64_t(CXIdxEntityKind::CXIdxEntity_CXXStaticVariable), das::LineInfo());
-		addIEx("CXIdxEntity_CXXStaticMethod", "CXIdxEntity_CXXStaticMethod", int64_t(CXIdxEntityKind::CXIdxEntity_CXXStaticMethod), das::LineInfo());
-		addIEx("CXIdxEntity_CXXInstanceMethod", "CXIdxEntity_CXXInstanceMethod", int64_t(CXIdxEntityKind::CXIdxEntity_CXXInstanceMethod), das::LineInfo());
-		addIEx("CXIdxEntity_CXXConstructor", "CXIdxEntity_CXXConstructor", int64_t(CXIdxEntityKind::CXIdxEntity_CXXConstructor), das::LineInfo());
-		addIEx("CXIdxEntity_CXXDestructor", "CXIdxEntity_CXXDestructor", int64_t(CXIdxEntityKind::CXIdxEntity_CXXDestructor), das::LineInfo());
-		addIEx("CXIdxEntity_CXXConversionFunction", "CXIdxEntity_CXXConversionFunction", int64_t(CXIdxEntityKind::CXIdxEntity_CXXConversionFunction), das::LineInfo());
-		addIEx("CXIdxEntity_CXXTypeAlias", "CXIdxEntity_CXXTypeAlias", int64_t(CXIdxEntityKind::CXIdxEntity_CXXTypeAlias), das::LineInfo());
-		addIEx("CXIdxEntity_CXXInterface", "CXIdxEntity_CXXInterface", int64_t(CXIdxEntityKind::CXIdxEntity_CXXInterface), das::LineInfo());
+		addIEx("Unexposed", "CXIdxEntity_Unexposed", int64_t(CXIdxEntityKind::CXIdxEntity_Unexposed), das::LineInfo());
+		addIEx("Typedef", "CXIdxEntity_Typedef", int64_t(CXIdxEntityKind::CXIdxEntity_Typedef), das::LineInfo());
+		addIEx("Function", "CXIdxEntity_Function", int64_t(CXIdxEntityKind::CXIdxEntity_Function), das::LineInfo());
+		addIEx("Variable", "CXIdxEntity_Variable", int64_t(CXIdxEntityKind::CXIdxEntity_Variable), das::LineInfo());
+		addIEx("Field", "CXIdxEntity_Field", int64_t(CXIdxEntityKind::CXIdxEntity_Field), das::LineInfo());
+		addIEx("EnumConstant", "CXIdxEntity_EnumConstant", int64_t(CXIdxEntityKind::CXIdxEntity_EnumConstant), das::LineInfo());
+		addIEx("ObjCClass", "CXIdxEntity_ObjCClass", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCClass), das::LineInfo());
+		addIEx("ObjCProtocol", "CXIdxEntity_ObjCProtocol", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCProtocol), das::LineInfo());
+		addIEx("ObjCCategory", "CXIdxEntity_ObjCCategory", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCCategory), das::LineInfo());
+		addIEx("ObjCInstanceMethod", "CXIdxEntity_ObjCInstanceMethod", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCInstanceMethod), das::LineInfo());
+		addIEx("ObjCClassMethod", "CXIdxEntity_ObjCClassMethod", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCClassMethod), das::LineInfo());
+		addIEx("ObjCProperty", "CXIdxEntity_ObjCProperty", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCProperty), das::LineInfo());
+		addIEx("ObjCIvar", "CXIdxEntity_ObjCIvar", int64_t(CXIdxEntityKind::CXIdxEntity_ObjCIvar), das::LineInfo());
+		addIEx("Enum", "CXIdxEntity_Enum", int64_t(CXIdxEntityKind::CXIdxEntity_Enum), das::LineInfo());
+		addIEx("Struct", "CXIdxEntity_Struct", int64_t(CXIdxEntityKind::CXIdxEntity_Struct), das::LineInfo());
+		addIEx("Union", "CXIdxEntity_Union", int64_t(CXIdxEntityKind::CXIdxEntity_Union), das::LineInfo());
+		addIEx("CXXClass", "CXIdxEntity_CXXClass", int64_t(CXIdxEntityKind::CXIdxEntity_CXXClass), das::LineInfo());
+		addIEx("CXXNamespace", "CXIdxEntity_CXXNamespace", int64_t(CXIdxEntityKind::CXIdxEntity_CXXNamespace), das::LineInfo());
+		addIEx("CXXNamespaceAlias", "CXIdxEntity_CXXNamespaceAlias", int64_t(CXIdxEntityKind::CXIdxEntity_CXXNamespaceAlias), das::LineInfo());
+		addIEx("CXXStaticVariable", "CXIdxEntity_CXXStaticVariable", int64_t(CXIdxEntityKind::CXIdxEntity_CXXStaticVariable), das::LineInfo());
+		addIEx("CXXStaticMethod", "CXIdxEntity_CXXStaticMethod", int64_t(CXIdxEntityKind::CXIdxEntity_CXXStaticMethod), das::LineInfo());
+		addIEx("CXXInstanceMethod", "CXIdxEntity_CXXInstanceMethod", int64_t(CXIdxEntityKind::CXIdxEntity_CXXInstanceMethod), das::LineInfo());
+		addIEx("CXXConstructor", "CXIdxEntity_CXXConstructor", int64_t(CXIdxEntityKind::CXIdxEntity_CXXConstructor), das::LineInfo());
+		addIEx("CXXDestructor", "CXIdxEntity_CXXDestructor", int64_t(CXIdxEntityKind::CXIdxEntity_CXXDestructor), das::LineInfo());
+		addIEx("CXXConversionFunction", "CXIdxEntity_CXXConversionFunction", int64_t(CXIdxEntityKind::CXIdxEntity_CXXConversionFunction), das::LineInfo());
+		addIEx("CXXTypeAlias", "CXIdxEntity_CXXTypeAlias", int64_t(CXIdxEntityKind::CXIdxEntity_CXXTypeAlias), das::LineInfo());
+		addIEx("CXXInterface", "CXIdxEntity_CXXInterface", int64_t(CXIdxEntityKind::CXIdxEntity_CXXInterface), das::LineInfo());
 	}
 };
 
@@ -1041,11 +1041,11 @@ public:
 		external = true;
 		cppName = "CXIdxEntityLanguage";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityLanguage >::type >::type;
-		addIEx("CXIdxEntityLang_None", "CXIdxEntityLang_None", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_None), das::LineInfo());
-		addIEx("CXIdxEntityLang_C", "CXIdxEntityLang_C", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_C), das::LineInfo());
-		addIEx("CXIdxEntityLang_ObjC", "CXIdxEntityLang_ObjC", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_ObjC), das::LineInfo());
-		addIEx("CXIdxEntityLang_CXX", "CXIdxEntityLang_CXX", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_CXX), das::LineInfo());
-		addIEx("CXIdxEntityLang_Swift", "CXIdxEntityLang_Swift", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_Swift), das::LineInfo());
+		addIEx("None", "CXIdxEntityLang_None", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_None), das::LineInfo());
+		addIEx("C", "CXIdxEntityLang_C", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_C), das::LineInfo());
+		addIEx("ObjC", "CXIdxEntityLang_ObjC", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_ObjC), das::LineInfo());
+		addIEx("CXX", "CXIdxEntityLang_CXX", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_CXX), das::LineInfo());
+		addIEx("Swift", "CXIdxEntityLang_Swift", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_Swift), das::LineInfo());
 	}
 };
 
@@ -1055,10 +1055,10 @@ public:
 		external = true;
 		cppName = "CXIdxEntityCXXTemplateKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityCXXTemplateKind >::type >::type;
-		addIEx("CXIdxEntity_NonTemplate", "CXIdxEntity_NonTemplate", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_NonTemplate), das::LineInfo());
-		addIEx("CXIdxEntity_Template", "CXIdxEntity_Template", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_Template), das::LineInfo());
-		addIEx("CXIdxEntity_TemplatePartialSpecialization", "CXIdxEntity_TemplatePartialSpecialization", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_TemplatePartialSpecialization), das::LineInfo());
-		addIEx("CXIdxEntity_TemplateSpecialization", "CXIdxEntity_TemplateSpecialization", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_TemplateSpecialization), das::LineInfo());
+		addIEx("NonTemplate", "CXIdxEntity_NonTemplate", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_NonTemplate), das::LineInfo());
+		addIEx("Template", "CXIdxEntity_Template", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_Template), das::LineInfo());
+		addIEx("TemplatePartialSpecialization", "CXIdxEntity_TemplatePartialSpecialization", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_TemplatePartialSpecialization), das::LineInfo());
+		addIEx("TemplateSpecialization", "CXIdxEntity_TemplateSpecialization", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_TemplateSpecialization), das::LineInfo());
 	}
 };
 
@@ -1068,10 +1068,10 @@ public:
 		external = true;
 		cppName = "CXIdxAttrKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxAttrKind >::type >::type;
-		addIEx("CXIdxAttr_Unexposed", "CXIdxAttr_Unexposed", int64_t(CXIdxAttrKind::CXIdxAttr_Unexposed), das::LineInfo());
-		addIEx("CXIdxAttr_IBAction", "CXIdxAttr_IBAction", int64_t(CXIdxAttrKind::CXIdxAttr_IBAction), das::LineInfo());
-		addIEx("CXIdxAttr_IBOutlet", "CXIdxAttr_IBOutlet", int64_t(CXIdxAttrKind::CXIdxAttr_IBOutlet), das::LineInfo());
-		addIEx("CXIdxAttr_IBOutletCollection", "CXIdxAttr_IBOutletCollection", int64_t(CXIdxAttrKind::CXIdxAttr_IBOutletCollection), das::LineInfo());
+		addIEx("Unexposed", "CXIdxAttr_Unexposed", int64_t(CXIdxAttrKind::CXIdxAttr_Unexposed), das::LineInfo());
+		addIEx("IBAction", "CXIdxAttr_IBAction", int64_t(CXIdxAttrKind::CXIdxAttr_IBAction), das::LineInfo());
+		addIEx("IBOutlet", "CXIdxAttr_IBOutlet", int64_t(CXIdxAttrKind::CXIdxAttr_IBOutlet), das::LineInfo());
+		addIEx("IBOutletCollection", "CXIdxAttr_IBOutletCollection", int64_t(CXIdxAttrKind::CXIdxAttr_IBOutletCollection), das::LineInfo());
 	}
 };
 
@@ -1081,7 +1081,7 @@ public:
 		external = true;
 		cppName = "CXIdxDeclInfoFlags";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxDeclInfoFlags >::type >::type;
-		addIEx("CXIdxDeclFlag_Skipped", "CXIdxDeclFlag_Skipped", int64_t(CXIdxDeclInfoFlags::CXIdxDeclFlag_Skipped), das::LineInfo());
+		addIEx("Skipped", "CXIdxDeclFlag_Skipped", int64_t(CXIdxDeclInfoFlags::CXIdxDeclFlag_Skipped), das::LineInfo());
 	}
 };
 
@@ -1091,9 +1091,9 @@ public:
 		external = true;
 		cppName = "CXIdxObjCContainerKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxObjCContainerKind >::type >::type;
-		addIEx("CXIdxObjCContainer_ForwardRef", "CXIdxObjCContainer_ForwardRef", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_ForwardRef), das::LineInfo());
-		addIEx("CXIdxObjCContainer_Interface", "CXIdxObjCContainer_Interface", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_Interface), das::LineInfo());
-		addIEx("CXIdxObjCContainer_Implementation", "CXIdxObjCContainer_Implementation", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_Implementation), das::LineInfo());
+		addIEx("ForwardRef", "CXIdxObjCContainer_ForwardRef", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_ForwardRef), das::LineInfo());
+		addIEx("Interface", "CXIdxObjCContainer_Interface", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_Interface), das::LineInfo());
+		addIEx("Implementation", "CXIdxObjCContainer_Implementation", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_Implementation), das::LineInfo());
 	}
 };
 
@@ -1103,8 +1103,8 @@ public:
 		external = true;
 		cppName = "CXIdxEntityRefKind";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityRefKind >::type >::type;
-		addIEx("CXIdxEntityRef_Direct", "CXIdxEntityRef_Direct", int64_t(CXIdxEntityRefKind::CXIdxEntityRef_Direct), das::LineInfo());
-		addIEx("CXIdxEntityRef_Implicit", "CXIdxEntityRef_Implicit", int64_t(CXIdxEntityRefKind::CXIdxEntityRef_Implicit), das::LineInfo());
+		addIEx("Direct", "CXIdxEntityRef_Direct", int64_t(CXIdxEntityRefKind::CXIdxEntityRef_Direct), das::LineInfo());
+		addIEx("Implicit", "CXIdxEntityRef_Implicit", int64_t(CXIdxEntityRefKind::CXIdxEntityRef_Implicit), das::LineInfo());
 	}
 };
 
@@ -1133,12 +1133,12 @@ public:
 		external = true;
 		cppName = "CXIndexOptFlags";
 		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIndexOptFlags >::type >::type;
-		addIEx("CXIndexOpt_None", "CXIndexOpt_None", int64_t(CXIndexOptFlags::CXIndexOpt_None), das::LineInfo());
-		addIEx("CXIndexOpt_SuppressRedundantRefs", "CXIndexOpt_SuppressRedundantRefs", int64_t(CXIndexOptFlags::CXIndexOpt_SuppressRedundantRefs), das::LineInfo());
-		addIEx("CXIndexOpt_IndexFunctionLocalSymbols", "CXIndexOpt_IndexFunctionLocalSymbols", int64_t(CXIndexOptFlags::CXIndexOpt_IndexFunctionLocalSymbols), das::LineInfo());
-		addIEx("CXIndexOpt_IndexImplicitTemplateInstantiations", "CXIndexOpt_IndexImplicitTemplateInstantiations", int64_t(CXIndexOptFlags::CXIndexOpt_IndexImplicitTemplateInstantiations), das::LineInfo());
-		addIEx("CXIndexOpt_SuppressWarnings", "CXIndexOpt_SuppressWarnings", int64_t(CXIndexOptFlags::CXIndexOpt_SuppressWarnings), das::LineInfo());
-		addIEx("CXIndexOpt_SkipParsedBodiesInSession", "CXIndexOpt_SkipParsedBodiesInSession", int64_t(CXIndexOptFlags::CXIndexOpt_SkipParsedBodiesInSession), das::LineInfo());
+		addIEx("None", "CXIndexOpt_None", int64_t(CXIndexOptFlags::CXIndexOpt_None), das::LineInfo());
+		addIEx("SuppressRedundantRefs", "CXIndexOpt_SuppressRedundantRefs", int64_t(CXIndexOptFlags::CXIndexOpt_SuppressRedundantRefs), das::LineInfo());
+		addIEx("IndexFunctionLocalSymbols", "CXIndexOpt_IndexFunctionLocalSymbols", int64_t(CXIndexOptFlags::CXIndexOpt_IndexFunctionLocalSymbols), das::LineInfo());
+		addIEx("IndexImplicitTemplateInstantiations", "CXIndexOpt_IndexImplicitTemplateInstantiations", int64_t(CXIndexOptFlags::CXIndexOpt_IndexImplicitTemplateInstantiations), das::LineInfo());
+		addIEx("SuppressWarnings", "CXIndexOpt_SuppressWarnings", int64_t(CXIndexOptFlags::CXIndexOpt_SuppressWarnings), das::LineInfo());
+		addIEx("SkipParsedBodiesInSession", "CXIndexOpt_SkipParsedBodiesInSession", int64_t(CXIndexOptFlags::CXIndexOpt_SkipParsedBodiesInSession), das::LineInfo());
 	}
 };
 

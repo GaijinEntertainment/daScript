@@ -303,7 +303,7 @@ class AnyGenBind
                     if !skip_function(c)
                         parse_FunctionDecl(c)
                     return CXChildVisitResult Continue
-                elif kind == CXCursorKind StructDecl
+                elif kind == CXCursorKind StructDecl || kind == CXCursorKind ClassDecl
                     let struct_name = string(clang_getCursorSpelling(c))
                     if empty(struct_name)
                         if hasEmptyStruct
@@ -327,7 +327,12 @@ class AnyGenBind
                         parse_Enum(c, enum_name)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind FieldDecl
-                    parse_Field(c)
+                    let acs = clang_getCXXAccessSpecifier(c)
+                    if acs != CX_CXXAccessSpecifier Public
+                        let field_name = string(clang_getCursorSpelling(c))
+                        to_log(LOG_INFO, "skipping {namespace_name(field_name)} due to access specifier {acs}")
+                    else
+                        parse_Field(c)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind VarDecl
                     let var_decl_name = string(clang_getCursorSpelling(c))

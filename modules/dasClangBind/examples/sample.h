@@ -3,25 +3,23 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-typedef int ( * fnptr ) ( int, int );
+class Foo {
+public:
+    int a;
+private:
+    int b;
+};
 
-void take_arg_ptr ( int a, fnptr b );
 
-fnptr return_ptr ( void );
+#if 0
 
 inline int global_function ( float a, const char * b ) { printf("hello, world\n"); }
-
-struct Foo {
-    int a;
-};
 
 Foo & ret_ref_foo();
 
 namespace goo  {
     Foo ret_foo();
 }
-
-#if 0
 
 typedef struct {
     int a;
