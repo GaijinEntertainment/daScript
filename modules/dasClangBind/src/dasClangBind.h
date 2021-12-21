@@ -8,6 +8,7 @@ public:
 	Module_dasClangBind();
 protected:
 	void initMain ( ModuleLibrary & lib );
+	virtual ModuleAotType aotRequire ( TextWriter & tw ) const override;
 	#include "dasClangBind.func.decl.inc"
 };
 }

@@ -6,6 +6,7 @@
 #include "daScript/simulate/bind_enum.h"
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
+#include "aot_dasClangBind.h"
 
 namespace das {
 
@@ -51,6 +52,13 @@ void Module_dasClangBind::initMain ( ModuleLibrary & lib ) {
     addExtern<DAS_BIND_FUN(das_clangVisitChildren)>(*this, lib,  "clang_visitChildren",
         SideEffects::worstDefault, "das_clangVisitChildren")
             ->args({"cursor","block","context","line"});
+}
+
+ModuleAotType Module_dasClangBind::aotRequire ( TextWriter & tw ) const {
+    // add your stuff here
+    tw << "#include <clang-c/Index.h>\n";
+    tw << "#include \"../modules/dasClangBind/src/aot_dasClangBind.h\"\n";
+    return ModuleAotType::cpp;
 }
 
 }

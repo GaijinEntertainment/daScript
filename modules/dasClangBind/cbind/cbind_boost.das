@@ -744,6 +744,7 @@ class CppGenBind : AnyGenBind
         module_h_file |> fwrite("\tModule_{bind_module}();\n")
         module_h_file |> fwrite("protected:\n")
         module_h_file |> fwrite("\tvoid initMain ( ModuleLibrary & lib );\n")
+        module_h_file |> fwrite("\tvirtual ModuleAotType aotRequire ( TextWriter & tw ) const override;\n")
         module_h_file |> fwrite("\t#include \"{bind_module}.func.decl.inc\"\n")
         module_h_file |> fwrite("};\n")
         module_h_file |> fwrite("}\n\n")
