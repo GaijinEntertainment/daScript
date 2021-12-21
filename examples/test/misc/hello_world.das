@@ -1,74 +1,13 @@
-require uriparser
-
-
 [export]
 def main
+    var q <- [[for x in range(5); x]]
+    for i in flatten(q)
+        print("q[{i}] = {i}\n")
 
-    print("uri size is {typeinfo(sizeof type<Uri>)}\n")
+    var qq <- [[for x in range(3); [[for y in range(4); x*4+y ]]  ]]
+    for i in flatten(qq)
+        print("qq[{i}] = {i}\n")
 
-    var dir = "dir"
-    print("\n{dir}\n")
-    Uri("test.das") |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
-
-    dir = "/dir"
-    print("\n{dir}\n")
-    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
-
-    dir = "./dir"
-    print("\n{dir}\n")
-    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
-
-    dir = "file://dir"
-    print("\n{dir}\n")
-    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
-
-    dir = "file:///dir"
-    print("\n{dir}\n")
-    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
-
-    dir = "file://./dir"
-    print("\n{dir}\n")
-    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
-
-
-    // dir = "file://dir/"
-    // print("\n{dir}\n")
-    // Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
-    // Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
-    // Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
-    // Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
-
-    // dir = "file:///dir/"
-    // print("\n{dir}\n")
-    // Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
-    // Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
-    // Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
-    // Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
-
-    dir = "file://./dir/"
-    print("\n{dir}\n")
-    Uri("test.das") |> add_base_uri <| Uri(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_unix_file_name(dir) |> to_file_name |> debug()
-    Uri("test.das") |> add_base_uri <| uri_from_windows_file_name(dir) |> to_file_name |> debug()
-
-
+    var qqq <- [[for x in range(3); [[for y in range(2); [[for z in range(2); x*2*2 + y*2 + z ]] ]]  ]]
+    for i in flatten(qqq)
+        print("qqq[{i}] = {i}\n")

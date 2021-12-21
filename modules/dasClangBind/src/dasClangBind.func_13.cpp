@@ -11,8 +11,6 @@
 #include "need_dasClangBind.h"
 namespace das {
 void Module_dasClangBind::initFunctions_13() {
-	addExtern<unsigned int (*)(CXCursor),clang_CXXMethod_isPureVirtual>(*this,lib,"clang_CXXMethod_isPureVirtual",SideEffects::worstDefault,"clang_CXXMethod_isPureVirtual")
-		->args({"C"});
 	addExtern<unsigned int (*)(CXCursor),clang_CXXMethod_isStatic>(*this,lib,"clang_CXXMethod_isStatic",SideEffects::worstDefault,"clang_CXXMethod_isStatic")
 		->args({"C"});
 	addExtern<unsigned int (*)(CXCursor),clang_CXXMethod_isVirtual>(*this,lib,"clang_CXXMethod_isVirtual",SideEffects::worstDefault,"clang_CXXMethod_isVirtual")
@@ -50,6 +48,8 @@ void Module_dasClangBind::initFunctions_13() {
 	addExtern<void (*)(CXCursor,const char **,const char **,unsigned int *,unsigned int *,unsigned int *,unsigned int *),clang_getDefinitionSpellingAndExtent>(*this,lib,"clang_getDefinitionSpellingAndExtent",SideEffects::worstDefault,"clang_getDefinitionSpellingAndExtent")
 		->args({"","startBuf","endBuf","startLine","startColumn","endLine","endColumn"});
 	addExtern<void (*)(),clang_enableStackTraces>(*this,lib,"clang_enableStackTraces",SideEffects::worstDefault,"clang_enableStackTraces");
+	addExtern<CXCompletionChunkKind (*)(void *,unsigned int),clang_getCompletionChunkKind>(*this,lib,"clang_getCompletionChunkKind",SideEffects::worstDefault,"clang_getCompletionChunkKind")
+		->args({"completion_string","chunk_number"});
 }
 }
 

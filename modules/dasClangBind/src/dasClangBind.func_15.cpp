@@ -11,10 +11,6 @@
 #include "need_dasClangBind.h"
 namespace das {
 void Module_dasClangBind::initFunctions_15() {
-	addExtern<unsigned long long (*)(CXCodeCompleteResults *),clang_codeCompleteGetContexts>(*this,lib,"clang_codeCompleteGetContexts",SideEffects::worstDefault,"clang_codeCompleteGetContexts")
-		->args({"Results"});
-	addExtern<CXCursorKind (*)(CXCodeCompleteResults *,unsigned int *),clang_codeCompleteGetContainerKind>(*this,lib,"clang_codeCompleteGetContainerKind",SideEffects::worstDefault,"clang_codeCompleteGetContainerKind")
-		->args({"Results","IsIncomplete"});
 	addExtern<CXString (*)(CXCodeCompleteResults *),clang_codeCompleteGetContainerUSR,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_codeCompleteGetContainerUSR",SideEffects::worstDefault,"clang_codeCompleteGetContainerUSR")
 		->args({"Results"});
 	addExtern<CXString (*)(CXCodeCompleteResults *),clang_codeCompleteGetObjCSelector,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_codeCompleteGetObjCSelector",SideEffects::worstDefault,"clang_codeCompleteGetObjCSelector")
@@ -22,8 +18,6 @@ void Module_dasClangBind::initFunctions_15() {
 	addExtern<CXString (*)(),clang_getClangVersion,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getClangVersion",SideEffects::worstDefault,"clang_getClangVersion");
 	addExtern<void (*)(unsigned int),clang_toggleCrashRecovery>(*this,lib,"clang_toggleCrashRecovery",SideEffects::worstDefault,"clang_toggleCrashRecovery")
 		->args({"isEnabled"});
-	addExtern<void (*)(CXTranslationUnitImpl *,void (*)(void *, CXSourceLocation *, unsigned int, void *),void *),clang_getInclusions>(*this,lib,"clang_getInclusions",SideEffects::worstDefault,"clang_getInclusions")
-		->args({"tu","visitor","client_data"});
 	addExtern<void * (*)(CXCursor),clang_Cursor_Evaluate>(*this,lib,"clang_Cursor_Evaluate",SideEffects::worstDefault,"clang_Cursor_Evaluate")
 		->args({"C"});
 	addExtern<CXEvalResultKind (*)(void *),clang_EvalResult_getKind>(*this,lib,"clang_EvalResult_getKind",SideEffects::worstDefault,"clang_EvalResult_getKind")
@@ -50,6 +44,12 @@ void Module_dasClangBind::initFunctions_15() {
 		->args({""});
 	addExtern<void (*)(void *,unsigned int,CXString *,CXString *),clang_remap_getFilenames>(*this,lib,"clang_remap_getFilenames",SideEffects::worstDefault,"clang_remap_getFilenames")
 		->args({"","index","original","transformed"});
+	addExtern<void (*)(void *),clang_remap_dispose>(*this,lib,"clang_remap_dispose",SideEffects::worstDefault,"clang_remap_dispose")
+		->args({""});
+	addExtern<CXResult (*)(CXCursor,void *,CXCursorAndRangeVisitor),clang_findReferencesInFile>(*this,lib,"clang_findReferencesInFile",SideEffects::worstDefault,"clang_findReferencesInFile")
+		->args({"cursor","file","visitor"});
+	addExtern<CXResult (*)(CXTranslationUnitImpl *,void *,CXCursorAndRangeVisitor),clang_findIncludesInFile>(*this,lib,"clang_findIncludesInFile",SideEffects::worstDefault,"clang_findIncludesInFile")
+		->args({"TU","file","visitor"});
 }
 }
 

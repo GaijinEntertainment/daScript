@@ -29,8 +29,6 @@ void Module_dasClangBind::initFunctions_10() {
 		->args({"cursor","index"});
 	addExtern<CXType (*)(CXCursor),clang_getIBOutletCollectionType,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getIBOutletCollectionType",SideEffects::worstDefault,"clang_getIBOutletCollectionType")
 		->args({""});
-	addExtern<unsigned int (*)(CXCursor,CXChildVisitResult (*)(CXCursor, CXCursor, void *),void *),clang_visitChildren>(*this,lib,"clang_visitChildren",SideEffects::worstDefault,"clang_visitChildren")
-		->args({"parent","visitor","client_data"});
 	addExtern<CXString (*)(CXCursor),clang_getCursorUSR,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getCursorUSR",SideEffects::worstDefault,"clang_getCursorUSR")
 		->args({""});
 	addExtern<CXString (*)(const char *),clang_constructUSR_ObjCClass,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_constructUSR_ObjCClass",SideEffects::worstDefault,"clang_constructUSR_ObjCClass")
@@ -51,6 +49,8 @@ void Module_dasClangBind::initFunctions_10() {
 		->args({"","pieceIndex","options"});
 	addExtern<unsigned int (*)(void *,CXPrintingPolicyProperty),clang_PrintingPolicy_getProperty>(*this,lib,"clang_PrintingPolicy_getProperty",SideEffects::worstDefault,"clang_PrintingPolicy_getProperty")
 		->args({"Policy","Property"});
+	addExtern<void (*)(void *,CXPrintingPolicyProperty,unsigned int),clang_PrintingPolicy_setProperty>(*this,lib,"clang_PrintingPolicy_setProperty",SideEffects::worstDefault,"clang_PrintingPolicy_setProperty")
+		->args({"Policy","Property","Value"});
 }
 }
 

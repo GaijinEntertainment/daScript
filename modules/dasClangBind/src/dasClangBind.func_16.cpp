@@ -11,12 +11,6 @@
 #include "need_dasClangBind.h"
 namespace das {
 void Module_dasClangBind::initFunctions_16() {
-	addExtern<void (*)(void *),clang_remap_dispose>(*this,lib,"clang_remap_dispose",SideEffects::worstDefault,"clang_remap_dispose")
-		->args({""});
-	addExtern<CXResult (*)(CXCursor,void *,CXCursorAndRangeVisitor),clang_findReferencesInFile>(*this,lib,"clang_findReferencesInFile",SideEffects::worstDefault,"clang_findReferencesInFile")
-		->args({"cursor","file","visitor"});
-	addExtern<CXResult (*)(CXTranslationUnitImpl *,void *,CXCursorAndRangeVisitor),clang_findIncludesInFile>(*this,lib,"clang_findIncludesInFile",SideEffects::worstDefault,"clang_findIncludesInFile")
-		->args({"TU","file","visitor"});
 	addExtern<int (*)(CXIdxEntityKind),clang_index_isEntityObjCContainerKind>(*this,lib,"clang_index_isEntityObjCContainerKind",SideEffects::worstDefault,"clang_index_isEntityObjCContainerKind")
 		->args({""});
 	addExtern<const CXIdxObjCContainerDeclInfo * (*)(const CXIdxDeclInfo *),clang_index_getObjCContainerDeclInfo>(*this,lib,"clang_index_getObjCContainerDeclInfo",SideEffects::worstDefault,"clang_index_getObjCContainerDeclInfo")
@@ -51,6 +45,10 @@ void Module_dasClangBind::initFunctions_16() {
 		->args({"","client_data","index_callbacks","index_callbacks_size","index_options","source_filename","command_line_args","num_command_line_args","unsaved_files","num_unsaved_files","out_TU","TU_options"});
 	addExtern<int (*)(void *,void *,IndexerCallbacks *,unsigned int,unsigned int,CXTranslationUnitImpl *),clang_indexTranslationUnit>(*this,lib,"clang_indexTranslationUnit",SideEffects::worstDefault,"clang_indexTranslationUnit")
 		->args({"","client_data","index_callbacks","index_callbacks_size","index_options",""});
+	addExtern<void (*)(CXIdxLoc,void **,void **,unsigned int *,unsigned int *,unsigned int *),clang_indexLoc_getFileLocation>(*this,lib,"clang_indexLoc_getFileLocation",SideEffects::worstDefault,"clang_indexLoc_getFileLocation")
+		->args({"loc","indexFile","file","line","column","offset"});
+	addExtern<CXSourceLocation (*)(CXIdxLoc),clang_indexLoc_getCXSourceLocation,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_indexLoc_getCXSourceLocation",SideEffects::worstDefault,"clang_indexLoc_getCXSourceLocation")
+		->args({"loc"});
 }
 }
 

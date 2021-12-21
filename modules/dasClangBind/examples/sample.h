@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+typedef int ( * fnptr ) ( int, int );
+
+void take_arg_ptr ( int a, fnptr b );
+
+fnptr return_ptr ( void );
+
 inline int global_function ( float a, const char * b ) { printf("hello, world\n"); }
 
 struct Foo {

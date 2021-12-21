@@ -11,10 +11,6 @@
 #include "need_dasClangBind.h"
 namespace das {
 void Module_dasClangBind::initFunctions_14() {
-	addExtern<void (*)(void (*)(void *),void *,unsigned int),clang_executeOnThread>(*this,lib,"clang_executeOnThread",SideEffects::worstDefault,"clang_executeOnThread")
-		->args({"fn","user_data","stack_size"});
-	addExtern<CXCompletionChunkKind (*)(void *,unsigned int),clang_getCompletionChunkKind>(*this,lib,"clang_getCompletionChunkKind",SideEffects::worstDefault,"clang_getCompletionChunkKind")
-		->args({"completion_string","chunk_number"});
 	addExtern<CXString (*)(void *,unsigned int),clang_getCompletionChunkText,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getCompletionChunkText",SideEffects::worstDefault,"clang_getCompletionChunkText")
 		->args({"completion_string","chunk_number"});
 	addExtern<void * (*)(void *,unsigned int),clang_getCompletionChunkCompletionString>(*this,lib,"clang_getCompletionChunkCompletionString",SideEffects::worstDefault,"clang_getCompletionChunkCompletionString")
@@ -50,6 +46,10 @@ void Module_dasClangBind::initFunctions_14() {
 		->args({"Results"});
 	addExtern<void * (*)(CXCodeCompleteResults *,unsigned int),clang_codeCompleteGetDiagnostic>(*this,lib,"clang_codeCompleteGetDiagnostic",SideEffects::worstDefault,"clang_codeCompleteGetDiagnostic")
 		->args({"Results","Index"});
+	addExtern<unsigned long long (*)(CXCodeCompleteResults *),clang_codeCompleteGetContexts>(*this,lib,"clang_codeCompleteGetContexts",SideEffects::worstDefault,"clang_codeCompleteGetContexts")
+		->args({"Results"});
+	addExtern<CXCursorKind (*)(CXCodeCompleteResults *,unsigned int *),clang_codeCompleteGetContainerKind>(*this,lib,"clang_codeCompleteGetContainerKind",SideEffects::worstDefault,"clang_codeCompleteGetContainerKind")
+		->args({"Results","IsIncomplete"});
 }
 }
 

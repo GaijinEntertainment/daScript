@@ -11,8 +11,6 @@
 #include "need_dasClangBind.h"
 namespace das {
 void Module_dasClangBind::initFunctions_12() {
-	addExtern<CXString (*)(CXCursor),clang_Cursor_getRawCommentText,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Cursor_getRawCommentText",SideEffects::worstDefault,"clang_Cursor_getRawCommentText")
-		->args({"C"});
 	addExtern<CXString (*)(CXCursor),clang_Cursor_getBriefCommentText,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Cursor_getBriefCommentText",SideEffects::worstDefault,"clang_Cursor_getBriefCommentText")
 		->args({"C"});
 	addExtern<CXString (*)(CXCursor),clang_Cursor_getMangling,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Cursor_getMangling",SideEffects::worstDefault,"clang_Cursor_getMangling")
@@ -50,6 +48,8 @@ void Module_dasClangBind::initFunctions_12() {
 	addExtern<unsigned int (*)(CXCursor),clang_CXXField_isMutable>(*this,lib,"clang_CXXField_isMutable",SideEffects::worstDefault,"clang_CXXField_isMutable")
 		->args({"C"});
 	addExtern<unsigned int (*)(CXCursor),clang_CXXMethod_isDefaulted>(*this,lib,"clang_CXXMethod_isDefaulted",SideEffects::worstDefault,"clang_CXXMethod_isDefaulted")
+		->args({"C"});
+	addExtern<unsigned int (*)(CXCursor),clang_CXXMethod_isPureVirtual>(*this,lib,"clang_CXXMethod_isPureVirtual",SideEffects::worstDefault,"clang_CXXMethod_isPureVirtual")
 		->args({"C"});
 }
 }

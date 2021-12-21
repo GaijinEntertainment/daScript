@@ -215,6 +215,28 @@ class AnyGenBind
                 wr |> write("::")
             wr |> write(name)
     def skip_function ( var c : CXCursor )
+        let function_name = string(clang_getCursorSpelling(c))
+        var fun_type = clang_getCursorType(c)
+        let narg = clang_Cursor_getNumArguments(c)
+        for ai in urange(narg)
+            var carg = clang_Cursor_getArgument(c, ai)
+            var arg_type = clang_getCanonicalType(clang_getCursorType(carg))
+            if skip_type(arg_type)
+                let arg_type_name = string(clang_getTypeSpelling(arg_type))
+                let arg_name = string(clang_getCursorSpelling(carg))
+                to_log(LOG_INFO,"skipping function {function_name} due to argument {arg_name} type {arg_type_name} at {clang_getCursorLocationDescription(c)}")
+                return true
+        var res_type = clang_getCanonicalType(clang_getResultType(fun_type))
+        if skip_type(res_type)
+            let res_type_name = string(clang_getTypeSpelling(res_type))
+            to_log(LOG_INFO,"skipping function {function_name} due to result type {res_type_name} at {clang_getCursorLocationDescription(c)}")
+            return true
+        return false
+    def skip_type ( var c : CXType )
+        if c.kind == CXTypeKind Pointer
+            var pc = clang_getPointeeType(c)
+            if pc.kind==CXTypeKind FunctionProto
+                return true
         return false
     def parse_FunctionDecl ( var c : CXCursor )
         pass
@@ -278,10 +300,7 @@ class AnyGenBind
                     parse_Alias(c)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind FunctionDecl
-                    if skip_function(c)
-                        let function_name = string(clang_getCursorSpelling(c))
-                        to_log(LOG_INFO, "skipping {function_name} at {clang_getCursorLocationDescription(c)}")
-                    else
+                    if !skip_function(c)
                         parse_FunctionDecl(c)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind StructDecl

@@ -11,8 +11,6 @@
 #include "need_dasClangBind.h"
 namespace das {
 void Module_dasClangBind::initFunctions_11() {
-	addExtern<void (*)(void *,CXPrintingPolicyProperty,unsigned int),clang_PrintingPolicy_setProperty>(*this,lib,"clang_PrintingPolicy_setProperty",SideEffects::worstDefault,"clang_PrintingPolicy_setProperty")
-		->args({"Policy","Property","Value"});
 	addExtern<void * (*)(CXCursor),clang_getCursorPrintingPolicy>(*this,lib,"clang_getCursorPrintingPolicy",SideEffects::worstDefault,"clang_getCursorPrintingPolicy")
 		->args({""});
 	addExtern<void (*)(void *),clang_PrintingPolicy_dispose>(*this,lib,"clang_PrintingPolicy_dispose",SideEffects::worstDefault,"clang_PrintingPolicy_dispose")
@@ -50,6 +48,8 @@ void Module_dasClangBind::initFunctions_11() {
 	addExtern<unsigned int (*)(CXCursor,CXString *,CXString *,unsigned int *),clang_Cursor_isExternalSymbol>(*this,lib,"clang_Cursor_isExternalSymbol",SideEffects::worstDefault,"clang_Cursor_isExternalSymbol")
 		->args({"C","language","definedIn","isGenerated"});
 	addExtern<CXSourceRange (*)(CXCursor),clang_Cursor_getCommentRange,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Cursor_getCommentRange",SideEffects::worstDefault,"clang_Cursor_getCommentRange")
+		->args({"C"});
+	addExtern<CXString (*)(CXCursor),clang_Cursor_getRawCommentText,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Cursor_getRawCommentText",SideEffects::worstDefault,"clang_Cursor_getRawCommentText")
 		->args({"C"});
 }
 }

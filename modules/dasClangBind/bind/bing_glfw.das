@@ -25,28 +25,7 @@ class GlfwGen : CppGenBind
         openAllFiles()
     def init_skip_func
         glfw_skip_func <- {{
-            "glfwDestroyWindow" => true;
-            "glfwSetErrorCallback" => true;
-            "glfwSetMonitorCallback" => true;
-            "glfwSetWindowContentScaleCallback" => true;
-            "glfwSetMouseButtonCallback" => true;
-            "glfwSetCursorPosCallback" => true;
-            "glfwSetCursorEnterCallback" => true;
-            "glfwSetScrollCallback" => true;
-            "glfwSetDropCallback" => true;
-            "glfwSetJoystickCallback" => true;
-            "glfwSetWindowPosCallback" => true;
-            "glfwSetWindowSizeCallback" => true;
-            "glfwSetWindowCloseCallback" => true;
-            "glfwSetWindowRefreshCallback" => true;
-            "glfwSetWindowFocusCallback" => true;
-            "glfwSetWindowIconifyCallback" => true;
-            "glfwSetWindowMaximizeCallback" => true;
-            "glfwSetFramebufferSizeCallback" => true;
-            "glfwSetKeyCallback" => true;
-            "glfwSetCharCallback" => true;
-            "glfwSetCharModsCallback" => true;
-            "glfwGetProcAddress" => true
+            "glfwDestroyWindow" => true
         }}
     def override skip_const ( name:string ) : bool
         if name |> starts_with("GL_")
@@ -55,12 +34,17 @@ class GlfwGen : CppGenBind
     def override isArgByValue ( name:string )
         return true
     def override skip_function ( var c : CXCursor )
+        if AnyGenBind`skip_function(self, c)
+            return true
         let function_name = string(clang_getCursorSpelling(c))
         if glfw_skip_func |> key_exists(function_name)
+            to_log(LOG_INFO, "skipping GLFW blocked function {function_name} at {clang_getCursorLocationDescription(c)}")
             return true
         if function_name |> starts_with("glfw")
             return false
-        return true
+        else
+            to_log(LOG_INFO, "skipping non GLFW function {function_name} at {clang_getCursorLocationDescription(c)}")
+            return true
     def override skip_file ( fname:string ) : bool
         if fname |> ends_with("glfw3.h")
             return false
