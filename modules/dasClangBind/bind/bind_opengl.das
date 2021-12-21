@@ -15,13 +15,10 @@ class OpenGLBind : DasGenBind
             "GLboolean *"       => "bool? implicit";
             "const GLbyte *"    => "int8 const? implicit"
         }}
-        var blocked_defines <- [{string []
-            "true";
-            "false"
-        }]
-        for bd in blocked_defines
-            blocked_defines_table[bd] = true
-        delete blocked_defines
+    def override skip_const ( name:string ) : bool
+        if name=="true" || name=="false"
+            return true
+        return false
     def override functionArgumentRules : TypeRules
         return (
             TypeRules char_ptr_is_string |

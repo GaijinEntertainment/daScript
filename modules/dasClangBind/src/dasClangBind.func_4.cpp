@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_4( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_4() {
 	addExtern<CXTranslationUnitImpl * (*)(void *,const char *),clang_createTranslationUnit>(*this,lib,"clang_createTranslationUnit",SideEffects::worstDefault,"clang_createTranslationUnit")
 		->args({"CIdx","ast_filename"});
 	addExtern<CXErrorCode (*)(void *,const char *,CXTranslationUnitImpl **),clang_createTranslationUnit2>(*this,lib,"clang_createTranslationUnit2",SideEffects::worstDefault,"clang_createTranslationUnit2")

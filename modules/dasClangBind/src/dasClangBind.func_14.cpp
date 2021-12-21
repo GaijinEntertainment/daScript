@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_14( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_14() {
 	addExtern<void (*)(void (*)(void *),void *,unsigned int),clang_executeOnThread>(*this,lib,"clang_executeOnThread",SideEffects::worstDefault,"clang_executeOnThread")
 		->args({"fn","user_data","stack_size"});
 	addExtern<CXCompletionChunkKind (*)(void *,unsigned int),clang_getCompletionChunkKind>(*this,lib,"clang_getCompletionChunkKind",SideEffects::worstDefault,"clang_getCompletionChunkKind")

@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_3( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_3() {
 	addExtern<void * (*)(void *),clang_getChildDiagnostics>(*this,lib,"clang_getChildDiagnostics",SideEffects::worstDefault,"clang_getChildDiagnostics")
 		->args({"D"});
 	addExtern<unsigned int (*)(CXTranslationUnitImpl *),clang_getNumDiagnostics>(*this,lib,"clang_getNumDiagnostics",SideEffects::worstDefault,"clang_getNumDiagnostics")

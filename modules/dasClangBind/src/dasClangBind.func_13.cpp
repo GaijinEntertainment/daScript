@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_13( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_13() {
 	addExtern<unsigned int (*)(CXCursor),clang_CXXMethod_isPureVirtual>(*this,lib,"clang_CXXMethod_isPureVirtual",SideEffects::worstDefault,"clang_CXXMethod_isPureVirtual")
 		->args({"C"});
 	addExtern<unsigned int (*)(CXCursor),clang_CXXMethod_isStatic>(*this,lib,"clang_CXXMethod_isStatic",SideEffects::worstDefault,"clang_CXXMethod_isStatic")

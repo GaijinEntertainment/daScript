@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_11( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_11() {
 	addExtern<void (*)(void *,CXPrintingPolicyProperty,unsigned int),clang_PrintingPolicy_setProperty>(*this,lib,"clang_PrintingPolicy_setProperty",SideEffects::worstDefault,"clang_PrintingPolicy_setProperty")
 		->args({"Policy","Property","Value"});
 	addExtern<void * (*)(CXCursor),clang_getCursorPrintingPolicy>(*this,lib,"clang_getCursorPrintingPolicy",SideEffects::worstDefault,"clang_getCursorPrintingPolicy")

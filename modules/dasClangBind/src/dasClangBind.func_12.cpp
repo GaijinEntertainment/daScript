@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_12( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_12() {
 	addExtern<CXString (*)(CXCursor),clang_Cursor_getRawCommentText,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Cursor_getRawCommentText",SideEffects::worstDefault,"clang_Cursor_getRawCommentText")
 		->args({"C"});
 	addExtern<CXString (*)(CXCursor),clang_Cursor_getBriefCommentText,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Cursor_getBriefCommentText",SideEffects::worstDefault,"clang_Cursor_getBriefCommentText")

@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_7( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_7() {
 	addExtern<CXString (*)(CXType),clang_getTypeSpelling,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getTypeSpelling",SideEffects::worstDefault,"clang_getTypeSpelling")
 		->args({"CT"});
 	addExtern<CXType (*)(CXCursor),clang_getTypedefDeclUnderlyingType,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getTypedefDeclUnderlyingType",SideEffects::worstDefault,"clang_getTypedefDeclUnderlyingType")

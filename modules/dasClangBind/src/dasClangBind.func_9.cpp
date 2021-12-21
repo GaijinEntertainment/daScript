@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_9( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_9() {
 	addExtern<int (*)(CXCursor),clang_getCursorExceptionSpecificationType>(*this,lib,"clang_getCursorExceptionSpecificationType",SideEffects::worstDefault,"clang_getCursorExceptionSpecificationType")
 		->args({"C"});
 	addExtern<unsigned int (*)(CXType),clang_isPODType>(*this,lib,"clang_isPODType",SideEffects::worstDefault,"clang_isPODType")

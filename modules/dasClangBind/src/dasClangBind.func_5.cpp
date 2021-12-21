@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_5( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_5() {
 	addExtern<CXCursor (*)(CXTranslationUnitImpl *),clang_getTranslationUnitCursor,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getTranslationUnitCursor",SideEffects::worstDefault,"clang_getTranslationUnitCursor")
 		->args({""});
 	addExtern<unsigned int (*)(CXCursor,CXCursor),clang_equalCursors>(*this,lib,"clang_equalCursors",SideEffects::worstDefault,"clang_equalCursors")

@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_1( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_1() {
 	addExtern<const char * (*)(CXString),clang_getCString>(*this,lib,"clang_getCString",SideEffects::worstDefault,"clang_getCString")
 		->args({"string"});
 	addExtern<void (*)(CXString),clang_disposeString>(*this,lib,"clang_disposeString",SideEffects::worstDefault,"clang_disposeString")

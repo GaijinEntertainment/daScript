@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_15( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_15() {
 	addExtern<unsigned long long (*)(CXCodeCompleteResults *),clang_codeCompleteGetContexts>(*this,lib,"clang_codeCompleteGetContexts",SideEffects::worstDefault,"clang_codeCompleteGetContexts")
 		->args({"Results"});
 	addExtern<CXCursorKind (*)(CXCodeCompleteResults *,unsigned int *),clang_codeCompleteGetContainerKind>(*this,lib,"clang_codeCompleteGetContainerKind",SideEffects::worstDefault,"clang_codeCompleteGetContainerKind")

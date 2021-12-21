@@ -7,9 +7,13 @@ class Module_dasClangBind : public Module {
 public:
 	Module_dasClangBind();
 protected:
-	void initMain ( ModuleLibrary & lib );
+virtual bool initDependencies() override;
+	void initMain ();
 	virtual ModuleAotType aotRequire ( TextWriter & tw ) const override;
 	#include "dasClangBind.func.decl.inc"
+public:
+	ModuleLibrary lib;
+	bool initialized = false;
 };
 }
 

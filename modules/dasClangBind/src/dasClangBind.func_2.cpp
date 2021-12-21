@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_2( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_2() {
 	addExtern<int (*)(CXSourceLocation),clang_Location_isInSystemHeader>(*this,lib,"clang_Location_isInSystemHeader",SideEffects::worstDefault,"clang_Location_isInSystemHeader")
 		->args({"location"});
 	addExtern<int (*)(CXSourceLocation),clang_Location_isFromMainFile>(*this,lib,"clang_Location_isFromMainFile",SideEffects::worstDefault,"clang_Location_isFromMainFile")

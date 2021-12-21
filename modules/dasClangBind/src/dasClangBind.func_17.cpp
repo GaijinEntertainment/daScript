@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_17( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_17() {
 	addExtern<void (*)(CXIdxLoc,void **,void **,unsigned int *,unsigned int *,unsigned int *),clang_indexLoc_getFileLocation>(*this,lib,"clang_indexLoc_getFileLocation",SideEffects::worstDefault,"clang_indexLoc_getFileLocation")
 		->args({"loc","indexFile","file","line","column","offset"});
 	addExtern<CXSourceLocation (*)(CXIdxLoc),clang_indexLoc_getCXSourceLocation,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_indexLoc_getCXSourceLocation",SideEffects::worstDefault,"clang_indexLoc_getCXSourceLocation")

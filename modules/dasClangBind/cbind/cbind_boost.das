@@ -181,6 +181,9 @@ class AnyGenBind
     hasEmptyStruct : bool
     emptyEnum : CXCursor
     hasEmptyEnum : bool
+    const_type_table : table<string; string>
+    define_const_file : FILE const?
+    define_const_style_das = true
     def AnyGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args )
     def init_args ( pfn,pfp:string; args:array<string> )
@@ -318,21 +321,7 @@ class AnyGenBind
                 return CXChildVisitResult Recurse
             else
                 return CXChildVisitResult Recurse
-
-class DasGenBind : AnyGenBind
-    blocked_defines_table : table<string;bool>
-    const_type_table : table<string; string>
-    known_type : table<string; string>
-    define_const_file : FILE const?
-    func_decl_file : FILE const?
-    def DasGenBind ( pfn,pfp:string; args:array<string> )
-        init_args(pfn,pfp,args)
-        define_const_file = fstdout()
-        func_decl_file = fstdout()
-    def setFiles ( dcf, fdf:FILE const? )
-        define_const_file = dcf
-        func_decl_file = fdf
-    def is_const_blocked ( name:string ) : bool
+    def skip_const ( name:string ) : bool
         return false
     def getGenConstType ( name, default_name:string )
         return const_type_table?[name] ?? default_name
@@ -350,12 +339,14 @@ class DasGenBind : AnyGenBind
                     if v > 0xfffffffful
                         to_log(LOG_INFO, "{DEF} promoted to ul")
                         suf = "ul"
-                if !blocked_defines_table |> key_exists(DEF)
-                    if is_const_blocked==null || !is_const_blocked(DEF)
-                        let ctt = getGenConstType(DEF,defTName)
-                        if !dup[DEF]
+                if !skip_const(DEF)
+                    let ctt = getGenConstType(DEF,defTName)
+                    if !dup[DEF]
+                        if define_const_style_das
                             fprint(define_const_file,"let {DEF} = {ctt}({VAL}{suf})\n")
-                            dup[DEF] = true
+                        else
+                            fprint(define_const_file,"addConstant<{ctt}>(*this,\"{DEF}\",{ctt}({VAL}{suf}));\n")
+                        dup[DEF] = true
             return true
     def generateConstantsFrom(fnames:array<string>)
         var reg_def_hex <- %regex~#define\s+(\w+)\s+(0x[0-9A-Fa-f]+)%%
@@ -372,16 +363,27 @@ class DasGenBind : AnyGenBind
                 var ofs : table<int; bool>
                 let data = fread(f)
                 var dup : table<string; bool>
-                searchAndGenConst(reg_def_hex, "uint", "u", true, ofs, data, dup)
-                searchAndGenConst(reg_def_dec, "int", "", false, ofs, data, dup)
-                searchAndGenConst(reg_def_UINT8, "uint8", "u", true, ofs, data, dup)
-                searchAndGenConst(reg_def_UINT16, "uint16", "u", true, ofs, data, dup)
-                searchAndGenConst(reg_def_UINT32, "uint", "u", true, ofs, data, dup)
-                searchAndGenConst(reg_def_UINT64, "uint64", "ul", true, ofs, data, dup)
+                searchAndGenConst(reg_def_hex, define_const_style_das ? "uint" : "uint32_t", "u", true, ofs, data, dup)
+                searchAndGenConst(reg_def_dec, define_const_style_das ? "int" : "int32_t", "", false, ofs, data, dup)
+                searchAndGenConst(reg_def_UINT8, define_const_style_das ? "uint8" : "uint8_t", "u", true, ofs, data, dup)
+                searchAndGenConst(reg_def_UINT16, define_const_style_das ? "uint16" : "uint16_t", "u", true, ofs, data, dup)
+                searchAndGenConst(reg_def_UINT32, define_const_style_das ? "uint" : "uint32_t", "u", true, ofs, data, dup)
+                searchAndGenConst(reg_def_UINT64, define_const_style_das ? "uint64" : "uint64_t", "ul", true, ofs, data, dup)
     def generateConstants(fname:string)
         var fnames <- [{ auto[] fname }]
         defer <| { delete fnames; }
         fnames |> generateConstantsFrom()
+
+class DasGenBind : AnyGenBind
+    known_type : table<string; string>
+    func_decl_file : FILE const?
+    def DasGenBind ( pfn,pfp:string; args:array<string> )
+        init_args(pfn,pfp,args)
+        define_const_file = fstdout()
+        func_decl_file = fstdout()
+    def setFiles ( dcf, fdf:FILE const? )
+        define_const_file = dcf
+        func_decl_file = fdf
     def functionArgumentRules : TypeRules
         return TypeRules char_ptr_is_string | TypeRules function_proto_is_void_ptr | TypeRules top_level_pointers_are_implicit
     def functionResultRules : TypeRules
@@ -429,6 +431,7 @@ let DEFAULT_CLANG_ARGUMENTS <- [{string
 }]
 
 class CppGenBind : AnyGenBind
+    override define_const_style_das = false
     enum_decl_file : FILE const?
     enum_class_file : FILE const?
     enum_add_file : FILE const?
@@ -447,7 +450,7 @@ class CppGenBind : AnyGenBind
     module_cpp_file : FILE const?
     module_h_file : FILE const?
     module_need_h_file : FILE const?
-    func_count : int
+    func_count : int = INT_MAX-1
     func_per_chunk : int = 100500
     func_chunk_index : int
     func_to_stdout : bool = true
@@ -456,6 +459,7 @@ class CppGenBind : AnyGenBind
     bind_root : string
     bind_module : string
     bind_das_module : string
+    generate_constant_decl : bool = false
     def CppGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args)
         setDefaultFiles()
@@ -476,6 +480,7 @@ class CppGenBind : AnyGenBind
         module_cpp_file = fstdout()
         module_h_file = fstdout()
         module_need_h_file = fstdout()
+        define_const_file = fstdout()
     def openFile ( path:string )
         var f = fopen(path,"wb")
         if f == null
@@ -510,6 +515,8 @@ class CppGenBind : AnyGenBind
             openFile("{bind_root}/{bind_module}.h"),
             openFile("{bind_root}/need_{bind_module}.h"),
             openFile("{bind_root}/{bind_module}.cpp"))
+        if generate_constant_decl
+            define_const_file = openFile("{bind_root}/{bind_module}.const.inc")
     def closeAllFiles
         closeFile(enum_decl_file)
         closeFile(enum_class_file)
@@ -524,6 +531,7 @@ class CppGenBind : AnyGenBind
         closeFile(module_cpp_file)
         closeFile(module_h_file)
         closeFile(module_need_h_file)
+        closeFile(define_const_file)
         closeLastFuncFile()
     def setEnumFiles ( edecl,eclass,eadd:FILE const? )
         enum_decl_file = edecl
@@ -615,8 +623,8 @@ class CppGenBind : AnyGenBind
             func_chunk_index ++
             func_file = nextFuncFile()
             writeFuncPrefix()
-            fwrite(func_file_reg, "initFunctions_{func_chunk_index}(lib);\n")
-            fwrite(func_file_decl, "void initFunctions_{func_chunk_index}( ModuleLibrary & lib );\n")
+            fwrite(func_file_reg, "initFunctions_{func_chunk_index}();\n")
+            fwrite(func_file_decl, "void initFunctions_{func_chunk_index}();\n")
             func_count = 0
         let function_name = string(clang_getCursorSpelling(c))
         var fun_type = clang_getCanonicalType(clang_getCursorType(c))
@@ -682,6 +690,8 @@ class CppGenBind : AnyGenBind
         generateModuleH()
         generateModuleNeedH()
         generateModuleCpp()
+        if generate_constant_decl
+            generateConstants(open_file_name())
         closeAllFiles()
     def generateDummy
         for k,v in keys(struct_ann),values(struct_ann)
@@ -698,7 +708,7 @@ class CppGenBind : AnyGenBind
         fwrite(func_file, "#include \"{bind_module}.h\"\n")
         fwrite(func_file, "#include \"need_{bind_module}.h\"\n")
         fwrite(func_file, "namespace das \{\n")
-        fwrite(func_file, "void Module_{bind_module}::initFunctions_{func_chunk_index}( ModuleLibrary & lib ) \{\n")
+        fwrite(func_file, "void Module_{bind_module}::initFunctions_{func_chunk_index}() \{\n")
     def writeFuncPostfix
         fwrite(func_file, "\}\n\}\n\n")
     def generateModuleNeedH
@@ -723,29 +733,45 @@ class CppGenBind : AnyGenBind
         module_cpp_file |> fwrite("#include \"{bind_module}.enum.class.inc\"\n")
         module_cpp_file |> fwrite("#include \"{bind_module}.struct.class.inc\"\n")
         module_cpp_file |> fwrite("Module_{bind_module}::Module_{bind_module}() : Module(\"{bind_das_module}\") \{\n")  // TODO: das module name
-        module_cpp_file |> fwrite("\tModuleLibrary lib;\n")
         module_cpp_file |> fwrite("\tlib.addModule(this);\n")
         module_cpp_file |> fwrite("\tlib.addBuiltInModule();\n")
+        module_cpp_file |> fwrite("\}\n")
+        module_cpp_file |> fwrite("bool Module_{bind_module}::initDependencies() \{\n")
+        module_cpp_file |> fwrite("\tif ( initialized ) return true;\n")
+        module_cpp_file |> fwrite("\tinitialized = true;\n")
+        if generate_constant_decl
+            module_cpp_file |> fwrite("\t#include \"{bind_module}.const.inc\"\n")
         module_cpp_file |> fwrite("\t#include \"{bind_module}.enum.add.inc\"\n")
         module_cpp_file |> fwrite("\t#include \"{bind_module}.dummy.add.inc\"\n")
         module_cpp_file |> fwrite("\t#include \"{bind_module}.struct.add.inc\"\n")
         module_cpp_file |> fwrite("\t#include \"{bind_module}.struct.postadd.inc\"\n")
         module_cpp_file |> fwrite("\t#include \"{bind_module}.alias.add.inc\"\n")
         module_cpp_file |> fwrite("\t#include \"{bind_module}.func.reg.inc\"\n")
-        module_cpp_file |> fwrite("\tinitMain(lib);\n")
+        module_cpp_file |> fwrite("\tinitMain();\n")
+        module_cpp_file |> fwrite("\treturn true;\n")
         module_cpp_file |> fwrite("\}\n")
         module_cpp_file |> fwrite("}\n")
         module_cpp_file |> fwrite("REGISTER_MODULE_IN_NAMESPACE(Module_{bind_module},das);\n\n")
+    def generateModuleHSuffix
+        pass
+    def generateModuleHPrefix
+        pass
     def generateModuleH
         module_h_file |> fwrite("#pragma once\n")
+        generateModuleHPrefix()
         module_h_file |> fwrite("namespace das \{\n")
         module_h_file |> fwrite("class Module_{bind_module} : public Module \{\n")
         module_h_file |> fwrite("public:\n")
         module_h_file |> fwrite("\tModule_{bind_module}();\n")
         module_h_file |> fwrite("protected:\n")
-        module_h_file |> fwrite("\tvoid initMain ( ModuleLibrary & lib );\n")
+        module_h_file |> fwrite("virtual bool initDependencies() override;\n")
+        module_h_file |> fwrite("\tvoid initMain ();\n")
         module_h_file |> fwrite("\tvirtual ModuleAotType aotRequire ( TextWriter & tw ) const override;\n")
         module_h_file |> fwrite("\t#include \"{bind_module}.func.decl.inc\"\n")
+        module_h_file |> fwrite("public:\n")
+        module_h_file |> fwrite("\tModuleLibrary lib;\n")
+        module_h_file |> fwrite("\tbool initialized = false;\n")
+        generateModuleHSuffix()
         module_h_file |> fwrite("};\n")
         module_h_file |> fwrite("}\n\n")
     def genCMakeDecl(MODULE_VAR:string)
@@ -768,6 +794,8 @@ class CppGenBind : AnyGenBind
         print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.decl.inc\n")
         print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.impl.inc\n")
         print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.cast.inc\n")
+        if generate_constant_decl
+            print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.const.inc\n")
         print("\t# generated functions\n")
         for index in range(1,func_chunk_index+1)
             print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.func_{index}.cpp\n")
@@ -791,3 +819,5 @@ for ai in urange(narg)
     print("{argument_type} {arg_name}")
 print(" );\n")
 */
+
+options debugger

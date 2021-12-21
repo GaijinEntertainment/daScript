@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_16( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_16() {
 	addExtern<void (*)(void *),clang_remap_dispose>(*this,lib,"clang_remap_dispose",SideEffects::worstDefault,"clang_remap_dispose")
 		->args({""});
 	addExtern<CXResult (*)(CXCursor,void *,CXCursorAndRangeVisitor),clang_findReferencesInFile>(*this,lib,"clang_findReferencesInFile",SideEffects::worstDefault,"clang_findReferencesInFile")

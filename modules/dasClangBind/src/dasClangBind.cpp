@@ -14,16 +14,20 @@ namespace das {
 #include "dasClangBind.enum.class.inc"
 #include "dasClangBind.struct.class.inc"
 Module_dasClangBind::Module_dasClangBind() : Module("cbind") {
-	ModuleLibrary lib;
 	lib.addModule(this);
 	lib.addBuiltInModule();
+}
+bool Module_dasClangBind::initDependencies() {
+	if ( initialized ) return true;
+	initialized = true;
 	#include "dasClangBind.enum.add.inc"
 	#include "dasClangBind.dummy.add.inc"
 	#include "dasClangBind.struct.add.inc"
 	#include "dasClangBind.struct.postadd.inc"
 	#include "dasClangBind.alias.add.inc"
 	#include "dasClangBind.func.reg.inc"
-	initMain(lib);
+	initMain();
+	return true;
 }
 }
 REGISTER_MODULE_IN_NAMESPACE(Module_dasClangBind,das);

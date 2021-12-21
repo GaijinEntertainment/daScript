@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_10( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_10() {
 	addExtern<CXType (*)(CXType,unsigned int),clang_Type_getTemplateArgumentAsType,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Type_getTemplateArgumentAsType",SideEffects::worstDefault,"clang_Type_getTemplateArgumentAsType")
 		->args({"T","i"});
 	addExtern<CXRefQualifierKind (*)(CXType),clang_Type_getCXXRefQualifier>(*this,lib,"clang_Type_getCXXRefQualifier",SideEffects::worstDefault,"clang_Type_getCXXRefQualifier")

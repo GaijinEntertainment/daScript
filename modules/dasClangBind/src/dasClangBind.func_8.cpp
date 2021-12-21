@@ -10,7 +10,7 @@
 #include "dasClangBind.h"
 #include "need_dasClangBind.h"
 namespace das {
-void Module_dasClangBind::initFunctions_8( ModuleLibrary & lib ) {
+void Module_dasClangBind::initFunctions_8() {
 	addExtern<unsigned int (*)(CXType),clang_isRestrictQualifiedType>(*this,lib,"clang_isRestrictQualifiedType",SideEffects::worstDefault,"clang_isRestrictQualifiedType")
 		->args({"T"});
 	addExtern<unsigned int (*)(CXType),clang_getAddressSpace>(*this,lib,"clang_getAddressSpace",SideEffects::worstDefault,"clang_getAddressSpace")

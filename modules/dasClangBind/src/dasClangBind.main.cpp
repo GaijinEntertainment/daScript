@@ -42,7 +42,7 @@ void das_clangVisitChildren ( CXCursor cursor, const TBlock<CXChildVisitResult,C
     );
 };
 
-void Module_dasClangBind::initMain ( ModuleLibrary & lib ) {
+void Module_dasClangBind::initMain() {
     addExtern<DAS_BIND_FUN(from_CXString_to_string)>(*this, lib,  "string",
         SideEffects::worstDefault, "from_CXString_to_string")
             ->args({"CXString","context"});
