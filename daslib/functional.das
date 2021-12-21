@@ -184,3 +184,24 @@ def not(x)
 def echo(var x;extra : string = "\n")
     print("{x}{extra}")
     return <- x
+
+def flatten_one ( var src : iterator<iterator<auto(TT)>> )
+    static_if !typeinfo(is_ref_type type<TT>)
+        return <- generator<TT -&> [[<-src]] () <| $ ()
+            for i in src
+                for j in i
+                    yield j
+            return false
+    else
+        return <- generator<TT&> [[<-src]] () <| $ ()
+            for i in src
+                for j in i
+                    yield j
+            return false
+
+def flatten ( var it : iterator<auto(TT)> )
+    unsafe
+        static_if typeinfo(is_iterator type<TT>)
+            return <- flatten_one ( [[for i in it; flatten(i)]] )
+        else
+            return <- [[for i in it; i]]

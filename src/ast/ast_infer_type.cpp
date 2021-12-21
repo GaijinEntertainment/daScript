@@ -6140,7 +6140,7 @@ namespace das {
             DAS_ASSERT(t1->baseType==passType->baseType && "how did it match otherwise?");
             DAS_ASSERT(t2->baseType==passType->baseType && "how did it match otherwise?");
         // if its an array or a pointer, we compare specialization of subtype
-            if ( t1->baseType==Type::tPointer || t1->baseType==Type::tArray ) {
+            if ( t1->baseType==Type::tPointer || t1->baseType==Type::tArray || t1->baseType==Type::tIterator ) {
                 return moreSpecialized(t1->firstType, t2->firstType, passType->firstType);
         // if its a table, we compare both subtypes
             } else if ( t1->baseType==Type::tTable ) {
