@@ -2104,10 +2104,6 @@ def glDebugMessageControl ( source:uint; _type:uint; severity:uint; count:int; i
 def glDebugMessageInsert ( source:uint; _type:uint; id:uint; severity:uint; length:int; buf:string implicit ) : void
 	pass
 
-[extern(opengl,late,name="glDebugMessageCallback",library="Opengl32")]
-def glDebugMessageCallback ( callback:void?? implicit; userParam:void const? implicit ) : void
-	pass
-
 [extern(opengl,late,name="glGetDebugMessageLog",library="Opengl32")]
 def glGetDebugMessageLog ( count:uint; bufSize:int; sources:uint? implicit; types:uint? implicit; ids:uint? implicit; severities:uint? implicit; lengths:int? implicit; messageLog:string implicit ) : uint
 	return [[uint]]
@@ -2710,10 +2706,6 @@ def glDebugMessageControlARB ( source:uint; _type:uint; severity:uint; count:int
 
 [extern(opengl,late,name="glDebugMessageInsertARB",library="Opengl32")]
 def glDebugMessageInsertARB ( source:uint; _type:uint; id:uint; severity:uint; length:int; buf:string implicit ) : void
-	pass
-
-[extern(opengl,late,name="glDebugMessageCallbackARB",library="Opengl32")]
-def glDebugMessageCallbackARB ( callback:void?? implicit; userParam:void const? implicit ) : void
 	pass
 
 [extern(opengl,late,name="glGetDebugMessageLogARB",library="Opengl32")]
@@ -4403,10 +4395,6 @@ def glDepthBoundsdNV ( zmin:double; zmax:double ) : void
 [extern(opengl,late,name="glDrawVkImageNV",library="Opengl32")]
 def glDrawVkImageNV ( vkImage:uint64; sampler:uint; x0:float; y0:float; x1:float; y1:float; z:float; s0:float; t0:float; s1:float; t1:float ) : void
 	pass
-
-[extern(opengl,late,name="glGetVkProcAddrNV",library="Opengl32")]
-def glGetVkProcAddrNV ( name:string implicit ) : void??
-	return [[void??]]
 
 [extern(opengl,late,name="glWaitVkSemaphoreNV",library="Opengl32")]
 def glWaitVkSemaphoreNV ( vkSemaphore:uint64 ) : void
