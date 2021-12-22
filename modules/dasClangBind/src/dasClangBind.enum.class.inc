@@ -6,7 +6,7 @@ public:
 	Enumeration_CXErrorCode() : das::Enumeration("CXErrorCode") {
 		external = true;
 		cppName = "CXErrorCode";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXErrorCode >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Success", "CXError_Success", int64_t(CXErrorCode::CXError_Success), das::LineInfo());
 		addIEx("Failure", "CXError_Failure", int64_t(CXErrorCode::CXError_Failure), das::LineInfo());
 		addIEx("Crashed", "CXError_Crashed", int64_t(CXErrorCode::CXError_Crashed), das::LineInfo());
@@ -20,7 +20,7 @@ public:
 	Enumeration_CXAvailabilityKind() : das::Enumeration("CXAvailabilityKind") {
 		external = true;
 		cppName = "CXAvailabilityKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXAvailabilityKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Available", "CXAvailability_Available", int64_t(CXAvailabilityKind::CXAvailability_Available), das::LineInfo());
 		addIEx("Deprecated", "CXAvailability_Deprecated", int64_t(CXAvailabilityKind::CXAvailability_Deprecated), das::LineInfo());
 		addIEx("NotAvailable", "CXAvailability_NotAvailable", int64_t(CXAvailabilityKind::CXAvailability_NotAvailable), das::LineInfo());
@@ -33,7 +33,7 @@ public:
 	Enumeration_CXCursor_ExceptionSpecificationKind() : das::Enumeration("CXCursor_ExceptionSpecificationKind") {
 		external = true;
 		cppName = "CXCursor_ExceptionSpecificationKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXCursor_ExceptionSpecificationKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXCursor_ExceptionSpecificationKind_None", int64_t(CXCursor_ExceptionSpecificationKind::CXCursor_ExceptionSpecificationKind_None), das::LineInfo());
 		addIEx("DynamicNone", "CXCursor_ExceptionSpecificationKind_DynamicNone", int64_t(CXCursor_ExceptionSpecificationKind::CXCursor_ExceptionSpecificationKind_DynamicNone), das::LineInfo());
 		addIEx("Dynamic", "CXCursor_ExceptionSpecificationKind_Dynamic", int64_t(CXCursor_ExceptionSpecificationKind::CXCursor_ExceptionSpecificationKind_Dynamic), das::LineInfo());
@@ -52,7 +52,7 @@ public:
 	Enumeration_CXGlobalOptFlags() : das::Enumeration("CXGlobalOptFlags") {
 		external = true;
 		cppName = "CXGlobalOptFlags";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXGlobalOptFlags >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXGlobalOpt_None", int64_t(CXGlobalOptFlags::CXGlobalOpt_None), das::LineInfo());
 		addIEx("ThreadBackgroundPriorityForIndexing", "CXGlobalOpt_ThreadBackgroundPriorityForIndexing", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForIndexing), das::LineInfo());
 		addIEx("ThreadBackgroundPriorityForEditing", "CXGlobalOpt_ThreadBackgroundPriorityForEditing", int64_t(CXGlobalOptFlags::CXGlobalOpt_ThreadBackgroundPriorityForEditing), das::LineInfo());
@@ -65,7 +65,7 @@ public:
 	Enumeration_CXDiagnosticSeverity() : das::Enumeration("CXDiagnosticSeverity") {
 		external = true;
 		cppName = "CXDiagnosticSeverity";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXDiagnosticSeverity >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Ignored", "CXDiagnostic_Ignored", int64_t(CXDiagnosticSeverity::CXDiagnostic_Ignored), das::LineInfo());
 		addIEx("Note", "CXDiagnostic_Note", int64_t(CXDiagnosticSeverity::CXDiagnostic_Note), das::LineInfo());
 		addIEx("Warning", "CXDiagnostic_Warning", int64_t(CXDiagnosticSeverity::CXDiagnostic_Warning), das::LineInfo());
@@ -79,7 +79,7 @@ public:
 	Enumeration_CXLoadDiag_Error() : das::Enumeration("CXLoadDiag_Error") {
 		external = true;
 		cppName = "CXLoadDiag_Error";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXLoadDiag_Error >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXLoadDiag_None", int64_t(CXLoadDiag_Error::CXLoadDiag_None), das::LineInfo());
 		addIEx("Unknown", "CXLoadDiag_Unknown", int64_t(CXLoadDiag_Error::CXLoadDiag_Unknown), das::LineInfo());
 		addIEx("CannotLoad", "CXLoadDiag_CannotLoad", int64_t(CXLoadDiag_Error::CXLoadDiag_CannotLoad), das::LineInfo());
@@ -92,7 +92,7 @@ public:
 	Enumeration_CXDiagnosticDisplayOptions() : das::Enumeration("CXDiagnosticDisplayOptions") {
 		external = true;
 		cppName = "CXDiagnosticDisplayOptions";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXDiagnosticDisplayOptions >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("SourceLocation", "CXDiagnostic_DisplaySourceLocation", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplaySourceLocation), das::LineInfo());
 		addIEx("Column", "CXDiagnostic_DisplayColumn", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayColumn), das::LineInfo());
 		addIEx("SourceRanges", "CXDiagnostic_DisplaySourceRanges", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplaySourceRanges), das::LineInfo());
@@ -107,7 +107,7 @@ public:
 	Enumeration_CXTranslationUnit_Flags() : das::Enumeration("CXTranslationUnit_Flags") {
 		external = true;
 		cppName = "CXTranslationUnit_Flags";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTranslationUnit_Flags >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXTranslationUnit_None", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_None), das::LineInfo());
 		addIEx("DetailedPreprocessingRecord", "CXTranslationUnit_DetailedPreprocessingRecord", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_DetailedPreprocessingRecord), das::LineInfo());
 		addIEx("Incomplete", "CXTranslationUnit_Incomplete", int64_t(CXTranslationUnit_Flags::CXTranslationUnit_Incomplete), das::LineInfo());
@@ -133,7 +133,7 @@ public:
 	Enumeration_CXSaveTranslationUnit_Flags() : das::Enumeration("CXSaveTranslationUnit_Flags") {
 		external = true;
 		cppName = "CXSaveTranslationUnit_Flags";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXSaveTranslationUnit_Flags >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXSaveTranslationUnit_None", int64_t(CXSaveTranslationUnit_Flags::CXSaveTranslationUnit_None), das::LineInfo());
 	}
 };
@@ -143,7 +143,7 @@ public:
 	Enumeration_CXSaveError() : das::Enumeration("CXSaveError") {
 		external = true;
 		cppName = "CXSaveError";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXSaveError >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXSaveError_None", int64_t(CXSaveError::CXSaveError_None), das::LineInfo());
 		addIEx("Unknown", "CXSaveError_Unknown", int64_t(CXSaveError::CXSaveError_Unknown), das::LineInfo());
 		addIEx("TranslationErrors", "CXSaveError_TranslationErrors", int64_t(CXSaveError::CXSaveError_TranslationErrors), das::LineInfo());
@@ -156,7 +156,7 @@ public:
 	Enumeration_CXReparse_Flags() : das::Enumeration("CXReparse_Flags") {
 		external = true;
 		cppName = "CXReparse_Flags";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXReparse_Flags >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXReparse_None", int64_t(CXReparse_Flags::CXReparse_None), das::LineInfo());
 	}
 };
@@ -166,7 +166,7 @@ public:
 	Enumeration_CXTUResourceUsageKind() : das::Enumeration("CXTUResourceUsageKind") {
 		external = true;
 		cppName = "CXTUResourceUsageKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTUResourceUsageKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("AST", "CXTUResourceUsage_AST", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_AST), das::LineInfo());
 		addIEx("Identifiers", "CXTUResourceUsage_Identifiers", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Identifiers), das::LineInfo());
 		addIEx("Selectors", "CXTUResourceUsage_Selectors", int64_t(CXTUResourceUsageKind::CXTUResourceUsage_Selectors), das::LineInfo());
@@ -193,7 +193,7 @@ public:
 	Enumeration_CXCursorKind() : das::Enumeration("CXCursorKind") {
 		external = true;
 		cppName = "CXCursorKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXCursorKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("UnexposedDecl", "CXCursor_UnexposedDecl", int64_t(CXCursorKind::CXCursor_UnexposedDecl), das::LineInfo());
 		addIEx("StructDecl", "CXCursor_StructDecl", int64_t(CXCursorKind::CXCursor_StructDecl), das::LineInfo());
 		addIEx("UnionDecl", "CXCursor_UnionDecl", int64_t(CXCursorKind::CXCursor_UnionDecl), das::LineInfo());
@@ -473,7 +473,7 @@ public:
 	Enumeration_CXLinkageKind() : das::Enumeration("CXLinkageKind") {
 		external = true;
 		cppName = "CXLinkageKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXLinkageKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Invalid", "CXLinkage_Invalid", int64_t(CXLinkageKind::CXLinkage_Invalid), das::LineInfo());
 		addIEx("NoLinkage", "CXLinkage_NoLinkage", int64_t(CXLinkageKind::CXLinkage_NoLinkage), das::LineInfo());
 		addIEx("Internal", "CXLinkage_Internal", int64_t(CXLinkageKind::CXLinkage_Internal), das::LineInfo());
@@ -487,7 +487,7 @@ public:
 	Enumeration_CXVisibilityKind() : das::Enumeration("CXVisibilityKind") {
 		external = true;
 		cppName = "CXVisibilityKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXVisibilityKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Invalid", "CXVisibility_Invalid", int64_t(CXVisibilityKind::CXVisibility_Invalid), das::LineInfo());
 		addIEx("Hidden", "CXVisibility_Hidden", int64_t(CXVisibilityKind::CXVisibility_Hidden), das::LineInfo());
 		addIEx("Protected", "CXVisibility_Protected", int64_t(CXVisibilityKind::CXVisibility_Protected), das::LineInfo());
@@ -500,7 +500,7 @@ public:
 	Enumeration_CXLanguageKind() : das::Enumeration("CXLanguageKind") {
 		external = true;
 		cppName = "CXLanguageKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXLanguageKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Invalid", "CXLanguage_Invalid", int64_t(CXLanguageKind::CXLanguage_Invalid), das::LineInfo());
 		addIEx("C", "CXLanguage_C", int64_t(CXLanguageKind::CXLanguage_C), das::LineInfo());
 		addIEx("ObjC", "CXLanguage_ObjC", int64_t(CXLanguageKind::CXLanguage_ObjC), das::LineInfo());
@@ -513,7 +513,7 @@ public:
 	Enumeration_CXTLSKind() : das::Enumeration("CXTLSKind") {
 		external = true;
 		cppName = "CXTLSKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTLSKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXTLS_None", int64_t(CXTLSKind::CXTLS_None), das::LineInfo());
 		addIEx("Dynamic", "CXTLS_Dynamic", int64_t(CXTLSKind::CXTLS_Dynamic), das::LineInfo());
 		addIEx("Static", "CXTLS_Static", int64_t(CXTLSKind::CXTLS_Static), das::LineInfo());
@@ -525,7 +525,7 @@ public:
 	Enumeration_CXTypeKind() : das::Enumeration("CXTypeKind") {
 		external = true;
 		cppName = "CXTypeKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTypeKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Invalid", "CXType_Invalid", int64_t(CXTypeKind::CXType_Invalid), das::LineInfo());
 		addIEx("Unexposed", "CXType_Unexposed", int64_t(CXTypeKind::CXType_Unexposed), das::LineInfo());
 		addIEx("Void", "CXType_Void", int64_t(CXTypeKind::CXType_Void), das::LineInfo());
@@ -654,7 +654,7 @@ public:
 	Enumeration_CXCallingConv() : das::Enumeration("CXCallingConv") {
 		external = true;
 		cppName = "CXCallingConv";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXCallingConv >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Default", "CXCallingConv_Default", int64_t(CXCallingConv::CXCallingConv_Default), das::LineInfo());
 		addIEx("C", "CXCallingConv_C", int64_t(CXCallingConv::CXCallingConv_C), das::LineInfo());
 		addIEx("X86StdCall", "CXCallingConv_X86StdCall", int64_t(CXCallingConv::CXCallingConv_X86StdCall), das::LineInfo());
@@ -684,7 +684,7 @@ public:
 	Enumeration_CXTemplateArgumentKind() : das::Enumeration("CXTemplateArgumentKind") {
 		external = true;
 		cppName = "CXTemplateArgumentKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTemplateArgumentKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Null", "CXTemplateArgumentKind_Null", int64_t(CXTemplateArgumentKind::CXTemplateArgumentKind_Null), das::LineInfo());
 		addIEx("Type", "CXTemplateArgumentKind_Type", int64_t(CXTemplateArgumentKind::CXTemplateArgumentKind_Type), das::LineInfo());
 		addIEx("Declaration", "CXTemplateArgumentKind_Declaration", int64_t(CXTemplateArgumentKind::CXTemplateArgumentKind_Declaration), das::LineInfo());
@@ -703,7 +703,7 @@ public:
 	Enumeration_CXTypeNullabilityKind() : das::Enumeration("CXTypeNullabilityKind") {
 		external = true;
 		cppName = "CXTypeNullabilityKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTypeNullabilityKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("NonNull", "CXTypeNullability_NonNull", int64_t(CXTypeNullabilityKind::CXTypeNullability_NonNull), das::LineInfo());
 		addIEx("Nullable", "CXTypeNullability_Nullable", int64_t(CXTypeNullabilityKind::CXTypeNullability_Nullable), das::LineInfo());
 		addIEx("Unspecified", "CXTypeNullability_Unspecified", int64_t(CXTypeNullabilityKind::CXTypeNullability_Unspecified), das::LineInfo());
@@ -717,7 +717,7 @@ public:
 	Enumeration_CXTypeLayoutError() : das::Enumeration("CXTypeLayoutError") {
 		external = true;
 		cppName = "CXTypeLayoutError";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTypeLayoutError >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Invalid", "CXTypeLayoutError_Invalid", int64_t(CXTypeLayoutError::CXTypeLayoutError_Invalid), das::LineInfo());
 		addIEx("Incomplete", "CXTypeLayoutError_Incomplete", int64_t(CXTypeLayoutError::CXTypeLayoutError_Incomplete), das::LineInfo());
 		addIEx("Dependent", "CXTypeLayoutError_Dependent", int64_t(CXTypeLayoutError::CXTypeLayoutError_Dependent), das::LineInfo());
@@ -732,7 +732,7 @@ public:
 	Enumeration_CXRefQualifierKind() : das::Enumeration("CXRefQualifierKind") {
 		external = true;
 		cppName = "CXRefQualifierKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXRefQualifierKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXRefQualifier_None", int64_t(CXRefQualifierKind::CXRefQualifier_None), das::LineInfo());
 		addIEx("LValue", "CXRefQualifier_LValue", int64_t(CXRefQualifierKind::CXRefQualifier_LValue), das::LineInfo());
 		addIEx("RValue", "CXRefQualifier_RValue", int64_t(CXRefQualifierKind::CXRefQualifier_RValue), das::LineInfo());
@@ -744,7 +744,7 @@ public:
 	Enumeration_CX_CXXAccessSpecifier() : das::Enumeration("CX_CXXAccessSpecifier") {
 		external = true;
 		cppName = "CX_CXXAccessSpecifier";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CX_CXXAccessSpecifier >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("InvalidAccessSpecifier", "CX_CXXInvalidAccessSpecifier", int64_t(CX_CXXAccessSpecifier::CX_CXXInvalidAccessSpecifier), das::LineInfo());
 		addIEx("Public", "CX_CXXPublic", int64_t(CX_CXXAccessSpecifier::CX_CXXPublic), das::LineInfo());
 		addIEx("Protected", "CX_CXXProtected", int64_t(CX_CXXAccessSpecifier::CX_CXXProtected), das::LineInfo());
@@ -757,7 +757,7 @@ public:
 	Enumeration_CX_StorageClass() : das::Enumeration("CX_StorageClass") {
 		external = true;
 		cppName = "CX_StorageClass";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CX_StorageClass >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Invalid", "CX_SC_Invalid", int64_t(CX_StorageClass::CX_SC_Invalid), das::LineInfo());
 		addIEx("None", "CX_SC_None", int64_t(CX_StorageClass::CX_SC_None), das::LineInfo());
 		addIEx("Extern", "CX_SC_Extern", int64_t(CX_StorageClass::CX_SC_Extern), das::LineInfo());
@@ -774,7 +774,7 @@ public:
 	Enumeration_CXChildVisitResult() : das::Enumeration("CXChildVisitResult") {
 		external = true;
 		cppName = "CXChildVisitResult";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXChildVisitResult >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Break", "CXChildVisit_Break", int64_t(CXChildVisitResult::CXChildVisit_Break), das::LineInfo());
 		addIEx("Continue", "CXChildVisit_Continue", int64_t(CXChildVisitResult::CXChildVisit_Continue), das::LineInfo());
 		addIEx("Recurse", "CXChildVisit_Recurse", int64_t(CXChildVisitResult::CXChildVisit_Recurse), das::LineInfo());
@@ -786,7 +786,7 @@ public:
 	Enumeration_CXPrintingPolicyProperty() : das::Enumeration("CXPrintingPolicyProperty") {
 		external = true;
 		cppName = "CXPrintingPolicyProperty";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXPrintingPolicyProperty >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Indentation", "CXPrintingPolicy_Indentation", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_Indentation), das::LineInfo());
 		addIEx("SuppressSpecifiers", "CXPrintingPolicy_SuppressSpecifiers", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressSpecifiers), das::LineInfo());
 		addIEx("SuppressTagKeyword", "CXPrintingPolicy_SuppressTagKeyword", int64_t(CXPrintingPolicyProperty::CXPrintingPolicy_SuppressTagKeyword), das::LineInfo());
@@ -822,7 +822,7 @@ public:
 	Enumeration_CXObjCPropertyAttrKind() : das::Enumeration("CXObjCPropertyAttrKind") {
 		external = true;
 		cppName = "CXObjCPropertyAttrKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXObjCPropertyAttrKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("noattr", "CXObjCPropertyAttr_noattr", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_noattr), das::LineInfo());
 		addIEx("readonly", "CXObjCPropertyAttr_readonly", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_readonly), das::LineInfo());
 		addIEx("getter", "CXObjCPropertyAttr_getter", int64_t(CXObjCPropertyAttrKind::CXObjCPropertyAttr_getter), das::LineInfo());
@@ -845,7 +845,7 @@ public:
 	Enumeration_CXObjCDeclQualifierKind() : das::Enumeration("CXObjCDeclQualifierKind") {
 		external = true;
 		cppName = "CXObjCDeclQualifierKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXObjCDeclQualifierKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXObjCDeclQualifier_None", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_None), das::LineInfo());
 		addIEx("In", "CXObjCDeclQualifier_In", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_In), das::LineInfo());
 		addIEx("Inout", "CXObjCDeclQualifier_Inout", int64_t(CXObjCDeclQualifierKind::CXObjCDeclQualifier_Inout), das::LineInfo());
@@ -861,7 +861,7 @@ public:
 	Enumeration_CXNameRefFlags() : das::Enumeration("CXNameRefFlags") {
 		external = true;
 		cppName = "CXNameRefFlags";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXNameRefFlags >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("WantQualifier", "CXNameRange_WantQualifier", int64_t(CXNameRefFlags::CXNameRange_WantQualifier), das::LineInfo());
 		addIEx("WantTemplateArgs", "CXNameRange_WantTemplateArgs", int64_t(CXNameRefFlags::CXNameRange_WantTemplateArgs), das::LineInfo());
 		addIEx("WantSinglePiece", "CXNameRange_WantSinglePiece", int64_t(CXNameRefFlags::CXNameRange_WantSinglePiece), das::LineInfo());
@@ -873,7 +873,7 @@ public:
 	Enumeration_CXTokenKind() : das::Enumeration("CXTokenKind") {
 		external = true;
 		cppName = "CXTokenKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXTokenKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Punctuation", "CXToken_Punctuation", int64_t(CXTokenKind::CXToken_Punctuation), das::LineInfo());
 		addIEx("Keyword", "CXToken_Keyword", int64_t(CXTokenKind::CXToken_Keyword), das::LineInfo());
 		addIEx("Identifier", "CXToken_Identifier", int64_t(CXTokenKind::CXToken_Identifier), das::LineInfo());
@@ -887,7 +887,7 @@ public:
 	Enumeration_CXCompletionChunkKind() : das::Enumeration("CXCompletionChunkKind") {
 		external = true;
 		cppName = "CXCompletionChunkKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXCompletionChunkKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Optional", "CXCompletionChunk_Optional", int64_t(CXCompletionChunkKind::CXCompletionChunk_Optional), das::LineInfo());
 		addIEx("TypedText", "CXCompletionChunk_TypedText", int64_t(CXCompletionChunkKind::CXCompletionChunk_TypedText), das::LineInfo());
 		addIEx("Text", "CXCompletionChunk_Text", int64_t(CXCompletionChunkKind::CXCompletionChunk_Text), das::LineInfo());
@@ -917,7 +917,7 @@ public:
 	Enumeration_CXCodeComplete_Flags() : das::Enumeration("CXCodeComplete_Flags") {
 		external = true;
 		cppName = "CXCodeComplete_Flags";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXCodeComplete_Flags >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("IncludeMacros", "CXCodeComplete_IncludeMacros", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeMacros), das::LineInfo());
 		addIEx("IncludeCodePatterns", "CXCodeComplete_IncludeCodePatterns", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeCodePatterns), das::LineInfo());
 		addIEx("IncludeBriefComments", "CXCodeComplete_IncludeBriefComments", int64_t(CXCodeComplete_Flags::CXCodeComplete_IncludeBriefComments), das::LineInfo());
@@ -931,7 +931,7 @@ public:
 	Enumeration_CXCompletionContext() : das::Enumeration("CXCompletionContext") {
 		external = true;
 		cppName = "CXCompletionContext";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXCompletionContext >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Unexposed", "CXCompletionContext_Unexposed", int64_t(CXCompletionContext::CXCompletionContext_Unexposed), das::LineInfo());
 		addIEx("AnyType", "CXCompletionContext_AnyType", int64_t(CXCompletionContext::CXCompletionContext_AnyType), das::LineInfo());
 		addIEx("AnyValue", "CXCompletionContext_AnyValue", int64_t(CXCompletionContext::CXCompletionContext_AnyValue), das::LineInfo());
@@ -965,7 +965,7 @@ public:
 	Enumeration_CXEvalResultKind() : das::Enumeration("CXEvalResultKind") {
 		external = true;
 		cppName = "CXEvalResultKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXEvalResultKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Int", "CXEval_Int", int64_t(CXEvalResultKind::CXEval_Int), das::LineInfo());
 		addIEx("Float", "CXEval_Float", int64_t(CXEvalResultKind::CXEval_Float), das::LineInfo());
 		addIEx("ObjCStrLiteral", "CXEval_ObjCStrLiteral", int64_t(CXEvalResultKind::CXEval_ObjCStrLiteral), das::LineInfo());
@@ -981,7 +981,7 @@ public:
 	Enumeration_CXVisitorResult() : das::Enumeration("CXVisitorResult") {
 		external = true;
 		cppName = "CXVisitorResult";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXVisitorResult >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Break", "CXVisit_Break", int64_t(CXVisitorResult::CXVisit_Break), das::LineInfo());
 		addIEx("Continue", "CXVisit_Continue", int64_t(CXVisitorResult::CXVisit_Continue), das::LineInfo());
 	}
@@ -992,7 +992,7 @@ public:
 	Enumeration_CXResult() : das::Enumeration("CXResult") {
 		external = true;
 		cppName = "CXResult";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXResult >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Success", "CXResult_Success", int64_t(CXResult::CXResult_Success), das::LineInfo());
 		addIEx("Invalid", "CXResult_Invalid", int64_t(CXResult::CXResult_Invalid), das::LineInfo());
 		addIEx("VisitBreak", "CXResult_VisitBreak", int64_t(CXResult::CXResult_VisitBreak), das::LineInfo());
@@ -1004,7 +1004,7 @@ public:
 	Enumeration_CXIdxEntityKind() : das::Enumeration("CXIdxEntityKind") {
 		external = true;
 		cppName = "CXIdxEntityKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Unexposed", "CXIdxEntity_Unexposed", int64_t(CXIdxEntityKind::CXIdxEntity_Unexposed), das::LineInfo());
 		addIEx("Typedef", "CXIdxEntity_Typedef", int64_t(CXIdxEntityKind::CXIdxEntity_Typedef), das::LineInfo());
 		addIEx("Function", "CXIdxEntity_Function", int64_t(CXIdxEntityKind::CXIdxEntity_Function), das::LineInfo());
@@ -1040,7 +1040,7 @@ public:
 	Enumeration_CXIdxEntityLanguage() : das::Enumeration("CXIdxEntityLanguage") {
 		external = true;
 		cppName = "CXIdxEntityLanguage";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityLanguage >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXIdxEntityLang_None", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_None), das::LineInfo());
 		addIEx("C", "CXIdxEntityLang_C", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_C), das::LineInfo());
 		addIEx("ObjC", "CXIdxEntityLang_ObjC", int64_t(CXIdxEntityLanguage::CXIdxEntityLang_ObjC), das::LineInfo());
@@ -1054,7 +1054,7 @@ public:
 	Enumeration_CXIdxEntityCXXTemplateKind() : das::Enumeration("CXIdxEntityCXXTemplateKind") {
 		external = true;
 		cppName = "CXIdxEntityCXXTemplateKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityCXXTemplateKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("NonTemplate", "CXIdxEntity_NonTemplate", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_NonTemplate), das::LineInfo());
 		addIEx("Template", "CXIdxEntity_Template", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_Template), das::LineInfo());
 		addIEx("TemplatePartialSpecialization", "CXIdxEntity_TemplatePartialSpecialization", int64_t(CXIdxEntityCXXTemplateKind::CXIdxEntity_TemplatePartialSpecialization), das::LineInfo());
@@ -1067,7 +1067,7 @@ public:
 	Enumeration_CXIdxAttrKind() : das::Enumeration("CXIdxAttrKind") {
 		external = true;
 		cppName = "CXIdxAttrKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxAttrKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Unexposed", "CXIdxAttr_Unexposed", int64_t(CXIdxAttrKind::CXIdxAttr_Unexposed), das::LineInfo());
 		addIEx("IBAction", "CXIdxAttr_IBAction", int64_t(CXIdxAttrKind::CXIdxAttr_IBAction), das::LineInfo());
 		addIEx("IBOutlet", "CXIdxAttr_IBOutlet", int64_t(CXIdxAttrKind::CXIdxAttr_IBOutlet), das::LineInfo());
@@ -1080,7 +1080,7 @@ public:
 	Enumeration_CXIdxDeclInfoFlags() : das::Enumeration("CXIdxDeclInfoFlags") {
 		external = true;
 		cppName = "CXIdxDeclInfoFlags";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxDeclInfoFlags >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Skipped", "CXIdxDeclFlag_Skipped", int64_t(CXIdxDeclInfoFlags::CXIdxDeclFlag_Skipped), das::LineInfo());
 	}
 };
@@ -1090,7 +1090,7 @@ public:
 	Enumeration_CXIdxObjCContainerKind() : das::Enumeration("CXIdxObjCContainerKind") {
 		external = true;
 		cppName = "CXIdxObjCContainerKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxObjCContainerKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("ForwardRef", "CXIdxObjCContainer_ForwardRef", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_ForwardRef), das::LineInfo());
 		addIEx("Interface", "CXIdxObjCContainer_Interface", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_Interface), das::LineInfo());
 		addIEx("Implementation", "CXIdxObjCContainer_Implementation", int64_t(CXIdxObjCContainerKind::CXIdxObjCContainer_Implementation), das::LineInfo());
@@ -1102,7 +1102,7 @@ public:
 	Enumeration_CXIdxEntityRefKind() : das::Enumeration("CXIdxEntityRefKind") {
 		external = true;
 		cppName = "CXIdxEntityRefKind";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIdxEntityRefKind >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("Direct", "CXIdxEntityRef_Direct", int64_t(CXIdxEntityRefKind::CXIdxEntityRef_Direct), das::LineInfo());
 		addIEx("Implicit", "CXIdxEntityRef_Implicit", int64_t(CXIdxEntityRefKind::CXIdxEntityRef_Implicit), das::LineInfo());
 	}
@@ -1113,7 +1113,7 @@ public:
 	Enumeration_CXSymbolRole() : das::Enumeration("CXSymbolRole") {
 		external = true;
 		cppName = "CXSymbolRole";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXSymbolRole >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXSymbolRole_None", int64_t(CXSymbolRole::CXSymbolRole_None), das::LineInfo());
 		addIEx("Declaration", "CXSymbolRole_Declaration", int64_t(CXSymbolRole::CXSymbolRole_Declaration), das::LineInfo());
 		addIEx("Definition", "CXSymbolRole_Definition", int64_t(CXSymbolRole::CXSymbolRole_Definition), das::LineInfo());
@@ -1132,7 +1132,7 @@ public:
 	Enumeration_CXIndexOptFlags() : das::Enumeration("CXIndexOptFlags") {
 		external = true;
 		cppName = "CXIndexOptFlags";
-		baseType = (das::Type) das::ToBasicType< das::underlying_type< CXIndexOptFlags >::type >::type;
+		baseType = (das::Type) das::ToBasicType<int>::type;
 		addIEx("None", "CXIndexOpt_None", int64_t(CXIndexOptFlags::CXIndexOpt_None), das::LineInfo());
 		addIEx("SuppressRedundantRefs", "CXIndexOpt_SuppressRedundantRefs", int64_t(CXIndexOptFlags::CXIndexOpt_SuppressRedundantRefs), das::LineInfo());
 		addIEx("IndexFunctionLocalSymbols", "CXIndexOpt_IndexFunctionLocalSymbols", int64_t(CXIndexOptFlags::CXIndexOpt_IndexFunctionLocalSymbols), das::LineInfo());

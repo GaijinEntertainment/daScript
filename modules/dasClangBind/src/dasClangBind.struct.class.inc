@@ -158,7 +158,6 @@ struct CXCursorAndRangeVisitor_GeneratedAnnotation : ManagedStructureAnnotation<
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(context)>("context","context");
-		addField<DAS_BIND_MANAGED_FIELD(visit)>("visit","visit");
 	}
 };
 
@@ -357,14 +356,6 @@ struct IndexerCallbacks_GeneratedAnnotation : ManagedStructureAnnotation<Indexer
 	IndexerCallbacks_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("IndexerCallbacks", ml) {
 	}
 	void init () {
-		addField<DAS_BIND_MANAGED_FIELD(abortQuery)>("abortQuery","abortQuery");
-		addField<DAS_BIND_MANAGED_FIELD(diagnostic)>("diagnostic","diagnostic");
-		addField<DAS_BIND_MANAGED_FIELD(enteredMainFile)>("enteredMainFile","enteredMainFile");
-		addField<DAS_BIND_MANAGED_FIELD(ppIncludedFile)>("ppIncludedFile","ppIncludedFile");
-		addField<DAS_BIND_MANAGED_FIELD(importedASTFile)>("importedASTFile","importedASTFile");
-		addField<DAS_BIND_MANAGED_FIELD(startedTranslationUnit)>("startedTranslationUnit","startedTranslationUnit");
-		addField<DAS_BIND_MANAGED_FIELD(indexDeclaration)>("indexDeclaration","indexDeclaration");
-		addField<DAS_BIND_MANAGED_FIELD(indexEntityReference)>("indexEntityReference","indexEntityReference");
 	}
 };
 
