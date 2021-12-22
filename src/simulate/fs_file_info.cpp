@@ -2,6 +2,7 @@
 
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/misc/sysos.h"
+#include "daScript/misc/utf8_stdio.h"
 #include "daScript/ast/ast.h"
 
 #define DASLIB_MODULE_NAME  "daslib"
@@ -14,7 +15,7 @@
 namespace das {
 #if !defined(DAS_NO_FILEIO)
     FileInfo * FsFileSystem::tryOpenFile ( const string & fileName ) {
-        if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
+        if ( FILE * ff = fopen_utf8 ( fileName.c_str(), "rb" ) ) {
             struct stat st;
             int fd = fileno((FILE *)ff);
             fstat(fd, &st);
@@ -45,7 +46,7 @@ namespace das {
         auto & hfile = it_ok.first->second;
         if ( it_ok.second ) {
             // we inserted
-            if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
+            if ( FILE * ff = fopen_utf8 ( fileName.c_str(), "rb" ) ) {
                 struct stat st;
                 int fd = fileno((FILE *)ff);
                 fstat(fd, &st);
