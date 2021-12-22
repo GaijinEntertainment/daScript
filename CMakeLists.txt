@@ -420,6 +420,7 @@ src/misc/free_list.cpp
 src/misc/daScriptC.cpp
 src/misc/uric.cpp
 src/misc/utf8_conv.cpp
+src/misc/utf8_stdio.cpp
 )
 list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
