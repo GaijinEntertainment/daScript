@@ -236,7 +236,7 @@ class AnyGenBind
             if rname |> starts_with("struct ")
                 rname = rname |> slice(7)
             elif rname |> starts_with("class ")
-                rname = rname |> slice(7)
+                rname = rname |> slice(6)
             if skip_struct(rname)
                 return true
         return false
