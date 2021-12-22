@@ -91,9 +91,6 @@
         void * getLibraryHandle ( const char * moduleName ) {
             return GetModuleHandleA(moduleName);
         }
-        string normalizeFileName ( const char * fileName ) {
-            return get_full_path_name_utf8(fileName);
-        }
     }
 #elif defined(__linux__)
     #include <unistd.h>
@@ -119,9 +116,6 @@
         }
         void * getLibraryHandle ( const char * lib ) {
             return dlopen(lib,RTLD_LAZY);
-        }
-        string normalizeFileName ( const char * fileName ) {
-            return get_full_path_name_utf8(fileName);
         }
     }
 #elif defined(__APPLE__)
@@ -381,10 +375,6 @@
         void * getLibraryHandle ( const char * lib ) {
             return dlopen(lib,RTLD_LAZY);
         }
-        string normalizeFileName ( const char * fileName ) {
-            // TODO: implement
-            return "";
-        }
     }
 #else
     namespace das {
@@ -410,10 +400,6 @@
         void * getLibraryHandle ( const char *  ) {
             // TODO: implement
             return nullptr;
-        }
-        string normalizeFileName ( const char * fileName ) {
-            // TODO: implement
-            return "";
         }
     }
 #endif
