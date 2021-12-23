@@ -164,6 +164,7 @@ class AnyGenBind
     ARGV : array<string>
     prevFileName : string
     nspaces : array<string>
+    lsp : table<string; string>
     emptyStruct : CXCursor
     hasEmptyStruct : bool
     emptyEnum : CXCursor
@@ -436,7 +437,13 @@ class AnyGenBind
                     // nada?
                     CXChildVisitResult Continue
                 elif kind == CXCursorKind CXXBaseSpecifier
-                    // TODO: support inheritance and generate "is inherited" thing
+                    let class_name = back(nspaces)
+                    if !(lsp |> key_exists(class_name))
+                        var tps = string(clang_getTypeSpelling(clang_getCursorType(c)))
+                        var tpq <- split(tps,"::")  // TODO: better inheritance?
+                        let base_name = back(tpq)
+                        delete tpq
+                        lsp[class_name] = base_name
                     CXChildVisitResult Recurse
                 else
                     to_log(LOG_WARNING, "unsupported {c.kind}: {describe(c)} at {clang_getCursorLocationDescription(c)}")
@@ -882,6 +889,7 @@ class CppGenBind : AnyGenBind
         AnyGenBind`generate(self)
         generateEnumDecl()
         generateDummy()
+        generateStructLsp()
         generateModuleH()
         generateModuleNeedH()
         generateModuleCpp()
@@ -1001,24 +1009,17 @@ class CppGenBind : AnyGenBind
         for index in range(1,func_chunk_index+1)
             print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.func_{index}.cpp\n")
         print("\t)\n\n")
-
-
-/*
-print("{function_result_type} ")
-if !empty(nspaces)
-    for n in nspaces
-        print("{n}::")
-print("{function_name} ( ")
-let narg = clang_Cursor_getNumArguments(c)
-for ai in urange(narg)
-    if ai != 0u
-        print(", ")
-    var carg = clang_Cursor_getArgument(c, ai)
-    let arg_name = string(clang_getCursorSpelling(carg))
-    var arg_type = clang_getCanonicalType(clang_getCursorType(carg))
-    let argument_type = string(clang_getTypeSpelling(arg_type))
-    print("{argument_type} {arg_name}")
-print(" );\n")
-*/
-
-options debugger
+    def generateStructLsp
+        for k,v in keys(lsp),values(lsp)
+            fprint(struct_add_file,"setParents(this,\"{k}\",  \{")
+            var pp : array<string>
+            pp |> push(v)
+            var qv = v
+            while lsp |> key_exists(qv)
+                qv = lsp[qv]
+                pp |> push(qv)
+            for p,i in pp,range(100500)
+                if i!=0
+                    fprint(struct_add_file,",")
+                fprint(struct_add_file,"\"{p}\"")
+            fprint(struct_add_file,"\});\n")

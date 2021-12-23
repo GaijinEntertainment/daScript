@@ -5,6 +5,19 @@
 
 namespace das {
 
+    void setParents ( Module * mod, const char * child, const initializer_list<const char *> & parents ) {
+        auto chA = mod->findAnnotation(child);
+        DAS_VERIFYF(chA,"missing child annotation");
+        DAS_VERIFYF(chA->rtti_isBasicStructureAnnotation(),"expecting basic structure annotation");
+        auto bsaCh = (BasicStructureAnnotation *) chA.get();
+        for ( auto parent : parents ) {
+            auto chP = mod->findAnnotation(parent);
+            DAS_VERIFYF(chP,"missing parent annotation");
+            bsaCh->parents.push_back((TypeAnnotation *)chP.get());
+        }
+    }
+
+
     bool BasicStructureAnnotation::canSubstitute(TypeAnnotation * ann) const {
         if ( this==ann ) return true;
         if ( this->module != ann->module ) return false;
