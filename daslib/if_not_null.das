@@ -32,7 +32,7 @@ class ApplyMacro : AstCallMacro
             if !expr.arguments[0]._type.isPointer
                 macro_error(prog,expr.at,"first argument must be pointer , expecting ptr |> if_not_null() <| call()")
                 return [[ExpressionPtr]]
-            var ifnn_name = "__ifnn_ptr_{if_not_null_index++}"
+            let ifnn_name = "__ifnn_ptr_{if_not_null_index++}"
             // var vptr = ptr
             var vlet <- new [[ExprLet() at=expr.at,atInit=expr.at]]
             vlet.variables |> emplace_new() <| new [[Variable() at=expr.at,

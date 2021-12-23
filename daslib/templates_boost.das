@@ -46,7 +46,7 @@ class private TemplateVisitor : AstVisitor
             let kv = string(ev.name)
             if rules.kaboomVar |> key_exists(kv)
                 let ps = rules.kaboomVar[kv]
-                var nv <- new [[ExprVar() at=expr.at, name:="{ps.prefix}{expr.name}{ps.suffix}"]]
+                let nv <- new [[ExprVar() at=expr.at, name:="{ps.prefix}{expr.name}{ps.suffix}"]]
                 return nv
         return expr
     def override visitExprLet( var expr:smart_ptr<ExprLet> ) : ExpressionPtr
@@ -107,16 +107,16 @@ def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Express
 def unquote_block ( expr:ExpressionPtr ) : smart_ptr<ExprBlock>
     assert(expr is ExprMakeBlock)
     unsafe
-        var mkb <- reinterpret<smart_ptr<ExprMakeBlock>>(expr)
-        var blk := mkb._block
+        let mkb <- reinterpret<smart_ptr<ExprMakeBlock>>(expr)
+        let blk := mkb._block
         return reinterpret<smart_ptr<ExprBlock>>(blk)
 
 def move_unquote_block ( var expr:ExpressionPtr& ) : smart_ptr<ExprBlock>
     assert(expr is ExprMakeBlock)
     unsafe
         var mkb <- reinterpret<smart_ptr<ExprMakeBlock>>(expr)
-        var blk := mkb._block
-        var res <- reinterpret<smart_ptr<ExprBlock>>(blk)
+        let blk := mkb._block
+        let res <- reinterpret<smart_ptr<ExprBlock>>(blk)
         mkb := null
         return res
 
