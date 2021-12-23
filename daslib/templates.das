@@ -48,7 +48,7 @@ class TemplateMacro : AstFunctionAnnotation
         newcall.func = null
         var extra = ""
         for t in fclone.annotations[taidx].arguments
-            var argidx = find_index_if(each(fclone.arguments)) <| $ ( farg )
+            let argidx = find_index_if(each(fclone.arguments)) <| $ ( farg )
                 return farg.name == t.name
             if argidx==-1
                 errors := "can't find template argument {t.name} (or duplicate)"
@@ -65,7 +65,7 @@ class TemplateMacro : AstFunctionAnnotation
                 fclone := [[FunctionPtr]]
                 newcall := [[smart_ptr<ExprCallFunc>]]
                 return [[ExpressionPtr]]
-            var tname = describe_typedecl(argExpr._type,true,true,true)
+            let tname = describe_typedecl(argExpr._type,true,true,true)
             argExpr := null
             extra += "`{hash(tname)}"
             fclone.arguments |> erase(argidx)

@@ -629,7 +629,7 @@ namespace das
             // string builder writer
             addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
-                SideEffects::modifyExternal,"delete_string")->args({"str","context"})->unsafeOperation = true;
+                SideEffects::modifyArgumentAndExternal,"delete_string")->args({"str","context"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
                 SideEffects::modifyExternal,"builtin_build_string_T")->args({"block","context","lineinfo"})->setAotTemplate();
             addExtern<DAS_BIND_FUN(builtin_string_peek)>(*this, lib, "peek_data",

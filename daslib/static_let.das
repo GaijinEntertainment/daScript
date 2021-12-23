@@ -34,12 +34,12 @@ def private make_shutdown_function ( varname:string; at:LineInfo )
 class StaticLetMacro : AstFunctionAnnotation
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         assert(call.arguments[0] is ExprMakeBlock)
-        var mblk = call.arguments[0] as ExprMakeBlock
+        let mblk = call.arguments[0] as ExprMakeBlock
         var blk = mblk._block as ExprBlock
         if blk.finalList.length != 0
             errors := "not expecting finally section in the static_let"
             return [[ExpressionPtr]]
-        var prefix = "`static`at_line_{int(call.at.line)}`"
+        let prefix = "`static`at_line_{int(call.at.line)}`"
         var rules : Template
         for ex in blk.list
             if !(ex is ExprLet)

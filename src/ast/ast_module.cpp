@@ -807,14 +807,19 @@ namespace das {
         }
     }
 
-    // Module group
-
-    ModuleGroup::~ModuleGroup() {
+    void ModuleLibrary::reset() {
         for ( auto & mod : modules ) {
             if ( !mod->builtIn ) {
                 delete mod;
             }
         }
+        modules.clear();
+    }
+
+    // Module group
+
+    ModuleGroup::~ModuleGroup() {
+        reset();
     }
 
     ModuleGroupUserData * ModuleGroup::getUserData ( const string & dataName ) const {

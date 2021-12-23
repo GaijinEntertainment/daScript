@@ -399,7 +399,8 @@ namespace das {
             Visitor::preVisit(expr);
             // TODO:
             //  at some point we should do better data trackng for this type of aliasing
-            if ( expr->returnReference ) propagateWrite(expr->subexpr.get());
+            if ( expr->returnReference || expr->moveSemantics ) propagateWrite(expr->subexpr.get());
+            else if ( expr->subexpr ) propagateRead(expr->subexpr.get());
         }
     // New
         virtual void preVisit ( ExprNew * expr ) override {
@@ -504,6 +505,55 @@ namespace das {
         virtual void preVisit ( ExprMemZero * expr ) override {
             Visitor::preVisit(expr);
             propagateWrite(expr->arguments[0].get());
+        }
+    // make array
+        virtual void preVisit ( ExprMakeArray * expr ) override {
+            Visitor::preVisit(expr);
+            if (!expr->values.empty()) {
+                const bool canCopy = expr->values[0]->type->canCopy();
+                for (auto value : expr->values) {
+                    if (canCopy) {
+                        propagateRead(value.get());
+                    } else {
+                        propagateWrite(value.get());
+                    }
+                }
+            }
+        }
+    // make tuple
+        virtual void preVisit ( ExprMakeTuple * expr ) override {
+            Visitor::preVisit(expr);
+            for (auto value : expr->values) {
+                if (value->type->canCopy()) {
+                    propagateRead(value.get());
+                } else {
+                    propagateWrite(value.get());
+                }
+            }
+        }
+    // MakeStruct
+        virtual void preVisit ( ExprMakeStruct * expr ) override {
+            Visitor::preVisit(expr);
+            for (auto st : expr->structs) {
+                for (auto mfd : *st) {
+                    if (mfd->moveSemantics) {
+                        propagateWrite(mfd->value.get());
+                    } else {
+                        propagateRead(mfd->value.get());
+                    }
+                }
+            }
+        }
+    // make variant
+        virtual void preVisit ( ExprMakeVariant * expr ) override {
+            Visitor::preVisit(expr);
+            for (auto mfd : expr->variants) {
+                 if (mfd->moveSemantics) {
+                    propagateWrite(mfd->value.get());
+                } else {
+                    propagateRead(mfd->value.get());
+                }
+            }
         }
     };
 

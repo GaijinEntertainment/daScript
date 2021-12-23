@@ -68,8 +68,14 @@ class LintVisitor : AstVisitor
             if !v.access_flags.access_ref && !v.access_flags.access_pass && v.init != null && v.init |> is_expr_const()
                 self->lint_error("unused variable", v.at)
                 continue
-            if !v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && v.init != null && !v.init.flags.noSideEffects
+            if !v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && (v.init == null || v.init.flags.noSideEffects)
                 self->lint_error("unused variable", v.at)
+                continue
+            if v._type.baseType != Type tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !v.access_flags.access_ref// && !v._type.flags.smartPtr
+                self->lint_error("variable {v.name}: {describe(v._type)} {describe(v.at)} can be made const", v.at)
+                continue
+            if v._type.baseType == Type tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !(v.access_flags.access_ref || v.access_flags.access_pass)
+                self->lint_error("variable {v.name}: {describe(v._type)} {describe(v.at)} can be made const", v.at)
                 continue
 
 def public paranoid ( prog:ProgramPtr; compile_time_errors : bool )
