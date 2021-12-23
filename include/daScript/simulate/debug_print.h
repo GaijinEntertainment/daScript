@@ -305,13 +305,19 @@ namespace das {
             }
         }
         virtual void Float ( float & f ) override {
-            ss << FIXEDFP << f << SCIENTIFIC;
+            if ( int(flags) & int(PrintFlags::fixedFloatingPoint) )
+                ss << FIXEDFP << f << SCIENTIFIC;
+            else
+                ss << f;
             if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
                 ss << "f";
             }
         }
         virtual void Double ( double & f ) override {
-            ss << FIXEDFP << f << SCIENTIFIC;
+            if ( int(flags) & int(PrintFlags::fixedFloatingPoint) )
+                ss << FIXEDFP << f << SCIENTIFIC;
+            else
+                ss << f;
             if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
                 ss << "lf";
             }
