@@ -828,7 +828,7 @@ namespace das {
                 copyOnReturn = false;
                 moveOnReturn = true;
             } else if ( !result->ref ) {
-                DAS_FATAL_ERROR("ExternalFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
+                DAS_FATAL_ERROR("InteropFn %s can't be bound. It returns values which can't be copied or moved\n", name.c_str());
             }
         } else {
             copyOnReturn = false;

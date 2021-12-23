@@ -3,11 +3,15 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+void foobar ( int i, ... );
+
 class Foo {
 public:
-    int a;
+    int add ( int a, int b ) { return a + b; }
+    static int sadd ( int a, int b ) { return a + b; }
+    int cadd ( int a, int b ) const { return a + b; }
 private:
-    int b;
+    int padd ( int a, int b ) const { return a + b; }
 };
 
 
