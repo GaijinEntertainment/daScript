@@ -356,6 +356,7 @@ namespace das {
             vsiz->at = at;
             vsiz->name = "__size";
             vsiz->type = make_smart<TypeDecl>(Type::autoinfer);
+            vsiz->type->constant = true;
             auto crs = make_smart<ExprCall>(at,"class_rtti_size");
             crs->arguments.push_back(make_smart<ExprVar>(at,"__this"));
             vsiz->init = crs;

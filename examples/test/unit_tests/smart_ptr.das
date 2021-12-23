@@ -40,17 +40,17 @@ def ref_count_test
     var pptr : TestObjectSmart?
     pptr = get_ptr(sptr)
     assert(sptr==ptr)
-    assert(get_ptr(sptr)==ptr)
+    assert(get_const_ptr(sptr)==ptr)
     var qptr : smart_ptr<TestObjectSmart>
     qptr := get_ptr(sptr)                   // ref_count = 2
     assert(smart_ptr_use_count(sptr)==2u)
     assert(qptr==ptr)
-    assert(get_ptr(qptr)==ptr)
+    assert(get_const_ptr(qptr)==ptr)
     assert(qptr==sptr)
     var fptr := qptr                        // ref_count = 3
     assert(smart_ptr_use_count(sptr)==3u)
     assert(fptr!=null)
-    assert(get_ptr(fptr)==sptr)
+    assert(get_const_ptr(fptr)==sptr)
     assert(fptr==qptr)
     assert(fptr==sptr)
     assert(smart_ptr_use_count(sptr)==3u)

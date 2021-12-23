@@ -524,7 +524,7 @@ namespace das {
             SideEffects::none, "makeCall")
                 ->args({"at","name"});
         addExtern<DAS_BIND_FUN(evalSingleExpression)>(*this, lib, "eval_single_expression",
-            SideEffects::none, "evalSingleExpression")
+            SideEffects::modifyArgument, "evalSingleExpression")
                 ->args({"expr","ok"})->unsafeOperation = true;
         // errors
         addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",

@@ -580,6 +580,11 @@ def get_ptr ( src : smart_ptr<auto(TT)> ) : TT?
     unsafe
         return reinterpret<TT?> src
 
+
+def get_const_ptr ( src : smart_ptr<auto(TT)> ) : TT ? const
+    unsafe
+        return reinterpret<TT ? const> src
+
 [generic]
 def get_command_line_arguments : array<string>
     var args : array<string>

@@ -1162,10 +1162,10 @@ namespace das
         addCall<ExprInvoke>("invoke");
         // smart ptr stuff
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone_ptr)>(*this, lib, "smart_ptr_clone",
-            SideEffects::modifyExternal, "builtin_smart_ptr_clone_ptr")
+            SideEffects::modifyArgument, "builtin_smart_ptr_clone_ptr")
                 ->args({"dest","src"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone)>(*this, lib, "smart_ptr_clone",
-            SideEffects::modifyExternal, "builtin_smart_ptr_clone")
+            SideEffects::modifyArgument, "builtin_smart_ptr_clone")
                 ->args({"dest","src"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_use_count)>(*this, lib, "smart_ptr_use_count",
             SideEffects::none, "builtin_smart_ptr_use_count")
