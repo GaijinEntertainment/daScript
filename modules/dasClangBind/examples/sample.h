@@ -3,16 +3,10 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-class Foo {
-public:
-    int add ( int a, int b ) { return a + b; }
-};
-
-class Bar : public Foo {
-public:
-    int sadd ( int a, int b ) { return a + b; }
-};
-
+typedef union Foo_u {
+    int a;
+    char c;
+} Foo;
 
 #if 0
 

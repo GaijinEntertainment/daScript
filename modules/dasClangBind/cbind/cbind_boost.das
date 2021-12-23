@@ -368,7 +368,7 @@ class AnyGenBind
                 elif kind == CXCursorKind Constructor
                     // TODO: support autobind of constructor?
                     return CXChildVisitResult Continue
-                elif kind == CXCursorKind StructDecl || kind == CXCursorKind ClassDecl
+                elif kind == CXCursorKind StructDecl || kind == CXCursorKind ClassDecl || kind == CXCursorKind UnionDecl
                     let struct_name = string(clang_getCursorSpelling(c))
                     if empty(struct_name)
                         if hasEmptyStruct
@@ -722,7 +722,7 @@ class CppGenBind : AnyGenBind
             fprint(struct_decl_file, "MAKE_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n")
             fprint(struct_impl_file, "IMPLEMENT_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n")
         if clang_isForwardDeclaration(c)
-            struct_ann[struct_namespace_name] = false
+            struct_ann[struct_namespace_name] ||= false
             return
         struct_ann[struct_namespace_name] = true
         let st = build_string() <| $ ( var writer:StringBuilderWriter )
