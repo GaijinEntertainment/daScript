@@ -4,6 +4,7 @@ require daslib/defer
 require daslib/strings_boost
 
 class XbyakGen : CppGenBind
+    override generate_lsp = true
     override func_to_stdout = false
     override generate_constant_decl = false
     xbyak_skip_func : table<string;bool>

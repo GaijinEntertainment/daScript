@@ -56,6 +56,8 @@ class GlfwGen : CppGenBind
         module_h_file |> fwrite("\t\tvirtual ~Module_{bind_module}();\n")
         module_h_file |> fwrite("\tpublic:\n")
         module_h_file |> fwrite("\t\tstatic thread_local das_map<void *, GlswCallbacks> g_Callbacks;\n")
+    def override skip_alias ( var c : CXCursor )
+        return false
 
 [export]
 def main

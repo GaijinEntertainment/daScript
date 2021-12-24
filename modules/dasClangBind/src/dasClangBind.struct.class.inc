@@ -2,7 +2,7 @@
 // all user modifications will be lost after this file is re-generated
 
 struct CXString_GeneratedAnnotation : ManagedStructureAnnotation<CXString> {
-	CXString_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXString", ml) {
+	CXString_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXString", ml, "CXString") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(data)>("data","data");
@@ -11,7 +11,7 @@ struct CXString_GeneratedAnnotation : ManagedStructureAnnotation<CXString> {
 };
 
 struct CXStringSet_GeneratedAnnotation : ManagedStructureAnnotation<CXStringSet> {
-	CXStringSet_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXStringSet", ml) {
+	CXStringSet_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXStringSet", ml, "CXStringSet") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(Strings)>("Strings","Strings");
@@ -20,7 +20,7 @@ struct CXStringSet_GeneratedAnnotation : ManagedStructureAnnotation<CXStringSet>
 };
 
 struct CXUnsavedFile_GeneratedAnnotation : ManagedStructureAnnotation<CXUnsavedFile> {
-	CXUnsavedFile_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXUnsavedFile", ml) {
+	CXUnsavedFile_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXUnsavedFile", ml, "CXUnsavedFile") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(Filename)>("Filename","Filename");
@@ -30,7 +30,7 @@ struct CXUnsavedFile_GeneratedAnnotation : ManagedStructureAnnotation<CXUnsavedF
 };
 
 struct CXVersion_GeneratedAnnotation : ManagedStructureAnnotation<CXVersion> {
-	CXVersion_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXVersion", ml) {
+	CXVersion_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXVersion", ml, "CXVersion") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(Major)>("Major","Major");
@@ -40,7 +40,7 @@ struct CXVersion_GeneratedAnnotation : ManagedStructureAnnotation<CXVersion> {
 };
 
 struct CXFileUniqueID_GeneratedAnnotation : ManagedStructureAnnotation<CXFileUniqueID> {
-	CXFileUniqueID_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXFileUniqueID", ml) {
+	CXFileUniqueID_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXFileUniqueID", ml, "CXFileUniqueID") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(data)>("data","data");
@@ -48,7 +48,7 @@ struct CXFileUniqueID_GeneratedAnnotation : ManagedStructureAnnotation<CXFileUni
 };
 
 struct CXSourceLocation_GeneratedAnnotation : ManagedStructureAnnotation<CXSourceLocation> {
-	CXSourceLocation_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXSourceLocation", ml) {
+	CXSourceLocation_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXSourceLocation", ml, "CXSourceLocation") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(ptr_data)>("ptr_data","ptr_data");
@@ -57,7 +57,7 @@ struct CXSourceLocation_GeneratedAnnotation : ManagedStructureAnnotation<CXSourc
 };
 
 struct CXSourceRange_GeneratedAnnotation : ManagedStructureAnnotation<CXSourceRange> {
-	CXSourceRange_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXSourceRange", ml) {
+	CXSourceRange_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXSourceRange", ml, "CXSourceRange") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(ptr_data)>("ptr_data","ptr_data");
@@ -67,7 +67,7 @@ struct CXSourceRange_GeneratedAnnotation : ManagedStructureAnnotation<CXSourceRa
 };
 
 struct CXSourceRangeList_GeneratedAnnotation : ManagedStructureAnnotation<CXSourceRangeList> {
-	CXSourceRangeList_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXSourceRangeList", ml) {
+	CXSourceRangeList_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXSourceRangeList", ml, "CXSourceRangeList") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(count)>("count","count");
@@ -76,7 +76,7 @@ struct CXSourceRangeList_GeneratedAnnotation : ManagedStructureAnnotation<CXSour
 };
 
 struct CXTUResourceUsageEntry_GeneratedAnnotation : ManagedStructureAnnotation<CXTUResourceUsageEntry> {
-	CXTUResourceUsageEntry_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXTUResourceUsageEntry", ml) {
+	CXTUResourceUsageEntry_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXTUResourceUsageEntry", ml, "CXTUResourceUsageEntry") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(kind)>("kind","kind");
@@ -85,7 +85,7 @@ struct CXTUResourceUsageEntry_GeneratedAnnotation : ManagedStructureAnnotation<C
 };
 
 struct CXTUResourceUsage_GeneratedAnnotation : ManagedStructureAnnotation<CXTUResourceUsage> {
-	CXTUResourceUsage_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXTUResourceUsage", ml) {
+	CXTUResourceUsage_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXTUResourceUsage", ml, "CXTUResourceUsage") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(data)>("data","data");
@@ -95,7 +95,7 @@ struct CXTUResourceUsage_GeneratedAnnotation : ManagedStructureAnnotation<CXTURe
 };
 
 struct CXCursor_GeneratedAnnotation : ManagedStructureAnnotation<CXCursor> {
-	CXCursor_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCursor", ml) {
+	CXCursor_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCursor", ml, "CXCursor") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(kind)>("kind","kind");
@@ -105,7 +105,7 @@ struct CXCursor_GeneratedAnnotation : ManagedStructureAnnotation<CXCursor> {
 };
 
 struct CXPlatformAvailability_GeneratedAnnotation : ManagedStructureAnnotation<CXPlatformAvailability> {
-	CXPlatformAvailability_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXPlatformAvailability", ml) {
+	CXPlatformAvailability_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXPlatformAvailability", ml, "CXPlatformAvailability") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(Platform)>("Platform","Platform");
@@ -118,7 +118,7 @@ struct CXPlatformAvailability_GeneratedAnnotation : ManagedStructureAnnotation<C
 };
 
 struct CXType_GeneratedAnnotation : ManagedStructureAnnotation<CXType> {
-	CXType_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXType", ml) {
+	CXType_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXType", ml, "CXType") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(kind)>("kind","kind");
@@ -127,7 +127,7 @@ struct CXType_GeneratedAnnotation : ManagedStructureAnnotation<CXType> {
 };
 
 struct CXToken_GeneratedAnnotation : ManagedStructureAnnotation<CXToken> {
-	CXToken_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXToken", ml) {
+	CXToken_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXToken", ml, "CXToken") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(int_data)>("int_data","int_data");
@@ -136,7 +136,7 @@ struct CXToken_GeneratedAnnotation : ManagedStructureAnnotation<CXToken> {
 };
 
 struct CXCompletionResult_GeneratedAnnotation : ManagedStructureAnnotation<CXCompletionResult> {
-	CXCompletionResult_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCompletionResult", ml) {
+	CXCompletionResult_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCompletionResult", ml, "CXCompletionResult") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(CursorKind)>("CursorKind","CursorKind");
@@ -145,7 +145,7 @@ struct CXCompletionResult_GeneratedAnnotation : ManagedStructureAnnotation<CXCom
 };
 
 struct CXCodeCompleteResults_GeneratedAnnotation : ManagedStructureAnnotation<CXCodeCompleteResults> {
-	CXCodeCompleteResults_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCodeCompleteResults", ml) {
+	CXCodeCompleteResults_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCodeCompleteResults", ml, "CXCodeCompleteResults") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(Results)>("Results","Results");
@@ -154,7 +154,7 @@ struct CXCodeCompleteResults_GeneratedAnnotation : ManagedStructureAnnotation<CX
 };
 
 struct CXCursorAndRangeVisitor_GeneratedAnnotation : ManagedStructureAnnotation<CXCursorAndRangeVisitor> {
-	CXCursorAndRangeVisitor_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCursorAndRangeVisitor", ml) {
+	CXCursorAndRangeVisitor_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCursorAndRangeVisitor", ml, "CXCursorAndRangeVisitor") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(context)>("context","context");
@@ -162,7 +162,7 @@ struct CXCursorAndRangeVisitor_GeneratedAnnotation : ManagedStructureAnnotation<
 };
 
 struct CXIdxLoc_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxLoc> {
-	CXIdxLoc_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxLoc", ml) {
+	CXIdxLoc_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxLoc", ml, "CXIdxLoc") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(ptr_data)>("ptr_data","ptr_data");
@@ -171,7 +171,7 @@ struct CXIdxLoc_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxLoc> {
 };
 
 struct CXIdxIncludedFileInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxIncludedFileInfo> {
-	CXIdxIncludedFileInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxIncludedFileInfo", ml) {
+	CXIdxIncludedFileInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxIncludedFileInfo", ml, "CXIdxIncludedFileInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(hashLoc)>("hashLoc","hashLoc");
@@ -184,7 +184,7 @@ struct CXIdxIncludedFileInfo_GeneratedAnnotation : ManagedStructureAnnotation<CX
 };
 
 struct CXIdxImportedASTFileInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxImportedASTFileInfo> {
-	CXIdxImportedASTFileInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxImportedASTFileInfo", ml) {
+	CXIdxImportedASTFileInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxImportedASTFileInfo", ml, "CXIdxImportedASTFileInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(file)>("file","file");
@@ -195,7 +195,7 @@ struct CXIdxImportedASTFileInfo_GeneratedAnnotation : ManagedStructureAnnotation
 };
 
 struct CXIdxAttrInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxAttrInfo> {
-	CXIdxAttrInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxAttrInfo", ml) {
+	CXIdxAttrInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxAttrInfo", ml, "CXIdxAttrInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(kind)>("kind","kind");
@@ -205,7 +205,7 @@ struct CXIdxAttrInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxAttrI
 };
 
 struct CXIdxEntityInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxEntityInfo> {
-	CXIdxEntityInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxEntityInfo", ml) {
+	CXIdxEntityInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxEntityInfo", ml, "CXIdxEntityInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(kind)>("kind","kind");
@@ -220,7 +220,7 @@ struct CXIdxEntityInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxEnt
 };
 
 struct CXIdxContainerInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxContainerInfo> {
-	CXIdxContainerInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxContainerInfo", ml) {
+	CXIdxContainerInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxContainerInfo", ml, "CXIdxContainerInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(cursor)>("cursor","cursor");
@@ -228,7 +228,7 @@ struct CXIdxContainerInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdx
 };
 
 struct CXIdxIBOutletCollectionAttrInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxIBOutletCollectionAttrInfo> {
-	CXIdxIBOutletCollectionAttrInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxIBOutletCollectionAttrInfo", ml) {
+	CXIdxIBOutletCollectionAttrInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxIBOutletCollectionAttrInfo", ml, "CXIdxIBOutletCollectionAttrInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(attrInfo)>("attrInfo","attrInfo");
@@ -239,7 +239,7 @@ struct CXIdxIBOutletCollectionAttrInfo_GeneratedAnnotation : ManagedStructureAnn
 };
 
 struct CXIdxDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxDeclInfo> {
-	CXIdxDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxDeclInfo", ml) {
+	CXIdxDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxDeclInfo", ml, "CXIdxDeclInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(entityInfo)>("entityInfo","entityInfo");
@@ -259,7 +259,7 @@ struct CXIdxDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxDeclI
 };
 
 struct CXIdxObjCContainerDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCContainerDeclInfo> {
-	CXIdxObjCContainerDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCContainerDeclInfo", ml) {
+	CXIdxObjCContainerDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCContainerDeclInfo", ml, "CXIdxObjCContainerDeclInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(declInfo)>("declInfo","declInfo");
@@ -268,7 +268,7 @@ struct CXIdxObjCContainerDeclInfo_GeneratedAnnotation : ManagedStructureAnnotati
 };
 
 struct CXIdxBaseClassInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxBaseClassInfo> {
-	CXIdxBaseClassInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxBaseClassInfo", ml) {
+	CXIdxBaseClassInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxBaseClassInfo", ml, "CXIdxBaseClassInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(base)>("base","base");
@@ -278,7 +278,7 @@ struct CXIdxBaseClassInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdx
 };
 
 struct CXIdxObjCProtocolRefInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCProtocolRefInfo> {
-	CXIdxObjCProtocolRefInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCProtocolRefInfo", ml) {
+	CXIdxObjCProtocolRefInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCProtocolRefInfo", ml, "CXIdxObjCProtocolRefInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(protocol)>("protocol","protocol");
@@ -288,7 +288,7 @@ struct CXIdxObjCProtocolRefInfo_GeneratedAnnotation : ManagedStructureAnnotation
 };
 
 struct CXIdxObjCProtocolRefListInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCProtocolRefListInfo> {
-	CXIdxObjCProtocolRefListInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCProtocolRefListInfo", ml) {
+	CXIdxObjCProtocolRefListInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCProtocolRefListInfo", ml, "CXIdxObjCProtocolRefListInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(protocols)>("protocols","protocols");
@@ -297,7 +297,7 @@ struct CXIdxObjCProtocolRefListInfo_GeneratedAnnotation : ManagedStructureAnnota
 };
 
 struct CXIdxObjCInterfaceDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCInterfaceDeclInfo> {
-	CXIdxObjCInterfaceDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCInterfaceDeclInfo", ml) {
+	CXIdxObjCInterfaceDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCInterfaceDeclInfo", ml, "CXIdxObjCInterfaceDeclInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(containerInfo)>("containerInfo","containerInfo");
@@ -307,7 +307,7 @@ struct CXIdxObjCInterfaceDeclInfo_GeneratedAnnotation : ManagedStructureAnnotati
 };
 
 struct CXIdxObjCCategoryDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCCategoryDeclInfo> {
-	CXIdxObjCCategoryDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCCategoryDeclInfo", ml) {
+	CXIdxObjCCategoryDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCCategoryDeclInfo", ml, "CXIdxObjCCategoryDeclInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(containerInfo)>("containerInfo","containerInfo");
@@ -319,7 +319,7 @@ struct CXIdxObjCCategoryDeclInfo_GeneratedAnnotation : ManagedStructureAnnotatio
 };
 
 struct CXIdxObjCPropertyDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCPropertyDeclInfo> {
-	CXIdxObjCPropertyDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCPropertyDeclInfo", ml) {
+	CXIdxObjCPropertyDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCPropertyDeclInfo", ml, "CXIdxObjCPropertyDeclInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(declInfo)>("declInfo","declInfo");
@@ -329,7 +329,7 @@ struct CXIdxObjCPropertyDeclInfo_GeneratedAnnotation : ManagedStructureAnnotatio
 };
 
 struct CXIdxCXXClassDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxCXXClassDeclInfo> {
-	CXIdxCXXClassDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxCXXClassDeclInfo", ml) {
+	CXIdxCXXClassDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxCXXClassDeclInfo", ml, "CXIdxCXXClassDeclInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(declInfo)>("declInfo","declInfo");
@@ -339,7 +339,7 @@ struct CXIdxCXXClassDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CX
 };
 
 struct CXIdxEntityRefInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxEntityRefInfo> {
-	CXIdxEntityRefInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxEntityRefInfo", ml) {
+	CXIdxEntityRefInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxEntityRefInfo", ml, "CXIdxEntityRefInfo") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(kind)>("kind","kind");
@@ -353,7 +353,7 @@ struct CXIdxEntityRefInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdx
 };
 
 struct IndexerCallbacks_GeneratedAnnotation : ManagedStructureAnnotation<IndexerCallbacks> {
-	IndexerCallbacks_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("IndexerCallbacks", ml) {
+	IndexerCallbacks_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("IndexerCallbacks", ml, "IndexerCallbacks") {
 	}
 	void init () {
 	}

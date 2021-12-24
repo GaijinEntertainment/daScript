@@ -3,10 +3,15 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-typedef union Foo_u {
-    int a;
-    char c;
-} Foo;
+enum Foo_ {
+    bar = 1,
+    far = 2
+};
+
+typedef int Foo;
+
+void pst ( Foo t );
+
 
 #if 0
 

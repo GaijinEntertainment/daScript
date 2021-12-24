@@ -58,6 +58,8 @@ ModuleAotType Module_dasClangBind::aotRequire ( TextWriter & tw ) const {
     // add your stuff here
     tw << "#include <clang-c/Index.h>\n";
     tw << "#include \"../modules/dasClangBind/src/aot_dasClangBind.h\"\n";
+    tw << "#include \"daScript/simulate/bind_enum.h\"\n";
+    tw << "#include \"../modules/dasClangBind/src/dasClangBind.enum.decl.cast.inc\"\n";
     return ModuleAotType::cpp;
 }
 

@@ -69,6 +69,8 @@ class BgfxGen : CppGenBind
         if fname|>ends_with("bgfx.h") || fname|>ends_with("defines.h")
             return false
         return ! fname |> ends_with(PARSE_FILE_NAME)
+    def override skip_alias ( var c : CXCursor )
+        return false
 
 [export]
 def main

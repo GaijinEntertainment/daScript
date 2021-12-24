@@ -72,7 +72,8 @@ class ClangGen : CppGenBind
         elif fname |> ends_with("CXString.h")
             return false
         return ! fname |> ends_with(PARSE_FILE_NAME)
-
+    def override skip_alias ( var c : CXCursor )
+        return false
 
 [export]
 def main

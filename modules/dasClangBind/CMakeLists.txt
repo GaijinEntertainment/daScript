@@ -37,6 +37,7 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_CLAN
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.enum.add.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.enum.class.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.enum.decl.inc
+		${DAS_CLANG_BIND_DIR}/src/dasClangBind.enum.decl.cast.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.add.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.postadd.inc
 		${DAS_CLANG_BIND_DIR}/src/dasClangBind.struct.class.inc
