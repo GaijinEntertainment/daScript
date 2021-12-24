@@ -394,11 +394,11 @@ namespace das
     ,   singleLine =            (1<<5)
     ,   fixedFloatingPoint =    (1<<6)
 
-    ,   string_builder  =   PrintFlags::none
+    ,   string_builder  =   PrintFlags::fixedFloatingPoint
     ,   debugger        =   PrintFlags::escapeString | PrintFlags::namesAndDimensions
-            | PrintFlags::humanReadable | PrintFlags::typeQualifiers | PrintFlags::refAddresses
+            | PrintFlags::humanReadable | PrintFlags::typeQualifiers | PrintFlags::refAddresses | PrintFlags::fixedFloatingPoint
     ,   stackwalker     =   PrintFlags::escapeString | PrintFlags::namesAndDimensions
-            | PrintFlags::typeQualifiers | PrintFlags::humanReadable
+            | PrintFlags::typeQualifiers | PrintFlags::humanReadable | PrintFlags::fixedFloatingPoint
     };
 
     string debug_type ( const TypeInfo * info );
