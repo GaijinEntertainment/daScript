@@ -13,7 +13,6 @@ set(EXECUTABLE_OUTPUT_PATH  ${PROJECT_SOURCE_DIR}/bin/)
 
 SET(LINUX_UUID FALSE)
 
-FIND_XXD()
 FIND_FLEX_AND_BISON()
 
 SETUP_COMPILER()
@@ -382,12 +381,12 @@ src/builtin/debugger.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
-XXD(src/builtin/builtin.das)
-XXD(src/builtin/fio.das)
-XXD(src/builtin/rtti.das)
-XXD(src/builtin/ast.das)
-XXD(src/builtin/network.das)
-XXD(src/builtin/debugger.das)
+CMAKE_XXD(src/builtin/builtin.das)
+CMAKE_XXD(src/builtin/fio.das)
+CMAKE_XXD(src/builtin/rtti.das)
+CMAKE_XXD(src/builtin/ast.das)
+CMAKE_XXD(src/builtin/network.das)
+CMAKE_XXD(src/builtin/debugger.das)
 
 SET(MISC_SRC
 include/daScript/misc/enums.h
@@ -634,7 +633,7 @@ examples/test/unit_test.das
 )
 SOURCE_GROUP_FILES("source" TEST_MAIN_LIB_SRC)
 
-XXD(examples/test/unit_test.das)
+CMAKE_XXD(examples/test/unit_test.das)
 
 ADD_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC})
 SETUP_CPP11(libDaScriptTest)
