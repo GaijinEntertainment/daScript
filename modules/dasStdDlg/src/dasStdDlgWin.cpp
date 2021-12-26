@@ -1,5 +1,4 @@
 #include "daScript/misc/platform.h"
-#include "daScript/misc/utf8_conv.h"
 
 #include "dasStdDlg.h"
 
@@ -9,6 +8,16 @@
 #include <codecvt>
 
 namespace das {
+
+	wstring string_to_wstring ( const string& utf8String ) {
+		wstring_convert<codecvt_utf8<wchar_t>> convert;
+		return convert.from_bytes(utf8String);
+	}
+
+	string wstring_to_string ( const wstring & wideString ) {
+		wstring_convert<codecvt_utf8<wchar_t>> convert;
+		return convert.to_bytes(wideString);
+	}
 
 	vector<string> split ( const char * str, const char * delim );
 
@@ -20,14 +29,14 @@ namespace das {
 	}
 
 	bool GetOkCancelFromUser(const char * caption, const char * body) {
-		wstring wcaption = utf8_to_wstring(caption);
-		wstring wbody = utf8_to_wstring(body);
+		wstring wcaption = string_to_wstring(caption ? caption : "");
+		wstring wbody = string_to_wstring(body ? body : "");
 		return MessageBoxW ( GetHWND(), wbody.c_str(), wcaption.c_str(), MB_OKCANCEL) == IDOK;
 	}
 
 	bool GetOkFromUser(const char * caption, const char * body) {
-		wstring wcaption = utf8_to_wstring(caption);
-		wstring wbody = utf8_to_wstring(body);
+		wstring wcaption = string_to_wstring(caption ? caption : "");
+		wstring wbody = string_to_wstring(body ? body : "");
 		MessageBoxW ( GetHWND(), wbody.c_str(), wcaption.c_str(), MB_OK);
 		return true;
 	}
@@ -36,8 +45,8 @@ namespace das {
 		if (!filter) return;
 		vector<string> exts = split(filter, "|");
 		for (size_t i = 0; i < exts.size(); ++i) {
-			extensions.push_back(utf8_to_wstring(exts[i]));
-			filterStr.append(utf8_to_wstring(string("*.") + exts[i]));
+			extensions.push_back(string_to_wstring(exts[i]));
+			filterStr.append(string_to_wstring(string("*.") + exts[i]));
 			if (i < (exts.size() - 1)) {
 				filterStr.append(L";");
 			}
@@ -69,7 +78,7 @@ namespace das {
 		if (FAILED(dialog->SetDefaultExtension(extensions[0].c_str()))) return string();
 		if (initialPath && *initialPath) {
 			DECL_AUTO_RELEASE_PTR(IShellItem, folder);
-			wstring path = utf8_to_wstring(initialPath);
+			wstring path = string_to_wstring(initialPath);
 			if (PathIsDirectoryW(path.c_str())) {
 				if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), NULL, IID_PPV_ARGS(&folder)))) {
 					dialog->SetDefaultFolder(folder);
@@ -77,7 +86,7 @@ namespace das {
 			}
 		}
 		if (initialFileName) {
-			wstring fileName = utf8_to_wstring(initialFileName);
+			wstring fileName = string_to_wstring(initialFileName);
 			dialog->SetFileName(fileName.c_str());
 		}
 		dialog->Show(GetHWND());
@@ -87,7 +96,7 @@ namespace das {
 		if (FAILED(shellItem->GetDisplayName(SIGDN_FILESYSPATH, &filePath))) return string();
 		wstring result = filePath;
 		CoTaskMemFree(filePath);
-		return wstring_to_utf8(result);
+		return wstring_to_string(result);
 	}
 
 	string GetOpenFileFromUser ( const char * initialPath, const char * filter ) {
@@ -105,7 +114,7 @@ namespace das {
 		if (FAILED(dialog->SetDefaultExtension(extensions[0].c_str()))) return string();
 		if (initialPath && *initialPath) {
 			DECL_AUTO_RELEASE_PTR(IShellItem, folder);
-			wstring path = utf8_to_wstring(initialPath);
+			wstring path = string_to_wstring(initialPath);
 			if (PathIsDirectoryW(path.c_str())) {
 				if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), NULL, IID_PPV_ARGS(&folder)))) {
 					dialog->SetDefaultFolder(folder);
@@ -129,6 +138,6 @@ namespace das {
 		if (FAILED(shellItem->GetDisplayName(SIGDN_FILESYSPATH, &filePath))) return string();
 		wstring result = filePath;
 		CoTaskMemFree(filePath);
-		return wstring_to_utf8(result);
+		return wstring_to_string(result);
 	}
 }
