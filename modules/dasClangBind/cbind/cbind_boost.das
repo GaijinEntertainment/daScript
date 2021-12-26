@@ -831,7 +831,7 @@ class CppGenBind : AnyGenBind
         fprint(struct_postadd_file,"initRecAnnotation(ann_{struct_name},lib);\n")
     def typeSpelling ( var c : CXType )
         let nspl = string(clang_getTypeSpelling(c))
-        if nspl=="size_t" || nspl=="std::size_t"
+        if nspl=="size_t" || nspl=="std::size_t" || nspl=="intptr_t" || nspl=="uintptr_t"
             return nspl
         var spl = string(clang_getTypeSpelling(clang_getCanonicalType(c)))
         if c.kind == CXTypeKind Enum
