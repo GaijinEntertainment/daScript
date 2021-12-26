@@ -76,14 +76,17 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 			${CARBON_LIBRARY}
 		)
 	ELSEIF(UNIX)
+		include(FindX11)
 		SET(SFML_LIBRARIES
-		${DAS_SFML_DIR}/libsfml/lib/sfml-main.a
-		${DAS_SFML_DIR}/libsfml/lib/sfml-system-s.a
-		${DAS_SFML_DIR}/libsfml/lib/sfml-window-s.a
-		${DAS_SFML_DIR}/libsfml/lib/sfml-audio-s.a
-		${DAS_SFML_DIR}/libsfml/lib/sfml-graphics-s.a
-		${DAS_SFML_DIR}/libsfml/lib/sfml-network-s.a
-		${DAS_SFML_DIR}/libsfml/lib/freetype.a
+		${DAS_SFML_DIR}/libsfml/lib/libsfml-system-s.a
+		${DAS_SFML_DIR}/libsfml/lib/libsfml-window-s.a
+		${DAS_SFML_DIR}/libsfml/lib/libsfml-audio-s.a
+		${DAS_SFML_DIR}/libsfml/lib/libsfml-graphics-s.a
+		${DAS_SFML_DIR}/libsfml/lib/libsfml-network-s.a
+		freetype
+		udev
+		${X11_X11_LIB}
+		${X11_Xcursor_LIB}
 		)
 	ELSE()
 		SET(SFML_LIBRARIES

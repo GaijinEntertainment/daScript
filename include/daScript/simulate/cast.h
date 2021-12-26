@@ -232,6 +232,21 @@ namespace das
         static __forceinline vec4f from ( uint64_t x )         { return v_cast_vec4f(v_splatsi64(x)); }
     };
 
+#if defined(__linux__)
+
+
+    template <>
+    struct cast <long long int> {
+        static __forceinline long long int to ( vec4f x )            { return v_extract_xi64(v_cast_vec4i(x)); }
+        static __forceinline vec4f from ( long long int x )          { return v_cast_vec4f(v_splatsi64(x)); }
+    };
+    template <>
+    struct cast <unsigned long long int> {
+        static __forceinline unsigned long long int to ( vec4f x )           { return v_extract_xi64(v_cast_vec4i(x)); }
+        static __forceinline vec4f from ( unsigned long long int x )         { return v_cast_vec4f(v_splatsi64(x)); }
+    };
+#endif
+
     template <>
     struct cast <float> {
         static __forceinline float to ( vec4f x )              { return v_extract_x(x); }

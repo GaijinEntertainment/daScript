@@ -18,14 +18,14 @@ void Module_dasSFML::initFunctions_1() {
 	using _method_2 = das::das_call_member< int (sf::Time::*)() const,&sf::Time::asMilliseconds >;
 	addExtern<DAS_CALL_METHOD(_method_2)>(*this,lib,"asMilliseconds",SideEffects::worstDefault,"das_call_member< int (sf::Time::*)() const , &sf::Time::asMilliseconds >::invoke")
 		->args({"self"});
-	using _method_3 = das::das_call_member< long long (sf::Time::*)() const,&sf::Time::asMicroseconds >;
-	addExtern<DAS_CALL_METHOD(_method_3)>(*this,lib,"asMicroseconds",SideEffects::worstDefault,"das_call_member< long long (sf::Time::*)() const , &sf::Time::asMicroseconds >::invoke")
+	using _method_3 = das::das_call_member< sf::Int64 (sf::Time::*)() const,&sf::Time::asMicroseconds >;
+	addExtern<DAS_CALL_METHOD(_method_3)>(*this,lib,"asMicroseconds",SideEffects::worstDefault,"das_call_member< sf::Int64 (sf::Time::*)() const , &sf::Time::asMicroseconds >::invoke")
 		->args({"self"});
 	addExtern< sf::Time (*)(float) , sf::seconds ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"seconds",SideEffects::worstDefault,"sf::seconds")
 		->args({"amount"});
 	addExtern< sf::Time (*)(int) , sf::milliseconds ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"milliseconds",SideEffects::worstDefault,"sf::milliseconds")
 		->args({"amount"});
-	addExtern< sf::Time (*)(long long) , sf::microseconds ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"microseconds",SideEffects::worstDefault,"sf::microseconds")
+	addExtern< sf::Time (*)(sf::Int64) , sf::microseconds ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"microseconds",SideEffects::worstDefault,"sf::microseconds")
 		->args({"amount"});
 	addCtorAndUsing<sf::Clock>(*this,lib,"Clock","sf::Clock");
 	using _method_4 = das::das_call_member< sf::Time (sf::Clock::*)() const,&sf::Clock::getElapsedTime >;

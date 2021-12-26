@@ -259,13 +259,13 @@ class AnyGenBind
         let narg = clang_Cursor_getNumArguments(c)
         for ai in urange(narg)
             var carg = clang_Cursor_getArgument(c, ai)
-            var arg_type = clang_getCanonicalType(clang_getCursorType(carg))
+            var arg_type = clang_getCursorType(carg)
             if skip_type(arg_type)
                 let arg_type_name = string(clang_getTypeSpelling(arg_type))
                 let arg_name = string(clang_getCursorSpelling(carg))
                 to_log(LOG_INFO,"skipping function {function_name} due to argument {arg_name} type {arg_type_name} at {clang_getCursorLocationDescription(c)}")
                 return true
-        var res_type = clang_getCanonicalType(clang_getResultType(fun_type))
+        var res_type = clang_getResultType(fun_type)
         if skip_type(res_type)
             let res_type_name = string(clang_getTypeSpelling(res_type))
             to_log(LOG_INFO,"skipping function {function_name} due to result type {res_type_name} at {clang_getCursorLocationDescription(c)}")
@@ -273,7 +273,11 @@ class AnyGenBind
         return false
     def skip_struct ( name : string )
         return false
-    def skip_type ( var c : CXType )
+    def skip_type ( var _c : CXType )
+        let nc_name = string(clang_getTypeSpelling(_c))
+        if nc_name=="va_list"
+            return true
+        var c = clang_getCanonicalType(_c)
         if c.kind == CXTypeKind Pointer
             var pc = clang_getPointeeType(c)
             if pc.kind==CXTypeKind FunctionProto
@@ -450,7 +454,7 @@ class AnyGenBind
                         let field_name = string(clang_getCursorSpelling(c))
                         to_log(LOG_INFO, "skipping {namespace_name(field_name)} due to access specifier {acs}")
                         return CXChildVisitResult Continue
-                    var field_type = clang_getCanonicalType(clang_getCursorType(c))
+                    var field_type = clang_getCursorType(c)
                     if skip_type(field_type)
                         let field_name = string(clang_getCursorSpelling(c))
                         let field_type_name = string(clang_getTypeSpelling(field_type))
@@ -831,11 +835,14 @@ class CppGenBind : AnyGenBind
         fprint(struct_postadd_file,"initRecAnnotation(ann_{struct_name},lib);\n")
     def typeSpelling ( var c : CXType )
         let nspl = string(clang_getTypeSpelling(c))
-        if nspl=="size_t" || nspl=="std::size_t" || nspl=="intptr_t" || nspl=="uintptr_t"
+        if nspl=="size_t" || nspl=="std::size_t" || nspl=="intptr_t" || nspl=="uintptr_t" || nspl=="size_t *"
             return nspl
-        var spl = string(clang_getTypeSpelling(clang_getCanonicalType(c)))
+        var t = clang_getCanonicalType(c)
+        var spl = string(clang_getTypeSpelling(t))
         if c.kind == CXTypeKind Enum
-            spl = enum2enum?[spl] ?? spl
+            return enum2enum?[spl] ?? spl
+        elif t.kind==CXTypeKind Long || t.kind==CXTypeKind LongLong || t.kind==CXTypeKind ULong || t.kind==CXTypeKind ULongLong
+            return nspl // if its a fancy type, which may be different on different platform
         return spl
     def functionPtrSpelling ( var c : CXCursor; isMethod:bool )
         // TODO: calling convention?

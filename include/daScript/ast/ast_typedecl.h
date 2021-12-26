@@ -247,6 +247,10 @@ namespace das {
     // note - under MSVC size_t is unsigned __int64 (or 32) accordingly
     template<> struct ToBasicType<size_t>       { enum { type = sizeof(size_t)==8 ? Type::tUInt64 : Type::tUInt }; };
 #endif
+#if defined(__linux__)
+    template<> struct ToBasicType<long long int>      { enum { type = Type::tInt64 }; };
+    template<> struct ToBasicType<unsigned long long int>     { enum { type = Type::tUInt64 }; };
+#endif
     template<> struct ToBasicType<float2>       { enum { type = Type::tFloat2 }; };
     template<> struct ToBasicType<float3>       { enum { type = Type::tFloat3 }; };
     template<> struct ToBasicType<float4>       { enum { type = Type::tFloat4 }; };
