@@ -116,4 +116,11 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 	)
 
 	SETUP_CPP11(libDasModuleSFML)
+
+    IF(APPLE)
+        set(CMAKE_MACOSX_RPATH TRUE)
+        set(CMAKE_INSTALL_RPATH "${DAS_SFML_DIR}/SFML/extlibs/libs-osx/Frameworks")
+		set(CMAKE_BUILD_RPATH "${DAS_SFML_DIR}/SFML/extlibs/libs-osx/Frameworks")
+    ENDIF()
+
 ENDIF()
