@@ -6,11 +6,20 @@
 
 namespace sf {
     class Foo {
-    public:
-        Foo();
-        Foo(int a = 5, float b = 6);
     };
 
+    class Hoo {
+        void printHoo();
+    };
+
+
+    class Goo {
+        void printHoo();
+    };
+
+    class Bar : public Foo, Hoo, public Goo {
+        void printBar();
+    };
 
 };
 

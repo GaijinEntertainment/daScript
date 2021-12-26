@@ -165,6 +165,7 @@ class AnyGenBind
     prevFileName : string
     nspaces : array<string>
     lsp : table<string; string>
+    interfaces : table<string; array<string>>
     emptyStruct : CXCursor
     hasEmptyStruct : bool
     emptyEnum : CXCursor
@@ -484,12 +485,18 @@ class AnyGenBind
                 */
                 elif kind == CXCursorKind CXXBaseSpecifier
                     let class_name = back(nspaces)
+                    var tps = string(clang_getTypeSpelling(clang_getCursorType(c)))
+                    var tpq <- split(tps,"::")  // TODO: better inheritance?
+                    let base_name = back(tpq)
+                    delete tpq
                     if !(lsp |> key_exists(class_name))
-                        var tps = string(clang_getTypeSpelling(clang_getCursorType(c)))
-                        var tpq <- split(tps,"::")  // TODO: better inheritance?
-                        let base_name = back(tpq)
-                        delete tpq
                         lsp[class_name] = base_name
+                    else
+                        var acs = clang_getCXXAccessSpecifier(c)
+                        if acs == CX_CXXAccessSpecifier Public
+                            interfaces[class_name] |> push(base_name)
+                        else
+                            to_log(LOG_WARNING, "skipping interface {base_name} due to access specifier {acs} at {clang_getCursorLocationDescription(c)}")
                     CXChildVisitResult Recurse
                 elif kind == CXCursorKind ClassTemplate
                     let template_name = string(clang_getCursorSpelling(c))
@@ -614,7 +621,7 @@ let DEFAULT_CLANG_ARGUMENTS <- [{string
 
 class CppGenBind : AnyGenBind
     include_parse_file = true
-    generate_lsp = false
+    generate_lsp : bool = false
     override define_const_style_das = false
     enum_decl_file : FILE const?
     enum_decl_cast_file : FILE const?
@@ -650,6 +657,7 @@ class CppGenBind : AnyGenBind
     aot_alias : table<string; bool>
     already_defined : table<string; bool>
     nsst2st : table<string; string>
+    st2nsst : table<string; string>
     require_modules : array<string>
     alias2type : table<string; string>
     enums_with_flags : table<string; bool>
@@ -784,6 +792,7 @@ class CppGenBind : AnyGenBind
     def override parse_Struct ( var c : CXCursor; struct_name : string )
         let struct_namespace_name = namespace_name(struct_name)
         nsst2st[struct_namespace_name] = struct_name
+        st2nsst[struct_name] = struct_namespace_name
         let isAotAlias = aot_alias |> key_exists(struct_namespace_name)
         let isAlreadyDefined = already_defined |> key_exists(struct_namespace_name)
         if !struct_ann |> key_exists(struct_namespace_name)
@@ -1105,6 +1114,7 @@ class CppGenBind : AnyGenBind
         generateDummy()
         if generate_lsp
             generateStructLsp()
+            generateStructInterfaces()
         generateModuleH()
         generateModuleNeedH()
         generateModuleCpp()
@@ -1253,6 +1263,14 @@ class CppGenBind : AnyGenBind
                     fprint(struct_add_file,",")
                 fprint(struct_add_file,"\"{p}\"")
             fprint(struct_add_file,"\});\n")
+    def generateStructInterfaces
+        for k,v in keys(interfaces),values(interfaces)
+            for i in v
+                step_Function()
+                let ct = st2nsst[k]
+                let it = st2nsst[i]
+                fprint(func_file,"\taddExtern< decltype(&with_interface<{ct},{it}>), with_interface<{ct},{it}> >")
+                fprint(func_file, "(*this,lib,\"interface\",SideEffects::invoke,\"with_interface<{ct},{it}>\");\n")
 
 def clang_reportAst(PARSE_FILE_NAME, PARSE_FILE_PREFIX:string; ARGV:array<string>)
     to_log(LOG_INFO,"--------------------------------------------------------------------------------------------------------")

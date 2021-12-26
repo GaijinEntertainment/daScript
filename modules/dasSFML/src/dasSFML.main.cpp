@@ -18,18 +18,12 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(Mat4,sf::Glsl::Mat4);
 
 namespace das {
 
-    void sfml_window_close ( sf::Window & win ) { win.close(); }
-
-    void sflm_with_render_target ( sf::RenderWindow & win, const TBlock<void,sf::RenderTarget> & block, Context * context, LineInfoArg * at ) {
-        das_invoke<void>::invoke<sf::RenderTarget&>(context,at,block,win);
+    void sfml_window_close ( sf::Window & win ) {
+        win.close();
     }
 
     const sf::RenderStates & sfml_render_states_default() {
         return sf::RenderStates::Default;
-    }
-
-    void sfml_with_transformable ( sf::Shape & shape, const TBlock<void,sf::Transformable> & block, Context * context, LineInfoArg * at ) {
-        das_invoke<void>::invoke<sf::Transformable&>(context,at,block,shape);
     }
 
     void Module_dasSFML::initAotAlias () {
@@ -48,12 +42,6 @@ namespace das {
 	void Module_dasSFML::initMain () {
         addExtern<DAS_BIND_FUN(sfml_window_close)>(*this,lib,"close",
             SideEffects::worstDefault,"sfml_window_close");
-        // sf::RenderWindow
-        addExtern<DAS_BIND_FUN(sflm_with_render_target)>(*this,lib,"with_render_target",
-            SideEffects::invoke,"sflm_with_render_target");
-        // sf::Shape
-        addExtern<DAS_BIND_FUN(sfml_with_transformable)>(*this,lib,"with_transformable",
-            SideEffects::invoke,"sfml_with_transformable");
         // render states
         addExtern<DAS_BIND_FUN(sfml_render_states_default)>(*this,lib,"RenderStates_Default",
             SideEffects::invoke,"sfml_render_states_default");

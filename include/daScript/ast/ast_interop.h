@@ -178,6 +178,11 @@ namespace das
         return fn;
     }
 
+    template <typename CType, typename IType>   // this is for the multiple inheritance
+    void with_interface ( CType & shape, const TBlock<void,IType> & block, Context * context, LineInfoArg * at ) {
+        das_invoke<void>::invoke<IType&>(context,at,block,shape);
+    }
+
     template <typename ET>
     inline void addEnumFlagOps ( Module & mod, ModuleLibrary & lib, const string & cppName ) {
         using method_not = das_operator_enum_NOT<ET>;

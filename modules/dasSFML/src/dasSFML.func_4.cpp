@@ -180,6 +180,10 @@ void Module_dasSFML::initFunctions_4() {
 	using _method_282 = das::das_call_member< sf::VertexBuffer::Usage (sf::VertexBuffer::*)() const,&sf::VertexBuffer::getUsage >;
 	addExtern<DAS_CALL_METHOD(_method_282)>(*this,lib,"getUsage",SideEffects::worstDefault,"das_call_member< sf::VertexBuffer::Usage (sf::VertexBuffer::*)() const , &sf::VertexBuffer::getUsage >::invoke")
 		->args({"self"});
+	addExtern< decltype(&with_interface<sf::Sprite,sf::Transformable>), with_interface<sf::Sprite,sf::Transformable> >(*this,lib,"interface",SideEffects::invoke,"with_interface<sf::Sprite,sf::Transformable>");
+	addExtern< decltype(&with_interface<sf::Shape,sf::Transformable>), with_interface<sf::Shape,sf::Transformable> >(*this,lib,"interface",SideEffects::invoke,"with_interface<sf::Shape,sf::Transformable>");
+	addExtern< decltype(&with_interface<sf::Text,sf::Transformable>), with_interface<sf::Text,sf::Transformable> >(*this,lib,"interface",SideEffects::invoke,"with_interface<sf::Text,sf::Transformable>");
+	addExtern< decltype(&with_interface<sf::RenderWindow,sf::RenderTarget>), with_interface<sf::RenderWindow,sf::RenderTarget> >(*this,lib,"interface",SideEffects::invoke,"with_interface<sf::RenderWindow,sf::RenderTarget>");
 }
 }
 
