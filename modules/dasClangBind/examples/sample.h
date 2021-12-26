@@ -3,14 +3,16 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-enum Foo_ {
-    bar = 1,
-    far = 2
+template <typename T>
+class Foo;
+
+template<>
+class Foo<int> {
+    int a = 5;
 };
 
-typedef int Foo;
-
-void pst ( Foo t );
+struct Bar {
+};
 
 
 #if 0

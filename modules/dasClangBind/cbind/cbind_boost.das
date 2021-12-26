@@ -237,6 +237,9 @@ class AnyGenBind
         if function_name |> starts_with("operator")
             let Ch = character_at(function_name,8)
             if !(is_alpha(Ch) || is_number(Ch) || Ch=='_')
+                if !isMethod
+                    to_log(LOG_INFO,"skipping global operator {function_name} at {clang_getCursorLocationDescription(c)}")
+                    return true
                 let op_name = function_name |> slice(8)
                 if op_name == "="
                     return true
@@ -387,6 +390,10 @@ class AnyGenBind
                 */
                 elif kind == CXCursorKind StructDecl || kind == CXCursorKind ClassDecl || kind == CXCursorKind UnionDecl
                     let struct_name = string(clang_getCursorSpelling(c))
+                    let nta = clang_Type_getNumTemplateArguments(clang_getCursorType(c))
+                    if nta != -1
+                        to_log(LOG_INFO, "skipping structure {struct_name} due to being template instance")
+                        return CXChildVisitResult Continue
                     if empty(struct_name)
                         if hasEmptyStruct
                             to_log(LOG_ERROR, "already in empty struct mode from {clang_getCursorLocationDescription(emptyStruct)}, at {clang_getCursorLocationDescription(c)}")
@@ -882,11 +889,11 @@ class CppGenBind : AnyGenBind
             let function_cpp_type = functionPtrSpelling(c,true)
             let using_mname_expr = "das::das_call_member< {function_cpp_type},&{function_cpp_name} >"
             bind_enchantation = "DAS_CALL_METHOD({using_mname})"
-            cpp_enchantation = "das_call_member< {function_cpp_type},&{function_cpp_name} >::invoke"
+            cpp_enchantation = "das_call_member< {function_cpp_type} , &{function_cpp_name} >::invoke"
             fprint(func_file,"\tusing {using_mname} = {using_mname_expr};\n");
         else
             let function_cpp_type = functionPtrSpelling(c,false)
-            bind_enchantation = "{function_cpp_type},{function_cpp_name}"
+            bind_enchantation = " {function_cpp_type} , {function_cpp_name} "
             cpp_enchantation = function_cpp_name
         fprint(func_file, "\taddExtern<{bind_enchantation}{extra_enchantation}>(*this,lib,\"{das_function_name}\",SideEffects::worstDefault,\"{cpp_enchantation}\")")
         let narg = clang_Cursor_getNumArguments(c)
@@ -998,7 +1005,7 @@ class CppGenBind : AnyGenBind
         elif enn|>starts_with(prefix) || enn|>starts_with(uprefix)
             name = enn |> slice(length(prefix))
         return unsafe_names?[name] ?? name
-    def dasEnumName(enum_name:string)
+    def dasEnumName(enum_name,cpp_enum_name:string) : string
         var das_enum_name = enum_name
         if das_enum_name |> ends_with("_")
             das_enum_name = das_enum_name |> slice(0,-1)
@@ -1006,18 +1013,19 @@ class CppGenBind : AnyGenBind
     def generateEnumDecl
         for decl in enumDecl
             let cppEnumName = enum2enum?[decl.ns_en] ?? decl.ns_en
-            let das_enum_name = dasEnumName(decl.enum_name)
+            let das_enum_name = dasEnumName(decl.enum_name,cppEnumName)
             fprint(enum_decl_cast_file, "DAS_BIND_ENUM_CAST({cppEnumName});\n")
             fprint(enum_decl_file, "DAS_BASE_BIND_ENUM_GEN({cppEnumName},{das_enum_name});\n\n")
             if enums_with_flags |> key_exists(cppEnumName)
                 fprint(enum_add_file,"addEnumFlagOps<{cppEnumName}>(*this,lib,\"{cppEnumName}\");\n");
     def override parse_Enum ( var cursor : CXCursor; enum_name : string )
         let ns_en = namespace_name(enum_name)
-        let das_enum_name = dasEnumName(enum_name)
+        let das_enum_name = dasEnumName(enum_name,ns_en)
         enumDecl |> push([[auto ns_en,enum_name]])
-        fprint(enum_class_file, "class Enumeration_{enum_name} : public das::Enumeration \{\n")
+        let dashing_name = namespace_name(enum_name,"_")
+        fprint(enum_class_file, "class Enumeration_{dashing_name} : public das::Enumeration \{\n")
         fprint(enum_class_file, "public:\n")
-        fprint(enum_class_file, "\tEnumeration_{enum_name}() : das::Enumeration(\"{das_enum_name}\") \{\n")
+        fprint(enum_class_file, "\tEnumeration_{dashing_name}() : das::Enumeration(\"{das_enum_name}\") \{\n")
         fprint(enum_class_file, "\t\texternal = true;\n")
         fprint(enum_class_file, "\t\tcppName = \"{ns_en}\";\n")
         let itype = string(clang_getTypeSpelling(clang_getEnumDeclIntegerType(cursor)))
@@ -1031,7 +1039,7 @@ class CppGenBind : AnyGenBind
             else
                 return CXChildVisitResult Recurse
         fprint(enum_class_file, "\t\}\n\};\n\n")
-        fprint(enum_add_file, "addEnumeration(make_smart<Enumeration_{enum_name}>());\n");
+        fprint(enum_add_file, "addEnumeration(make_smart<Enumeration_{dashing_name}>());\n");
     def override parse_Alias ( var c : CXCursor )
         let tdn = string(clang_getCursorDisplayName(c))
         var tdt = clang_getCanonicalType(clang_getCursorType(c))
