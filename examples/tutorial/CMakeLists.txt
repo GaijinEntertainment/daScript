@@ -90,7 +90,7 @@ ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial04module.das.inc
 )
 DAS_TUTORIAL(tutorial04 "${TUTORIAL_04_SRC}")
 target_include_directories(tutorial04 PUBLIC ${CMAKE_SOURCE_DIR}/src/builtin)   # we need RTTI to bind StructInfo and such
-CMAKE_XXD(${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial04module.das "TEXT")
+XXD(${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial04module.das)
 
 ##########################
 # tutorial 05 - coroutines

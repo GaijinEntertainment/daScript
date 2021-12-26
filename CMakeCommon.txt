@@ -123,32 +123,29 @@ MACRO(SETUP_CPP11 _targetName)
 	ENDIF()
 ENDMACRO()
 
+MACRO(FIND_XXD)
+	find_program(XXD_BIN xxd)
+ENDMACRO(FIND_XXD)
+
 MACRO(FIND_FLEX_AND_BISON)
 	find_package(BISON)
 	find_package(FLEX)
 ENDMACRO(FIND_FLEX_AND_BISON)
 
-MACRO(CMAKE_XXD input is_text_file)
-	get_filename_component(INPUT_SRC ${input} ABSOLUTE)
-	get_filename_component(INPUT_DIR ${INPUT_SRC} DIRECTORY)
-	get_filename_component(INPUT_NAME ${input} NAME)
-	string(REPLACE "." "_" CPP_STR_CONST_NAME ${INPUT_NAME})
-
-	file(READ ${INPUT_DIR}/${INPUT_NAME} HEX_CONTENTS HEX)
-	string(REGEX MATCHALL "([A-Za-z0-9][A-Za-z0-9])" SEPARATED_HEX "${HEX_CONTENTS}")
-	list(JOIN SEPARATED_HEX ",0x" FORMATTED_HEX)
-  set(FORMATTED_HEX "0x${FORMATTED_HEX}")
-  IF(${is_text_file} MATCHES "TEXT")
-		string(REPLACE "0x0D," "" FORMATTED_HEX ${FORMATTED_HEX})
-		string(REPLACE "0x0d," "" FORMATTED_HEX ${FORMATTED_HEX})
-    string(REPLACE "0x0A," "0x0A,\n" FORMATTED_HEX ${FORMATTED_HEX})
-  	string(REPLACE "0x0a," "0x0a,\n" FORMATTED_HEX ${FORMATTED_HEX})
+MACRO(XXD input)
+	IF(NOT XXD_BIN)
+		MESSAGE(STATUS "XXD not found, pre-generated files will be used." )
+	ELSE()
+		get_filename_component(input_src ${input} ABSOLUTE)
+		get_filename_component(input_dir ${input_src} DIRECTORY)
+		get_filename_component(input_name ${input} NAME)
+		ADD_CUSTOM_COMMAND(
+			DEPENDS ${input_src}
+			OUTPUT ${input_src}.inc
+			WORKING_DIRECTORY ${input_dir}
+			COMMAND ${XXD_BIN} -i ${input_name} ${input_name}.inc
+			COMMENT "compiling ${input} to c++ string")
 	ENDIF()
-	string(REGEX MATCHALL "([^,;]*,)([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?"
-		SEPARATED_LINES "${FORMATTED_HEX}, ")
-	list(JOIN SEPARATED_LINES "\n" FORMATTED_HEX)
-	file(WRITE ${INPUT_DIR}/${INPUT_NAME}.inc "static unsigned char ${CPP_STR_CONST_NAME}[] = {\n${FORMATTED_HEX}\n};")
-	message(DEBUG "compiling ${input} to c++ array")
 ENDMACRO()
 
 MACRO(FLEX input)
