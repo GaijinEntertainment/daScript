@@ -12,7 +12,7 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		ExternalProject_Add(
 			SFML
 			SOURCE_DIR ${DAS_SFML_DIR}/SFML
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${DAS_SFML_DIR}/libsfml -DOSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=false
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${DAS_SFML_DIR}/libsfml -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=false
 			BINARY_DIR ${DAS_SFML_DIR}/libsfml/build
 		)
 	ELSE()
@@ -61,18 +61,19 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		find_library(IOKIT_LIBRARY IOKit)
 		find_library(METAL_LIBRARY Metal)
 		find_library(QUARTZCORE_LIBRARY QuartzCore)
+		find_library(CARBON_LIBRARY Carbon)
 		SET(SFML_LIBRARIES
-			${DAS_SFML_DIR}/libsfml/lib/sfml-main.a
-			${DAS_SFML_DIR}/libsfml/lib/sfml-system-s.a
-			${DAS_SFML_DIR}/libsfml/lib/sfml-window-s.a
-			${DAS_SFML_DIR}/libsfml/lib/sfml-audio-s.a
-			${DAS_SFML_DIR}/libsfml/lib/sfml-graphics-s.a
-			${DAS_SFML_DIR}/libsfml/lib/sfml-network-s.a
-			${DAS_SFML_DIR}/libsfml/lib/freetype.a
+			${DAS_SFML_DIR}/libsfml/lib/libsfml-system-s.a
+			${DAS_SFML_DIR}/libsfml/lib/libsfml-window-s.a
+			${DAS_SFML_DIR}/libsfml/lib/libsfml-audio-s.a
+			${DAS_SFML_DIR}/libsfml/lib/libsfml-graphics-s.a
+			${DAS_SFML_DIR}/libsfml/lib/libsfml-network-s.a
+			${DAS_SFML_DIR}/libsfml/lib/freetype.framework
 			${COCOA_LIBRARY}
 			${IOKIT_LIBRARY}
 			${METAL_LIBRARY}
 			${QUARTZCORE_LIBRARY}
+			${CARBON_LIBRARY}
 		)
 	ELSEIF(UNIX)
 		SET(SFML_LIBRARIES
