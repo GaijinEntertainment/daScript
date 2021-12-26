@@ -34,6 +34,7 @@ namespace das {
 #endif
 
 namespace das {
+      // normalizeFileName ->
       const char * get_full_path_name_utf8(const char * path, Context * context); // allocation in context->stringHeap
       std::string get_full_path_name_utf8(const char * path);
 }
