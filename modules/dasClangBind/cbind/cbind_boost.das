@@ -830,14 +830,13 @@ class CppGenBind : AnyGenBind
         fprint(struct_add_file,"addAnnotation(ann_{struct_name});\n")
         fprint(struct_postadd_file,"initRecAnnotation(ann_{struct_name},lib);\n")
     def typeSpelling ( var c : CXType )
-        // TODO: proper type spelling?
         let nspl = string(clang_getTypeSpelling(c))
-        if nspl == "size_t"
-            return "size_t"
+        if nspl=="size_t" || nspl=="std::size_t"
+            return nspl
         var spl = string(clang_getTypeSpelling(clang_getCanonicalType(c)))
         if c.kind == CXTypeKind Enum
             spl = enum2enum?[spl] ?? spl
-        return nspl
+        return spl
     def functionPtrSpelling ( var c : CXCursor; isMethod:bool )
         // TODO: calling convention?
         var fun_type = clang_getCursorType(c)

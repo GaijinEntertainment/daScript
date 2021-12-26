@@ -59,20 +59,20 @@ void Module_dasSFML::initFunctions_2() {
 	addCtorAndUsing<sf::VertexArray,sf::PrimitiveType,unsigned long long>(*this,lib,"VertexArray","sf::VertexArray")
 		->args({"type","vertexCount"})
 		->arg_init(1,make_smart<ExprConstUInt64>(0x0));
-	using _method_77 = das::das_call_member< unsigned long long (sf::VertexArray::*)() const,&sf::VertexArray::getVertexCount >;
-	addExtern<DAS_CALL_METHOD(_method_77)>(*this,lib,"getVertexCount",SideEffects::worstDefault,"das_call_member< unsigned long long (sf::VertexArray::*)() const , &sf::VertexArray::getVertexCount >::invoke")
+	using _method_77 = das::das_call_member< std::size_t (sf::VertexArray::*)() const,&sf::VertexArray::getVertexCount >;
+	addExtern<DAS_CALL_METHOD(_method_77)>(*this,lib,"getVertexCount",SideEffects::worstDefault,"das_call_member< std::size_t (sf::VertexArray::*)() const , &sf::VertexArray::getVertexCount >::invoke")
 		->args({"self"});
-	using _method_78 = das::das_call_member< sf::Vertex & (sf::VertexArray::*)(unsigned long long),&sf::VertexArray::operator[] >;
-	addExtern<DAS_CALL_METHOD(_method_78), SimNode_ExtFuncCallRef>(*this,lib,"[]",SideEffects::worstDefault,"das_call_member< sf::Vertex & (sf::VertexArray::*)(unsigned long long) , &sf::VertexArray::operator[] >::invoke")
+	using _method_78 = das::das_call_member< sf::Vertex & (sf::VertexArray::*)(std::size_t),&sf::VertexArray::operator[] >;
+	addExtern<DAS_CALL_METHOD(_method_78), SimNode_ExtFuncCallRef>(*this,lib,"[]",SideEffects::worstDefault,"das_call_member< sf::Vertex & (sf::VertexArray::*)(std::size_t) , &sf::VertexArray::operator[] >::invoke")
 		->args({"self","index"});
-	using _method_79 = das::das_call_member< const sf::Vertex & (sf::VertexArray::*)(unsigned long long) const,&sf::VertexArray::operator[] >;
-	addExtern<DAS_CALL_METHOD(_method_79), SimNode_ExtFuncCallRef>(*this,lib,"[]",SideEffects::worstDefault,"das_call_member< const sf::Vertex & (sf::VertexArray::*)(unsigned long long) const , &sf::VertexArray::operator[] >::invoke")
+	using _method_79 = das::das_call_member< const sf::Vertex & (sf::VertexArray::*)(std::size_t) const,&sf::VertexArray::operator[] >;
+	addExtern<DAS_CALL_METHOD(_method_79), SimNode_ExtFuncCallRef>(*this,lib,"[]",SideEffects::worstDefault,"das_call_member< const sf::Vertex & (sf::VertexArray::*)(std::size_t) const , &sf::VertexArray::operator[] >::invoke")
 		->args({"self","index"});
 	using _method_80 = das::das_call_member< void (sf::VertexArray::*)(),&sf::VertexArray::clear >;
 	addExtern<DAS_CALL_METHOD(_method_80)>(*this,lib,"clear",SideEffects::worstDefault,"das_call_member< void (sf::VertexArray::*)() , &sf::VertexArray::clear >::invoke")
 		->args({"self"});
-	using _method_81 = das::das_call_member< void (sf::VertexArray::*)(unsigned long long),&sf::VertexArray::resize >;
-	addExtern<DAS_CALL_METHOD(_method_81)>(*this,lib,"resize",SideEffects::worstDefault,"das_call_member< void (sf::VertexArray::*)(unsigned long long) , &sf::VertexArray::resize >::invoke")
+	using _method_81 = das::das_call_member< void (sf::VertexArray::*)(std::size_t),&sf::VertexArray::resize >;
+	addExtern<DAS_CALL_METHOD(_method_81)>(*this,lib,"resize",SideEffects::worstDefault,"das_call_member< void (sf::VertexArray::*)(std::size_t) , &sf::VertexArray::resize >::invoke")
 		->args({"self","vertexCount"});
 	using _method_82 = das::das_call_member< void (sf::VertexArray::*)(const sf::Vertex &),&sf::VertexArray::append >;
 	addExtern<DAS_CALL_METHOD(_method_82)>(*this,lib,"append",SideEffects::worstDefault,"das_call_member< void (sf::VertexArray::*)(const sf::Vertex &) , &sf::VertexArray::append >::invoke")
@@ -133,17 +133,17 @@ void Module_dasSFML::initFunctions_2() {
 	using _method_99 = das::das_call_member< float (sf::CircleShape::*)() const,&sf::CircleShape::getRadius >;
 	addExtern<DAS_CALL_METHOD(_method_99)>(*this,lib,"getRadius",SideEffects::worstDefault,"das_call_member< float (sf::CircleShape::*)() const , &sf::CircleShape::getRadius >::invoke")
 		->args({"self"});
-	using _method_100 = das::das_call_member< void (sf::CircleShape::*)(unsigned long long),&sf::CircleShape::setPointCount >;
-	addExtern<DAS_CALL_METHOD(_method_100)>(*this,lib,"setPointCount",SideEffects::worstDefault,"das_call_member< void (sf::CircleShape::*)(unsigned long long) , &sf::CircleShape::setPointCount >::invoke")
+	using _method_100 = das::das_call_member< void (sf::CircleShape::*)(std::size_t),&sf::CircleShape::setPointCount >;
+	addExtern<DAS_CALL_METHOD(_method_100)>(*this,lib,"setPointCount",SideEffects::worstDefault,"das_call_member< void (sf::CircleShape::*)(std::size_t) , &sf::CircleShape::setPointCount >::invoke")
 		->args({"self","count"});
 	addCtorAndUsing<sf::ConvexShape,unsigned long long>(*this,lib,"ConvexShape","sf::ConvexShape")
 		->args({"pointCount"})
 		->arg_init(0,make_smart<ExprConstUInt64>(0x0));
-	using _method_101 = das::das_call_member< void (sf::ConvexShape::*)(unsigned long long),&sf::ConvexShape::setPointCount >;
-	addExtern<DAS_CALL_METHOD(_method_101)>(*this,lib,"setPointCount",SideEffects::worstDefault,"das_call_member< void (sf::ConvexShape::*)(unsigned long long) , &sf::ConvexShape::setPointCount >::invoke")
+	using _method_101 = das::das_call_member< void (sf::ConvexShape::*)(std::size_t),&sf::ConvexShape::setPointCount >;
+	addExtern<DAS_CALL_METHOD(_method_101)>(*this,lib,"setPointCount",SideEffects::worstDefault,"das_call_member< void (sf::ConvexShape::*)(std::size_t) , &sf::ConvexShape::setPointCount >::invoke")
 		->args({"self","count"});
-	using _method_102 = das::das_call_member< void (sf::ConvexShape::*)(unsigned long long,const sf::Vector2<float> &),&sf::ConvexShape::setPoint >;
-	addExtern<DAS_CALL_METHOD(_method_102)>(*this,lib,"setPoint",SideEffects::worstDefault,"das_call_member< void (sf::ConvexShape::*)(unsigned long long,const sf::Vector2<float> &) , &sf::ConvexShape::setPoint >::invoke")
+	using _method_102 = das::das_call_member< void (sf::ConvexShape::*)(std::size_t,const sf::Vector2<float> &),&sf::ConvexShape::setPoint >;
+	addExtern<DAS_CALL_METHOD(_method_102)>(*this,lib,"setPoint",SideEffects::worstDefault,"das_call_member< void (sf::ConvexShape::*)(std::size_t,const sf::Vector2<float> &) , &sf::ConvexShape::setPoint >::invoke")
 		->args({"self","index","point"});
 	addCtorAndUsing<sf::Glyph>(*this,lib,"Glyph","sf::Glyph");
 	addCtorAndUsing<sf::Image>(*this,lib,"Image","sf::Image");
@@ -156,8 +156,8 @@ void Module_dasSFML::initFunctions_2() {
 	using _method_105 = das::das_call_member< bool (sf::Image::*)(const std::basic_string<char> &),&sf::Image::loadFromFile >;
 	addExtern<DAS_CALL_METHOD(_method_105)>(*this,lib,"loadFromFile",SideEffects::worstDefault,"das_call_member< bool (sf::Image::*)(const std::basic_string<char> &) , &sf::Image::loadFromFile >::invoke")
 		->args({"self","filename"});
-	using _method_106 = das::das_call_member< bool (sf::Image::*)(const void *,unsigned long long),&sf::Image::loadFromMemory >;
-	addExtern<DAS_CALL_METHOD(_method_106)>(*this,lib,"loadFromMemory",SideEffects::worstDefault,"das_call_member< bool (sf::Image::*)(const void *,unsigned long long) , &sf::Image::loadFromMemory >::invoke")
+	using _method_106 = das::das_call_member< bool (sf::Image::*)(const void *,std::size_t),&sf::Image::loadFromMemory >;
+	addExtern<DAS_CALL_METHOD(_method_106)>(*this,lib,"loadFromMemory",SideEffects::worstDefault,"das_call_member< bool (sf::Image::*)(const void *,std::size_t) , &sf::Image::loadFromMemory >::invoke")
 		->args({"self","data","size"});
 	using _method_107 = das::das_call_member< bool (sf::Image::*)(sf::InputStream &),&sf::Image::loadFromStream >;
 	addExtern<DAS_CALL_METHOD(_method_107)>(*this,lib,"loadFromStream",SideEffects::worstDefault,"das_call_member< bool (sf::Image::*)(sf::InputStream &) , &sf::Image::loadFromStream >::invoke")
@@ -202,8 +202,8 @@ void Module_dasSFML::initFunctions_2() {
 	using _method_119 = das::das_call_member< bool (sf::Texture::*)(const std::basic_string<char> &,const sf::Rect<int> &),&sf::Texture::loadFromFile >;
 	addExtern<DAS_CALL_METHOD(_method_119)>(*this,lib,"loadFromFile",SideEffects::worstDefault,"das_call_member< bool (sf::Texture::*)(const std::basic_string<char> &,const sf::Rect<int> &) , &sf::Texture::loadFromFile >::invoke")
 		->args({"self","filename","area"});
-	using _method_120 = das::das_call_member< bool (sf::Texture::*)(const void *,unsigned long long,const sf::Rect<int> &),&sf::Texture::loadFromMemory >;
-	addExtern<DAS_CALL_METHOD(_method_120)>(*this,lib,"loadFromMemory",SideEffects::worstDefault,"das_call_member< bool (sf::Texture::*)(const void *,unsigned long long,const sf::Rect<int> &) , &sf::Texture::loadFromMemory >::invoke")
+	using _method_120 = das::das_call_member< bool (sf::Texture::*)(const void *,std::size_t,const sf::Rect<int> &),&sf::Texture::loadFromMemory >;
+	addExtern<DAS_CALL_METHOD(_method_120)>(*this,lib,"loadFromMemory",SideEffects::worstDefault,"das_call_member< bool (sf::Texture::*)(const void *,std::size_t,const sf::Rect<int> &) , &sf::Texture::loadFromMemory >::invoke")
 		->args({"self","data","size","area"});
 	using _method_121 = das::das_call_member< bool (sf::Texture::*)(sf::InputStream &,const sf::Rect<int> &),&sf::Texture::loadFromStream >;
 	addExtern<DAS_CALL_METHOD(_method_121)>(*this,lib,"loadFromStream",SideEffects::worstDefault,"das_call_member< bool (sf::Texture::*)(sf::InputStream &,const sf::Rect<int> &) , &sf::Texture::loadFromStream >::invoke")
@@ -271,8 +271,8 @@ void Module_dasSFML::initFunctions_2() {
 	using _method_141 = das::das_call_member< bool (sf::Font::*)(const std::basic_string<char> &),&sf::Font::loadFromFile >;
 	addExtern<DAS_CALL_METHOD(_method_141)>(*this,lib,"loadFromFile",SideEffects::worstDefault,"das_call_member< bool (sf::Font::*)(const std::basic_string<char> &) , &sf::Font::loadFromFile >::invoke")
 		->args({"self","filename"});
-	using _method_142 = das::das_call_member< bool (sf::Font::*)(const void *,unsigned long long),&sf::Font::loadFromMemory >;
-	addExtern<DAS_CALL_METHOD(_method_142)>(*this,lib,"loadFromMemory",SideEffects::worstDefault,"das_call_member< bool (sf::Font::*)(const void *,unsigned long long) , &sf::Font::loadFromMemory >::invoke")
+	using _method_142 = das::das_call_member< bool (sf::Font::*)(const void *,std::size_t),&sf::Font::loadFromMemory >;
+	addExtern<DAS_CALL_METHOD(_method_142)>(*this,lib,"loadFromMemory",SideEffects::worstDefault,"das_call_member< bool (sf::Font::*)(const void *,std::size_t) , &sf::Font::loadFromMemory >::invoke")
 		->args({"self","data","sizeInBytes"});
 	using _method_143 = das::das_call_member< bool (sf::Font::*)(sf::InputStream &),&sf::Font::loadFromStream >;
 	addExtern<DAS_CALL_METHOD(_method_143)>(*this,lib,"loadFromStream",SideEffects::worstDefault,"das_call_member< bool (sf::Font::*)(sf::InputStream &) , &sf::Font::loadFromStream >::invoke")

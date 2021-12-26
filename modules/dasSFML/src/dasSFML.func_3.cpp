@@ -120,14 +120,14 @@ void Module_dasSFML::initFunctions_3() {
 	using _method_182 = das::das_call_member< void (sf::RenderTarget::*)(const sf::Drawable &,const sf::RenderStates &),&sf::RenderTarget::draw >;
 	addExtern<DAS_CALL_METHOD(_method_182)>(*this,lib,"draw",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::Drawable &,const sf::RenderStates &) , &sf::RenderTarget::draw >::invoke")
 		->args({"self","drawable","states"});
-	using _method_183 = das::das_call_member< void (sf::RenderTarget::*)(const sf::Vertex *,unsigned long long,sf::PrimitiveType,const sf::RenderStates &),&sf::RenderTarget::draw >;
-	addExtern<DAS_CALL_METHOD(_method_183)>(*this,lib,"draw",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::Vertex *,unsigned long long,sf::PrimitiveType,const sf::RenderStates &) , &sf::RenderTarget::draw >::invoke")
+	using _method_183 = das::das_call_member< void (sf::RenderTarget::*)(const sf::Vertex *,std::size_t,sf::PrimitiveType,const sf::RenderStates &),&sf::RenderTarget::draw >;
+	addExtern<DAS_CALL_METHOD(_method_183)>(*this,lib,"draw",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::Vertex *,std::size_t,sf::PrimitiveType,const sf::RenderStates &) , &sf::RenderTarget::draw >::invoke")
 		->args({"self","vertices","vertexCount","type","states"});
 	using _method_184 = das::das_call_member< void (sf::RenderTarget::*)(const sf::VertexBuffer &,const sf::RenderStates &),&sf::RenderTarget::draw >;
 	addExtern<DAS_CALL_METHOD(_method_184)>(*this,lib,"draw",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::VertexBuffer &,const sf::RenderStates &) , &sf::RenderTarget::draw >::invoke")
 		->args({"self","vertexBuffer","states"});
-	using _method_185 = das::das_call_member< void (sf::RenderTarget::*)(const sf::VertexBuffer &,unsigned long long,unsigned long long,const sf::RenderStates &),&sf::RenderTarget::draw >;
-	addExtern<DAS_CALL_METHOD(_method_185)>(*this,lib,"draw",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::VertexBuffer &,unsigned long long,unsigned long long,const sf::RenderStates &) , &sf::RenderTarget::draw >::invoke")
+	using _method_185 = das::das_call_member< void (sf::RenderTarget::*)(const sf::VertexBuffer &,std::size_t,std::size_t,const sf::RenderStates &),&sf::RenderTarget::draw >;
+	addExtern<DAS_CALL_METHOD(_method_185)>(*this,lib,"draw",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::VertexBuffer &,std::size_t,std::size_t,const sf::RenderStates &) , &sf::RenderTarget::draw >::invoke")
 		->args({"self","vertexBuffer","firstVertex","vertexCount","states"});
 	using _method_186 = das::das_call_member< void (sf::RenderTarget::*)(),&sf::RenderTarget::pushGLStates >;
 	addExtern<DAS_CALL_METHOD(_method_186)>(*this,lib,"pushGLStates",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)() , &sf::RenderTarget::pushGLStates >::invoke")
@@ -174,7 +174,7 @@ void Module_dasSFML::initFunctions_3() {
 		->args({"source","dest"});
 	addExtern< void (*)(const sf::Transform &,sf::priv::Matrix<4, 4> &) , sf::priv::copyMatrix >(*this,lib,"copyMatrix",SideEffects::worstDefault,"sf::priv::copyMatrix")
 		->args({"source","dest"});
-	addExtern< void (*)(const float *,unsigned long long,float *) , sf::priv::copyMatrix >(*this,lib,"copyMatrix",SideEffects::worstDefault,"sf::priv::copyMatrix")
+	addExtern< void (*)(const float *,std::size_t,float *) , sf::priv::copyMatrix >(*this,lib,"copyMatrix",SideEffects::worstDefault,"sf::priv::copyMatrix")
 		->args({"source","elements","dest"});
 	addExtern< void (*)(const sf::Color &,sf::priv::Vector4<float> &) , sf::priv::copyVector >(*this,lib,"copyVector",SideEffects::worstDefault,"sf::priv::copyVector")
 		->args({"source","dest"});
@@ -256,23 +256,23 @@ void Module_dasSFML::initFunctions_3() {
 	using _method_222 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,sf::Shader::CurrentTextureType),&sf::Shader::setUniform >;
 	addExtern<DAS_CALL_METHOD(_method_222)>(*this,lib,"setUniform",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,sf::Shader::CurrentTextureType) , &sf::Shader::setUniform >::invoke")
 		->args({"self","name",""});
-	using _method_223 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const float *,unsigned long long),&sf::Shader::setUniformArray >;
-	addExtern<DAS_CALL_METHOD(_method_223)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const float *,unsigned long long) , &sf::Shader::setUniformArray >::invoke")
+	using _method_223 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const float *,std::size_t),&sf::Shader::setUniformArray >;
+	addExtern<DAS_CALL_METHOD(_method_223)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const float *,std::size_t) , &sf::Shader::setUniformArray >::invoke")
 		->args({"self","name","scalarArray","length"});
-	using _method_224 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector2<float> *,unsigned long long),&sf::Shader::setUniformArray >;
-	addExtern<DAS_CALL_METHOD(_method_224)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector2<float> *,unsigned long long) , &sf::Shader::setUniformArray >::invoke")
+	using _method_224 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector2<float> *,std::size_t),&sf::Shader::setUniformArray >;
+	addExtern<DAS_CALL_METHOD(_method_224)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector2<float> *,std::size_t) , &sf::Shader::setUniformArray >::invoke")
 		->args({"self","name","vectorArray","length"});
-	using _method_225 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector3<float> *,unsigned long long),&sf::Shader::setUniformArray >;
-	addExtern<DAS_CALL_METHOD(_method_225)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector3<float> *,unsigned long long) , &sf::Shader::setUniformArray >::invoke")
+	using _method_225 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector3<float> *,std::size_t),&sf::Shader::setUniformArray >;
+	addExtern<DAS_CALL_METHOD(_method_225)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector3<float> *,std::size_t) , &sf::Shader::setUniformArray >::invoke")
 		->args({"self","name","vectorArray","length"});
-	using _method_226 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Vector4<float> *,unsigned long long),&sf::Shader::setUniformArray >;
-	addExtern<DAS_CALL_METHOD(_method_226)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Vector4<float> *,unsigned long long) , &sf::Shader::setUniformArray >::invoke")
+	using _method_226 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Vector4<float> *,std::size_t),&sf::Shader::setUniformArray >;
+	addExtern<DAS_CALL_METHOD(_method_226)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Vector4<float> *,std::size_t) , &sf::Shader::setUniformArray >::invoke")
 		->args({"self","name","vectorArray","length"});
-	using _method_227 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Matrix<3, 3> *,unsigned long long),&sf::Shader::setUniformArray >;
-	addExtern<DAS_CALL_METHOD(_method_227)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Matrix<3, 3> *,unsigned long long) , &sf::Shader::setUniformArray >::invoke")
+	using _method_227 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Matrix<3, 3> *,std::size_t),&sf::Shader::setUniformArray >;
+	addExtern<DAS_CALL_METHOD(_method_227)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Matrix<3, 3> *,std::size_t) , &sf::Shader::setUniformArray >::invoke")
 		->args({"self","name","matrixArray","length"});
-	using _method_228 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Matrix<4, 4> *,unsigned long long),&sf::Shader::setUniformArray >;
-	addExtern<DAS_CALL_METHOD(_method_228)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Matrix<4, 4> *,unsigned long long) , &sf::Shader::setUniformArray >::invoke")
+	using _method_228 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Matrix<4, 4> *,std::size_t),&sf::Shader::setUniformArray >;
+	addExtern<DAS_CALL_METHOD(_method_228)>(*this,lib,"setUniformArray",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::priv::Matrix<4, 4> *,std::size_t) , &sf::Shader::setUniformArray >::invoke")
 		->args({"self","name","matrixArray","length"});
 	using _method_229 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,float),&sf::Shader::setParameter >;
 	addExtern<DAS_CALL_METHOD(_method_229)>(*this,lib,"setParameter",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,float) , &sf::Shader::setParameter >::invoke")

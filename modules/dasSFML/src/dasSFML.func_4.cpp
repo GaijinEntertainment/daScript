@@ -117,8 +117,8 @@ void Module_dasSFML::initFunctions_4() {
 	using _method_267 = das::das_call_member< float (sf::Text::*)() const,&sf::Text::getOutlineThickness >;
 	addExtern<DAS_CALL_METHOD(_method_267)>(*this,lib,"getOutlineThickness",SideEffects::worstDefault,"das_call_member< float (sf::Text::*)() const , &sf::Text::getOutlineThickness >::invoke")
 		->args({"self"});
-	using _method_268 = das::das_call_member< sf::Vector2<float> (sf::Text::*)(unsigned long long) const,&sf::Text::findCharacterPos >;
-	addExtern<DAS_CALL_METHOD(_method_268)>(*this,lib,"findCharacterPos",SideEffects::worstDefault,"das_call_member< sf::Vector2<float> (sf::Text::*)(unsigned long long) const , &sf::Text::findCharacterPos >::invoke")
+	using _method_268 = das::das_call_member< sf::Vector2<float> (sf::Text::*)(std::size_t) const,&sf::Text::findCharacterPos >;
+	addExtern<DAS_CALL_METHOD(_method_268)>(*this,lib,"findCharacterPos",SideEffects::worstDefault,"das_call_member< sf::Vector2<float> (sf::Text::*)(std::size_t) const , &sf::Text::findCharacterPos >::invoke")
 		->args({"self","index"});
 	using _method_269 = das::das_call_member< sf::Rect<float> (sf::Text::*)() const,&sf::Text::getLocalBounds >;
 	addExtern<DAS_CALL_METHOD(_method_269)>(*this,lib,"getLocalBounds",SideEffects::worstDefault,"das_call_member< sf::Rect<float> (sf::Text::*)() const , &sf::Text::getLocalBounds >::invoke")
@@ -135,17 +135,17 @@ void Module_dasSFML::initFunctions_4() {
 		->args({"type","usage"});
 	addCtorAndUsing<sf::VertexBuffer,const sf::VertexBuffer &>(*this,lib,"VertexBuffer","sf::VertexBuffer")
 		->args({"copy"});
-	using _method_271 = das::das_call_member< bool (sf::VertexBuffer::*)(unsigned long long),&sf::VertexBuffer::create >;
-	addExtern<DAS_CALL_METHOD(_method_271)>(*this,lib,"create",SideEffects::worstDefault,"das_call_member< bool (sf::VertexBuffer::*)(unsigned long long) , &sf::VertexBuffer::create >::invoke")
+	using _method_271 = das::das_call_member< bool (sf::VertexBuffer::*)(std::size_t),&sf::VertexBuffer::create >;
+	addExtern<DAS_CALL_METHOD(_method_271)>(*this,lib,"create",SideEffects::worstDefault,"das_call_member< bool (sf::VertexBuffer::*)(std::size_t) , &sf::VertexBuffer::create >::invoke")
 		->args({"self","vertexCount"});
-	using _method_272 = das::das_call_member< unsigned long long (sf::VertexBuffer::*)() const,&sf::VertexBuffer::getVertexCount >;
-	addExtern<DAS_CALL_METHOD(_method_272)>(*this,lib,"getVertexCount",SideEffects::worstDefault,"das_call_member< unsigned long long (sf::VertexBuffer::*)() const , &sf::VertexBuffer::getVertexCount >::invoke")
+	using _method_272 = das::das_call_member< std::size_t (sf::VertexBuffer::*)() const,&sf::VertexBuffer::getVertexCount >;
+	addExtern<DAS_CALL_METHOD(_method_272)>(*this,lib,"getVertexCount",SideEffects::worstDefault,"das_call_member< std::size_t (sf::VertexBuffer::*)() const , &sf::VertexBuffer::getVertexCount >::invoke")
 		->args({"self"});
 	using _method_273 = das::das_call_member< bool (sf::VertexBuffer::*)(const sf::Vertex *),&sf::VertexBuffer::update >;
 	addExtern<DAS_CALL_METHOD(_method_273)>(*this,lib,"update",SideEffects::worstDefault,"das_call_member< bool (sf::VertexBuffer::*)(const sf::Vertex *) , &sf::VertexBuffer::update >::invoke")
 		->args({"self","vertices"});
-	using _method_274 = das::das_call_member< bool (sf::VertexBuffer::*)(const sf::Vertex *,unsigned long long,unsigned int),&sf::VertexBuffer::update >;
-	addExtern<DAS_CALL_METHOD(_method_274)>(*this,lib,"update",SideEffects::worstDefault,"das_call_member< bool (sf::VertexBuffer::*)(const sf::Vertex *,unsigned long long,unsigned int) , &sf::VertexBuffer::update >::invoke")
+	using _method_274 = das::das_call_member< bool (sf::VertexBuffer::*)(const sf::Vertex *,std::size_t,unsigned int),&sf::VertexBuffer::update >;
+	addExtern<DAS_CALL_METHOD(_method_274)>(*this,lib,"update",SideEffects::worstDefault,"das_call_member< bool (sf::VertexBuffer::*)(const sf::Vertex *,std::size_t,unsigned int) , &sf::VertexBuffer::update >::invoke")
 		->args({"self","vertices","vertexCount","offset"});
 	using _method_275 = das::das_call_member< bool (sf::VertexBuffer::*)(const sf::VertexBuffer &),&sf::VertexBuffer::update >;
 	addExtern<DAS_CALL_METHOD(_method_275)>(*this,lib,"update",SideEffects::worstDefault,"das_call_member< bool (sf::VertexBuffer::*)(const sf::VertexBuffer &) , &sf::VertexBuffer::update >::invoke")

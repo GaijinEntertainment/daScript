@@ -41,8 +41,8 @@ void Module_dasSFML::initFunctions_1() {
 	addCtorAndUsing<sf::Lock,sf::Mutex &>(*this,lib,"Lock","sf::Lock")
 		->args({"mutex"});
 	addCtorAndUsing<sf::MemoryInputStream>(*this,lib,"MemoryInputStream","sf::MemoryInputStream");
-	using _method_7 = das::das_call_member< void (sf::MemoryInputStream::*)(const void *,unsigned long long),&sf::MemoryInputStream::open >;
-	addExtern<DAS_CALL_METHOD(_method_7)>(*this,lib,"open",SideEffects::worstDefault,"das_call_member< void (sf::MemoryInputStream::*)(const void *,unsigned long long) , &sf::MemoryInputStream::open >::invoke")
+	using _method_7 = das::das_call_member< void (sf::MemoryInputStream::*)(const void *,std::size_t),&sf::MemoryInputStream::open >;
+	addExtern<DAS_CALL_METHOD(_method_7)>(*this,lib,"open",SideEffects::worstDefault,"das_call_member< void (sf::MemoryInputStream::*)(const void *,std::size_t) , &sf::MemoryInputStream::open >::invoke")
 		->args({"self","data","sizeInBytes"});
 	addCtorAndUsing<sf::Mutex>(*this,lib,"Mutex","sf::Mutex");
 	using _method_8 = das::das_call_member< void (sf::Mutex::*)(),&sf::Mutex::lock >;
