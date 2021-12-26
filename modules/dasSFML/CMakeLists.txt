@@ -13,14 +13,14 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		ExternalProject_Add(
 			SFML
 			SOURCE_DIR ${DAS_SFML_DIR}/SFML
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${DAS_SFML_DIR}/libsfml -DOSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} -DCMAKE_BUILD_TYPE=Release
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${DAS_SFML_DIR}/libsfml -DOSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=false
 			BINARY_DIR ${DAS_SFML_DIR}/libsfml/build
 		)
 	ELSE()
 		ExternalProject_Add(
 			SFML
 			SOURCE_DIR ${DAS_SFML_DIR}/SFML
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${libsfml}/glfw -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DCMAKE_LINKER=${CMAKE_LINKER}
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${libsfml}/glfw -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DCMAKE_LINKER=${CMAKE_LINKER} -DBUILD_SHARED_LIBS=false
 			BINARY_DIR ${DAS_SFML_DIR}/libsfml/build
 		)
 	ENDIF()
@@ -73,8 +73,13 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 	ELSE()
 		SET(SFML_LIBRARIES
 			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-main.lib
-			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-system.lib
-			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-window.lib
+			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-system-s.lib
+			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-window-s.lib
+			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-audio-s.lib
+			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-graphics-s.lib
+			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-network-s.lib
+			Winmm.lib
+			Opengl32.lib
 		)
 	ENDIF()
 
