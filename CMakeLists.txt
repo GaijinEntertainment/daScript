@@ -381,12 +381,12 @@ src/builtin/debugger.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
-CMAKE_XXD(src/builtin/builtin.das "TEXT")
-CMAKE_XXD(src/builtin/fio.das "TEXT")
-CMAKE_XXD(src/builtin/rtti.das "TEXT")
-CMAKE_XXD(src/builtin/ast.das "TEXT")
-CMAKE_XXD(src/builtin/network.das "TEXT")
-CMAKE_XXD(src/builtin/debugger.das "TEXT")
+CMAKE_XXD(src/builtin/builtin.das)
+CMAKE_XXD(src/builtin/fio.das)
+CMAKE_XXD(src/builtin/rtti.das)
+CMAKE_XXD(src/builtin/ast.das)
+CMAKE_XXD(src/builtin/network.das)
+CMAKE_XXD(src/builtin/debugger.das)
 
 SET(MISC_SRC
 include/daScript/misc/enums.h
@@ -633,7 +633,7 @@ examples/test/unit_test.das
 )
 SOURCE_GROUP_FILES("source" TEST_MAIN_LIB_SRC)
 
-CMAKE_XXD(examples/test/unit_test.das "TEXT")
+CMAKE_XXD(examples/test/unit_test.das)
 
 ADD_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC})
 SETUP_CPP11(libDaScriptTest)
