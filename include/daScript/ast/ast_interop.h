@@ -175,6 +175,7 @@ namespace das
         DAS_ASSERT(fn->result->isRefType() && "can't add ctor to by-value types");
         mod.addFunction(fn);
         mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib,cppName));
+        return fn;
     }
 
     template <typename ET>

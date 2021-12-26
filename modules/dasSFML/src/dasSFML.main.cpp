@@ -46,33 +46,14 @@ namespace das {
     }
 
 	void Module_dasSFML::initMain () {
-        // sf::Color
-        addCtor<sf::Color>(*this,lib,"Color","sf::Color");
-        addCtor<sf::Color,uint32_t>(*this,lib,"Color","sf::Color");
-        addCtor<sf::Color,uint8_t,uint8_t,uint8_t,uint8_t>(*this,lib,"Color","sf::Color")
-            ->arg_init(3,make_smart<ExprConstUInt>(255));
-        // sf::ContextSettings
-        addCtorAndUsing<sf::ContextSettings>(*this,lib,"ContextSettings","sf::ContextSettings");
-        // sf::VideoMode
-        addCtorAndUsing<sf::VideoMode>(*this,lib,"VideoMode","sf::VideoMode");
-        addCtor<sf::VideoMode,uint32_t,uint32_t,uint32_t>(*this,lib,"VideoMode","sf::VideoMode")
-            ->arg_init(2,make_smart<ExprConstUInt>(24));
-        // sf::Window
-        addCtorAndUsing<sf::Window>(*this,lib,"Window","sf::Window");
-        addCtorAndUsing<sf::Window,sf::VideoMode,char *,uint32_t,const sf::ContextSettings &>(*this,lib,"Window","sf::Window");
         addExtern<DAS_BIND_FUN(sfml_window_close)>(*this,lib,"close",
             SideEffects::worstDefault,"sfml_window_close");
         // sf::RenderWindow
-        addCtorAndUsing<sf::RenderWindow>(*this,lib,"RenderWindow","sf::RenderWindow");
-        addCtorAndUsing<sf::RenderWindow,sf::VideoMode,char *,uint32_t,const sf::ContextSettings &>(*this,lib,"RenderWindow","sf::RenderWindow");
         addExtern<DAS_BIND_FUN(sflm_with_render_target)>(*this,lib,"with_render_target",
             SideEffects::invoke,"sflm_with_render_target");
         // sf::Shape
         addExtern<DAS_BIND_FUN(sfml_with_transformable)>(*this,lib,"with_transformable",
             SideEffects::invoke,"sfml_with_transformable");
-        // sf::CircleShape
-        addCtor<sf::CircleShape>(*this,lib,"CircleShape","sf::CircleShape");
-        addCtor<sf::CircleShape,float>(*this,lib,"CircleShape","sf::CircleShape");
         // render states
         addExtern<DAS_BIND_FUN(sfml_render_states_default)>(*this,lib,"RenderStates_Default",
             SideEffects::invoke,"sfml_render_states_default");

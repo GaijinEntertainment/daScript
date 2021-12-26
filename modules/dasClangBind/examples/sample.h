@@ -3,17 +3,16 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-template <typename T>
-class Foo;
 
-template<>
-class Foo<int> {
-    int a = 5;
+namespace sf {
+    class Foo {
+    public:
+        Foo();
+        Foo(int a = 5, float b = 6);
+    };
+
+
 };
-
-struct Bar {
-};
-
 
 #if 0
 

@@ -11,12 +11,177 @@
 #include "need_dasSFML.h"
 namespace das {
 void Module_dasSFML::initFunctions_3() {
+	using _method_147 = das::das_call_member< bool (sf::Font::*)(unsigned int) const,&sf::Font::hasGlyph >;
+	addExtern<DAS_CALL_METHOD(_method_147)>(*this,lib,"hasGlyph",SideEffects::worstDefault,"das_call_member< bool (sf::Font::*)(unsigned int) const , &sf::Font::hasGlyph >::invoke")
+		->args({"self","codePoint"});
+	using _method_148 = das::das_call_member< float (sf::Font::*)(unsigned int,unsigned int,unsigned int,bool) const,&sf::Font::getKerning >;
+	addExtern<DAS_CALL_METHOD(_method_148)>(*this,lib,"getKerning",SideEffects::worstDefault,"das_call_member< float (sf::Font::*)(unsigned int,unsigned int,unsigned int,bool) const , &sf::Font::getKerning >::invoke")
+		->args({"self","first","second","characterSize","bold"})
+		->arg_init(4,make_smart<ExprConstBool>(false));
+	using _method_149 = das::das_call_member< float (sf::Font::*)(unsigned int) const,&sf::Font::getLineSpacing >;
+	addExtern<DAS_CALL_METHOD(_method_149)>(*this,lib,"getLineSpacing",SideEffects::worstDefault,"das_call_member< float (sf::Font::*)(unsigned int) const , &sf::Font::getLineSpacing >::invoke")
+		->args({"self","characterSize"});
+	using _method_150 = das::das_call_member< float (sf::Font::*)(unsigned int) const,&sf::Font::getUnderlinePosition >;
+	addExtern<DAS_CALL_METHOD(_method_150)>(*this,lib,"getUnderlinePosition",SideEffects::worstDefault,"das_call_member< float (sf::Font::*)(unsigned int) const , &sf::Font::getUnderlinePosition >::invoke")
+		->args({"self","characterSize"});
+	using _method_151 = das::das_call_member< float (sf::Font::*)(unsigned int) const,&sf::Font::getUnderlineThickness >;
+	addExtern<DAS_CALL_METHOD(_method_151)>(*this,lib,"getUnderlineThickness",SideEffects::worstDefault,"das_call_member< float (sf::Font::*)(unsigned int) const , &sf::Font::getUnderlineThickness >::invoke")
+		->args({"self","characterSize"});
+	using _method_152 = das::das_call_member< const sf::Texture & (sf::Font::*)(unsigned int) const,&sf::Font::getTexture >;
+	addExtern<DAS_CALL_METHOD(_method_152), SimNode_ExtFuncCallRef>(*this,lib,"getTexture",SideEffects::worstDefault,"das_call_member< const sf::Texture & (sf::Font::*)(unsigned int) const , &sf::Font::getTexture >::invoke")
+		->args({"self","characterSize"});
+	using _method_153 = das::das_call_member< void (sf::Font::*)(bool),&sf::Font::setSmooth >;
+	addExtern<DAS_CALL_METHOD(_method_153)>(*this,lib,"setSmooth",SideEffects::worstDefault,"das_call_member< void (sf::Font::*)(bool) , &sf::Font::setSmooth >::invoke")
+		->args({"self","smooth"});
+	using _method_154 = das::das_call_member< bool (sf::Font::*)() const,&sf::Font::isSmooth >;
+	addExtern<DAS_CALL_METHOD(_method_154)>(*this,lib,"isSmooth",SideEffects::worstDefault,"das_call_member< bool (sf::Font::*)() const , &sf::Font::isSmooth >::invoke")
+		->args({"self"});
+	addCtorAndUsing<sf::RectangleShape,const sf::Vector2<float> &>(*this,lib,"RectangleShape","sf::RectangleShape")
+		->args({"size"});
+	using _method_155 = das::das_call_member< void (sf::RectangleShape::*)(const sf::Vector2<float> &),&sf::RectangleShape::setSize >;
+	addExtern<DAS_CALL_METHOD(_method_155)>(*this,lib,"setSize",SideEffects::worstDefault,"das_call_member< void (sf::RectangleShape::*)(const sf::Vector2<float> &) , &sf::RectangleShape::setSize >::invoke")
+		->args({"self","size"});
+	using _method_156 = das::das_call_member< const sf::Vector2<float> & (sf::RectangleShape::*)() const,&sf::RectangleShape::getSize >;
+	addExtern<DAS_CALL_METHOD(_method_156), SimNode_ExtFuncCallRef>(*this,lib,"getSize",SideEffects::worstDefault,"das_call_member< const sf::Vector2<float> & (sf::RectangleShape::*)() const , &sf::RectangleShape::getSize >::invoke")
+		->args({"self"});
+	addCtorAndUsing<sf::View>(*this,lib,"View","sf::View");
+	addCtorAndUsing<sf::View,const sf::Rect<float> &>(*this,lib,"View","sf::View")
+		->args({"rectangle"});
+	addCtorAndUsing<sf::View,const sf::Vector2<float> &,const sf::Vector2<float> &>(*this,lib,"View","sf::View")
+		->args({"center","size"});
+	using _method_157 = das::das_call_member< void (sf::View::*)(float,float),&sf::View::setCenter >;
+	addExtern<DAS_CALL_METHOD(_method_157)>(*this,lib,"setCenter",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(float,float) , &sf::View::setCenter >::invoke")
+		->args({"self","x","y"});
+	using _method_158 = das::das_call_member< void (sf::View::*)(const sf::Vector2<float> &),&sf::View::setCenter >;
+	addExtern<DAS_CALL_METHOD(_method_158)>(*this,lib,"setCenter",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(const sf::Vector2<float> &) , &sf::View::setCenter >::invoke")
+		->args({"self","center"});
+	using _method_159 = das::das_call_member< void (sf::View::*)(float,float),&sf::View::setSize >;
+	addExtern<DAS_CALL_METHOD(_method_159)>(*this,lib,"setSize",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(float,float) , &sf::View::setSize >::invoke")
+		->args({"self","width","height"});
+	using _method_160 = das::das_call_member< void (sf::View::*)(const sf::Vector2<float> &),&sf::View::setSize >;
+	addExtern<DAS_CALL_METHOD(_method_160)>(*this,lib,"setSize",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(const sf::Vector2<float> &) , &sf::View::setSize >::invoke")
+		->args({"self","size"});
+	using _method_161 = das::das_call_member< void (sf::View::*)(float),&sf::View::setRotation >;
+	addExtern<DAS_CALL_METHOD(_method_161)>(*this,lib,"setRotation",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(float) , &sf::View::setRotation >::invoke")
+		->args({"self","angle"});
+	using _method_162 = das::das_call_member< void (sf::View::*)(const sf::Rect<float> &),&sf::View::setViewport >;
+	addExtern<DAS_CALL_METHOD(_method_162)>(*this,lib,"setViewport",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(const sf::Rect<float> &) , &sf::View::setViewport >::invoke")
+		->args({"self","viewport"});
+	using _method_163 = das::das_call_member< void (sf::View::*)(const sf::Rect<float> &),&sf::View::reset >;
+	addExtern<DAS_CALL_METHOD(_method_163)>(*this,lib,"reset",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(const sf::Rect<float> &) , &sf::View::reset >::invoke")
+		->args({"self","rectangle"});
+	using _method_164 = das::das_call_member< const sf::Vector2<float> & (sf::View::*)() const,&sf::View::getCenter >;
+	addExtern<DAS_CALL_METHOD(_method_164), SimNode_ExtFuncCallRef>(*this,lib,"getCenter",SideEffects::worstDefault,"das_call_member< const sf::Vector2<float> & (sf::View::*)() const , &sf::View::getCenter >::invoke")
+		->args({"self"});
+	using _method_165 = das::das_call_member< const sf::Vector2<float> & (sf::View::*)() const,&sf::View::getSize >;
+	addExtern<DAS_CALL_METHOD(_method_165), SimNode_ExtFuncCallRef>(*this,lib,"getSize",SideEffects::worstDefault,"das_call_member< const sf::Vector2<float> & (sf::View::*)() const , &sf::View::getSize >::invoke")
+		->args({"self"});
+	using _method_166 = das::das_call_member< float (sf::View::*)() const,&sf::View::getRotation >;
+	addExtern<DAS_CALL_METHOD(_method_166)>(*this,lib,"getRotation",SideEffects::worstDefault,"das_call_member< float (sf::View::*)() const , &sf::View::getRotation >::invoke")
+		->args({"self"});
+	using _method_167 = das::das_call_member< const sf::Rect<float> & (sf::View::*)() const,&sf::View::getViewport >;
+	addExtern<DAS_CALL_METHOD(_method_167), SimNode_ExtFuncCallRef>(*this,lib,"getViewport",SideEffects::worstDefault,"das_call_member< const sf::Rect<float> & (sf::View::*)() const , &sf::View::getViewport >::invoke")
+		->args({"self"});
+	using _method_168 = das::das_call_member< void (sf::View::*)(float,float),&sf::View::move >;
+	addExtern<DAS_CALL_METHOD(_method_168)>(*this,lib,"move",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(float,float) , &sf::View::move >::invoke")
+		->args({"self","offsetX","offsetY"});
+	using _method_169 = das::das_call_member< void (sf::View::*)(const sf::Vector2<float> &),&sf::View::move >;
+	addExtern<DAS_CALL_METHOD(_method_169)>(*this,lib,"move",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(const sf::Vector2<float> &) , &sf::View::move >::invoke")
+		->args({"self","offset"});
+	using _method_170 = das::das_call_member< void (sf::View::*)(float),&sf::View::rotate >;
+	addExtern<DAS_CALL_METHOD(_method_170)>(*this,lib,"rotate",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(float) , &sf::View::rotate >::invoke")
+		->args({"self","angle"});
+	using _method_171 = das::das_call_member< void (sf::View::*)(float),&sf::View::zoom >;
+	addExtern<DAS_CALL_METHOD(_method_171)>(*this,lib,"zoom",SideEffects::worstDefault,"das_call_member< void (sf::View::*)(float) , &sf::View::zoom >::invoke")
+		->args({"self","factor"});
+	using _method_172 = das::das_call_member< const sf::Transform & (sf::View::*)() const,&sf::View::getTransform >;
+	addExtern<DAS_CALL_METHOD(_method_172), SimNode_ExtFuncCallRef>(*this,lib,"getTransform",SideEffects::worstDefault,"das_call_member< const sf::Transform & (sf::View::*)() const , &sf::View::getTransform >::invoke")
+		->args({"self"});
+	using _method_173 = das::das_call_member< const sf::Transform & (sf::View::*)() const,&sf::View::getInverseTransform >;
+	addExtern<DAS_CALL_METHOD(_method_173), SimNode_ExtFuncCallRef>(*this,lib,"getInverseTransform",SideEffects::worstDefault,"das_call_member< const sf::Transform & (sf::View::*)() const , &sf::View::getInverseTransform >::invoke")
+		->args({"self"});
+	using _method_174 = das::das_call_member< void (sf::RenderTarget::*)(const sf::Color &),&sf::RenderTarget::clear >;
+	addExtern<DAS_CALL_METHOD(_method_174)>(*this,lib,"clear",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::Color &) , &sf::RenderTarget::clear >::invoke")
+		->args({"self","color"});
+	using _method_175 = das::das_call_member< void (sf::RenderTarget::*)(const sf::View &),&sf::RenderTarget::setView >;
+	addExtern<DAS_CALL_METHOD(_method_175)>(*this,lib,"setView",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::View &) , &sf::RenderTarget::setView >::invoke")
+		->args({"self","view"});
+	using _method_176 = das::das_call_member< const sf::View & (sf::RenderTarget::*)() const,&sf::RenderTarget::getView >;
+	addExtern<DAS_CALL_METHOD(_method_176), SimNode_ExtFuncCallRef>(*this,lib,"getView",SideEffects::worstDefault,"das_call_member< const sf::View & (sf::RenderTarget::*)() const , &sf::RenderTarget::getView >::invoke")
+		->args({"self"});
+	using _method_177 = das::das_call_member< const sf::View & (sf::RenderTarget::*)() const,&sf::RenderTarget::getDefaultView >;
+	addExtern<DAS_CALL_METHOD(_method_177), SimNode_ExtFuncCallRef>(*this,lib,"getDefaultView",SideEffects::worstDefault,"das_call_member< const sf::View & (sf::RenderTarget::*)() const , &sf::RenderTarget::getDefaultView >::invoke")
+		->args({"self"});
+	using _method_178 = das::das_call_member< sf::Rect<int> (sf::RenderTarget::*)(const sf::View &) const,&sf::RenderTarget::getViewport >;
+	addExtern<DAS_CALL_METHOD(_method_178)>(*this,lib,"getViewport",SideEffects::worstDefault,"das_call_member< sf::Rect<int> (sf::RenderTarget::*)(const sf::View &) const , &sf::RenderTarget::getViewport >::invoke")
+		->args({"self","view"});
+	using _method_179 = das::das_call_member< sf::Vector2<float> (sf::RenderTarget::*)(const sf::Vector2<int> &) const,&sf::RenderTarget::mapPixelToCoords >;
+	addExtern<DAS_CALL_METHOD(_method_179)>(*this,lib,"mapPixelToCoords",SideEffects::worstDefault,"das_call_member< sf::Vector2<float> (sf::RenderTarget::*)(const sf::Vector2<int> &) const , &sf::RenderTarget::mapPixelToCoords >::invoke")
+		->args({"self","point"});
+	using _method_180 = das::das_call_member< sf::Vector2<float> (sf::RenderTarget::*)(const sf::Vector2<int> &,const sf::View &) const,&sf::RenderTarget::mapPixelToCoords >;
+	addExtern<DAS_CALL_METHOD(_method_180)>(*this,lib,"mapPixelToCoords",SideEffects::worstDefault,"das_call_member< sf::Vector2<float> (sf::RenderTarget::*)(const sf::Vector2<int> &,const sf::View &) const , &sf::RenderTarget::mapPixelToCoords >::invoke")
+		->args({"self","point","view"});
+	using _method_181 = das::das_call_member< sf::Vector2<int> (sf::RenderTarget::*)(const sf::Vector2<float> &) const,&sf::RenderTarget::mapCoordsToPixel >;
+	addExtern<DAS_CALL_METHOD(_method_181)>(*this,lib,"mapCoordsToPixel",SideEffects::worstDefault,"das_call_member< sf::Vector2<int> (sf::RenderTarget::*)(const sf::Vector2<float> &) const , &sf::RenderTarget::mapCoordsToPixel >::invoke")
+		->args({"self","point"});
+	using _method_182 = das::das_call_member< sf::Vector2<int> (sf::RenderTarget::*)(const sf::Vector2<float> &,const sf::View &) const,&sf::RenderTarget::mapCoordsToPixel >;
+	addExtern<DAS_CALL_METHOD(_method_182)>(*this,lib,"mapCoordsToPixel",SideEffects::worstDefault,"das_call_member< sf::Vector2<int> (sf::RenderTarget::*)(const sf::Vector2<float> &,const sf::View &) const , &sf::RenderTarget::mapCoordsToPixel >::invoke")
+		->args({"self","point","view"});
+	using _method_183 = das::das_call_member< void (sf::RenderTarget::*)(const sf::Drawable &,const sf::RenderStates &),&sf::RenderTarget::draw >;
+	addExtern<DAS_CALL_METHOD(_method_183)>(*this,lib,"draw",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::Drawable &,const sf::RenderStates &) , &sf::RenderTarget::draw >::invoke")
+		->args({"self","drawable","states"});
+	using _method_184 = das::das_call_member< void (sf::RenderTarget::*)(const sf::Vertex *,unsigned long long,sf::PrimitiveType,const sf::RenderStates &),&sf::RenderTarget::draw >;
+	addExtern<DAS_CALL_METHOD(_method_184)>(*this,lib,"draw",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::Vertex *,unsigned long long,sf::PrimitiveType,const sf::RenderStates &) , &sf::RenderTarget::draw >::invoke")
+		->args({"self","vertices","vertexCount","type","states"});
+	using _method_185 = das::das_call_member< void (sf::RenderTarget::*)(const sf::VertexBuffer &,const sf::RenderStates &),&sf::RenderTarget::draw >;
+	addExtern<DAS_CALL_METHOD(_method_185)>(*this,lib,"draw",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::VertexBuffer &,const sf::RenderStates &) , &sf::RenderTarget::draw >::invoke")
+		->args({"self","vertexBuffer","states"});
+	using _method_186 = das::das_call_member< void (sf::RenderTarget::*)(const sf::VertexBuffer &,unsigned long long,unsigned long long,const sf::RenderStates &),&sf::RenderTarget::draw >;
+	addExtern<DAS_CALL_METHOD(_method_186)>(*this,lib,"draw",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)(const sf::VertexBuffer &,unsigned long long,unsigned long long,const sf::RenderStates &) , &sf::RenderTarget::draw >::invoke")
+		->args({"self","vertexBuffer","firstVertex","vertexCount","states"});
+	using _method_187 = das::das_call_member< void (sf::RenderTarget::*)(),&sf::RenderTarget::pushGLStates >;
+	addExtern<DAS_CALL_METHOD(_method_187)>(*this,lib,"pushGLStates",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)() , &sf::RenderTarget::pushGLStates >::invoke")
+		->args({"self"});
+	using _method_188 = das::das_call_member< void (sf::RenderTarget::*)(),&sf::RenderTarget::popGLStates >;
+	addExtern<DAS_CALL_METHOD(_method_188)>(*this,lib,"popGLStates",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)() , &sf::RenderTarget::popGLStates >::invoke")
+		->args({"self"});
+	using _method_189 = das::das_call_member< void (sf::RenderTarget::*)(),&sf::RenderTarget::resetGLStates >;
+	addExtern<DAS_CALL_METHOD(_method_189)>(*this,lib,"resetGLStates",SideEffects::worstDefault,"das_call_member< void (sf::RenderTarget::*)() , &sf::RenderTarget::resetGLStates >::invoke")
+		->args({"self"});
+	addCtorAndUsing<sf::RenderTexture>(*this,lib,"RenderTexture","sf::RenderTexture");
+	using _method_190 = das::das_call_member< bool (sf::RenderTexture::*)(unsigned int,unsigned int,bool),&sf::RenderTexture::create >;
+	addExtern<DAS_CALL_METHOD(_method_190)>(*this,lib,"create",SideEffects::worstDefault,"das_call_member< bool (sf::RenderTexture::*)(unsigned int,unsigned int,bool) , &sf::RenderTexture::create >::invoke")
+		->args({"self","width","height","depthBuffer"});
+	using _method_191 = das::das_call_member< bool (sf::RenderTexture::*)(unsigned int,unsigned int,const sf::ContextSettings &),&sf::RenderTexture::create >;
+	addExtern<DAS_CALL_METHOD(_method_191)>(*this,lib,"create",SideEffects::worstDefault,"das_call_member< bool (sf::RenderTexture::*)(unsigned int,unsigned int,const sf::ContextSettings &) , &sf::RenderTexture::create >::invoke")
+		->args({"self","width","height","settings"});
+	using _method_192 = das::das_call_member< void (sf::RenderTexture::*)(bool),&sf::RenderTexture::setSmooth >;
+	addExtern<DAS_CALL_METHOD(_method_192)>(*this,lib,"setSmooth",SideEffects::worstDefault,"das_call_member< void (sf::RenderTexture::*)(bool) , &sf::RenderTexture::setSmooth >::invoke")
+		->args({"self","smooth"});
+	using _method_193 = das::das_call_member< bool (sf::RenderTexture::*)() const,&sf::RenderTexture::isSmooth >;
+	addExtern<DAS_CALL_METHOD(_method_193)>(*this,lib,"isSmooth",SideEffects::worstDefault,"das_call_member< bool (sf::RenderTexture::*)() const , &sf::RenderTexture::isSmooth >::invoke")
+		->args({"self"});
+	using _method_194 = das::das_call_member< void (sf::RenderTexture::*)(bool),&sf::RenderTexture::setRepeated >;
+	addExtern<DAS_CALL_METHOD(_method_194)>(*this,lib,"setRepeated",SideEffects::worstDefault,"das_call_member< void (sf::RenderTexture::*)(bool) , &sf::RenderTexture::setRepeated >::invoke")
+		->args({"self","repeated"});
+	using _method_195 = das::das_call_member< bool (sf::RenderTexture::*)() const,&sf::RenderTexture::isRepeated >;
+	addExtern<DAS_CALL_METHOD(_method_195)>(*this,lib,"isRepeated",SideEffects::worstDefault,"das_call_member< bool (sf::RenderTexture::*)() const , &sf::RenderTexture::isRepeated >::invoke")
+		->args({"self"});
+	using _method_196 = das::das_call_member< bool (sf::RenderTexture::*)(),&sf::RenderTexture::generateMipmap >;
+	addExtern<DAS_CALL_METHOD(_method_196)>(*this,lib,"generateMipmap",SideEffects::worstDefault,"das_call_member< bool (sf::RenderTexture::*)() , &sf::RenderTexture::generateMipmap >::invoke")
+		->args({"self"});
 	using _method_197 = das::das_call_member< void (sf::RenderTexture::*)(),&sf::RenderTexture::display >;
 	addExtern<DAS_CALL_METHOD(_method_197)>(*this,lib,"display",SideEffects::worstDefault,"das_call_member< void (sf::RenderTexture::*)() , &sf::RenderTexture::display >::invoke")
 		->args({"self"});
 	using _method_198 = das::das_call_member< const sf::Texture & (sf::RenderTexture::*)() const,&sf::RenderTexture::getTexture >;
 	addExtern<DAS_CALL_METHOD(_method_198), SimNode_ExtFuncCallRef>(*this,lib,"getTexture",SideEffects::worstDefault,"das_call_member< const sf::Texture & (sf::RenderTexture::*)() const , &sf::RenderTexture::getTexture >::invoke")
 		->args({"self"});
+	addCtorAndUsing<sf::RenderWindow>(*this,lib,"RenderWindow","sf::RenderWindow");
+	addCtorAndUsing<sf::RenderWindow,sf::VideoMode,const sf::String &,unsigned int,const sf::ContextSettings &>(*this,lib,"RenderWindow","sf::RenderWindow")
+		->args({"mode","title","style","settings"})
+		->arg_init(2,make_smart<ExprConstUInt>(0x7));
+	addCtorAndUsing<sf::RenderWindow,HWND__ *,const sf::ContextSettings &>(*this,lib,"RenderWindow","sf::RenderWindow")
+		->args({"handle","settings"});
 	addExtern< void (*)(const sf::Transform &,sf::priv::Matrix<3, 3> &) , sf::priv::copyMatrix >(*this,lib,"copyMatrix",SideEffects::worstDefault,"sf::priv::copyMatrix")
 		->args({"source","dest"});
 	addExtern< void (*)(const sf::Transform &,sf::priv::Matrix<4, 4> &) , sf::priv::copyMatrix >(*this,lib,"copyMatrix",SideEffects::worstDefault,"sf::priv::copyMatrix")
@@ -27,6 +192,7 @@ void Module_dasSFML::initFunctions_3() {
 		->args({"source","dest"});
 	addExtern< void (*)(const sf::Color &,sf::priv::Vector4<int> &) , sf::priv::copyVector >(*this,lib,"copyVector",SideEffects::worstDefault,"sf::priv::copyVector")
 		->args({"source","dest"});
+	addCtorAndUsing<sf::Shader>(*this,lib,"Shader","sf::Shader");
 	using _method_199 = das::das_call_member< bool (sf::Shader::*)(const std::basic_string<char> &,sf::Shader::Type),&sf::Shader::loadFromFile >;
 	addExtern<DAS_CALL_METHOD(_method_199)>(*this,lib,"loadFromFile",SideEffects::worstDefault,"das_call_member< bool (sf::Shader::*)(const std::basic_string<char> &,sf::Shader::Type) , &sf::Shader::loadFromFile >::invoke")
 		->args({"self","filename","type"});
@@ -129,157 +295,6 @@ void Module_dasSFML::initFunctions_3() {
 	using _method_232 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,float,float,float),&sf::Shader::setParameter >;
 	addExtern<DAS_CALL_METHOD(_method_232)>(*this,lib,"setParameter",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,float,float,float) , &sf::Shader::setParameter >::invoke")
 		->args({"self","name","x","y","z"});
-	using _method_233 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,float,float,float,float),&sf::Shader::setParameter >;
-	addExtern<DAS_CALL_METHOD(_method_233)>(*this,lib,"setParameter",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,float,float,float,float) , &sf::Shader::setParameter >::invoke")
-		->args({"self","name","x","y","z","w"});
-	using _method_234 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector2<float> &),&sf::Shader::setParameter >;
-	addExtern<DAS_CALL_METHOD(_method_234)>(*this,lib,"setParameter",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector2<float> &) , &sf::Shader::setParameter >::invoke")
-		->args({"self","name","vector"});
-	using _method_235 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector3<float> &),&sf::Shader::setParameter >;
-	addExtern<DAS_CALL_METHOD(_method_235)>(*this,lib,"setParameter",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Vector3<float> &) , &sf::Shader::setParameter >::invoke")
-		->args({"self","name","vector"});
-	using _method_236 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Color &),&sf::Shader::setParameter >;
-	addExtern<DAS_CALL_METHOD(_method_236)>(*this,lib,"setParameter",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Color &) , &sf::Shader::setParameter >::invoke")
-		->args({"self","name","color"});
-	using _method_237 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Transform &),&sf::Shader::setParameter >;
-	addExtern<DAS_CALL_METHOD(_method_237)>(*this,lib,"setParameter",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Transform &) , &sf::Shader::setParameter >::invoke")
-		->args({"self","name","transform"});
-	using _method_238 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Texture &),&sf::Shader::setParameter >;
-	addExtern<DAS_CALL_METHOD(_method_238)>(*this,lib,"setParameter",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,const sf::Texture &) , &sf::Shader::setParameter >::invoke")
-		->args({"self","name","texture"});
-	using _method_239 = das::das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,sf::Shader::CurrentTextureType),&sf::Shader::setParameter >;
-	addExtern<DAS_CALL_METHOD(_method_239)>(*this,lib,"setParameter",SideEffects::worstDefault,"das_call_member< void (sf::Shader::*)(const std::basic_string<char> &,sf::Shader::CurrentTextureType) , &sf::Shader::setParameter >::invoke")
-		->args({"self","name",""});
-	using _method_240 = das::das_call_member< unsigned int (sf::Shader::*)() const,&sf::Shader::getNativeHandle >;
-	addExtern<DAS_CALL_METHOD(_method_240)>(*this,lib,"getNativeHandle",SideEffects::worstDefault,"das_call_member< unsigned int (sf::Shader::*)() const , &sf::Shader::getNativeHandle >::invoke")
-		->args({"self"});
-	using _method_241 = das::das_call_member< void (sf::Sprite::*)(const sf::Texture &,bool),&sf::Sprite::setTexture >;
-	addExtern<DAS_CALL_METHOD(_method_241)>(*this,lib,"setTexture",SideEffects::worstDefault,"das_call_member< void (sf::Sprite::*)(const sf::Texture &,bool) , &sf::Sprite::setTexture >::invoke")
-		->args({"self","texture","resetRect"})
-		->arg_init(2,make_smart<ExprConstBool>(false));
-	using _method_242 = das::das_call_member< void (sf::Sprite::*)(const sf::Rect<int> &),&sf::Sprite::setTextureRect >;
-	addExtern<DAS_CALL_METHOD(_method_242)>(*this,lib,"setTextureRect",SideEffects::worstDefault,"das_call_member< void (sf::Sprite::*)(const sf::Rect<int> &) , &sf::Sprite::setTextureRect >::invoke")
-		->args({"self","rectangle"});
-	using _method_243 = das::das_call_member< void (sf::Sprite::*)(const sf::Color &),&sf::Sprite::setColor >;
-	addExtern<DAS_CALL_METHOD(_method_243)>(*this,lib,"setColor",SideEffects::worstDefault,"das_call_member< void (sf::Sprite::*)(const sf::Color &) , &sf::Sprite::setColor >::invoke")
-		->args({"self","color"});
-	using _method_244 = das::das_call_member< const sf::Texture * (sf::Sprite::*)() const,&sf::Sprite::getTexture >;
-	addExtern<DAS_CALL_METHOD(_method_244)>(*this,lib,"getTexture",SideEffects::worstDefault,"das_call_member< const sf::Texture * (sf::Sprite::*)() const , &sf::Sprite::getTexture >::invoke")
-		->args({"self"});
-	using _method_245 = das::das_call_member< const sf::Rect<int> & (sf::Sprite::*)() const,&sf::Sprite::getTextureRect >;
-	addExtern<DAS_CALL_METHOD(_method_245), SimNode_ExtFuncCallRef>(*this,lib,"getTextureRect",SideEffects::worstDefault,"das_call_member< const sf::Rect<int> & (sf::Sprite::*)() const , &sf::Sprite::getTextureRect >::invoke")
-		->args({"self"});
-	using _method_246 = das::das_call_member< const sf::Color & (sf::Sprite::*)() const,&sf::Sprite::getColor >;
-	addExtern<DAS_CALL_METHOD(_method_246), SimNode_ExtFuncCallRef>(*this,lib,"getColor",SideEffects::worstDefault,"das_call_member< const sf::Color & (sf::Sprite::*)() const , &sf::Sprite::getColor >::invoke")
-		->args({"self"});
-	using _method_247 = das::das_call_member< sf::Rect<float> (sf::Sprite::*)() const,&sf::Sprite::getLocalBounds >;
-	addExtern<DAS_CALL_METHOD(_method_247)>(*this,lib,"getLocalBounds",SideEffects::worstDefault,"das_call_member< sf::Rect<float> (sf::Sprite::*)() const , &sf::Sprite::getLocalBounds >::invoke")
-		->args({"self"});
-	using _method_248 = das::das_call_member< sf::Rect<float> (sf::Sprite::*)() const,&sf::Sprite::getGlobalBounds >;
-	addExtern<DAS_CALL_METHOD(_method_248)>(*this,lib,"getGlobalBounds",SideEffects::worstDefault,"das_call_member< sf::Rect<float> (sf::Sprite::*)() const , &sf::Sprite::getGlobalBounds >::invoke")
-		->args({"self"});
-	using _method_249 = das::das_call_member< void (sf::Text::*)(const sf::String &),&sf::Text::setString >;
-	addExtern<DAS_CALL_METHOD(_method_249)>(*this,lib,"setString",SideEffects::worstDefault,"das_call_member< void (sf::Text::*)(const sf::String &) , &sf::Text::setString >::invoke")
-		->args({"self","string"});
-	using _method_250 = das::das_call_member< void (sf::Text::*)(const sf::Font &),&sf::Text::setFont >;
-	addExtern<DAS_CALL_METHOD(_method_250)>(*this,lib,"setFont",SideEffects::worstDefault,"das_call_member< void (sf::Text::*)(const sf::Font &) , &sf::Text::setFont >::invoke")
-		->args({"self","font"});
-	using _method_251 = das::das_call_member< void (sf::Text::*)(unsigned int),&sf::Text::setCharacterSize >;
-	addExtern<DAS_CALL_METHOD(_method_251)>(*this,lib,"setCharacterSize",SideEffects::worstDefault,"das_call_member< void (sf::Text::*)(unsigned int) , &sf::Text::setCharacterSize >::invoke")
-		->args({"self","size"});
-	using _method_252 = das::das_call_member< void (sf::Text::*)(float),&sf::Text::setLineSpacing >;
-	addExtern<DAS_CALL_METHOD(_method_252)>(*this,lib,"setLineSpacing",SideEffects::worstDefault,"das_call_member< void (sf::Text::*)(float) , &sf::Text::setLineSpacing >::invoke")
-		->args({"self","spacingFactor"});
-	using _method_253 = das::das_call_member< void (sf::Text::*)(float),&sf::Text::setLetterSpacing >;
-	addExtern<DAS_CALL_METHOD(_method_253)>(*this,lib,"setLetterSpacing",SideEffects::worstDefault,"das_call_member< void (sf::Text::*)(float) , &sf::Text::setLetterSpacing >::invoke")
-		->args({"self","spacingFactor"});
-	using _method_254 = das::das_call_member< void (sf::Text::*)(unsigned int),&sf::Text::setStyle >;
-	addExtern<DAS_CALL_METHOD(_method_254)>(*this,lib,"setStyle",SideEffects::worstDefault,"das_call_member< void (sf::Text::*)(unsigned int) , &sf::Text::setStyle >::invoke")
-		->args({"self","style"});
-	using _method_255 = das::das_call_member< void (sf::Text::*)(const sf::Color &),&sf::Text::setColor >;
-	addExtern<DAS_CALL_METHOD(_method_255)>(*this,lib,"setColor",SideEffects::worstDefault,"das_call_member< void (sf::Text::*)(const sf::Color &) , &sf::Text::setColor >::invoke")
-		->args({"self","color"});
-	using _method_256 = das::das_call_member< void (sf::Text::*)(const sf::Color &),&sf::Text::setFillColor >;
-	addExtern<DAS_CALL_METHOD(_method_256)>(*this,lib,"setFillColor",SideEffects::worstDefault,"das_call_member< void (sf::Text::*)(const sf::Color &) , &sf::Text::setFillColor >::invoke")
-		->args({"self","color"});
-	using _method_257 = das::das_call_member< void (sf::Text::*)(const sf::Color &),&sf::Text::setOutlineColor >;
-	addExtern<DAS_CALL_METHOD(_method_257)>(*this,lib,"setOutlineColor",SideEffects::worstDefault,"das_call_member< void (sf::Text::*)(const sf::Color &) , &sf::Text::setOutlineColor >::invoke")
-		->args({"self","color"});
-	using _method_258 = das::das_call_member< void (sf::Text::*)(float),&sf::Text::setOutlineThickness >;
-	addExtern<DAS_CALL_METHOD(_method_258)>(*this,lib,"setOutlineThickness",SideEffects::worstDefault,"das_call_member< void (sf::Text::*)(float) , &sf::Text::setOutlineThickness >::invoke")
-		->args({"self","thickness"});
-	using _method_259 = das::das_call_member< const sf::String & (sf::Text::*)() const,&sf::Text::getString >;
-	addExtern<DAS_CALL_METHOD(_method_259), SimNode_ExtFuncCallRef>(*this,lib,"getString",SideEffects::worstDefault,"das_call_member< const sf::String & (sf::Text::*)() const , &sf::Text::getString >::invoke")
-		->args({"self"});
-	using _method_260 = das::das_call_member< const sf::Font * (sf::Text::*)() const,&sf::Text::getFont >;
-	addExtern<DAS_CALL_METHOD(_method_260)>(*this,lib,"getFont",SideEffects::worstDefault,"das_call_member< const sf::Font * (sf::Text::*)() const , &sf::Text::getFont >::invoke")
-		->args({"self"});
-	using _method_261 = das::das_call_member< unsigned int (sf::Text::*)() const,&sf::Text::getCharacterSize >;
-	addExtern<DAS_CALL_METHOD(_method_261)>(*this,lib,"getCharacterSize",SideEffects::worstDefault,"das_call_member< unsigned int (sf::Text::*)() const , &sf::Text::getCharacterSize >::invoke")
-		->args({"self"});
-	using _method_262 = das::das_call_member< float (sf::Text::*)() const,&sf::Text::getLetterSpacing >;
-	addExtern<DAS_CALL_METHOD(_method_262)>(*this,lib,"getLetterSpacing",SideEffects::worstDefault,"das_call_member< float (sf::Text::*)() const , &sf::Text::getLetterSpacing >::invoke")
-		->args({"self"});
-	using _method_263 = das::das_call_member< float (sf::Text::*)() const,&sf::Text::getLineSpacing >;
-	addExtern<DAS_CALL_METHOD(_method_263)>(*this,lib,"getLineSpacing",SideEffects::worstDefault,"das_call_member< float (sf::Text::*)() const , &sf::Text::getLineSpacing >::invoke")
-		->args({"self"});
-	using _method_264 = das::das_call_member< unsigned int (sf::Text::*)() const,&sf::Text::getStyle >;
-	addExtern<DAS_CALL_METHOD(_method_264)>(*this,lib,"getStyle",SideEffects::worstDefault,"das_call_member< unsigned int (sf::Text::*)() const , &sf::Text::getStyle >::invoke")
-		->args({"self"});
-	using _method_265 = das::das_call_member< const sf::Color & (sf::Text::*)() const,&sf::Text::getColor >;
-	addExtern<DAS_CALL_METHOD(_method_265), SimNode_ExtFuncCallRef>(*this,lib,"getColor",SideEffects::worstDefault,"das_call_member< const sf::Color & (sf::Text::*)() const , &sf::Text::getColor >::invoke")
-		->args({"self"});
-	using _method_266 = das::das_call_member< const sf::Color & (sf::Text::*)() const,&sf::Text::getFillColor >;
-	addExtern<DAS_CALL_METHOD(_method_266), SimNode_ExtFuncCallRef>(*this,lib,"getFillColor",SideEffects::worstDefault,"das_call_member< const sf::Color & (sf::Text::*)() const , &sf::Text::getFillColor >::invoke")
-		->args({"self"});
-	using _method_267 = das::das_call_member< const sf::Color & (sf::Text::*)() const,&sf::Text::getOutlineColor >;
-	addExtern<DAS_CALL_METHOD(_method_267), SimNode_ExtFuncCallRef>(*this,lib,"getOutlineColor",SideEffects::worstDefault,"das_call_member< const sf::Color & (sf::Text::*)() const , &sf::Text::getOutlineColor >::invoke")
-		->args({"self"});
-	using _method_268 = das::das_call_member< float (sf::Text::*)() const,&sf::Text::getOutlineThickness >;
-	addExtern<DAS_CALL_METHOD(_method_268)>(*this,lib,"getOutlineThickness",SideEffects::worstDefault,"das_call_member< float (sf::Text::*)() const , &sf::Text::getOutlineThickness >::invoke")
-		->args({"self"});
-	using _method_269 = das::das_call_member< sf::Vector2<float> (sf::Text::*)(unsigned long long) const,&sf::Text::findCharacterPos >;
-	addExtern<DAS_CALL_METHOD(_method_269)>(*this,lib,"findCharacterPos",SideEffects::worstDefault,"das_call_member< sf::Vector2<float> (sf::Text::*)(unsigned long long) const , &sf::Text::findCharacterPos >::invoke")
-		->args({"self","index"});
-	using _method_270 = das::das_call_member< sf::Rect<float> (sf::Text::*)() const,&sf::Text::getLocalBounds >;
-	addExtern<DAS_CALL_METHOD(_method_270)>(*this,lib,"getLocalBounds",SideEffects::worstDefault,"das_call_member< sf::Rect<float> (sf::Text::*)() const , &sf::Text::getLocalBounds >::invoke")
-		->args({"self"});
-	using _method_271 = das::das_call_member< sf::Rect<float> (sf::Text::*)() const,&sf::Text::getGlobalBounds >;
-	addExtern<DAS_CALL_METHOD(_method_271)>(*this,lib,"getGlobalBounds",SideEffects::worstDefault,"das_call_member< sf::Rect<float> (sf::Text::*)() const , &sf::Text::getGlobalBounds >::invoke")
-		->args({"self"});
-	using _method_272 = das::das_call_member< bool (sf::VertexBuffer::*)(unsigned long long),&sf::VertexBuffer::create >;
-	addExtern<DAS_CALL_METHOD(_method_272)>(*this,lib,"create",SideEffects::worstDefault,"das_call_member< bool (sf::VertexBuffer::*)(unsigned long long) , &sf::VertexBuffer::create >::invoke")
-		->args({"self","vertexCount"});
-	using _method_273 = das::das_call_member< unsigned long long (sf::VertexBuffer::*)() const,&sf::VertexBuffer::getVertexCount >;
-	addExtern<DAS_CALL_METHOD(_method_273)>(*this,lib,"getVertexCount",SideEffects::worstDefault,"das_call_member< unsigned long long (sf::VertexBuffer::*)() const , &sf::VertexBuffer::getVertexCount >::invoke")
-		->args({"self"});
-	using _method_274 = das::das_call_member< bool (sf::VertexBuffer::*)(const sf::Vertex *),&sf::VertexBuffer::update >;
-	addExtern<DAS_CALL_METHOD(_method_274)>(*this,lib,"update",SideEffects::worstDefault,"das_call_member< bool (sf::VertexBuffer::*)(const sf::Vertex *) , &sf::VertexBuffer::update >::invoke")
-		->args({"self","vertices"});
-	using _method_275 = das::das_call_member< bool (sf::VertexBuffer::*)(const sf::Vertex *,unsigned long long,unsigned int),&sf::VertexBuffer::update >;
-	addExtern<DAS_CALL_METHOD(_method_275)>(*this,lib,"update",SideEffects::worstDefault,"das_call_member< bool (sf::VertexBuffer::*)(const sf::Vertex *,unsigned long long,unsigned int) , &sf::VertexBuffer::update >::invoke")
-		->args({"self","vertices","vertexCount","offset"});
-	using _method_276 = das::das_call_member< bool (sf::VertexBuffer::*)(const sf::VertexBuffer &),&sf::VertexBuffer::update >;
-	addExtern<DAS_CALL_METHOD(_method_276)>(*this,lib,"update",SideEffects::worstDefault,"das_call_member< bool (sf::VertexBuffer::*)(const sf::VertexBuffer &) , &sf::VertexBuffer::update >::invoke")
-		->args({"self","vertexBuffer"});
-	using _method_277 = das::das_call_member< void (sf::VertexBuffer::*)(sf::VertexBuffer &),&sf::VertexBuffer::swap >;
-	addExtern<DAS_CALL_METHOD(_method_277)>(*this,lib,"swap",SideEffects::worstDefault,"das_call_member< void (sf::VertexBuffer::*)(sf::VertexBuffer &) , &sf::VertexBuffer::swap >::invoke")
-		->args({"self","right"});
-	using _method_278 = das::das_call_member< unsigned int (sf::VertexBuffer::*)() const,&sf::VertexBuffer::getNativeHandle >;
-	addExtern<DAS_CALL_METHOD(_method_278)>(*this,lib,"getNativeHandle",SideEffects::worstDefault,"das_call_member< unsigned int (sf::VertexBuffer::*)() const , &sf::VertexBuffer::getNativeHandle >::invoke")
-		->args({"self"});
-	using _method_279 = das::das_call_member< void (sf::VertexBuffer::*)(sf::PrimitiveType),&sf::VertexBuffer::setPrimitiveType >;
-	addExtern<DAS_CALL_METHOD(_method_279)>(*this,lib,"setPrimitiveType",SideEffects::worstDefault,"das_call_member< void (sf::VertexBuffer::*)(sf::PrimitiveType) , &sf::VertexBuffer::setPrimitiveType >::invoke")
-		->args({"self","type"});
-	using _method_280 = das::das_call_member< sf::PrimitiveType (sf::VertexBuffer::*)() const,&sf::VertexBuffer::getPrimitiveType >;
-	addExtern<DAS_CALL_METHOD(_method_280)>(*this,lib,"getPrimitiveType",SideEffects::worstDefault,"das_call_member< sf::PrimitiveType (sf::VertexBuffer::*)() const , &sf::VertexBuffer::getPrimitiveType >::invoke")
-		->args({"self"});
-	using _method_281 = das::das_call_member< void (sf::VertexBuffer::*)(sf::VertexBuffer::Usage),&sf::VertexBuffer::setUsage >;
-	addExtern<DAS_CALL_METHOD(_method_281)>(*this,lib,"setUsage",SideEffects::worstDefault,"das_call_member< void (sf::VertexBuffer::*)(sf::VertexBuffer::Usage) , &sf::VertexBuffer::setUsage >::invoke")
-		->args({"self","usage"});
-	using _method_282 = das::das_call_member< sf::VertexBuffer::Usage (sf::VertexBuffer::*)() const,&sf::VertexBuffer::getUsage >;
-	addExtern<DAS_CALL_METHOD(_method_282)>(*this,lib,"getUsage",SideEffects::worstDefault,"das_call_member< sf::VertexBuffer::Usage (sf::VertexBuffer::*)() const , &sf::VertexBuffer::getUsage >::invoke")
-		->args({"self"});
 }
 }
 

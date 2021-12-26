@@ -207,6 +207,12 @@ class AnyGenBind
             print("{diags}\n")
         clang_disposeTranslationUnit(unit)
         clang_disposeIndex(index)
+    def namespace_struct_name ( dash:string="::" ) : string
+        return build_string <| $ ( wr )
+            for n,i in nspaces,range(100500)
+                if i != 0
+                    wr |> write(dash)
+                wr |> write(n)
     def namespace_name ( name:string; dash:string="::" ) : string
         return build_string <| $ ( wr )
             for n in nspaces
@@ -214,6 +220,8 @@ class AnyGenBind
                 wr |> write(dash)
             wr |> write(name)
     def skip_method ( var c : CXCursor ) : bool
+        return skip_anyFunction(c, true)
+    def skip_constructor ( var c : CXCursor ) : bool
         return skip_anyFunction(c, true)
     def skip_function ( var c : CXCursor ) : bool
         return skip_anyFunction(c, false)
@@ -282,6 +290,8 @@ class AnyGenBind
     def parse_FunctionDecl ( var c : CXCursor )
         pass
     def parse_Method ( var c : CXCursor )
+        pass
+    def parse_Constructor ( var c : CXCursor )
         pass
     def parse_Namespace ( var c : CXCursor )
         let ns = string(clang_getCursorDisplayName(c))
@@ -379,7 +389,13 @@ class AnyGenBind
                             parse_Method(c)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind Constructor
-                    // TODO: support autobind of constructor?
+                    let acs = clang_getCXXAccessSpecifier(c)
+                    if acs != CX_CXXAccessSpecifier Public
+                        let ctor_name = string(clang_getCursorSpelling(c))
+                        to_log(LOG_INFO, "skipping {namespace_name(ctor_name)} constructor due to access specifier {acs}")
+                    else
+                        if !skip_constructor(c)
+                            parse_Constructor(c)
                     return CXChildVisitResult Continue
                 /*
                 elif kind == CXCursorKind CXXConversionFunction
@@ -850,7 +866,7 @@ class CppGenBind : AnyGenBind
         // let tname = string(clang_getTypeSpelling(t))
         // print("NOT AOT ALIAS {tname} {t.kind}\n")
         return false
-    def parse_anyFunctionDecl ( var c : CXCursor; isMethod : bool )
+    def step_Function
         func_count ++
         if func_count >= func_per_chunk
             func_count = 0
@@ -862,6 +878,8 @@ class CppGenBind : AnyGenBind
             fwrite(func_file_reg, "initFunctions_{func_chunk_index}();\n")
             fwrite(func_file_decl, "void initFunctions_{func_chunk_index}();\n")
             func_count = 0
+    def parse_anyFunctionDecl ( var c : CXCursor; isMethod : bool )
+        step_Function()
         var isStatic = false
         if isMethod
             if clang_Cursor_getStorageClass(c)==CX_StorageClass Static
@@ -922,6 +940,38 @@ class CppGenBind : AnyGenBind
         let rp = getCursorArgType(nc_res_type)
         if rp != ""
             fprint(func_file,"\n\t\t->res_type(makeType<{rp}>(lib))")
+        fprint(func_file,";\n")
+    def override parse_Constructor ( var c : CXCursor )
+        step_Function()
+        let ctor_name = string(clang_getCursorSpelling(c))
+        let function_cpp_name = namespace_struct_name()
+        fprint(func_file,"\taddCtorAndUsing<{function_cpp_name}")
+        let narg = clang_Cursor_getNumArguments(c)
+        for ai in urange(narg)
+            var carg = clang_Cursor_getArgument(c, ai)
+            var ct = clang_getCursorType(carg)
+            var cp = getCursorArgType(ct)
+            if cp == ""
+                cp = string(clang_getTypeSpelling(clang_getCanonicalType(ct)))
+            fprint(func_file,",{cp}")
+        fprint(func_file,">(*this,lib,\"{ctor_name}\",\"{function_cpp_name}\")")
+        if narg!=0
+            fprint(func_file,"\n\t\t->args(\{")
+            for ai in urange(narg)
+                if ai != 0u
+                    fprint(func_file,",")
+                var carg = clang_Cursor_getArgument(c, ai)
+                let arg_name = string(clang_getCursorSpelling(carg))
+                fprint(func_file,"\"{arg_name}\"")
+            fprint(func_file,"\})")
+        for ai in urange(narg)
+            let aii = int(ai)
+            var carg = clang_Cursor_getArgument(c, ai)
+            var ct = clang_getCursorType(carg)
+            var cp = getCursorArgType(ct)
+            let cv = getCursorInit(carg,cp)
+            if cv != ""
+                fprint(func_file,"\n\t\t->arg_init({aii},{cv})")
         fprint(func_file,";\n")
     def getCursorArgType ( var t : CXType )
         let tn = string(clang_getTypeSpelling(t))
