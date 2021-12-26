@@ -108,8 +108,6 @@ void Module_dasSFML::initFunctions_1() {
 	addCtorAndUsing<sf::WindowBase,sf::VideoMode,const sf::String &,unsigned int>(*this,lib,"WindowBase","sf::WindowBase")
 		->args({"mode","title","style"})
 		->arg_init(2,make_smart<ExprConstUInt>(0x7));
-	addCtorAndUsing<sf::WindowBase,HWND__ *>(*this,lib,"WindowBase","sf::WindowBase")
-		->args({"handle"});
 	using _method_20 = das::das_call_member< bool (sf::WindowBase::*)() const,&sf::WindowBase::isOpen >;
 	addExtern<DAS_CALL_METHOD(_method_20)>(*this,lib,"isOpen",SideEffects::worstDefault,"das_call_member< bool (sf::WindowBase::*)() const , &sf::WindowBase::isOpen >::invoke")
 		->args({"self"});
@@ -161,34 +159,29 @@ void Module_dasSFML::initFunctions_1() {
 	using _method_36 = das::das_call_member< bool (sf::WindowBase::*)() const,&sf::WindowBase::hasFocus >;
 	addExtern<DAS_CALL_METHOD(_method_36)>(*this,lib,"hasFocus",SideEffects::worstDefault,"das_call_member< bool (sf::WindowBase::*)() const , &sf::WindowBase::hasFocus >::invoke")
 		->args({"self"});
-	using _method_37 = das::das_call_member< HWND__ * (sf::WindowBase::*)() const,&sf::WindowBase::getSystemHandle >;
-	addExtern<DAS_CALL_METHOD(_method_37)>(*this,lib,"getSystemHandle",SideEffects::worstDefault,"das_call_member< HWND__ * (sf::WindowBase::*)() const , &sf::WindowBase::getSystemHandle >::invoke")
-		->args({"self"});
-	using _method_38 = das::das_call_member< bool (sf::WindowBase::*)(VkInstance_T *const &,VkSurfaceKHR_T *&,const VkAllocationCallbacks *),&sf::WindowBase::createVulkanSurface >;
-	addExtern<DAS_CALL_METHOD(_method_38)>(*this,lib,"createVulkanSurface",SideEffects::worstDefault,"das_call_member< bool (sf::WindowBase::*)(VkInstance_T *const &,VkSurfaceKHR_T *&,const VkAllocationCallbacks *) , &sf::WindowBase::createVulkanSurface >::invoke")
+	using _method_37 = das::das_call_member< bool (sf::WindowBase::*)(VkInstance_T *const &,VkSurfaceKHR_T *&,const VkAllocationCallbacks *),&sf::WindowBase::createVulkanSurface >;
+	addExtern<DAS_CALL_METHOD(_method_37)>(*this,lib,"createVulkanSurface",SideEffects::worstDefault,"das_call_member< bool (sf::WindowBase::*)(VkInstance_T *const &,VkSurfaceKHR_T *&,const VkAllocationCallbacks *) , &sf::WindowBase::createVulkanSurface >::invoke")
 		->args({"self","instance","surface","allocator"})
 		->arg_init(3,make_smart<ExprConstPtr>());
 	addCtorAndUsing<sf::Window>(*this,lib,"Window","sf::Window");
 	addCtorAndUsing<sf::Window,sf::VideoMode,const sf::String &,unsigned int,const sf::ContextSettings &>(*this,lib,"Window","sf::Window")
 		->args({"mode","title","style","settings"})
 		->arg_init(2,make_smart<ExprConstUInt>(0x7));
-	addCtorAndUsing<sf::Window,HWND__ *,const sf::ContextSettings &>(*this,lib,"Window","sf::Window")
-		->args({"handle","settings"});
-	using _method_39 = das::das_call_member< const sf::ContextSettings & (sf::Window::*)() const,&sf::Window::getSettings >;
-	addExtern<DAS_CALL_METHOD(_method_39), SimNode_ExtFuncCallRef>(*this,lib,"getSettings",SideEffects::worstDefault,"das_call_member< const sf::ContextSettings & (sf::Window::*)() const , &sf::Window::getSettings >::invoke")
+	using _method_38 = das::das_call_member< const sf::ContextSettings & (sf::Window::*)() const,&sf::Window::getSettings >;
+	addExtern<DAS_CALL_METHOD(_method_38), SimNode_ExtFuncCallRef>(*this,lib,"getSettings",SideEffects::worstDefault,"das_call_member< const sf::ContextSettings & (sf::Window::*)() const , &sf::Window::getSettings >::invoke")
 		->args({"self"});
-	using _method_40 = das::das_call_member< void (sf::Window::*)(bool),&sf::Window::setVerticalSyncEnabled >;
-	addExtern<DAS_CALL_METHOD(_method_40)>(*this,lib,"setVerticalSyncEnabled",SideEffects::worstDefault,"das_call_member< void (sf::Window::*)(bool) , &sf::Window::setVerticalSyncEnabled >::invoke")
+	using _method_39 = das::das_call_member< void (sf::Window::*)(bool),&sf::Window::setVerticalSyncEnabled >;
+	addExtern<DAS_CALL_METHOD(_method_39)>(*this,lib,"setVerticalSyncEnabled",SideEffects::worstDefault,"das_call_member< void (sf::Window::*)(bool) , &sf::Window::setVerticalSyncEnabled >::invoke")
 		->args({"self","enabled"});
-	using _method_41 = das::das_call_member< void (sf::Window::*)(unsigned int),&sf::Window::setFramerateLimit >;
-	addExtern<DAS_CALL_METHOD(_method_41)>(*this,lib,"setFramerateLimit",SideEffects::worstDefault,"das_call_member< void (sf::Window::*)(unsigned int) , &sf::Window::setFramerateLimit >::invoke")
+	using _method_40 = das::das_call_member< void (sf::Window::*)(unsigned int),&sf::Window::setFramerateLimit >;
+	addExtern<DAS_CALL_METHOD(_method_40)>(*this,lib,"setFramerateLimit",SideEffects::worstDefault,"das_call_member< void (sf::Window::*)(unsigned int) , &sf::Window::setFramerateLimit >::invoke")
 		->args({"self","limit"});
-	using _method_42 = das::das_call_member< bool (sf::Window::*)(bool) const,&sf::Window::setActive >;
-	addExtern<DAS_CALL_METHOD(_method_42)>(*this,lib,"setActive",SideEffects::worstDefault,"das_call_member< bool (sf::Window::*)(bool) const , &sf::Window::setActive >::invoke")
+	using _method_41 = das::das_call_member< bool (sf::Window::*)(bool) const,&sf::Window::setActive >;
+	addExtern<DAS_CALL_METHOD(_method_41)>(*this,lib,"setActive",SideEffects::worstDefault,"das_call_member< bool (sf::Window::*)(bool) const , &sf::Window::setActive >::invoke")
 		->args({"self","active"})
 		->arg_init(1,make_smart<ExprConstBool>(true));
-	using _method_43 = das::das_call_member< void (sf::Window::*)(),&sf::Window::display >;
-	addExtern<DAS_CALL_METHOD(_method_43)>(*this,lib,"display",SideEffects::worstDefault,"das_call_member< void (sf::Window::*)() , &sf::Window::display >::invoke")
+	using _method_42 = das::das_call_member< void (sf::Window::*)(),&sf::Window::display >;
+	addExtern<DAS_CALL_METHOD(_method_42)>(*this,lib,"display",SideEffects::worstDefault,"das_call_member< void (sf::Window::*)() , &sf::Window::display >::invoke")
 		->args({"self"});
 	addCtorAndUsing<sf::BlendMode>(*this,lib,"BlendMode","sf::BlendMode");
 	addCtorAndUsing<sf::BlendMode,sf::BlendMode::Factor,sf::BlendMode::Factor,sf::BlendMode::Equation>(*this,lib,"BlendMode","sf::BlendMode")
@@ -199,50 +192,50 @@ void Module_dasSFML::initFunctions_1() {
 	addCtorAndUsing<sf::Transform>(*this,lib,"Transform","sf::Transform");
 	addCtorAndUsing<sf::Transform,float,float,float,float,float,float,float,float,float>(*this,lib,"Transform","sf::Transform")
 		->args({"a00","a01","a02","a10","a11","a12","a20","a21","a22"});
-	using _method_44 = das::das_call_member< const float * (sf::Transform::*)() const,&sf::Transform::getMatrix >;
-	addExtern<DAS_CALL_METHOD(_method_44)>(*this,lib,"getMatrix",SideEffects::worstDefault,"das_call_member< const float * (sf::Transform::*)() const , &sf::Transform::getMatrix >::invoke")
+	using _method_43 = das::das_call_member< const float * (sf::Transform::*)() const,&sf::Transform::getMatrix >;
+	addExtern<DAS_CALL_METHOD(_method_43)>(*this,lib,"getMatrix",SideEffects::worstDefault,"das_call_member< const float * (sf::Transform::*)() const , &sf::Transform::getMatrix >::invoke")
 		->args({"self"});
-	using _method_45 = das::das_call_member< sf::Transform (sf::Transform::*)() const,&sf::Transform::getInverse >;
-	addExtern<DAS_CALL_METHOD(_method_45),SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"getInverse",SideEffects::worstDefault,"das_call_member< sf::Transform (sf::Transform::*)() const , &sf::Transform::getInverse >::invoke")
+	using _method_44 = das::das_call_member< sf::Transform (sf::Transform::*)() const,&sf::Transform::getInverse >;
+	addExtern<DAS_CALL_METHOD(_method_44),SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"getInverse",SideEffects::worstDefault,"das_call_member< sf::Transform (sf::Transform::*)() const , &sf::Transform::getInverse >::invoke")
 		->args({"self"});
-	using _method_46 = das::das_call_member< sf::Vector2<float> (sf::Transform::*)(float,float) const,&sf::Transform::transformPoint >;
-	addExtern<DAS_CALL_METHOD(_method_46)>(*this,lib,"transformPoint",SideEffects::worstDefault,"das_call_member< sf::Vector2<float> (sf::Transform::*)(float,float) const , &sf::Transform::transformPoint >::invoke")
+	using _method_45 = das::das_call_member< sf::Vector2<float> (sf::Transform::*)(float,float) const,&sf::Transform::transformPoint >;
+	addExtern<DAS_CALL_METHOD(_method_45)>(*this,lib,"transformPoint",SideEffects::worstDefault,"das_call_member< sf::Vector2<float> (sf::Transform::*)(float,float) const , &sf::Transform::transformPoint >::invoke")
 		->args({"self","x","y"});
-	using _method_47 = das::das_call_member< sf::Vector2<float> (sf::Transform::*)(const sf::Vector2<float> &) const,&sf::Transform::transformPoint >;
-	addExtern<DAS_CALL_METHOD(_method_47)>(*this,lib,"transformPoint",SideEffects::worstDefault,"das_call_member< sf::Vector2<float> (sf::Transform::*)(const sf::Vector2<float> &) const , &sf::Transform::transformPoint >::invoke")
+	using _method_46 = das::das_call_member< sf::Vector2<float> (sf::Transform::*)(const sf::Vector2<float> &) const,&sf::Transform::transformPoint >;
+	addExtern<DAS_CALL_METHOD(_method_46)>(*this,lib,"transformPoint",SideEffects::worstDefault,"das_call_member< sf::Vector2<float> (sf::Transform::*)(const sf::Vector2<float> &) const , &sf::Transform::transformPoint >::invoke")
 		->args({"self","point"});
-	using _method_48 = das::das_call_member< sf::Rect<float> (sf::Transform::*)(const sf::Rect<float> &) const,&sf::Transform::transformRect >;
-	addExtern<DAS_CALL_METHOD(_method_48)>(*this,lib,"transformRect",SideEffects::worstDefault,"das_call_member< sf::Rect<float> (sf::Transform::*)(const sf::Rect<float> &) const , &sf::Transform::transformRect >::invoke")
+	using _method_47 = das::das_call_member< sf::Rect<float> (sf::Transform::*)(const sf::Rect<float> &) const,&sf::Transform::transformRect >;
+	addExtern<DAS_CALL_METHOD(_method_47)>(*this,lib,"transformRect",SideEffects::worstDefault,"das_call_member< sf::Rect<float> (sf::Transform::*)(const sf::Rect<float> &) const , &sf::Transform::transformRect >::invoke")
 		->args({"self","rectangle"});
-	using _method_49 = das::das_call_member< sf::Transform & (sf::Transform::*)(const sf::Transform &),&sf::Transform::combine >;
-	addExtern<DAS_CALL_METHOD(_method_49), SimNode_ExtFuncCallRef>(*this,lib,"combine",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(const sf::Transform &) , &sf::Transform::combine >::invoke")
+	using _method_48 = das::das_call_member< sf::Transform & (sf::Transform::*)(const sf::Transform &),&sf::Transform::combine >;
+	addExtern<DAS_CALL_METHOD(_method_48), SimNode_ExtFuncCallRef>(*this,lib,"combine",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(const sf::Transform &) , &sf::Transform::combine >::invoke")
 		->args({"self","transform"});
-	using _method_50 = das::das_call_member< sf::Transform & (sf::Transform::*)(float,float),&sf::Transform::translate >;
-	addExtern<DAS_CALL_METHOD(_method_50), SimNode_ExtFuncCallRef>(*this,lib,"translate",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float,float) , &sf::Transform::translate >::invoke")
+	using _method_49 = das::das_call_member< sf::Transform & (sf::Transform::*)(float,float),&sf::Transform::translate >;
+	addExtern<DAS_CALL_METHOD(_method_49), SimNode_ExtFuncCallRef>(*this,lib,"translate",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float,float) , &sf::Transform::translate >::invoke")
 		->args({"self","x","y"});
-	using _method_51 = das::das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &),&sf::Transform::translate >;
-	addExtern<DAS_CALL_METHOD(_method_51), SimNode_ExtFuncCallRef>(*this,lib,"translate",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &) , &sf::Transform::translate >::invoke")
+	using _method_50 = das::das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &),&sf::Transform::translate >;
+	addExtern<DAS_CALL_METHOD(_method_50), SimNode_ExtFuncCallRef>(*this,lib,"translate",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &) , &sf::Transform::translate >::invoke")
 		->args({"self","offset"});
-	using _method_52 = das::das_call_member< sf::Transform & (sf::Transform::*)(float),&sf::Transform::rotate >;
-	addExtern<DAS_CALL_METHOD(_method_52), SimNode_ExtFuncCallRef>(*this,lib,"rotate",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float) , &sf::Transform::rotate >::invoke")
+	using _method_51 = das::das_call_member< sf::Transform & (sf::Transform::*)(float),&sf::Transform::rotate >;
+	addExtern<DAS_CALL_METHOD(_method_51), SimNode_ExtFuncCallRef>(*this,lib,"rotate",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float) , &sf::Transform::rotate >::invoke")
 		->args({"self","angle"});
-	using _method_53 = das::das_call_member< sf::Transform & (sf::Transform::*)(float,float,float),&sf::Transform::rotate >;
-	addExtern<DAS_CALL_METHOD(_method_53), SimNode_ExtFuncCallRef>(*this,lib,"rotate",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float,float,float) , &sf::Transform::rotate >::invoke")
+	using _method_52 = das::das_call_member< sf::Transform & (sf::Transform::*)(float,float,float),&sf::Transform::rotate >;
+	addExtern<DAS_CALL_METHOD(_method_52), SimNode_ExtFuncCallRef>(*this,lib,"rotate",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float,float,float) , &sf::Transform::rotate >::invoke")
 		->args({"self","angle","centerX","centerY"});
-	using _method_54 = das::das_call_member< sf::Transform & (sf::Transform::*)(float,const sf::Vector2<float> &),&sf::Transform::rotate >;
-	addExtern<DAS_CALL_METHOD(_method_54), SimNode_ExtFuncCallRef>(*this,lib,"rotate",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float,const sf::Vector2<float> &) , &sf::Transform::rotate >::invoke")
+	using _method_53 = das::das_call_member< sf::Transform & (sf::Transform::*)(float,const sf::Vector2<float> &),&sf::Transform::rotate >;
+	addExtern<DAS_CALL_METHOD(_method_53), SimNode_ExtFuncCallRef>(*this,lib,"rotate",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float,const sf::Vector2<float> &) , &sf::Transform::rotate >::invoke")
 		->args({"self","angle","center"});
-	using _method_55 = das::das_call_member< sf::Transform & (sf::Transform::*)(float,float),&sf::Transform::scale >;
-	addExtern<DAS_CALL_METHOD(_method_55), SimNode_ExtFuncCallRef>(*this,lib,"scale",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float,float) , &sf::Transform::scale >::invoke")
+	using _method_54 = das::das_call_member< sf::Transform & (sf::Transform::*)(float,float),&sf::Transform::scale >;
+	addExtern<DAS_CALL_METHOD(_method_54), SimNode_ExtFuncCallRef>(*this,lib,"scale",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float,float) , &sf::Transform::scale >::invoke")
 		->args({"self","scaleX","scaleY"});
-	using _method_56 = das::das_call_member< sf::Transform & (sf::Transform::*)(float,float,float,float),&sf::Transform::scale >;
-	addExtern<DAS_CALL_METHOD(_method_56), SimNode_ExtFuncCallRef>(*this,lib,"scale",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float,float,float,float) , &sf::Transform::scale >::invoke")
+	using _method_55 = das::das_call_member< sf::Transform & (sf::Transform::*)(float,float,float,float),&sf::Transform::scale >;
+	addExtern<DAS_CALL_METHOD(_method_55), SimNode_ExtFuncCallRef>(*this,lib,"scale",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(float,float,float,float) , &sf::Transform::scale >::invoke")
 		->args({"self","scaleX","scaleY","centerX","centerY"});
-	using _method_57 = das::das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &),&sf::Transform::scale >;
-	addExtern<DAS_CALL_METHOD(_method_57), SimNode_ExtFuncCallRef>(*this,lib,"scale",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &) , &sf::Transform::scale >::invoke")
+	using _method_56 = das::das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &),&sf::Transform::scale >;
+	addExtern<DAS_CALL_METHOD(_method_56), SimNode_ExtFuncCallRef>(*this,lib,"scale",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &) , &sf::Transform::scale >::invoke")
 		->args({"self","factors"});
-	using _method_58 = das::das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &,const sf::Vector2<float> &),&sf::Transform::scale >;
-	addExtern<DAS_CALL_METHOD(_method_58), SimNode_ExtFuncCallRef>(*this,lib,"scale",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &,const sf::Vector2<float> &) , &sf::Transform::scale >::invoke")
+	using _method_57 = das::das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &,const sf::Vector2<float> &),&sf::Transform::scale >;
+	addExtern<DAS_CALL_METHOD(_method_57), SimNode_ExtFuncCallRef>(*this,lib,"scale",SideEffects::worstDefault,"das_call_member< sf::Transform & (sf::Transform::*)(const sf::Vector2<float> &,const sf::Vector2<float> &) , &sf::Transform::scale >::invoke")
 		->args({"self","factors","center"});
 	addCtorAndUsing<sf::RenderStates>(*this,lib,"RenderStates","sf::RenderStates");
 	addCtorAndUsing<sf::RenderStates,const sf::BlendMode &>(*this,lib,"RenderStates","sf::RenderStates")
@@ -256,24 +249,33 @@ void Module_dasSFML::initFunctions_1() {
 	addCtorAndUsing<sf::RenderStates,const sf::BlendMode &,const sf::Transform &,const sf::Texture *,const sf::Shader *>(*this,lib,"RenderStates","sf::RenderStates")
 		->args({"theBlendMode","theTransform","theTexture","theShader"});
 	addCtorAndUsing<sf::Transformable>(*this,lib,"Transformable","sf::Transformable");
-	using _method_59 = das::das_call_member< void (sf::Transformable::*)(float,float),&sf::Transformable::setPosition >;
-	addExtern<DAS_CALL_METHOD(_method_59)>(*this,lib,"setPosition",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(float,float) , &sf::Transformable::setPosition >::invoke")
+	using _method_58 = das::das_call_member< void (sf::Transformable::*)(float,float),&sf::Transformable::setPosition >;
+	addExtern<DAS_CALL_METHOD(_method_58)>(*this,lib,"setPosition",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(float,float) , &sf::Transformable::setPosition >::invoke")
 		->args({"self","x","y"});
-	using _method_60 = das::das_call_member< void (sf::Transformable::*)(const sf::Vector2<float> &),&sf::Transformable::setPosition >;
-	addExtern<DAS_CALL_METHOD(_method_60)>(*this,lib,"setPosition",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(const sf::Vector2<float> &) , &sf::Transformable::setPosition >::invoke")
+	using _method_59 = das::das_call_member< void (sf::Transformable::*)(const sf::Vector2<float> &),&sf::Transformable::setPosition >;
+	addExtern<DAS_CALL_METHOD(_method_59)>(*this,lib,"setPosition",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(const sf::Vector2<float> &) , &sf::Transformable::setPosition >::invoke")
 		->args({"self","position"});
-	using _method_61 = das::das_call_member< void (sf::Transformable::*)(float),&sf::Transformable::setRotation >;
-	addExtern<DAS_CALL_METHOD(_method_61)>(*this,lib,"setRotation",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(float) , &sf::Transformable::setRotation >::invoke")
+	using _method_60 = das::das_call_member< void (sf::Transformable::*)(float),&sf::Transformable::setRotation >;
+	addExtern<DAS_CALL_METHOD(_method_60)>(*this,lib,"setRotation",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(float) , &sf::Transformable::setRotation >::invoke")
 		->args({"self","angle"});
-	using _method_62 = das::das_call_member< void (sf::Transformable::*)(float,float),&sf::Transformable::setScale >;
-	addExtern<DAS_CALL_METHOD(_method_62)>(*this,lib,"setScale",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(float,float) , &sf::Transformable::setScale >::invoke")
+	using _method_61 = das::das_call_member< void (sf::Transformable::*)(float,float),&sf::Transformable::setScale >;
+	addExtern<DAS_CALL_METHOD(_method_61)>(*this,lib,"setScale",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(float,float) , &sf::Transformable::setScale >::invoke")
 		->args({"self","factorX","factorY"});
-	using _method_63 = das::das_call_member< void (sf::Transformable::*)(const sf::Vector2<float> &),&sf::Transformable::setScale >;
-	addExtern<DAS_CALL_METHOD(_method_63)>(*this,lib,"setScale",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(const sf::Vector2<float> &) , &sf::Transformable::setScale >::invoke")
+	using _method_62 = das::das_call_member< void (sf::Transformable::*)(const sf::Vector2<float> &),&sf::Transformable::setScale >;
+	addExtern<DAS_CALL_METHOD(_method_62)>(*this,lib,"setScale",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(const sf::Vector2<float> &) , &sf::Transformable::setScale >::invoke")
 		->args({"self","factors"});
-	using _method_64 = das::das_call_member< void (sf::Transformable::*)(float,float),&sf::Transformable::setOrigin >;
-	addExtern<DAS_CALL_METHOD(_method_64)>(*this,lib,"setOrigin",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(float,float) , &sf::Transformable::setOrigin >::invoke")
+	using _method_63 = das::das_call_member< void (sf::Transformable::*)(float,float),&sf::Transformable::setOrigin >;
+	addExtern<DAS_CALL_METHOD(_method_63)>(*this,lib,"setOrigin",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(float,float) , &sf::Transformable::setOrigin >::invoke")
 		->args({"self","x","y"});
+	using _method_64 = das::das_call_member< void (sf::Transformable::*)(const sf::Vector2<float> &),&sf::Transformable::setOrigin >;
+	addExtern<DAS_CALL_METHOD(_method_64)>(*this,lib,"setOrigin",SideEffects::worstDefault,"das_call_member< void (sf::Transformable::*)(const sf::Vector2<float> &) , &sf::Transformable::setOrigin >::invoke")
+		->args({"self","origin"});
+	using _method_65 = das::das_call_member< const sf::Vector2<float> & (sf::Transformable::*)() const,&sf::Transformable::getPosition >;
+	addExtern<DAS_CALL_METHOD(_method_65), SimNode_ExtFuncCallRef>(*this,lib,"getPosition",SideEffects::worstDefault,"das_call_member< const sf::Vector2<float> & (sf::Transformable::*)() const , &sf::Transformable::getPosition >::invoke")
+		->args({"self"});
+	using _method_66 = das::das_call_member< float (sf::Transformable::*)() const,&sf::Transformable::getRotation >;
+	addExtern<DAS_CALL_METHOD(_method_66)>(*this,lib,"getRotation",SideEffects::worstDefault,"das_call_member< float (sf::Transformable::*)() const , &sf::Transformable::getRotation >::invoke")
+		->args({"self"});
 }
 }
 

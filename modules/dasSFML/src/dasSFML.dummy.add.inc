@@ -10,5 +10,4 @@ addAnnotation(make_smart<DummyTypeAnnotation>("VkSurfaceKHR_T", "VkSurfaceKHR_T"
 addAnnotation(make_smart<DummyTypeAnnotation>("VkAllocationCallbacks", "VkAllocationCallbacks", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("VkInstance_T", "VkInstance_T", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("RenderTextureImpl", "sf::priv::RenderTextureImpl", 1, 1));
-addAnnotation(make_smart<DummyTypeAnnotation>("HWND__", "HWND__", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("MutexImpl", "sf::priv::MutexImpl", 1, 1));

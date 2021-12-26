@@ -43,7 +43,6 @@ MAKE_EXTERNAL_TYPE_FACTORY(TouchEvent,sf::Event::TouchEvent);
 MAKE_EXTERNAL_TYPE_FACTORY(SensorEvent,sf::Event::SensorEvent);
 MAKE_EXTERNAL_TYPE_FACTORY(Touch,sf::Touch);
 MAKE_EXTERNAL_TYPE_FACTORY(VideoMode,sf::VideoMode);
-MAKE_EXTERNAL_TYPE_FACTORY(HWND__,HWND__);
 MAKE_EXTERNAL_TYPE_FACTORY(VkInstance_T,VkInstance_T);
 MAKE_EXTERNAL_TYPE_FACTORY(VkSurfaceKHR_T,VkSurfaceKHR_T);
 MAKE_EXTERNAL_TYPE_FACTORY(VkAllocationCallbacks,VkAllocationCallbacks);

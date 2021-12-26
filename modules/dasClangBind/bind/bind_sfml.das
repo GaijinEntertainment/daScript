@@ -71,6 +71,11 @@ class SFMLGen : CppGenBind
             to_log(LOG_INFO, "skipping SFML blocked function {function_name} at {clang_getCursorLocationDescription(c)}")
             return true
         return false
+    def override skip_struct ( name : string )
+        if name=="HWND__"
+            return true
+        return false
+
 
 
 [export]
