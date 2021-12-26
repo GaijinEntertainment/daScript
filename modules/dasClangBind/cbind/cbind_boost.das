@@ -831,13 +831,16 @@ class CppGenBind : AnyGenBind
         fprint(struct_postadd_file,"initRecAnnotation(ann_{struct_name},lib);\n")
     def typeSpelling ( var c : CXType )
         // TODO: proper type spelling?
-        var spl = string(clang_getTypeSpelling(c))
+        let nspl = string(clang_getTypeSpelling(c))
+        if nspl == "size_t"
+            return "size_t"
+        var spl = string(clang_getTypeSpelling(clang_getCanonicalType(c)))
         if c.kind == CXTypeKind Enum
             spl = enum2enum?[spl] ?? spl
-        return spl
+        return nspl
     def functionPtrSpelling ( var c : CXCursor; isMethod:bool )
         // TODO: calling convention?
-        var fun_type = clang_getCanonicalType(clang_getCursorType(c))
+        var fun_type = clang_getCursorType(c)
         var res_type = clang_getResultType(fun_type)
         let function_result_type = typeSpelling(res_type)
         return build_string() <| $ ( str )
@@ -852,7 +855,7 @@ class CppGenBind : AnyGenBind
                 if ai != 0u
                     str |> write(",")
                 var carg = clang_Cursor_getArgument(c, ai)
-                var arg_type = clang_getCanonicalType(clang_getCursorType(carg))
+                var arg_type = clang_getCursorType(carg)
                 let argument_type = typeSpelling(arg_type)
                 str |> write("{argument_type}")
             str |> write(")")
