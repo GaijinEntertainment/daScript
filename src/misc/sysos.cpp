@@ -1,5 +1,4 @@
 #include "daScript/misc/platform.h"
-#include "daScript/misc/utf8_stdio.h"
 
 #include "daScript/misc/sysos.h"
 
@@ -92,7 +91,9 @@
             return GetModuleHandleA(moduleName);
         }
         string normalizeFileName ( const char * fileName ) {
-            return get_full_path_name_utf8(fileName);
+            char buffer[MAX_PATH ];
+            auto ret = GetFullPathNameA(fileName,MAX_PATH,buffer,nullptr);
+            return ret ? buffer : "";
         }
     }
 #elif defined(__linux__)
@@ -121,7 +122,8 @@
             return dlopen(lib,RTLD_LAZY);
         }
         string normalizeFileName ( const char * fileName ) {
-            return get_full_path_name_utf8(fileName);
+            // TODO: implement
+            return "";
         }
     }
 #elif defined(__APPLE__)

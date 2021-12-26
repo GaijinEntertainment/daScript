@@ -1,6 +1,5 @@
 #include "daScript/daScript.h"
 #include "daScript/simulate/fs_file_info.h"
-#include "daScript/misc/utf8_stdio.h"
 
 using namespace das;
 
@@ -20,7 +19,7 @@ bool saveToFile ( const string & fname, const string & str ) {
     if ( !quiet )  {
         tout << "saving to " << fname << "\n";
     }
-    FILE * f = fopen_utf8 ( fname.c_str(), "w" );
+    FILE * f = fopen ( fname.c_str(), "w" );
     if ( !f ) {
         tout << "can't open " << fname << "\n";
         return false;

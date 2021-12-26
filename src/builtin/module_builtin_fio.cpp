@@ -12,7 +12,6 @@
 
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
-#include "daScript/misc/utf8_stdio.h"
 
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
 
@@ -94,12 +93,7 @@ namespace das {
 
 namespace das {
     struct FStat {
-
-#if defined(_MSC_VER)
-        struct _stati64 stats;
-#else
         struct stat stats;
-#endif
         bool        is_valid;
         uint64_t size() const   { return stats.st_size; }
 #if defined(_MSC_VER)
@@ -164,7 +158,7 @@ namespace das {
 
     const FILE * builtin_fopen  ( const char * name, const char * mode ) {
         if ( name && mode ) {
-            FILE * f = fopen_utf8(name, mode);
+            FILE * f = fopen(name, mode);
             if ( f ) setvbuf(f, NULL, _IOFBF, 65536);
             return f;
         } else {
@@ -311,50 +305,110 @@ namespace das {
     }
 
 
-    const char * builtin_dirname ( const char * name, Context * context, LineInfoArg * ) {
-        return dirname_utf8(name, context);
+    char * builtin_dirname ( const char * name, Context * context, LineInfoArg * ) {
+        if ( name ) {
+#if defined(_MSC_VER)
+            char full_path[ _MAX_PATH ];
+            char dir[ _MAX_DIR ];
+            char fname[ _MAX_FNAME ];
+            char ext[ _MAX_EXT ];
+            _splitpath(name, full_path, dir, fname, ext);
+            strcat(full_path, dir);
+            uint32_t len = uint32_t(strlen(full_path));
+            if (len) {
+                if (full_path[len - 1] == '/' || full_path[len - 1] == '\\') {
+                    full_path[--len] = 0;
+                }
+            }
+            return context->stringHeap->allocateString(full_path, len);
+#else
+            char * tempName = strdup(name);
+            char * dirName = dirname(tempName);
+            char * result = context->stringHeap->allocateString(dirName, strlen(dirName));
+            free(tempName);
+            return result;
+#endif
+        } else {
+            return nullptr;
+        }
     }
 
-    const char * builtin_basename ( const char * name, Context * context, LineInfoArg * ) {
-        return basename_utf8(name, context);
+    char * builtin_basename ( const char * name, Context * context, LineInfoArg * ) {
+        if ( name ) {
+#if defined(_MSC_VER)
+            char drive[ _MAX_DRIVE ];
+            char full_path[ _MAX_PATH ];
+            char dir[ _MAX_DIR ];
+            char ext[ _MAX_EXT ];
+            _splitpath(name, drive, dir, full_path, ext);
+            strcat(full_path, ext);
+            return context->stringHeap->allocateString(full_path, uint32_t(strlen(full_path)));
+#else
+            char * tempName = strdup(name);
+            char * dirName = basename(tempName);
+            char * result = context->stringHeap->allocateString(dirName, strlen(dirName));
+            free(tempName);
+            return result;
+#endif
+        } else {
+            return nullptr;
+        }
     }
 
     bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(*at, "fstat of null");
-#if defined(_MSC_VER)
-        return _fstati64(fileno((FILE *)f), &fs.stats) == 0;
-#else
         return fstat(fileno((FILE *)f), &fs.stats) == 0;
-#endif
     }
 
     bool builtin_stat ( const char * filename, FStat & fs ) {
-        return stat_utf8(filename, &fs.stats);
+        if ( filename!=nullptr ) {
+            return stat(filename, &fs.stats) == 0;
+        } else {
+            return false;
+        }
     }
 
-
-    struct DirInvokeData {
-        const Block & fblk;
-        Context * context;
-        LineInfoArg * at;
-    };
-
-    void dir_cb (const char * path, void * user_data) {
-        DirInvokeData * invokeData = (DirInvokeData *) user_data;
-        char * fname = invokeData->context->stringHeap->allocateString(path, uint32_t(strlen(path)));
-        vec4f args[1] = {
-            cast<char *>::from(fname)
-        };
-        invokeData->context->invoke(invokeData->fblk, args, nullptr, invokeData->at);
-    }
-
-    void builtin_dir ( const char * path, const Block & fblk, Context * context, LineInfoArg * at ) {
-        DirInvokeData invokeData { fblk, context, at };
-        dir_utf8(path, dir_cb, &invokeData);
+     void builtin_dir ( const char * path, const Block & fblk, Context * context, LineInfoArg * at ) {
+#if defined(_MSC_VER)
+        _finddata_t c_file;
+        intptr_t hFile;
+        string findPath = string(path) + "/*";
+        if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
+            do {
+                char * fname = context->stringHeap->allocateString(c_file.name, uint32_t(strlen(c_file.name)));
+                vec4f args[1] = {
+                    cast<char *>::from(fname)
+                };
+                context->invoke(fblk, args, nullptr, at);
+            } while (_findnext(hFile, &c_file) == 0);
+        }
+        _findclose(hFile);
+ #else
+        DIR *dir;
+        struct dirent *ent;
+        if ((dir = opendir (path)) != NULL) {
+            while ((ent = readdir (dir)) != NULL) {
+                char * fname = context->stringHeap->allocateString(ent->d_name,uint32_t(strlen(ent->d_name)));
+                vec4f args[1] = {
+                    cast<char *>::from(fname)
+                };
+                context->invoke(fblk, args, nullptr, at);
+            }
+            closedir (dir);
+        }
+ #endif
     }
 
     bool builtin_mkdir ( const char * path ) {
-        return mkdir_utf8(path);
+        if ( path ) {
+#if defined(_MSC_VER)
+            return _mkdir(path) == 0;
+#else
+            return mkdir(path, ACCESSPERMS) == 0;
+#endif
+        } else {
+            return false;
+        }
     }
 
     void builtin_exit ( int32_t ec ) {
@@ -362,7 +416,13 @@ namespace das {
     }
 
     int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) {
-        FILE * f = popen_utf8(cmd);
+#ifdef _MSC_VER
+        FILE * f = cmd ? _popen(cmd, "rt") : nullptr;
+#elif defined(__linux__)
+        FILE * f = cmd ? popen(cmd, "r") : nullptr;
+#else
+        FILE * f = cmd ? popen(cmd, "r+") : nullptr;
+#endif
         vec4f args[1];
         args[0] = cast<FILE *>::from(f);
         context->invoke(blk, args, nullptr, at);
@@ -374,8 +434,10 @@ namespace das {
 #endif
     }
 
-    const char * get_full_file_name ( const char * path, Context * context, LineInfoArg * ) {
-        return get_full_path_name_utf8(path, context);
+    char * get_full_file_name ( const char * path, Context * context, LineInfoArg * ) {
+        auto res = normalizeFileName(path);
+        if ( res.length()==0 ) return nullptr;
+        return context->stringHeap->allocateString(res);
     }
 
     class Module_FIO : public Module {

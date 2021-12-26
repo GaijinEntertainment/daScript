@@ -20,8 +20,8 @@ namespace das {
     vec4f builtin_write ( Context &, SimNode_CallBase * call, vec4f * args );
     vec4f builtin_load ( Context & context, SimNode_CallBase *, vec4f * args );
     void builtin_map_file ( const FILE* _f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context*, LineInfoArg * at );
-    const char * builtin_dirname ( const char * name, Context * context, LineInfoArg * at );
-    const char * builtin_basename ( const char * name, Context * context, LineInfoArg * at );
+    char * builtin_dirname ( const char * name, Context * context, LineInfoArg * at );
+    char * builtin_basename ( const char * name, Context * context, LineInfoArg * at );
     bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at );
     bool builtin_stat ( const char * filename, FStat & fs );
     void builtin_dir ( const char * path, const Block & fblk, Context * context, LineInfoArg * at );
@@ -30,5 +30,5 @@ namespace das {
     const FILE * builtin_stdout();
     const FILE * builtin_stderr();
     int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
-    const char * get_full_file_name ( const char * path, Context * context, LineInfoArg * );
+    char * get_full_file_name ( const char * path, Context * context, LineInfoArg * );
 }
