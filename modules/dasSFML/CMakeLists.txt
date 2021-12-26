@@ -4,7 +4,6 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
     MESSAGE(STATUS "dasSFML module included.")
 
 	SET(DAS_SFML_DIR ${PROJECT_SOURCE_DIR}/modules/dasSFML)
-	SET(SFML_INCLUDE_DIR ${DAS_SFML_DIR}/SFML/INCLUDE)
 
     LIST(APPEND CMAKE_MODULE_PATH ${DAS_SFML_DIR})
 
@@ -20,7 +19,7 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		ExternalProject_Add(
 			SFML
 			SOURCE_DIR ${DAS_SFML_DIR}/SFML
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${libsfml}/glfw -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DCMAKE_LINKER=${CMAKE_LINKER} -DBUILD_SHARED_LIBS=false
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${DAS_SFML_DIR}/libsfml -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DCMAKE_LINKER=${CMAKE_LINKER} -DBUILD_SHARED_LIBS=false
 			BINARY_DIR ${DAS_SFML_DIR}/libsfml/build
 		)
 	ENDIF()
@@ -63,12 +62,13 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		find_library(METAL_LIBRARY Metal)
 		find_library(QUARTZCORE_LIBRARY QuartzCore)
 		SET(SFML_LIBRARIES
-			${DAS_SFML_DIR}/libsfml/build/lib/sfml-main.a
-			${DAS_SFML_DIR}/libsfml/build/lib/sfml-system-s.a
-			${DAS_SFML_DIR}/libsfml/build/lib/sfml-window-s.a
-			${DAS_SFML_DIR}/libsfml/build/lib/sfml-audio-s.a
-			${DAS_SFML_DIR}/libsfml/build/lib/sfml-graphics-s.a
-			${DAS_SFML_DIR}/libsfml/build/lib/sfml-network-s.a
+			${DAS_SFML_DIR}/libsfml/lib/sfml-main.a
+			${DAS_SFML_DIR}/libsfml/lib/sfml-system-s.a
+			${DAS_SFML_DIR}/libsfml/lib/sfml-window-s.a
+			${DAS_SFML_DIR}/libsfml/lib/sfml-audio-s.a
+			${DAS_SFML_DIR}/libsfml/lib/sfml-graphics-s.a
+			${DAS_SFML_DIR}/libsfml/lib/sfml-network-s.a
+			${DAS_SFML_DIR}/libsfml/lib/freetype.a
 			${COCOA_LIBRARY}
 			${IOKIT_LIBRARY}
 			${METAL_LIBRARY}
@@ -76,22 +76,23 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		)
 	ELSEIF(UNIX)
 		SET(SFML_LIBRARIES
-		${DAS_SFML_DIR}/libsfml/build/lib/sfml-main.a
-		${DAS_SFML_DIR}/libsfml/build/lib/sfml-system-s.a
-		${DAS_SFML_DIR}/libsfml/build/lib/sfml-window-s.a
-		${DAS_SFML_DIR}/libsfml/build/lib/sfml-audio-s.a
-		${DAS_SFML_DIR}/libsfml/build/lib/sfml-graphics-s.a
-		${DAS_SFML_DIR}/libsfml/build/lib/sfml-network-s.a
+		${DAS_SFML_DIR}/libsfml/lib/sfml-main.a
+		${DAS_SFML_DIR}/libsfml/lib/sfml-system-s.a
+		${DAS_SFML_DIR}/libsfml/lib/sfml-window-s.a
+		${DAS_SFML_DIR}/libsfml/lib/sfml-audio-s.a
+		${DAS_SFML_DIR}/libsfml/lib/sfml-graphics-s.a
+		${DAS_SFML_DIR}/libsfml/lib/sfml-network-s.a
+		${DAS_SFML_DIR}/libsfml/lib/freetype.a
 		)
 	ELSE()
 		SET(SFML_LIBRARIES
-			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-main.lib
-			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-system-s.lib
-			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-window-s.lib
-			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-audio-s.lib
-			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-graphics-s.lib
-			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-network-s.lib
-			${DAS_SFML_DIR}/SFML/extlibs/libs-msvc/x64/freetype.lib
+			${DAS_SFML_DIR}/libsfml/lib/sfml-main.lib
+			${DAS_SFML_DIR}/libsfml/lib/sfml-system-s.lib
+			${DAS_SFML_DIR}/libsfml/lib/sfml-window-s.lib
+			${DAS_SFML_DIR}/libsfml/lib/sfml-audio-s.lib
+			${DAS_SFML_DIR}/libsfml/lib/sfml-graphics-s.lib
+			${DAS_SFML_DIR}/libsfml/lib/sfml-network-s.lib
+			${DAS_SFML_DIR}/libsfml/lib/freetype.lib
 			Winmm.lib
 			Opengl32.lib
 			legacy_stdio_definitions.lib
@@ -106,7 +107,7 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 	TARGET_LINK_LIBRARIES(libDasModuleSFML ${SFML_LIBRARIES})
 	ADD_DEPENDENCIES(libDasModuleSFML SFML)
 	TARGET_INCLUDE_DIRECTORIES(libDasModuleSFML PUBLIC
-		${SFML_INCLUDE_DIR}
+		${DAS_SFML_DIR}/libsfml/include
 		${DAS_SFML_DIR}/src
 	)
 

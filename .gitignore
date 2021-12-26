@@ -26,3 +26,4 @@ temp/vertex.bin
 temp/vertex.sh
 temp/compute.bin
 temp/compute.sh
+modules/dasSFML/libsfml/
