@@ -39,14 +39,18 @@ class SFMLGen : CppGenBind
             "sf::Vector2u"  => true;
             "sf::Vector2i"  => true;
             "sf::Vector2f"  => true;
-            "sf::String"    => true
+            "sf::String"    => true;
+            "sf::FloatRect" => true;
+            "sf::IntRect"   => true
         }}
         enum2sfmlenum <- {{
             "sf::Sensor::Type"  => "SensorType";
             "sf::Cursor::Type"  => "CursorType"
         }}
         sfml_skip_func <- {{
-            "sf::err"   => true
+            "sf::err"   => true;
+            "sf::Texture::copyToImage" => true;
+            "sf::RenderWindow::capture" => true
         }}
     def override isArgByValue ( name:string )
         return true
@@ -59,8 +63,8 @@ class SFMLGen : CppGenBind
         return enum2sfmlenum?[cpp_enum_name] ?? CppGenBind`dasEnumName(self,enum_name,cpp_enum_name)
     def override generateModuleHPrefix
         module_h_file |> fwrite("#include \"cb_dasSFML.h\"\n")
-    def override skip_function ( var c : CXCursor )
-        if AnyGenBind`skip_function(self, c)
+    def override skip_anyFunction ( var c : CXCursor; isMethod:bool ) : bool
+        if AnyGenBind`skip_anyFunction(self, c, isMethod)
             return true
         let function_name = namespace_name(string(clang_getCursorSpelling(c)))
         if sfml_skip_func |> key_exists(function_name)

@@ -52,6 +52,8 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		${DAS_SFML_BIND_DIR}/src/dasSFML.struct.cast.inc
 	# generated functions
 		${DAS_SFML_BIND_DIR}/src/dasSFML.func_1.cpp
+		${DAS_SFML_BIND_DIR}/src/dasSFML.func_2.cpp
+		${DAS_SFML_BIND_DIR}/src/dasSFML.func_3.cpp
 	)
 
 	IF(APPLE)
@@ -60,7 +62,12 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		find_library(METAL_LIBRARY Metal)
 		find_library(QUARTZCORE_LIBRARY QuartzCore)
 		SET(SFML_LIBRARIES
-			${DAS_GLFW_DIR}/glfw/lib/libglfw3.a
+			${DAS_SFML_DIR}/libsfml/build/lib/sfml-main.a
+			${DAS_SFML_DIR}/libsfml/build/lib/sfml-system-s.a
+			${DAS_SFML_DIR}/libsfml/build/lib/sfml-window-s.a
+			${DAS_SFML_DIR}/libsfml/build/lib/sfml-audio-s.a
+			${DAS_SFML_DIR}/libsfml/build/lib/sfml-graphics-s.a
+			${DAS_SFML_DIR}/libsfml/build/lib/sfml-network-s.a
 			${COCOA_LIBRARY}
 			${IOKIT_LIBRARY}
 			${METAL_LIBRARY}
@@ -68,7 +75,12 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		)
 	ELSEIF(UNIX)
 		SET(SFML_LIBRARIES
-			${DAS_SFML_DIR}/glfw/lib/libglfw3.a
+		${DAS_SFML_DIR}/libsfml/build/lib/sfml-main.a
+		${DAS_SFML_DIR}/libsfml/build/lib/sfml-system-s.a
+		${DAS_SFML_DIR}/libsfml/build/lib/sfml-window-s.a
+		${DAS_SFML_DIR}/libsfml/build/lib/sfml-audio-s.a
+		${DAS_SFML_DIR}/libsfml/build/lib/sfml-graphics-s.a
+		${DAS_SFML_DIR}/libsfml/build/lib/sfml-network-s.a
 		)
 	ELSE()
 		SET(SFML_LIBRARIES
@@ -78,8 +90,10 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-audio-s.lib
 			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-graphics-s.lib
 			${DAS_SFML_DIR}/libsfml/build/lib/RelWithDebInfo/sfml-network-s.lib
+			${DAS_SFML_DIR}/SFML/extlibs/libs-msvc/x64/freetype.lib
 			Winmm.lib
 			Opengl32.lib
+			legacy_stdio_definitions.lib
 		)
 	ENDIF()
 

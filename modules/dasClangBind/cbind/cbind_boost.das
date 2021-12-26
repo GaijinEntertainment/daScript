@@ -843,10 +843,12 @@ class CppGenBind : AnyGenBind
     def rename_function ( name,nsname:string )
         return name
     def isAotAliasType ( var t : CXType )
-        if t.kind == CXTypeKind Record
+        if t.kind == CXTypeKind Record || t.kind == CXTypeKind Typedef
             let tname = string(clang_getTypeSpelling(t))
             if aot_alias |> key_exists(tname)
                 return true
+        // let tname = string(clang_getTypeSpelling(t))
+        // print("NOT AOT ALIAS {tname} {t.kind}\n")
         return false
     def parse_anyFunctionDecl ( var c : CXCursor; isMethod : bool )
         func_count ++

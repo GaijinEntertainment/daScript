@@ -252,3 +252,104 @@ public:
 	}
 };
 
+class Enumeration_sf_BlendMode_Factor : public das::Enumeration {
+public:
+	Enumeration_sf_BlendMode_Factor() : das::Enumeration("Factor") {
+		external = true;
+		cppName = "sf::BlendMode::Factor";
+		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("Zero", "Zero", int64_t(sf::BlendMode::Factor::Zero), das::LineInfo());
+		addIEx("One", "One", int64_t(sf::BlendMode::Factor::One), das::LineInfo());
+		addIEx("SrcColor", "SrcColor", int64_t(sf::BlendMode::Factor::SrcColor), das::LineInfo());
+		addIEx("OneMinusSrcColor", "OneMinusSrcColor", int64_t(sf::BlendMode::Factor::OneMinusSrcColor), das::LineInfo());
+		addIEx("DstColor", "DstColor", int64_t(sf::BlendMode::Factor::DstColor), das::LineInfo());
+		addIEx("OneMinusDstColor", "OneMinusDstColor", int64_t(sf::BlendMode::Factor::OneMinusDstColor), das::LineInfo());
+		addIEx("SrcAlpha", "SrcAlpha", int64_t(sf::BlendMode::Factor::SrcAlpha), das::LineInfo());
+		addIEx("OneMinusSrcAlpha", "OneMinusSrcAlpha", int64_t(sf::BlendMode::Factor::OneMinusSrcAlpha), das::LineInfo());
+		addIEx("DstAlpha", "DstAlpha", int64_t(sf::BlendMode::Factor::DstAlpha), das::LineInfo());
+		addIEx("OneMinusDstAlpha", "OneMinusDstAlpha", int64_t(sf::BlendMode::Factor::OneMinusDstAlpha), das::LineInfo());
+	}
+};
+
+class Enumeration_sf_BlendMode_Equation : public das::Enumeration {
+public:
+	Enumeration_sf_BlendMode_Equation() : das::Enumeration("Equation") {
+		external = true;
+		cppName = "sf::BlendMode::Equation";
+		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("Add", "Add", int64_t(sf::BlendMode::Equation::Add), das::LineInfo());
+		addIEx("Subtract", "Subtract", int64_t(sf::BlendMode::Equation::Subtract), das::LineInfo());
+		addIEx("ReverseSubtract", "ReverseSubtract", int64_t(sf::BlendMode::Equation::ReverseSubtract), das::LineInfo());
+		addIEx("Min", "Min", int64_t(sf::BlendMode::Equation::Min), das::LineInfo());
+		addIEx("Max", "Max", int64_t(sf::BlendMode::Equation::Max), das::LineInfo());
+	}
+};
+
+class Enumeration_sf_PrimitiveType : public das::Enumeration {
+public:
+	Enumeration_sf_PrimitiveType() : das::Enumeration("PrimitiveType") {
+		external = true;
+		cppName = "sf::PrimitiveType";
+		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("Points", "Points", int64_t(sf::PrimitiveType::Points), das::LineInfo());
+		addIEx("Lines", "Lines", int64_t(sf::PrimitiveType::Lines), das::LineInfo());
+		addIEx("LineStrip", "LineStrip", int64_t(sf::PrimitiveType::LineStrip), das::LineInfo());
+		addIEx("Triangles", "Triangles", int64_t(sf::PrimitiveType::Triangles), das::LineInfo());
+		addIEx("TriangleStrip", "TriangleStrip", int64_t(sf::PrimitiveType::TriangleStrip), das::LineInfo());
+		addIEx("TriangleFan", "TriangleFan", int64_t(sf::PrimitiveType::TriangleFan), das::LineInfo());
+		addIEx("Quads", "Quads", int64_t(sf::PrimitiveType::Quads), das::LineInfo());
+		addIEx("LinesStrip", "LinesStrip", int64_t(sf::PrimitiveType::LinesStrip), das::LineInfo());
+		addIEx("TrianglesStrip", "TrianglesStrip", int64_t(sf::PrimitiveType::TrianglesStrip), das::LineInfo());
+		addIEx("TrianglesFan", "TrianglesFan", int64_t(sf::PrimitiveType::TrianglesFan), das::LineInfo());
+	}
+};
+
+class Enumeration_sf_Texture_CoordinateType : public das::Enumeration {
+public:
+	Enumeration_sf_Texture_CoordinateType() : das::Enumeration("CoordinateType") {
+		external = true;
+		cppName = "sf::Texture::CoordinateType";
+		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("Normalized", "Normalized", int64_t(sf::Texture::CoordinateType::Normalized), das::LineInfo());
+		addIEx("Pixels", "Pixels", int64_t(sf::Texture::CoordinateType::Pixels), das::LineInfo());
+	}
+};
+
+class Enumeration_sf_Shader_Type : public das::Enumeration {
+public:
+	Enumeration_sf_Shader_Type() : das::Enumeration("Type") {
+		external = true;
+		cppName = "sf::Shader::Type";
+		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("Vertex", "Vertex", int64_t(sf::Shader::Type::Vertex), das::LineInfo());
+		addIEx("Geometry", "Geometry", int64_t(sf::Shader::Type::Geometry), das::LineInfo());
+		addIEx("Fragment", "Fragment", int64_t(sf::Shader::Type::Fragment), das::LineInfo());
+	}
+};
+
+class Enumeration_sf_Text_Style : public das::Enumeration {
+public:
+	Enumeration_sf_Text_Style() : das::Enumeration("Style") {
+		external = true;
+		cppName = "sf::Text::Style";
+		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("Regular", "Regular", int64_t(sf::Text::Style::Regular), das::LineInfo());
+		addIEx("Bold", "Bold", int64_t(sf::Text::Style::Bold), das::LineInfo());
+		addIEx("Italic", "Italic", int64_t(sf::Text::Style::Italic), das::LineInfo());
+		addIEx("Underlined", "Underlined", int64_t(sf::Text::Style::Underlined), das::LineInfo());
+		addIEx("StrikeThrough", "StrikeThrough", int64_t(sf::Text::Style::StrikeThrough), das::LineInfo());
+	}
+};
+
+class Enumeration_sf_VertexBuffer_Usage : public das::Enumeration {
+public:
+	Enumeration_sf_VertexBuffer_Usage() : das::Enumeration("Usage") {
+		external = true;
+		cppName = "sf::VertexBuffer::Usage";
+		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("Stream", "Stream", int64_t(sf::VertexBuffer::Usage::Stream), das::LineInfo());
+		addIEx("Dynamic", "Dynamic", int64_t(sf::VertexBuffer::Usage::Dynamic), das::LineInfo());
+		addIEx("Static", "Static", int64_t(sf::VertexBuffer::Usage::Static), das::LineInfo());
+	}
+};
+

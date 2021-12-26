@@ -235,3 +235,159 @@ template <> struct cast_arg<sf::Window> {
 		return * cast<sf::Window *>::to(res);
 	}
 };
+template <> struct cast_arg<sf::BlendMode> {
+	static __forceinline const sf::BlendMode & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::BlendMode *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Transform> {
+	static __forceinline const sf::Transform & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Transform *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::RenderStates> {
+	static __forceinline const sf::RenderStates & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::RenderStates *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Drawable> {
+	static __forceinline const sf::Drawable & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Drawable *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Transformable> {
+	static __forceinline const sf::Transformable & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Transformable *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Color> {
+	static __forceinline const sf::Color & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Color *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Vertex> {
+	static __forceinline const sf::Vertex & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Vertex *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::VertexArray> {
+	static __forceinline const sf::VertexArray & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::VertexArray *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Shape> {
+	static __forceinline const sf::Shape & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Shape *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::CircleShape> {
+	static __forceinline const sf::CircleShape & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::CircleShape *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::ConvexShape> {
+	static __forceinline const sf::ConvexShape & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::ConvexShape *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Glyph> {
+	static __forceinline const sf::Glyph & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Glyph *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Image> {
+	static __forceinline const sf::Image & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Image *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Texture> {
+	static __forceinline const sf::Texture & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Texture *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Font::Info> {
+	static __forceinline const sf::Font::Info & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Font::Info *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Font> {
+	static __forceinline const sf::Font & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Font *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::RectangleShape> {
+	static __forceinline const sf::RectangleShape & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::RectangleShape *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::View> {
+	static __forceinline const sf::View & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::View *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::RenderTarget> {
+	static __forceinline const sf::RenderTarget & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::RenderTarget *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::RenderTexture> {
+	static __forceinline const sf::RenderTexture & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::RenderTexture *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::RenderWindow> {
+	static __forceinline const sf::RenderWindow & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::RenderWindow *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Shader::CurrentTextureType> {
+	static __forceinline const sf::Shader::CurrentTextureType & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Shader::CurrentTextureType *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Shader> {
+	static __forceinline const sf::Shader & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Shader *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Sprite> {
+	static __forceinline const sf::Sprite & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Sprite *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::Text> {
+	static __forceinline const sf::Text & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::Text *>::to(res);
+	}
+};
+template <> struct cast_arg<sf::VertexBuffer> {
+	static __forceinline const sf::VertexBuffer & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<sf::VertexBuffer *>::to(res);
+	}
+};

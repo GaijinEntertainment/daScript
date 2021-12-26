@@ -7,4 +7,10 @@ namespace das {
 
 
     void sfml_window_close ( sf::Window & win );
+
+    void sflm_with_render_target ( sf::RenderWindow & win, const TBlock<void,sf::RenderTarget> & block, Context * context, LineInfoArg * at );
+
+    const sf::RenderStates & sfml_render_states_default();
+
+    void sfml_with_transformable ( sf::Shape & shape, const TBlock<void,sf::Transformable> & block, Context * context, LineInfoArg * at );
 }

@@ -7,7 +7,8 @@ addAnnotation(make_smart<DummyTypeAnnotation>("CursorImpl", "sf::priv::CursorImp
 addAnnotation(make_smart<DummyTypeAnnotation>("WindowImpl", "sf::priv::WindowImpl", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("ThreadImpl", "sf::priv::ThreadImpl", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("VkSurfaceKHR_T", "VkSurfaceKHR_T", 1, 1));
-addAnnotation(make_smart<DummyTypeAnnotation>("VkInstance_T", "VkInstance_T", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("VkAllocationCallbacks", "VkAllocationCallbacks", 1, 1));
-addAnnotation(make_smart<DummyTypeAnnotation>("MutexImpl", "sf::priv::MutexImpl", 1, 1));
+addAnnotation(make_smart<DummyTypeAnnotation>("VkInstance_T", "VkInstance_T", 1, 1));
+addAnnotation(make_smart<DummyTypeAnnotation>("RenderTextureImpl", "sf::priv::RenderTextureImpl", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("HWND__", "HWND__", 1, 1));
+addAnnotation(make_smart<DummyTypeAnnotation>("MutexImpl", "sf::priv::MutexImpl", 1, 1));

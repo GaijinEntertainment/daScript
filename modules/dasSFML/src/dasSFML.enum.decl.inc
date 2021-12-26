@@ -17,3 +17,17 @@ DAS_BASE_BIND_ENUM_GEN(sf::Sensor::Type,SensorType);
 
 DAS_BASE_BIND_ENUM_GEN(sf::Event::EventType,EventType);
 
+DAS_BASE_BIND_ENUM_GEN(sf::BlendMode::Factor,Factor);
+
+DAS_BASE_BIND_ENUM_GEN(sf::BlendMode::Equation,Equation);
+
+DAS_BASE_BIND_ENUM_GEN(sf::PrimitiveType,PrimitiveType);
+
+DAS_BASE_BIND_ENUM_GEN(sf::Texture::CoordinateType,CoordinateType);
+
+DAS_BASE_BIND_ENUM_GEN(sf::Shader::Type,Type);
+
+DAS_BASE_BIND_ENUM_GEN(sf::Text::Style,Style);
+
+DAS_BASE_BIND_ENUM_GEN(sf::VertexBuffer::Usage,Usage);
+

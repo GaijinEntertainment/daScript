@@ -321,3 +321,208 @@ struct sf_Window_GeneratedAnnotation : ManagedStructureAnnotation<sf::Window> {
 	}
 };
 
+struct sf_BlendMode_GeneratedAnnotation : ManagedStructureAnnotation<sf::BlendMode> {
+	sf_BlendMode_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("BlendMode", ml, "sf::BlendMode") {
+	}
+	void init () {
+		addField<DAS_BIND_MANAGED_FIELD(colorSrcFactor)>("colorSrcFactor","colorSrcFactor");
+		addField<DAS_BIND_MANAGED_FIELD(colorDstFactor)>("colorDstFactor","colorDstFactor");
+		addField<DAS_BIND_MANAGED_FIELD(colorEquation)>("colorEquation","colorEquation");
+		addField<DAS_BIND_MANAGED_FIELD(alphaSrcFactor)>("alphaSrcFactor","alphaSrcFactor");
+		addField<DAS_BIND_MANAGED_FIELD(alphaDstFactor)>("alphaDstFactor","alphaDstFactor");
+		addField<DAS_BIND_MANAGED_FIELD(alphaEquation)>("alphaEquation","alphaEquation");
+	}
+};
+
+struct sf_Transform_GeneratedAnnotation : ManagedStructureAnnotation<sf::Transform> {
+	sf_Transform_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Transform", ml, "sf::Transform") {
+	}
+	void init () {
+	}
+};
+
+struct sf_RenderStates_GeneratedAnnotation : ManagedStructureAnnotation<sf::RenderStates> {
+	sf_RenderStates_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RenderStates", ml, "sf::RenderStates") {
+	}
+	void init () {
+		addField<DAS_BIND_MANAGED_FIELD(blendMode)>("blendMode","blendMode");
+		addField<DAS_BIND_MANAGED_FIELD(transform)>("transform","transform");
+		addField<DAS_BIND_MANAGED_FIELD(texture)>("texture","texture");
+		addField<DAS_BIND_MANAGED_FIELD(shader)>("shader","shader");
+	}
+};
+
+struct sf_Drawable_GeneratedAnnotation : ManagedStructureAnnotation<sf::Drawable> {
+	sf_Drawable_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Drawable", ml, "sf::Drawable") {
+	}
+	void init () {
+	}
+};
+
+struct sf_Transformable_GeneratedAnnotation : ManagedStructureAnnotation<sf::Transformable> {
+	sf_Transformable_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Transformable", ml, "sf::Transformable") {
+	}
+	void init () {
+	}
+};
+
+struct sf_Color_GeneratedAnnotation : ManagedStructureAnnotation<sf::Color> {
+	sf_Color_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Color", ml, "sf::Color") {
+	}
+	void init () {
+		addField<DAS_BIND_MANAGED_FIELD(r)>("r","r");
+		addField<DAS_BIND_MANAGED_FIELD(g)>("g","g");
+		addField<DAS_BIND_MANAGED_FIELD(b)>("b","b");
+		addField<DAS_BIND_MANAGED_FIELD(a)>("a","a");
+	}
+};
+
+struct sf_Vertex_GeneratedAnnotation : ManagedStructureAnnotation<sf::Vertex> {
+	sf_Vertex_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Vertex", ml, "sf::Vertex") {
+	}
+	void init () {
+		addField<DAS_BIND_MANAGED_FIELD(position)>("position","position");
+		addField<DAS_BIND_MANAGED_FIELD(color)>("color","color");
+		addField<DAS_BIND_MANAGED_FIELD(texCoords)>("texCoords","texCoords");
+	}
+};
+
+struct sf_VertexArray_GeneratedAnnotation : ManagedStructureAnnotation<sf::VertexArray> {
+	sf_VertexArray_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("VertexArray", ml, "sf::VertexArray") {
+	}
+	void init () {
+	}
+};
+
+struct sf_Shape_GeneratedAnnotation : ManagedStructureAnnotation<sf::Shape> {
+	sf_Shape_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Shape", ml, "sf::Shape") {
+	}
+	void init () {
+	}
+};
+
+struct sf_CircleShape_GeneratedAnnotation : ManagedStructureAnnotation<sf::CircleShape> {
+	sf_CircleShape_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CircleShape", ml, "sf::CircleShape") {
+	}
+	void init () {
+	}
+};
+
+struct sf_ConvexShape_GeneratedAnnotation : ManagedStructureAnnotation<sf::ConvexShape> {
+	sf_ConvexShape_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("ConvexShape", ml, "sf::ConvexShape") {
+	}
+	void init () {
+	}
+};
+
+struct sf_Glyph_GeneratedAnnotation : ManagedStructureAnnotation<sf::Glyph> {
+	sf_Glyph_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Glyph", ml, "sf::Glyph") {
+	}
+	void init () {
+		addField<DAS_BIND_MANAGED_FIELD(advance)>("advance","advance");
+		addField<DAS_BIND_MANAGED_FIELD(lsbDelta)>("lsbDelta","lsbDelta");
+		addField<DAS_BIND_MANAGED_FIELD(rsbDelta)>("rsbDelta","rsbDelta");
+		addField<DAS_BIND_MANAGED_FIELD(bounds)>("bounds","bounds");
+		addField<DAS_BIND_MANAGED_FIELD(textureRect)>("textureRect","textureRect");
+	}
+};
+
+struct sf_Image_GeneratedAnnotation : ManagedStructureAnnotation<sf::Image> {
+	sf_Image_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Image", ml, "sf::Image") {
+	}
+	void init () {
+	}
+};
+
+struct sf_Texture_GeneratedAnnotation : ManagedStructureAnnotation<sf::Texture> {
+	sf_Texture_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Texture", ml, "sf::Texture") {
+	}
+	void init () {
+	}
+};
+
+struct sf_Font_Info_GeneratedAnnotation : ManagedStructureAnnotation<sf::Font::Info> {
+	sf_Font_Info_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Info", ml, "sf::Font::Info") {
+	}
+	void init () {
+		addField<DAS_BIND_MANAGED_FIELD(family)>("family","family");
+	}
+};
+
+struct sf_Font_GeneratedAnnotation : ManagedStructureAnnotation<sf::Font> {
+	sf_Font_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Font", ml, "sf::Font") {
+	}
+	void init () {
+	}
+};
+
+struct sf_RectangleShape_GeneratedAnnotation : ManagedStructureAnnotation<sf::RectangleShape> {
+	sf_RectangleShape_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RectangleShape", ml, "sf::RectangleShape") {
+	}
+	void init () {
+	}
+};
+
+struct sf_View_GeneratedAnnotation : ManagedStructureAnnotation<sf::View> {
+	sf_View_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("View", ml, "sf::View") {
+	}
+	void init () {
+	}
+};
+
+struct sf_RenderTarget_GeneratedAnnotation : ManagedStructureAnnotation<sf::RenderTarget> {
+	sf_RenderTarget_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RenderTarget", ml, "sf::RenderTarget") {
+	}
+	void init () {
+	}
+};
+
+struct sf_RenderTexture_GeneratedAnnotation : ManagedStructureAnnotation<sf::RenderTexture> {
+	sf_RenderTexture_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RenderTexture", ml, "sf::RenderTexture") {
+	}
+	void init () {
+	}
+};
+
+struct sf_RenderWindow_GeneratedAnnotation : ManagedStructureAnnotation<sf::RenderWindow> {
+	sf_RenderWindow_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("RenderWindow", ml, "sf::RenderWindow") {
+	}
+	void init () {
+	}
+};
+
+struct sf_Shader_CurrentTextureType_GeneratedAnnotation : ManagedStructureAnnotation<sf::Shader::CurrentTextureType> {
+	sf_Shader_CurrentTextureType_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CurrentTextureType", ml, "sf::Shader::CurrentTextureType") {
+	}
+	void init () {
+	}
+};
+
+struct sf_Shader_GeneratedAnnotation : ManagedStructureAnnotation<sf::Shader> {
+	sf_Shader_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Shader", ml, "sf::Shader") {
+	}
+	void init () {
+	}
+};
+
+struct sf_Sprite_GeneratedAnnotation : ManagedStructureAnnotation<sf::Sprite> {
+	sf_Sprite_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Sprite", ml, "sf::Sprite") {
+	}
+	void init () {
+	}
+};
+
+struct sf_Text_GeneratedAnnotation : ManagedStructureAnnotation<sf::Text> {
+	sf_Text_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Text", ml, "sf::Text") {
+	}
+	void init () {
+	}
+};
+
+struct sf_VertexBuffer_GeneratedAnnotation : ManagedStructureAnnotation<sf::VertexBuffer> {
+	sf_VertexBuffer_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("VertexBuffer", ml, "sf::VertexBuffer") {
+	}
+	void init () {
+	}
+};
+

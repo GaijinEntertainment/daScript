@@ -9,4 +9,5 @@ def main
             while window |> pollEvent(event)
                 if event._type == EventType Closed
                     window |> close()
+            window |> display()
 
