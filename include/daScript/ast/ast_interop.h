@@ -159,11 +159,14 @@ namespace das
         auto fn = make_smart<BuiltIn_PlacementNew<CType,Args...>>(name,lib,cppName);
         DAS_ASSERT(fn->result->isRefType() && "can't add ctor to by-value types");
         mod.addFunction(fn);
+        return fn;
     }
 
     template <typename CType, typename ...Args>
     inline auto addUsing ( Module & mod, const ModuleLibrary & lib, const char * cppName ) {
-        mod.addFunction(make_smart<BuiltIn_Using<CType,Args...>>(lib,cppName));
+        auto fn = make_smart<BuiltIn_Using<CType,Args...>>(lib,cppName);
+        mod.addFunction(fn);
+        return fn;
     }
 
     template <typename CType, typename ...Args>

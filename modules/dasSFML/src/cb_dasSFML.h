@@ -15,11 +15,9 @@ template <> struct typeFactory<sf::String> {
 	static TypeDeclPtr make(const ModuleLibrary &) {
 		auto t = make_smart<TypeDecl>(Type::tString);
 		t->alias = "String";
-		t->aotAlias = true;
 		return t;
 	}
 };
-
 
 // Vector2u
 template<> struct cast <sf::Vector2u> : cast_fVec<sf::Vector2u> {};
