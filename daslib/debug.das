@@ -80,7 +80,7 @@ def private join_path(a, path_b: string): string
         return fix_path(b)
     if length(b) == 0
         return fix_path(a)
-    var res = build_string() <| $(builder)
+    let res = build_string() <| $(builder)
         builder |> write(a)
         let ends = ends_with_separator(a)
         let starts = starts_with_separator(b)
@@ -972,7 +972,7 @@ class private DAgent: DapiDebugAgent
         return false
 
     def getContextIdx(var ctx: Context): int
-        var ctxAt = ctx_at(ctx)
+        let ctxAt = ctx_at(ctx)
         for idx in iter_range(contexts)
             if contexts[idx].at == ctxAt
                 return idx
@@ -1058,10 +1058,10 @@ class private DAServer: Server
                     continue
                 if ch != '\n'
                     continue
-                var str = string(current_string)
+                let str = string(current_string)
                 if str |> starts_with(prefix)
                     unsafe
-                        var lenStr = chop(str, 16, length(current_string) - length(prefix) - 2) // \r\n length
+                        let lenStr = chop(str, 16, length(current_string) - length(prefix) - 2) // \r\n length
                         toRead = to_int(lenStr)
                         clear(current_string)
                 continue
@@ -1241,7 +1241,7 @@ class private DAServer: Server
         agent->getContextData(ctxId) <| $(var ctxData: DAContext)
             let frameId = int(ini.frameId % double(MAX_STACK))
             if frameId >= 0 && frameId < length(ctxData.stack)
-                var spAddr = ctxData.stack[frameId].spAddr
+                let spAddr = ctxData.stack[frameId].spAddr
                 var globs = 0
                 var idx = frameId
                 var first = true
@@ -1437,7 +1437,7 @@ class private DAServer: Server
 
     // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#responseMessage
     def sendRawData(var data : JsonValue?; logData: bool)
-        var msg = write_json(data)
+        let msg = write_json(data)
         var packStr = "Content-Length: {length(msg)}\r\n\r\n{msg}"
         if logData
             self->log("<------\n{packStr}")

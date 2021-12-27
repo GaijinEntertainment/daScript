@@ -12,7 +12,7 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		ExternalProject_Add(
 			SFML
 			SOURCE_DIR ${DAS_SFML_DIR}/SFML
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${DAS_SFML_DIR}/libsfml -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=false
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${DAS_SFML_DIR}/libsfml -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=true
 			BINARY_DIR ${DAS_SFML_DIR}/libsfml/build
 		)
 	ELSE()
@@ -63,11 +63,11 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		find_library(QUARTZCORE_LIBRARY QuartzCore)
 		find_library(CARBON_LIBRARY Carbon)
 		SET(SFML_LIBRARIES
-			${DAS_SFML_DIR}/libsfml/lib/libsfml-system-s.a
-			${DAS_SFML_DIR}/libsfml/lib/libsfml-window-s.a
-			${DAS_SFML_DIR}/libsfml/lib/libsfml-audio-s.a
-			${DAS_SFML_DIR}/libsfml/lib/libsfml-graphics-s.a
-			${DAS_SFML_DIR}/libsfml/lib/libsfml-network-s.a
+			${DAS_SFML_DIR}/libsfml/lib/libsfml-system.dylib
+			${DAS_SFML_DIR}/libsfml/lib/libsfml-window.dylib
+			${DAS_SFML_DIR}/libsfml/lib/libsfml-audio.dylib
+			${DAS_SFML_DIR}/libsfml/lib/libsfml-graphics.dylib
+			${DAS_SFML_DIR}/libsfml/lib/libsfml-network.dylib
 			${DAS_SFML_DIR}/libsfml/lib/freetype.framework
 			${COCOA_LIBRARY}
 			${IOKIT_LIBRARY}
@@ -116,4 +116,11 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 	)
 
 	SETUP_CPP11(libDasModuleSFML)
+
+    IF(APPLE)
+        set(CMAKE_MACOSX_RPATH TRUE)
+        set(CMAKE_INSTALL_RPATH "${DAS_SFML_DIR}/SFML/extlibs/libs-osx/Frameworks")
+		set(CMAKE_BUILD_RPATH "${DAS_SFML_DIR}/SFML/extlibs/libs-osx/Frameworks")
+    ENDIF()
+
 ENDIF()
