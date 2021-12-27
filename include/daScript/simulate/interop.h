@@ -34,7 +34,11 @@ namespace das
     };
 
     template <typename TT>
-    struct cast_res  : cast<TT> {};
+    struct cast_res {
+        static __forceinline vec4f from ( TT x, Context * ) {
+            return cast<TT>::from(x);
+        }
+    };
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -57,7 +61,7 @@ namespace das
     template <typename R, typename ...Args>
     struct ImplCallStaticFunction<R (*)(Args...)> {
         static _msc_inline_bug vec4f call( R (*fn)(Args...), Context & ctx, SimNode ** args ) {
-            return cast_res<R>::from(CallStaticFunction<R,Args...>(fn,ctx,args));
+            return cast_res<R>::from(CallStaticFunction<R,Args...>(fn,ctx,args),&ctx);
         }
     };
 

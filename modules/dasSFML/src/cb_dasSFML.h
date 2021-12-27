@@ -2,6 +2,8 @@
 
 #include "sfml_stub.h"
 
+#include "daScript/misc/type_name.h"
+
 namespace das {
 
 // sf::String
@@ -11,6 +13,12 @@ template <> struct cast_arg<const sf::String &> {
         return sf::String(pstr ? pstr : "");
     }
 };
+template <> struct cast_res<sf::String> {
+    static __forceinline vec4f from ( const sf::String & str, Context * context ) {
+		auto text = context->stringHeap->allocateString(str);
+        return cast<char *>::from(text);
+    }
+};
 template <> struct typeFactory<sf::String> {
 	static TypeDeclPtr make(const ModuleLibrary &) {
 		auto t = make_smart<TypeDecl>(Type::tString);
@@ -18,6 +26,7 @@ template <> struct typeFactory<sf::String> {
 		return t;
 	}
 };
+template <> struct typeName<sf::String> : typeName<char *> {};
 
 // Vector2u
 template<> struct cast <sf::Vector2u> : cast_fVec<sf::Vector2u> {};

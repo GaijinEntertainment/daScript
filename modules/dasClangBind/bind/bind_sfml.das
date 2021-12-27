@@ -50,7 +50,8 @@ class SFMLGen : CppGenBind
         sfml_skip_func <- {{
             "sf::err"   => true;
             "sf::Texture::copyToImage" => true;
-            "sf::RenderWindow::capture" => true
+            "sf::RenderWindow::capture" => true;
+            "sf::Joystick::getIdentification" => true
         }}
     def override isArgByValue ( name:string )
         return true

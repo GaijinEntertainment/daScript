@@ -58,6 +58,7 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		${DAS_SFML_BIND_DIR}/src/dasSFML.func_2.cpp
 		${DAS_SFML_BIND_DIR}/src/dasSFML.func_3.cpp
 		${DAS_SFML_BIND_DIR}/src/dasSFML.func_4.cpp
+		${DAS_SFML_BIND_DIR}/src/dasSFML.func_5.cpp
 	)
 
 	IF(APPLE)

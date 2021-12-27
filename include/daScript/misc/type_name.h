@@ -47,6 +47,7 @@ namespace das {
     template <> struct typeName<range>    { constexpr static const char * name() { return "range"; } };
     template <> struct typeName<urange>   { constexpr static const char * name() { return "urange"; } };
     template <> struct typeName<char *>   { constexpr static const char * name() { return "string"; } };
+    template <> struct typeName<const char *> { constexpr static const char * name() { return "string"; } };
     template <> struct typeName<void *>   { constexpr static const char * name() { return "pointer"; } };
     template <> struct typeName<Func>     { constexpr static const char * name() { return "Func"; } };
     template <> struct typeName<Lambda>   { constexpr static const char * name() { return "Lambda"; } };

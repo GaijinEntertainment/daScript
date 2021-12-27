@@ -232,10 +232,6 @@ class AnyGenBind
             if clang_CXXMethod_isPureVirtual(c)!=0u
                 to_log(LOG_INFO,"skipping pure virtual {function_name} at {clang_getCursorLocationDescription(c)}")
                 return true
-            if clang_Cursor_getStorageClass(c)==CX_StorageClass Static
-                // TODO: support static functions
-                to_log(LOG_INFO,"skipping static {function_name} at {clang_getCursorLocationDescription(c)}")
-                return true
         var semP = clang_getCursorSemanticParent(c)
         var lexP = clang_getCursorLexicalParent(c)
         if clang_equalCursors(semP,lexP)==0u
@@ -862,13 +858,14 @@ class CppGenBind : AnyGenBind
         var fun_type = clang_getCursorType(c)
         var res_type = clang_getResultType(fun_type)
         let function_result_type = typeSpelling(res_type)
+        let isStatic = clang_Cursor_getStorageClass(c)==CX_StorageClass Static
         return build_string() <| $ ( str )
             str |> write("{function_result_type} {function_name}(")
             if !empty(self_type)
-                if isMethod && clang_CXXMethod_isConst(c)!=0u
+                if isMethod && (clang_CXXMethod_isConst(c)!=0u || isStatic)
                     str |> write("const ")
                 str |> write("{self_type} &")
-                if needArgumentNames
+                if needArgumentNames && !isStatic
                     str |> write(" self")
             let narg = clang_Cursor_getNumArguments(c)
             for ai in urange(narg)
@@ -929,7 +926,9 @@ class CppGenBind : AnyGenBind
     def gen_functionWrapper ( var c : CXCursor; self_type:string )
         let function_name = string(clang_getCursorSpelling(c))
         let wrapper_index = wrapper_count ++
-        let wrapper_name = "_{bind_module}_virtual_{wrapper_index}_{function_name}"
+        let isStatic = clang_Cursor_getStorageClass(c)==CX_StorageClass Static
+        let static_name = isStatic ? "static" : "virtual"
+        let wrapper_name = "_{bind_module}_{static_name}_{wrapper_index}_{function_name}"
         let header = functionHeaderSpelling(c,true,false,true,wrapper_name,self_type)
         fprint(func_file_aot_decl, "{header};\n")
         fprint(func_file_aot, "{header} \{\n\t")
@@ -937,7 +936,10 @@ class CppGenBind : AnyGenBind
         var res_type = clang_getCanonicalType(clang_getResultType(fun_type))
         if res_type.kind != CXTypeKind Void
             fprint(func_file_aot,"return ")
-        fprint(func_file_aot,"self.{function_name}(")
+        if isStatic
+            fprint(func_file_aot,"{self_type}::{function_name}(")
+        else
+            fprint(func_file_aot,"self.{function_name}(")
         let narg = clang_Cursor_getNumArguments(c)
         for ai in urange(narg)
             if ai != 0u
@@ -951,10 +953,7 @@ class CppGenBind : AnyGenBind
         return wrapper_name
     def parse_anyFunctionDecl ( var c : CXCursor; isMethod : bool )
         step_Function()
-        var isStatic = false
-        if isMethod
-            if clang_Cursor_getStorageClass(c)==CX_StorageClass Static
-                isStatic = true // TODO: support static methods
+        let isStatic = clang_Cursor_getStorageClass(c)==CX_StorageClass Static
         let function_name = string(clang_getCursorSpelling(c))
         var das_function_name = function_name
         var isOperator = false
@@ -972,13 +971,15 @@ class CppGenBind : AnyGenBind
         var bind_enchantation = ""
         var cpp_enchantation = ""
         var extra_enchantation = ""
+        if isStatic
+            print("HERE!!! {function_cpp_name} COR:{clang_das_isCopyOnReturn(res_type)} AOTA:{isAotAliasType(nc_res_type)}\n")
         if clang_das_isRef(res_type)
             extra_enchantation = ", SimNode_ExtFuncCallRef"
         elif clang_das_isCopyOnReturn(res_type) && !isAotAliasType(nc_res_type)
             extra_enchantation = ",SimNode_ExtFuncCallAndCopyOrMove"
         if isMethod
             let using_mname = methodName()
-            if isVirtual
+            if isVirtual || isStatic
                 let self_type = namespace_struct_name()
                 let function_cpp_type = functionWrapperSpelling(c,self_type)
                 let wrapper_cpp_name = gen_functionWrapper(c,self_type)

@@ -6,9 +6,7 @@
 class Foo {
 public:
     Foo();
-    virtual int add ( float a, float b ) const;
-    virtual int sub ( float a, float b );
-    int mul ( float a, float b ) const;
+    static int add(int a, int b);
 };
 
 
