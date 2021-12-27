@@ -3,24 +3,16 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+class Foo {
+public:
+    Foo();
+    virtual void add() = 0;
+};
 
-namespace sf {
-    class Foo {
-    };
-
-    class Hoo {
-        void printHoo();
-    };
-
-
-    class Goo {
-        void printHoo();
-    };
-
-    class Bar : public Foo, Hoo, public Goo {
-        void printBar();
-    };
-
+class Bar {
+public:
+    Bar();
+    virtual void add();
 };
 
 #if 0

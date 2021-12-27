@@ -665,6 +665,7 @@ class CppGenBind : AnyGenBind
     require_modules : array<string>
     alias2type : table<string; string>
     enums_with_flags : table<string; bool>
+    abstract_class : array<bool>
     def CppGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args)
         setDefaultFiles()
@@ -819,7 +820,10 @@ class CppGenBind : AnyGenBind
             writer |> write("\t{dashing_name}_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation (\"{struct_name}\", ml, \"{struct_namespace_name}\") \{\n")
             writer |> write("\t\}\n")
             writer |> write("\tvoid init () \{\n")
+            let isAbstract = clang_CXXRecord_isAbstract(c)!=0u
+            abstract_class |> push(isAbstract)
             AnyGenBind`parse_Struct(self, c, struct_name)
+            abstract_class |> pop()
             writer |> write("\t\}\n\};\n")
             if isArgByValue(struct_namespace_name)
                 fprint(struct_cast_file, "template <> struct cast_arg<{struct_namespace_name}> \{\n")
@@ -960,8 +964,10 @@ class CppGenBind : AnyGenBind
             fprint(func_file,"\n\t\t->res_type(makeType<{rp}>(lib))")
         fprint(func_file,";\n")
     def override parse_Constructor ( var c : CXCursor )
-        step_Function()
         let ctor_name = string(clang_getCursorSpelling(c))
+        if abstract_class |> back
+            to_log(LOG_WARNING, "skipping abstract class constructor {ctor_name} at {clang_getCursorLocationDescription(c)}")
+        step_Function()
         let function_cpp_name = namespace_struct_name()
         fprint(func_file,"\taddCtorAndUsing<{function_cpp_name}")
         let narg = clang_Cursor_getNumArguments(c)
