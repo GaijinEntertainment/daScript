@@ -1024,6 +1024,7 @@ class CppGenBind : AnyGenBind
         let ctor_name = string(clang_getCursorSpelling(c))
         if abstract_class |> back
             to_log(LOG_WARNING, "skipping abstract class constructor {ctor_name} at {clang_getCursorLocationDescription(c)}")
+            return
         step_Function()
         let function_cpp_name = namespace_struct_name()
         fprint(func_file,"\taddCtorAndUsing<{function_cpp_name}")
