@@ -40,7 +40,7 @@ def describe_bitfield(bf;merger:string = "")
 
 def describe_function_short(func:FunctionPtr)
     var args <- [{for x in func.arguments; "{x.name}:{describe(x._type,false)}" }]
-    var res = "{func.name} ({join(args,";")}) : {describe(func.result,false)}"
+    let res = "{func.name} ({join(args,";")}) : {describe(func.result,false)}"
     delete args
     return res
 
@@ -470,8 +470,8 @@ def private walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInf
         emplace_new(tupT.argTypes,clone_type(info.secondType))
         var arrT <- clone_type(tupT)
         var mkArr <- new [[ExprMakeArray() at=at, makeType <- arrT]]
-        var key_stride = info.firstType.sizeOf
-        var value_stride = info.secondType.sizeOf
+        let key_stride = info.firstType.sizeOf
+        let value_stride = info.secondType.sizeOf
         any_table_foreach ( data, key_stride, value_stride ) <| $ ( pkey, pvalue )
             var key <- walk_and_convert ( pkey, info.firstType, at)
             var value <- walk_and_convert ( pvalue, info.secondType, at)
