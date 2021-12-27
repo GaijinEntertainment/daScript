@@ -6,14 +6,11 @@
 class Foo {
 public:
     Foo();
-    virtual void add() = 0;
+    virtual int add ( float a, float b ) const;
+    virtual int sub ( float a, float b );
+    int mul ( float a, float b ) const;
 };
 
-class Bar {
-public:
-    Bar();
-    virtual void add();
-};
 
 #if 0
 

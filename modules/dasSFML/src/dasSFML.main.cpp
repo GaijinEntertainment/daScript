@@ -18,10 +18,6 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(Mat4,sf::Glsl::Mat4);
 
 namespace das {
 
-    void sfml_window_close ( sf::Window & win ) {
-        win.close();
-    }
-
     const sf::RenderStates & sfml_render_states_default() {
         return sf::RenderStates::Default;
     }
@@ -40,8 +36,6 @@ namespace das {
     }
 
 	void Module_dasSFML::initMain () {
-        addExtern<DAS_BIND_FUN(sfml_window_close)>(*this,lib,"close",
-            SideEffects::worstDefault,"sfml_window_close");
         // render states
         addExtern<DAS_BIND_FUN(sfml_render_states_default)>(*this,lib,"RenderStates_Default",
             SideEffects::invoke,"sfml_render_states_default");

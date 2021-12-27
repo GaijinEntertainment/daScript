@@ -13,3 +13,7 @@ enum WindowStyle
     Close      = 1 << 2 //!< Title bar + close button
     Fullscreen = 1 << 3 //!< Fullscreen mode (this flag and all others are mutually exclusive)
     Default = (1<<0) | (1<<1) | (1<<2) //!< Default window style
+
+def close ( var win:RenderWindow implicit )
+    unsafe
+        close(reinterpret<Window> win)

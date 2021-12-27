@@ -229,8 +229,8 @@ class AnyGenBind
     def skip_anyFunction ( var c : CXCursor; isMethod:bool ) : bool
         let function_name = string(clang_getCursorSpelling(c))
         if isMethod
-            if clang_CXXMethod_isVirtual(c)!=0u
-                to_log(LOG_INFO,"skipping virtual {function_name} at {clang_getCursorLocationDescription(c)}")
+            if clang_CXXMethod_isPureVirtual(c)!=0u
+                to_log(LOG_INFO,"skipping pure virtual {function_name} at {clang_getCursorLocationDescription(c)}")
                 return true
             if clang_Cursor_getStorageClass(c)==CX_StorageClass Static
                 // TODO: support static functions
@@ -643,6 +643,8 @@ class CppGenBind : AnyGenBind
     func_file : FILE const?
     func_file_reg : FILE const?
     func_file_decl : FILE const?
+    func_file_aot : FILE const?
+    func_file_aot_decl : FILE const?
     module_cpp_file : FILE const?
     module_h_file : FILE const?
     module_need_h_file : FILE const?
@@ -666,6 +668,7 @@ class CppGenBind : AnyGenBind
     alias2type : table<string; string>
     enums_with_flags : table<string; bool>
     abstract_class : array<bool>
+    wrapper_count : int
     def CppGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args)
         setDefaultFiles()
@@ -684,6 +687,8 @@ class CppGenBind : AnyGenBind
         dummy_add_file = fstdout()
         func_file_reg = fstdout()
         func_file_decl = fstdout()
+        func_file_aot = fstdout()
+        func_file_aot_decl = fstdout()
         module_cpp_file = fstdout()
         module_h_file = fstdout()
         module_need_h_file = fstdout()
@@ -718,7 +723,9 @@ class CppGenBind : AnyGenBind
             openFile("{bind_root}/{bind_module}.dummy.add.inc"))
         setFuncFiles (
             openFile("{bind_root}/{bind_module}.func.reg.inc"),
-            openFile("{bind_root}/{bind_module}.func.decl.inc"))
+            openFile("{bind_root}/{bind_module}.func.decl.inc"),
+            openFile("{bind_root}/{bind_module}.func.aot.inc"),
+            openFile("{bind_root}/{bind_module}.func.aot.decl.inc"))
         setModuleFiles(
             openFile("{bind_root}/{bind_module}.h"),
             openFile("{bind_root}/need_{bind_module}.h"),
@@ -757,9 +764,11 @@ class CppGenBind : AnyGenBind
     def setAliasFiles ( af,df:FILE const? )
         alias_add_file = af
         dummy_add_file = df
-    def setFuncFiles ( ffr,ffd:FILE const? )
+    def setFuncFiles ( ffr,ffd,ffa,ffad:FILE const? )
         func_file_reg = ffr
         func_file_decl = ffd
+        func_file_aot = ffa
+        func_file_aot_decl = ffad
     def setModuleFiles ( mh,mnh,mcpp:FILE const? )
         module_h_file = mh
         module_need_h_file = mnh
@@ -848,29 +857,46 @@ class CppGenBind : AnyGenBind
         elif t.kind==CXTypeKind Long || t.kind==CXTypeKind LongLong || t.kind==CXTypeKind ULong || t.kind==CXTypeKind ULongLong
             return nspl // if its a fancy type, which may be different on different platform
         return spl
-    def functionPtrSpelling ( var c : CXCursor; isMethod:bool )
+    def functionHeaderSpelling ( var c : CXCursor; isMethod,needMethodQualifier,needArgumentNames:bool; function_name, self_type:string )
         // TODO: calling convention?
         var fun_type = clang_getCursorType(c)
         var res_type = clang_getResultType(fun_type)
         let function_result_type = typeSpelling(res_type)
         return build_string() <| $ ( str )
-            str |> write("{function_result_type} (")
-            if isMethod
-                for n in nspaces
-                    str |> write(n)
-                    str |> write("::")
-            str |> write("*)(")
+            str |> write("{function_result_type} {function_name}(")
+            if !empty(self_type)
+                if isMethod && clang_CXXMethod_isConst(c)!=0u
+                    str |> write("const ")
+                str |> write("{self_type} &")
+                if needArgumentNames
+                    str |> write(" self")
             let narg = clang_Cursor_getNumArguments(c)
             for ai in urange(narg)
-                if ai != 0u
+                if ai != 0u || !empty(self_type)
                     str |> write(",")
                 var carg = clang_Cursor_getArgument(c, ai)
                 var arg_type = clang_getCursorType(carg)
                 let argument_type = typeSpelling(arg_type)
                 str |> write("{argument_type}")
+                if needArgumentNames
+                    var arg_name = string(clang_getCursorSpelling(carg))
+                    if empty(arg_name)
+                        arg_name = "_arg_{int(ai)}"
+                    str |> write(" {arg_name}")
             str |> write(")")
-            if isMethod && clang_CXXMethod_isConst(c)!=0u
+            if isMethod && needMethodQualifier && clang_CXXMethod_isConst(c)!=0u
                 str |> write(" const")
+    def functionPtrSpelling ( var c : CXCursor; isMethod:bool )
+        let function_name = build_string() <| $ ( str )
+            str |> write("(")
+            if isMethod
+                for n in nspaces
+                    str |> write(n)
+                    str |> write("::")
+            str |> write("*)")
+        return functionHeaderSpelling(c, isMethod, true, false, function_name, "")
+    def functionWrapperSpelling ( var c : CXCursor; self_type:string )
+        return functionHeaderSpelling(c, true, false, false, "(*)", self_type )
     def methodName
         method_name_index ++
         return "_method_{method_name_index}"
@@ -900,6 +926,29 @@ class CppGenBind : AnyGenBind
             fwrite(func_file_reg, "initFunctions_{func_chunk_index}();\n")
             fwrite(func_file_decl, "void initFunctions_{func_chunk_index}();\n")
             func_count = 0
+    def gen_functionWrapper ( var c : CXCursor; self_type:string )
+        let function_name = string(clang_getCursorSpelling(c))
+        let wrapper_index = wrapper_count ++
+        let wrapper_name = "_{bind_module}_virtual_{wrapper_index}_{function_name}"
+        let header = functionHeaderSpelling(c,true,false,true,wrapper_name,self_type)
+        fprint(func_file_aot_decl, "{header};\n")
+        fprint(func_file_aot, "{header} \{\n\t")
+        var fun_type = clang_getCursorType(c)
+        var res_type = clang_getCanonicalType(clang_getResultType(fun_type))
+        if res_type.kind != CXTypeKind Void
+            fprint(func_file_aot,"return ")
+        fprint(func_file_aot,"self.{function_name}(")
+        let narg = clang_Cursor_getNumArguments(c)
+        for ai in urange(narg)
+            if ai != 0u
+                fprint(func_file_aot,",")
+            var carg = clang_Cursor_getArgument(c, ai)
+            var arg_name = string(clang_getCursorSpelling(carg))
+            if empty(arg_name)
+                arg_name = "_arg_{int(ai)}"
+            fprint(func_file_aot,"{arg_name}")
+        fprint(func_file_aot,");\n\}\n\n")
+        return wrapper_name
     def parse_anyFunctionDecl ( var c : CXCursor; isMethod : bool )
         step_Function()
         var isStatic = false
@@ -914,6 +963,7 @@ class CppGenBind : AnyGenBind
             if !(is_alpha(Ch) || is_number(Ch) || Ch=='_')
                 das_function_name = function_name |> slice(8)
                 isOperator = true
+        let isVirtual = clang_CXXMethod_isVirtual(c)!=0u
         var fun_type = clang_getCanonicalType(clang_getCursorType(c))
         var res_type = clang_getResultType(fun_type)
         var nc_res_type = clang_getResultType(clang_getCursorType(c))
@@ -928,11 +978,18 @@ class CppGenBind : AnyGenBind
             extra_enchantation = ",SimNode_ExtFuncCallAndCopyOrMove"
         if isMethod
             let using_mname = methodName()
-            let function_cpp_type = functionPtrSpelling(c,true)
-            let using_mname_expr = "das::das_call_member< {function_cpp_type},&{function_cpp_name} >"
-            bind_enchantation = "DAS_CALL_METHOD({using_mname})"
-            cpp_enchantation = "das_call_member< {function_cpp_type} , &{function_cpp_name} >::invoke"
-            fprint(func_file,"\tusing {using_mname} = {using_mname_expr};\n");
+            if isVirtual
+                let self_type = namespace_struct_name()
+                let function_cpp_type = functionWrapperSpelling(c,self_type)
+                let wrapper_cpp_name = gen_functionWrapper(c,self_type)
+                bind_enchantation = " {function_cpp_type} , {wrapper_cpp_name} "
+                cpp_enchantation = wrapper_cpp_name
+            else
+                let function_cpp_type = functionPtrSpelling(c,true)
+                let using_mname_expr = "das::das_call_member< {function_cpp_type},&{function_cpp_name} >"
+                bind_enchantation = "DAS_CALL_METHOD({using_mname})"
+                cpp_enchantation = "das_call_member< {function_cpp_type} , &{function_cpp_name} >::invoke"
+                fprint(func_file,"\tusing {using_mname} = {using_mname_expr};\n");
         else
             let function_cpp_type = functionPtrSpelling(c,false)
             bind_enchantation = " {function_cpp_type} , {function_cpp_name} "
@@ -1156,6 +1213,7 @@ class CppGenBind : AnyGenBind
         fwrite(func_file, "#include \"{bind_module}.h\"\n")
         fwrite(func_file, "#include \"need_{bind_module}.h\"\n")
         fwrite(func_file, "namespace das \{\n")
+        fwrite(func_file, "#include \"{bind_module}.func.aot.decl.inc\"\n")
         fwrite(func_file, "void Module_{bind_module}::initFunctions_{func_chunk_index}() \{\n")
     def writeFuncPostfix
         fwrite(func_file, "\}\n\}\n\n")
@@ -1185,6 +1243,7 @@ class CppGenBind : AnyGenBind
         module_cpp_file |> fwrite("namespace das \{\n")
         module_cpp_file |> fwrite("#include \"{bind_module}.enum.class.inc\"\n")
         module_cpp_file |> fwrite("#include \"{bind_module}.struct.class.inc\"\n")
+        module_cpp_file |> fwrite("#include \"{bind_module}.func.aot.inc\"\n")
         module_cpp_file |> fwrite("Module_{bind_module}::Module_{bind_module}() : Module(\"{bind_das_module}\") \{\n")  // TODO: das module name
         module_cpp_file |> fwrite("\}\n")
         module_cpp_file |> fwrite("bool Module_{bind_module}::initDependencies() \{\n")
@@ -1258,6 +1317,10 @@ class CppGenBind : AnyGenBind
         print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.decl.inc\n")
         print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.impl.inc\n")
         print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.struct.cast.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.func.reg.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.func.decl.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.func.aot.inc\n")
+        print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.func.aot.decl.inc\n")
         if generate_constant_decl
             print("\t\t$\{{MODULE_VAR}_DIR\}/src/{bind_module}.const.inc\n")
         print("\t# generated functions\n")

@@ -13,6 +13,7 @@
 namespace das {
 #include "dasSFML.enum.class.inc"
 #include "dasSFML.struct.class.inc"
+#include "dasSFML.func.aot.inc"
 Module_dasSFML::Module_dasSFML() : Module("sfml") {
 }
 bool Module_dasSFML::initDependencies() {

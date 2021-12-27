@@ -49,6 +49,10 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		${DAS_SFML_BIND_DIR}/src/dasSFML.struct.decl.inc
 		${DAS_SFML_BIND_DIR}/src/dasSFML.struct.impl.inc
 		${DAS_SFML_BIND_DIR}/src/dasSFML.struct.cast.inc
+		${DAS_SFML_BIND_DIR}/src/dasSFML.func.reg.inc
+		${DAS_SFML_BIND_DIR}/src/dasSFML.func.decl.inc
+		${DAS_SFML_BIND_DIR}/src/dasSFML.func.aot.inc
+		${DAS_SFML_BIND_DIR}/src/dasSFML.func.aot.decl.inc
 	# generated functions
 		${DAS_SFML_BIND_DIR}/src/dasSFML.func_1.cpp
 		${DAS_SFML_BIND_DIR}/src/dasSFML.func_2.cpp
