@@ -1219,6 +1219,10 @@ namespace das {
         static __forceinline TT * make ( Context * ) {
             return new TT();
         }
+        template <typename QQ>
+        static __forceinline TT * make_and_init ( Context *, QQ && init ) {
+            return init();
+        }
     };
 
     template <typename TT>

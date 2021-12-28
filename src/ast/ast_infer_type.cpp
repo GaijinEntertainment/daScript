@@ -3608,6 +3608,7 @@ namespace das {
                     expr->type->firstType->dim.clear();
                     expr->type->dim = expr->typeexpr->dim;
                     expr->type->smartPtr = expr->typeexpr->annotation->isSmart();
+                    expr->name =  expr->typeexpr->annotation->module->name + "::" + expr->typeexpr->annotation->name;
                 } else {
                     error("can't new this type " + describeType(expr->typeexpr), "", "",
                           expr->at, CompilationError::invalid_new_type);

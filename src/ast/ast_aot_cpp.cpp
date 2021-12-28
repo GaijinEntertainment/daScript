@@ -2469,7 +2469,10 @@ namespace das {
                         << ","
                         << (enew->type->smartPtr ? "true" : "false");
                     if ( enew->initializer ) {
-                        DAS_ASSERT(0 && "internal error. initializer for enew is not supported");
+                        ss  << ">::make_and_init(__context__,[&]()"
+                            // << " -> " << describeCppType(enew->type->firstType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
+                            << " { return new ";
+                        CallFunc_preVisit(enew);
                     } else {
                         ss << ">::make(__context__";
                     }

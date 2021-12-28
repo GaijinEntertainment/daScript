@@ -95,13 +95,20 @@ IF ((NOT DAS_SFML_INCLUDED) AND ((NOT ${DAS_SFML_DISABLED}) OR (NOT DEFINED DAS_
 		)
 	ELSE()
 		SET(SFML_LIBRARIES
-			${DAS_SFML_DIR}/libsfml/lib/sfml-main.lib
-			${DAS_SFML_DIR}/libsfml/lib/sfml-system-s.lib
-			${DAS_SFML_DIR}/libsfml/lib/sfml-window-s.lib
-			${DAS_SFML_DIR}/libsfml/lib/sfml-audio-s.lib
-			${DAS_SFML_DIR}/libsfml/lib/sfml-graphics-s.lib
-			${DAS_SFML_DIR}/libsfml/lib/sfml-network-s.lib
-			${DAS_SFML_DIR}/libsfml/lib/freetype.lib
+			optimized ${DAS_SFML_DIR}/libsfml/lib/sfml-main.lib
+			optimized ${DAS_SFML_DIR}/libsfml/lib/sfml-system-s.lib
+			optimized ${DAS_SFML_DIR}/libsfml/lib/sfml-window-s.lib
+			optimized ${DAS_SFML_DIR}/libsfml/lib/sfml-audio-s.lib
+			optimized ${DAS_SFML_DIR}/libsfml/lib/sfml-graphics-s.lib
+			optimized ${DAS_SFML_DIR}/libsfml/lib/sfml-network-s.lib
+			optimized ${DAS_SFML_DIR}/libsfml/lib/freetype.lib
+			debug ${DAS_SFML_DIR}/libsfml/lib/sfml-main-d.lib
+			debug ${DAS_SFML_DIR}/libsfml/lib/sfml-system-s-d.lib
+			debug ${DAS_SFML_DIR}/libsfml/lib/sfml-window-s-d.lib
+			debug ${DAS_SFML_DIR}/libsfml/lib/sfml-audio-s-d.lib
+			debug ${DAS_SFML_DIR}/libsfml/lib/sfml-graphics-s-d.lib
+			debug ${DAS_SFML_DIR}/libsfml/lib/sfml-network-s-d.lib
+			debug ${DAS_SFML_DIR}/libsfml/lib/freetype.lib
 			Winmm.lib
 			Opengl32.lib
 			legacy_stdio_definitions.lib

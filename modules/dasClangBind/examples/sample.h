@@ -6,7 +6,7 @@
 class Foo {
 public:
     Foo();
-    static int add(int a, int b);
+    Foo(int a, int b = 5);
 };
 
 

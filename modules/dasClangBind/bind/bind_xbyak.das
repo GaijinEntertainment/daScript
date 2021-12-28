@@ -32,7 +32,8 @@ class XbyakGen : CppGenBind
         module_need_h_file |> fwrite("#define XBYAK_NO_EXCEPTION\n")
     def init_skip
         xbyak_skip_func <- {{
-            "Xbyak::CodeGenerator::L" => true
+            "Xbyak::CodeGenerator::L" => true;
+            "Xbyak::Label::toStr" => true
         }}
     def override isArgByValue ( name:string )
         return true

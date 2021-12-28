@@ -1352,10 +1352,18 @@ namespace das
         SimNode * newNode;
         if ( typeexpr->baseType == Type::tHandle ) {
             DAS_ASSERT(typeexpr->annotation->canNew() && "how???");
-            newNode = typeexpr->annotation->simulateGetNew(context, at);
-            if ( !newNode ) {
-                context.thisProgram->error("integration error, simulateGetNew returned null", "", "",
-                                           at, CompilationError::missing_node );
+            if ( initializer ) {
+                int32_t bytes = type->firstType->getSizeOf();
+                auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context,arguments));
+                ExprCall::simulateCall(func, this, context, pCall);
+                pCall->cmresEval = context.code->makeNode<SimNode_New>(at,bytes,true);
+                return pCall;
+            } else {
+                newNode = typeexpr->annotation->simulateGetNew(context, at);
+                if ( !newNode ) {
+                    context.thisProgram->error("integration error, simulateGetNew returned null", "", "",
+                                            at, CompilationError::missing_node );
+                }
             }
         } else {
             bool persistent = false;
