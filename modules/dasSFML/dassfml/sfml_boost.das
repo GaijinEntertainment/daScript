@@ -15,5 +15,4 @@ enum WindowStyle
     Default = (1<<0) | (1<<1) | (1<<2) //!< Default window style
 
 def close ( var win:RenderWindow implicit )
-    unsafe
-        close(reinterpret<Window> win)
+    close(cast<Window> win)

@@ -3499,6 +3499,13 @@ namespace das {
                 expr->type->ref = expr->subexpr->type->ref;
             } else if ( expr->castType->isGoodBlockType() ||  expr->castType->isGoodFunctionType() || expr->castType->isGoodLambdaType() ) {
                 expr->type = castFunc(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
+            } else if ( expr->castType->isHandle() ) {
+                if ( expr->castType->isSameType(*expr->subexpr->type, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, AllowSubstitute::yes) ) {
+                    expr->type = make_smart<TypeDecl>(*expr->castType);
+                    expr->type->ref = expr->subexpr->type->ref;
+                } else {
+                    expr->type = nullptr;
+                }
             } else {
                 expr->type = castStruct(expr->at, expr->subexpr->type, expr->castType, expr->upcast);
             }
