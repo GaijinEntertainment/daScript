@@ -126,6 +126,16 @@ namespace das {
         // append code
         node->visit(hashV);
         debug_hash("\n");
+        if ( fun->aotHashDeppendsOnArguments ) {
+            for ( auto & arg : fun->arguments ) {
+                hashV.write(arg->name.c_str());
+                if ( arg->init ) {
+                    TextWriter tw;
+                    tw << *(arg->init);
+                    hashV.write(tw.str().c_str());
+                }
+            }
+        }
         return hashV.getHash();
     }
 

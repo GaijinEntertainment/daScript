@@ -739,6 +739,7 @@ namespace das
             struct {
                 bool    macroFunction : 1;
                 bool    needStringCast : 1;
+                bool    aotHashDeppendsOnArguments : 1;
             };
             uint32_t moreFlags = 0;
 
