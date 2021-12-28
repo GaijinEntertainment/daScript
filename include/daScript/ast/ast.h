@@ -628,6 +628,7 @@ namespace das
     ,   accessExternal =    modifyExternal
     ,   modifyArgument =    (1<<3)
     ,   modifyArgumentAndExternal   = modifyArgument | modifyExternal
+    ,   modifyArgumentAndAccessExternal = modifyArgument | accessExternal
     ,   worstDefault =      modifyArgumentAndExternal// use this as 'default' bind if you don't know what are side effects of your function, or if you don't undersand what are SideEffects
     ,   accessGlobal =      (1<<4)
     ,   invoke =            (1<<5)
