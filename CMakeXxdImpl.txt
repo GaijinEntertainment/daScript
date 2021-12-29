@@ -1,0 +1,42 @@
+# CMAKE_XXD
+
+# expected defines:
+# INPUT_FILE_NAME - file name
+# FILE_TYPE - "TEXT" or "BIN"
+
+get_filename_component(INPUT_SRC ${INPUT_FILE_NAME} ABSOLUTE)
+get_filename_component(INPUT_DIR ${INPUT_SRC} DIRECTORY)
+get_filename_component(INPUT_NAME ${INPUT_FILE_NAME} NAME)
+string(REPLACE "." "_" CPP_STR_CONST_NAME ${INPUT_NAME})
+
+file(READ ${INPUT_DIR}/${INPUT_NAME} HEX_CONTENTS HEX)
+string(REGEX MATCHALL "([A-Za-z0-9][A-Za-z0-9])" SEPARATED_HEX "${HEX_CONTENTS}")
+list(JOIN SEPARATED_HEX ",0x" FORMATTED_HEX)
+set(FORMATTED_HEX "0x${FORMATTED_HEX}")
+if(${FILE_TYPE} MATCHES "TEXT")
+	string(REPLACE "0x0D," "" FORMATTED_HEX ${FORMATTED_HEX})
+	string(REPLACE "0x0d," "" FORMATTED_HEX ${FORMATTED_HEX})
+	string(REPLACE "0x0A," "0x0A,\n" FORMATTED_HEX ${FORMATTED_HEX})
+	string(REPLACE "0x0a," "0x0a,\n" FORMATTED_HEX ${FORMATTED_HEX})
+elseif(${FILE_TYPE} MATCHES "BIN")
+else()
+	message(FATAL_ERROR "CMAKE_XXD: expected \"TEXT\" or \"BIN\" in FILE_TYPE")
+endif()
+string(REGEX MATCHALL "([^,;]*,)([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?"
+	SEPARATED_LINES "${FORMATTED_HEX}, ")
+list(JOIN SEPARATED_LINES "\n" FORMATTED_HEX)
+file(WRITE ${TMP_DIR}/${INPUT_NAME}.inc.temp "static unsigned char ${CPP_STR_CONST_NAME}[] = {\n${FORMATTED_HEX}\n};\n")
+file(READ ${TMP_DIR}/${INPUT_NAME}.inc.temp TEMP_CONTENT HEX)
+if(EXISTS ${INPUT_DIR}/${INPUT_NAME}.inc)
+	file(READ ${INPUT_DIR}/${INPUT_NAME}.inc DEST_CONTENT HEX)
+else()
+	set(DEST_CONTENT "")
+endif()
+if(NOT "${TEMP_CONTENT}" STREQUAL "${DEST_CONTENT}")
+	file(REMOVE ${INPUT_DIR}/${INPUT_NAME}.inc)
+	file(RENAME ${TMP_DIR}/${INPUT_NAME}.inc.temp ${INPUT_DIR}/${INPUT_NAME}.inc)
+	message(STATUS "File ${INPUT_FILE_NAME} converted to C-array ${INPUT_DIR}/${INPUT_NAME}.inc")
+else()
+	file(REMOVE ${TMP_DIR}/${INPUT_NAME}.inc.temp)
+	message(STATUS "File is not changed. Generation skipped.")
+endif()
