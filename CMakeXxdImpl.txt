@@ -4,6 +4,13 @@
 # INPUT_FILE_NAME - file name
 # FILE_TYPE - "TEXT" or "BIN"
 
+if("${TMP_DIR}" STREQUAL "")
+	set(XXD_TMP_DIR ".")
+else()
+	set(XXD_TMP_DIR "${TMP_DIR}")
+endif()
+
+
 get_filename_component(INPUT_SRC ${INPUT_FILE_NAME} ABSOLUTE)
 get_filename_component(INPUT_DIR ${INPUT_SRC} DIRECTORY)
 get_filename_component(INPUT_NAME ${INPUT_FILE_NAME} NAME)
@@ -25,8 +32,8 @@ endif()
 string(REGEX MATCHALL "([^,;]*,)([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?([^,;]*,)?"
 	SEPARATED_LINES "${FORMATTED_HEX}, ")
 list(JOIN SEPARATED_LINES "\n" FORMATTED_HEX)
-file(WRITE ${TMP_DIR}/${INPUT_NAME}.inc.temp "static unsigned char ${CPP_STR_CONST_NAME}[] = {\n${FORMATTED_HEX}\n};\n")
-file(READ ${TMP_DIR}/${INPUT_NAME}.inc.temp TEMP_CONTENT HEX)
+file(WRITE ${XXD_TMP_DIR}/${INPUT_NAME}.inc.temp "static unsigned char ${CPP_STR_CONST_NAME}[] = {\n${FORMATTED_HEX}\n};\n")
+file(READ ${XXD_TMP_DIR}/${INPUT_NAME}.inc.temp TEMP_CONTENT HEX)
 if(EXISTS ${INPUT_DIR}/${INPUT_NAME}.inc)
 	file(READ ${INPUT_DIR}/${INPUT_NAME}.inc DEST_CONTENT HEX)
 else()
@@ -34,9 +41,9 @@ else()
 endif()
 if(NOT "${TEMP_CONTENT}" STREQUAL "${DEST_CONTENT}")
 	file(REMOVE ${INPUT_DIR}/${INPUT_NAME}.inc)
-	file(RENAME ${TMP_DIR}/${INPUT_NAME}.inc.temp ${INPUT_DIR}/${INPUT_NAME}.inc)
+	file(RENAME ${XXD_TMP_DIR}/${INPUT_NAME}.inc.temp ${INPUT_DIR}/${INPUT_NAME}.inc)
 	message(STATUS "File ${INPUT_FILE_NAME} converted to C-array ${INPUT_DIR}/${INPUT_NAME}.inc")
 else()
-	file(REMOVE ${TMP_DIR}/${INPUT_NAME}.inc.temp)
+	file(REMOVE ${XXD_TMP_DIR}/${INPUT_NAME}.inc.temp)
 	message(STATUS "File is not changed. Generation skipped.")
 endif()
