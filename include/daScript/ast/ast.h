@@ -635,6 +635,13 @@ namespace das
     ,   inferredSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invoke)
     };
 
+    inline SideEffects operator |(SideEffects lhs, SideEffects rhs)
+    {
+      return static_cast<SideEffects>(
+          static_cast<std::underlying_type<SideEffects>::type>(lhs) |
+          static_cast<std::underlying_type<SideEffects>::type>(rhs));
+    }
+
     struct InferHistory {
         LineInfo    at;
         Function *  func = nullptr;
