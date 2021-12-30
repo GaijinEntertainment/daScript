@@ -19,3 +19,6 @@
 [submodule "modules/dasHV"]
 	path = modules/dasHV
 	url = git@github.com:borisbat/dasHV.git
+[submodule "modules/dasSFML"]
+	path = modules/dasSFML
+	url = git@github.com:borisbat/dasSFML.git
