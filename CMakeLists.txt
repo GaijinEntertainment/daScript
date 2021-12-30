@@ -1,6 +1,19 @@
 cmake_minimum_required (VERSION 3.16)
 project (DAS)
 
+option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" OFF)
+option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" OFF)
+option(DAS_GLFW_DISABLED "Disable dasGLFW (GLFW window for graphics apps)" OFF)
+option(DAS_IMGUI_DISABLED "Disable dasIMGUI (IMGUI, IMNODES, IMGUI-NODE-EDITOR gui libraries)" OFF)
+option(DAS_BGFX_DISABLED "Disable dasBGFX (BGFX graphics API)" OFF)
+option(DAS_XBYAK_DISABLED "Disable dasXbyak (XBYAK and ZYDIS, x86 assembly, jit)" OFF)
+option(DAS_MINFFT_DISABLED "Disable dasMinfft (Minimal FFT library)" OFF)
+option(DAS_SOUND_DISABLED "Disable dasSound (Miniaudio sound library)" OFF)
+option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" OFF)
+option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" OFF)
+option(DAS_STBTRUETYPE_DISABLED "Disable dasStbTrueType (StbTrueType bindings, ttf rasterization)" OFF)
+option(DAS_SFML_DISABLED "Disable dasSFML (SFML multimedia library)" OFF)
+
 INCLUDE(./CMakeCommon.txt)
 
 IF(DEFINED DAS_CONFIG_INCLUDE_DIR)
