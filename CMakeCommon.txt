@@ -123,30 +123,38 @@ MACRO(SETUP_CPP11 _targetName)
 	ENDIF()
 ENDMACRO()
 
-MACRO(FIND_XXD)
-	find_program(XXD_BIN xxd)
-ENDMACRO(FIND_XXD)
+MACRO(CMAKE_TEXT_XXD project_name file_name)
+	add_custom_command(
+		DEPENDS ${file_name}
+		OUTPUT ${file_name}.inc
+		VERBATIM
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  		COMMAND ${CMAKE_COMMAND} -DFILE_TYPE:STRING="TEXT" -DINPUT_FILE_NAME:STRING=${file_name}
+			-P CMakeXxdImpl.txt
+	)
+
+	list(APPEND XXD_DEPENDS_LIST_${project_name} ${file_name}.inc)
+ 	execute_process(
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		COMMAND ${CMAKE_COMMAND} -DFILE_TYPE:STRING="TEXT" -DINPUT_FILE_NAME:STRING=${file_name}
+			-P CMakeXxdImpl.txt
+	)
+ENDMACRO()
+
+MACRO(ADD_PROJECT_XXD_DEPENDS project_name)
+	ADD_CUSTOM_TARGET(${project_name}_xxd ALL
+		DEPENDS ${XXD_DEPENDS_LIST_${project_name}}
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+	)
+	ADD_DEPENDENCIES(${project_name} ${project_name}_xxd)
+ENDMACRO()
+
 
 MACRO(FIND_FLEX_AND_BISON)
 	find_package(BISON)
 	find_package(FLEX)
 ENDMACRO(FIND_FLEX_AND_BISON)
 
-MACRO(XXD input)
-	IF(NOT XXD_BIN)
-		MESSAGE(STATUS "XXD not found, pre-generated files will be used." )
-	ELSE()
-		get_filename_component(input_src ${input} ABSOLUTE)
-		get_filename_component(input_dir ${input_src} DIRECTORY)
-		get_filename_component(input_name ${input} NAME)
-		ADD_CUSTOM_COMMAND(
-			DEPENDS ${input_src}
-			OUTPUT ${input_src}.inc
-			WORKING_DIRECTORY ${input_dir}
-			COMMAND ${XXD_BIN} -i ${input_name} ${input_name}.inc
-			COMMENT "compiling ${input} to c++ string")
-	ENDIF()
-ENDMACRO()
 
 MACRO(FLEX input)
 	IF(NOT FLEX_FOUND)

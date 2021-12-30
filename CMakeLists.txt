@@ -13,7 +13,6 @@ set(EXECUTABLE_OUTPUT_PATH  ${PROJECT_SOURCE_DIR}/bin/)
 
 SET(LINUX_UUID FALSE)
 
-FIND_XXD()
 FIND_FLEX_AND_BISON()
 
 SETUP_COMPILER()
@@ -382,12 +381,12 @@ src/builtin/debugger.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
-XXD(src/builtin/builtin.das)
-XXD(src/builtin/fio.das)
-XXD(src/builtin/rtti.das)
-XXD(src/builtin/ast.das)
-XXD(src/builtin/network.das)
-XXD(src/builtin/debugger.das)
+CMAKE_TEXT_XXD(libDaScript src/builtin/builtin.das)
+CMAKE_TEXT_XXD(libDaScript src/builtin/fio.das)
+CMAKE_TEXT_XXD(libDaScript src/builtin/rtti.das)
+CMAKE_TEXT_XXD(libDaScript src/builtin/ast.das)
+CMAKE_TEXT_XXD(libDaScript src/builtin/network.das)
+CMAKE_TEXT_XXD(libDaScript src/builtin/debugger.das)
 
 SET(MISC_SRC
 include/daScript/misc/enums.h
@@ -562,6 +561,7 @@ ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${A
     ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
 	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${SMMALLOC_SRC})
 ADD_DEPENDENCIES(libDaScript need_and_resolve)
+ADD_PROJECT_XXD_DEPENDS(libDaScript)
 target_include_directories(libDaScript PUBLIC
     ${DAS_SMMALLOC_DIR}
     ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
@@ -631,10 +631,11 @@ examples/test/unit_test.das
 )
 SOURCE_GROUP_FILES("source" TEST_MAIN_LIB_SRC)
 
-XXD(examples/test/unit_test.das)
+CMAKE_TEXT_XXD(libDaScriptTest examples/test/unit_test.das)
 
 ADD_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC})
 SETUP_CPP11(libDaScriptTest)
+ADD_PROJECT_XXD_DEPENDS(libDaScriptTest)
 
 # Test
 if (NOT ${DAS_BUILD_TEST} MATCHES NO)
