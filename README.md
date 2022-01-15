@@ -1,6 +1,9 @@
 # daScript
 daScript - high-performance statically strong typed scripting language
 
+Win64 build status [![Build status](https://ci.appveyor.com/api/projects/status/87jho7utcy3d5pcc/branch/master?svg=true)](https://ci.appveyor.com/project/imp5imp5/dascript/branch/master)\
+Linux build status [![Build status](https://ci.appveyor.com/api/projects/status/n2xv2i829xuvjv3g/branch/master?svg=true)](https://ci.appveyor.com/project/imp5imp5/dascript-linux/branch/master)
+
 11/26/2021
   * hardware breakpoints are now supported on mac arm64
   * linux build is functional again
