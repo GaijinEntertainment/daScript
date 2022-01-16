@@ -1,6 +1,7 @@
 cmake_minimum_required (VERSION 3.16)
 project (DAS)
 
+option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" OFF)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" OFF)
 option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" OFF)
 option(DAS_GLFW_DISABLED "Disable dasGLFW (GLFW window for graphics apps)" OFF)
@@ -26,7 +27,9 @@ set(EXECUTABLE_OUTPUT_PATH  ${PROJECT_SOURCE_DIR}/bin/)
 
 SET(LINUX_UUID FALSE)
 
-FIND_FLEX_AND_BISON()
+IF(NOT DAS_FLEX_BISON_DISABLED)
+    FIND_FLEX_AND_BISON()
+ENDIF()
 
 SETUP_COMPILER()
 
