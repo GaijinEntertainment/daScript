@@ -2,7 +2,7 @@
 daScript - high-performance statically strong typed scripting language
 
 Win64 build status [![Build status](https://ci.appveyor.com/api/projects/status/87jho7utcy3d5pcc/branch/master?svg=true)](https://ci.appveyor.com/project/imp5imp5/dascript/branch/master)\
-Linux build status [![Build status](https://ci.appveyor.com/api/projects/status/n2xv2i829xuvjv3g/branch/master?svg=true)](https://ci.appveyor.com/project/imp5imp5/dascript-linux/branch/master)
+Linux build status [![Build status](https://ci.appveyor.com/api/projects/status/n2xv2i829xuvjv3g/branch/master?svg=true)](https://ci.appveyor.com/project/imp5imp5/dascript-linux/branch/master)\
 macOS build status [![Build status](https://ci.appveyor.com/api/projects/status/dk833vli83lko0m4/branch/master?svg=true)](https://ci.appveyor.com/project/imp5imp5/dascript-mac/branch/master)
 
 
