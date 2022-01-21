@@ -805,12 +805,20 @@ class CppGenBind : AnyGenBind
         st2nsst[struct_name] = struct_namespace_name
         let isAotAlias = aot_alias |> key_exists(struct_namespace_name)
         let isAlreadyDefined = already_defined |> key_exists(struct_namespace_name)
+        let isForward = clang_isForwardDeclaration(c)
+        var isForwardDummy = false
+        if isForward
+            var stdecl = clang_getTypeDeclaration(clang_getCursorType(c))
+            isForwardDummy = clang_isForwardDeclaration(stdecl)
         if !struct_ann |> key_exists(struct_namespace_name)
             if !isAotAlias && !isAlreadyDefined
-                fprint(struct_decl_file, "MAKE_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n")
-                fprint(struct_impl_file, "IMPLEMENT_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n")
-        if clang_isForwardDeclaration(c)
-            struct_ann[struct_namespace_name] ||= false
+                if !isForward || isForwardDummy
+                    fprint(struct_decl_file, "MAKE_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n")
+                    fprint(struct_impl_file, "IMPLEMENT_EXTERNAL_TYPE_FACTORY({struct_name},{struct_namespace_name});\n")
+        if isForward
+            if isForwardDummy
+                to_log(LOG_INFO, "Forward declaration {struct_namespace_name} at {clang_getCursorLocationDescription(c)}\n")
+                struct_ann[struct_namespace_name] ||= false
             return
         struct_ann[struct_namespace_name] = true
         if isAotAlias || isAlreadyDefined
@@ -971,8 +979,6 @@ class CppGenBind : AnyGenBind
         var bind_enchantation = ""
         var cpp_enchantation = ""
         var extra_enchantation = ""
-        if isStatic
-            print("HERE!!! {function_cpp_name} COR:{clang_das_isCopyOnReturn(res_type)} AOTA:{isAotAliasType(nc_res_type)}\n")
         if clang_das_isRef(res_type)
             extra_enchantation = ", SimNode_ExtFuncCallRef"
         elif clang_das_isCopyOnReturn(res_type) && !isAotAliasType(nc_res_type)

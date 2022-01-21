@@ -1,14 +1,14 @@
 #pragma once
 
-#include <stdio.h>
-#include <inttypes.h>
-
-class Foo {
-public:
-    Foo();
-    Foo(int a, int b = 5);
+struct B {
+  struct A *a;
 };
 
+/*
+struct A {
+    int x;
+};
+*/
 
 #if 0
 
