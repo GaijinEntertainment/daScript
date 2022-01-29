@@ -268,6 +268,7 @@
 %token  ANDANDEQU           "&&="
 %token  OROREQU             "||="
 %token  XORXOREQU           "^^="
+%token  DOTDOT              ".."
 
 
 %token  BRABRAB             "[["    /* [[ */
@@ -420,7 +421,7 @@
 
 /* operation precedence*/
 %left       ','
-%nonassoc    MAPTO
+%nonassoc    DOTDOT MAPTO
 %right      '=' ADDEQU SUBEQU DIVEQU MULEQU MODEQU ANDEQU OREQU XOREQU LARROW SHLEQU SHREQU ROTLEQU ROTREQU ANDANDEQU XORXOREQU OROREQU
 %right      '?' ':'
 %left       OROR
@@ -883,6 +884,7 @@ function_name
     |   DAS_OPERATOR '%'     { $$ = new string("%"); }
     |   DAS_OPERATOR '<'     { $$ = new string("<"); }
     |   DAS_OPERATOR '>'     { $$ = new string(">"); }
+    |   DAS_OPERATOR DOTDOT  { $$ = new string("interval"); }
     |   DAS_OPERATOR EQUEQU  { $$ = new string("=="); }
     |   DAS_OPERATOR NOTEQU  { $$ = new string("!="); }
     |   DAS_OPERATOR LEEQU   { $$ = new string("<="); }
@@ -1422,6 +1424,12 @@ expr
     |   expr[left] ANDAND[loc] expr[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"&&", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] OROR[loc] expr[right]     { $$ = new ExprOp2(tokAt(scanner,@loc),"||", ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] XORXOR[loc] expr[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"^^", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] DOTDOT[loc] expr[right]   {
+        auto itv = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"interval");
+        itv->arguments.push_back(ExpressionPtr($left));
+        itv->arguments.push_back(ExpressionPtr($right));
+        $$ = itv;
+    }
     |   ADDADD[loc] expr[subexpr] %prec PRE_INC  { $$ = new ExprOp1(tokAt(scanner,@loc),"++", ExpressionPtr($subexpr)); }
     |   SUBSUB[loc] expr[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokAt(scanner,@loc),"--", ExpressionPtr($subexpr)); }
     |   expr[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokAt(scanner,@loc),"+++", ExpressionPtr($subexpr)); }

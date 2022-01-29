@@ -295,9 +295,11 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         // range
         ADD_RANGE_CTOR_1(range,"range");
         ADD_VEC_CTOR_2(range,"range");
+        addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int32_t,SimPolicy<range>,2>,range,int32_t,int32_t>>("interval",lib,"range",false) );
         // urange
         ADD_RANGE_CTOR_1(urange,"urange");
         ADD_VEC_CTOR_2(urange,"urange");
+        addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<urange>,2>,urange,uint32_t,uint32_t>>("interval",lib,"urange",false) );
     }
 }
 

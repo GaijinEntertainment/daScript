@@ -1,6 +1,7 @@
-require sfml
 
 [export]
 def main
-    breakpoint()
-    print("hello, world\n")
+    for x in 3..5
+        print("x = {x}\n")
+
+options log

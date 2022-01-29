@@ -407,6 +407,23 @@ void YYNEWLINE(yyscan_t yyscanner);
             return UNSIGNED_INTEGER;
         }
     }
+<normal>[0-9]+\.\.                          {
+        char * endtext = nullptr;
+        int64_t int_const = strtoll(yytext,&endtext,10);
+        if ( endtext!=(yytext+strlen(yytext)-2) ) {
+            return LEXER_ERROR;
+        } else {
+            if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
+                das_yyfatalerror(yylloc_param,yyscanner,"integer constant out of range", CompilationError::integer_constant_out_of_range);
+            }
+            yylval_param->i = int32_t(int_const);
+            unput('.');
+            YYCOLUMN(yyextra->das_yycolumn--, "UNPUT .");
+            unput('.');
+            YYCOLUMN(yyextra->das_yycolumn--, "UNPUT .");
+            return INTEGER;
+        }
+    }
 <normal>[0-9]+                          {
         char * endtext = nullptr;
         int64_t int_const = strtoll(yytext,&endtext,10);
@@ -510,6 +527,7 @@ void YYNEWLINE(yyscan_t yyscanner);
     return '{';
 }
 <normal>"\:\:"                              return COLCOL;
+<normal>"\.\."                              return DOTDOT;
 <normal>"\|\>"                              return RPIPE;
 <normal>\<\|[ \t\r]*\/\/.*\n                yyextra->das_need_oxford_comma = false; unput('\n'); return LBPIPE;
 <normal>\<\|[ \t\r]*\n                      yyextra->das_need_oxford_comma = false; unput('\n'); return LBPIPE;

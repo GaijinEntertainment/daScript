@@ -226,30 +226,31 @@ extern int das_yydebug;
     ANDANDEQU = 391,               /* "&&="  */
     OROREQU = 392,                 /* "||="  */
     XORXOREQU = 393,               /* "^^="  */
-    BRABRAB = 394,                 /* "[["  */
-    BRACBRB = 395,                 /* "[{"  */
-    CBRCBRB = 396,                 /* "{{"  */
-    INTEGER = 397,                 /* "integer constant"  */
-    LONG_INTEGER = 398,            /* "long integer constant"  */
-    UNSIGNED_INTEGER = 399,        /* "unsigned integer constant"  */
-    UNSIGNED_LONG_INTEGER = 400,   /* "unsigned long integer constant"  */
-    FLOAT = 401,                   /* "floating point constant"  */
-    DOUBLE = 402,                  /* "double constant"  */
-    NAME = 403,                    /* "name"  */
-    BEGIN_STRING = 404,            /* "start of the string"  */
-    STRING_CHARACTER = 405,        /* STRING_CHARACTER  */
-    STRING_CHARACTER_ESC = 406,    /* STRING_CHARACTER_ESC  */
-    END_STRING = 407,              /* "end of the string"  */
-    BEGIN_STRING_EXPR = 408,       /* "{"  */
-    END_STRING_EXPR = 409,         /* "}"  */
-    END_OF_READ = 410,             /* "end of failed eader macro"  */
-    UNARY_MINUS = 411,             /* UNARY_MINUS  */
-    UNARY_PLUS = 412,              /* UNARY_PLUS  */
-    PRE_INC = 413,                 /* PRE_INC  */
-    PRE_DEC = 414,                 /* PRE_DEC  */
-    POST_INC = 415,                /* POST_INC  */
-    POST_DEC = 416,                /* POST_DEC  */
-    DEREF = 417                    /* DEREF  */
+    DOTDOT = 394,                  /* ".."  */
+    BRABRAB = 395,                 /* "[["  */
+    BRACBRB = 396,                 /* "[{"  */
+    CBRCBRB = 397,                 /* "{{"  */
+    INTEGER = 398,                 /* "integer constant"  */
+    LONG_INTEGER = 399,            /* "long integer constant"  */
+    UNSIGNED_INTEGER = 400,        /* "unsigned integer constant"  */
+    UNSIGNED_LONG_INTEGER = 401,   /* "unsigned long integer constant"  */
+    FLOAT = 402,                   /* "floating point constant"  */
+    DOUBLE = 403,                  /* "double constant"  */
+    NAME = 404,                    /* "name"  */
+    BEGIN_STRING = 405,            /* "start of the string"  */
+    STRING_CHARACTER = 406,        /* STRING_CHARACTER  */
+    STRING_CHARACTER_ESC = 407,    /* STRING_CHARACTER_ESC  */
+    END_STRING = 408,              /* "end of the string"  */
+    BEGIN_STRING_EXPR = 409,       /* "{"  */
+    END_STRING_EXPR = 410,         /* "}"  */
+    END_OF_READ = 411,             /* "end of failed eader macro"  */
+    UNARY_MINUS = 412,             /* UNARY_MINUS  */
+    UNARY_PLUS = 413,              /* UNARY_PLUS  */
+    PRE_INC = 414,                 /* PRE_INC  */
+    PRE_DEC = 415,                 /* PRE_DEC  */
+    POST_INC = 416,                /* POST_INC  */
+    POST_DEC = 417,                /* POST_DEC  */
+    DEREF = 418                    /* DEREF  */
   };
   typedef enum das_yytokentype das_yytoken_kind_t;
 #endif

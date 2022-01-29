@@ -2,23 +2,23 @@ struct Foo
     a : string
 
 def operator [] ( t:Foo; cmp:string )
-    return "{t..a}-{cmp}"
+    return "{t . . a}-{cmp}"
 
 def operator ?[] ( t:Foo; cmp:string ) : string const?#
-    if cmp==t..a
+    if cmp==t . . a
         unsafe
-            return reinterpret<string const?#> addr(t..a)
+            return reinterpret<string const?#> addr(t . . a)
     else
         unsafe
             return reinterpret<string const?#> null
 
 def operator . ( t:Foo; name:string )
-    return [[Foo a="{t..a}.{name}"]]
+    return [[Foo a="{t . . a}.{name}"]]
 
 def operator ?. ( t:Foo; name:string ) : string const?#
     if name=="yes"
         unsafe
-            return reinterpret<string const?#> addr(t..a)
+            return reinterpret<string const?#> addr(t . . a)
     else
         unsafe
             return reinterpret<string const?#> null
@@ -34,7 +34,7 @@ def test
     assert(z=="hello-blah")
     assert(w=="not_blah")
     assert(W=="hello")
-    assert(EZ..a=="hello.fooBar")
+    assert(EZ . . a=="hello.fooBar")
     assert(HARD_YES=="hello")
     assert(HARD_NO=="hard no")
     return true
