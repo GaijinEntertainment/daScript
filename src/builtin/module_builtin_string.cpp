@@ -235,14 +235,14 @@ namespace das
         const uint32_t strLen = stringLengthSafe(*context, str);
         if (strLen == 0)
         {
-            context->throw_error("string-to-float conversion failed. String is not an float number");
+            context->throw_error("string-to-float conversion failed. String is not a float number");
             return 0.f;
         }
         char *endptr;
         float ret = strtof(str, &endptr);
         if (endptr == str)
         {
-            context->throw_error("string-to-float conversion failed. String is not an float number");
+            context->throw_error("string-to-float conversion failed. String is not a float number");
             return 0.f;
         }
         return ret;
@@ -252,14 +252,14 @@ namespace das
         const uint32_t strLen = stringLengthSafe(*context, str);
         if (strLen == 0)
         {
-            context->throw_error("string-to-float conversion failed. String is not an double number");
+            context->throw_error("string-to-float conversion failed. String is not a double number");
             return 0.0;
         }
         char *endptr;
         double ret = strtod(str, &endptr);
         if (endptr == str)
         {
-            context->throw_error("string-to-dobule conversion failed. String is not an double number");
+            context->throw_error("string-to-dobule conversion failed. String is not a double number");
             return 0.0;
         }
         return ret;

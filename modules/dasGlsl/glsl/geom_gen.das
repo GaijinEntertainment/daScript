@@ -5,6 +5,8 @@ options no_unused_function_arguments = false
 module geom_gen public
 
 require daslib/safe_addr
+require daslib/strings_boost
+require fio
 require math
 
 struct GeometryPreviewVertex
@@ -225,3 +227,82 @@ def gen_image_checkerboard(w,h:int; c1,c2:uint)
             surface.pixels[y*w+x] = ((x^y)&1)!=0 ? c1 : c2
     return <- surface
 
+def private s_to_int ( s : string )
+    return empty(s) ? -1 : int(s)
+
+def private split_sptn ( sptn:string ) : tuple<p:int;t:int;n:int>
+    var s : string
+    var ptn : array<string>
+    for ch in sptn
+        if ch=='/'
+            ptn |> push(s)
+            s = ""
+        else
+            s += to_char(ch)
+    if !empty(s)
+        ptn |> push(s)
+    if length(ptn)==1
+        return [[auto s_to_int(ptn[0]),-1,-1]]
+    else
+        return [[auto s_to_int(ptn[0]), s_to_int(ptn[1]), s_to_int(ptn[2])]]
+
+def load_obj_mesh ( fname:string )
+    var frag : GeometryFragment
+    frag.prim = GeometryFragmentType triangles
+    var v : array<float3>
+    var vt : array<float2>
+    var vn : array<float3>
+    var uvtx : table<string; int>
+    fopen(fname,"rb") <| $ ( f )
+        while !feof(f)
+            let st = strip(fgets(f))
+            if st |> starts_with("#")
+                continue
+            elif st |> starts_with("v ")
+                var xyz <- st |> split(" ")
+                v |> push(float3(float(xyz[1]),float(xyz[2]),float(xyz[3])))
+                delete xyz
+            elif st |> starts_with("vt ")
+                var xy <- st |> split(" ")
+                vt |> push(float2(float(xy[1]),float(xy[2])))
+                delete xy
+            elif st |> starts_with("vn ")
+                var xyz <- st |> split(" ")
+                vn |> push(float3(float(xyz[1]),float(xyz[2]),float(xyz[3])))
+                delete xyz
+            elif st |> starts_with("f ")
+                var f012 <- st |> split(" ")
+                var v012 <- [{for v in range(1,length(f012)); split_sptn(f012[v])}]
+                var i012 : array<int>
+                for pvi in v012
+                    var vtx = [[GeometryPreviewVertex
+                        xyz = pvi.p==-1 ? float3() : v[pvi.p-1],
+                        normal = pvi.n==-1 ? float3(1,0,0) : vn[pvi.n-1],
+                        uv = pvi.t==-1 ? float2() : vt[pvi.t-1]
+                    ]]
+                    let svtx = "{vtx}"
+                    if uvtx |> key_exists(svtx)
+                        i012 |> push(uvtx[svtx])
+                    else
+                        let i = frag.vertices |> length
+                        uvtx[svtx] = i
+                        i012 |> push(i)
+                        frag.vertices |> push(vtx)
+                let li = length(i012)
+                if li==3
+                    frag.indices |> push(i012[0])
+                    frag.indices |> push(i012[1])
+                    frag.indices |> push(i012[2])
+                elif li==4
+                    frag.indices |> push(i012[0])
+                    frag.indices |> push(i012[1])
+                    frag.indices |> push(i012[2])
+                    frag.indices |> push(i012[0])
+                    frag.indices |> push(i012[2])
+                    frag.indices |> push(i012[3])
+                else
+                    to_log(LOG_ERROR,"invaid face `{st}`\n")
+                delete i012
+                delete v012
+                delete f012
+    return <- frag
