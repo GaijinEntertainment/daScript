@@ -3745,6 +3745,13 @@ namespace das {
                     expr->type->constant |= seT->constant;
                 }
             } else {
+                if ( ixT->isRange() && (seT->isGoodArrayType() || seT->dim.size()) ) {  // a[range(b)] into subset(a,range(b))
+                    auto subset = make_smart<ExprCall>(expr->at, "subarray");
+                    subset->arguments.push_back(expr->subexpr->clone());
+                    subset->arguments.push_back(expr->index->clone());
+                    reportAstChanged();
+                    return subset;
+                }
                 if ( !ixT->isIndex() ) {
                     expr->type.reset();
                     error("index must be int or uint, not " + describeType(ixT),  "", "",

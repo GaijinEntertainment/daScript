@@ -70,6 +70,24 @@ def push(var Arr:array<auto(numT)>;value:numT const)
     else
         concept_assert(false,"can't push value, which can't be copied")
 
+def push(var Arr:array<auto(numT)>; varr:array<numT>)
+    static_if typeinfo(can_copy type<numT>)
+        static_if typeinfo(need_lock_check type<numT>)
+            _builtin_verify_locks(Arr)
+        for t in varr
+            Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] = t
+    else
+        concept_assert(false,"can't push value, which can't be copied")
+
+def push(var Arr:array<auto(numT)>; varr:numT[])
+    static_if typeinfo(can_copy type<numT>)
+        static_if typeinfo(need_lock_check type<numT>)
+            _builtin_verify_locks(Arr)
+        for t in varr
+            Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] = t
+    else
+        concept_assert(false,"can't push value, which can't be copied")
+
 def emplace(var Arr:array<auto(numT)>;var value:numT;at:int)
     static_if typeinfo(can_move value)
         static_if typeinfo(need_lock_check type<numT>)
@@ -613,3 +631,47 @@ def swap ( var a,b:auto(TT)& )
     var t : TT - & <- a
     a <- b
     b <- t
+
+def subarray ( a:auto(TT)[]; r:range )
+    static_if typeinfo(can_copy type<TT>)
+        var ra : array<TT-const-&>
+        if r.x < r.y
+            ra |> reserve(r.y-r.x)
+            for t in r
+                ra |> push(a[t])
+        return <- ra
+    else
+        concept_assert(false,"can't get subarray of non-copyable type")
+
+def subarray ( a:auto(TT)[]; r:urange )
+    static_if typeinfo(can_copy type<TT>)
+        var ra : array<TT-const-&>
+        if r.x < r.y
+            ra |> reserve(int(r.y-r.x))
+            for t in r
+                ra |> push(a[t])
+        return <- ra
+    else
+        concept_assert(false,"can't get subarray of non-copyable type")
+
+def subarray ( a:array<auto(TT)>; r:range )
+    static_if typeinfo(can_copy type<TT>)
+        var ra : array<TT-const-&>
+        if r.x < r.y
+            ra |> reserve(r.y-r.x)
+            for t in r
+                ra |> push(a[t])
+        return <- ra
+    else
+        concept_assert(false,"can't get subarray of non-copyable type")
+
+def subarray ( a:array<auto(TT)>; r:urange )
+    static_if typeinfo(can_copy type<TT>)
+        var ra : array<TT-const-&>
+        if r.x < r.y
+            ra |> reserve(int(r.y-r.x))
+            for t in r
+                ra |> push(a[t])
+        return <- ra
+    else
+        concept_assert(false,"can't get subarray of non-copyable type")
