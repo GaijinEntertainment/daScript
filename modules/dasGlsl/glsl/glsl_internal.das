@@ -219,6 +219,7 @@ let private glsl_functions <- {{
     "uint_bits_to_float" => "uintBitsToFloat";
     "float_bits_to_int" => "floatBitsToInt";
     "float_bits_to_uint" => "floatBitsToUint";
+    "discard"   =>  "_discard";
     "_"         =>  "_"
 }}
 
@@ -435,6 +436,8 @@ class GlslExport : AstVisitor
         if caps.write_version
             *writer |> write("#version {version} core\n\n")
         // TODO: only output builtin functions which are necessary
+        if version>=400
+            *writer |> write("void _discard ( ) \{ discard; \}\n")
         *writer |> write("ivec2 range ( int r ) \{ return ivec2(0,r); \}\n")
         *writer |> write("ivec2 range ( int f, int t ) \{ return ivec2(f,t); \}\n")
         *writer |> write("float SATURATE ( float a ) \{ return clamp(a,0.,1.); \}\n")

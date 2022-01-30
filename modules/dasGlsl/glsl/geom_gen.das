@@ -16,6 +16,7 @@ struct GeometryPreviewVertex
 
 enum GeometryFragmentType
     none
+    points
     triangles
 
 struct GeometryFragment
@@ -225,6 +226,19 @@ def gen_image_checkerboard(w,h:int; c1,c2:uint)
     for y in range(h)
         for x in range(w)
             surface.pixels[y*w+x] = ((x^y)&1)!=0 ? c1 : c2
+    return <- surface
+
+def gen_image_point(w:int; c:uint)
+    var surface <- [[ImageSurface width=w, height=w]]
+    surface.pixels |> resize(w*w)
+    let rad = float(w) / 2.
+    for y in range(w)
+        let dy = (float(y) - rad) / rad
+        for x in range(w)
+            let dx = (float(x) - rad) / rad
+            let r = sqrt(dx*dx + dy*dy)
+            let a = saturate(1.0 - r)
+            surface.pixels[y*w+x] = (c & 0x00ffffff) | (uint(a * 255.) << 24u)
     return <- surface
 
 def private s_to_int ( s : string )

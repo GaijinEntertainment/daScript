@@ -86,6 +86,10 @@ def dFdy ( val:float4 )
     assert(false,"we should not be here\n")
     return val
 
+[sideeffects]
+def discard
+    assert(false,"we should not be here\n")
+
 var gl_NumWorkGroups : uint3        // global work group size we gave to glDispatchCompute()
 var gl_WorkGroupSize : uint3        // local work group size we defined with layout
 var gl_WorkGroupID : uint3          // position of current invocation in global work group
@@ -95,6 +99,8 @@ var gl_LocalInvocationIndex	: uint  // 1d index representation of gl_LocalInvoca
 
 var gl_Position : float4
 var gl_FragColor : float4
+var gl_PointSize : float
+var gl_PointCoord : float2
 
 def operator := ( var image:image2D; sampler:sampler2D )
     image.texture2D = sampler.texture2D

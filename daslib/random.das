@@ -7,6 +7,7 @@ module random shared
 require math
 
 let LCG_RAND_MAX = 32767
+let LCG_RAND_MAX_BIG = 32768*32768-1
 let LCG_IRAND_MAX_FLT = 1.0f / float(LCG_RAND_MAX)
 
 def random_seed ( seed:int )
@@ -20,6 +21,11 @@ def random_seed2D(var seed:int4&; co:int2; cf:int=0)
 def random_int ( var seed:int4& )
     seed.x = 214013*seed.x+2531011
     return int((seed.x>>16) & LCG_RAND_MAX)
+
+def random_big_int ( var seed:int4& )
+    seed = int4(214013)*seed+int4(2531011)
+    let i12 = (seed.xy>>16) & int2(LCG_RAND_MAX)
+    return i12.x + i12.y*32768
 
 def random_int4 ( var seed:int4& )
     seed = int4(214013)*seed+int4(2531011)
