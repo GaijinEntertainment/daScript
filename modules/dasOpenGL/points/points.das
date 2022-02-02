@@ -98,6 +98,8 @@ def gen_point_cloud ( frag : GeometryFragment; numpoints : int )
         ]]
         cloud.vertices |> push(vtx)
     delete dens
+    cloud.bmin = frag.bmin
+    cloud.bmax = frag.bmax
     return <- cloud
 
 [export]
@@ -185,7 +187,8 @@ def main
         f_tex := checkerboard_texture
         f_ptex := point_sprite_texture
         glUseProgram(program)
-        v_model = compose(float4(0,0,0,0), rot, float4(1.0))
+        let center = (gmesh.bmax + gmesh.bmin) * 0.5
+        v_model = compose(float4(-center.x,-center.y,-center.z,0.), rot, float4(1.0))
         vs_preview_bind_uniform(program)
         fs_preview_bind_uniform(program)
         draw_geometry_fragment(mesh)

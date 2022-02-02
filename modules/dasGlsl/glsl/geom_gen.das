@@ -23,6 +23,7 @@ struct GeometryFragment
     vertices : array<GeometryPreviewVertex>
     indices : array<int>
     prim : GeometryFragmentType
+    bmin, bmax : float3
 
 struct ImageSurface
     width, height : int
@@ -41,6 +42,15 @@ def private get_uv ( xyz:float3; uv:float2; cube:bool )
         return UV*0.5 + float2(0.5)
     else
         return uv
+
+def gen_bbox ( var frag:GeometryFragment )
+    var bmin = float3(FLT_MAX)
+    var bmax = float3(FLT_MIN)
+    for v in frag.vertices
+        bmin = min(bmin, v.xyz)
+        bmax = max(bmax, v.xyz)
+    frag.bmin = bmin
+    frag.bmax = bmax
 
 def gen_sphere ( sectorCount,stackCount:int; cubeUV : bool )
     var frag : GeometryFragment
@@ -78,6 +88,7 @@ def gen_sphere ( sectorCount,stackCount:int; cubeUV : bool )
             ++k1
             ++k2
     frag.prim = GeometryFragmentType triangles
+    gen_bbox(frag)
     return <- frag
 
 enum GenDirection
@@ -110,6 +121,7 @@ def gen_plane ( plt : GenDirection )
     apply_gen_direction_tm(plt, frag)
     frag.indices <- [{int 0; 1; 2; 2; 3; 0 }]
     frag.prim = GeometryFragmentType triangles
+    gen_bbox(frag)
     return <- frag
 
 def private get_unit_circle_veritces ( sectorCount:int )
@@ -173,6 +185,7 @@ def gen_cylinder(plt:GenDirection; sectorCount:int)
         frag.indices |> push(k)
     delete unitVertices
     frag.prim = GeometryFragmentType triangles
+    gen_bbox(frag)
     return <- frag
 
 def gen_cube
@@ -218,6 +231,7 @@ def gen_cube
         16;17;18;  18;19;16;      // bottom
         20;21;22;  22;23;20 }]    // back
     frag.prim = GeometryFragmentType triangles
+    gen_bbox(frag)
     return <- frag
 
 def gen_image_checkerboard(w,h:int; c1,c2:uint)
@@ -319,4 +333,5 @@ def load_obj_mesh ( fname:string )
                 delete i012
                 delete v012
                 delete f012
+    gen_bbox(frag)
     return <- frag

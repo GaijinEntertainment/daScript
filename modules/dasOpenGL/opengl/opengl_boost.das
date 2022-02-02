@@ -53,6 +53,10 @@ def bind_sampler_2d ( unit:int; tex:uint )
     glActiveTexture(GL_TEXTURE0 + uint(unit))
     glBindTexture(GL_TEXTURE_2D, tex)
 
+def bind_sampler_3d ( unit:int; tex:uint )
+    glActiveTexture(GL_TEXTURE0 + uint(unit))
+    glBindTexture(GL_TEXTURE_3D, tex)
+
 def bind_image_2d ( unit:int; tex:uint; format:uint; access:uint=GL_READ_WRITE )
     glBindImageTexture(uint(unit), tex, 0, false, 0, access, format)
 

@@ -4,6 +4,9 @@ options no_unused_function_arguments = false
 
 module glsl_common shared public
 
+struct sampler3D
+    texture3D : uint
+
 struct sampler2D
     texture2D : uint
 
@@ -11,6 +14,10 @@ struct image2D
     texture2D : uint
 
 def texture(sampler:sampler2D;uv:float2)
+    assert(false,"we should not be here\n")
+    return float4(0.)
+
+def texture(sampler:sampler3D;uv:float3)
     assert(false,"we should not be here\n")
     return float4(0.)
 
@@ -113,3 +120,18 @@ def operator := ( var image:image2D; sampler:uint )
 
 def operator := ( var sampler:sampler2D; image:uint )
     sampler.texture2D = image
+
+def operator := ( var sampler:sampler3D; image:uint )
+    sampler.texture3D = image
+
+def fract ( x:float )
+    return x % 1.0
+
+def fract ( x:float2 )
+    return float2(x.x % 1.0, x.y % 1.0)
+
+def fract ( x:float3 )
+    return float3(x.x % 1.0, x.y % 1.0, x.z % 1.0)
+
+def fract ( x:float4 )
+    return float4(x.x % 1.0, x.y % 1.0, x.z % 1.0, x.w % 1.0)

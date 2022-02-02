@@ -71,6 +71,25 @@ def private generate_bind_uniform(fnMain:FunctionPtr; var fn:FunctionPtr)
                     cll_uni.arguments |> emplace(cll_gul)
                     cll_uni.arguments |> emplace_new() <| new [[ExprConstInt() at=vv.at, value=binding]]
                     blk.list |>emplace(cll_uni)
+                elif is_glsl_structure(vv,"sampler3D")
+                    // bind_sampler_2d(binding, varName.texture2D)
+                    var binding = find_arg("stage", vv.annotation) ?as tInt ?? 0
+                    var vtex <- new [[ExprField() at=vv.at,
+                        value <- new [[ExprVar() at=vv.at, name:=vv.name]],
+                        name := "texture3D"
+                    ]]
+                    var cll_bind <- new [[ExprCall() at=vv.at, name:="bind_sampler_3d"]]
+                    cll_bind.arguments |> emplace_new() <| new [[ExprConstInt() at=vv.at, value=binding]]
+                    cll_bind.arguments |> emplace(vtex)
+                    blk.list |>emplace(cll_bind)
+                    // glUniformAny(gl_GetUniformLocation("varName"),binding)
+                    var cll_gul <- new [[ExprCall() at=vv.at, name:="glGetUniformLocation"]]
+                    cll_gul.arguments |> emplace_new() <| new [[ExprVar() at=vv.at, name:="__program"]]
+                    cll_gul.arguments |> emplace_new() <| new [[ExprConstString() at=vv.at, value:=vv.name]]
+                    var cll_uni <- new [[ExprCall() at=vv.at, name:="glUniformAny"]]
+                    cll_uni.arguments |> emplace(cll_gul)
+                    cll_uni.arguments |> emplace_new() <| new [[ExprConstInt() at=vv.at, value=binding]]
+                    blk.list |>emplace(cll_uni)
                 elif is_glsl_structure(vv,"image2D")
                     // bind_sampler_2d(binding, varName.texture2D, format, access)
                     var binding = find_arg("stage", vv.annotation) ?as tInt ?? 0
