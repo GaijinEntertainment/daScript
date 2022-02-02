@@ -6,30 +6,57 @@ require daslib/math_boost
 
 require daslib/safe_addr
 
+require sdf
+
+let AA = 1
+
 var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_texcoord : float2
 var [[inout]] f_texcoord : float2
 var [[out]] f_FragColor : float4
-
 var [[uniform]] f_Camera2World : float4x4
 var [[uniform]] f_CameraNearFar : float2
+var [[uniform]] f_PixelSize : float2
 
 [vertex_program]
 def vs_main
     f_texcoord = v_texcoord
     gl_Position = float4(v_position, 0.0, 1.0)
 
-def sdPlane ( p:float3 )
-    return p.y
-
-def sdBox ( p,b:float3 )
-    let d = abs(p) - b
-    return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,float3(0.0)))
+def opU ( d1,d2:float )
+	return min(d1,d2)
 
 def map ( pos:float3 )
-    let qos = float3 ( fract(pos.x+0.5)-0.5, pos.yz )
-    return min( sdPlane(     pos.xyz-float3( 0.0,0.00, 0.0)),
-                sdBox(       qos.xyz-float3( 0.0,0.25, 0.0), float3(0.2,0.5,0.2) ) )
+    var res = 1e10
+    res = sdPlane(pos.xyz-float3( 0.0,0.00, 0.0))
+    // res = opU ( res, sdBox(pos.xyz-float3(0.0,0.25,0.0),float3(0.2,0.5,0.2)) )
+    res = opU ( res, sdSphere(pos-float3(-2.0,0.25, 0.0),0.25) )
+    if sdBox( pos-float3(0.0,0.3,-1.0),float3(0.35,0.3,2.5) ) < res
+        res = opU( res, sdBoundingBox( pos-float3( 0.0,0.25, 0.0), float3(0.3,0.25,0.2), 0.025 ) )
+        res = opU( res, sdTorus(      (pos-float3( 0.0,0.30, 1.0)).xzy, float2(0.25,0.05) ) )
+        res = opU( res, sdCone(        pos-float3( 0.0,0.45,-1.0), float2(0.6,0.8),0.45 ) )
+        res = opU( res, sdCappedCone(  pos-float3( 0.0,0.25,-2.0), 0.25, 0.25, 0.1 ) )
+        res = opU( res, sdSolidAngle(  pos-float3( 0.0,0.00,-3.0), float2(3,4)/5.0, 0.4 ) )
+    if sdBox( pos-float3(1.0,0.3,-1.0),float3(0.35,0.3,2.5) )<res
+        res = opU( res, sdCappedTorus((pos-float3( 1.0,0.30, 1.0))*float3(1,-1,1), float2(0.866025,-0.5), 0.25, 0.05) )
+        res = opU( res, sdBox(         pos-float3( 1.0,0.25, 0.0), float3(0.3,0.25,0.1) ) )
+        res = opU( res, sdCapsule(     pos-float3( 1.0,0.00,-1.0),float3(-0.1,0.1,-0.1), float3(0.2,0.4,0.2), 0.1  ) )
+        res = opU( res, sdCylinder(    pos-float3( 1.0,0.25,-2.0), float2(0.15,0.25) ) )
+        res = opU( res, sdHexPrism(    pos-float3( 1.0,0.2,-3.0), float2(0.2,0.05) ) )
+    if sdBox( pos-float3(-1.0,0.35,-1.0),float3(0.35,0.35,2.5))<res
+        res = opU( res, sdPyramid(    pos-float3(-1.0,-0.6,-3.0), 1.0 ) )
+        res = opU( res, sdOctahedron( pos-float3(-1.0,0.15,-2.0), 0.35 ) )
+        res = opU( res, sdTriPrism(   pos-float3(-1.0,0.15,-1.0), float2(0.3,0.05) ) )
+        // res = opU( res, sdEllipsoid(  pos-float3(-1.0,0.25, 0.0), float3(0.2, 0.25, 0.05) ) )
+        res = opU( res, sdRhombus(   (pos-float3(-1.0,0.34, 1.0)).xzy, 0.15, 0.25, 0.04, 0.08 ) )
+    if sdBox( pos-float3(2.0,0.3,-1.0),float3(0.35,0.3,2.5) )<res
+        res = opU( res, sdOctogonPrism(pos-float3( 2.0,0.2,-3.0), 0.2, 0.05) )
+        res = opU( res, sdCylinder(    pos-float3( 2.0,0.15,-2.0), float3(0.1,-0.1,0.0), float3(-0.2,0.35,0.1), 0.08) )
+        res = opU( res, sdCappedCone(  pos-float3( 2.0,0.10,-1.0), float3(0.1,0.0,0.0), float3(-0.2,0.40,0.1), 0.15, 0.05) )
+        res = opU( res, sdRoundCone(   pos-float3( 2.0,0.15, 0.0), float3(0.1,0.0,0.0), float3(-0.1,0.35,0.1), 0.15, 0.05) )
+        res = opU( res, sdRoundCone(   pos-float3( 2.0,0.20, 1.0), 0.2, 0.1, 0.3 ) )
+    return res
+
 
 def calcSoftshadow ( ro,rd:float3; mint,tmax:float; tech:int )
     var res = 1.0
@@ -71,7 +98,6 @@ def castRay ( ro,rd:float3 )
             tmin = max(tmin, tp2)
         else
             tmax = min(tmax, tp2)
-
     var t = tmin
     for i in 0..64
         let precis = 0.0005*t
@@ -123,18 +149,32 @@ def setCamera ( ro,ta:float3; cr:float )
     res[2] = cw
     return res
 
+
 [fragment_program]
 def fs_main
     let tech = 1
     let near = f_CameraNearFar.x
     let far = f_CameraNearFar.y
-    let p = f_texcoord * 2.0 - float2(1.0)
-    let pos = float2(p.x,-p.y)
-    let ro = (f_Camera2World * float4(pos, -1.0, 1.0) * near).xyz
-    let pd = (f_Camera2World * float4(pos * (far - near), far + near, far - near)).xyz
-    let rd = normalize(pd - ro)
-    var col = render(ro,rd,tech)
-    col = pow(col, float3(0.4545))
+    var col = float3(0.0)
+    if AA>1
+        for m in range(AA)
+            for n in range(AA)
+                let p = f_texcoord * 2.0 - float2(1.0)
+                let pos = float2(p.x,-p.y) + float2(m-AA/2,n-AA/2) * ( f_PixelSize / float(AA) )
+                let ro = (f_Camera2World * float4(pos, -1.0, 1.0) * near).xyz
+                let pd = (f_Camera2World * float4(pos * (far - near), far + near, far - near)).xyz
+                let rd = normalize(pd - ro)
+                let ccol = render(ro,rd,tech)
+                col += pow(ccol, float3(0.4545))
+        col /= float(AA*AA)
+    else
+        let p = f_texcoord * 2.0 - float2(1.0)
+        let pos = float2(p.x,-p.y)
+        let ro = (f_Camera2World * float4(pos, -1.0, 1.0) * near).xyz
+        let pd = (f_Camera2World * float4(pos * (far - near), far + near, far - near)).xyz
+        let rd = normalize(pd - ro)
+        col = render(ro,rd,tech)
+        col = pow(col, float3(0.4545))
     f_FragColor.xyz = col
     f_FragColor.w = 1.
 
@@ -245,6 +285,7 @@ def main
         glDepthFunc(GL_LEQUAL)
         glUseProgram(program)
         f_CameraNearFar = float2(0.05f,50.0f)
+        f_PixelSize = float2(1.) / float2(display_w, display_h)
         let v_view = camera_rotation(camera_rotation_xy) * compose(float4(-camera_position,1.), float4(0), float4(1.))
         let v_projection = perspective_rh_opengl( 45.0f*PI/180., aspect, f_CameraNearFar.x, f_CameraNearFar.y )
         f_Camera2World = inverse(v_projection * v_view)
