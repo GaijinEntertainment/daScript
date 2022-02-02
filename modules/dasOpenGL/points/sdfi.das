@@ -8,12 +8,9 @@ require daslib/safe_addr
 
 var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_texcoord : float2
-var [[inout]] f_color : float3
 var [[inout]] f_texcoord : float2
-var [[uniform]] f_tex : sampler2D
 var [[out]] f_FragColor : float4
 
-var [[uniform]] f_CameraPosition : float3
 var [[uniform]] f_Camera2World : float4x4
 var [[uniform]] f_CameraNearFar : float2
 
@@ -126,22 +123,16 @@ def setCamera ( ro,ta:float3; cr:float )
     res[2] = cw
     return res
 
-let iTime = 0.
-let iResolution = float2(1280.0,720.0)
-
 [fragment_program]
 def fs_main
-
     let tech = 1
     let near = f_CameraNearFar.x
     let far = f_CameraNearFar.y
-
     let p = f_texcoord * 2.0 - float2(1.0)
     let pos = float2(p.x,-p.y)
     let ro = (f_Camera2World * float4(pos, -1.0, 1.0) * near).xyz
     let pd = (f_Camera2World * float4(pos * (far - near), far + near, far - near)).xyz
     let rd = normalize(pd - ro)
-
     var col = render(ro,rd,tech)
     col = pow(col, float3(0.4545))
     f_FragColor.xyz = col
@@ -151,7 +142,6 @@ var program : uint
 var vao : uint
 var vbo : uint
 var ebo : uint
-var texture : uint
 
 [vertex_buffer]
 struct Vertex
@@ -181,9 +171,12 @@ def create_gl_objects
     glGenBuffers(1, safe_addr(ebo))
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW)
-    // texture
-    texture = load_image_from_file("{get_das_root()}/modules/dasOpenGL/examples/image.png")
 
+def camera_rotation ( camera_rotation_xy:float2 )
+    let rot_x = un_quat_from_unit_vec_ang(normalize(float3(1.,0.,0.)), camera_rotation_xy.x*PI/180.)
+    let rot_y = un_quat_from_unit_vec_ang(normalize(float3(0.,1.,0.)), camera_rotation_xy.y*PI/180.)
+    let rot = quat_mul(rot_x,rot_y)
+    return <- compose(float4(0,0,0,1), rot, float4(1.))
 
 [export]
 def main
@@ -199,16 +192,51 @@ def main
         glfwDestroyWindow(window)
     glfwMakeContextCurrent(window)
     create_gl_objects()
-
-    include camera.das
+    var camera_position = float3(0,3,15)
+    var camera_rotation_xy = float2(0,0)
+    var cursor_position_xy = glfwGetCursorPos(window)
+    var cursor_enabled = false
+    unsafe
+        glfwSetKeyCallback(window) <| @ [[&camera_position,&camera_rotation_xy]] ( w, kk, sc, act, mod )
+            var y = 0.
+            if sc==17       //w
+                y = 1.
+            elif sc==31     //s
+                y = -1.
+            if y != 0.
+                let v_cam = inverse(camera_rotation(camera_rotation_xy))
+                camera_position -= v_cam[2].xyz * float(y)
+        glfwSetScrollCallback(window) <| @ [[&camera_position,&camera_rotation_xy]] ( w, x, y )
+            let v_cam = inverse(camera_rotation(camera_rotation_xy))
+            camera_position -= v_cam[2].xyz * float(y)
+        glfwSetCursorPosCallback(window) <| @ [[&cursor_position_xy,&cursor_enabled,&camera_rotation_xy]] ( w, x, y )
+            if cursor_enabled
+                let cxy = glfwGetCursorPos(window)
+                let dxy = cxy - cursor_position_xy
+                var display_w, display_h : int
+                glfwGetFramebufferSize(window, display_w, display_h)
+                camera_rotation_xy += float2(dxy.y, dxy.x)
+                cursor_position_xy = float2(display_w/2, display_h/2)
+                glfwSetCursorPos(window, double(cursor_position_xy.x), double(cursor_position_xy.y))
+        glfwSetMouseButtonCallback(window) <| @ [[&cursor_enabled,&cursor_position_xy]] ( w, b, a, m )
+            if b==int(GLFW_MOUSE_BUTTON_1)
+                cursor_enabled = a==int(GLFW_PRESS)
+                if cursor_enabled
+                    glfwSetInputMode(window, int(GLFW_CURSOR), int(GLFW_CURSOR_HIDDEN))
+                    glfwSetInputMode(window, int(GLFW_RAW_MOUSE_MOTION), int(GLFW_TRUE))
+                    var display_w, display_h : int
+                    glfwGetFramebufferSize(window, display_w, display_h)
+                    cursor_position_xy = float2(display_w/2, display_h/2)
+                    glfwSetCursorPos(window, double(cursor_position_xy.x), double(cursor_position_xy.y))
+                else
+                    glfwSetInputMode(window, int(GLFW_CURSOR), int(GLFW_CURSOR_NORMAL))
+                    glfwSetInputMode(window, int(GLFW_RAW_MOUSE_MOTION), int(GLFW_FALSE))
 
     while glfwWindowShouldClose(window)==0
         glfwPollEvents()
         var display_w, display_h : int
         glfwGetFramebufferSize(window, display_w, display_h)
         let aspect = display_h!=0 ? float(display_w)/float(display_h) : 1.
-
-        // render
         glViewport(0, 0, display_w, display_h)
         glClearColor(0.2, 0.2, 0.2, 1.0)
         glClearDepth(1.0lf)
@@ -216,22 +244,14 @@ def main
         glEnable(GL_DEPTH_TEST)
         glDepthFunc(GL_LEQUAL)
         glUseProgram(program)
-
-        f_tex := texture
         f_CameraNearFar = float2(0.05f,50.0f)
-        f_CameraPosition = float3(0.,camera_position_y+camera_distance*0.5,camera_distance)
-        let v_view = look_at_rh(f_CameraPosition,float3(0,0,0),float3(0,1,0))
-        let rot = un_quat_from_unit_vec_ang(normalize(float3(0.,1.,0.)), camera_rotation*PI/180.)
-        let v_rot = compose(float4(0,0,0,1),rot,float4(1,1,1,1))
+        let v_view = camera_rotation(camera_rotation_xy) * compose(float4(-camera_position,1.), float4(0), float4(1.))
         let v_projection = perspective_rh_opengl( 45.0f*PI/180., aspect, f_CameraNearFar.x, f_CameraNearFar.y )
-        f_Camera2World = inverse(v_projection * v_view * v_rot)
-
+        f_Camera2World = inverse(v_projection * v_view)
         vs_main_bind_uniform(program)
         fs_main_bind_uniform(program)
         glBindVertexArray(vao)
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
-
-        // swap buffersa
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
