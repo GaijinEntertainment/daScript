@@ -7,16 +7,18 @@ require daslib/math_boost
 require daslib/safe_addr
 
 var [[in, location=0]] v_position : float2
-var [[in, location=1]] v_color : float3
-var [[in, location=2]] v_texcoord : float2
+var [[in, location=1]] v_texcoord : float2
 var [[inout]] f_color : float3
 var [[inout]] f_texcoord : float2
 var [[uniform]] f_tex : sampler2D
 var [[out]] f_FragColor : float4
 
+var [[uniform]] f_CameraPosition : float3
+var [[uniform]] f_Camera2World : float4x4
+var [[uniform]] f_CameraNearFar : float2
+
 [vertex_program]
 def vs_main
-    f_color = v_color
     f_texcoord = v_texcoord
     gl_Position = float4(v_position, 0.0, 1.0)
 
@@ -59,8 +61,8 @@ def calcNormal ( pos:float3 )
 					  e.xxx*map( pos + e.xxx ) )
 
 def castRay ( ro,rd:float3 )
-    var tmin = 1.0
-    var tmax = 20.0
+    var tmin = 0.05
+    var tmax = 25.0
 
     // bounding volume (optional)
     let tp1 = (0.0-ro.y)/rd.y
@@ -129,13 +131,17 @@ let iResolution = float2(1280.0,720.0)
 
 [fragment_program]
 def fs_main
-    let an = 12.0 - sin(0.1*iTime)
-    let ro = float3( 3.0*cos(0.1*an), 1.0, -3.0*sin(0.1*an) )
-    let ta = float3( 0.0, -0.4, 0.0 )
-    let ca = setCamera(ro, ta, 0.0)
+
     let tech = 1
+    let near = f_CameraNearFar.x
+    let far = f_CameraNearFar.y
+
     let p = f_texcoord * 2.0 - float2(1.0)
-    let rd = ca * normalize(float3(p.x,-p.y,2.0))
+    let pos = float2(p.x,-p.y)
+    let ro = (f_Camera2World * float4(pos, -1.0, 1.0) * near).xyz
+    let pd = (f_Camera2World * float4(pos * (far - near), far + near, far - near)).xyz
+    let rd = normalize(pd - ro)
+
     var col = render(ro,rd,tech)
     col = pow(col, float3(0.4545))
     f_FragColor.xyz = col
@@ -150,14 +156,13 @@ var texture : uint
 [vertex_buffer]
 struct Vertex
     xy  : float2
-    rgb : float3
     uv  : float2
 
 let vertices = [[Vertex
-    xy=float2(-1.0, 1.0), rgb=float3(0.0,0.0,0.0), uv=float2(0.0,0.0);
-    xy=float2( 1.0, 1.0), rgb=float3(1.0,1.0,0.0), uv=float2(1.0,0.0);
-    xy=float2( 1.0,-1.0), rgb=float3(1.0,0.0,0.0), uv=float2(1.0,1.0);
-    xy=float2(-1.0,-1.0), rgb=float3(1.0,1.0,0.0), uv=float2(0.0,1.0)
+    xy=float2(-1.0, 1.0), uv=float2(0.0,0.0);
+    xy=float2( 1.0, 1.0), uv=float2(1.0,0.0);
+    xy=float2( 1.0,-1.0), uv=float2(1.0,1.0);
+    xy=float2(-1.0,-1.0), uv=float2(0.0,1.0)
 ]]
 
 let indices = [[int 0; 1; 2; 2; 3; 0]]
@@ -179,11 +184,9 @@ def create_gl_objects
     // texture
     texture = load_image_from_file("{get_das_root()}/modules/dasOpenGL/examples/image.png")
 
+
 [export]
 def main
-
-    print("{fract(float3(1.2,-2.3,3.4))}\n")
-
     if glfwInit()==0
 		panic("can't init glfw")
     defer <|
@@ -196,10 +199,15 @@ def main
         glfwDestroyWindow(window)
     glfwMakeContextCurrent(window)
     create_gl_objects()
+
+    include camera.das
+
     while glfwWindowShouldClose(window)==0
         glfwPollEvents()
         var display_w, display_h : int
         glfwGetFramebufferSize(window, display_w, display_h)
+        let aspect = display_h!=0 ? float(display_w)/float(display_h) : 1.
+
         // render
         glViewport(0, 0, display_w, display_h)
         glClearColor(0.2, 0.2, 0.2, 1.0)
@@ -208,12 +216,22 @@ def main
         glEnable(GL_DEPTH_TEST)
         glDepthFunc(GL_LEQUAL)
         glUseProgram(program)
-        f_tex := texture           // bind texture
+
+        f_tex := texture
+        f_CameraNearFar = float2(0.05f,50.0f)
+        f_CameraPosition = float3(0.,camera_position_y+camera_distance*0.5,camera_distance)
+        let v_view = look_at_rh(f_CameraPosition,float3(0,0,0),float3(0,1,0))
+        let rot = un_quat_from_unit_vec_ang(normalize(float3(0.,1.,0.)), camera_rotation*PI/180.)
+        let v_rot = compose(float4(0,0,0,1),rot,float4(1,1,1,1))
+        let v_projection = perspective_rh_opengl( 45.0f*PI/180., aspect, f_CameraNearFar.x, f_CameraNearFar.y )
+        f_Camera2World = inverse(v_projection * v_view * v_rot)
+
         vs_main_bind_uniform(program)
         fs_main_bind_uniform(program)
         glBindVertexArray(vao)
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
+
         // swap buffersa
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
