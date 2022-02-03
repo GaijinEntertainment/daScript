@@ -9,6 +9,7 @@ require daslib/safe_addr
 require sdf
 
 let AA = 1
+let MAX_CAST_STEPS = 256
 
 var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_texcoord : float2
@@ -23,38 +24,49 @@ def vs_main
     f_texcoord = v_texcoord
     gl_Position = float4(v_position, 0.0, 1.0)
 
-def opU ( d1,d2:float )
-	return min(d1,d2)
+def xCol ( x:float; m:float )
+    let col = float3(0.2) + sin( float3(m)*2.0 + float3(0.0,1.0,2.0) ) * 0.2
+    return float4 ( x, col )
+
+def xCol ( x:float; m:float3 )
+    return float4 ( x, m )
+
+def opU ( d1,d2:float4 )
+	return d1.x<d2.x ? d1 : d2
+
+def checker ( var p:float3 )
+    p *= 4.0
+    return ((int(p.x)^int(p.z)) & 1) != 0 ? float3(0.3,0.3,0.3) : float3(0.6,0.6,0.6)
 
 def map ( pos:float3 )
-    var res = 1e10
-    res = sdPlane(pos.xyz-float3( 0.0,0.00, 0.0))
-    // res = opU ( res, sdBox(pos.xyz-float3(0.0,0.25,0.0),float3(0.2,0.5,0.2)) )
-    res = opU ( res, sdSphere(pos-float3(-2.0,0.25, 0.0),0.25) )
-    if sdBox( pos-float3(0.0,0.3,-1.0),float3(0.35,0.3,2.5) ) < res
-        res = opU( res, sdBoundingBox( pos-float3( 0.0,0.25, 0.0), float3(0.3,0.25,0.2), 0.025 ) )
-        res = opU( res, sdTorus(      (pos-float3( 0.0,0.30, 1.0)).xzy, float2(0.25,0.05) ) )
-        res = opU( res, sdCone(        pos-float3( 0.0,0.45,-1.0), float2(0.6,0.8),0.45 ) )
-        res = opU( res, sdCappedCone(  pos-float3( 0.0,0.25,-2.0), 0.25, 0.25, 0.1 ) )
-        res = opU( res, sdSolidAngle(  pos-float3( 0.0,0.00,-3.0), float2(3,4)/5.0, 0.4 ) )
-    if sdBox( pos-float3(1.0,0.3,-1.0),float3(0.35,0.3,2.5) )<res
-        res = opU( res, sdCappedTorus((pos-float3( 1.0,0.30, 1.0))*float3(1,-1,1), float2(0.866025,-0.5), 0.25, 0.05) )
-        res = opU( res, sdBox(         pos-float3( 1.0,0.25, 0.0), float3(0.3,0.25,0.1) ) )
-        res = opU( res, sdCapsule(     pos-float3( 1.0,0.00,-1.0),float3(-0.1,0.1,-0.1), float3(0.2,0.4,0.2), 0.1  ) )
-        res = opU( res, sdCylinder(    pos-float3( 1.0,0.25,-2.0), float2(0.15,0.25) ) )
-        res = opU( res, sdHexPrism(    pos-float3( 1.0,0.2,-3.0), float2(0.2,0.05) ) )
-    if sdBox( pos-float3(-1.0,0.35,-1.0),float3(0.35,0.35,2.5))<res
-        res = opU( res, sdPyramid(    pos-float3(-1.0,-0.6,-3.0), 1.0 ) )
-        res = opU( res, sdOctahedron( pos-float3(-1.0,0.15,-2.0), 0.35 ) )
-        res = opU( res, sdTriPrism(   pos-float3(-1.0,0.15,-1.0), float2(0.3,0.05) ) )
-        // res = opU( res, sdEllipsoid(  pos-float3(-1.0,0.25, 0.0), float3(0.2, 0.25, 0.05) ) )
-        res = opU( res, sdRhombus(   (pos-float3(-1.0,0.34, 1.0)).xzy, 0.15, 0.25, 0.04, 0.08 ) )
-    if sdBox( pos-float3(2.0,0.3,-1.0),float3(0.35,0.3,2.5) )<res
-        res = opU( res, sdOctogonPrism(pos-float3( 2.0,0.2,-3.0), 0.2, 0.05) )
-        res = opU( res, sdCylinder(    pos-float3( 2.0,0.15,-2.0), float3(0.1,-0.1,0.0), float3(-0.2,0.35,0.1), 0.08) )
-        res = opU( res, sdCappedCone(  pos-float3( 2.0,0.10,-1.0), float3(0.1,0.0,0.0), float3(-0.2,0.40,0.1), 0.15, 0.05) )
-        res = opU( res, sdRoundCone(   pos-float3( 2.0,0.15, 0.0), float3(0.1,0.0,0.0), float3(-0.1,0.35,0.1), 0.15, 0.05) )
-        res = opU( res, sdRoundCone(   pos-float3( 2.0,0.20, 1.0), 0.2, 0.1, 0.3 ) )
+    var res = xCol ( 1e10, 0.0 )
+    res = xCol(sdPlane(pos.xyz-float3( 0.0,0.00, 0.0)), checker(pos) )
+    res = opU ( res, xCol(sdSphere(pos-float3(-2.0,0.25, 0.0),0.25),26.9) )
+    if sdBox( pos-float3(0.0,0.3,-1.0),float3(0.35,0.3,2.5) ) < res.x
+        res = opU( res, xCol(sdBoundingBox( pos-float3( 0.0,0.25, 0.0), float3(0.3,0.25,0.2), 0.025 ), 16.9) )
+        res = opU( res, xCol(sdTorus(      (pos-float3( 0.0,0.30, 1.0)).xzy, float2(0.25,0.05) ), 25.0) )
+        res = opU( res, xCol(sdCone(        pos-float3( 0.0,0.45,-1.0), float2(0.6,0.8),0.45 ), 55.0) )
+        res = opU( res, xCol(sdCappedCone(  pos-float3( 0.0,0.25,-2.0), 0.25, 0.25, 0.1 ), 13.67) )
+        res = opU( res, xCol(sdSolidAngle(  pos-float3( 0.0,0.00,-3.0), float2(3,4)/5.0, 0.4 ), 49.13) )
+    if sdBox( pos-float3(1.0,0.3,-1.0),float3(0.35,0.3,2.5) ) < res.x
+        res = opU( res, xCol(sdCappedTorus((pos-float3( 1.0,0.30, 1.0))*float3(1,-1,1), float2(0.866025,-0.5), 0.25, 0.05), 8.5 ) )
+        res = opU( res, xCol(sdBox(         pos-float3( 1.0,0.25, 0.0), float3(0.3,0.25,0.1) ), 3.0 ) )
+        res = opU( res, xCol(sdCapsule(     pos-float3( 1.0,0.00,-1.0),float3(-0.1,0.1,-0.1), float3(0.2,0.4,0.2), 0.1  ), 31.0 ) )
+        res = opU( res, xCol(sdCylinder(    pos-float3( 1.0,0.25,-2.0), float2(0.15,0.25) ), 8.0 ) )
+        res = opU( res, xCol(sdHexPrism(    pos-float3( 1.0,0.2,-3.0), float2(0.2,0.05) ), 18.4 ) )
+    if sdBox( pos-float3(-1.0,0.35,-1.0),float3(0.35,0.35,2.5)) < res.x
+        res = opU( res, xCol(sdPyramid(    pos-float3(-1.0,-0.6,-3.0), 1.0 ), 13.56 ) )
+        res = opU( res, xCol(sdOctahedron( pos-float3(-1.0,0.15,-2.0), 0.35 ), 23.56 ) )
+        res = opU( res, xCol(sdTriPrism(   pos-float3(-1.0,0.15,-1.0), float2(0.3,0.05) ), 43.5 ) )
+// disabling elipsoid for now
+//      res = opU( res, xCol(sdEllipsoid(  pos-float3(-1.0,0.25, 0.0), float3(0.2, 0.25, 0.05) ), 43.17 ) )
+        res = opU( res, xCol(sdRhombus(   (pos-float3(-1.0,0.34, 1.0)).xzy, 0.15, 0.25, 0.04, 0.08 ), 17.0 ) )
+    if sdBox( pos-float3(2.0,0.3,-1.0),float3(0.35,0.3,2.5) ) < res.x
+        res = opU( res, xCol(sdOctogonPrism(pos-float3( 2.0,0.2,-3.0), 0.2, 0.05), 51.8 ) )
+        res = opU( res, xCol(sdCylinder(    pos-float3( 2.0,0.15,-2.0), float3(0.1,-0.1,0.0), float3(-0.2,0.35,0.1), 0.08), 31.2 ) )
+        res = opU( res, xCol(sdCappedCone(  pos-float3( 2.0,0.10,-1.0), float3(0.1,0.0,0.0), float3(-0.2,0.40,0.1), 0.15, 0.05), 45.1 ) )
+        res = opU( res, xCol(sdRoundCone(   pos-float3( 2.0,0.15, 0.0), float3(0.1,0.0,0.0), float3(-0.1,0.35,0.1), 0.15, 0.05), 51.7 ) )
+        res = opU( res, xCol(sdRoundCone(   pos-float3( 2.0,0.20, 1.0), 0.2, 0.1, 0.3 ), 37.0 ) )
     return res
 
 
@@ -63,7 +75,7 @@ def calcSoftshadow ( ro,rd:float3; mint,tmax:float; tech:int )
     var t = mint
     var ph = 1e10
     for i in 0..32
-        let h = map ( ro + rd*t )
+        let h = map ( ro + rd*t ).x
         if tech==0
             res = min(res, 10.0*h/t)
         else
@@ -79,76 +91,52 @@ def calcSoftshadow ( ro,rd:float3; mint,tmax:float; tech:int )
 
 def calcNormal ( pos:float3 )
     let e = float2(1.0,-1.0)*0.5773*0.0005
-    return normalize( e.xyy*map( pos + e.xyy ) +
-					  e.yyx*map( pos + e.yyx ) +
-					  e.yxy*map( pos + e.yxy ) +
-					  e.xxx*map( pos + e.xxx ) )
+    return normalize( e.xyy*map( pos + e.xyy ).x +
+					  e.yyx*map( pos + e.yyx ).x +
+					  e.yxy*map( pos + e.yxy ).x +
+					  e.xxx*map( pos + e.xxx ).x )
 
 def castRay ( ro,rd:float3 )
     var tmin = 0.05
     var tmax = 25.0
-
-    // bounding volume (optional)
-    let tp1 = (0.0-ro.y)/rd.y
-    if tp1>0.0
-        tmax = min(tmax, tp1)
-    let tp2 = (1.0-ro.y)/rd.y
-    if tp2>0.0
-        if ro.y>1.0
-            tmin = max(tmin, tp2)
-        else
-            tmax = min(tmax, tp2)
+    var res = float4(-1,-1,-1,-1)
     var t = tmin
-    for i in 0..64
-        let precis = 0.0005*t
-        let res = map(ro+rd*t)
-        if res<precis || t>tmax
-            break
-        t += res
-    if t > tmax
-        t = -1.0
-    return t
+    for i in 0..MAX_CAST_STEPS
+        let h = map(ro+rd*t)
+        if abs(h.x)<(0.001*t)
+            res = float4(t, h.yzw)
+        t += h.x
+    return res
 
 def calcAO ( pos,nor:float3 )
     var occ = 0.0
     var sca = 1.0
     for i in 0..5
         let h = 0.001 + 0.15*float(i)/4.0
-        let d = map( pos + h*nor )
+        let d = map( pos + h*nor ).x
         occ += (h-d)*sca
         sca *= 0.95
     return saturate(1.0-1.5*occ)
 
 def render ( ro,rd:float3; tech:int )
     var col = float3(0.0)
-    let t = castRay(ro,rd)
+    let res = castRay(ro,rd)
+    let t = res.x
+    let mat = res.yzw
     if t > -0.5
         let pos = ro + rd*t
         let nor = calcNormal(pos)
-        let mate = float3(0.3)
         let lig = normalize(float3(-0.1,0.3,0.6))
         let hal = normalize(lig-rd)
         let dif = saturate(dot(nor,lig)) * calcSoftshadow(pos,lig,0.01,3.0,tech)
         let spe = pow(saturate(dot(nor,hal)),16.0) * dif * (0.04 + 0.96*pow(saturate(1.0+dot(hal,rd)),5.0))
-        col = mate * 4.0*dif*float3(1.0,0.7,0.5)
-        col += 12.0*spe*float3(1.,0.7,0.5)
+        let ligCol = float3(1.0,0.7,0.5)
+        col = mat * dif * ligCol + 12.0 * spe * ligCol
         let occ = calcAO(pos,nor)
         let amb = saturate(0.5+0.5*nor.y)
-        col += mate*amb*occ*float3(0.0,0.08,0.1)
+        col += mat*amb*occ*float3(0.0,0.08,0.1)
         col *= exp(-0.0005*t*t*t)
     return col
-
-def setCamera ( ro,ta:float3; cr:float )
-    let cw = normalize(ta-ro)
-    let cp = float3(sin(cr),cos(cr),0.0)
-    let cu = normalize(cross(cw,cp))
-    let cv = normalize(cross(cu,cw))
-    var res : float3x3
-    res[0] = cu
-    res[1] = cv
-    res[2] = cw
-    return res
-
 
 [fragment_program]
 def fs_main
