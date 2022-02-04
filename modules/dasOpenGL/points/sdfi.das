@@ -10,6 +10,9 @@ require sdf
 
 let AA = 1
 let MAX_CAST_STEPS = 256
+let GEN_IN_SOFTWARE = false
+let BORDER = 0.1
+let SDF_STEP = float2(0.025,0.005)
 
 var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_texcoord : float2
@@ -59,21 +62,21 @@ var t3d : uint
 var t3d_color : uint
 var c_disp_size : uint3
 
-let GEN_IN_SOFTWARE = false
-let border = 0.1
-
-def gen_map_texture ( var bmin,bmax:float3; _step:float2=float2(0.025,0.005) )
+def gen_map_texture ( var bmin,bmax:float3; _step:float2=SDF_STEP )
     let step = GEN_IN_SOFTWARE ? _step.x : _step.y
-    bmin -= float3(border)
-    bmax += float3(border)
+    bmin -= float3(BORDER)
+    bmax += float3(BORDER)
     let idim = int3 ( (bmax-bmin)/step )
     print("idim = {idim}\n")
-    var h : array<float>
-    var gb : array<uint>
-    h |> resize(idim.x*idim.y*idim.z)
-    gb |> resize(idim.x*idim.y*idim.z)
+
+    var ph = null
+    let pgb = null
 
     if GEN_IN_SOFTWARE
+        var h : array<float>
+        var gb : array<uint>
+        h |> resize(idim.x*idim.y*idim.z)
+        gb |> resize(idim.x*idim.y*idim.z)
         for z in 0..idim.z
             let oz = z*idim.y*idim.x
             for y in 0..idim.y
@@ -83,10 +86,12 @@ def gen_map_texture ( var bmin,bmax:float3; _step:float2=float2(0.025,0.005) )
                     let c = map_(p)
                     h[oyz + x] = c.x
                     gb[oyz + x] = pack_float_to_byte(c.yzww * float4(255.0))
+        ph = unsafe(addr(h[0]))
+        pgb = unsafe(addr(gb[0]))
 
     glGenTextures(1, safe_addr(t3d))
     glBindTexture(GL_TEXTURE_3D, t3d)
-    glTexImage3D(GL_TEXTURE_3D, 0, int(GL_R32F), idim.x, idim.y, idim.z, 0, GL_RED, GL_FLOAT, unsafe(addr(h[0])))
+    glTexImage3D(GL_TEXTURE_3D, 0, int(GL_R32F), idim.x, idim.y, idim.z, 0, GL_RED, GL_FLOAT, ph)
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE )
@@ -96,7 +101,7 @@ def gen_map_texture ( var bmin,bmax:float3; _step:float2=float2(0.025,0.005) )
 
     glGenTextures(1, safe_addr(t3d_color))
     glBindTexture(GL_TEXTURE_3D, t3d_color)
-    glTexImage3D(GL_TEXTURE_3D, 0, int(GL_RGBA), idim.x, idim.y, idim.z, 0, GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(gb[0])))
+    glTexImage3D(GL_TEXTURE_3D, 0, int(GL_RGBA), idim.x, idim.y, idim.z, 0, GL_RGBA, GL_UNSIGNED_BYTE, pgb)
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE )
@@ -157,15 +162,21 @@ def map_ ( pos:float3 )
     return res
 
 def map_h ( pos:float3 )
-    var bmin = float3(-2.25, 0.0, -3.5) - float3(border)
-    var bmax = float3(2.35, 0.7, 1.5) + float3(border)
-    let tx = (pos - bmin) / (bmax - bmin)
+    var bmin = float3(-2.25, 0.0, -3.5) - float3(BORDER)
+    var bmax = float3(2.35, 0.7, 1.5) + float3(BORDER)
+    /*
+    let c = (bmin+bmax) * 0.5
+    let d = (bmax-bmin) * 0.5
+    if sdBox(pos-c,d) > 0.
+        return sdPlane(pos.xyz-float3( 0.0,0.00, 0.0))
+    */
+    let tx = (pos - bmin) * ( 1.0 / (bmax - bmin) )
     return texture(t_sdf, tx).x
 
 def map_c ( pos:float3 )
-    var bmin = float3(-2.25, 0.0, -3.5) - float3(border)
-    var bmax = float3(2.35, 0.7, 1.5) + float3(border)
-    let tx = (pos - bmin) / (bmax - bmin)
+    var bmin = float3(-2.25, 0.0, -3.5) - float3(BORDER)
+    var bmax = float3(2.35, 0.7, 1.5) + float3(BORDER)
+    let tx = (pos - bmin) * ( 1.0 / (bmax - bmin) )
     return texture(t_sdf_color, tx)
 
 def calcSoftshadow ( ro,rd:float3; mint,tmax:float; tech:int )
@@ -218,6 +229,13 @@ def calcAO ( pos,nor:float3 )
     return saturate(1.0-1.5*occ)
 
 def render ( ro,rd:float3; tech:int )
+
+
+    var bmin = float3(-2.25, 0.0, -3.5) - float3(BORDER)
+    var bmax = float3(2.35, 0.7, 1.5) + float3(BORDER)
+    if !is_intersecting([[Ray origin=ro, dir=rd]], [[AABB min=bmin, max=bmax]] )
+        return float3(0.0,0.0,0.0)
+
     var col = float3(0.0)
     let res = castRay(ro,rd)
     let t = res.x

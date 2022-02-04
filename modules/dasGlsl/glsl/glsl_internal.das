@@ -438,6 +438,10 @@ class GlslExport : AstVisitor
         // TODO: only output builtin functions which are necessary
         if version>=400 && shaderType!=ShaderType compute
             *writer |> write("void _discard ( ) \{ discard; \}\n")
+        *writer |> write("float rcp ( float r ) \{ return 1.0 / r; \}\n")
+        *writer |> write("vec2 rcp ( vec2 r ) \{ return 1.0 / r; \}\n")
+        *writer |> write("vec3 rcp ( vec3 r ) \{ return 1.0 / r; \}\n")
+        *writer |> write("vec4 rcp ( vec4 r ) \{ return 1.0 / r; \}\n")
         *writer |> write("ivec2 range ( int r ) \{ return ivec2(0,r); \}\n")
         *writer |> write("ivec2 range ( int f, int t ) \{ return ivec2(f,t); \}\n")
         *writer |> write("float SATURATE ( float a ) \{ return clamp(a,0.,1.); \}\n")
