@@ -12,7 +12,7 @@ let AA = 1
 let MAX_CAST_STEPS = 256
 let GEN_IN_SOFTWARE = false
 let BORDER = 0.1
-let SDF_STEP = float2(0.025,0.005)
+let SDF_STEP = float2(0.025,0.006)
 
 var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_texcoord : float2
@@ -33,7 +33,7 @@ var [[uniform, format=rgba8, stage=1]] c_sdf_color : image3D
 [compute_program(local_size_x=8,local_size_y=8,local_size_z=8)]
 def map_effect
     let xyz = int3(gl_GlobalInvocationID.xyz)
-    if xyz.x<c_dim.x || xyz.y<c_dim.y || xyz.z<c_dim.z
+    if xyz.x<c_dim.x && xyz.y<c_dim.y && xyz.z<c_dim.z
         let p = c_bmin + float3(xyz) * c_step
         let c = map_(p)
         imageStore(c_sdf, xyz, c)               // only x get written
