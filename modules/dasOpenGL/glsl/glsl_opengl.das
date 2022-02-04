@@ -90,12 +90,13 @@ def private generate_bind_uniform(fnMain:FunctionPtr; var fn:FunctionPtr)
                     cll_uni.arguments |> emplace(cll_gul)
                     cll_uni.arguments |> emplace_new() <| new [[ExprConstInt() at=vv.at, value=binding]]
                     blk.list |>emplace(cll_uni)
-                elif is_glsl_structure(vv,"image2D")
-                    // bind_sampler_2d(binding, varName.texture2D, format, access)
+                elif is_glsl_structure(vv,"image2D") || is_glsl_structure(vv,"image3D")
+                    // bind_sampler_any(binding, varName.texture?D, format, access)
+                    let is2D = is_glsl_structure(vv,"image2D")
                     var binding = find_arg("stage", vv.annotation) ?as tInt ?? 0
                     var vtex <- new [[ExprField() at=vv.at,
                         value <- new [[ExprVar() at=vv.at, name:=vv.name]],
-                        name := "texture2D"
+                        name := is2D ? "texture2D" : "texture3D"
                     ]]
                     var format = find_arg("format", vv.annotation) ?as tString ?? "rgba8"
                     format = "GL_{to_upper(format)}"
@@ -104,7 +105,7 @@ def private generate_bind_uniform(fnMain:FunctionPtr; var fn:FunctionPtr)
                         access = "GL_WRITE_ONLY"
                     if find_arg("readonly", vv.annotation) is tBool
                         access = "GL_READ_ONLY"
-                    var cll_uni <- new [[ExprCall() at=vv.at, name:="bind_image_2d"]]
+                    var cll_uni <- new [[ExprCall() at=vv.at, name:="bind_image_any"]]
                     cll_uni.arguments |> emplace_new() <| new [[ExprConstInt() at=vv.at, value=binding]]
                     cll_uni.arguments |> emplace(vtex)
                     cll_uni.arguments |> emplace_new() <| new [[ExprVar() at=vv.at, name:=format]]

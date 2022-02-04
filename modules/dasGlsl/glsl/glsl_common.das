@@ -15,6 +15,9 @@ struct sampler2D
 struct image2D
     texture2D : uint
 
+struct image3D
+    texture3D : uint
+
 def texture(sampler:sampler2D;uv:float2)
     assert(false,"we should not be here\n")
     return float4(0.)
@@ -39,7 +42,15 @@ def textureSize(sampler:sampler2D;lod:int)
 def imageStore(img:image2D;uv:int2;data:float4)
     assert(false,"we should not be here\n")
 
+[sideeffects]
+def imageStore(img:image3D;uvw:int3;data:float4)
+    assert(false,"we should not be here\n")
+
 def imageLoad(img:image2D;uv:int2)
+    assert(false,"we should not be here\n")
+    return float4(0.)
+
+def imageLoad(img:image3D;uvw:int3)
     assert(false,"we should not be here\n")
     return float4(0.)
 

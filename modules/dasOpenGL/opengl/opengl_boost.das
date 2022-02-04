@@ -57,7 +57,7 @@ def bind_sampler_3d ( unit:int; tex:uint )
     glActiveTexture(GL_TEXTURE0 + uint(unit))
     glBindTexture(GL_TEXTURE_3D, tex)
 
-def bind_image_2d ( unit:int; tex:uint; format:uint; access:uint=GL_READ_WRITE )
+def bind_image_any ( unit:int; tex:uint; format:uint; access:uint=GL_READ_WRITE )
     glBindImageTexture(uint(unit), tex, 0, false, 0, access, format)
 
 def bind_ffp()
@@ -96,6 +96,15 @@ def glUniformAny ( location:int; value:float4 )
 
 def glUniformAny ( location:int; value:float4x4 )
     glUniformMatrix4fv(location, value)
+
+def glUniformAny ( location:int; value:int2 )
+    glUniform2iv(location, 1, unsafe(addr(value.x)))
+
+def glUniformAny ( location:int; value:int3 )
+    glUniform3iv(location, 1, unsafe(addr(value.x)))
+
+def glUniformAny ( location:int; value:int4 )
+    glUniform4iv(location, 1, unsafe(addr(value.x)))
 
 def glUniformMatrix4fv ( location:int; value:float4x4 )
     unsafe

@@ -18,6 +18,23 @@ var [[out]] f_FragColor : float4
 var [[uniform]] f_Camera2World : float4x4
 var [[uniform]] f_CameraNearFar : float2
 var [[uniform]] f_PixelSize : float2
+var [[uniform, stage=0]] t_sdf : sampler3D
+var [[uniform, stage=1]] t_sdf_color : sampler3D
+
+var [[uniform]] c_dim : int3
+var [[uniform]] c_bmin : float3
+var [[uniform]] c_step : float
+var [[uniform, format=r32f, stage=0]] c_sdf : image3D
+var [[uniform, format=rgba8, stage=0]] c_sdf_color : image3D
+
+[compute_program(local_size_x=8,local_size_y=8,local_size_z=8)]
+def map_effect
+    let xyz = int3(gl_GlobalInvocationID.xyz)
+    if xyz.x<c_dim.x || xyz.y<c_dim.y || xyz.z<c_dim.z
+        let p = c_bmin + float3(xyz) * c_step
+        let c = map_(p)
+        imageStore(c_sdf, xyz, c)               // only x get written
+        imageStore(c_sdf_color, xyz, c.yzww)    // yzww get written
 
 [vertex_program]
 def vs_main
@@ -38,22 +55,93 @@ def checker ( var p:float3 )
     p *= 4.0
     return ((int(p.x)^int(p.z)) & 1) != 0 ? float3(0.3,0.3,0.3) : float3(0.6,0.6,0.6)
 
-def map ( pos:float3 )
+var t3d : uint
+var t3d_color : uint
+
+let GEN_IN_SOFTWARE = true
+let border = 0.1
+
+def gen_map_texture ( var bmin,bmax:float3; step:float=0.025 )
+    bmin -= float3(border)
+    bmax += float3(border)
+    let idim = int3 ( (bmax-bmin)/step )
+    print("idim = {idim}\n")
+    var h : array<float>
+    var gb : array<uint>
+    h |> resize(idim.x*idim.y*idim.z)
+    gb |> resize(idim.x*idim.y*idim.z)
+
+    if GEN_IN_SOFTWARE
+        for z in 0..idim.z
+            let oz = z*idim.y*idim.x
+            for y in 0..idim.y
+                let oyz = oz + y*idim.x
+                for x in 0..idim.x
+                    let p = bmin + float3(x,y,z) * step // + float3(step*0.5)
+                    let c = map_(p)
+                    h[oyz + x] = c.x
+                    gb[oyz + x] = pack_float_to_byte(c.yzww * float4(255.0))
+
+    glGenTextures(1, safe_addr(t3d))
+    glBindTexture(GL_TEXTURE_3D, t3d)
+    glTexImage3D(GL_TEXTURE_3D, 0, int(GL_R32F), idim.x, idim.y, idim.z, 0, GL_RED, GL_FLOAT, unsafe(addr(h[0])))
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE )
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE )
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE )
+    glBindTexture(GL_TEXTURE_3D, 0u)
+
+    glGenTextures(1, safe_addr(t3d_color))
+    glBindTexture(GL_TEXTURE_3D, t3d_color)
+    glTexImage3D(GL_TEXTURE_3D, 0, int(GL_RGBA), idim.x, idim.y, idim.z, 0, GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(gb[0])))
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE )
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE )
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE )
+    glBindTexture(GL_TEXTURE_3D, 0u)
+
+    if !GEN_IN_SOFTWARE
+
+        let map_program = create_compute_shader_program(@@map_effect)
+
+        glUseProgram(map_program)
+        // c_destTex := texture
+
+        c_sdf := t3d
+        c_sdf_color := t3d_color
+
+        map_effect_bind_uniform(map_program)
+        let disp_size = uint3(idim+int3(7)/8)
+        glDispatchCompute(disp_size.x, disp_size.y, disp.size_z)
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+        glUseProgram(0u)
+
+
+    t_sdf.texture3D := t3d
+    t_sdf_color.texture3D := t3d_color
+
+def map_ ( pos:float3 )
     var res = xCol ( 1e10, 0.0 )
     res = xCol(sdPlane(pos.xyz-float3( 0.0,0.00, 0.0)), checker(pos) )
+    // [[-2.25, 0, -0.25]] [[-1.75, 0.5, 0.25]]
     res = opU ( res, xCol(sdSphere(pos-float3(-2.0,0.25, 0.0),0.25),26.9) )
+    // [[-0.35, 0, -3.5]]   [[0.35, 0.6, 1.5]]
     if sdBox( pos-float3(0.0,0.3,-1.0),float3(0.35,0.3,2.5) ) < res.x
         res = opU( res, xCol(sdBoundingBox( pos-float3( 0.0,0.25, 0.0), float3(0.3,0.25,0.2), 0.025 ), 16.9) )
         res = opU( res, xCol(sdTorus(      (pos-float3( 0.0,0.30, 1.0)).xzy, float2(0.25,0.05) ), 25.0) )
         res = opU( res, xCol(sdCone(        pos-float3( 0.0,0.45,-1.0), float2(0.6,0.8),0.45 ), 55.0) )
         res = opU( res, xCol(sdCappedCone(  pos-float3( 0.0,0.25,-2.0), 0.25, 0.25, 0.1 ), 13.67) )
         res = opU( res, xCol(sdSolidAngle(  pos-float3( 0.0,0.00,-3.0), float2(3,4)/5.0, 0.4 ), 49.13) )
+    // [[-0.65, 0, -3.5]]   [[1.35, 0.6, 1.5]][]
     if sdBox( pos-float3(1.0,0.3,-1.0),float3(0.35,0.3,2.5) ) < res.x
         res = opU( res, xCol(sdCappedTorus((pos-float3( 1.0,0.30, 1.0))*float3(1,-1,1), float2(0.866025,-0.5), 0.25, 0.05), 8.5 ) )
         res = opU( res, xCol(sdBox(         pos-float3( 1.0,0.25, 0.0), float3(0.3,0.25,0.1) ), 3.0 ) )
         res = opU( res, xCol(sdCapsule(     pos-float3( 1.0,0.00,-1.0),float3(-0.1,0.1,-0.1), float3(0.2,0.4,0.2), 0.1  ), 31.0 ) )
         res = opU( res, xCol(sdCylinder(    pos-float3( 1.0,0.25,-2.0), float2(0.15,0.25) ), 8.0 ) )
         res = opU( res, xCol(sdHexPrism(    pos-float3( 1.0,0.2,-3.0), float2(0.2,0.05) ), 18.4 ) )
+    // [[-1.35, 0, -3.5]]   [[0.65, 0.7, 1.5]]
     if sdBox( pos-float3(-1.0,0.35,-1.0),float3(0.35,0.35,2.5)) < res.x
         res = opU( res, xCol(sdPyramid(    pos-float3(-1.0,-0.6,-3.0), 1.0 ), 13.56 ) )
         res = opU( res, xCol(sdOctahedron( pos-float3(-1.0,0.15,-2.0), 0.35 ), 23.56 ) )
@@ -61,6 +149,8 @@ def map ( pos:float3 )
 // disabling elipsoid for now
 //      res = opU( res, xCol(sdEllipsoid(  pos-float3(-1.0,0.25, 0.0), float3(0.2, 0.25, 0.05) ), 43.17 ) )
         res = opU( res, xCol(sdRhombus(   (pos-float3(-1.0,0.34, 1.0)).xzy, 0.15, 0.25, 0.04, 0.08 ), 17.0 ) )
+    // float3(2.0,0.3,-1.0),float3(0.35,0.3,2.5)
+    // [[1.65, 0, -3.5]] [[2.35, 0.6, 1.5]]
     if sdBox( pos-float3(2.0,0.3,-1.0),float3(0.35,0.3,2.5) ) < res.x
         res = opU( res, xCol(sdOctogonPrism(pos-float3( 2.0,0.2,-3.0), 0.2, 0.05), 51.8 ) )
         res = opU( res, xCol(sdCylinder(    pos-float3( 2.0,0.15,-2.0), float3(0.1,-0.1,0.0), float3(-0.2,0.35,0.1), 0.08), 31.2 ) )
@@ -69,13 +159,24 @@ def map ( pos:float3 )
         res = opU( res, xCol(sdRoundCone(   pos-float3( 2.0,0.20, 1.0), 0.2, 0.1, 0.3 ), 37.0 ) )
     return res
 
+def map_h ( pos:float3 )
+    var bmin = float3(-2.25, 0.0, -3.5) - float3(border)
+    var bmax = float3(2.35, 0.7, 1.5) + float3(border)
+    let tx = (pos - bmin) / (bmax - bmin)
+    return texture(t_sdf, tx).x
+
+def map_c ( pos:float3 )
+    var bmin = float3(-2.25, 0.0, -3.5) - float3(border)
+    var bmax = float3(2.35, 0.7, 1.5) + float3(border)
+    let tx = (pos - bmin) / (bmax - bmin)
+    return texture(t_sdf_color, tx)
 
 def calcSoftshadow ( ro,rd:float3; mint,tmax:float; tech:int )
     var res = 1.0
     var t = mint
     var ph = 1e10
     for i in 0..32
-        let h = map ( ro + rd*t ).x
+        let h = map_h ( ro + rd*t )
         if tech==0
             res = min(res, 10.0*h/t)
         else
@@ -91,29 +192,30 @@ def calcSoftshadow ( ro,rd:float3; mint,tmax:float; tech:int )
 
 def calcNormal ( pos:float3 )
     let e = float2(1.0,-1.0)*0.5773*0.0005
-    return normalize( e.xyy*map( pos + e.xyy ).x +
-					  e.yyx*map( pos + e.yyx ).x +
-					  e.yxy*map( pos + e.yxy ).x +
-					  e.xxx*map( pos + e.xxx ).x )
+    return normalize( e.xyy*map_h( pos + e.xyy ) +
+					  e.yyx*map_h( pos + e.yyx ) +
+					  e.yxy*map_h( pos + e.yxy ) +
+					  e.xxx*map_h( pos + e.xxx ) )
 
 def castRay ( ro,rd:float3 )
     var tmin = 0.05
     var tmax = 25.0
-    var res = float4(-1,-1,-1,-1)
+    var res = -1.
     var t = tmin
     for i in 0..MAX_CAST_STEPS
-        let h = map(ro+rd*t)
-        if abs(h.x)<(0.001*t)
-            res = float4(t, h.yzw)
-        t += h.x
-    return res
+        let h = map_h(ro+rd*t)
+        if abs(h)<(0.001*t)
+            res = t
+        t += h
+    let c = map_c(ro+rd*t)
+    return float4(t,c.x,c.y,c.z)
 
 def calcAO ( pos,nor:float3 )
     var occ = 0.0
     var sca = 1.0
     for i in 0..5
         let h = 0.001 + 0.15*float(i)/4.0
-        let d = map( pos + h*nor ).x
+        let d = map_h( pos + h*nor )
         occ += (h-d)*sca
         sca *= 0.95
     return saturate(1.0-1.5*occ)
@@ -220,6 +322,9 @@ def main
         glfwDestroyWindow(window)
     glfwMakeContextCurrent(window)
     create_gl_objects()
+
+    gen_map_texture ( float3(-2.25, 0.0, -3.5), float3(2.35, 0.7, 1.5) )
+
     var camera_position = float3(0,3,15)
     var camera_rotation_xy = float2(0,0)
     var cursor_position_xy = glfwGetCursorPos(window)
