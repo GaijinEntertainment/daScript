@@ -436,7 +436,7 @@ class GlslExport : AstVisitor
         if caps.write_version
             *writer |> write("#version {version} core\n\n")
         // TODO: only output builtin functions which are necessary
-        if version>=400
+        if version>=400 && shaderType!=ShaderType compute
             *writer |> write("void _discard ( ) \{ discard; \}\n")
         *writer |> write("ivec2 range ( int r ) \{ return ivec2(0,r); \}\n")
         *writer |> write("ivec2 range ( int f, int t ) \{ return ivec2(f,t); \}\n")
@@ -844,7 +844,7 @@ class GlslExport : AstVisitor
                     *writer |> write("out "); needInit = false
                 if find_arg("inout", arg.annotation) is tBool
                     *writer |> write("in "); needInit = false
-                if is_glsl_structure(arg,"image2D")
+                if is_glsl_structure(arg,"image2D") || is_glsl_structure(arg,"image3D")
                     var layouts : array<string>
                     let i_writeonly = find_arg("writeonly", arg.annotation)
                     if i_writeonly is tBool

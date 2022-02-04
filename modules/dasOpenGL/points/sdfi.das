@@ -25,7 +25,7 @@ var [[uniform]] c_dim : int3
 var [[uniform]] c_bmin : float3
 var [[uniform]] c_step : float
 var [[uniform, format=r32f, stage=0]] c_sdf : image3D
-var [[uniform, format=rgba8, stage=0]] c_sdf_color : image3D
+var [[uniform, format=rgba8, stage=1]] c_sdf_color : image3D
 
 [compute_program(local_size_x=8,local_size_y=8,local_size_z=8)]
 def map_effect
@@ -57,11 +57,13 @@ def checker ( var p:float3 )
 
 var t3d : uint
 var t3d_color : uint
+var c_disp_size : uint3
 
-let GEN_IN_SOFTWARE = true
+let GEN_IN_SOFTWARE = false
 let border = 0.1
 
-def gen_map_texture ( var bmin,bmax:float3; step:float=0.025 )
+def gen_map_texture ( var bmin,bmax:float3; _step:float2=float2(0.025,0.005) )
+    let step = GEN_IN_SOFTWARE ? _step.x : _step.y
     bmin -= float3(border)
     bmax += float3(border)
     let idim = int3 ( (bmax-bmin)/step )
@@ -102,25 +104,20 @@ def gen_map_texture ( var bmin,bmax:float3; step:float=0.025 )
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE )
     glBindTexture(GL_TEXTURE_3D, 0u)
 
+    c_disp_size = uint3(idim+int3(7)/8)
+    c_bmin = bmin
+    c_step = step
+    c_dim = idim
+
     if !GEN_IN_SOFTWARE
-
-        let map_program = create_compute_shader_program(@@map_effect)
-
         glUseProgram(map_program)
-        // c_destTex := texture
-
         c_sdf := t3d
         c_sdf_color := t3d_color
-
         map_effect_bind_uniform(map_program)
-        let disp_size = uint3(idim+int3(7)/8)
-        glDispatchCompute(disp_size.x, disp_size.y, disp.size_z)
+        glDispatchCompute(c_disp_size.x, c_disp_size.y, c_disp_size.z)
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
         glUseProgram(0u)
 
-
-    t_sdf.texture3D := t3d
-    t_sdf_color.texture3D := t3d_color
 
 def map_ ( pos:float3 )
     var res = xCol ( 1e10, 0.0 )
@@ -268,7 +265,7 @@ def fs_main
     f_FragColor.xyz = col
     f_FragColor.w = 1.
 
-var program : uint
+var program, map_program : uint
 var vao : uint
 var vbo : uint
 var ebo : uint
@@ -289,6 +286,7 @@ let indices = [[int 0; 1; 2; 2; 3; 0]]
 
 def create_gl_objects
     program = create_shader_program(@@vs_main,@@fs_main)
+    map_program = create_compute_shader_program(@@map_effect)
     // vao
     glGenVertexArrays(1, safe_addr(vao))
     glBindVertexArray(vao);
@@ -382,6 +380,8 @@ def main
         let v_view = camera_rotation(camera_rotation_xy) * compose(float4(-camera_position,1.), float4(0), float4(1.))
         let v_projection = perspective_rh_opengl( 45.0f*PI/180., aspect, f_CameraNearFar.x, f_CameraNearFar.y )
         f_Camera2World = inverse(v_projection * v_view)
+        t_sdf.texture3D := t3d
+        t_sdf_color.texture3D := t3d_color
         vs_main_bind_uniform(program)
         fs_main_bind_uniform(program)
         glBindVertexArray(vao)
