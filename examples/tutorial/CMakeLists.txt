@@ -119,3 +119,9 @@ ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial07.c
 ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial07.das
 )
 DAS_TUTORIAL(tutorial07 "${TUTORIAL_07_SRC}")
+
+# "C" interface, loading from source file text
+SET(TUTORIAL_07A_SRC
+${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial07a.c
+)
+DAS_TUTORIAL(tutorial07a "${TUTORIAL_07A_SRC}")

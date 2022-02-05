@@ -75,6 +75,7 @@ void das_modulegroup_release ( das_module_group * group );
 das_file_access * das_fileaccess_make_default (  );
 das_file_access * das_fileaccess_make_project ( const char * project_file  );
 void das_fileaccess_release ( das_file_access * access );
+void das_fileaccess_introduce_file ( das_file_access * access, const char * file_name, const char * file_content );
 
 void das_get_root ( char * root, int maxbuf );
 

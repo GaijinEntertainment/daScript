@@ -125,6 +125,11 @@ void das_fileaccess_release ( das_file_access * access ) {
     if ( access ) ((FileAccess *) access)->delRef();
 }
 
+void das_fileaccess_introduce_file ( das_file_access * access, const char * file_name, const char * file_content ) {
+    auto fileInfo = make_unique<TextFileInfo>((char *) file_content, uint32_t(strlen(file_content)), false);
+    ((FileAccess *) access)->setFileInfo(file_name, move(fileInfo));
+}
+
 void das_get_root ( char * root, int maxbuf ) {
     auto r = getDasRoot();
     strncpy ( root, r.c_str(), maxbuf );
