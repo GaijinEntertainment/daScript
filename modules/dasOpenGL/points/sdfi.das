@@ -13,6 +13,8 @@ let MAX_CAST_STEPS = 256
 let GEN_IN_SOFTWARE = false
 let BORDER = 0.1
 let SDF_STEP = float2(0.025,0.006)
+let FAST_SHADOWS = false
+let USE_ANALYTIC_SDF = false
 
 var [[in, location=0]] v_position : float2
 var [[in, location=1]] v_texcoord : float2
@@ -179,13 +181,25 @@ def map_c ( pos:float3 )
     let tx = (pos - bmin) * ( 1.0 / (bmax - bmin) )
     return texture(t_sdf_color, tx)
 
-def calcSoftshadow ( ro,rd:float3; mint,tmax:float; tech:int )
+def map_h_ ( pos:float3 )
+    if USE_ANALYTIC_SDF
+        return map_(pos).x
+    else
+        return map_h(pos)
+
+def map_c_ ( pos:float3 )
+    if USE_ANALYTIC_SDF
+        return map_(pos).yzww
+    else
+        return map_c(pos)
+
+def calcSoftshadow ( ro,rd:float3; mint,tmax:float )
     var res = 1.0
     var t = mint
     var ph = 1e10
     for i in 0..32
-        let h = map_h ( ro + rd*t )
-        if tech==0
+        let h = map_h_ ( ro + rd*t )
+        if FAST_SHADOWS
             res = min(res, 10.0*h/t)
         else
             let y = h*h/(2.0*ph)
@@ -200,10 +214,10 @@ def calcSoftshadow ( ro,rd:float3; mint,tmax:float; tech:int )
 
 def calcNormal ( pos:float3 )
     let e = float2(1.0,-1.0)*0.5773*0.0005
-    return normalize( e.xyy*map_h( pos + e.xyy ) +
-					  e.yyx*map_h( pos + e.yyx ) +
-					  e.yxy*map_h( pos + e.yxy ) +
-					  e.xxx*map_h( pos + e.xxx ) )
+    return normalize( e.xyy*map_h_( pos + e.xyy ) +
+					  e.yyx*map_h_( pos + e.yyx ) +
+					  e.yxy*map_h_( pos + e.yxy ) +
+					  e.xxx*map_h_( pos + e.xxx ) )
 
 def castRay ( ro,rd:float3 )
     var tmin = 0.05
@@ -211,11 +225,11 @@ def castRay ( ro,rd:float3 )
     var res = -1.
     var t = tmin
     for i in 0..MAX_CAST_STEPS
-        let h = map_h(ro+rd*t)
-        if abs(h)<(0.001*t)
+        let h = map_h_(ro+rd*t)
+        if abs(h)<(0.0001*t)
             res = t
         t += h
-    let c = map_c(ro+rd*t)
+    let c = map_c_(ro+rd*t)
     return float4(t,c.x,c.y,c.z)
 
 def calcAO ( pos,nor:float3 )
@@ -223,14 +237,14 @@ def calcAO ( pos,nor:float3 )
     var sca = 1.0
     for i in 0..5
         let h = 0.001 + 0.15*float(i)/4.0
-        let d = map_h( pos + h*nor )
+        let d = map_h_( pos + h*nor )
         occ += (h-d)*sca
         sca *= 0.95
     return saturate(1.0-1.5*occ)
 
-def render ( ro,rd:float3; tech:int )
+def render ( ro,rd:float3 )
 
-
+    // bbox
     var bmin = float3(-2.25, 0.0, -3.5) - float3(BORDER)
     var bmax = float3(2.35, 0.7, 1.5) + float3(BORDER)
     if !is_intersecting([[Ray origin=ro, dir=rd]], [[AABB min=bmin, max=bmax]] )
@@ -245,7 +259,7 @@ def render ( ro,rd:float3; tech:int )
         let nor = calcNormal(pos)
         let lig = normalize(float3(-0.1,0.3,0.6))
         let hal = normalize(lig-rd)
-        let dif = saturate(dot(nor,lig)) * calcSoftshadow(pos,lig,0.01,3.0,tech)
+        let dif = saturate(dot(nor,lig)) * calcSoftshadow(pos,lig,0.01,3.0)
         let spe = pow(saturate(dot(nor,hal)),16.0) * dif * (0.04 + 0.96*pow(saturate(1.0+dot(hal,rd)),5.0))
         let ligCol = float3(1.0,0.7,0.5)
         col = mat * dif * ligCol + 12.0 * spe * ligCol
@@ -257,7 +271,6 @@ def render ( ro,rd:float3; tech:int )
 
 [fragment_program]
 def fs_main
-    let tech = 1
     let near = f_CameraNearFar.x
     let far = f_CameraNearFar.y
     var col = float3(0.0)
@@ -269,7 +282,7 @@ def fs_main
                 let ro = (f_Camera2World * float4(pos, -1.0, 1.0) * near).xyz
                 let pd = (f_Camera2World * float4(pos * (far - near), far + near, far - near)).xyz
                 let rd = normalize(pd - ro)
-                let ccol = render(ro,rd,tech)
+                let ccol = render(ro,rd)
                 col += pow(ccol, float3(0.4545))
         col /= float(AA*AA)
     else
@@ -278,7 +291,7 @@ def fs_main
         let ro = (f_Camera2World * float4(pos, -1.0, 1.0) * near).xyz
         let pd = (f_Camera2World * float4(pos * (far - near), far + near, far - near)).xyz
         let rd = normalize(pd - ro)
-        col = render(ro,rd,tech)
+        col = render(ro,rd)
         col = pow(col, float3(0.4545))
     f_FragColor.xyz = col
     f_FragColor.w = 1.
