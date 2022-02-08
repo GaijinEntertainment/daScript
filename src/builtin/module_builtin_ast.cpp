@@ -495,6 +495,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(for_each_global)>(*this, lib,  "for_each_global",
             SideEffects::modifyExternal, "for_each_global")
                 ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_call_macro)>(*this, lib,  "for_each_call_macro",
+            SideEffects::modifyExternal, "for_each_call_macro")
+                ->args({"module","block","context","line"});
         addExtern<DAS_BIND_FUN(builtin_structure_for_each_field)>(*this, lib,  "for_each_field",
             SideEffects::modifyExternal, "builtin_structure_for_each_field")
                 ->args({"annotation","block","context","line"});
