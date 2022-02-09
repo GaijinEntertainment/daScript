@@ -26,6 +26,13 @@ There are static arrays (of fixed size, allocated on stack), and dynamic array (
   push(b, "some")               // now it is 1 element of "some"
   b |> push("some")             // same as above line, but using pipe operator
 
+Dynamic sub-array can be created out of any array type via range indexing::
+
+  var a  = [[int[4] 1; 2; 3; 4]]
+  let b <- a[1..3]               //  b is [{int 2;3}]
+
+In reality `a[b]`` where b is range is equivalent to `subarray(a, b)`
+
 Resizing, insertion, deletion of dynamic arrays and arrays elements is done through a set of
 standard functions (see :ref:`built-in functions <stdlib__builtin>`).
 
