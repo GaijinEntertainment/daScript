@@ -42,6 +42,10 @@ it defines as follows
   __rtti  : void?
   _server : smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` >
 
+.. das:function:: Server.make_server_adapter(self: Server)
+
+|method-network-Server.make_server_adapter|
+
 .. das:function:: Server.init(self: Server; port: int const)
 
 init returns bool
@@ -211,21 +215,6 @@ server_init returns bool
 
 |function-network-server_init|
 
-.. _function-_at_network_c__c_server_is_connected_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr_?M_C_c:
-
-.. das:function:: server_is_connected(server: smart_ptr<network::NetworkServer> const implicit)
-
-server_is_connected returns bool
-
-+--------+----------------------------------------------------------------------------------------+
-+argument+argument type                                                                           +
-+========+========================================================================================+
-+server  +smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` > const implicit+
-+--------+----------------------------------------------------------------------------------------+
-
-
-|function-network-server_is_connected|
-
 .. _function-_at_network_c__c_server_is_open_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr_?M_C_c:
 
 .. das:function:: server_is_open(server: smart_ptr<network::NetworkServer> const implicit)
@@ -241,22 +230,33 @@ server_is_open returns bool
 
 |function-network-server_is_open|
 
-.. _function-_at_network_c__c_server_restore_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr_?M_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_network_c__c_server_is_connected_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr_?M_C_c:
 
-.. das:function:: server_restore(server: smart_ptr<network::NetworkServer> const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: server_is_connected(server: smart_ptr<network::NetworkServer> const implicit)
+
+server_is_connected returns bool
 
 +--------+----------------------------------------------------------------------------------------+
 +argument+argument type                                                                           +
 +========+========================================================================================+
 +server  +smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` > const implicit+
 +--------+----------------------------------------------------------------------------------------+
-+class   +void? const implicit                                                                    +
+
+
+|function-network-server_is_connected|
+
+.. _function-_at_network_c__c_server_tick_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr_?M_C_c:
+
+.. das:function:: server_tick(server: smart_ptr<network::NetworkServer> const implicit)
+
 +--------+----------------------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit                +
++argument+argument type                                                                           +
++========+========================================================================================+
++server  +smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` > const implicit+
 +--------+----------------------------------------------------------------------------------------+
 
 
-|function-network-server_restore|
+|function-network-server_tick|
 
 .. _function-_at_network_c__c_server_send_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr_?M_CI1_ls_u8_gr_?_Ci_C_c:
 
@@ -277,17 +277,21 @@ server_send returns bool
 
 |function-network-server_send|
 
-.. _function-_at_network_c__c_server_tick_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr_?M_C_c:
+.. _function-_at_network_c__c_server_restore_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr_?M_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
 
-.. das:function:: server_tick(server: smart_ptr<network::NetworkServer> const implicit)
+.. das:function:: server_restore(server: smart_ptr<network::NetworkServer> const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
 
 +--------+----------------------------------------------------------------------------------------+
 +argument+argument type                                                                           +
 +========+========================================================================================+
 +server  +smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` > const implicit+
 +--------+----------------------------------------------------------------------------------------+
++class   +void? const implicit                                                                    +
++--------+----------------------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit                +
++--------+----------------------------------------------------------------------------------------+
 
 
-|function-network-server_tick|
+|function-network-server_restore|
 
 

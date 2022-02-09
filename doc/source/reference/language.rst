@@ -9,6 +9,7 @@
    language/datatypes.rst
    language/statements.rst
    language/expressions.rst
+   language/aliases.rst
    language/temporary.rst
    language/builtin_functions.rst
    language/clone.rst

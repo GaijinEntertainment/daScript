@@ -38,7 +38,7 @@ The following words are reserved as keywords and cannot be used as identifiers:
 +------------+------------+-----------+------------+------------+-------------+
 | try        | options    | table     | expect     | const      | require     |
 +------------+------------+-----------+------------+------------+-------------+
-| operator   | enum       | finally   | delete     | deref      |             |
+| operator   | enum       | finally   | delete     | deref      | aka         |
 +------------+------------+-----------+------------+------------+-------------+
 | typedef    | with       | cast      | override   | abstract   | upcast      |
 +------------+------------+-----------+------------+------------+-------------+
@@ -47,6 +47,8 @@ The following words are reserved as keywords and cannot be used as identifiers:
 | reinterpret| module     | public    | label      | goto       | implicit    |
 +------------+------------+-----------+------------+------------+-------------+
 | shared     | private    | smart_ptr | generator  | yield      | unsafe      |
++------------+------------+-----------+------------+------------+-------------+
+| assume     | explicit   | sealed    |            |            |             |
 +------------+------------+-----------+------------+------------+-------------+
 
 The following words are reserved as type names and cannot be used as identifiers:

@@ -244,6 +244,10 @@ Function specialization can be limited by contracts (contract macros)::
 
 In the example above only arrays will be matched.
 
+LSP can be explicitly prohibited for a particular function argument via `explicit` keyword::
+
+    def foo ( a : Foo explicit ) // will accept Foo, but not any subtype of Foo
+
 ^^^^^^^^^^^^^^^^^^
 Default Parameters
 ^^^^^^^^^^^^^^^^^^

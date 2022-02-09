@@ -18,6 +18,23 @@ All functions and symbols are in "strings_boost" module, use require to get acce
 Uncategorized
 +++++++++++++
 
+.. _function-_at_strings_boost_c__c_wide_Cs_Ci:
+
+.. das:function:: wide(text: string const; width: int const)
+
+wide returns string
+
++--------+-------------+
++argument+argument type+
++========+=============+
++text    +string const +
++--------+-------------+
++width   +int const    +
++--------+-------------+
+
+
+|function-strings_boost-wide|
+
 .. _function-_at_strings_boost_c__c_split_Cs_Cs:
 
 .. das:function:: split(text: string const; delim: string const)
@@ -51,76 +68,6 @@ split_by_chars returns array<string>
 
 
 |function-strings_boost-split_by_chars|
-
-.. _function-_at_strings_boost_c__c_wide_Cs_Ci:
-
-.. das:function:: wide(text: string const; width: int const)
-
-wide returns string
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+text    +string const +
-+--------+-------------+
-+width   +int const    +
-+--------+-------------+
-
-
-|function-strings_boost-wide|
-
-.. _function-_at_strings_boost_c__c_eq_CH_ls__builtin__c__c_das_string_gr__Cs:
-
-.. das:function:: eq(b: das_string const; a: string const)
-
-eq returns auto
-
-+--------+--------------------------------------------------------------+
-+argument+argument type                                                 +
-+========+==============================================================+
-+b       + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
-+--------+--------------------------------------------------------------+
-+a       +string const                                                  +
-+--------+--------------------------------------------------------------+
-
-
-|function-strings_boost-eq|
-
-.. _function-_at_strings_boost_c__c_eq_Cs_CH_ls__builtin__c__c_das_string_gr_:
-
-.. das:function:: eq(a: string const; b: das_string const)
-
-eq returns auto
-
-+--------+--------------------------------------------------------------+
-+argument+argument type                                                 +
-+========+==============================================================+
-+a       +string const                                                  +
-+--------+--------------------------------------------------------------+
-+b       + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
-+--------+--------------------------------------------------------------+
-
-
-|function-strings_boost-eq|
-
-.. _function-_at_strings_boost_c__c_is_character_at_C_hh_1_ls_u8_gr_A_Ci_Ci:
-
-.. das:function:: is_character_at(foo: array<uint8> const#; idx: int const; ch: int const)
-
-is_character_at returns auto
-
-+--------+-------------------+
-+argument+argument type      +
-+========+===================+
-+foo     +array<uint8> const#+
-+--------+-------------------+
-+idx     +int const          +
-+--------+-------------------+
-+ch      +int const          +
-+--------+-------------------+
-
-
-|function-strings_boost-is_character_at|
 
 .. _function-_at_strings_boost_c__c_join_C._Cs:
 
@@ -176,5 +123,58 @@ split_by_chars returns auto
 
 
 |function-strings_boost-split_by_chars|
+
+.. _function-_at_strings_boost_c__c_is_character_at_C_hh_1_ls_u8_gr_A_Ci_Ci:
+
+.. das:function:: is_character_at(foo: array<uint8> const#; idx: int const; ch: int const)
+
+is_character_at returns auto
+
++--------+-------------------+
++argument+argument type      +
++========+===================+
++foo     +array<uint8> const#+
++--------+-------------------+
++idx     +int const          +
++--------+-------------------+
++ch      +int const          +
++--------+-------------------+
+
+
+|function-strings_boost-is_character_at|
+
+.. _function-_at_strings_boost_c__c_eq_Cs_CH_ls__builtin__c__c_das_string_gr_:
+
+.. das:function:: eq(a: string const; b: das_string const)
+
+eq returns auto
+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++a       +string const                                                  +
++--------+--------------------------------------------------------------+
++b       + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
++--------+--------------------------------------------------------------+
+
+
+|function-strings_boost-eq|
+
+.. _function-_at_strings_boost_c__c_eq_CH_ls__builtin__c__c_das_string_gr__Cs:
+
+.. das:function:: eq(b: das_string const; a: string const)
+
+eq returns auto
+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++b       + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
++--------+--------------------------------------------------------------+
++a       +string const                                                  +
++--------+--------------------------------------------------------------+
+
+
+|function-strings_boost-eq|
 
 

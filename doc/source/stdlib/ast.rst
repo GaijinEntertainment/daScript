@@ -18,321 +18,44 @@ All functions and symbols are in "ast" module, use require to get access to it. 
 Type aliases
 ++++++++++++
 
-.. _alias-CallMacroPtr:
+.. _alias-TypeDeclFlags:
 
-.. das:attribute:: CallMacroPtr = smart_ptr<ast::CallMacro>
-
-|typedef-ast-CallMacroPtr|
-
-.. _alias-EnumerationAnnotationPtr:
-
-.. das:attribute:: EnumerationAnnotationPtr = smart_ptr<ast::EnumerationAnnotation>
-
-|typedef-ast-EnumerationAnnotationPtr|
-
-.. _alias-EnumerationPtr:
-
-.. das:attribute:: EnumerationPtr = smart_ptr<ast::Enumeration>
-
-|typedef-ast-EnumerationPtr|
-
-.. _alias-ExprAscendFlags:
-
-.. das:attribute:: ExprAscendFlags is a bitfield
-
-+------------+---+-----+
-+field       +bit+value+
-+============+===+=====+
-+useStackRef +0  +1    +
-+------------+---+-----+
-+needTypeInfo+1  +2    +
-+------------+---+-----+
-
-
-|typedef-ast-ExprAscendFlags|
-
-.. _alias-ExprAtFlags:
-
-.. das:attribute:: ExprAtFlags is a bitfield
-
-+-----+---+-----+
-+field+bit+value+
-+=====+===+=====+
-+r2v  +0  +1    +
-+-----+---+-----+
-+r2cr +1  +2    +
-+-----+---+-----+
-+write+2  +4    +
-+-----+---+-----+
-
-
-|typedef-ast-ExprAtFlags|
-
-.. _alias-ExprBlockFlags:
-
-.. das:attribute:: ExprBlockFlags is a bitfield
-
-+--------------------------+---+-----+
-+field                     +bit+value+
-+==========================+===+=====+
-+isClosure                 +0  +1    +
-+--------------------------+---+-----+
-+hasReturn                 +1  +2    +
-+--------------------------+---+-----+
-+copyOnReturn              +2  +4    +
-+--------------------------+---+-----+
-+moveOnReturn              +3  +8    +
-+--------------------------+---+-----+
-+inTheLoop                 +4  +16   +
-+--------------------------+---+-----+
-+finallyBeforeBody         +5  +32   +
-+--------------------------+---+-----+
-+finallyDisabled           +6  +64   +
-+--------------------------+---+-----+
-+aotSkipMakeBlock          +7  +128  +
-+--------------------------+---+-----+
-+aotDoNotSkipAnnotationData+8  +256  +
-+--------------------------+---+-----+
-+isCollapseable            +9  +512  +
-+--------------------------+---+-----+
-+needCollapse              +10 +1024 +
-+--------------------------+---+-----+
-
-
-|typedef-ast-ExprBlockFlags|
-
-.. _alias-ExprCastFlags:
-
-.. das:attribute:: ExprCastFlags is a bitfield
+.. das:attribute:: TypeDeclFlags is a bitfield
 
 +---------------+---+-----+
 +field          +bit+value+
 +===============+===+=====+
-+upcastCast     +0  +1    +
++ref            +0  +1    +
 +---------------+---+-----+
-+reinterpretCast+1  +2    +
++constant       +1  +2    +
 +---------------+---+-----+
-
-
-|typedef-ast-ExprCastFlags|
-
-.. _alias-ExprFieldDerefFlags:
-
-.. das:attribute:: ExprFieldDerefFlags is a bitfield
-
-+------------------+---+-----+
-+field             +bit+value+
-+==================+===+=====+
-+unsafeDeref       +0  +1    +
-+------------------+---+-----+
-+ignoreCaptureConst+1  +2    +
-+------------------+---+-----+
-
-
-|typedef-ast-ExprFieldDerefFlags|
-
-.. _alias-ExprFieldFieldFlags:
-
-.. das:attribute:: ExprFieldFieldFlags is a bitfield
-
-+-----+---+-----+
-+field+bit+value+
-+=====+===+=====+
-+r2v  +0  +1    +
-+-----+---+-----+
-+r2cr +1  +2    +
-+-----+---+-----+
-+write+2  +4    +
-+-----+---+-----+
-
-
-|typedef-ast-ExprFieldFieldFlags|
-
-.. _alias-ExprFlags:
-
-.. das:attribute:: ExprFlags is a bitfield
-
-+-------------------+---+-----+
-+field              +bit+value+
-+===================+===+=====+
-+constexpression    +0  +1    +
-+-------------------+---+-----+
-+noSideEffects      +1  +2    +
-+-------------------+---+-----+
-+noNativeSideEffects+2  +4    +
-+-------------------+---+-----+
-
-
-|typedef-ast-ExprFlags|
-
-.. _alias-ExprGenFlags:
-
-.. das:attribute:: ExprGenFlags is a bitfield
-
-+----------+---+-----+
-+field     +bit+value+
-+==========+===+=====+
-+alwaysSafe+0  +1    +
-+----------+---+-----+
-+generated +1  +2    +
-+----------+---+-----+
-
-
-|typedef-ast-ExprGenFlags|
-
-.. _alias-ExprMakeBlockFlags:
-
-.. das:attribute:: ExprMakeBlockFlags is a bitfield
-
++temporary      +2  +4    +
 +---------------+---+-----+
-+field          +bit+value+
-+===============+===+=====+
-+isLambda       +0  +1    +
++_implicit      +3  +8    +
 +---------------+---+-----+
-+isLocalFunction+1  +2    +
++removeRef      +4  +16   +
++---------------+---+-----+
++removeConstant +5  +32   +
++---------------+---+-----+
++removeDim      +6  +64   +
++---------------+---+-----+
++removeTemporary+7  +128  +
++---------------+---+-----+
++explicitConst  +8  +256  +
++---------------+---+-----+
++aotAlias       +9  +512  +
++---------------+---+-----+
++smartPtr       +10 +1024 +
++---------------+---+-----+
++smartPtrNative +11 +2048 +
++---------------+---+-----+
++isExplicit     +12 +4096 +
++---------------+---+-----+
++isNativeDim    +13 +8192 +
 +---------------+---+-----+
 
 
-|typedef-ast-ExprMakeBlockFlags|
-
-.. _alias-ExprMakeLocalFlags:
-
-.. das:attribute:: ExprMakeLocalFlags is a bitfield
-
-+---------------+---+-----+
-+field          +bit+value+
-+===============+===+=====+
-+useStackRef    +0  +1    +
-+---------------+---+-----+
-+useCMRES       +1  +2    +
-+---------------+---+-----+
-+doesNotNeedSp  +2  +4    +
-+---------------+---+-----+
-+doesNotNeedInit+3  +8    +
-+---------------+---+-----+
-+initAllFields  +4  +16   +
-+---------------+---+-----+
-
-
-|typedef-ast-ExprMakeLocalFlags|
-
-.. _alias-ExprMakeStructFlags:
-
-.. das:attribute:: ExprMakeStructFlags is a bitfield
-
-+--------------+---+-----+
-+field         +bit+value+
-+==============+===+=====+
-+useInitializer+0  +1    +
-+--------------+---+-----+
-+isNewHandle   +1  +2    +
-+--------------+---+-----+
-
-
-|typedef-ast-ExprMakeStructFlags|
-
-.. _alias-ExprPrintFlags:
-
-.. das:attribute:: ExprPrintFlags is a bitfield
-
-+-----------+---+-----+
-+field      +bit+value+
-+===========+===+=====+
-+topLevel   +0  +1    +
-+-----------+---+-----+
-+argLevel   +1  +2    +
-+-----------+---+-----+
-+bottomLevel+2  +4    +
-+-----------+---+-----+
-
-
-|typedef-ast-ExprPrintFlags|
-
-.. _alias-ExprReturnFlags:
-
-.. das:attribute:: ExprReturnFlags is a bitfield
-
-+------------------+---+-----+
-+field             +bit+value+
-+==================+===+=====+
-+moveSemantics     +0  +1    +
-+------------------+---+-----+
-+returnReference   +1  +2    +
-+------------------+---+-----+
-+returnInBlock     +2  +4    +
-+------------------+---+-----+
-+takeOverRightStack+3  +8    +
-+------------------+---+-----+
-+returnCallCMRES   +4  +16   +
-+------------------+---+-----+
-+returnCMRES       +5  +32   +
-+------------------+---+-----+
-+fromYield         +6  +64   +
-+------------------+---+-----+
-
-
-|typedef-ast-ExprReturnFlags|
-
-.. _alias-ExprSwizzleFieldFlags:
-
-.. das:attribute:: ExprSwizzleFieldFlags is a bitfield
-
-+-----+---+-----+
-+field+bit+value+
-+=====+===+=====+
-+r2v  +0  +1    +
-+-----+---+-----+
-+r2cr +1  +2    +
-+-----+---+-----+
-+write+2  +4    +
-+-----+---+-----+
-
-
-|typedef-ast-ExprSwizzleFieldFlags|
-
-.. _alias-ExprVarFlags:
-
-.. das:attribute:: ExprVarFlags is a bitfield
-
-+---------+---+-----+
-+field    +bit+value+
-+=========+===+=====+
-+local    +0  +1    +
-+---------+---+-----+
-+argument +1  +2    +
-+---------+---+-----+
-+_block   +2  +4    +
-+---------+---+-----+
-+thisBlock+3  +8    +
-+---------+---+-----+
-+r2v      +4  +16   +
-+---------+---+-----+
-+r2cr     +5  +32   +
-+---------+---+-----+
-+write    +6  +64   +
-+---------+---+-----+
-
-
-|typedef-ast-ExprVarFlags|
-
-.. _alias-ExprYieldFlags:
-
-.. das:attribute:: ExprYieldFlags is a bitfield
-
-+-------------+---+-----+
-+field        +bit+value+
-+=============+===+=====+
-+moveSemantics+0  +1    +
-+-------------+---+-----+
-
-
-|typedef-ast-ExprYieldFlags|
-
-.. _alias-ExpressionPtr:
-
-.. das:attribute:: ExpressionPtr = smart_ptr<ast::Expression>
-
-|typedef-ast-ExpressionPtr|
+|typedef-ast-TypeDeclFlags|
 
 .. _alias-FieldDeclarationFlags:
 
@@ -353,15 +76,95 @@ Type aliases
 +----------------+---+-----+
 +doNotDelete     +5  +32   +
 +----------------+---+-----+
++privateField    +6  +64   +
++----------------+---+-----+
++sealed          +7  +128  +
++----------------+---+-----+
 
 
 |typedef-ast-FieldDeclarationFlags|
 
-.. _alias-FunctionAnnotationPtr:
+.. _alias-StructureFlags:
 
-.. das:attribute:: FunctionAnnotationPtr = smart_ptr<ast::FunctionAnnotation>
+.. das:attribute:: StructureFlags is a bitfield
 
-|typedef-ast-FunctionAnnotationPtr|
++----------------+---+-----+
++field           +bit+value+
++================+===+=====+
++isClass         +0  +1    +
++----------------+---+-----+
++genCtor         +1  +2    +
++----------------+---+-----+
++cppLayout       +2  +4    +
++----------------+---+-----+
++cppLayoutNotPod +3  +8    +
++----------------+---+-----+
++generated       +4  +16   +
++----------------+---+-----+
++persistent      +5  +32   +
++----------------+---+-----+
++isLambda        +6  +64   +
++----------------+---+-----+
++privateStructure+7  +128  +
++----------------+---+-----+
++macroInterface  +8  +256  +
++----------------+---+-----+
++sealed          +9  +512  +
++----------------+---+-----+
+
+
+|typedef-ast-StructureFlags|
+
+.. _alias-ExprGenFlags:
+
+.. das:attribute:: ExprGenFlags is a bitfield
+
++---------------+---+-----+
++field          +bit+value+
++===============+===+=====+
++alwaysSafe     +0  +1    +
++---------------+---+-----+
++generated      +1  +2    +
++---------------+---+-----+
++userSaidItsSafe+2  +4    +
++---------------+---+-----+
+
+
+|typedef-ast-ExprGenFlags|
+
+.. _alias-ExprFlags:
+
+.. das:attribute:: ExprFlags is a bitfield
+
++-------------------+---+-----+
++field              +bit+value+
++===================+===+=====+
++constexpression    +0  +1    +
++-------------------+---+-----+
++noSideEffects      +1  +2    +
++-------------------+---+-----+
++noNativeSideEffects+2  +4    +
++-------------------+---+-----+
+
+
+|typedef-ast-ExprFlags|
+
+.. _alias-ExprPrintFlags:
+
+.. das:attribute:: ExprPrintFlags is a bitfield
+
++-----------+---+-----+
++field      +bit+value+
++===========+===+=====+
++topLevel   +0  +1    +
++-----------+---+-----+
++argLevel   +1  +2    +
++-----------+---+-----+
++bottomLevel+2  +4    +
++-----------+---+-----+
+
+
+|typedef-ast-ExprPrintFlags|
 
 .. _alias-FunctionFlags:
 
@@ -438,11 +241,22 @@ Type aliases
 
 |typedef-ast-FunctionFlags|
 
-.. _alias-FunctionPtr:
+.. _alias-MoreFunctionFlags:
 
-.. das:attribute:: FunctionPtr = smart_ptr<ast::Function>
+.. das:attribute:: MoreFunctionFlags is a bitfield
 
-|typedef-ast-FunctionPtr|
++--------------------------+---+-----+
++field                     +bit+value+
++==========================+===+=====+
++macroFunction             +0  +1    +
++--------------------------+---+-----+
++needStringCast            +1  +2    +
++--------------------------+---+-----+
++aotHashDeppendsOnArguments+2  +4    +
++--------------------------+---+-----+
+
+
+|typedef-ast-MoreFunctionFlags|
 
 .. _alias-FunctionSideEffectFlags:
 
@@ -451,7 +265,7 @@ Type aliases
 +--------------+---+-----+
 +field         +bit+value+
 +==============+===+=====+
-+unsafe        +0  +1    +
++_unsafe       +0  +1    +
 +--------------+---+-----+
 +userScenario  +1  +2    +
 +--------------+---+-----+
@@ -466,156 +280,6 @@ Type aliases
 
 
 |typedef-ast-FunctionSideEffectFlags|
-
-.. _alias-MakeFieldDeclFlags:
-
-.. das:attribute:: MakeFieldDeclFlags is a bitfield
-
-+--------------+---+-----+
-+field         +bit+value+
-+==============+===+=====+
-+moveSemantics +0  +1    +
-+--------------+---+-----+
-+cloneSemantics+1  +2    +
-+--------------+---+-----+
-
-
-|typedef-ast-MakeFieldDeclFlags|
-
-.. _alias-MakeFieldDeclPtr:
-
-.. das:attribute:: MakeFieldDeclPtr = smart_ptr<ast::MakeFieldDecl>
-
-|typedef-ast-MakeFieldDeclPtr|
-
-.. _alias-PassMacroPtr:
-
-.. das:attribute:: PassMacroPtr = smart_ptr<ast::PassMacro>
-
-|typedef-ast-PassMacroPtr|
-
-.. _alias-ProgramPtr:
-
-.. das:attribute:: ProgramPtr = smart_ptr<rtti::Program>
-
-|typedef-ast-ProgramPtr|
-
-.. _alias-ReaderMacroPtr:
-
-.. das:attribute:: ReaderMacroPtr = smart_ptr<ast::ReaderMacro>
-
-|typedef-ast-ReaderMacroPtr|
-
-.. _alias-StructureAnnotationPtr:
-
-.. das:attribute:: StructureAnnotationPtr = smart_ptr<ast::StructureAnnotation>
-
-|typedef-ast-StructureAnnotationPtr|
-
-.. _alias-StructureFlags:
-
-.. das:attribute:: StructureFlags is a bitfield
-
-+----------------+---+-----+
-+field           +bit+value+
-+================+===+=====+
-+isClass         +0  +1    +
-+----------------+---+-----+
-+genCtor         +1  +2    +
-+----------------+---+-----+
-+cppLayout       +2  +4    +
-+----------------+---+-----+
-+cppLayoutNotPod +3  +8    +
-+----------------+---+-----+
-+generated       +4  +16   +
-+----------------+---+-----+
-+persistent      +5  +32   +
-+----------------+---+-----+
-+isLambda        +6  +64   +
-+----------------+---+-----+
-+privateStructure+7  +128  +
-+----------------+---+-----+
-
-
-|typedef-ast-StructureFlags|
-
-.. _alias-StructurePtr:
-
-.. das:attribute:: StructurePtr = smart_ptr<ast::Structure>
-
-|typedef-ast-StructurePtr|
-
-.. _alias-TypeDeclFlags:
-
-.. das:attribute:: TypeDeclFlags is a bitfield
-
-+---------------+---+-----+
-+field          +bit+value+
-+===============+===+=====+
-+ref            +0  +1    +
-+---------------+---+-----+
-+constant       +1  +2    +
-+---------------+---+-----+
-+temporary      +2  +4    +
-+---------------+---+-----+
-+_implicit      +3  +8    +
-+---------------+---+-----+
-+removeRef      +4  +16   +
-+---------------+---+-----+
-+removeConstant +5  +32   +
-+---------------+---+-----+
-+removeDim      +6  +64   +
-+---------------+---+-----+
-+removeTemporary+7  +128  +
-+---------------+---+-----+
-+explicitConst  +8  +256  +
-+---------------+---+-----+
-+aotAlias       +9  +512  +
-+---------------+---+-----+
-+smartPtr       +10 +1024 +
-+---------------+---+-----+
-+smartPtrNative +11 +2048 +
-+---------------+---+-----+
-+isExplicit     +12 +4096 +
-+---------------+---+-----+
-+isNativeDim    +13 +8192 +
-+---------------+---+-----+
-
-
-|typedef-ast-TypeDeclFlags|
-
-.. _alias-TypeDeclPtr:
-
-.. das:attribute:: TypeDeclPtr = smart_ptr<ast::TypeDecl>
-
-|typedef-ast-TypeDeclPtr|
-
-.. _alias-TypeInfoMacroPtr:
-
-.. das:attribute:: TypeInfoMacroPtr = smart_ptr<ast::TypeInfoMacro>
-
-|typedef-ast-TypeInfoMacroPtr|
-
-.. _alias-VariableAccessFlags:
-
-.. das:attribute:: VariableAccessFlags is a bitfield
-
-+-------------+---+-----+
-+field        +bit+value+
-+=============+===+=====+
-+access_extern+0  +1    +
-+-------------+---+-----+
-+access_get   +1  +2    +
-+-------------+---+-----+
-+access_ref   +2  +4    +
-+-------------+---+-----+
-+access_init  +3  +8    +
-+-------------+---+-----+
-+access_pass  +4  +16   +
-+-------------+---+-----+
-
-
-|typedef-ast-VariableAccessFlags|
 
 .. _alias-VariableFlags:
 
@@ -650,17 +314,306 @@ Type aliases
 
 |typedef-ast-VariableFlags|
 
-.. _alias-VariablePtr:
+.. _alias-VariableAccessFlags:
 
-.. das:attribute:: VariablePtr = smart_ptr<ast::Variable>
+.. das:attribute:: VariableAccessFlags is a bitfield
 
-|typedef-ast-VariablePtr|
++-------------+---+-----+
++field        +bit+value+
++=============+===+=====+
++access_extern+0  +1    +
++-------------+---+-----+
++access_get   +1  +2    +
++-------------+---+-----+
++access_ref   +2  +4    +
++-------------+---+-----+
++access_init  +3  +8    +
++-------------+---+-----+
++access_pass  +4  +16   +
++-------------+---+-----+
 
-.. _alias-VariantMacroPtr:
 
-.. das:attribute:: VariantMacroPtr = smart_ptr<ast::VariantMacro>
+|typedef-ast-VariableAccessFlags|
 
-|typedef-ast-VariantMacroPtr|
+.. _alias-ExprBlockFlags:
+
+.. das:attribute:: ExprBlockFlags is a bitfield
+
++--------------------------+---+-----+
++field                     +bit+value+
++==========================+===+=====+
++isClosure                 +0  +1    +
++--------------------------+---+-----+
++hasReturn                 +1  +2    +
++--------------------------+---+-----+
++copyOnReturn              +2  +4    +
++--------------------------+---+-----+
++moveOnReturn              +3  +8    +
++--------------------------+---+-----+
++inTheLoop                 +4  +16   +
++--------------------------+---+-----+
++finallyBeforeBody         +5  +32   +
++--------------------------+---+-----+
++finallyDisabled           +6  +64   +
++--------------------------+---+-----+
++aotSkipMakeBlock          +7  +128  +
++--------------------------+---+-----+
++aotDoNotSkipAnnotationData+8  +256  +
++--------------------------+---+-----+
++isCollapseable            +9  +512  +
++--------------------------+---+-----+
++needCollapse              +10 +1024 +
++--------------------------+---+-----+
+
+
+|typedef-ast-ExprBlockFlags|
+
+.. _alias-ExprAtFlags:
+
+.. das:attribute:: ExprAtFlags is a bitfield
+
++------------+---+-----+
++field       +bit+value+
++============+===+=====+
++r2v         +0  +1    +
++------------+---+-----+
++r2cr        +1  +2    +
++------------+---+-----+
++write       +2  +4    +
++------------+---+-----+
++no_promotion+3  +8    +
++------------+---+-----+
+
+
+|typedef-ast-ExprAtFlags|
+
+.. _alias-ExprMakeLocalFlags:
+
+.. das:attribute:: ExprMakeLocalFlags is a bitfield
+
++---------------+---+-----+
++field          +bit+value+
++===============+===+=====+
++useStackRef    +0  +1    +
++---------------+---+-----+
++useCMRES       +1  +2    +
++---------------+---+-----+
++doesNotNeedSp  +2  +4    +
++---------------+---+-----+
++doesNotNeedInit+3  +8    +
++---------------+---+-----+
++initAllFields  +4  +16   +
++---------------+---+-----+
+
+
+|typedef-ast-ExprMakeLocalFlags|
+
+.. _alias-ExprAscendFlags:
+
+.. das:attribute:: ExprAscendFlags is a bitfield
+
++------------+---+-----+
++field       +bit+value+
++============+===+=====+
++useStackRef +0  +1    +
++------------+---+-----+
++needTypeInfo+1  +2    +
++------------+---+-----+
+
+
+|typedef-ast-ExprAscendFlags|
+
+.. _alias-ExprCastFlags:
+
+.. das:attribute:: ExprCastFlags is a bitfield
+
++---------------+---+-----+
++field          +bit+value+
++===============+===+=====+
++upcastCast     +0  +1    +
++---------------+---+-----+
++reinterpretCast+1  +2    +
++---------------+---+-----+
+
+
+|typedef-ast-ExprCastFlags|
+
+.. _alias-ExprVarFlags:
+
+.. das:attribute:: ExprVarFlags is a bitfield
+
++---------+---+-----+
++field    +bit+value+
++=========+===+=====+
++local    +0  +1    +
++---------+---+-----+
++argument +1  +2    +
++---------+---+-----+
++_block   +2  +4    +
++---------+---+-----+
++thisBlock+3  +8    +
++---------+---+-----+
++r2v      +4  +16   +
++---------+---+-----+
++r2cr     +5  +32   +
++---------+---+-----+
++write    +6  +64   +
++---------+---+-----+
+
+
+|typedef-ast-ExprVarFlags|
+
+.. _alias-ExprMakeStructFlags:
+
+.. das:attribute:: ExprMakeStructFlags is a bitfield
+
++--------------+---+-----+
++field         +bit+value+
++==============+===+=====+
++useInitializer+0  +1    +
++--------------+---+-----+
++isNewHandle   +1  +2    +
++--------------+---+-----+
+
+
+|typedef-ast-ExprMakeStructFlags|
+
+.. _alias-MakeFieldDeclFlags:
+
+.. das:attribute:: MakeFieldDeclFlags is a bitfield
+
++--------------+---+-----+
++field         +bit+value+
++==============+===+=====+
++moveSemantics +0  +1    +
++--------------+---+-----+
++cloneSemantics+1  +2    +
++--------------+---+-----+
+
+
+|typedef-ast-MakeFieldDeclFlags|
+
+.. _alias-ExprFieldDerefFlags:
+
+.. das:attribute:: ExprFieldDerefFlags is a bitfield
+
++------------------+---+-----+
++field             +bit+value+
++==================+===+=====+
++unsafeDeref       +0  +1    +
++------------------+---+-----+
++ignoreCaptureConst+1  +2    +
++------------------+---+-----+
+
+
+|typedef-ast-ExprFieldDerefFlags|
+
+.. _alias-ExprFieldFieldFlags:
+
+.. das:attribute:: ExprFieldFieldFlags is a bitfield
+
++------------+---+-----+
++field       +bit+value+
++============+===+=====+
++r2v         +0  +1    +
++------------+---+-----+
++r2cr        +1  +2    +
++------------+---+-----+
++write       +2  +4    +
++------------+---+-----+
++no_promotion+3  +8    +
++------------+---+-----+
+
+
+|typedef-ast-ExprFieldFieldFlags|
+
+.. _alias-ExprSwizzleFieldFlags:
+
+.. das:attribute:: ExprSwizzleFieldFlags is a bitfield
+
++-----+---+-----+
++field+bit+value+
++=====+===+=====+
++r2v  +0  +1    +
++-----+---+-----+
++r2cr +1  +2    +
++-----+---+-----+
++write+2  +4    +
++-----+---+-----+
+
+
+|typedef-ast-ExprSwizzleFieldFlags|
+
+.. _alias-ExprYieldFlags:
+
+.. das:attribute:: ExprYieldFlags is a bitfield
+
++-------------+---+-----+
++field        +bit+value+
++=============+===+=====+
++moveSemantics+0  +1    +
++-------------+---+-----+
+
+
+|typedef-ast-ExprYieldFlags|
+
+.. _alias-ExprReturnFlags:
+
+.. das:attribute:: ExprReturnFlags is a bitfield
+
++------------------+---+-----+
++field             +bit+value+
++==================+===+=====+
++moveSemantics     +0  +1    +
++------------------+---+-----+
++returnReference   +1  +2    +
++------------------+---+-----+
++returnInBlock     +2  +4    +
++------------------+---+-----+
++takeOverRightStack+3  +8    +
++------------------+---+-----+
++returnCallCMRES   +4  +16   +
++------------------+---+-----+
++returnCMRES       +5  +32   +
++------------------+---+-----+
++fromYield         +6  +64   +
++------------------+---+-----+
+
+
+|typedef-ast-ExprReturnFlags|
+
+.. _alias-ExprMakeBlockFlags:
+
+.. das:attribute:: ExprMakeBlockFlags is a bitfield
+
++---------------+---+-----+
++field          +bit+value+
++===============+===+=====+
++isLambda       +0  +1    +
++---------------+---+-----+
++isLocalFunction+1  +2    +
++---------------+---+-----+
+
+
+|typedef-ast-ExprMakeBlockFlags|
+
+.. _alias-ExpressionPtr:
+
+.. das:attribute:: ExpressionPtr = smart_ptr<ast::Expression>
+
+|typedef-ast-ExpressionPtr|
+
+.. _alias-ProgramPtr:
+
+.. das:attribute:: ProgramPtr = smart_ptr<rtti::Program>
+
+|typedef-ast-ProgramPtr|
+
+.. _alias-TypeDeclPtr:
+
+.. das:attribute:: TypeDeclPtr = smart_ptr<ast::TypeDecl>
+
+|typedef-ast-TypeDeclPtr|
 
 .. _alias-VectorTypeDeclPtr:
 
@@ -668,28 +621,87 @@ Type aliases
 
 |typedef-ast-VectorTypeDeclPtr|
 
+.. _alias-EnumerationPtr:
+
+.. das:attribute:: EnumerationPtr = smart_ptr<ast::Enumeration>
+
+|typedef-ast-EnumerationPtr|
+
+.. _alias-StructurePtr:
+
+.. das:attribute:: StructurePtr = smart_ptr<ast::Structure>
+
+|typedef-ast-StructurePtr|
+
+.. _alias-FunctionPtr:
+
+.. das:attribute:: FunctionPtr = smart_ptr<ast::Function>
+
+|typedef-ast-FunctionPtr|
+
+.. _alias-VariablePtr:
+
+.. das:attribute:: VariablePtr = smart_ptr<ast::Variable>
+
+|typedef-ast-VariablePtr|
+
+.. _alias-MakeFieldDeclPtr:
+
+.. das:attribute:: MakeFieldDeclPtr = smart_ptr<ast::MakeFieldDecl>
+
+|typedef-ast-MakeFieldDeclPtr|
+
+.. _alias-FunctionAnnotationPtr:
+
+.. das:attribute:: FunctionAnnotationPtr = smart_ptr<ast::FunctionAnnotation>
+
+|typedef-ast-FunctionAnnotationPtr|
+
+.. _alias-StructureAnnotationPtr:
+
+.. das:attribute:: StructureAnnotationPtr = smart_ptr<ast::StructureAnnotation>
+
+|typedef-ast-StructureAnnotationPtr|
+
+.. _alias-EnumerationAnnotationPtr:
+
+.. das:attribute:: EnumerationAnnotationPtr = smart_ptr<ast::EnumerationAnnotation>
+
+|typedef-ast-EnumerationAnnotationPtr|
+
+.. _alias-PassMacroPtr:
+
+.. das:attribute:: PassMacroPtr = smart_ptr<ast::PassMacro>
+
+|typedef-ast-PassMacroPtr|
+
+.. _alias-VariantMacroPtr:
+
+.. das:attribute:: VariantMacroPtr = smart_ptr<ast::VariantMacro>
+
+|typedef-ast-VariantMacroPtr|
+
+.. _alias-ReaderMacroPtr:
+
+.. das:attribute:: ReaderMacroPtr = smart_ptr<ast::ReaderMacro>
+
+|typedef-ast-ReaderMacroPtr|
+
+.. _alias-CallMacroPtr:
+
+.. das:attribute:: CallMacroPtr = smart_ptr<ast::CallMacro>
+
+|typedef-ast-CallMacroPtr|
+
+.. _alias-TypeInfoMacroPtr:
+
+.. das:attribute:: TypeInfoMacroPtr = smart_ptr<ast::TypeInfoMacro>
+
+|typedef-ast-TypeInfoMacroPtr|
+
 ++++++++++++
 Enumerations
 ++++++++++++
-
-.. _enum-ast-CaptureMode:
-
-.. das:attribute:: CaptureMode
-
-+--------------------+-+
-+capture_any         +0+
-+--------------------+-+
-+capture_by_copy     +1+
-+--------------------+-+
-+capture_by_reference+2+
-+--------------------+-+
-+capture_by_clone    +3+
-+--------------------+-+
-+capture_by_move     +4+
-+--------------------+-+
-
-
-|enumeration-ast-CaptureMode|
 
 .. _enum-ast-SideEffects:
 
@@ -722,2920 +734,34 @@ Enumerations
 
 |enumeration-ast-SideEffects|
 
+.. _enum-ast-CaptureMode:
+
+.. das:attribute:: CaptureMode
+
++--------------------+-+
++capture_any         +0+
++--------------------+-+
++capture_by_copy     +1+
++--------------------+-+
++capture_by_reference+2+
++--------------------+-+
++capture_by_clone    +3+
++--------------------+-+
++capture_by_move     +4+
++--------------------+-+
+
+
+|enumeration-ast-CaptureMode|
+
 ++++++++++++++++++
 Handled structures
 ++++++++++++++++++
 
-.. _handle-ast-AstContext:
+.. _handle-ast-ModuleLibrary:
 
-.. das:attribute:: AstContext
+.. das:attribute:: ModuleLibrary
 
-AstContext fields are
-
-+------+------------------------------------------------------------------------------------------------+
-+func  +smart_ptr< :ref:`ast::Function <handle-ast-Function>` >                                         +
-+------+------------------------------------------------------------------------------------------------+
-+scopes+ :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+------+------------------------------------------------------------------------------------------------+
-+blocks+ :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+------+------------------------------------------------------------------------------------------------+
-+_loop + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+------+------------------------------------------------------------------------------------------------+
-+_with + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-AstContext|
-
-.. _handle-ast-CallMacro:
-
-.. das:attribute:: CallMacro
-
-CallMacro fields are
-
-+-------+--------------------------------------------------------+
-+_module+ :ref:`rtti::Module <handle-rtti-Module>` ?             +
-+-------+--------------------------------------------------------+
-+name   + :ref:`builtin::das_string <handle-builtin-das_string>` +
-+-------+--------------------------------------------------------+
-
-
-|structure_annotation-ast-CallMacro|
-
-.. _handle-ast-CaptureEntry:
-
-.. das:attribute:: CaptureEntry
-
-CaptureEntry fields are
-
-+----+--------------------------------------------------------+
-+name+ :ref:`builtin::das_string <handle-builtin-das_string>` +
-+----+--------------------------------------------------------+
-+mode+ :ref:`ast::CaptureMode <enum-ast-CaptureMode>`         +
-+----+--------------------------------------------------------+
-
-
-|structure_annotation-ast-CaptureEntry|
-
-.. _handle-ast-EnumEntry:
-
-.. das:attribute:: EnumEntry
-
-EnumEntry fields are
-
-+-----+-----------------------------------------------------------+
-+value+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+-----+-----------------------------------------------------------+
-+at   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+-----+-----------------------------------------------------------+
-+name + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+-----+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-EnumEntry|
-
-.. _handle-ast-Enumeration:
-
-.. das:attribute:: Enumeration
-
-Enumeration fields are
-
-+-----------+--------------------------------------------------------------------------+
-+_module    + :ref:`rtti::Module <handle-rtti-Module>` ?                               +
-+-----------+--------------------------------------------------------------------------+
-+at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                             +
-+-----------+--------------------------------------------------------------------------+
-+isPrivate  +bool                                                                      +
-+-----------+--------------------------------------------------------------------------+
-+cppName    + :ref:`builtin::das_string <handle-builtin-das_string>`                   +
-+-----------+--------------------------------------------------------------------------+
-+list       + :ref:`builtin::dasvector`EnumEntry <handle-builtin-dasvector`EnumEntry>` +
-+-----------+--------------------------------------------------------------------------+
-+annotations+ :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`                 +
-+-----------+--------------------------------------------------------------------------+
-+name       + :ref:`builtin::das_string <handle-builtin-das_string>`                   +
-+-----------+--------------------------------------------------------------------------+
-+external   +bool                                                                      +
-+-----------+--------------------------------------------------------------------------+
-+baseType   + :ref:`rtti::Type <enum-rtti-Type>`                                       +
-+-----------+--------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-Enumeration|
-
-.. _handle-ast-EnumerationAnnotation:
-
-.. das:attribute:: EnumerationAnnotation
-
-|structure_annotation-ast-EnumerationAnnotation|
-
-.. _handle-ast-ExprAddr:
-
-.. das:attribute:: ExprAddr
-
-ExprAddr fields are
-
-+----------+--------------------------------------------------------+
-+func      + :ref:`ast::Function <handle-ast-Function>` ?           +
-+----------+--------------------------------------------------------+
-+target    + :ref:`builtin::das_string <handle-builtin-das_string>` +
-+----------+--------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
-+----------+--------------------------------------------------------+
-+funcType  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
-+----------+--------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`           +
-+----------+--------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`               +
-+----------+--------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
-+----------+--------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                     +
-+----------+--------------------------------------------------------+
-+__rtti    +string const                                            +
-+----------+--------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprAddr|
-
-.. _handle-ast-ExprArrayComprehension:
-
-.. das:attribute:: ExprArrayComprehension
-
-ExprArrayComprehension fields are
-
-+---------------+-----------------------------------------------------------+
-+at             + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+---------------+-----------------------------------------------------------+
-+printFlags     + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+---------------+-----------------------------------------------------------+
-+generatorSyntax+bool                                                       +
-+---------------+-----------------------------------------------------------+
-+subexpr        +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+---------------+-----------------------------------------------------------+
-+genFlags       + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+---------------+-----------------------------------------------------------+
-+exprFor        +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+---------------+-----------------------------------------------------------+
-+exprWhere      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+---------------+-----------------------------------------------------------+
-+_type          +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+---------------+-----------------------------------------------------------+
-+flags          + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+---------------+-----------------------------------------------------------+
-+__rtti         +string const                                               +
-+---------------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprArrayComprehension|
-
-.. _handle-ast-ExprAsVariant:
-
-.. das:attribute:: ExprAsVariant
-
-ExprAsVariant fields are
-
-+----------+-------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` >    +
-+----------+-------------------------------------------------------------------------+
-+value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >              +
-+----------+-------------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
-+----------+-------------------------------------------------------------------------+
-+fieldIndex+int                                                                      +
-+----------+-------------------------------------------------------------------------+
-+fieldFlags+ :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`                  +
-+----------+-------------------------------------------------------------------------+
-+field     + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const? const+
-+----------+-------------------------------------------------------------------------+
-+derefFlags+ :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`                  +
-+----------+-------------------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                            +
-+----------+-------------------------------------------------------------------------+
-+name      + :ref:`builtin::das_string <handle-builtin-das_string>`                  +
-+----------+-------------------------------------------------------------------------+
-+atField   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
-+----------+-------------------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                +
-+----------+-------------------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                  +
-+----------+-------------------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                                      +
-+----------+-------------------------------------------------------------------------+
-+__rtti    +string const                                                             +
-+----------+-------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprAsVariant|
-
-.. _handle-ast-ExprAscend:
-
-.. das:attribute:: ExprAscend
-
-ExprAscend fields are
-
-+-----------+-----------------------------------------------------------+
-+ascType    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+-----------+-----------------------------------------------------------+
-+at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+-----------+-----------------------------------------------------------+
-+printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+-----------+-----------------------------------------------------------+
-+stackTop   +uint                                                       +
-+-----------+-----------------------------------------------------------+
-+ascendFlags+ :ref:`ExprAscendFlags <alias-ExprAscendFlags>`            +
-+-----------+-----------------------------------------------------------+
-+subexpr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+-----------+-----------------------------------------------------------+
-+genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+-----------+-----------------------------------------------------------+
-+_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+-----------+-----------------------------------------------------------+
-+flags      + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+-----------+-----------------------------------------------------------+
-+__rtti     +string const                                               +
-+-----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprAscend|
-
-.. _handle-ast-ExprAssert:
-
-.. das:attribute:: ExprAssert
-
-ExprAssert fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+isVerify              +bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprAssert|
-
-.. _handle-ast-ExprAt:
-
-.. das:attribute:: ExprAt
-
-ExprAt fields are
-
-+----------+-----------------------------------------------------------+
-+index     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+atFlags   + :ref:`ExprAtFlags <alias-ExprAtFlags>`                    +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprAt|
-
-.. _handle-ast-ExprBlock:
-
-.. das:attribute:: ExprBlock
-
-ExprBlock fields are
-
-+-----------------+------------------------------------------------------------------------------------------------+
-+stackVarBottom   +uint                                                                                            +
-+-----------------+------------------------------------------------------------------------------------------------+
-+annotationDataSid+uint                                                                                            +
-+-----------------+------------------------------------------------------------------------------------------------+
-+arguments        + :ref:`builtin::dasvector`smart_ptr`Variable <handle-builtin-dasvector`smart_ptr`Variable>`     +
-+-----------------+------------------------------------------------------------------------------------------------+
-+at               + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+-----------------+------------------------------------------------------------------------------------------------+
-+stackCleanVars   + :ref:`builtin::dasvector`pair`uint`uint <handle-builtin-dasvector`pair`uint`uint>`             +
-+-----------------+------------------------------------------------------------------------------------------------+
-+list             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+-----------------+------------------------------------------------------------------------------------------------+
-+returnType       +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+-----------------+------------------------------------------------------------------------------------------------+
-+printFlags       + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+-----------------+------------------------------------------------------------------------------------------------+
-+annotations      + :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`                                       +
-+-----------------+------------------------------------------------------------------------------------------------+
-+stackTop         +uint                                                                                            +
-+-----------------+------------------------------------------------------------------------------------------------+
-+maxLabelIndex    +int                                                                                             +
-+-----------------+------------------------------------------------------------------------------------------------+
-+blockFlags       + :ref:`ExprBlockFlags <alias-ExprBlockFlags>`                                                   +
-+-----------------+------------------------------------------------------------------------------------------------+
-+finalList        + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+-----------------+------------------------------------------------------------------------------------------------+
-+genFlags         + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+-----------------+------------------------------------------------------------------------------------------------+
-+annotationData   +uint64                                                                                          +
-+-----------------+------------------------------------------------------------------------------------------------+
-+stackVarTop      +uint                                                                                            +
-+-----------------+------------------------------------------------------------------------------------------------+
-+flags            + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+-----------------+------------------------------------------------------------------------------------------------+
-+_type            +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+-----------------+------------------------------------------------------------------------------------------------+
-+__rtti           +string const                                                                                    +
-+-----------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprBlock|
-
-.. _handle-ast-ExprBreak:
-
-.. das:attribute:: ExprBreak
-
-ExprBreak fields are
-
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprBreak|
-
-.. _handle-ast-ExprCall:
-
-.. das:attribute:: ExprCall
-
-ExprCall fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+func                  + :ref:`ast::Function <handle-ast-Function>` ?                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+stackTop              +uint                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+doesNotNeedSp         +bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprCall|
-
-.. _handle-ast-ExprCallFunc:
-
-.. das:attribute:: ExprCallFunc
-
-ExprCallFunc fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+func                  + :ref:`ast::Function <handle-ast-Function>` ?                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+stackTop              +uint                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprCallFunc|
-
-.. _handle-ast-ExprCallMacro:
-
-.. das:attribute:: ExprCallMacro
-
-ExprCallMacro fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+macro                 + :ref:`ast::CallMacro <handle-ast-CallMacro>` ?                                                 +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprCallMacro|
-
-.. _handle-ast-ExprCast:
-
-.. das:attribute:: ExprCast
-
-ExprCast fields are
-
-+----------+-----------------------------------------------------------+
-+castFlags + :ref:`ExprCastFlags <alias-ExprCastFlags>`                +
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+castType  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprCast|
-
-.. _handle-ast-ExprClone:
-
-.. das:attribute:: ExprClone
-
-ExprClone fields are
-
-+----------+-----------------------------------------------------------+
-+right     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+left      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprClone|
-
-.. _handle-ast-ExprConst:
-
-.. das:attribute:: ExprConst
-
-ExprConst fields are
-
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConst|
-
-.. _handle-ast-ExprConstBitfield:
-
-.. das:attribute:: ExprConstBitfield
-
-ExprConstBitfield fields are
-
-+------------+-------------------------------------------------------+
-+value       +bitfield<>                                             +
-+------------+-------------------------------------------------------+
-+at          + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+------------+-------------------------------------------------------+
-+bitfieldType+smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+------------+-------------------------------------------------------+
-+printFlags  + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+------------+-------------------------------------------------------+
-+genFlags    + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+------------+-------------------------------------------------------+
-+baseType    + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+------------+-------------------------------------------------------+
-+_type       +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+------------+-------------------------------------------------------+
-+flags       + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+------------+-------------------------------------------------------+
-+__rtti      +string const                                           +
-+------------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstBitfield|
-
-.. _handle-ast-ExprConstBool:
-
-.. das:attribute:: ExprConstBool
-
-ExprConstBool fields are
-
-+----------+-------------------------------------------------------+
-+value     +bool                                                   +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstBool|
-
-.. _handle-ast-ExprConstDouble:
-
-.. das:attribute:: ExprConstDouble
-
-ExprConstDouble fields are
-
-+----------+-------------------------------------------------------+
-+value     +double                                                 +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstDouble|
-
-.. _handle-ast-ExprConstEnumeration:
-
-.. das:attribute:: ExprConstEnumeration
-
-ExprConstEnumeration fields are
-
-+----------+-------------------------------------------------------------+
-+value     + :ref:`builtin::das_string <handle-builtin-das_string>`      +
-+----------+-------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                +
-+----------+-------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                +
-+----------+-------------------------------------------------------------+
-+enumType  +smart_ptr< :ref:`ast::Enumeration <handle-ast-Enumeration>` >+
-+----------+-------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                    +
-+----------+-------------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                          +
-+----------+-------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >      +
-+----------+-------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                          +
-+----------+-------------------------------------------------------------+
-+__rtti    +string const                                                 +
-+----------+-------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstEnumeration|
-
-.. _handle-ast-ExprConstFloat:
-
-.. das:attribute:: ExprConstFloat
-
-ExprConstFloat fields are
-
-+----------+-------------------------------------------------------+
-+value     +float                                                  +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstFloat|
-
-.. _handle-ast-ExprConstFloat2:
-
-.. das:attribute:: ExprConstFloat2
-
-ExprConstFloat2 fields are
-
-+----------+-------------------------------------------------------+
-+value     +float2                                                 +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstFloat2|
-
-.. _handle-ast-ExprConstFloat3:
-
-.. das:attribute:: ExprConstFloat3
-
-ExprConstFloat3 fields are
-
-+----------+-------------------------------------------------------+
-+value     +float3                                                 +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstFloat3|
-
-.. _handle-ast-ExprConstFloat4:
-
-.. das:attribute:: ExprConstFloat4
-
-ExprConstFloat4 fields are
-
-+----------+-------------------------------------------------------+
-+value     +float4                                                 +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstFloat4|
-
-.. _handle-ast-ExprConstInt:
-
-.. das:attribute:: ExprConstInt
-
-ExprConstInt fields are
-
-+----------+-------------------------------------------------------+
-+value     +int                                                    +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstInt|
-
-.. _handle-ast-ExprConstInt16:
-
-.. das:attribute:: ExprConstInt16
-
-ExprConstInt16 fields are
-
-+----------+-------------------------------------------------------+
-+value     +int16                                                  +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstInt16|
-
-.. _handle-ast-ExprConstInt2:
-
-.. das:attribute:: ExprConstInt2
-
-ExprConstInt2 fields are
-
-+----------+-------------------------------------------------------+
-+value     +int2                                                   +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstInt2|
-
-.. _handle-ast-ExprConstInt3:
-
-.. das:attribute:: ExprConstInt3
-
-ExprConstInt3 fields are
-
-+----------+-------------------------------------------------------+
-+value     +int3                                                   +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstInt3|
-
-.. _handle-ast-ExprConstInt4:
-
-.. das:attribute:: ExprConstInt4
-
-ExprConstInt4 fields are
-
-+----------+-------------------------------------------------------+
-+value     +int4                                                   +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstInt4|
-
-.. _handle-ast-ExprConstInt64:
-
-.. das:attribute:: ExprConstInt64
-
-ExprConstInt64 fields are
-
-+----------+-------------------------------------------------------+
-+value     +int64                                                  +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstInt64|
-
-.. _handle-ast-ExprConstInt8:
-
-.. das:attribute:: ExprConstInt8
-
-ExprConstInt8 fields are
-
-+----------+-------------------------------------------------------+
-+value     +int8                                                   +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstInt8|
-
-.. _handle-ast-ExprConstPtr:
-
-.. das:attribute:: ExprConstPtr
-
-ExprConstPtr fields are
-
-+----------+-------------------------------------------------------+
-+value     +void?                                                  +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstPtr|
-
-.. _handle-ast-ExprConstRange:
-
-.. das:attribute:: ExprConstRange
-
-ExprConstRange fields are
-
-+----------+-------------------------------------------------------+
-+value     +range                                                  +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstRange|
-
-.. _handle-ast-ExprConstString:
-
-.. das:attribute:: ExprConstString
-
-ExprConstString fields are
-
-+----------+--------------------------------------------------------+
-+value     + :ref:`builtin::das_string <handle-builtin-das_string>` +
-+----------+--------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
-+----------+--------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`           +
-+----------+--------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`               +
-+----------+--------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                     +
-+----------+--------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
-+----------+--------------------------------------------------------+
-+__rtti    +string const                                            +
-+----------+--------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                     +
-+----------+--------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstString|
-
-.. _handle-ast-ExprConstUInt:
-
-.. das:attribute:: ExprConstUInt
-
-ExprConstUInt fields are
-
-+----------+-------------------------------------------------------+
-+value     +uint                                                   +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstUInt|
-
-.. _handle-ast-ExprConstUInt16:
-
-.. das:attribute:: ExprConstUInt16
-
-ExprConstUInt16 fields are
-
-+----------+-------------------------------------------------------+
-+value     +uint16                                                 +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstUInt16|
-
-.. _handle-ast-ExprConstUInt2:
-
-.. das:attribute:: ExprConstUInt2
-
-ExprConstUInt2 fields are
-
-+----------+-------------------------------------------------------+
-+value     +uint2                                                  +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstUInt2|
-
-.. _handle-ast-ExprConstUInt3:
-
-.. das:attribute:: ExprConstUInt3
-
-ExprConstUInt3 fields are
-
-+----------+-------------------------------------------------------+
-+value     +uint3                                                  +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstUInt3|
-
-.. _handle-ast-ExprConstUInt4:
-
-.. das:attribute:: ExprConstUInt4
-
-ExprConstUInt4 fields are
-
-+----------+-------------------------------------------------------+
-+value     +uint4                                                  +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstUInt4|
-
-.. _handle-ast-ExprConstUInt64:
-
-.. das:attribute:: ExprConstUInt64
-
-ExprConstUInt64 fields are
-
-+----------+-------------------------------------------------------+
-+value     +uint64                                                 +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstUInt64|
-
-.. _handle-ast-ExprConstUInt8:
-
-.. das:attribute:: ExprConstUInt8
-
-ExprConstUInt8 fields are
-
-+----------+-------------------------------------------------------+
-+value     +uint8                                                  +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstUInt8|
-
-.. _handle-ast-ExprConstURange:
-
-.. das:attribute:: ExprConstURange
-
-ExprConstURange fields are
-
-+----------+-------------------------------------------------------+
-+value     +urange                                                 +
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprConstURange|
-
-.. _handle-ast-ExprContinue:
-
-.. das:attribute:: ExprContinue
-
-ExprContinue fields are
-
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprContinue|
-
-.. _handle-ast-ExprCopy:
-
-.. das:attribute:: ExprCopy
-
-ExprCopy fields are
-
-+------------------+-----------------------------------------------------------+
-+takeOverRightStack+bool                                                       +
-+------------------+-----------------------------------------------------------+
-+right             +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+------------------+-----------------------------------------------------------+
-+at                + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+------------------+-----------------------------------------------------------+
-+op                + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+------------------+-----------------------------------------------------------+
-+printFlags        + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+------------------+-----------------------------------------------------------+
-+genFlags          + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+------------------+-----------------------------------------------------------+
-+_type             +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+------------------+-----------------------------------------------------------+
-+flags             + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+------------------+-----------------------------------------------------------+
-+__rtti            +string const                                               +
-+------------------+-----------------------------------------------------------+
-+left              +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+------------------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprCopy|
-
-.. _handle-ast-ExprDebug:
-
-.. das:attribute:: ExprDebug
-
-ExprDebug fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprDebug|
-
-.. _handle-ast-ExprDelete:
-
-.. das:attribute:: ExprDelete
-
-ExprDelete fields are
-
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+native    +bool                                                       +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprDelete|
-
-.. _handle-ast-ExprErase:
-
-.. das:attribute:: ExprErase
-
-ExprErase fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprErase|
-
-.. _handle-ast-ExprFakeContext:
-
-.. das:attribute:: ExprFakeContext
-
-ExprFakeContext fields are
-
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprFakeContext|
-
-.. _handle-ast-ExprFakeLineInfo:
-
-.. das:attribute:: ExprFakeLineInfo
-
-ExprFakeLineInfo fields are
-
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprFakeLineInfo|
-
-.. _handle-ast-ExprField:
-
-.. das:attribute:: ExprField
-
-ExprField fields are
-
-+----------+-------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` >    +
-+----------+-------------------------------------------------------------------------+
-+value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >              +
-+----------+-------------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
-+----------+-------------------------------------------------------------------------+
-+fieldIndex+int                                                                      +
-+----------+-------------------------------------------------------------------------+
-+fieldFlags+ :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`                  +
-+----------+-------------------------------------------------------------------------+
-+field     + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const? const+
-+----------+-------------------------------------------------------------------------+
-+derefFlags+ :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`                  +
-+----------+-------------------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                            +
-+----------+-------------------------------------------------------------------------+
-+name      + :ref:`builtin::das_string <handle-builtin-das_string>`                  +
-+----------+-------------------------------------------------------------------------+
-+atField   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
-+----------+-------------------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                +
-+----------+-------------------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                  +
-+----------+-------------------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                                      +
-+----------+-------------------------------------------------------------------------+
-+__rtti    +string const                                                             +
-+----------+-------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprField|
-
-.. _handle-ast-ExprFind:
-
-.. das:attribute:: ExprFind
-
-ExprFind fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprFind|
-
-.. _handle-ast-ExprFor:
-
-.. das:attribute:: ExprFor
-
-ExprFor fields are
-
-+-----------------+------------------------------------------------------------------------------------------------+
-+at               + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+-----------------+------------------------------------------------------------------------------------------------+
-+body             +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >                                     +
-+-----------------+------------------------------------------------------------------------------------------------+
-+iteratorsAt      + :ref:`builtin::dasvector`LineInfo <handle-builtin-dasvector`LineInfo>`                         +
-+-----------------+------------------------------------------------------------------------------------------------+
-+printFlags       + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+-----------------+------------------------------------------------------------------------------------------------+
-+iterators        + :ref:`builtin::dasvector`das_string <handle-builtin-dasvector`das_string>`                     +
-+-----------------+------------------------------------------------------------------------------------------------+
-+iteratorVariables+ :ref:`builtin::dasvector`smart_ptr`Variable <handle-builtin-dasvector`smart_ptr`Variable>`     +
-+-----------------+------------------------------------------------------------------------------------------------+
-+genFlags         + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+-----------------+------------------------------------------------------------------------------------------------+
-+sources          + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+-----------------+------------------------------------------------------------------------------------------------+
-+_type            +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+-----------------+------------------------------------------------------------------------------------------------+
-+flags            + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+-----------------+------------------------------------------------------------------------------------------------+
-+__rtti           +string const                                                                                    +
-+-----------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprFor|
-
-.. _handle-ast-ExprGoto:
-
-.. das:attribute:: ExprGoto
-
-ExprGoto fields are
-
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+labelName +int                                                        +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprGoto|
-
-.. _handle-ast-ExprIfThenElse:
-
-.. das:attribute:: ExprIfThenElse
-
-ExprIfThenElse fields are
-
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+if_false  +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+isStatic  +bool                                                       +
-+----------+-----------------------------------------------------------+
-+cond      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+if_true   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprIfThenElse|
-
-.. _handle-ast-ExprInvoke:
-
-.. das:attribute:: ExprInvoke
-
-ExprInvoke fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+stackTop              +uint                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+isInvokeMethod        +bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+doesNotNeedSp         +bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprInvoke|
-
-.. _handle-ast-ExprIs:
-
-.. das:attribute:: ExprIs
-
-ExprIs fields are
-
-+----------+-----------------------------------------------------------+
-+typeexpr  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprIs|
-
-.. _handle-ast-ExprIsVariant:
-
-.. das:attribute:: ExprIsVariant
-
-ExprIsVariant fields are
-
-+----------+-------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` >    +
-+----------+-------------------------------------------------------------------------+
-+value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >              +
-+----------+-------------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
-+----------+-------------------------------------------------------------------------+
-+fieldIndex+int                                                                      +
-+----------+-------------------------------------------------------------------------+
-+fieldFlags+ :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`                  +
-+----------+-------------------------------------------------------------------------+
-+field     + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const? const+
-+----------+-------------------------------------------------------------------------+
-+derefFlags+ :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`                  +
-+----------+-------------------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                            +
-+----------+-------------------------------------------------------------------------+
-+name      + :ref:`builtin::das_string <handle-builtin-das_string>`                  +
-+----------+-------------------------------------------------------------------------+
-+atField   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
-+----------+-------------------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                +
-+----------+-------------------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                  +
-+----------+-------------------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                                      +
-+----------+-------------------------------------------------------------------------+
-+__rtti    +string const                                                             +
-+----------+-------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprIsVariant|
-
-.. _handle-ast-ExprKeyExists:
-
-.. das:attribute:: ExprKeyExists
-
-ExprKeyExists fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprKeyExists|
-
-.. _handle-ast-ExprLabel:
-
-.. das:attribute:: ExprLabel
-
-ExprLabel fields are
-
-+----------+--------------------------------------------------------+
-+comment   + :ref:`builtin::das_string <handle-builtin-das_string>` +
-+----------+--------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
-+----------+--------------------------------------------------------+
-+labelName +int                                                     +
-+----------+--------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`           +
-+----------+--------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`               +
-+----------+--------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
-+----------+--------------------------------------------------------+
-+__rtti    +string const                                            +
-+----------+--------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                     +
-+----------+--------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprLabel|
-
-.. _handle-ast-ExprLet:
-
-.. das:attribute:: ExprLet
-
-ExprLet fields are
-
-+----------+--------------------------------------------------------------------------------------------+
-+atInit    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                               +
-+----------+--------------------------------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                               +
-+----------+--------------------------------------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                               +
-+----------+--------------------------------------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                   +
-+----------+--------------------------------------------------------------------------------------------+
-+variables + :ref:`builtin::dasvector`smart_ptr`Variable <handle-builtin-dasvector`smart_ptr`Variable>` +
-+----------+--------------------------------------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                     +
-+----------+--------------------------------------------------------------------------------------------+
-+__rtti    +string const                                                                                +
-+----------+--------------------------------------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                                                         +
-+----------+--------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprLet|
-
-.. _handle-ast-ExprLooksLikeCall:
-
-.. das:attribute:: ExprLooksLikeCall
-
-ExprLooksLikeCall fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprLooksLikeCall|
-
-.. _handle-ast-ExprMakeArray:
-
-.. das:attribute:: ExprMakeArray
-
-ExprMakeArray fields are
-
-+-----------+------------------------------------------------------------------------------------------------+
-+makeType   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+-----------+------------------------------------------------------------------------------------------------+
-+values     + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+-----------+------------------------------------------------------------------------------------------------+
-+at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+-----------+------------------------------------------------------------------------------------------------+
-+recordType +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+-----------+------------------------------------------------------------------------------------------------+
-+printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+-----------+------------------------------------------------------------------------------------------------+
-+makeFlags  + :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`                                           +
-+-----------+------------------------------------------------------------------------------------------------+
-+stackTop   +uint                                                                                            +
-+-----------+------------------------------------------------------------------------------------------------+
-+extraOffset+uint                                                                                            +
-+-----------+------------------------------------------------------------------------------------------------+
-+genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+-----------+------------------------------------------------------------------------------------------------+
-+_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+-----------+------------------------------------------------------------------------------------------------+
-+flags      + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+-----------+------------------------------------------------------------------------------------------------+
-+__rtti     +string const                                                                                    +
-+-----------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprMakeArray|
-
-.. _handle-ast-ExprMakeBlock:
-
-.. das:attribute:: ExprMakeBlock
-
-ExprMakeBlock fields are
-
-+----------+--------------------------------------------------------------------------------+
-+mmFlags   + :ref:`ExprMakeBlockFlags <alias-ExprMakeBlockFlags>`                           +
-+----------+--------------------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                   +
-+----------+--------------------------------------------------------------------------------+
-+capture   + :ref:`builtin::dasvector`CaptureEntry <handle-builtin-dasvector`CaptureEntry>` +
-+----------+--------------------------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                   +
-+----------+--------------------------------------------------------------------------------+
-+stackTop  +uint                                                                            +
-+----------+--------------------------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                       +
-+----------+--------------------------------------------------------------------------------+
-+_block    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >                     +
-+----------+--------------------------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                         +
-+----------+--------------------------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                                             +
-+----------+--------------------------------------------------------------------------------+
-+__rtti    +string const                                                                    +
-+----------+--------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprMakeBlock|
-
-.. _handle-ast-ExprMakeGenerator:
-
-.. das:attribute:: ExprMakeGenerator
-
-ExprMakeGenerator fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+capture               + :ref:`builtin::dasvector`CaptureEntry <handle-builtin-dasvector`CaptureEntry>`                 +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+iterType              +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprMakeGenerator|
-
-.. _handle-ast-ExprMakeLocal:
-
-.. das:attribute:: ExprMakeLocal
-
-ExprMakeLocal fields are
-
-+-----------+-------------------------------------------------------+
-+makeType   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+-----------+-------------------------------------------------------+
-+at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+-----------+-------------------------------------------------------+
-+printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+-----------+-------------------------------------------------------+
-+makeFlags  + :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  +
-+-----------+-------------------------------------------------------+
-+stackTop   +uint                                                   +
-+-----------+-------------------------------------------------------+
-+extraOffset+uint                                                   +
-+-----------+-------------------------------------------------------+
-+genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+-----------+-------------------------------------------------------+
-+_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+-----------+-------------------------------------------------------+
-+flags      + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+-----------+-------------------------------------------------------+
-+__rtti     +string const                                           +
-+-----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprMakeLocal|
-
-.. _handle-ast-ExprMakeStruct:
-
-.. das:attribute:: ExprMakeStruct
-
-ExprMakeStruct fields are
-
-+---------------+------------------------------------------------------------------------------------------------+
-+makeType       +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+---------------+------------------------------------------------------------------------------------------------+
-+at             + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+---------------+------------------------------------------------------------------------------------------------+
-+structs        + :ref:`builtin::dasvector`smart_ptr`MakeStruct <handle-builtin-dasvector`smart_ptr`MakeStruct>` +
-+---------------+------------------------------------------------------------------------------------------------+
-+printFlags     + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+---------------+------------------------------------------------------------------------------------------------+
-+makeFlags      + :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`                                           +
-+---------------+------------------------------------------------------------------------------------------------+
-+stackTop       +uint                                                                                            +
-+---------------+------------------------------------------------------------------------------------------------+
-+extraOffset    +uint                                                                                            +
-+---------------+------------------------------------------------------------------------------------------------+
-+genFlags       + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+---------------+------------------------------------------------------------------------------------------------+
-+_block         +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >                                     +
-+---------------+------------------------------------------------------------------------------------------------+
-+_type          +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+---------------+------------------------------------------------------------------------------------------------+
-+flags          + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+---------------+------------------------------------------------------------------------------------------------+
-+__rtti         +string const                                                                                    +
-+---------------+------------------------------------------------------------------------------------------------+
-+makeStructFlags+ :ref:`ExprMakeStructFlags <alias-ExprMakeStructFlags>`                                         +
-+---------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprMakeStruct|
-
-.. _handle-ast-ExprMakeTuple:
-
-.. das:attribute:: ExprMakeTuple
-
-ExprMakeTuple fields are
-
-+-----------+------------------------------------------------------------------------------------------------+
-+makeType   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+-----------+------------------------------------------------------------------------------------------------+
-+values     + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+-----------+------------------------------------------------------------------------------------------------+
-+at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+-----------+------------------------------------------------------------------------------------------------+
-+recordType +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+-----------+------------------------------------------------------------------------------------------------+
-+printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+-----------+------------------------------------------------------------------------------------------------+
-+makeFlags  + :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`                                           +
-+-----------+------------------------------------------------------------------------------------------------+
-+stackTop   +uint                                                                                            +
-+-----------+------------------------------------------------------------------------------------------------+
-+extraOffset+uint                                                                                            +
-+-----------+------------------------------------------------------------------------------------------------+
-+genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+-----------+------------------------------------------------------------------------------------------------+
-+isKeyValue +bool                                                                                            +
-+-----------+------------------------------------------------------------------------------------------------+
-+_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+-----------+------------------------------------------------------------------------------------------------+
-+flags      + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+-----------+------------------------------------------------------------------------------------------------+
-+__rtti     +string const                                                                                    +
-+-----------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprMakeTuple|
-
-.. _handle-ast-ExprMakeVariant:
-
-.. das:attribute:: ExprMakeVariant
-
-ExprMakeVariant fields are
-
-+-----------+------------------------------------------------------------------------------------------------------+
-+variants   + :ref:`builtin::dasvector`smart_ptr`MakeFieldDecl <handle-builtin-dasvector`smart_ptr`MakeFieldDecl>` +
-+-----------+------------------------------------------------------------------------------------------------------+
-+makeType   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                               +
-+-----------+------------------------------------------------------------------------------------------------------+
-+at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                         +
-+-----------+------------------------------------------------------------------------------------------------------+
-+printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                         +
-+-----------+------------------------------------------------------------------------------------------------------+
-+makeFlags  + :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`                                                 +
-+-----------+------------------------------------------------------------------------------------------------------+
-+stackTop   +uint                                                                                                  +
-+-----------+------------------------------------------------------------------------------------------------------+
-+extraOffset+uint                                                                                                  +
-+-----------+------------------------------------------------------------------------------------------------------+
-+genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                             +
-+-----------+------------------------------------------------------------------------------------------------------+
-+_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                               +
-+-----------+------------------------------------------------------------------------------------------------------+
-+flags      + :ref:`ExprFlags <alias-ExprFlags>`                                                                   +
-+-----------+------------------------------------------------------------------------------------------------------+
-+__rtti     +string const                                                                                          +
-+-----------+------------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprMakeVariant|
-
-.. _handle-ast-ExprMemZero:
-
-.. das:attribute:: ExprMemZero
-
-ExprMemZero fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprMemZero|
-
-.. _handle-ast-ExprMove:
-
-.. das:attribute:: ExprMove
-
-ExprMove fields are
-
-+----------+-----------------------------------------------------------+
-+right     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+left      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprMove|
-
-.. _handle-ast-ExprNamedCall:
-
-.. das:attribute:: ExprNamedCall
-
-ExprNamedCall fields are
-
-+----------------------+--------------------------------------------------------+
-+arguments             + :ref:`ast::MakeStruct <handle-ast-MakeStruct>`         +
-+----------------------+--------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
-+----------------------+--------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`           +
-+----------------------+--------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>` +
-+----------------------+--------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                    +
-+----------------------+--------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`               +
-+----------------------+--------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
-+----------------------+--------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                     +
-+----------------------+--------------------------------------------------------+
-+__rtti                +string const                                            +
-+----------------------+--------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprNamedCall|
-
-.. _handle-ast-ExprNew:
-
-.. das:attribute:: ExprNew
-
-ExprNew fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+func                  + :ref:`ast::Function <handle-ast-Function>` ?                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+typeexpr              +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+initializer           +bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+stackTop              +uint                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprNew|
-
-.. _handle-ast-ExprNullCoalescing:
-
-.. das:attribute:: ExprNullCoalescing
-
-ExprNullCoalescing fields are
-
-+------------+-----------------------------------------------------------+
-+defaultValue+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+------------+-----------------------------------------------------------+
-+at          + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+------------+-----------------------------------------------------------+
-+printFlags  + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+------------+-----------------------------------------------------------+
-+subexpr     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+------------+-----------------------------------------------------------+
-+genFlags    + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+------------+-----------------------------------------------------------+
-+_type       +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+------------+-----------------------------------------------------------+
-+__rtti      +string const                                               +
-+------------+-----------------------------------------------------------+
-+flags       + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+------------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprNullCoalescing|
-
-.. _handle-ast-ExprOp:
-
-.. das:attribute:: ExprOp
-
-|structure_annotation-ast-ExprOp|
-
-.. _handle-ast-ExprOp1:
-
-.. das:attribute:: ExprOp1
-
-ExprOp1 fields are
-
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprOp1|
-
-.. _handle-ast-ExprOp2:
-
-.. das:attribute:: ExprOp2
-
-ExprOp2 fields are
-
-+----------+-----------------------------------------------------------+
-+right     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+left      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprOp2|
-
-.. _handle-ast-ExprOp3:
-
-.. das:attribute:: ExprOp3
-
-ExprOp3 fields are
-
-+----------+-----------------------------------------------------------+
-+right     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+left      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprOp3|
-
-.. _handle-ast-ExprPtr2Ref:
-
-.. das:attribute:: ExprPtr2Ref
-
-ExprPtr2Ref fields are
-
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprPtr2Ref|
-
-.. _handle-ast-ExprQuote:
-
-.. das:attribute:: ExprQuote
-
-ExprQuote fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprQuote|
-
-.. _handle-ast-ExprReader:
-
-.. das:attribute:: ExprReader
-
-ExprReader fields are
-
-+----------+-------------------------------------------------------------+
-+macro     +smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMacro>` >+
-+----------+-------------------------------------------------------------+
-+sequence  + :ref:`builtin::das_string <handle-builtin-das_string>`      +
-+----------+-------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                +
-+----------+-------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                +
-+----------+-------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                    +
-+----------+-------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >      +
-+----------+-------------------------------------------------------------+
-+__rtti    +string const                                                 +
-+----------+-------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                          +
-+----------+-------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprReader|
-
-.. _handle-ast-ExprRef2Ptr:
-
-.. das:attribute:: ExprRef2Ptr
-
-ExprRef2Ptr fields are
-
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprRef2Ptr|
-
-.. _handle-ast-ExprRef2Value:
-
-.. das:attribute:: ExprRef2Value
-
-ExprRef2Value fields are
-
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprRef2Value|
-
-.. _handle-ast-ExprReturn:
-
-.. das:attribute:: ExprReturn
-
-ExprReturn fields are
-
-+-----------+-----------------------------------------------------------+
-+at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+-----------+-----------------------------------------------------------+
-+printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+-----------+-----------------------------------------------------------+
-+stackTop   +uint                                                       +
-+-----------+-----------------------------------------------------------+
-+subexpr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+-----------+-----------------------------------------------------------+
-+block      + :ref:`ast::ExprBlock <handle-ast-ExprBlock>` ?            +
-+-----------+-----------------------------------------------------------+
-+genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+-----------+-----------------------------------------------------------+
-+refStackTop+uint                                                       +
-+-----------+-----------------------------------------------------------+
-+_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+-----------+-----------------------------------------------------------+
-+flags      + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+-----------+-----------------------------------------------------------+
-+returnFlags+ :ref:`ExprReturnFlags <alias-ExprReturnFlags>`            +
-+-----------+-----------------------------------------------------------+
-+__rtti     +string const                                               +
-+-----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprReturn|
-
-.. _handle-ast-ExprSafeAsVariant:
-
-.. das:attribute:: ExprSafeAsVariant
-
-ExprSafeAsVariant fields are
-
-+----------+-------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` >    +
-+----------+-------------------------------------------------------------------------+
-+value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >              +
-+----------+-------------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
-+----------+-------------------------------------------------------------------------+
-+fieldIndex+int                                                                      +
-+----------+-------------------------------------------------------------------------+
-+fieldFlags+ :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`                  +
-+----------+-------------------------------------------------------------------------+
-+field     + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const? const+
-+----------+-------------------------------------------------------------------------+
-+skipQQ    +bool                                                                     +
-+----------+-------------------------------------------------------------------------+
-+derefFlags+ :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`                  +
-+----------+-------------------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                            +
-+----------+-------------------------------------------------------------------------+
-+name      + :ref:`builtin::das_string <handle-builtin-das_string>`                  +
-+----------+-------------------------------------------------------------------------+
-+atField   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
-+----------+-------------------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                +
-+----------+-------------------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                  +
-+----------+-------------------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                                      +
-+----------+-------------------------------------------------------------------------+
-+__rtti    +string const                                                             +
-+----------+-------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprSafeAsVariant|
-
-.. _handle-ast-ExprSafeAt:
-
-.. das:attribute:: ExprSafeAt
-
-ExprSafeAt fields are
-
-+----------+-----------------------------------------------------------+
-+index     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+atFlags   + :ref:`ExprAtFlags <alias-ExprAtFlags>`                    +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprSafeAt|
-
-.. _handle-ast-ExprSafeField:
-
-.. das:attribute:: ExprSafeField
-
-ExprSafeField fields are
-
-+----------+-------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` >    +
-+----------+-------------------------------------------------------------------------+
-+value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >              +
-+----------+-------------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
-+----------+-------------------------------------------------------------------------+
-+fieldIndex+int                                                                      +
-+----------+-------------------------------------------------------------------------+
-+fieldFlags+ :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`                  +
-+----------+-------------------------------------------------------------------------+
-+field     + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const? const+
-+----------+-------------------------------------------------------------------------+
-+skipQQ    +bool                                                                     +
-+----------+-------------------------------------------------------------------------+
-+derefFlags+ :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`                  +
-+----------+-------------------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                            +
-+----------+-------------------------------------------------------------------------+
-+name      + :ref:`builtin::das_string <handle-builtin-das_string>`                  +
-+----------+-------------------------------------------------------------------------+
-+atField   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
-+----------+-------------------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                +
-+----------+-------------------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                  +
-+----------+-------------------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                                      +
-+----------+-------------------------------------------------------------------------+
-+__rtti    +string const                                                             +
-+----------+-------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprSafeField|
-
-.. _handle-ast-ExprStaticAssert:
-
-.. das:attribute:: ExprStaticAssert
-
-ExprStaticAssert fields are
-
-+----------------------+------------------------------------------------------------------------------------------------+
-+atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------------------+------------------------------------------------------------------------------------------------+
-+at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------------------+------------------------------------------------------------------------------------------------+
-+name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+argumentsFailedToInfer+bool                                                                                            +
-+----------------------+------------------------------------------------------------------------------------------------+
-+genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------------------+------------------------------------------------------------------------------------------------+
-+_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------------------+------------------------------------------------------------------------------------------------+
-+flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------------------+------------------------------------------------------------------------------------------------+
-+__rtti                +string const                                                                                    +
-+----------------------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprStaticAssert|
-
-.. _handle-ast-ExprStringBuilder:
-
-.. das:attribute:: ExprStringBuilder
-
-ExprStringBuilder fields are
-
-+----------+------------------------------------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
-+----------+------------------------------------------------------------------------------------------------+
-+elements  + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+----------+------------------------------------------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
-+----------+------------------------------------------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
-+----------+------------------------------------------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
-+----------+------------------------------------------------------------------------------------------------+
-+__rtti    +string const                                                                                    +
-+----------+------------------------------------------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
-+----------+------------------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprStringBuilder|
-
-.. _handle-ast-ExprSwizzle:
-
-.. das:attribute:: ExprSwizzle
-
-ExprSwizzle fields are
-
-+----------+------------------------------------------------------------------+
-+value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >       +
-+----------+------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                     +
-+----------+------------------------------------------------------------------+
-+fieldFlags+ :ref:`ExprSwizzleFieldFlags <alias-ExprSwizzleFieldFlags>`       +
-+----------+------------------------------------------------------------------+
-+mask      + :ref:`builtin::das_string <handle-builtin-das_string>`           +
-+----------+------------------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                     +
-+----------+------------------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                         +
-+----------+------------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >           +
-+----------+------------------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                               +
-+----------+------------------------------------------------------------------+
-+__rtti    +string const                                                      +
-+----------+------------------------------------------------------------------+
-+fields    + :ref:`builtin::dasvector`uint8 <handle-builtin-dasvector`uint8>` +
-+----------+------------------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprSwizzle|
-
-.. _handle-ast-ExprTryCatch:
-
-.. das:attribute:: ExprTryCatch
-
-ExprTryCatch fields are
-
-+-----------+-----------------------------------------------------------+
-+try_block  +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+-----------+-----------------------------------------------------------+
-+at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+-----------+-----------------------------------------------------------+
-+catch_block+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+-----------+-----------------------------------------------------------+
-+printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+-----------+-----------------------------------------------------------+
-+genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+-----------+-----------------------------------------------------------+
-+_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+-----------+-----------------------------------------------------------+
-+__rtti     +string const                                               +
-+-----------+-----------------------------------------------------------+
-+flags      + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+-----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprTryCatch|
-
-.. _handle-ast-ExprTypeDecl:
-
-.. das:attribute:: ExprTypeDecl
-
-ExprTypeDecl fields are
-
-+----------+-------------------------------------------------------+
-+typeexpr  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprTypeDecl|
-
-.. _handle-ast-ExprTypeInfo:
-
-.. das:attribute:: ExprTypeInfo
-
-ExprTypeInfo fields are
-
-+----------+-----------------------------------------------------------+
-+typeexpr  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+extratrait+ :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+----------+-----------------------------------------------------------+
-+macro     + :ref:`ast::TypeInfoMacro <handle-ast-TypeInfoMacro>` ?    +
-+----------+-----------------------------------------------------------+
-+subtrait  + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+trait     + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprTypeInfo|
-
-.. _handle-ast-ExprUnsafe:
-
-.. das:attribute:: ExprUnsafe
-
-ExprUnsafe fields are
-
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+body      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprUnsafe|
-
-.. _handle-ast-ExprVar:
-
-.. das:attribute:: ExprVar
-
-ExprVar fields are
-
-+-------------+--------------------------------------------------------+
-+at           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
-+-------------+--------------------------------------------------------+
-+variable     +smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` > +
-+-------------+--------------------------------------------------------+
-+varFlags     + :ref:`ExprVarFlags <alias-ExprVarFlags>`               +
-+-------------+--------------------------------------------------------+
-+printFlags   + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`           +
-+-------------+--------------------------------------------------------+
-+argumentIndex+int                                                     +
-+-------------+--------------------------------------------------------+
-+name         + :ref:`builtin::das_string <handle-builtin-das_string>` +
-+-------------+--------------------------------------------------------+
-+genFlags     + :ref:`ExprGenFlags <alias-ExprGenFlags>`               +
-+-------------+--------------------------------------------------------+
-+pBlock       + :ref:`ast::ExprBlock <handle-ast-ExprBlock>` ?         +
-+-------------+--------------------------------------------------------+
-+_type        +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
-+-------------+--------------------------------------------------------+
-+flags        + :ref:`ExprFlags <alias-ExprFlags>`                     +
-+-------------+--------------------------------------------------------+
-+__rtti       +string const                                            +
-+-------------+--------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprVar|
-
-.. _handle-ast-ExprWhile:
-
-.. das:attribute:: ExprWhile
-
-ExprWhile fields are
-
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+body      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+cond      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprWhile|
-
-.. _handle-ast-ExprWith:
-
-.. das:attribute:: ExprWith
-
-ExprWith fields are
-
-+----------+-----------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+----------+-----------------------------------------------------------+
-+body      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+----------+-----------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+----------+-----------------------------------------------------------+
-+_with     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+----------+-----------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprWith|
-
-.. _handle-ast-ExprYield:
-
-.. das:attribute:: ExprYield
-
-ExprYield fields are
-
-+-----------+-----------------------------------------------------------+
-+at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+-----------+-----------------------------------------------------------+
-+printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+-----------+-----------------------------------------------------------+
-+subexpr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+-----------+-----------------------------------------------------------+
-+genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+-----------+-----------------------------------------------------------+
-+_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+-----------+-----------------------------------------------------------+
-+__rtti     +string const                                               +
-+-----------+-----------------------------------------------------------+
-+flags      + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+-----------+-----------------------------------------------------------+
-+returnFlags+ :ref:`ExprYieldFlags <alias-ExprYieldFlags>`              +
-+-----------+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-ExprYield|
+|structure_annotation-ast-ModuleLibrary|
 
 .. _handle-ast-Expression:
 
@@ -3659,188 +785,6 @@ Expression fields are
 
 
 |structure_annotation-ast-Expression|
-
-.. _handle-ast-FieldDeclaration:
-
-.. das:attribute:: FieldDeclaration
-
-FieldDeclaration fields are
-
-+----------+--------------------------------------------------------------------------+
-+annotation+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` +
-+----------+--------------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                             +
-+----------+--------------------------------------------------------------------------+
-+name      + :ref:`builtin::das_string <handle-builtin-das_string>`                   +
-+----------+--------------------------------------------------------------------------+
-+init      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >               +
-+----------+--------------------------------------------------------------------------+
-+offset    +int                                                                       +
-+----------+--------------------------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                   +
-+----------+--------------------------------------------------------------------------+
-+flags     + :ref:`FieldDeclarationFlags <alias-FieldDeclarationFlags>`               +
-+----------+--------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-FieldDeclaration|
-
-.. _handle-ast-Function:
-
-.. das:attribute:: Function
-
-Function fields are
-
-+---------------+--------------------------------------------------------------------------------------------+
-+arguments      + :ref:`builtin::dasvector`smart_ptr`Variable <handle-builtin-dasvector`smart_ptr`Variable>` +
-+---------------+--------------------------------------------------------------------------------------------+
-+fromGeneric    + :ref:`ast::Function <handle-ast-Function>` ?                                               +
-+---------------+--------------------------------------------------------------------------------------------+
-+result         +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                     +
-+---------------+--------------------------------------------------------------------------------------------+
-+aotHash        +uint64                                                                                      +
-+---------------+--------------------------------------------------------------------------------------------+
-+totalGenLabel  +int                                                                                         +
-+---------------+--------------------------------------------------------------------------------------------+
-+_module        + :ref:`rtti::Module <handle-rtti-Module>` ?                                                 +
-+---------------+--------------------------------------------------------------------------------------------+
-+index          +int                                                                                         +
-+---------------+--------------------------------------------------------------------------------------------+
-+at             + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                               +
-+---------------+--------------------------------------------------------------------------------------------+
-+inferStack     + :ref:`builtin::dasvector`InferHistory <handle-builtin-dasvector`InferHistory>`             +
-+---------------+--------------------------------------------------------------------------------------------+
-+body           +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >                                 +
-+---------------+--------------------------------------------------------------------------------------------+
-+atDecl         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                               +
-+---------------+--------------------------------------------------------------------------------------------+
-+sideEffectFlags+ :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>`                             +
-+---------------+--------------------------------------------------------------------------------------------+
-+annotations    + :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`                                   +
-+---------------+--------------------------------------------------------------------------------------------+
-+totalStackSize +uint                                                                                        +
-+---------------+--------------------------------------------------------------------------------------------+
-+name           + :ref:`builtin::das_string <handle-builtin-das_string>`                                     +
-+---------------+--------------------------------------------------------------------------------------------+
-+hash           +uint64                                                                                      +
-+---------------+--------------------------------------------------------------------------------------------+
-+flags          + :ref:`FunctionFlags <alias-FunctionFlags>`                                                 +
-+---------------+--------------------------------------------------------------------------------------------+
-
-
-Function properties are
-
-+------+---------------------------------------------+
-+origin+ :ref:`ast::Function <handle-ast-Function>` ?+
-+------+---------------------------------------------+
-
-
-|structure_annotation-ast-Function|
-
-.. _handle-ast-FunctionAnnotation:
-
-.. das:attribute:: FunctionAnnotation
-
-|structure_annotation-ast-FunctionAnnotation|
-
-.. _handle-ast-InferHistory:
-
-.. das:attribute:: InferHistory
-
-InferHistory fields are
-
-+----+----------------------------------------------+
-+func+ :ref:`ast::Function <handle-ast-Function>` ? +
-+----+----------------------------------------------+
-+at  + :ref:`rtti::LineInfo <handle-rtti-LineInfo>` +
-+----+----------------------------------------------+
-
-
-|structure_annotation-ast-InferHistory|
-
-.. _handle-ast-MakeFieldDecl:
-
-.. das:attribute:: MakeFieldDecl
-
-MakeFieldDecl fields are
-
-+-----+-----------------------------------------------------------+
-+value+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+-----+-----------------------------------------------------------+
-+at   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+-----+-----------------------------------------------------------+
-+name + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+-----+-----------------------------------------------------------+
-+flags+ :ref:`MakeFieldDeclFlags <alias-MakeFieldDeclFlags>`      +
-+-----+-----------------------------------------------------------+
-
-
-|structure_annotation-ast-MakeFieldDecl|
-
-.. _handle-ast-ModuleLibrary:
-
-.. das:attribute:: ModuleLibrary
-
-|structure_annotation-ast-ModuleLibrary|
-
-.. _handle-ast-PassMacro:
-
-.. das:attribute:: PassMacro
-
-PassMacro fields are
-
-+----+--------------------------------------------------------+
-+name+ :ref:`builtin::das_string <handle-builtin-das_string>` +
-+----+--------------------------------------------------------+
-
-
-|structure_annotation-ast-PassMacro|
-
-.. _handle-ast-ReaderMacro:
-
-.. das:attribute:: ReaderMacro
-
-ReaderMacro fields are
-
-+-------+--------------------------------------------------------+
-+_module+ :ref:`rtti::Module <handle-rtti-Module>` ?             +
-+-------+--------------------------------------------------------+
-+name   + :ref:`builtin::das_string <handle-builtin-das_string>` +
-+-------+--------------------------------------------------------+
-
-
-|structure_annotation-ast-ReaderMacro|
-
-.. _handle-ast-Structure:
-
-.. das:attribute:: Structure
-
-Structure fields are
-
-+-----------+----------------------------------------------------------------------------------------+
-+_module    + :ref:`rtti::Module <handle-rtti-Module>` ?                                             +
-+-----------+----------------------------------------------------------------------------------------+
-+at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                           +
-+-----------+----------------------------------------------------------------------------------------+
-+parent     + :ref:`ast::Structure <handle-ast-Structure>` ?                                         +
-+-----------+----------------------------------------------------------------------------------------+
-+annotations+ :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`                               +
-+-----------+----------------------------------------------------------------------------------------+
-+name       + :ref:`builtin::das_string <handle-builtin-das_string>`                                 +
-+-----------+----------------------------------------------------------------------------------------+
-+fields     + :ref:`builtin::dasvector`FieldDeclaration <handle-builtin-dasvector`FieldDeclaration>` +
-+-----------+----------------------------------------------------------------------------------------+
-+flags      + :ref:`StructureFlags <alias-StructureFlags>`                                           +
-+-----------+----------------------------------------------------------------------------------------+
-
-
-|structure_annotation-ast-Structure|
-
-.. _handle-ast-StructureAnnotation:
-
-.. das:attribute:: StructureAnnotation
-
-|structure_annotation-ast-StructureAnnotation|
 
 .. _handle-ast-TypeDecl:
 
@@ -4038,20 +982,172 @@ TypeDecl properties are
 
 |structure_annotation-ast-TypeDecl|
 
-.. _handle-ast-TypeInfoMacro:
+.. _handle-ast-Structure:
 
-.. das:attribute:: TypeInfoMacro
+.. das:attribute:: Structure
 
-TypeInfoMacro fields are
+Structure fields are
 
-+-------+--------------------------------------------------------+
-+_module+ :ref:`rtti::Module <handle-rtti-Module>` ?             +
-+-------+--------------------------------------------------------+
-+name   + :ref:`builtin::das_string <handle-builtin-das_string>` +
-+-------+--------------------------------------------------------+
++-----------+----------------------------------------------------------------------------------------+
++_module    + :ref:`rtti::Module <handle-rtti-Module>` ?                                             +
++-----------+----------------------------------------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                           +
++-----------+----------------------------------------------------------------------------------------+
++parent     + :ref:`ast::Structure <handle-ast-Structure>` ?                                         +
++-----------+----------------------------------------------------------------------------------------+
++annotations+ :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`                               +
++-----------+----------------------------------------------------------------------------------------+
++name       + :ref:`builtin::das_string <handle-builtin-das_string>`                                 +
++-----------+----------------------------------------------------------------------------------------+
++fields     + :ref:`builtin::dasvector`FieldDeclaration <handle-builtin-dasvector`FieldDeclaration>` +
++-----------+----------------------------------------------------------------------------------------+
++flags      + :ref:`StructureFlags <alias-StructureFlags>`                                           +
++-----------+----------------------------------------------------------------------------------------+
 
 
-|structure_annotation-ast-TypeInfoMacro|
+|structure_annotation-ast-Structure|
+
+.. _handle-ast-FieldDeclaration:
+
+.. das:attribute:: FieldDeclaration
+
+FieldDeclaration fields are
+
++----------+--------------------------------------------------------------------------+
++annotation+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` +
++----------+--------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                             +
++----------+--------------------------------------------------------------------------+
++name      + :ref:`builtin::das_string <handle-builtin-das_string>`                   +
++----------+--------------------------------------------------------------------------+
++init      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >               +
++----------+--------------------------------------------------------------------------+
++offset    +int                                                                       +
++----------+--------------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                   +
++----------+--------------------------------------------------------------------------+
++flags     + :ref:`FieldDeclarationFlags <alias-FieldDeclarationFlags>`               +
++----------+--------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-FieldDeclaration|
+
+.. _handle-ast-EnumEntry:
+
+.. das:attribute:: EnumEntry
+
+EnumEntry fields are
+
++-----+-----------------------------------------------------------+
++value+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++-----+-----------------------------------------------------------+
++at   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++-----+-----------------------------------------------------------+
++name + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++-----+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-EnumEntry|
+
+.. _handle-ast-Enumeration:
+
+.. das:attribute:: Enumeration
+
+Enumeration fields are
+
++-----------+--------------------------------------------------------------------------+
++_module    + :ref:`rtti::Module <handle-rtti-Module>` ?                               +
++-----------+--------------------------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                             +
++-----------+--------------------------------------------------------------------------+
++isPrivate  +bool                                                                      +
++-----------+--------------------------------------------------------------------------+
++cppName    + :ref:`builtin::das_string <handle-builtin-das_string>`                   +
++-----------+--------------------------------------------------------------------------+
++list       + :ref:`builtin::dasvector`EnumEntry <handle-builtin-dasvector`EnumEntry>` +
++-----------+--------------------------------------------------------------------------+
++annotations+ :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`                 +
++-----------+--------------------------------------------------------------------------+
++name       + :ref:`builtin::das_string <handle-builtin-das_string>`                   +
++-----------+--------------------------------------------------------------------------+
++external   +bool                                                                      +
++-----------+--------------------------------------------------------------------------+
++baseType   + :ref:`rtti::Type <enum-rtti-Type>`                                       +
++-----------+--------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-Enumeration|
+
+.. _handle-ast-Function:
+
+.. das:attribute:: Function
+
+Function fields are
+
++---------------+--------------------------------------------------------------------------------------------+
++arguments      + :ref:`builtin::dasvector`smart_ptr`Variable <handle-builtin-dasvector`smart_ptr`Variable>` +
++---------------+--------------------------------------------------------------------------------------------+
++fromGeneric    + :ref:`ast::Function <handle-ast-Function>` ?                                               +
++---------------+--------------------------------------------------------------------------------------------+
++result         +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                     +
++---------------+--------------------------------------------------------------------------------------------+
++aotHash        +uint64                                                                                      +
++---------------+--------------------------------------------------------------------------------------------+
++totalGenLabel  +int                                                                                         +
++---------------+--------------------------------------------------------------------------------------------+
++_module        + :ref:`rtti::Module <handle-rtti-Module>` ?                                                 +
++---------------+--------------------------------------------------------------------------------------------+
++index          +int                                                                                         +
++---------------+--------------------------------------------------------------------------------------------+
++at             + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                               +
++---------------+--------------------------------------------------------------------------------------------+
++inferStack     + :ref:`builtin::dasvector`InferHistory <handle-builtin-dasvector`InferHistory>`             +
++---------------+--------------------------------------------------------------------------------------------+
++body           +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >                                 +
++---------------+--------------------------------------------------------------------------------------------+
++atDecl         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                               +
++---------------+--------------------------------------------------------------------------------------------+
++sideEffectFlags+ :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>`                             +
++---------------+--------------------------------------------------------------------------------------------+
++annotations    + :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`                                   +
++---------------+--------------------------------------------------------------------------------------------+
++totalStackSize +uint                                                                                        +
++---------------+--------------------------------------------------------------------------------------------+
++name           + :ref:`builtin::das_string <handle-builtin-das_string>`                                     +
++---------------+--------------------------------------------------------------------------------------------+
++moreFlags      + :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>`                                         +
++---------------+--------------------------------------------------------------------------------------------+
++hash           +uint64                                                                                      +
++---------------+--------------------------------------------------------------------------------------------+
++classParent    + :ref:`rtti::Module <handle-rtti-Module>` ?                                                 +
++---------------+--------------------------------------------------------------------------------------------+
++flags          + :ref:`FunctionFlags <alias-FunctionFlags>`                                                 +
++---------------+--------------------------------------------------------------------------------------------+
+
+
+Function properties are
+
++------+---------------------------------------------+
++origin+ :ref:`ast::Function <handle-ast-Function>` ?+
++------+---------------------------------------------+
+
+
+|structure_annotation-ast-Function|
+
+.. _handle-ast-InferHistory:
+
+.. das:attribute:: InferHistory
+
+InferHistory fields are
+
++----+----------------------------------------------+
++func+ :ref:`ast::Function <handle-ast-Function>` ? +
++----+----------------------------------------------+
++at  + :ref:`rtti::LineInfo <handle-rtti-LineInfo>` +
++----+----------------------------------------------+
+
+
+|structure_annotation-ast-InferHistory|
 
 .. _handle-ast-Variable:
 
@@ -4076,6 +1172,8 @@ Variable fields are
 +-------------+--------------------------------------------------------------------------+
 +init         +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >               +
 +-------------+--------------------------------------------------------------------------+
++_aka         + :ref:`builtin::das_string <handle-builtin-das_string>`                   +
++-------------+--------------------------------------------------------------------------+
 +access_flags + :ref:`VariableAccessFlags <alias-VariableAccessFlags>`                   +
 +-------------+--------------------------------------------------------------------------+
 +source       +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >               +
@@ -4095,6 +1193,2924 @@ Variable properties are
 
 |structure_annotation-ast-Variable|
 
+.. _handle-ast-AstContext:
+
+.. das:attribute:: AstContext
+
+AstContext fields are
+
++------+------------------------------------------------------------------------------------------------+
++func  +smart_ptr< :ref:`ast::Function <handle-ast-Function>` >                                         +
++------+------------------------------------------------------------------------------------------------+
++scopes+ :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++------+------------------------------------------------------------------------------------------------+
++blocks+ :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++------+------------------------------------------------------------------------------------------------+
++_loop + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++------+------------------------------------------------------------------------------------------------+
++_with + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-AstContext|
+
+.. _handle-ast-ExprBlock:
+
+.. das:attribute:: ExprBlock
+
+ExprBlock fields are
+
++-----------------+------------------------------------------------------------------------------------------------+
++stackVarBottom   +uint                                                                                            +
++-----------------+------------------------------------------------------------------------------------------------+
++annotationDataSid+uint64                                                                                          +
++-----------------+------------------------------------------------------------------------------------------------+
++arguments        + :ref:`builtin::dasvector`smart_ptr`Variable <handle-builtin-dasvector`smart_ptr`Variable>`     +
++-----------------+------------------------------------------------------------------------------------------------+
++at               + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++-----------------+------------------------------------------------------------------------------------------------+
++stackCleanVars   + :ref:`builtin::dasvector`pair`uint`uint <handle-builtin-dasvector`pair`uint`uint>`             +
++-----------------+------------------------------------------------------------------------------------------------+
++list             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++-----------------+------------------------------------------------------------------------------------------------+
++returnType       +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++-----------------+------------------------------------------------------------------------------------------------+
++printFlags       + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++-----------------+------------------------------------------------------------------------------------------------+
++annotations      + :ref:`rtti::AnnotationList <handle-rtti-AnnotationList>`                                       +
++-----------------+------------------------------------------------------------------------------------------------+
++stackTop         +uint                                                                                            +
++-----------------+------------------------------------------------------------------------------------------------+
++maxLabelIndex    +int                                                                                             +
++-----------------+------------------------------------------------------------------------------------------------+
++blockFlags       + :ref:`ExprBlockFlags <alias-ExprBlockFlags>`                                                   +
++-----------------+------------------------------------------------------------------------------------------------+
++finalList        + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++-----------------+------------------------------------------------------------------------------------------------+
++genFlags         + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++-----------------+------------------------------------------------------------------------------------------------+
++annotationData   +uint64                                                                                          +
++-----------------+------------------------------------------------------------------------------------------------+
++stackVarTop      +uint                                                                                            +
++-----------------+------------------------------------------------------------------------------------------------+
++flags            + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++-----------------+------------------------------------------------------------------------------------------------+
++_type            +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++-----------------+------------------------------------------------------------------------------------------------+
++__rtti           +string const                                                                                    +
++-----------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprBlock|
+
+.. _handle-ast-ExprLet:
+
+.. das:attribute:: ExprLet
+
+ExprLet fields are
+
++----------+--------------------------------------------------------------------------------------------+
++atInit    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                               +
++----------+--------------------------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                               +
++----------+--------------------------------------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                               +
++----------+--------------------------------------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                   +
++----------+--------------------------------------------------------------------------------------------+
++variables + :ref:`builtin::dasvector`smart_ptr`Variable <handle-builtin-dasvector`smart_ptr`Variable>` +
++----------+--------------------------------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                     +
++----------+--------------------------------------------------------------------------------------------+
++__rtti    +string const                                                                                +
++----------+--------------------------------------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                                                         +
++----------+--------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprLet|
+
+.. _handle-ast-ExprStringBuilder:
+
+.. das:attribute:: ExprStringBuilder
+
+ExprStringBuilder fields are
+
++----------+------------------------------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------+------------------------------------------------------------------------------------------------+
++elements  + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------+------------------------------------------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------+------------------------------------------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------+------------------------------------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------+------------------------------------------------------------------------------------------------+
++__rtti    +string const                                                                                    +
++----------+------------------------------------------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprStringBuilder|
+
+.. _handle-ast-MakeFieldDecl:
+
+.. das:attribute:: MakeFieldDecl
+
+MakeFieldDecl fields are
+
++-----+-----------------------------------------------------------+
++value+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++-----+-----------------------------------------------------------+
++at   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++-----+-----------------------------------------------------------+
++name + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++-----+-----------------------------------------------------------+
++flags+ :ref:`MakeFieldDeclFlags <alias-MakeFieldDeclFlags>`      +
++-----+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-MakeFieldDecl|
+
+.. _handle-ast-ExprNamedCall:
+
+.. das:attribute:: ExprNamedCall
+
+ExprNamedCall fields are
+
++----------------------+--------------------------------------------------------+
++arguments             + :ref:`ast::MakeStruct <handle-ast-MakeStruct>`         +
++----------------------+--------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
++----------------------+--------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`           +
++----------------------+--------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>` +
++----------------------+--------------------------------------------------------+
++argumentsFailedToInfer+bool                                                    +
++----------------------+--------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`               +
++----------------------+--------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
++----------------------+--------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                     +
++----------------------+--------------------------------------------------------+
++__rtti                +string const                                            +
++----------------------+--------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprNamedCall|
+
+.. _handle-ast-ExprLooksLikeCall:
+
+.. das:attribute:: ExprLooksLikeCall
+
+ExprLooksLikeCall fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprLooksLikeCall|
+
+.. _handle-ast-ExprCallFunc:
+
+.. das:attribute:: ExprCallFunc
+
+ExprCallFunc fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++func                  + :ref:`ast::Function <handle-ast-Function>` ?                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++stackTop              +uint                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprCallFunc|
+
+.. _handle-ast-ExprNew:
+
+.. das:attribute:: ExprNew
+
+ExprNew fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++func                  + :ref:`ast::Function <handle-ast-Function>` ?                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++typeexpr              +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++initializer           +bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++stackTop              +uint                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprNew|
+
+.. _handle-ast-ExprCall:
+
+.. das:attribute:: ExprCall
+
+ExprCall fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++func                  + :ref:`ast::Function <handle-ast-Function>` ?                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++stackTop              +uint                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++doesNotNeedSp         +bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprCall|
+
+.. _handle-ast-ExprPtr2Ref:
+
+.. das:attribute:: ExprPtr2Ref
+
+ExprPtr2Ref fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprPtr2Ref|
+
+.. _handle-ast-ExprNullCoalescing:
+
+.. das:attribute:: ExprNullCoalescing
+
+ExprNullCoalescing fields are
+
++------------+-----------------------------------------------------------+
++defaultValue+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++------------+-----------------------------------------------------------+
++at          + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++------------+-----------------------------------------------------------+
++printFlags  + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++------------+-----------------------------------------------------------+
++subexpr     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++------------+-----------------------------------------------------------+
++genFlags    + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++------------+-----------------------------------------------------------+
++_type       +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++------------+-----------------------------------------------------------+
++__rtti      +string const                                               +
++------------+-----------------------------------------------------------+
++flags       + :ref:`ExprFlags <alias-ExprFlags>`                        +
++------------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprNullCoalescing|
+
+.. _handle-ast-ExprAt:
+
+.. das:attribute:: ExprAt
+
+ExprAt fields are
+
++----------+-----------------------------------------------------------+
++index     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++atFlags   + :ref:`ExprAtFlags <alias-ExprAtFlags>`                    +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprAt|
+
+.. _handle-ast-ExprSafeAt:
+
+.. das:attribute:: ExprSafeAt
+
+ExprSafeAt fields are
+
++----------+-----------------------------------------------------------+
++index     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++atFlags   + :ref:`ExprAtFlags <alias-ExprAtFlags>`                    +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprSafeAt|
+
+.. _handle-ast-ExprIs:
+
+.. das:attribute:: ExprIs
+
+ExprIs fields are
+
++----------+-----------------------------------------------------------+
++typeexpr  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprIs|
+
+.. _handle-ast-ExprOp:
+
+.. das:attribute:: ExprOp
+
+|structure_annotation-ast-ExprOp|
+
+.. _handle-ast-ExprOp2:
+
+.. das:attribute:: ExprOp2
+
+ExprOp2 fields are
+
++----------+-----------------------------------------------------------+
++right     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++left      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprOp2|
+
+.. _handle-ast-ExprOp3:
+
+.. das:attribute:: ExprOp3
+
+ExprOp3 fields are
+
++----------+-----------------------------------------------------------+
++right     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++left      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprOp3|
+
+.. _handle-ast-ExprCopy:
+
+.. das:attribute:: ExprCopy
+
+ExprCopy fields are
+
++------------------+-----------------------------------------------------------+
++takeOverRightStack+bool                                                       +
++------------------+-----------------------------------------------------------+
++right             +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++------------------+-----------------------------------------------------------+
++at                + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++------------------+-----------------------------------------------------------+
++op                + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++------------------+-----------------------------------------------------------+
++printFlags        + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++------------------+-----------------------------------------------------------+
++genFlags          + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++------------------+-----------------------------------------------------------+
++_type             +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++------------------+-----------------------------------------------------------+
++flags             + :ref:`ExprFlags <alias-ExprFlags>`                        +
++------------------+-----------------------------------------------------------+
++__rtti            +string const                                               +
++------------------+-----------------------------------------------------------+
++left              +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++------------------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprCopy|
+
+.. _handle-ast-ExprMove:
+
+.. das:attribute:: ExprMove
+
+ExprMove fields are
+
++----------+-----------------------------------------------------------+
++right     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++left      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprMove|
+
+.. _handle-ast-ExprClone:
+
+.. das:attribute:: ExprClone
+
+ExprClone fields are
+
++----------+-----------------------------------------------------------+
++right     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++left      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprClone|
+
+.. _handle-ast-ExprWith:
+
+.. das:attribute:: ExprWith
+
+ExprWith fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++body      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_with     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprWith|
+
+.. _handle-ast-ExprAssume:
+
+.. das:attribute:: ExprAssume
+
+ExprAssume fields are
+
++----------+-----------------------------------------------------------+
++alias     + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprAssume|
+
+.. _handle-ast-ExprWhile:
+
+.. das:attribute:: ExprWhile
+
+ExprWhile fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++body      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++cond      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprWhile|
+
+.. _handle-ast-ExprTryCatch:
+
+.. das:attribute:: ExprTryCatch
+
+ExprTryCatch fields are
+
++-----------+-----------------------------------------------------------+
++try_block  +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++-----------+-----------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++-----------+-----------------------------------------------------------+
++catch_block+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++-----------+-----------------------------------------------------------+
++printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++-----------+-----------------------------------------------------------+
++genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++-----------+-----------------------------------------------------------+
++_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++-----------+-----------------------------------------------------------+
++__rtti     +string const                                               +
++-----------+-----------------------------------------------------------+
++flags      + :ref:`ExprFlags <alias-ExprFlags>`                        +
++-----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprTryCatch|
+
+.. _handle-ast-ExprIfThenElse:
+
+.. das:attribute:: ExprIfThenElse
+
+ExprIfThenElse fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++if_false  +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++isStatic  +bool                                                       +
++----------+-----------------------------------------------------------+
++cond      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++if_true   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprIfThenElse|
+
+.. _handle-ast-ExprFor:
+
+.. das:attribute:: ExprFor
+
+ExprFor fields are
+
++-------------------------+------------------------------------------------------------------------------------------------+
++visibility               + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++-------------------------+------------------------------------------------------------------------------------------------+
++allowIteratorOptimization+bool                                                                                            +
++-------------------------+------------------------------------------------------------------------------------------------+
++at                       + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++-------------------------+------------------------------------------------------------------------------------------------+
++body                     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >                                     +
++-------------------------+------------------------------------------------------------------------------------------------+
++iteratorsAt              + :ref:`builtin::dasvector`LineInfo <handle-builtin-dasvector`LineInfo>`                         +
++-------------------------+------------------------------------------------------------------------------------------------+
++printFlags               + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++-------------------------+------------------------------------------------------------------------------------------------+
++iterators                + :ref:`builtin::dasvector`das_string <handle-builtin-dasvector`das_string>`                     +
++-------------------------+------------------------------------------------------------------------------------------------+
++iteratorVariables        + :ref:`builtin::dasvector`smart_ptr`Variable <handle-builtin-dasvector`smart_ptr`Variable>`     +
++-------------------------+------------------------------------------------------------------------------------------------+
++genFlags                 + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++-------------------------+------------------------------------------------------------------------------------------------+
++iteratorsAka             + :ref:`builtin::dasvector`das_string <handle-builtin-dasvector`das_string>`                     +
++-------------------------+------------------------------------------------------------------------------------------------+
++sources                  + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++-------------------------+------------------------------------------------------------------------------------------------+
++_type                    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++-------------------------+------------------------------------------------------------------------------------------------+
++flags                    + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++-------------------------+------------------------------------------------------------------------------------------------+
++__rtti                   +string const                                                                                    +
++-------------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprFor|
+
+.. _handle-ast-ExprMakeLocal:
+
+.. das:attribute:: ExprMakeLocal
+
+ExprMakeLocal fields are
+
++-----------+-------------------------------------------------------+
++makeType   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++-----------+-------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++-----------+-------------------------------------------------------+
++printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++-----------+-------------------------------------------------------+
++makeFlags  + :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  +
++-----------+-------------------------------------------------------+
++stackTop   +uint                                                   +
++-----------+-------------------------------------------------------+
++extraOffset+uint                                                   +
++-----------+-------------------------------------------------------+
++genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++-----------+-------------------------------------------------------+
++_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++-----------+-------------------------------------------------------+
++flags      + :ref:`ExprFlags <alias-ExprFlags>`                    +
++-----------+-------------------------------------------------------+
++__rtti     +string const                                           +
++-----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprMakeLocal|
+
+.. _handle-ast-ExprMakeStruct:
+
+.. das:attribute:: ExprMakeStruct
+
+ExprMakeStruct fields are
+
++---------------+------------------------------------------------------------------------------------------------+
++makeType       +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++---------------+------------------------------------------------------------------------------------------------+
++at             + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++---------------+------------------------------------------------------------------------------------------------+
++structs        + :ref:`builtin::dasvector`smart_ptr`MakeStruct <handle-builtin-dasvector`smart_ptr`MakeStruct>` +
++---------------+------------------------------------------------------------------------------------------------+
++printFlags     + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++---------------+------------------------------------------------------------------------------------------------+
++makeFlags      + :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`                                           +
++---------------+------------------------------------------------------------------------------------------------+
++stackTop       +uint                                                                                            +
++---------------+------------------------------------------------------------------------------------------------+
++extraOffset    +uint                                                                                            +
++---------------+------------------------------------------------------------------------------------------------+
++genFlags       + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++---------------+------------------------------------------------------------------------------------------------+
++_block         +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >                                     +
++---------------+------------------------------------------------------------------------------------------------+
++_type          +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++---------------+------------------------------------------------------------------------------------------------+
++flags          + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++---------------+------------------------------------------------------------------------------------------------+
++__rtti         +string const                                                                                    +
++---------------+------------------------------------------------------------------------------------------------+
++makeStructFlags+ :ref:`ExprMakeStructFlags <alias-ExprMakeStructFlags>`                                         +
++---------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprMakeStruct|
+
+.. _handle-ast-ExprMakeVariant:
+
+.. das:attribute:: ExprMakeVariant
+
+ExprMakeVariant fields are
+
++-----------+------------------------------------------------------------------------------------------------------+
++variants   + :ref:`builtin::dasvector`smart_ptr`MakeFieldDecl <handle-builtin-dasvector`smart_ptr`MakeFieldDecl>` +
++-----------+------------------------------------------------------------------------------------------------------+
++makeType   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                               +
++-----------+------------------------------------------------------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                         +
++-----------+------------------------------------------------------------------------------------------------------+
++printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                         +
++-----------+------------------------------------------------------------------------------------------------------+
++makeFlags  + :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`                                                 +
++-----------+------------------------------------------------------------------------------------------------------+
++stackTop   +uint                                                                                                  +
++-----------+------------------------------------------------------------------------------------------------------+
++extraOffset+uint                                                                                                  +
++-----------+------------------------------------------------------------------------------------------------------+
++genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                             +
++-----------+------------------------------------------------------------------------------------------------------+
++_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                               +
++-----------+------------------------------------------------------------------------------------------------------+
++flags      + :ref:`ExprFlags <alias-ExprFlags>`                                                                   +
++-----------+------------------------------------------------------------------------------------------------------+
++__rtti     +string const                                                                                          +
++-----------+------------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprMakeVariant|
+
+.. _handle-ast-ExprMakeArray:
+
+.. das:attribute:: ExprMakeArray
+
+ExprMakeArray fields are
+
++-----------+------------------------------------------------------------------------------------------------+
++makeType   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++-----------+------------------------------------------------------------------------------------------------+
++values     + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++-----------+------------------------------------------------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++-----------+------------------------------------------------------------------------------------------------+
++recordType +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++-----------+------------------------------------------------------------------------------------------------+
++printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++-----------+------------------------------------------------------------------------------------------------+
++makeFlags  + :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`                                           +
++-----------+------------------------------------------------------------------------------------------------+
++stackTop   +uint                                                                                            +
++-----------+------------------------------------------------------------------------------------------------+
++extraOffset+uint                                                                                            +
++-----------+------------------------------------------------------------------------------------------------+
++genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++-----------+------------------------------------------------------------------------------------------------+
++_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++-----------+------------------------------------------------------------------------------------------------+
++flags      + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++-----------+------------------------------------------------------------------------------------------------+
++__rtti     +string const                                                                                    +
++-----------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprMakeArray|
+
+.. _handle-ast-ExprMakeTuple:
+
+.. das:attribute:: ExprMakeTuple
+
+ExprMakeTuple fields are
+
++-----------+------------------------------------------------------------------------------------------------+
++makeType   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++-----------+------------------------------------------------------------------------------------------------+
++values     + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++-----------+------------------------------------------------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++-----------+------------------------------------------------------------------------------------------------+
++recordType +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++-----------+------------------------------------------------------------------------------------------------+
++printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++-----------+------------------------------------------------------------------------------------------------+
++makeFlags  + :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`                                           +
++-----------+------------------------------------------------------------------------------------------------+
++stackTop   +uint                                                                                            +
++-----------+------------------------------------------------------------------------------------------------+
++extraOffset+uint                                                                                            +
++-----------+------------------------------------------------------------------------------------------------+
++genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++-----------+------------------------------------------------------------------------------------------------+
++isKeyValue +bool                                                                                            +
++-----------+------------------------------------------------------------------------------------------------+
++_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++-----------+------------------------------------------------------------------------------------------------+
++flags      + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++-----------+------------------------------------------------------------------------------------------------+
++__rtti     +string const                                                                                    +
++-----------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprMakeTuple|
+
+.. _handle-ast-ExprArrayComprehension:
+
+.. das:attribute:: ExprArrayComprehension
+
+ExprArrayComprehension fields are
+
++---------------+-----------------------------------------------------------+
++at             + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++---------------+-----------------------------------------------------------+
++printFlags     + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++---------------+-----------------------------------------------------------+
++generatorSyntax+bool                                                       +
++---------------+-----------------------------------------------------------+
++subexpr        +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++---------------+-----------------------------------------------------------+
++genFlags       + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++---------------+-----------------------------------------------------------+
++exprFor        +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++---------------+-----------------------------------------------------------+
++exprWhere      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++---------------+-----------------------------------------------------------+
++_type          +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++---------------+-----------------------------------------------------------+
++flags          + :ref:`ExprFlags <alias-ExprFlags>`                        +
++---------------+-----------------------------------------------------------+
++__rtti         +string const                                               +
++---------------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprArrayComprehension|
+
+.. _handle-ast-TypeInfoMacro:
+
+.. das:attribute:: TypeInfoMacro
+
+TypeInfoMacro fields are
+
++-------+--------------------------------------------------------+
++_module+ :ref:`rtti::Module <handle-rtti-Module>` ?             +
++-------+--------------------------------------------------------+
++name   + :ref:`builtin::das_string <handle-builtin-das_string>` +
++-------+--------------------------------------------------------+
+
+
+|structure_annotation-ast-TypeInfoMacro|
+
+.. _handle-ast-ExprTypeInfo:
+
+.. das:attribute:: ExprTypeInfo
+
+ExprTypeInfo fields are
+
++----------+-----------------------------------------------------------+
++typeexpr  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++extratrait+ :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++macro     + :ref:`ast::TypeInfoMacro <handle-ast-TypeInfoMacro>` ?    +
++----------+-----------------------------------------------------------+
++subtrait  + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++trait     + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprTypeInfo|
+
+.. _handle-ast-ExprTypeDecl:
+
+.. das:attribute:: ExprTypeDecl
+
+ExprTypeDecl fields are
+
++----------+-------------------------------------------------------+
++typeexpr  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprTypeDecl|
+
+.. _handle-ast-ExprLabel:
+
+.. das:attribute:: ExprLabel
+
+ExprLabel fields are
+
++----------+--------------------------------------------------------+
++comment   + :ref:`builtin::das_string <handle-builtin-das_string>` +
++----------+--------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
++----------+--------------------------------------------------------+
++labelName +int                                                     +
++----------+--------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`           +
++----------+--------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`               +
++----------+--------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
++----------+--------------------------------------------------------+
++__rtti    +string const                                            +
++----------+--------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                     +
++----------+--------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprLabel|
+
+.. _handle-ast-ExprGoto:
+
+.. das:attribute:: ExprGoto
+
+ExprGoto fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++labelName +int                                                        +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprGoto|
+
+.. _handle-ast-ExprRef2Value:
+
+.. das:attribute:: ExprRef2Value
+
+ExprRef2Value fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprRef2Value|
+
+.. _handle-ast-ExprRef2Ptr:
+
+.. das:attribute:: ExprRef2Ptr
+
+ExprRef2Ptr fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprRef2Ptr|
+
+.. _handle-ast-ExprAddr:
+
+.. das:attribute:: ExprAddr
+
+ExprAddr fields are
+
++----------+--------------------------------------------------------+
++func      + :ref:`ast::Function <handle-ast-Function>` ?           +
++----------+--------------------------------------------------------+
++target    + :ref:`builtin::das_string <handle-builtin-das_string>` +
++----------+--------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
++----------+--------------------------------------------------------+
++funcType  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
++----------+--------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`           +
++----------+--------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`               +
++----------+--------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
++----------+--------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                     +
++----------+--------------------------------------------------------+
++__rtti    +string const                                            +
++----------+--------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprAddr|
+
+.. _handle-ast-ExprAssert:
+
+.. das:attribute:: ExprAssert
+
+ExprAssert fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++isVerify              +bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprAssert|
+
+.. _handle-ast-ExprQuote:
+
+.. das:attribute:: ExprQuote
+
+ExprQuote fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprQuote|
+
+.. _handle-ast-ExprStaticAssert:
+
+.. das:attribute:: ExprStaticAssert
+
+ExprStaticAssert fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprStaticAssert|
+
+.. _handle-ast-ExprDebug:
+
+.. das:attribute:: ExprDebug
+
+ExprDebug fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprDebug|
+
+.. _handle-ast-ExprInvoke:
+
+.. das:attribute:: ExprInvoke
+
+ExprInvoke fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++stackTop              +uint                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++isInvokeMethod        +bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++doesNotNeedSp         +bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprInvoke|
+
+.. _handle-ast-ExprErase:
+
+.. das:attribute:: ExprErase
+
+ExprErase fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprErase|
+
+.. _handle-ast-ExprFind:
+
+.. das:attribute:: ExprFind
+
+ExprFind fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprFind|
+
+.. _handle-ast-ExprKeyExists:
+
+.. das:attribute:: ExprKeyExists
+
+ExprKeyExists fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprKeyExists|
+
+.. _handle-ast-ExprAscend:
+
+.. das:attribute:: ExprAscend
+
+ExprAscend fields are
+
++-----------+-----------------------------------------------------------+
++ascType    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++-----------+-----------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++-----------+-----------------------------------------------------------+
++printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++-----------+-----------------------------------------------------------+
++stackTop   +uint                                                       +
++-----------+-----------------------------------------------------------+
++ascendFlags+ :ref:`ExprAscendFlags <alias-ExprAscendFlags>`            +
++-----------+-----------------------------------------------------------+
++subexpr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++-----------+-----------------------------------------------------------+
++genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++-----------+-----------------------------------------------------------+
++_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++-----------+-----------------------------------------------------------+
++flags      + :ref:`ExprFlags <alias-ExprFlags>`                        +
++-----------+-----------------------------------------------------------+
++__rtti     +string const                                               +
++-----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprAscend|
+
+.. _handle-ast-ExprCast:
+
+.. das:attribute:: ExprCast
+
+ExprCast fields are
+
++----------+-----------------------------------------------------------+
++castFlags + :ref:`ExprCastFlags <alias-ExprCastFlags>`                +
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++castType  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprCast|
+
+.. _handle-ast-ExprDelete:
+
+.. das:attribute:: ExprDelete
+
+ExprDelete fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++native    +bool                                                       +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprDelete|
+
+.. _handle-ast-ExprVar:
+
+.. das:attribute:: ExprVar
+
+ExprVar fields are
+
++-------------+--------------------------------------------------------+
++at           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
++-------------+--------------------------------------------------------+
++variable     +smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` > +
++-------------+--------------------------------------------------------+
++varFlags     + :ref:`ExprVarFlags <alias-ExprVarFlags>`               +
++-------------+--------------------------------------------------------+
++printFlags   + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`           +
++-------------+--------------------------------------------------------+
++argumentIndex+int                                                     +
++-------------+--------------------------------------------------------+
++name         + :ref:`builtin::das_string <handle-builtin-das_string>` +
++-------------+--------------------------------------------------------+
++genFlags     + :ref:`ExprGenFlags <alias-ExprGenFlags>`               +
++-------------+--------------------------------------------------------+
++pBlock       + :ref:`ast::ExprBlock <handle-ast-ExprBlock>` ?         +
++-------------+--------------------------------------------------------+
++_type        +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
++-------------+--------------------------------------------------------+
++flags        + :ref:`ExprFlags <alias-ExprFlags>`                     +
++-------------+--------------------------------------------------------+
++__rtti       +string const                                            +
++-------------+--------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprVar|
+
+.. _handle-ast-ExprSwizzle:
+
+.. das:attribute:: ExprSwizzle
+
+ExprSwizzle fields are
+
++----------+------------------------------------------------------------------+
++value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >       +
++----------+------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                     +
++----------+------------------------------------------------------------------+
++fieldFlags+ :ref:`ExprSwizzleFieldFlags <alias-ExprSwizzleFieldFlags>`       +
++----------+------------------------------------------------------------------+
++mask      + :ref:`builtin::das_string <handle-builtin-das_string>`           +
++----------+------------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                     +
++----------+------------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                         +
++----------+------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >           +
++----------+------------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                               +
++----------+------------------------------------------------------------------+
++__rtti    +string const                                                      +
++----------+------------------------------------------------------------------+
++fields    + :ref:`builtin::dasvector`uint8 <handle-builtin-dasvector`uint8>` +
++----------+------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprSwizzle|
+
+.. _handle-ast-ExprField:
+
+.. das:attribute:: ExprField
+
+ExprField fields are
+
++----------+-------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` >    +
++----------+-------------------------------------------------------------------------+
++value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >              +
++----------+-------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
++----------+-------------------------------------------------------------------------+
++fieldIndex+int                                                                      +
++----------+-------------------------------------------------------------------------+
++fieldFlags+ :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`                  +
++----------+-------------------------------------------------------------------------+
++field     + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const? const+
++----------+-------------------------------------------------------------------------+
++derefFlags+ :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`                  +
++----------+-------------------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                            +
++----------+-------------------------------------------------------------------------+
++name      + :ref:`builtin::das_string <handle-builtin-das_string>`                  +
++----------+-------------------------------------------------------------------------+
++atField   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
++----------+-------------------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                +
++----------+-------------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                  +
++----------+-------------------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                                      +
++----------+-------------------------------------------------------------------------+
++__rtti    +string const                                                             +
++----------+-------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprField|
+
+.. _handle-ast-ExprSafeField:
+
+.. das:attribute:: ExprSafeField
+
+ExprSafeField fields are
+
++----------+-------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` >    +
++----------+-------------------------------------------------------------------------+
++value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >              +
++----------+-------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
++----------+-------------------------------------------------------------------------+
++fieldIndex+int                                                                      +
++----------+-------------------------------------------------------------------------+
++fieldFlags+ :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`                  +
++----------+-------------------------------------------------------------------------+
++field     + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const? const+
++----------+-------------------------------------------------------------------------+
++skipQQ    +bool                                                                     +
++----------+-------------------------------------------------------------------------+
++derefFlags+ :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`                  +
++----------+-------------------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                            +
++----------+-------------------------------------------------------------------------+
++name      + :ref:`builtin::das_string <handle-builtin-das_string>`                  +
++----------+-------------------------------------------------------------------------+
++atField   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
++----------+-------------------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                +
++----------+-------------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                  +
++----------+-------------------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                                      +
++----------+-------------------------------------------------------------------------+
++__rtti    +string const                                                             +
++----------+-------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprSafeField|
+
+.. _handle-ast-ExprIsVariant:
+
+.. das:attribute:: ExprIsVariant
+
+ExprIsVariant fields are
+
++----------+-------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` >    +
++----------+-------------------------------------------------------------------------+
++value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >              +
++----------+-------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
++----------+-------------------------------------------------------------------------+
++fieldIndex+int                                                                      +
++----------+-------------------------------------------------------------------------+
++fieldFlags+ :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`                  +
++----------+-------------------------------------------------------------------------+
++field     + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const? const+
++----------+-------------------------------------------------------------------------+
++derefFlags+ :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`                  +
++----------+-------------------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                            +
++----------+-------------------------------------------------------------------------+
++name      + :ref:`builtin::das_string <handle-builtin-das_string>`                  +
++----------+-------------------------------------------------------------------------+
++atField   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
++----------+-------------------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                +
++----------+-------------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                  +
++----------+-------------------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                                      +
++----------+-------------------------------------------------------------------------+
++__rtti    +string const                                                             +
++----------+-------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprIsVariant|
+
+.. _handle-ast-ExprAsVariant:
+
+.. das:attribute:: ExprAsVariant
+
+ExprAsVariant fields are
+
++----------+-------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` >    +
++----------+-------------------------------------------------------------------------+
++value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >              +
++----------+-------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
++----------+-------------------------------------------------------------------------+
++fieldIndex+int                                                                      +
++----------+-------------------------------------------------------------------------+
++fieldFlags+ :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`                  +
++----------+-------------------------------------------------------------------------+
++field     + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const? const+
++----------+-------------------------------------------------------------------------+
++derefFlags+ :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`                  +
++----------+-------------------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                            +
++----------+-------------------------------------------------------------------------+
++name      + :ref:`builtin::das_string <handle-builtin-das_string>`                  +
++----------+-------------------------------------------------------------------------+
++atField   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
++----------+-------------------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                +
++----------+-------------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                  +
++----------+-------------------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                                      +
++----------+-------------------------------------------------------------------------+
++__rtti    +string const                                                             +
++----------+-------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprAsVariant|
+
+.. _handle-ast-ExprSafeAsVariant:
+
+.. das:attribute:: ExprSafeAsVariant
+
+ExprSafeAsVariant fields are
+
++----------+-------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` >    +
++----------+-------------------------------------------------------------------------+
++value     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >              +
++----------+-------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
++----------+-------------------------------------------------------------------------+
++fieldIndex+int                                                                      +
++----------+-------------------------------------------------------------------------+
++fieldFlags+ :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`                  +
++----------+-------------------------------------------------------------------------+
++field     + :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>`  const? const+
++----------+-------------------------------------------------------------------------+
++skipQQ    +bool                                                                     +
++----------+-------------------------------------------------------------------------+
++derefFlags+ :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`                  +
++----------+-------------------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                            +
++----------+-------------------------------------------------------------------------+
++name      + :ref:`builtin::das_string <handle-builtin-das_string>`                  +
++----------+-------------------------------------------------------------------------+
++atField   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                            +
++----------+-------------------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                +
++----------+-------------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                  +
++----------+-------------------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                                      +
++----------+-------------------------------------------------------------------------+
++__rtti    +string const                                                             +
++----------+-------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprSafeAsVariant|
+
+.. _handle-ast-ExprOp1:
+
+.. das:attribute:: ExprOp1
+
+ExprOp1 fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++subexpr   +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprOp1|
+
+.. _handle-ast-ExprReturn:
+
+.. das:attribute:: ExprReturn
+
+ExprReturn fields are
+
++-----------+-----------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++-----------+-----------------------------------------------------------+
++printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++-----------+-----------------------------------------------------------+
++stackTop   +uint                                                       +
++-----------+-----------------------------------------------------------+
++subexpr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++-----------+-----------------------------------------------------------+
++block      + :ref:`ast::ExprBlock <handle-ast-ExprBlock>` ?            +
++-----------+-----------------------------------------------------------+
++genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++-----------+-----------------------------------------------------------+
++refStackTop+uint                                                       +
++-----------+-----------------------------------------------------------+
++_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++-----------+-----------------------------------------------------------+
++flags      + :ref:`ExprFlags <alias-ExprFlags>`                        +
++-----------+-----------------------------------------------------------+
++returnFlags+ :ref:`ExprReturnFlags <alias-ExprReturnFlags>`            +
++-----------+-----------------------------------------------------------+
++__rtti     +string const                                               +
++-----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprReturn|
+
+.. _handle-ast-ExprYield:
+
+.. das:attribute:: ExprYield
+
+ExprYield fields are
+
++-----------+-----------------------------------------------------------+
++at         + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++-----------+-----------------------------------------------------------+
++printFlags + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++-----------+-----------------------------------------------------------+
++subexpr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++-----------+-----------------------------------------------------------+
++genFlags   + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++-----------+-----------------------------------------------------------+
++_type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++-----------+-----------------------------------------------------------+
++__rtti     +string const                                               +
++-----------+-----------------------------------------------------------+
++flags      + :ref:`ExprFlags <alias-ExprFlags>`                        +
++-----------+-----------------------------------------------------------+
++returnFlags+ :ref:`ExprYieldFlags <alias-ExprYieldFlags>`              +
++-----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprYield|
+
+.. _handle-ast-ExprBreak:
+
+.. das:attribute:: ExprBreak
+
+ExprBreak fields are
+
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprBreak|
+
+.. _handle-ast-ExprContinue:
+
+.. das:attribute:: ExprContinue
+
+ExprContinue fields are
+
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprContinue|
+
+.. _handle-ast-ExprConst:
+
+.. das:attribute:: ExprConst
+
+ExprConst fields are
+
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConst|
+
+.. _handle-ast-ExprFakeContext:
+
+.. das:attribute:: ExprFakeContext
+
+ExprFakeContext fields are
+
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprFakeContext|
+
+.. _handle-ast-ExprFakeLineInfo:
+
+.. das:attribute:: ExprFakeLineInfo
+
+ExprFakeLineInfo fields are
+
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprFakeLineInfo|
+
+.. _handle-ast-ExprConstPtr:
+
+.. das:attribute:: ExprConstPtr
+
+ExprConstPtr fields are
+
++----------+-------------------------------------------------------+
++value     +void?                                                  +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstPtr|
+
+.. _handle-ast-ExprConstInt8:
+
+.. das:attribute:: ExprConstInt8
+
+ExprConstInt8 fields are
+
++----------+-------------------------------------------------------+
++value     +int8                                                   +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstInt8|
+
+.. _handle-ast-ExprConstInt16:
+
+.. das:attribute:: ExprConstInt16
+
+ExprConstInt16 fields are
+
++----------+-------------------------------------------------------+
++value     +int16                                                  +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstInt16|
+
+.. _handle-ast-ExprConstInt64:
+
+.. das:attribute:: ExprConstInt64
+
+ExprConstInt64 fields are
+
++----------+-------------------------------------------------------+
++value     +int64                                                  +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstInt64|
+
+.. _handle-ast-ExprConstInt:
+
+.. das:attribute:: ExprConstInt
+
+ExprConstInt fields are
+
++----------+-------------------------------------------------------+
++value     +int                                                    +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstInt|
+
+.. _handle-ast-ExprConstInt2:
+
+.. das:attribute:: ExprConstInt2
+
+ExprConstInt2 fields are
+
++----------+-------------------------------------------------------+
++value     +int2                                                   +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstInt2|
+
+.. _handle-ast-ExprConstInt3:
+
+.. das:attribute:: ExprConstInt3
+
+ExprConstInt3 fields are
+
++----------+-------------------------------------------------------+
++value     +int3                                                   +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstInt3|
+
+.. _handle-ast-ExprConstInt4:
+
+.. das:attribute:: ExprConstInt4
+
+ExprConstInt4 fields are
+
++----------+-------------------------------------------------------+
++value     +int4                                                   +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstInt4|
+
+.. _handle-ast-ExprConstUInt8:
+
+.. das:attribute:: ExprConstUInt8
+
+ExprConstUInt8 fields are
+
++----------+-------------------------------------------------------+
++value     +uint8                                                  +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstUInt8|
+
+.. _handle-ast-ExprConstUInt16:
+
+.. das:attribute:: ExprConstUInt16
+
+ExprConstUInt16 fields are
+
++----------+-------------------------------------------------------+
++value     +uint16                                                 +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstUInt16|
+
+.. _handle-ast-ExprConstUInt64:
+
+.. das:attribute:: ExprConstUInt64
+
+ExprConstUInt64 fields are
+
++----------+-------------------------------------------------------+
++value     +uint64                                                 +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstUInt64|
+
+.. _handle-ast-ExprConstUInt:
+
+.. das:attribute:: ExprConstUInt
+
+ExprConstUInt fields are
+
++----------+-------------------------------------------------------+
++value     +uint                                                   +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstUInt|
+
+.. _handle-ast-ExprConstUInt2:
+
+.. das:attribute:: ExprConstUInt2
+
+ExprConstUInt2 fields are
+
++----------+-------------------------------------------------------+
++value     +uint2                                                  +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstUInt2|
+
+.. _handle-ast-ExprConstUInt3:
+
+.. das:attribute:: ExprConstUInt3
+
+ExprConstUInt3 fields are
+
++----------+-------------------------------------------------------+
++value     +uint3                                                  +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstUInt3|
+
+.. _handle-ast-ExprConstUInt4:
+
+.. das:attribute:: ExprConstUInt4
+
+ExprConstUInt4 fields are
+
++----------+-------------------------------------------------------+
++value     +uint4                                                  +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstUInt4|
+
+.. _handle-ast-ExprConstRange:
+
+.. das:attribute:: ExprConstRange
+
+ExprConstRange fields are
+
++----------+-------------------------------------------------------+
++value     +range                                                  +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstRange|
+
+.. _handle-ast-ExprConstURange:
+
+.. das:attribute:: ExprConstURange
+
+ExprConstURange fields are
+
++----------+-------------------------------------------------------+
++value     +urange                                                 +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstURange|
+
+.. _handle-ast-ExprConstFloat:
+
+.. das:attribute:: ExprConstFloat
+
+ExprConstFloat fields are
+
++----------+-------------------------------------------------------+
++value     +float                                                  +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstFloat|
+
+.. _handle-ast-ExprConstFloat2:
+
+.. das:attribute:: ExprConstFloat2
+
+ExprConstFloat2 fields are
+
++----------+-------------------------------------------------------+
++value     +float2                                                 +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstFloat2|
+
+.. _handle-ast-ExprConstFloat3:
+
+.. das:attribute:: ExprConstFloat3
+
+ExprConstFloat3 fields are
+
++----------+-------------------------------------------------------+
++value     +float3                                                 +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstFloat3|
+
+.. _handle-ast-ExprConstFloat4:
+
+.. das:attribute:: ExprConstFloat4
+
+ExprConstFloat4 fields are
+
++----------+-------------------------------------------------------+
++value     +float4                                                 +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstFloat4|
+
+.. _handle-ast-ExprConstDouble:
+
+.. das:attribute:: ExprConstDouble
+
+ExprConstDouble fields are
+
++----------+-------------------------------------------------------+
++value     +double                                                 +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstDouble|
+
+.. _handle-ast-ExprConstBool:
+
+.. das:attribute:: ExprConstBool
+
+ExprConstBool fields are
+
++----------+-------------------------------------------------------+
++value     +bool                                                   +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstBool|
+
+.. _handle-ast-CaptureEntry:
+
+.. das:attribute:: CaptureEntry
+
+CaptureEntry fields are
+
++----+--------------------------------------------------------+
++name+ :ref:`builtin::das_string <handle-builtin-das_string>` +
++----+--------------------------------------------------------+
++mode+ :ref:`ast::CaptureMode <enum-ast-CaptureMode>`         +
++----+--------------------------------------------------------+
+
+
+|structure_annotation-ast-CaptureEntry|
+
+.. _handle-ast-ExprMakeBlock:
+
+.. das:attribute:: ExprMakeBlock
+
+ExprMakeBlock fields are
+
++----------+--------------------------------------------------------------------------------+
++mmFlags   + :ref:`ExprMakeBlockFlags <alias-ExprMakeBlockFlags>`                           +
++----------+--------------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                   +
++----------+--------------------------------------------------------------------------------+
++capture   + :ref:`builtin::dasvector`CaptureEntry <handle-builtin-dasvector`CaptureEntry>` +
++----------+--------------------------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                   +
++----------+--------------------------------------------------------------------------------+
++stackTop  +uint                                                                            +
++----------+--------------------------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                       +
++----------+--------------------------------------------------------------------------------+
++_block    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >                     +
++----------+--------------------------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                         +
++----------+--------------------------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                                             +
++----------+--------------------------------------------------------------------------------+
++__rtti    +string const                                                                    +
++----------+--------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprMakeBlock|
+
+.. _handle-ast-ExprMakeGenerator:
+
+.. das:attribute:: ExprMakeGenerator
+
+ExprMakeGenerator fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++capture               + :ref:`builtin::dasvector`CaptureEntry <handle-builtin-dasvector`CaptureEntry>`                 +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++iterType              +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprMakeGenerator|
+
+.. _handle-ast-ExprMemZero:
+
+.. das:attribute:: ExprMemZero
+
+ExprMemZero fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprMemZero|
+
+.. _handle-ast-ExprConstEnumeration:
+
+.. das:attribute:: ExprConstEnumeration
+
+ExprConstEnumeration fields are
+
++----------+-------------------------------------------------------------+
++value     + :ref:`builtin::das_string <handle-builtin-das_string>`      +
++----------+-------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                +
++----------+-------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                +
++----------+-------------------------------------------------------------+
++enumType  +smart_ptr< :ref:`ast::Enumeration <handle-ast-Enumeration>` >+
++----------+-------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                    +
++----------+-------------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                          +
++----------+-------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >      +
++----------+-------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                          +
++----------+-------------------------------------------------------------+
++__rtti    +string const                                                 +
++----------+-------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstEnumeration|
+
+.. _handle-ast-ExprConstBitfield:
+
+.. das:attribute:: ExprConstBitfield
+
+ExprConstBitfield fields are
+
++------------+-------------------------------------------------------+
++value       +bitfield<>                                             +
++------------+-------------------------------------------------------+
++at          + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++------------+-------------------------------------------------------+
++bitfieldType+smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++------------+-------------------------------------------------------+
++printFlags  + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++------------+-------------------------------------------------------+
++genFlags    + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++------------+-------------------------------------------------------+
++baseType    + :ref:`rtti::Type <enum-rtti-Type>`                    +
++------------+-------------------------------------------------------+
++_type       +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++------------+-------------------------------------------------------+
++flags       + :ref:`ExprFlags <alias-ExprFlags>`                    +
++------------+-------------------------------------------------------+
++__rtti      +string const                                           +
++------------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstBitfield|
+
+.. _handle-ast-ExprConstString:
+
+.. das:attribute:: ExprConstString
+
+ExprConstString fields are
+
++----------+--------------------------------------------------------+
++value     + :ref:`builtin::das_string <handle-builtin-das_string>` +
++----------+--------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
++----------+--------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`           +
++----------+--------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`               +
++----------+--------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                     +
++----------+--------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > +
++----------+--------------------------------------------------------+
++__rtti    +string const                                            +
++----------+--------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                     +
++----------+--------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstString|
+
+.. _handle-ast-ExprUnsafe:
+
+.. das:attribute:: ExprUnsafe
+
+ExprUnsafe fields are
+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++body      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprUnsafe|
+
+.. _handle-ast-VisitorAdapter:
+
+.. das:attribute:: VisitorAdapter
+
+|structure_annotation-ast-VisitorAdapter|
+
+.. _handle-ast-FunctionAnnotation:
+
+.. das:attribute:: FunctionAnnotation
+
+|structure_annotation-ast-FunctionAnnotation|
+
+.. _handle-ast-StructureAnnotation:
+
+.. das:attribute:: StructureAnnotation
+
+|structure_annotation-ast-StructureAnnotation|
+
+.. _handle-ast-EnumerationAnnotation:
+
+.. das:attribute:: EnumerationAnnotation
+
+|structure_annotation-ast-EnumerationAnnotation|
+
+.. _handle-ast-PassMacro:
+
+.. das:attribute:: PassMacro
+
+PassMacro fields are
+
++----+--------------------------------------------------------+
++name+ :ref:`builtin::das_string <handle-builtin-das_string>` +
++----+--------------------------------------------------------+
+
+
+|structure_annotation-ast-PassMacro|
+
+.. _handle-ast-ReaderMacro:
+
+.. das:attribute:: ReaderMacro
+
+ReaderMacro fields are
+
++-------+--------------------------------------------------------+
++_module+ :ref:`rtti::Module <handle-rtti-Module>` ?             +
++-------+--------------------------------------------------------+
++name   + :ref:`builtin::das_string <handle-builtin-das_string>` +
++-------+--------------------------------------------------------+
+
+
+|structure_annotation-ast-ReaderMacro|
+
+.. _handle-ast-CallMacro:
+
+.. das:attribute:: CallMacro
+
+CallMacro fields are
+
++-------+--------------------------------------------------------+
++_module+ :ref:`rtti::Module <handle-rtti-Module>` ?             +
++-------+--------------------------------------------------------+
++name   + :ref:`builtin::das_string <handle-builtin-das_string>` +
++-------+--------------------------------------------------------+
+
+
+|structure_annotation-ast-CallMacro|
+
 .. _handle-ast-VariantMacro:
 
 .. das:attribute:: VariantMacro
@@ -4108,11 +4124,65 @@ VariantMacro fields are
 
 |structure_annotation-ast-VariantMacro|
 
-.. _handle-ast-VisitorAdapter:
+.. _handle-ast-ExprReader:
 
-.. das:attribute:: VisitorAdapter
+.. das:attribute:: ExprReader
 
-|structure_annotation-ast-VisitorAdapter|
+ExprReader fields are
+
++----------+-------------------------------------------------------------+
++macro     +smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMacro>` >+
++----------+-------------------------------------------------------------+
++sequence  + :ref:`builtin::das_string <handle-builtin-das_string>`      +
++----------+-------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                +
++----------+-------------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                +
++----------+-------------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                    +
++----------+-------------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >      +
++----------+-------------------------------------------------------------+
++__rtti    +string const                                                 +
++----------+-------------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                          +
++----------+-------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprReader|
+
+.. _handle-ast-ExprCallMacro:
+
+.. das:attribute:: ExprCallMacro
+
+ExprCallMacro fields are
+
++----------------------+------------------------------------------------------------------------------------------------+
++atEnclosure           + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++arguments             + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++----------------------+------------------------------------------------------------------------------------------------+
++macro                 + :ref:`ast::CallMacro <handle-ast-CallMacro>` ?                                                 +
++----------------------+------------------------------------------------------------------------------------------------+
++at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++printFlags            + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`                                                   +
++----------------------+------------------------------------------------------------------------------------------------+
++name                  + :ref:`builtin::das_string <handle-builtin-das_string>`                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++argumentsFailedToInfer+bool                                                                                            +
++----------------------+------------------------------------------------------------------------------------------------+
++genFlags              + :ref:`ExprGenFlags <alias-ExprGenFlags>`                                                       +
++----------------------+------------------------------------------------------------------------------------------------+
++_type                 +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                         +
++----------------------+------------------------------------------------------------------------------------------------+
++flags                 + :ref:`ExprFlags <alias-ExprFlags>`                                                             +
++----------------------+------------------------------------------------------------------------------------------------+
++__rtti                +string const                                                                                    +
++----------------------+------------------------------------------------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprCallMacro|
 
 +++++++++++
 Call macros
@@ -4137,66 +4207,6 @@ Handled types
 +++++++
 Classes
 +++++++
-
-.. _struct-ast-AstCallMacro:
-
-.. das:attribute:: AstCallMacro
-
-|class-ast-AstCallMacro|
-
-it defines as follows
-
-  __rtti : void?
-
-.. das:function:: AstCallMacro.visit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
-
-visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-+--------+-----------------------------------------------------------------------+
-+argument+argument type                                                          +
-+========+=======================================================================+
-+self    + :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
-+--------+-----------------------------------------------------------------------+
-+prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+--------+-----------------------------------------------------------------------+
-+mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+--------+-----------------------------------------------------------------------+
-+expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
-+--------+-----------------------------------------------------------------------+
-
-
-|method-ast-AstCallMacro.visit|
-
-.. _struct-ast-AstEnumerationAnnotation:
-
-.. das:attribute:: AstEnumerationAnnotation
-
-|class-ast-AstEnumerationAnnotation|
-
-it defines as follows
-
-  __rtti : void?
-
-.. das:function:: AstEnumerationAnnotation.apply(self: AstEnumerationAnnotation; st: EnumerationPtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
-
-apply returns bool
-
-+--------+--------------------------------------------------------------------------------+
-+argument+argument type                                                                   +
-+========+================================================================================+
-+self    + :ref:`ast::AstEnumerationAnnotation <struct-ast-AstEnumerationAnnotation>`     +
-+--------+--------------------------------------------------------------------------------+
-+st      + :ref:`EnumerationPtr <alias-EnumerationPtr>`                                   +
-+--------+--------------------------------------------------------------------------------+
-+group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
-+--------+--------------------------------------------------------------------------------+
-+args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
-+--------+--------------------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
-+--------+--------------------------------------------------------------------------------+
-
-
-|method-ast-AstEnumerationAnnotation.apply|
 
 .. _struct-ast-AstFunctionAnnotation:
 
@@ -4388,84 +4398,59 @@ isSpecialized returns bool
 
 |method-ast-AstFunctionAnnotation.isSpecialized|
 
-.. _struct-ast-AstPassMacro:
+.. _struct-ast-AstBlockAnnotation:
 
-.. das:attribute:: AstPassMacro
+.. das:attribute:: AstBlockAnnotation
 
-|class-ast-AstPassMacro|
+|class-ast-AstBlockAnnotation|
 
 it defines as follows
 
   __rtti : void?
 
-.. das:function:: AstPassMacro.apply(self: AstPassMacro; prog: ProgramPtr; mod: rtti::Module? const)
+.. das:function:: AstBlockAnnotation.apply(self: AstBlockAnnotation; blk: smart_ptr<ast::ExprBlock>; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
 apply returns bool
 
-+--------+----------------------------------------------------+
-+argument+argument type                                       +
-+========+====================================================+
-+self    + :ref:`ast::AstPassMacro <struct-ast-AstPassMacro>` +
-+--------+----------------------------------------------------+
-+prog    + :ref:`ProgramPtr <alias-ProgramPtr>`               +
-+--------+----------------------------------------------------+
-+mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const   +
-+--------+----------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstBlockAnnotation <struct-ast-AstBlockAnnotation>`                 +
++--------+--------------------------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` >                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
-|method-ast-AstPassMacro.apply|
+|method-ast-AstBlockAnnotation.apply|
 
-.. _struct-ast-AstReaderMacro:
+.. das:function:: AstBlockAnnotation.finish(self: AstBlockAnnotation; blk: smart_ptr<ast::ExprBlock>; group: ModuleGroup; args: AnnotationArgumentList const; progArgs: AnnotationArgumentList const; errors: das_string)
 
-.. das:attribute:: AstReaderMacro
+finish returns bool
 
-|class-ast-AstReaderMacro|
-
-it defines as follows
-
-  __rtti : void?
-
-.. das:function:: AstReaderMacro.accept(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: ast::ExprReader? const; ch: int const; info: LineInfo const)
-
-accept returns bool
-
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>` +
-+--------+--------------------------------------------------------+
-+prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                   +
-+--------+--------------------------------------------------------+
-+mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const       +
-+--------+--------------------------------------------------------+
-+expr    + :ref:`ast::ExprReader <handle-ast-ExprReader>` ? const +
-+--------+--------------------------------------------------------+
-+ch      +int const                                               +
-+--------+--------------------------------------------------------+
-+info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const    +
-+--------+--------------------------------------------------------+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstBlockAnnotation <struct-ast-AstBlockAnnotation>`                 +
++--------+--------------------------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` >                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++progArgs+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
 
 
-|method-ast-AstReaderMacro.accept|
-
-.. das:function:: AstReaderMacro.visit(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprReader> const)
-
-visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-+--------+-----------------------------------------------------------------+
-+argument+argument type                                                    +
-+========+=================================================================+
-+self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>`          +
-+--------+-----------------------------------------------------------------+
-+prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                            +
-+--------+-----------------------------------------------------------------+
-+mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                +
-+--------+-----------------------------------------------------------------+
-+expr    +smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
-+--------+-----------------------------------------------------------------+
-
-
-|method-ast-AstReaderMacro.visit|
+|method-ast-AstBlockAnnotation.finish|
 
 .. _struct-ast-AstStructureAnnotation:
 
@@ -4542,51 +4527,32 @@ patch returns bool
 
 |method-ast-AstStructureAnnotation.patch|
 
-.. _struct-ast-AstTypeInfoMacro:
+.. _struct-ast-AstPassMacro:
 
-.. das:attribute:: AstTypeInfoMacro
+.. das:attribute:: AstPassMacro
 
-|class-ast-AstTypeInfoMacro|
+|class-ast-AstPassMacro|
 
 it defines as follows
 
   __rtti : void?
 
-.. das:function:: AstTypeInfoMacro.getAstChange(self: AstTypeInfoMacro; expr: smart_ptr<ast::ExprTypeInfo> const; errors: das_string)
+.. das:function:: AstPassMacro.apply(self: AstPassMacro; prog: ProgramPtr; mod: rtti::Module? const)
 
-getAstChange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+apply returns bool
 
-+--------+---------------------------------------------------------------------+
-+argument+argument type                                                        +
-+========+=====================================================================+
-+self    + :ref:`ast::AstTypeInfoMacro <struct-ast-AstTypeInfoMacro>`          +
-+--------+---------------------------------------------------------------------+
-+expr    +smart_ptr< :ref:`ast::ExprTypeInfo <handle-ast-ExprTypeInfo>` > const+
-+--------+---------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`              +
-+--------+---------------------------------------------------------------------+
-
-
-|method-ast-AstTypeInfoMacro.getAstChange|
-
-.. das:function:: AstTypeInfoMacro.getAstType(self: AstTypeInfoMacro; lib: ModuleLibrary; expr: smart_ptr<ast::ExprTypeInfo> const; errors: das_string)
-
-getAstType returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
-
-+--------+---------------------------------------------------------------------+
-+argument+argument type                                                        +
-+========+=====================================================================+
-+self    + :ref:`ast::AstTypeInfoMacro <struct-ast-AstTypeInfoMacro>`          +
-+--------+---------------------------------------------------------------------+
-+lib     + :ref:`ast::ModuleLibrary <handle-ast-ModuleLibrary>`                +
-+--------+---------------------------------------------------------------------+
-+expr    +smart_ptr< :ref:`ast::ExprTypeInfo <handle-ast-ExprTypeInfo>` > const+
-+--------+---------------------------------------------------------------------+
-+errors  + :ref:`builtin::das_string <handle-builtin-das_string>`              +
-+--------+---------------------------------------------------------------------+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++self    + :ref:`ast::AstPassMacro <struct-ast-AstPassMacro>` +
++--------+----------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`               +
++--------+----------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const   +
++--------+----------------------------------------------------+
 
 
-|method-ast-AstTypeInfoMacro.getAstType|
+|method-ast-AstPassMacro.apply|
 
 .. _struct-ast-AstVariantMacro:
 
@@ -4654,6 +4620,181 @@ visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 
 |method-ast-AstVariantMacro.visitExprSafeAsVariant|
+
+.. _struct-ast-AstReaderMacro:
+
+.. das:attribute:: AstReaderMacro
+
+|class-ast-AstReaderMacro|
+
+it defines as follows
+
+  __rtti : void?
+
+.. das:function:: AstReaderMacro.accept(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: ast::ExprReader? const; ch: int const; info: LineInfo const)
+
+accept returns bool
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>` +
++--------+--------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                   +
++--------+--------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const       +
++--------+--------------------------------------------------------+
++expr    + :ref:`ast::ExprReader <handle-ast-ExprReader>` ? const +
++--------+--------------------------------------------------------+
++ch      +int const                                               +
++--------+--------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const    +
++--------+--------------------------------------------------------+
+
+
+|method-ast-AstReaderMacro.accept|
+
+.. das:function:: AstReaderMacro.visit(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprReader> const)
+
+visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>`          +
++--------+-----------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                            +
++--------+-----------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprReader <handle-ast-ExprReader>` > const+
++--------+-----------------------------------------------------------------+
+
+
+|method-ast-AstReaderMacro.visit|
+
+.. _struct-ast-AstCallMacro:
+
+.. das:attribute:: AstCallMacro
+
+|class-ast-AstCallMacro|
+
+it defines as follows
+
+  __rtti : void?
+
+.. das:function:: AstCallMacro.preVisit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
++--------+-----------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++--------+-----------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
++--------+-----------------------------------------------------------------------+
+
+
+|method-ast-AstCallMacro.preVisit|
+
+.. das:function:: AstCallMacro.visit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
+
+visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
++--------+-----------------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
++--------+-----------------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
++--------+-----------------------------------------------------------------------+
+
+
+|method-ast-AstCallMacro.visit|
+
+.. _struct-ast-AstTypeInfoMacro:
+
+.. das:attribute:: AstTypeInfoMacro
+
+|class-ast-AstTypeInfoMacro|
+
+it defines as follows
+
+  __rtti : void?
+
+.. das:function:: AstTypeInfoMacro.getAstChange(self: AstTypeInfoMacro; expr: smart_ptr<ast::ExprTypeInfo> const; errors: das_string)
+
+getAstChange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstTypeInfoMacro <struct-ast-AstTypeInfoMacro>`          +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprTypeInfo <handle-ast-ExprTypeInfo>` > const+
++--------+---------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`              +
++--------+---------------------------------------------------------------------+
+
+
+|method-ast-AstTypeInfoMacro.getAstChange|
+
+.. das:function:: AstTypeInfoMacro.getAstType(self: AstTypeInfoMacro; lib: ModuleLibrary; expr: smart_ptr<ast::ExprTypeInfo> const; errors: das_string)
+
+getAstType returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++self    + :ref:`ast::AstTypeInfoMacro <struct-ast-AstTypeInfoMacro>`          +
++--------+---------------------------------------------------------------------+
++lib     + :ref:`ast::ModuleLibrary <handle-ast-ModuleLibrary>`                +
++--------+---------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprTypeInfo <handle-ast-ExprTypeInfo>` > const+
++--------+---------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`              +
++--------+---------------------------------------------------------------------+
+
+
+|method-ast-AstTypeInfoMacro.getAstType|
+
+.. _struct-ast-AstEnumerationAnnotation:
+
+.. das:attribute:: AstEnumerationAnnotation
+
+|class-ast-AstEnumerationAnnotation|
+
+it defines as follows
+
+  __rtti : void?
+
+.. das:function:: AstEnumerationAnnotation.apply(self: AstEnumerationAnnotation; st: EnumerationPtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
+
+apply returns bool
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstEnumerationAnnotation <struct-ast-AstEnumerationAnnotation>`     +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`EnumerationPtr <alias-EnumerationPtr>`                                   +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
+
+
+|method-ast-AstEnumerationAnnotation.apply|
 
 .. _struct-ast-AstVisitor:
 
@@ -6230,6 +6371,34 @@ visitExprClone returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 
 |method-ast-AstVisitor.preVisitExprCloneRight|
+
+.. das:function:: AstVisitor.preVisitExprAssume(self: AstVisitor; expr: smart_ptr<ast::ExprAssume> const)
+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAssume <handle-ast-ExprAssume>` > const+
++--------+-----------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.preVisitExprAssume|
+
+.. das:function:: AstVisitor.visitExprAssume(self: AstVisitor; expr: smart_ptr<ast::ExprAssume> const)
+
+visitExprAssume returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAssume <handle-ast-ExprAssume>` > const+
++--------+-----------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.visitExprAssume|
 
 .. das:function:: AstVisitor.preVisitExprWith(self: AstVisitor; expr: smart_ptr<ast::ExprWith> const)
 
@@ -8764,35 +8933,233 @@ visitExprCallMacro returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 Uncategorized
 +++++++++++++
 
-.. _function-_at_ast_c__c_add_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CallMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_make_visitor_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
 
-.. das:function:: add_call_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::CallMacro>& implicit)
+.. das:function:: make_visitor(class: void? const implicit; info: rtti::StructInfo const? const implicit)
 
-+----------+-------------------------------------------------------------------+
-+argument  +argument type                                                      +
-+==========+===================================================================+
-+module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
-+----------+-------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` >& implicit+
-+----------+-------------------------------------------------------------------+
+make_visitor returns smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` >
 
-
-|function-ast-add_call_macro|
-
-.. _function-_at_ast_c__c_add_dirty_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
-
-.. das:function:: add_dirty_infer_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
-
-+----------+-------------------------------------------------------------------+
-+argument  +argument type                                                      +
-+==========+===================================================================+
-+module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
-+----------+-------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >& implicit+
-+----------+-------------------------------------------------------------------+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
 
 
-|function-ast-add_dirty_infer_macro|
+|function-ast-make_visitor|
+
+.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
+
+.. das:function:: visit(program: smart_ptr<rtti::Program> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
+
++--------+----------------------------------------------------------------------------------+
++argument+argument type                                                                     +
++========+==================================================================================+
++program +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit            +
++--------+----------------------------------------------------------------------------------+
++adapter +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
++--------+----------------------------------------------------------------------------------+
+
+
+|function-ast-visit|
+
+.. _function-_at_ast_c__c_visit_modules_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
+
+.. das:function:: visit_modules(program: smart_ptr<rtti::Program> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
+
++--------+----------------------------------------------------------------------------------+
++argument+argument type                                                                     +
++========+==================================================================================+
++program +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit            +
++--------+----------------------------------------------------------------------------------+
++adapter +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
++--------+----------------------------------------------------------------------------------+
+
+
+|function-ast-visit_modules|
+
+.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
+
+.. das:function:: visit(function: smart_ptr<ast::Function> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
+
++--------+----------------------------------------------------------------------------------+
++argument+argument type                                                                     +
++========+==================================================================================+
++function+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit            +
++--------+----------------------------------------------------------------------------------+
++adapter +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
++--------+----------------------------------------------------------------------------------+
+
+
+|function-ast-visit|
+
+.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
+
+.. das:function:: visit(expression: smart_ptr<ast::Expression> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
+
++----------+----------------------------------------------------------------------------------+
++argument  +argument type                                                                     +
++==========+==================================================================================+
++expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit        +
++----------+----------------------------------------------------------------------------------+
++adapter   +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
++----------+----------------------------------------------------------------------------------+
+
+
+|function-ast-visit|
+
+.. _function-_at_ast_c__c_make_function_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_function_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_function_annotation returns smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++name    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_function_annotation|
+
+.. _function-_at_ast_c__c_make_block_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_block_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_block_annotation returns smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++name    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_block_annotation|
+
+.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c:
+
+.. das:function:: add_function_annotation(module: rtti::Module? const implicit; annotation: smart_ptr<ast::FunctionAnnotation>& implicit)
+
++----------+-------------------------------------------------------------------------------------+
++argument  +argument type                                                                        +
++==========+=====================================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                           +
++----------+-------------------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` >& implicit+
++----------+-------------------------------------------------------------------------------------+
+
+
+|function-ast-add_function_annotation|
+
+.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c:
+
+.. das:function:: add_function_annotation(function: smart_ptr<ast::Function> const implicit; annotation: smart_ptr<ast::FunctionAnnotation>& implicit)
+
++----------+-------------------------------------------------------------------------------------+
++argument  +argument type                                                                        +
++==========+=====================================================================================+
++function  +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit               +
++----------+-------------------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` >& implicit+
++----------+-------------------------------------------------------------------------------------+
+
+
+|function-ast-add_function_annotation|
+
+.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c:
+
+.. das:function:: add_function_annotation(function: smart_ptr<ast::Function> const implicit; annotation: smart_ptr<rtti::AnnotationDeclaration>& implicit)
+
++----------+---------------------------------------------------------------------------------------------+
++argument  +argument type                                                                                +
++==========+=============================================================================================+
++function  +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit                       +
++----------+---------------------------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`rtti::AnnotationDeclaration <handle-rtti-AnnotationDeclaration>` >& implicit+
++----------+---------------------------------------------------------------------------------------------+
+
+
+|function-ast-add_function_annotation|
+
+.. _function-_at_ast_c__c_make_structure_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_structure_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_structure_annotation returns smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++name    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_structure_annotation|
+
+.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c:
+
+.. das:function:: add_structure_annotation(module: rtti::Module? const implicit; annotation: smart_ptr<ast::StructureAnnotation>& implicit)
+
++----------+---------------------------------------------------------------------------------------+
++argument  +argument type                                                                          +
++==========+=======================================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                             +
++----------+---------------------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` >& implicit+
++----------+---------------------------------------------------------------------------------------+
+
+
+|function-ast-add_structure_annotation|
+
+.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c:
+
+.. das:function:: add_structure_annotation(structure: smart_ptr<ast::Structure> const implicit; annotation: smart_ptr<ast::StructureAnnotation>& implicit)
+
++----------+---------------------------------------------------------------------------------------+
++argument  +argument type                                                                          +
++==========+=======================================================================================+
++structure +smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` > const implicit               +
++----------+---------------------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` >& implicit+
++----------+---------------------------------------------------------------------------------------+
+
+
+|function-ast-add_structure_annotation|
+
+.. _function-_at_ast_c__c_make_enumeration_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_enumeration_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_enumeration_annotation returns smart_ptr< :ref:`ast::EnumerationAnnotation <handle-ast-EnumerationAnnotation>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++name    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_enumeration_annotation|
 
 .. _function-_at_ast_c__c_add_enumeration_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_EnumerationAnnotation_gr__gr_?W_C_c:
 
@@ -8826,6 +9193,385 @@ add_enumeration_entry returns int
 
 |function-ast-add_enumeration_entry|
 
+.. _function-_at_ast_c__c_make_pass_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_pass_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_pass_macro returns smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++name    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_pass_macro|
+
+.. _function-_at_ast_c__c_add_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+
+.. das:function:: add_infer_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+
++----------+-------------------------------------------------------------------+
++argument  +argument type                                                      +
++==========+===================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
++----------+-------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >& implicit+
++----------+-------------------------------------------------------------------+
+
+
+|function-ast-add_infer_macro|
+
+.. _function-_at_ast_c__c_add_dirty_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+
+.. das:function:: add_dirty_infer_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+
++----------+-------------------------------------------------------------------+
++argument  +argument type                                                      +
++==========+===================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
++----------+-------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >& implicit+
++----------+-------------------------------------------------------------------+
+
+
+|function-ast-add_dirty_infer_macro|
+
+.. _function-_at_ast_c__c_add_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+
+.. das:function:: add_lint_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+
++----------+-------------------------------------------------------------------+
++argument  +argument type                                                      +
++==========+===================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
++----------+-------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >& implicit+
++----------+-------------------------------------------------------------------+
+
+
+|function-ast-add_lint_macro|
+
+.. _function-_at_ast_c__c_add_global_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+
+.. das:function:: add_global_lint_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+
++----------+-------------------------------------------------------------------+
++argument  +argument type                                                      +
++==========+===================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
++----------+-------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >& implicit+
++----------+-------------------------------------------------------------------+
+
+
+|function-ast-add_global_lint_macro|
+
+.. _function-_at_ast_c__c_add_optimization_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+
+.. das:function:: add_optimization_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+
++----------+-------------------------------------------------------------------+
++argument  +argument type                                                      +
++==========+===================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
++----------+-------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >& implicit+
++----------+-------------------------------------------------------------------+
+
+
+|function-ast-add_optimization_macro|
+
+.. _function-_at_ast_c__c_make_reader_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_reader_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_reader_macro returns smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMacro>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++name    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_reader_macro|
+
+.. _function-_at_ast_c__c_add_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ReaderMacro_gr__gr_?W_C_c:
+
+.. das:function:: add_reader_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::ReaderMacro>& implicit)
+
++----------+-----------------------------------------------------------------------+
++argument  +argument type                                                          +
++==========+=======================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit             +
++----------+-----------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMacro>` >& implicit+
++----------+-----------------------------------------------------------------------+
+
+
+|function-ast-add_reader_macro|
+
+.. _function-_at_ast_c__c_make_call_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_call_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_call_macro returns smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++name    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_call_macro|
+
+.. _function-_at_ast_c__c_add_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CallMacro_gr__gr_?W_C_c:
+
+.. das:function:: add_call_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::CallMacro>& implicit)
+
++----------+-------------------------------------------------------------------+
++argument  +argument type                                                      +
++==========+===================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
++----------+-------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` >& implicit+
++----------+-------------------------------------------------------------------+
+
+
+|function-ast-add_call_macro|
+
+.. _function-_at_ast_c__c_make_typeinfo_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_typeinfo_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_typeinfo_macro returns smart_ptr< :ref:`ast::TypeInfoMacro <handle-ast-TypeInfoMacro>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++name    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_typeinfo_macro|
+
+.. _function-_at_ast_c__c_add_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_C_c:
+
+.. das:function:: add_typeinfo_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::TypeInfoMacro>& implicit)
+
++----------+---------------------------------------------------------------------------+
++argument  +argument type                                                              +
++==========+===========================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                 +
++----------+---------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::TypeInfoMacro <handle-ast-TypeInfoMacro>` >& implicit+
++----------+---------------------------------------------------------------------------+
+
+
+|function-ast-add_typeinfo_macro|
+
+.. _function-_at_ast_c__c_make_variant_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_variant_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_variant_macro returns smart_ptr< :ref:`ast::VariantMacro <handle-ast-VariantMacro>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++name    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_variant_macro|
+
+.. _function-_at_ast_c__c_add_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_C_c:
+
+.. das:function:: add_variant_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::VariantMacro>& implicit)
+
++----------+-------------------------------------------------------------------------+
++argument  +argument type                                                            +
++==========+=========================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit               +
++----------+-------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::VariantMacro <handle-ast-VariantMacro>` >& implicit+
++----------+-------------------------------------------------------------------------+
+
+
+|function-ast-add_variant_macro|
+
+.. _function-_at_ast_c__c_this_program_C_c:
+
+.. das:function:: this_program()
+
+this_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >
+
+|function-ast-this_program|
+
+.. _function-_at_ast_c__c_this_module_C_c_C_l:
+
+.. das:function:: this_module()
+
+this_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
+
+|function-ast-this_module|
+
+.. _function-_at_ast_c__c_find_module_via_rtti_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CIs_C_c_C_l:
+
+.. das:function:: find_module_via_rtti(program: smart_ptr<rtti::Program> const implicit; name: string const implicit)
+
+find_module_via_rtti returns  :ref:`rtti::Module <handle-rtti-Module>` ?
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++program +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit+
++--------+----------------------------------------------------------------------+
++name    +string const implicit                                                 +
++--------+----------------------------------------------------------------------+
+
+
+|function-ast-find_module_via_rtti|
+
+.. _function-_at_ast_c__c_find_module_function_via_rtti_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C_at__at__C_c_C_l:
+
+.. das:function:: find_module_function_via_rtti(module: rtti::Module? const implicit; function: function<> const)
+
+find_module_function_via_rtti returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++--------+----------------------------------------------------------+
++function+function<> const                                          +
++--------+----------------------------------------------------------+
+
+
+|function-ast-find_module_function_via_rtti|
+
+.. _function-_at_ast_c__c_compiling_program_C_c:
+
+.. das:function:: compiling_program()
+
+compiling_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >
+
+|function-ast-compiling_program|
+
+.. _function-_at_ast_c__c_compiling_module_C_c:
+
+.. das:function:: compiling_module()
+
+compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
+
+|function-ast-compiling_module|
+
+.. _function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_function(module: rtti::Module? const implicit; name: string const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
++--------+------------------------------------------------------------------------------------+
++name    +string const implicit                                                               +
++--------+------------------------------------------------------------------------------------+
++block   +block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_function|
+
+.. _function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_generic(module: rtti::Module? const implicit; name: string const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
++--------+------------------------------------------------------------------------------------+
++name    +string const implicit                                                               +
++--------+------------------------------------------------------------------------------------+
++block   +block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_generic|
+
+.. _function-_at_ast_c__c_force_at_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CIH_ls_rtti_c__c_LineInfo_gr_:
+
+.. das:function:: force_at(expression: smart_ptr<ast::Expression> const& implicit; at: LineInfo const implicit)
+
++----------+---------------------------------------------------------------------------+
++argument  +argument type                                                              +
++==========+===========================================================================+
++expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
++----------+---------------------------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const implicit              +
++----------+---------------------------------------------------------------------------+
+
+
+|function-ast-force_at|
+
+.. _function-_at_ast_c__c_parse_mangled_name_CIs_IH_ls_rtti_c__c_ModuleGroup_gr__CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C_c_C_l:
+
+.. das:function:: parse_mangled_name(txt: string const implicit; lib: ModuleGroup implicit; thisModule: rtti::Module? const implicit)
+
+parse_mangled_name returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
+
++----------+-------------------------------------------------------------+
++argument  +argument type                                                +
++==========+=============================================================+
++txt       +string const implicit                                        +
++----------+-------------------------------------------------------------+
++lib       + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`  implicit+
++----------+-------------------------------------------------------------+
++thisModule+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit   +
++----------+-------------------------------------------------------------+
+
+
+|function-ast-parse_mangled_name|
+
+.. _function-_at_ast_c__c_collect_dependencies_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W_CI0_ls_1_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?_gr_A;1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: collect_dependencies(function: smart_ptr<ast::Function> const implicit; block: block<(array<ast::Function?>;array<ast::Variable?>):void> const implicit)
+
++--------+--------------------------------------------------------------------------------------------------------------------------------------+
++argument+argument type                                                                                                                         +
++========+======================================================================================================================================+
++function+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit                                                                +
++--------+--------------------------------------------------------------------------------------------------------------------------------------+
++block   +block<(array< :ref:`ast::Function <handle-ast-Function>` ?>;array< :ref:`ast::Variable <handle-ast-Variable>` ?>):void> const implicit+
++--------+--------------------------------------------------------------------------------------------------------------------------------------+
+
+
+|function-ast-collect_dependencies|
+
 .. _function-_at_ast_c__c_add_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c:
 
 .. das:function:: add_function(module: rtti::Module? const implicit; function: smart_ptr<ast::Function>& implicit)
@@ -8842,51 +9588,6 @@ add_function returns bool
 
 
 |function-ast-add_function|
-
-.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c:
-
-.. das:function:: add_function_annotation(function: smart_ptr<ast::Function> const implicit; annotation: smart_ptr<ast::FunctionAnnotation>& implicit)
-
-+----------+-------------------------------------------------------------------------------------+
-+argument  +argument type                                                                        +
-+==========+=====================================================================================+
-+function  +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit               +
-+----------+-------------------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` >& implicit+
-+----------+-------------------------------------------------------------------------------------+
-
-
-|function-ast-add_function_annotation|
-
-.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c:
-
-.. das:function:: add_function_annotation(function: smart_ptr<ast::Function> const implicit; annotation: smart_ptr<rtti::AnnotationDeclaration>& implicit)
-
-+----------+---------------------------------------------------------------------------------------------+
-+argument  +argument type                                                                                +
-+==========+=============================================================================================+
-+function  +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit                       +
-+----------+---------------------------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`rtti::AnnotationDeclaration <handle-rtti-AnnotationDeclaration>` >& implicit+
-+----------+---------------------------------------------------------------------------------------------+
-
-
-|function-ast-add_function_annotation|
-
-.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c:
-
-.. das:function:: add_function_annotation(module: rtti::Module? const implicit; annotation: smart_ptr<ast::FunctionAnnotation>& implicit)
-
-+----------+-------------------------------------------------------------------------------------+
-+argument  +argument type                                                                        +
-+==========+=====================================================================================+
-+module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                           +
-+----------+-------------------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` >& implicit+
-+----------+-------------------------------------------------------------------------------------+
-
-
-|function-ast-add_function_annotation|
 
 .. _function-_at_ast_c__c_add_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c:
 
@@ -8905,65 +9606,39 @@ add_generic returns bool
 
 |function-ast-add_generic|
 
-.. _function-_at_ast_c__c_add_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_C_c:
 
-.. das:function:: add_infer_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+.. das:function:: add_variable(module: rtti::Module? const implicit; variable: smart_ptr<ast::Variable>& implicit)
 
-+----------+-------------------------------------------------------------------+
-+argument  +argument type                                                      +
-+==========+===================================================================+
-+module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
-+----------+-------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >& implicit+
-+----------+-------------------------------------------------------------------+
+add_variable returns bool
 
-
-|function-ast-add_infer_macro|
-
-.. _function-_at_ast_c__c_add_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
-
-.. das:function:: add_lint_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
-
-+----------+-------------------------------------------------------------------+
-+argument  +argument type                                                      +
-+==========+===================================================================+
-+module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
-+----------+-------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >& implicit+
-+----------+-------------------------------------------------------------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit       +
++--------+-----------------------------------------------------------------+
++variable+smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >& implicit+
++--------+-----------------------------------------------------------------+
 
 
-|function-ast-add_lint_macro|
+|function-ast-add_variable|
 
-.. _function-_at_ast_c__c_add_optimization_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_find_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs:
 
-.. das:function:: add_optimization_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+.. das:function:: find_variable(module: rtti::Module? const implicit; variable: string const implicit)
 
-+----------+-------------------------------------------------------------------+
-+argument  +argument type                                                      +
-+==========+===================================================================+
-+module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit         +
-+----------+-------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >& implicit+
-+----------+-------------------------------------------------------------------+
+find_variable returns smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >
 
-
-|function-ast-add_optimization_macro|
-
-.. _function-_at_ast_c__c_add_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ReaderMacro_gr__gr_?W_C_c:
-
-.. das:function:: add_reader_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::ReaderMacro>& implicit)
-
-+----------+-----------------------------------------------------------------------+
-+argument  +argument type                                                          +
-+==========+=======================================================================+
-+module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit             +
-+----------+-----------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMacro>` >& implicit+
-+----------+-----------------------------------------------------------------------+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++--------+----------------------------------------------------------+
++variable+string const implicit                                     +
++--------+----------------------------------------------------------+
 
 
-|function-ast-add_reader_macro|
+|function-ast-find_variable|
 
 .. _function-_at_ast_c__c_add_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Structure_gr__gr_?W_C_c:
 
@@ -8982,179 +9657,6 @@ add_structure returns bool
 
 |function-ast-add_structure|
 
-.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c:
-
-.. das:function:: add_structure_annotation(structure: smart_ptr<ast::Structure> const implicit; annotation: smart_ptr<ast::StructureAnnotation>& implicit)
-
-+----------+---------------------------------------------------------------------------------------+
-+argument  +argument type                                                                          +
-+==========+=======================================================================================+
-+structure +smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` > const implicit               +
-+----------+---------------------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` >& implicit+
-+----------+---------------------------------------------------------------------------------------+
-
-
-|function-ast-add_structure_annotation|
-
-.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c:
-
-.. das:function:: add_structure_annotation(module: rtti::Module? const implicit; annotation: smart_ptr<ast::StructureAnnotation>& implicit)
-
-+----------+---------------------------------------------------------------------------------------+
-+argument  +argument type                                                                          +
-+==========+=======================================================================================+
-+module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                             +
-+----------+---------------------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` >& implicit+
-+----------+---------------------------------------------------------------------------------------+
-
-
-|function-ast-add_structure_annotation|
-
-.. _function-_at_ast_c__c_add_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_C_c:
-
-.. das:function:: add_typeinfo_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::TypeInfoMacro>& implicit)
-
-+----------+---------------------------------------------------------------------------+
-+argument  +argument type                                                              +
-+==========+===========================================================================+
-+module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                 +
-+----------+---------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::TypeInfoMacro <handle-ast-TypeInfoMacro>` >& implicit+
-+----------+---------------------------------------------------------------------------+
-
-
-|function-ast-add_typeinfo_macro|
-
-.. _function-_at_ast_c__c_add_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_C_c:
-
-.. das:function:: add_variable(module: rtti::Module? const implicit; variable: smart_ptr<ast::Variable>& implicit)
-
-add_variable returns bool
-
-+--------+-----------------------------------------------------------------+
-+argument+argument type                                                    +
-+========+=================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit       +
-+--------+-----------------------------------------------------------------+
-+variable+smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >& implicit+
-+--------+-----------------------------------------------------------------+
-
-
-|function-ast-add_variable|
-
-.. _function-_at_ast_c__c_add_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_C_c:
-
-.. das:function:: add_variant_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::VariantMacro>& implicit)
-
-+----------+-------------------------------------------------------------------------+
-+argument  +argument type                                                            +
-+==========+=========================================================================+
-+module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit               +
-+----------+-------------------------------------------------------------------------+
-+annotation+smart_ptr< :ref:`ast::VariantMacro <handle-ast-VariantMacro>` >& implicit+
-+----------+-------------------------------------------------------------------------+
-
-
-|function-ast-add_variant_macro|
-
-.. _function-_at_ast_c__c_any_array_foreach_CI?_Ci_CI0_ls_?_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: any_array_foreach(array: void? const implicit; stride: int const; block: block<(void?):void> const implicit)
-
-+--------+----------------------------------+
-+argument+argument type                     +
-+========+==================================+
-+array   +void? const implicit              +
-+--------+----------------------------------+
-+stride  +int const                         +
-+--------+----------------------------------+
-+block   +block<(void?):void> const implicit+
-+--------+----------------------------------+
-
-
-|function-ast-any_array_foreach|
-
-.. _function-_at_ast_c__c_any_array_size_CI?:
-
-.. das:function:: any_array_size(array: void? const implicit)
-
-any_array_size returns int
-
-+--------+--------------------+
-+argument+argument type       +
-+========+====================+
-+array   +void? const implicit+
-+--------+--------------------+
-
-
-|function-ast-any_array_size|
-
-.. _function-_at_ast_c__c_any_table_foreach_CI?_Ci_Ci_CI0_ls_?;?_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: any_table_foreach(table: void? const implicit; keyStride: int const; valueStride: int const; block: block<(void?;void?):void> const implicit)
-
-+-----------+----------------------------------------+
-+argument   +argument type                           +
-+===========+========================================+
-+table      +void? const implicit                    +
-+-----------+----------------------------------------+
-+keyStride  +int const                               +
-+-----------+----------------------------------------+
-+valueStride+int const                               +
-+-----------+----------------------------------------+
-+block      +block<(void?;void?):void> const implicit+
-+-----------+----------------------------------------+
-
-
-|function-ast-any_table_foreach|
-
-.. _function-_at_ast_c__c_any_table_size_CI?:
-
-.. das:function:: any_table_size(table: void? const implicit)
-
-any_table_size returns int
-
-+--------+--------------------+
-+argument+argument type       +
-+========+====================+
-+table   +void? const implicit+
-+--------+--------------------+
-
-
-|function-ast-any_table_size|
-
-.. _function-_at_ast_c__c_clone_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
-
-.. das:function:: clone_expression(expression: smart_ptr<ast::Expression> const implicit)
-
-clone_expression returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
-
-+----------+--------------------------------------------------------------------------+
-+argument  +argument type                                                             +
-+==========+==========================================================================+
-+expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit+
-+----------+--------------------------------------------------------------------------+
-
-
-|function-ast-clone_expression|
-
-.. _function-_at_ast_c__c_clone_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W:
-
-.. das:function:: clone_function(function: smart_ptr<ast::Function> const implicit)
-
-clone_function returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
-
-+--------+----------------------------------------------------------------------+
-+argument+argument type                                                         +
-+========+======================================================================+
-+function+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
-+--------+----------------------------------------------------------------------+
-
-
-|function-ast-clone_function|
-
 .. _function-_at_ast_c__c_clone_structure_CI1_ls_CH_ls_ast_c__c_Structure_gr__gr_?:
 
 .. das:function:: clone_structure(structure: ast::Structure const? const implicit)
@@ -9169,112 +9671,6 @@ clone_structure returns smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` 
 
 
 |function-ast-clone_structure|
-
-.. _function-_at_ast_c__c_clone_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W:
-
-.. das:function:: clone_type(type: smart_ptr<ast::TypeDecl> const implicit)
-
-clone_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
-
-+--------+----------------------------------------------------------------------+
-+argument+argument type                                                         +
-+========+======================================================================+
-+type    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+--------+----------------------------------------------------------------------+
-
-
-|function-ast-clone_type|
-
-.. _function-_at_ast_c__c_clone_variable_CI1_ls_H_ls_ast_c__c_Variable_gr__gr_?W:
-
-.. das:function:: clone_variable(variable: smart_ptr<ast::Variable> const implicit)
-
-clone_variable returns smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >
-
-+--------+----------------------------------------------------------------------+
-+argument+argument type                                                         +
-+========+======================================================================+
-+variable+smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` > const implicit+
-+--------+----------------------------------------------------------------------+
-
-
-|function-ast-clone_variable|
-
-.. _function-_at_ast_c__c_collect_dependencies_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W_CI0_ls_1_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?_gr_A;1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: collect_dependencies(function: smart_ptr<ast::Function> const implicit; block: block<(array<ast::Function?>;array<ast::Variable?>):void> const implicit)
-
-+--------+--------------------------------------------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                                                         +
-+========+======================================================================================================================================+
-+function+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit                                                                +
-+--------+--------------------------------------------------------------------------------------------------------------------------------------+
-+block   +block<(array< :ref:`ast::Function <handle-ast-Function>` ?>;array< :ref:`ast::Variable <handle-ast-Variable>` ?>):void> const implicit+
-+--------+--------------------------------------------------------------------------------------------------------------------------------------+
-
-
-|function-ast-collect_dependencies|
-
-.. _function-_at_ast_c__c_compiling_module_C_c:
-
-.. das:function:: compiling_module()
-
-compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
-
-|function-ast-compiling_module|
-
-.. _function-_at_ast_c__c_compiling_program_C_c:
-
-.. das:function:: compiling_program()
-
-compiling_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >
-
-|function-ast-compiling_program|
-
-.. _function-_at_ast_c__c_das_to_string_CE_ls_rtti_c__c_Type_gr__C_c:
-
-.. das:function:: das_to_string(type: Type const)
-
-das_to_string returns string
-
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+type    + :ref:`rtti::Type <enum-rtti-Type>`  const+
-+--------+------------------------------------------+
-
-
-|function-ast-das_to_string|
-
-.. _function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_C_c:
-
-.. das:function:: describe_expression(expression: smart_ptr<ast::Expression> const implicit)
-
-describe_expression returns string
-
-+----------+--------------------------------------------------------------------------+
-+argument  +argument type                                                             +
-+==========+==========================================================================+
-+expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit+
-+----------+--------------------------------------------------------------------------+
-
-
-|function-ast-describe_expression|
-
-.. _function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c:
-
-.. das:function:: describe_function(function: smart_ptr<ast::Function> const implicit)
-
-describe_function returns string
-
-+--------+----------------------------------------------------------------------+
-+argument+argument type                                                         +
-+========+======================================================================+
-+function+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
-+--------+----------------------------------------------------------------------+
-
-
-|function-ast-describe_function|
 
 .. _function-_at_ast_c__c_describe_typedecl_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_C_c:
 
@@ -9320,25 +9716,35 @@ describe_typedecl_cpp returns string
 
 |function-ast-describe_typedecl_cpp|
 
-.. _function-_at_ast_c__c_eval_single_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W_&Ib:
+.. _function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_C_c:
 
-.. das:function:: eval_single_expression(expr: smart_ptr<ast::Expression> const& implicit; ok: bool& implicit)
+.. das:function:: describe_expression(expression: smart_ptr<ast::Expression> const implicit)
 
-eval_single_expression returns float4
+describe_expression returns string
 
-.. warning:: 
-  This is unsafe operation.
-
-+--------+---------------------------------------------------------------------------+
-+argument+argument type                                                              +
-+========+===========================================================================+
-+expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
-+--------+---------------------------------------------------------------------------+
-+ok      +bool& implicit                                                             +
-+--------+---------------------------------------------------------------------------+
++----------+--------------------------------------------------------------------------+
++argument  +argument type                                                             +
++==========+==========================================================================+
++expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit+
++----------+--------------------------------------------------------------------------+
 
 
-|function-ast-eval_single_expression|
+|function-ast-describe_expression|
+
+.. _function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c:
+
+.. das:function:: describe_function(function: smart_ptr<ast::Function> const implicit)
+
+describe_function returns string
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++function+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
++--------+----------------------------------------------------------------------+
+
+
+|function-ast-describe_function|
 
 .. _function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ct_C_c:
 
@@ -9374,177 +9780,6 @@ find_enum_value returns int64
 
 |function-ast-find_enum_value|
 
-.. _function-_at_ast_c__c_for_each_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: for_each_call_macro(module: rtti::Module? const implicit; block: block<(string#):void> const implicit)
-
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
-+--------+----------------------------------------------------------+
-+block   +block<(string#):void> const implicit                      +
-+--------+----------------------------------------------------------+
-
-
-|function-ast-for_each_call_macro|
-
-.. _function-_at_ast_c__c_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: for_each_enumeration(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Enumeration>):void> const implicit)
-
-+--------+------------------------------------------------------------------------------------------+
-+argument+argument type                                                                             +
-+========+==========================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                +
-+--------+------------------------------------------------------------------------------------------+
-+block   +block<(smart_ptr< :ref:`ast::Enumeration <handle-ast-Enumeration>` >):void> const implicit+
-+--------+------------------------------------------------------------------------------------------+
-
-
-|function-ast-for_each_enumeration|
-
-.. _function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W;u_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: for_each_field(annotation: BasicStructureAnnotation const implicit; block: block<(string;string;smart_ptr<ast::TypeDecl>;uint):void> const implicit)
-
-+----------+-------------------------------------------------------------------------------------------------------+
-+argument  +argument type                                                                                          +
-+==========+=======================================================================================================+
-+annotation+ :ref:`rtti::BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  const implicit          +
-+----------+-------------------------------------------------------------------------------------------------------+
-+block     +block<(string;string;smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >;uint):void> const implicit+
-+----------+-------------------------------------------------------------------------------------------------------+
-
-
-|function-ast-for_each_field|
-
-.. _function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: for_each_function(module: rtti::Module? const implicit; name: string const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
-
-+--------+------------------------------------------------------------------------------------+
-+argument+argument type                                                                       +
-+========+====================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
-+--------+------------------------------------------------------------------------------------+
-+name    +string const implicit                                                               +
-+--------+------------------------------------------------------------------------------------+
-+block   +block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
-+--------+------------------------------------------------------------------------------------+
-
-
-|function-ast-for_each_function|
-
-.. _function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: for_each_generic(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
-
-+--------+------------------------------------------------------------------------------------+
-+argument+argument type                                                                       +
-+========+====================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
-+--------+------------------------------------------------------------------------------------+
-+block   +block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
-+--------+------------------------------------------------------------------------------------+
-
-
-|function-ast-for_each_generic|
-
-.. _function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: for_each_generic(module: rtti::Module? const implicit; name: string const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
-
-+--------+------------------------------------------------------------------------------------+
-+argument+argument type                                                                       +
-+========+====================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
-+--------+------------------------------------------------------------------------------------+
-+name    +string const implicit                                                               +
-+--------+------------------------------------------------------------------------------------+
-+block   +block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
-+--------+------------------------------------------------------------------------------------+
-
-
-|function-ast-for_each_generic|
-
-.. _function-_at_ast_c__c_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: for_each_global(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Variable>):void> const implicit)
-
-+--------+------------------------------------------------------------------------------------+
-+argument+argument type                                                                       +
-+========+====================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
-+--------+------------------------------------------------------------------------------------+
-+block   +block<(smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >):void> const implicit+
-+--------+------------------------------------------------------------------------------------+
-
-
-|function-ast-for_each_global|
-
-.. _function-_at_ast_c__c_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Structure_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: for_each_structure(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Structure>):void> const implicit)
-
-+--------+--------------------------------------------------------------------------------------+
-+argument+argument type                                                                         +
-+========+======================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                            +
-+--------+--------------------------------------------------------------------------------------+
-+block   +block<(smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` >):void> const implicit+
-+--------+--------------------------------------------------------------------------------------+
-
-
-|function-ast-for_each_structure|
-
-.. _function-_at_ast_c__c_for_each_typedef_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: for_each_typedef(module: rtti::Module? const implicit; block: block<(string#;smart_ptr<ast::TypeDecl>):void> const implicit)
-
-+--------+--------------------------------------------------------------------------------------------+
-+argument+argument type                                                                               +
-+========+============================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                  +
-+--------+--------------------------------------------------------------------------------------------+
-+block   +block<(string#;smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >):void> const implicit+
-+--------+--------------------------------------------------------------------------------------------+
-
-
-|function-ast-for_each_typedef|
-
-.. _function-_at_ast_c__c_force_at_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CIH_ls_rtti_c__c_LineInfo_gr_:
-
-.. das:function:: force_at(expression: smart_ptr<ast::Expression> const& implicit; at: LineInfo const implicit)
-
-+----------+---------------------------------------------------------------------------+
-+argument  +argument type                                                              +
-+==========+===========================================================================+
-+expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
-+----------+---------------------------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const implicit              +
-+----------+---------------------------------------------------------------------------+
-
-
-|function-ast-force_at|
-
-.. _function-_at_ast_c__c_get_ast_context_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI0_ls_b;H_ls_ast_c__c_AstContext_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: get_ast_context(program: smart_ptr<rtti::Program> const implicit; expression: smart_ptr<ast::Expression> const implicit; block: block<(bool;ast::AstContext):void> const implicit)
-
-+----------+----------------------------------------------------------------------------------+
-+argument  +argument type                                                                     +
-+==========+==================================================================================+
-+program   +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit            +
-+----------+----------------------------------------------------------------------------------+
-+expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit        +
-+----------+----------------------------------------------------------------------------------+
-+block     +block<(bool; :ref:`ast::AstContext <handle-ast-AstContext>` ):void> const implicit+
-+----------+----------------------------------------------------------------------------------+
-
-
-|function-ast-get_ast_context|
-
 .. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c:
 
 .. das:function:: get_mangled_name(function: smart_ptr<ast::Function> const implicit)
@@ -9575,69 +9810,82 @@ get_mangled_name returns string
 
 |function-ast-get_mangled_name|
 
-.. _function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci:
+.. _function-_at_ast_c__c_das_to_string_CE_ls_rtti_c__c_Type_gr__C_c:
 
-.. das:function:: get_tuple_field_offset(typle: smart_ptr<ast::TypeDecl> const implicit; index: int const)
+.. das:function:: das_to_string(type: Type const)
 
-get_tuple_field_offset returns int
+das_to_string returns string
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++type    + :ref:`rtti::Type <enum-rtti-Type>`  const+
++--------+------------------------------------------+
+
+
+|function-ast-das_to_string|
+
+.. _function-_at_ast_c__c_clone_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+
+.. das:function:: clone_expression(expression: smart_ptr<ast::Expression> const implicit)
+
+clone_expression returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
+
++----------+--------------------------------------------------------------------------+
++argument  +argument type                                                             +
++==========+==========================================================================+
++expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit+
++----------+--------------------------------------------------------------------------+
+
+
+|function-ast-clone_expression|
+
+.. _function-_at_ast_c__c_clone_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W:
+
+.. das:function:: clone_function(function: smart_ptr<ast::Function> const implicit)
+
+clone_function returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
 
 +--------+----------------------------------------------------------------------+
 +argument+argument type                                                         +
 +========+======================================================================+
-+typle   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+--------+----------------------------------------------------------------------+
-+index   +int const                                                             +
++function+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit+
 +--------+----------------------------------------------------------------------+
 
 
-|function-ast-get_tuple_field_offset|
+|function-ast-clone_function|
 
-.. _function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci:
+.. _function-_at_ast_c__c_clone_variable_CI1_ls_H_ls_ast_c__c_Variable_gr__gr_?W:
 
-.. das:function:: get_variant_field_offset(variant: smart_ptr<ast::TypeDecl> const implicit; index: int const)
+.. das:function:: clone_variable(variable: smart_ptr<ast::Variable> const implicit)
 
-get_variant_field_offset returns int
+clone_variable returns smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >
 
 +--------+----------------------------------------------------------------------+
 +argument+argument type                                                         +
 +========+======================================================================+
-+variant +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+--------+----------------------------------------------------------------------+
-+index   +int const                                                             +
++variable+smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` > const implicit+
 +--------+----------------------------------------------------------------------+
 
 
-|function-ast-get_variant_field_offset|
+|function-ast-clone_variable|
 
-.. _function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+.. _function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb:
 
-.. das:function:: is_expr_const(expression: smart_ptr<ast::Expression> const& implicit)
+.. das:function:: is_temp_type(type: smart_ptr<ast::TypeDecl> const implicit; refMatters: bool const)
 
-is_expr_const returns bool
+is_temp_type returns bool
 
-+----------+---------------------------------------------------------------------------+
-+argument  +argument type                                                              +
-+==========+===========================================================================+
-+expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
-+----------+---------------------------------------------------------------------------+
-
-
-|function-ast-is_expr_const|
-
-.. _function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
-
-.. das:function:: is_expr_like_call(expression: smart_ptr<ast::Expression> const& implicit)
-
-is_expr_like_call returns bool
-
-+----------+---------------------------------------------------------------------------+
-+argument  +argument type                                                              +
-+==========+===========================================================================+
-+expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
-+----------+---------------------------------------------------------------------------+
++----------+----------------------------------------------------------------------+
++argument  +argument type                                                         +
++==========+======================================================================+
++type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++----------+----------------------------------------------------------------------+
++refMatters+bool const                                                            +
++----------+----------------------------------------------------------------------+
 
 
-|function-ast-is_expr_like_call|
+|function-ast-is_temp_type|
 
 .. _function-_at_ast_c__c_is_same_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr_:
 
@@ -9662,39 +9910,323 @@ is_same_type returns bool
 
 |function-ast-is_same_type|
 
-.. _function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb:
+.. _function-_at_ast_c__c_clone_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W:
 
-.. das:function:: is_temp_type(type: smart_ptr<ast::TypeDecl> const implicit; refMatters: bool const)
+.. das:function:: clone_type(type: smart_ptr<ast::TypeDecl> const implicit)
 
-is_temp_type returns bool
-
-+----------+----------------------------------------------------------------------+
-+argument  +argument type                                                         +
-+==========+======================================================================+
-+type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+----------+----------------------------------------------------------------------+
-+refMatters+bool const                                                            +
-+----------+----------------------------------------------------------------------+
-
-
-|function-ast-is_temp_type|
-
-.. _function-_at_ast_c__c_macro_error_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CIH_ls_rtti_c__c_LineInfo_gr__CIs_C_c_C_l:
-
-.. das:function:: macro_error(porogram: smart_ptr<rtti::Program> const implicit; at: LineInfo const implicit; message: string const implicit)
+clone_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
 
 +--------+----------------------------------------------------------------------+
 +argument+argument type                                                         +
 +========+======================================================================+
-+porogram+smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit+
-+--------+----------------------------------------------------------------------+
-+at      + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const implicit         +
-+--------+----------------------------------------------------------------------+
-+message +string const implicit                                                 +
++type    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
 +--------+----------------------------------------------------------------------+
 
 
-|function-ast-macro_error|
+|function-ast-clone_type|
+
+.. _function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci:
+
+.. das:function:: get_variant_field_offset(variant: smart_ptr<ast::TypeDecl> const implicit; index: int const)
+
+get_variant_field_offset returns int
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++variant +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
++index   +int const                                                             +
++--------+----------------------------------------------------------------------+
+
+
+|function-ast-get_variant_field_offset|
+
+.. _function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci:
+
+.. das:function:: get_tuple_field_offset(typle: smart_ptr<ast::TypeDecl> const implicit; index: int const)
+
+get_tuple_field_offset returns int
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++typle   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
++index   +int const                                                             +
++--------+----------------------------------------------------------------------+
+
+
+|function-ast-get_tuple_field_offset|
+
+.. _function-_at_ast_c__c_any_table_foreach_CI?_Ci_Ci_CI0_ls_?;?_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: any_table_foreach(table: void? const implicit; keyStride: int const; valueStride: int const; block: block<(void?;void?):void> const implicit)
+
++-----------+----------------------------------------+
++argument   +argument type                           +
++===========+========================================+
++table      +void? const implicit                    +
++-----------+----------------------------------------+
++keyStride  +int const                               +
++-----------+----------------------------------------+
++valueStride+int const                               +
++-----------+----------------------------------------+
++block      +block<(void?;void?):void> const implicit+
++-----------+----------------------------------------+
+
+
+|function-ast-any_table_foreach|
+
+.. _function-_at_ast_c__c_any_array_foreach_CI?_Ci_CI0_ls_?_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: any_array_foreach(array: void? const implicit; stride: int const; block: block<(void?):void> const implicit)
+
++--------+----------------------------------+
++argument+argument type                     +
++========+==================================+
++array   +void? const implicit              +
++--------+----------------------------------+
++stride  +int const                         +
++--------+----------------------------------+
++block   +block<(void?):void> const implicit+
++--------+----------------------------------+
+
+
+|function-ast-any_array_foreach|
+
+.. _function-_at_ast_c__c_any_array_size_CI?:
+
+.. das:function:: any_array_size(array: void? const implicit)
+
+any_array_size returns int
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++array   +void? const implicit+
++--------+--------------------+
+
+
+|function-ast-any_array_size|
+
+.. _function-_at_ast_c__c_any_table_size_CI?:
+
+.. das:function:: any_table_size(table: void? const implicit)
+
+any_table_size returns int
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++table   +void? const implicit+
++--------+--------------------+
+
+
+|function-ast-any_table_size|
+
+.. _function-_at_ast_c__c_for_each_typedef_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_typedef(module: rtti::Module? const implicit; block: block<(string#;smart_ptr<ast::TypeDecl>):void> const implicit)
+
++--------+--------------------------------------------------------------------------------------------+
++argument+argument type                                                                               +
++========+============================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                  +
++--------+--------------------------------------------------------------------------------------------+
++block   +block<(string#;smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >):void> const implicit+
++--------+--------------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_typedef|
+
+.. _function-_at_ast_c__c_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_enumeration(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Enumeration>):void> const implicit)
+
++--------+------------------------------------------------------------------------------------------+
++argument+argument type                                                                             +
++========+==========================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                +
++--------+------------------------------------------------------------------------------------------+
++block   +block<(smart_ptr< :ref:`ast::Enumeration <handle-ast-Enumeration>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_enumeration|
+
+.. _function-_at_ast_c__c_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Structure_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_structure(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Structure>):void> const implicit)
+
++--------+--------------------------------------------------------------------------------------+
++argument+argument type                                                                         +
++========+======================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                            +
++--------+--------------------------------------------------------------------------------------+
++block   +block<(smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` >):void> const implicit+
++--------+--------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_structure|
+
+.. _function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_generic(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
++--------+------------------------------------------------------------------------------------+
++block   +block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_generic|
+
+.. _function-_at_ast_c__c_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_global(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Variable>):void> const implicit)
+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                          +
++--------+------------------------------------------------------------------------------------+
++block   +block<(smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_global|
+
+.. _function-_at_ast_c__c_for_each_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_call_macro(module: rtti::Module? const implicit; block: block<(string#):void> const implicit)
+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++--------+----------------------------------------------------------+
++block   +block<(string#):void> const implicit                      +
++--------+----------------------------------------------------------+
+
+
+|function-ast-for_each_call_macro|
+
+.. _function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W;u_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_field(annotation: BasicStructureAnnotation const implicit; block: block<(string;string;smart_ptr<ast::TypeDecl>;uint):void> const implicit)
+
++----------+-------------------------------------------------------------------------------------------------------+
++argument  +argument type                                                                                          +
++==========+=======================================================================================================+
++annotation+ :ref:`rtti::BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  const implicit          +
++----------+-------------------------------------------------------------------------------------------------------+
++block     +block<(string;string;smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >;uint):void> const implicit+
++----------+-------------------------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_field|
+
+.. _function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb:
+
+.. das:function:: has_field(type: smart_ptr<ast::TypeDecl> const implicit; fieldName: string const implicit; constant: bool const)
+
+has_field returns bool
+
++---------+----------------------------------------------------------------------+
++argument +argument type                                                         +
++=========+======================================================================+
++type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++---------+----------------------------------------------------------------------+
++fieldName+string const implicit                                                 +
++---------+----------------------------------------------------------------------+
++constant +bool const                                                            +
++---------+----------------------------------------------------------------------+
+
+
+|function-ast-has_field|
+
+.. _function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?:
+
+.. das:function:: is_visible_directly(from_module: rtti::Module? const implicit; which_module: rtti::Module? const implicit)
+
+is_visible_directly returns bool
+
++------------+----------------------------------------------------------+
++argument    +argument type                                             +
++============+==========================================================+
++from_module + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++------------+----------------------------------------------------------+
++which_module+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++------------+----------------------------------------------------------+
+
+
+|function-ast-is_visible_directly|
+
+.. _function-_at_ast_c__c_get_ast_context_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI0_ls_b;H_ls_ast_c__c_AstContext_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: get_ast_context(program: smart_ptr<rtti::Program> const implicit; expression: smart_ptr<ast::Expression> const implicit; block: block<(bool;ast::AstContext):void> const implicit)
+
++----------+----------------------------------------------------------------------------------+
++argument  +argument type                                                                     +
++==========+==================================================================================+
++program   +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit            +
++----------+----------------------------------------------------------------------------------+
++expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit        +
++----------+----------------------------------------------------------------------------------+
++block     +block<(bool; :ref:`ast::AstContext <handle-ast-AstContext>` ):void> const implicit+
++----------+----------------------------------------------------------------------------------+
+
+
+|function-ast-get_ast_context|
+
+.. _function-_at_ast_c__c_make_clone_structure_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?:
+
+.. das:function:: make_clone_structure(structure: ast::Structure? const implicit)
+
+make_clone_structure returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
+
++---------+--------------------------------------------------------------+
++argument +argument type                                                 +
++=========+==============================================================+
++structure+ :ref:`ast::Structure <handle-ast-Structure>` ? const implicit+
++---------+--------------------------------------------------------------+
+
+
+|function-ast-make_clone_structure|
+
+.. _function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+
+.. das:function:: is_expr_like_call(expression: smart_ptr<ast::Expression> const& implicit)
+
+is_expr_like_call returns bool
+
++----------+---------------------------------------------------------------------------+
++argument  +argument type                                                              +
++==========+===========================================================================+
++expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
++----------+---------------------------------------------------------------------------+
+
+
+|function-ast-is_expr_like_call|
+
+.. _function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+
+.. das:function:: is_expr_const(expression: smart_ptr<ast::Expression> const& implicit)
+
+is_expr_const returns bool
+
++----------+---------------------------------------------------------------------------+
++argument  +argument type                                                              +
++==========+===========================================================================+
++expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
++----------+---------------------------------------------------------------------------+
+
+
+|function-ast-is_expr_const|
 
 .. _function-_at_ast_c__c_make_call_CIH_ls_rtti_c__c_LineInfo_gr__CIs:
 
@@ -9713,548 +10245,42 @@ make_call returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
 
 |function-ast-make_call|
 
-.. _function-_at_ast_c__c_make_call_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_eval_single_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W_&Ib:
 
-.. das:function:: make_call_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: eval_single_expression(expr: smart_ptr<ast::Expression> const& implicit; ok: bool& implicit)
 
-make_call_macro returns smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` >
+eval_single_expression returns float4
 
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+name    +string const implicit                                                   +
-+--------+------------------------------------------------------------------------+
-+class   +void? const implicit                                                    +
-+--------+------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
+.. warning:: 
+  This is unsafe operation.
 
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
++--------+---------------------------------------------------------------------------+
++ok      +bool& implicit                                                             +
++--------+---------------------------------------------------------------------------+
 
-|function-ast-make_call_macro|
 
-.. _function-_at_ast_c__c_make_clone_structure_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?:
+|function-ast-eval_single_expression|
 
-.. das:function:: make_clone_structure(structure: ast::Structure? const implicit)
+.. _function-_at_ast_c__c_macro_error_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CIH_ls_rtti_c__c_LineInfo_gr__CIs_C_c_C_l:
 
-make_clone_structure returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
+.. das:function:: macro_error(porogram: smart_ptr<rtti::Program> const implicit; at: LineInfo const implicit; message: string const implicit)
 
-+---------+--------------------------------------------------------------+
-+argument +argument type                                                 +
-+=========+==============================================================+
-+structure+ :ref:`ast::Structure <handle-ast-Structure>` ? const implicit+
-+---------+--------------------------------------------------------------+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++porogram+smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit+
++--------+----------------------------------------------------------------------+
++at      + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const implicit         +
++--------+----------------------------------------------------------------------+
++message +string const implicit                                                 +
++--------+----------------------------------------------------------------------+
 
 
-|function-ast-make_clone_structure|
-
-.. _function-_at_ast_c__c_make_enumeration_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
-
-.. das:function:: make_enumeration_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
-
-make_enumeration_annotation returns smart_ptr< :ref:`ast::EnumerationAnnotation <handle-ast-EnumerationAnnotation>` >
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+name    +string const implicit                                                   +
-+--------+------------------------------------------------------------------------+
-+class   +void? const implicit                                                    +
-+--------+------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-ast-make_enumeration_annotation|
-
-.. _function-_at_ast_c__c_make_function_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
-
-.. das:function:: make_function_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
-
-make_function_annotation returns smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` >
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+name    +string const implicit                                                   +
-+--------+------------------------------------------------------------------------+
-+class   +void? const implicit                                                    +
-+--------+------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-ast-make_function_annotation|
-
-.. _function-_at_ast_c__c_make_pass_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
-
-.. das:function:: make_pass_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
-
-make_pass_macro returns smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+name    +string const implicit                                                   +
-+--------+------------------------------------------------------------------------+
-+class   +void? const implicit                                                    +
-+--------+------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-ast-make_pass_macro|
-
-.. _function-_at_ast_c__c_make_reader_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
-
-.. das:function:: make_reader_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
-
-make_reader_macro returns smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMacro>` >
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+name    +string const implicit                                                   +
-+--------+------------------------------------------------------------------------+
-+class   +void? const implicit                                                    +
-+--------+------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-ast-make_reader_macro|
-
-.. _function-_at_ast_c__c_make_structure_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
-
-.. das:function:: make_structure_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
-
-make_structure_annotation returns smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` >
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+name    +string const implicit                                                   +
-+--------+------------------------------------------------------------------------+
-+class   +void? const implicit                                                    +
-+--------+------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-ast-make_structure_annotation|
-
-.. _function-_at_ast_c__c_make_typeinfo_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
-
-.. das:function:: make_typeinfo_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
-
-make_typeinfo_macro returns smart_ptr< :ref:`ast::TypeInfoMacro <handle-ast-TypeInfoMacro>` >
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+name    +string const implicit                                                   +
-+--------+------------------------------------------------------------------------+
-+class   +void? const implicit                                                    +
-+--------+------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-ast-make_typeinfo_macro|
-
-.. _function-_at_ast_c__c_make_variant_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
-
-.. das:function:: make_variant_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
-
-make_variant_macro returns smart_ptr< :ref:`ast::VariantMacro <handle-ast-VariantMacro>` >
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+name    +string const implicit                                                   +
-+--------+------------------------------------------------------------------------+
-+class   +void? const implicit                                                    +
-+--------+------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-ast-make_variant_macro|
-
-.. _function-_at_ast_c__c_make_visitor_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
-
-.. das:function:: make_visitor(class: void? const implicit; info: rtti::StructInfo const? const implicit)
-
-make_visitor returns smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` >
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+class   +void? const implicit                                                    +
-+--------+------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-ast-make_visitor|
-
-.. _function-_at_ast_c__c_parse_mangled_name_CIs_IH_ls_rtti_c__c_ModuleGroup_gr__CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C_c_C_l:
-
-.. das:function:: parse_mangled_name(txt: string const implicit; lib: ModuleGroup implicit; thisModule: rtti::Module? const implicit)
-
-parse_mangled_name returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
-
-+----------+-------------------------------------------------------------+
-+argument  +argument type                                                +
-+==========+=============================================================+
-+txt       +string const implicit                                        +
-+----------+-------------------------------------------------------------+
-+lib       + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`  implicit+
-+----------+-------------------------------------------------------------+
-+thisModule+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit   +
-+----------+-------------------------------------------------------------+
-
-
-|function-ast-parse_mangled_name|
-
-.. _function-_at_ast_c__c_this_module_C_c_C_l:
-
-.. das:function:: this_module()
-
-this_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
-
-|function-ast-this_module|
-
-.. _function-_at_ast_c__c_this_program_C_c:
-
-.. das:function:: this_program()
-
-this_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` >
-
-|function-ast-this_program|
-
-.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
-
-.. das:function:: visit(expression: smart_ptr<ast::Expression> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
-
-+----------+----------------------------------------------------------------------------------+
-+argument  +argument type                                                                     +
-+==========+==================================================================================+
-+expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const implicit        +
-+----------+----------------------------------------------------------------------------------+
-+adapter   +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
-+----------+----------------------------------------------------------------------------------+
-
-
-|function-ast-visit|
-
-.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
-
-.. das:function:: visit(function: smart_ptr<ast::Function> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
-
-+--------+----------------------------------------------------------------------------------+
-+argument+argument type                                                                     +
-+========+==================================================================================+
-+function+smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit            +
-+--------+----------------------------------------------------------------------------------+
-+adapter +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
-+--------+----------------------------------------------------------------------------------+
-
-
-|function-ast-visit|
-
-.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
-
-.. das:function:: visit(program: smart_ptr<rtti::Program> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
-
-+--------+----------------------------------------------------------------------------------+
-+argument+argument type                                                                     +
-+========+==================================================================================+
-+program +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit            +
-+--------+----------------------------------------------------------------------------------+
-+adapter +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
-+--------+----------------------------------------------------------------------------------+
-
-
-|function-ast-visit|
-
-.. _function-_at_ast_c__c_visit_modules_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
-
-.. das:function:: visit_modules(program: smart_ptr<rtti::Program> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
-
-+--------+----------------------------------------------------------------------------------+
-+argument+argument type                                                                     +
-+========+==================================================================================+
-+program +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit            +
-+--------+----------------------------------------------------------------------------------+
-+adapter +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
-+--------+----------------------------------------------------------------------------------+
-
-
-|function-ast-visit_modules|
-
-.. _function-_at_ast_c__c_ExpressionPtr_C1_ls_Y_ls_TT_gr_._gr_?M:
-
-.. das:function:: ExpressionPtr(expr: smart_ptr<auto(TT)> const)
-
-ExpressionPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-+--------+-------------------------+
-+argument+argument type            +
-+========+=========================+
-+expr    +smart_ptr<auto(TT)> const+
-+--------+-------------------------+
-
-
-|function-ast-ExpressionPtr|
-
-.. _function-_at_ast_c__c_FunctionPtr_C1_ls_H_ls_ast_c__c_Function_gr__gr_?:
-
-.. das:function:: FunctionPtr(fun: ast::Function? const)
-
-FunctionPtr returns  :ref:`FunctionPtr <alias-FunctionPtr>` 
-
-+--------+---------------------------------------------------+
-+argument+argument type                                      +
-+========+===================================================+
-+fun     + :ref:`ast::Function <handle-ast-Function>` ? const+
-+--------+---------------------------------------------------+
-
-
-|function-ast-FunctionPtr|
-
-.. _function-_at_ast_c__c_add_new_call_macro_Cs_C.:
-
-.. das:function:: add_new_call_macro(name: string const; someClassPtr: auto const)
-
-add_new_call_macro returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_call_macro|
-
-.. _function-_at_ast_c__c_add_new_contract_annotation_Cs_C.:
-
-.. das:function:: add_new_contract_annotation(name: string const; someClassPtr: auto const)
-
-add_new_contract_annotation returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_contract_annotation|
-
-.. _function-_at_ast_c__c_add_new_dirty_infer_macro_Cs_C.:
-
-.. das:function:: add_new_dirty_infer_macro(name: string const; someClassPtr: auto const)
-
-add_new_dirty_infer_macro returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_dirty_infer_macro|
-
-.. _function-_at_ast_c__c_add_new_enumeration_annotation_Cs_C.:
-
-.. das:function:: add_new_enumeration_annotation(name: string const; someClassPtr: auto const)
-
-add_new_enumeration_annotation returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_enumeration_annotation|
-
-.. _function-_at_ast_c__c_add_new_function_annotation_Cs_C.:
-
-.. das:function:: add_new_function_annotation(name: string const; someClassPtr: auto const)
-
-add_new_function_annotation returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_function_annotation|
-
-.. _function-_at_ast_c__c_add_new_infer_macro_Cs_C.:
-
-.. das:function:: add_new_infer_macro(name: string const; someClassPtr: auto const)
-
-add_new_infer_macro returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_infer_macro|
-
-.. _function-_at_ast_c__c_add_new_lint_macro_Cs_C.:
-
-.. das:function:: add_new_lint_macro(name: string const; someClassPtr: auto const)
-
-add_new_lint_macro returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_lint_macro|
-
-.. _function-_at_ast_c__c_add_new_optimization_macro_Cs_C.:
-
-.. das:function:: add_new_optimization_macro(name: string const; someClassPtr: auto const)
-
-add_new_optimization_macro returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_optimization_macro|
-
-.. _function-_at_ast_c__c_add_new_reader_macro_Cs_C.:
-
-.. das:function:: add_new_reader_macro(name: string const; someClassPtr: auto const)
-
-add_new_reader_macro returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_reader_macro|
-
-.. _function-_at_ast_c__c_add_new_structure_annotation_Cs_C.:
-
-.. das:function:: add_new_structure_annotation(name: string const; someClassPtr: auto const)
-
-add_new_structure_annotation returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_structure_annotation|
-
-.. _function-_at_ast_c__c_add_new_typeinfo_macro_Cs_C.:
-
-.. das:function:: add_new_typeinfo_macro(name: string const; someClassPtr: auto const)
-
-add_new_typeinfo_macro returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_typeinfo_macro|
-
-.. _function-_at_ast_c__c_add_new_variant_macro_Cs_C.:
-
-.. das:function:: add_new_variant_macro(name: string const; someClassPtr: auto const)
-
-add_new_variant_macro returns auto
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-add_new_variant_macro|
-
-.. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
-
-.. das:function:: describe(expr: smart_ptr<ast::Expression> const)
-
-describe returns auto
-
-+--------+-----------------------------------------------------------------+
-+argument+argument type                                                    +
-+========+=================================================================+
-+expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const+
-+--------+-----------------------------------------------------------------+
-
-
-|function-ast-describe|
-
-.. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Function_gr__gr_?M:
-
-.. das:function:: describe(expr: smart_ptr<ast::Function> const)
-
-describe returns auto
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+expr    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const+
-+--------+-------------------------------------------------------------+
-
-
-|function-ast-describe|
+|function-ast-macro_error|
 
 .. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb:
 
@@ -10300,20 +10326,471 @@ describe_cpp returns auto
 
 |function-ast-describe_cpp|
 
-.. _function-_at_ast_c__c_find_compiling_module_Cs:
+.. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
 
-.. das:function:: find_compiling_module(name: string const)
+.. das:function:: describe(expr: smart_ptr<ast::Expression> const)
 
-find_compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
+describe returns auto
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+name    +string const +
-+--------+-------------+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const+
++--------+-----------------------------------------------------------------+
 
 
-|function-ast-find_compiling_module|
+|function-ast-describe|
+
+.. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Function_gr__gr_?M:
+
+.. das:function:: describe(expr: smart_ptr<ast::Function> const)
+
+describe returns auto
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++expr    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const+
++--------+-------------------------------------------------------------+
+
+
+|function-ast-describe|
+
+.. _function-_at_ast_c__c_ExpressionPtr_C1_ls_Y_ls_TT_gr_._gr_?M:
+
+.. das:function:: ExpressionPtr(expr: smart_ptr<auto(TT)> const)
+
+ExpressionPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+-------------------------+
++argument+argument type            +
++========+=========================+
++expr    +smart_ptr<auto(TT)> const+
++--------+-------------------------+
+
+
+|function-ast-ExpressionPtr|
+
+.. _function-_at_ast_c__c_FunctionPtr_C1_ls_H_ls_ast_c__c_Function_gr__gr_?:
+
+.. das:function:: FunctionPtr(fun: ast::Function? const)
+
+FunctionPtr returns  :ref:`FunctionPtr <alias-FunctionPtr>` 
+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++fun     + :ref:`ast::Function <handle-ast-Function>` ? const+
++--------+---------------------------------------------------+
+
+
+|function-ast-FunctionPtr|
+
+.. _function-_at_ast_c__c_make_function_annotation_Cs_C.:
+
+.. das:function:: make_function_annotation(name: string const; someClassPtr: auto const)
+
+make_function_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnotationPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_function_annotation|
+
+.. _function-_at_ast_c__c_make_block_annotation_Cs_C.:
+
+.. das:function:: make_block_annotation(name: string const; someClassPtr: auto const)
+
+make_block_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnotationPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_block_annotation|
+
+.. _function-_at_ast_c__c_make_structure_annotation_Cs_C.:
+
+.. das:function:: make_structure_annotation(name: string const; someClassPtr: auto const)
+
+make_structure_annotation returns  :ref:`StructureAnnotationPtr <alias-StructureAnnotationPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_structure_annotation|
+
+.. _function-_at_ast_c__c_make_enumeration_annotation_Cs_C.:
+
+.. das:function:: make_enumeration_annotation(name: string const; someClassPtr: auto const)
+
+make_enumeration_annotation returns  :ref:`EnumerationAnnotationPtr <alias-EnumerationAnnotationPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_enumeration_annotation|
+
+.. _function-_at_ast_c__c_make_visitor_C.:
+
+.. das:function:: make_visitor(someClass: auto const)
+
+make_visitor returns smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` >
+
++---------+-------------+
++argument +argument type+
++=========+=============+
++someClass+auto const   +
++---------+-------------+
+
+
+|function-ast-make_visitor|
+
+.. _function-_at_ast_c__c_make_reader_macro_Cs_C.:
+
+.. das:function:: make_reader_macro(name: string const; someClassPtr: auto const)
+
+make_reader_macro returns  :ref:`ReaderMacroPtr <alias-ReaderMacroPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_reader_macro|
+
+.. _function-_at_ast_c__c_make_call_macro_Cs_C.:
+
+.. das:function:: make_call_macro(name: string const; someClassPtr: auto const)
+
+make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_call_macro|
+
+.. _function-_at_ast_c__c_make_typeinfo_macro_Cs_C.:
+
+.. das:function:: make_typeinfo_macro(name: string const; someClassPtr: auto const)
+
+make_typeinfo_macro returns  :ref:`TypeInfoMacroPtr <alias-TypeInfoMacroPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_typeinfo_macro|
+
+.. _function-_at_ast_c__c_make_pass_macro_Cs_C.:
+
+.. das:function:: make_pass_macro(name: string const; someClassPtr: auto const)
+
+make_pass_macro returns  :ref:`PassMacroPtr <alias-PassMacroPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_pass_macro|
+
+.. _function-_at_ast_c__c_make_variant_macro_Cs_C.:
+
+.. das:function:: make_variant_macro(name: string const; someClassPtr: auto const)
+
+make_variant_macro returns  :ref:`VariantMacroPtr <alias-VariantMacroPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_variant_macro|
+
+.. _function-_at_ast_c__c_add_new_block_annotation_Cs_C.:
+
+.. das:function:: add_new_block_annotation(name: string const; someClassPtr: auto const)
+
+add_new_block_annotation returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_block_annotation|
+
+.. _function-_at_ast_c__c_add_new_function_annotation_Cs_C.:
+
+.. das:function:: add_new_function_annotation(name: string const; someClassPtr: auto const)
+
+add_new_function_annotation returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_function_annotation|
+
+.. _function-_at_ast_c__c_add_new_contract_annotation_Cs_C.:
+
+.. das:function:: add_new_contract_annotation(name: string const; someClassPtr: auto const)
+
+add_new_contract_annotation returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_contract_annotation|
+
+.. _function-_at_ast_c__c_add_new_structure_annotation_Cs_C.:
+
+.. das:function:: add_new_structure_annotation(name: string const; someClassPtr: auto const)
+
+add_new_structure_annotation returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_structure_annotation|
+
+.. _function-_at_ast_c__c_add_new_enumeration_annotation_Cs_C.:
+
+.. das:function:: add_new_enumeration_annotation(name: string const; someClassPtr: auto const)
+
+add_new_enumeration_annotation returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_enumeration_annotation|
+
+.. _function-_at_ast_c__c_add_new_variant_macro_Cs_C.:
+
+.. das:function:: add_new_variant_macro(name: string const; someClassPtr: auto const)
+
+add_new_variant_macro returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_variant_macro|
+
+.. _function-_at_ast_c__c_add_new_reader_macro_Cs_C.:
+
+.. das:function:: add_new_reader_macro(name: string const; someClassPtr: auto const)
+
+add_new_reader_macro returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_reader_macro|
+
+.. _function-_at_ast_c__c_add_new_call_macro_Cs_C.:
+
+.. das:function:: add_new_call_macro(name: string const; someClassPtr: auto const)
+
+add_new_call_macro returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_call_macro|
+
+.. _function-_at_ast_c__c_add_new_typeinfo_macro_Cs_C.:
+
+.. das:function:: add_new_typeinfo_macro(name: string const; someClassPtr: auto const)
+
+add_new_typeinfo_macro returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_typeinfo_macro|
+
+.. _function-_at_ast_c__c_add_new_infer_macro_Cs_C.:
+
+.. das:function:: add_new_infer_macro(name: string const; someClassPtr: auto const)
+
+add_new_infer_macro returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_infer_macro|
+
+.. _function-_at_ast_c__c_add_new_dirty_infer_macro_Cs_C.:
+
+.. das:function:: add_new_dirty_infer_macro(name: string const; someClassPtr: auto const)
+
+add_new_dirty_infer_macro returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_dirty_infer_macro|
+
+.. _function-_at_ast_c__c_add_new_lint_macro_Cs_C.:
+
+.. das:function:: add_new_lint_macro(name: string const; someClassPtr: auto const)
+
+add_new_lint_macro returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_lint_macro|
+
+.. _function-_at_ast_c__c_add_new_global_lint_macro_Cs_C.:
+
+.. das:function:: add_new_global_lint_macro(name: string const; someClassPtr: auto const)
+
+add_new_global_lint_macro returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_global_lint_macro|
+
+.. _function-_at_ast_c__c_add_new_optimization_macro_Cs_C.:
+
+.. das:function:: add_new_optimization_macro(name: string const; someClassPtr: auto const)
+
+add_new_optimization_macro returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_optimization_macro|
 
 .. _function-_at_ast_c__c_find_module_C1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_Cs:
 
@@ -10347,155 +10824,19 @@ find_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
 |function-ast-find_module|
 
-.. _function-_at_ast_c__c_make_call_macro_Cs_C.:
+.. _function-_at_ast_c__c_find_compiling_module_Cs:
 
-.. das:function:: make_call_macro(name: string const; someClassPtr: auto const)
+.. das:function:: find_compiling_module(name: string const)
 
-make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>` 
+find_compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++name    +string const +
++--------+-------------+
 
 
-|function-ast-make_call_macro|
-
-.. _function-_at_ast_c__c_make_enumeration_annotation_Cs_C.:
-
-.. das:function:: make_enumeration_annotation(name: string const; someClassPtr: auto const)
-
-make_enumeration_annotation returns  :ref:`EnumerationAnnotationPtr <alias-EnumerationAnnotationPtr>` 
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-make_enumeration_annotation|
-
-.. _function-_at_ast_c__c_make_function_annotation_Cs_C.:
-
-.. das:function:: make_function_annotation(name: string const; someClassPtr: auto const)
-
-make_function_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnotationPtr>` 
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-make_function_annotation|
-
-.. _function-_at_ast_c__c_make_pass_macro_Cs_C.:
-
-.. das:function:: make_pass_macro(name: string const; someClassPtr: auto const)
-
-make_pass_macro returns  :ref:`PassMacroPtr <alias-PassMacroPtr>` 
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-make_pass_macro|
-
-.. _function-_at_ast_c__c_make_reader_macro_Cs_C.:
-
-.. das:function:: make_reader_macro(name: string const; someClassPtr: auto const)
-
-make_reader_macro returns  :ref:`ReaderMacroPtr <alias-ReaderMacroPtr>` 
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-make_reader_macro|
-
-.. _function-_at_ast_c__c_make_structure_annotation_Cs_C.:
-
-.. das:function:: make_structure_annotation(name: string const; someClassPtr: auto const)
-
-make_structure_annotation returns  :ref:`StructureAnnotationPtr <alias-StructureAnnotationPtr>` 
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-make_structure_annotation|
-
-.. _function-_at_ast_c__c_make_typeinfo_macro_Cs_C.:
-
-.. das:function:: make_typeinfo_macro(name: string const; someClassPtr: auto const)
-
-make_typeinfo_macro returns  :ref:`TypeInfoMacroPtr <alias-TypeInfoMacroPtr>` 
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-make_typeinfo_macro|
-
-.. _function-_at_ast_c__c_make_variant_macro_Cs_C.:
-
-.. das:function:: make_variant_macro(name: string const; someClassPtr: auto const)
-
-make_variant_macro returns  :ref:`VariantMacroPtr <alias-VariantMacroPtr>` 
-
-+------------+-------------+
-+argument    +argument type+
-+============+=============+
-+name        +string const +
-+------------+-------------+
-+someClassPtr+auto const   +
-+------------+-------------+
-
-
-|function-ast-make_variant_macro|
-
-.. _function-_at_ast_c__c_make_visitor_C.:
-
-.. das:function:: make_visitor(someClass: auto const)
-
-make_visitor returns smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` >
-
-+---------+-------------+
-+argument +argument type+
-+=========+=============+
-+someClass+auto const   +
-+---------+-------------+
-
-
-|function-ast-make_visitor|
+|function-ast-find_compiling_module|
 
 

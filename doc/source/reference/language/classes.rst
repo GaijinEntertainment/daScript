@@ -58,6 +58,17 @@ Class can define abstract methods using ``abstract`` keyword::
 Abstract functions need to be fully qualified, including return type.
 Class member functions will be inferred in the same manner as regular functions.
 
+Sealed functions can not be overridden. 'sealed' keyword is used to prevent overriding::
+
+    class Foo3D : Foo
+        def sealed set(X,Y:int )    // subclasses of Foo3D can no longer override this method
+            xyz = X + Y
+
+Sealed classes can not be inherited from. 'sealed' keyword is used to prevent inheritance::
+
+    class sealed Foo3D : Foo        // Foo3D can no longer be inherited from
+        ...
+
 Pointer named ``self`` is available inside any class method.
 
 Classes can be created via ``new`` operator::

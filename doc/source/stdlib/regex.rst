@@ -43,17 +43,23 @@ Type aliases
 Constants
 +++++++++
 
+.. _global-regex-log_parse_enabled:
+
+.. das:attribute:: log_parse_enabled = false
+
+|variable-regex-log_parse_enabled|
+
 .. _global-regex-log_match_enabled:
 
 .. das:attribute:: log_match_enabled = false
 
 |variable-regex-log_match_enabled|
 
-.. _global-regex-log_parse_enabled:
+.. _global-regex-range_check_enabled:
 
-.. das:attribute:: log_parse_enabled = false
+.. das:attribute:: range_check_enabled = false
 
-|variable-regex-log_parse_enabled|
+|variable-regex-range_check_enabled|
 
 .. _global-regex-meta:
 
@@ -66,12 +72,6 @@ Constants
 .. das:attribute:: meta_set = "wWsSdD"
 
 |variable-regex-meta_set|
-
-.. _global-regex-range_check_enabled:
-
-.. das:attribute:: range_check_enabled = false
-
-|variable-regex-range_check_enabled|
 
 ++++++++++++
 Enumerations
@@ -174,34 +174,6 @@ Regex fields are
 Uncategorized
 +++++++++++++
 
-.. _function-_at_regex_c__c_debug_set_C[8]Y_ls_CharSet_gr_u:
-
-.. das:function:: debug_set(cset: CharSet)
-
-+--------+--------------------------------+
-+argument+argument type                   +
-+========+================================+
-+cset    + :ref:`CharSet <alias-CharSet>` +
-+--------+--------------------------------+
-
-
-|function-regex-debug_set|
-
-.. _function-_at_regex_c__c_is_valid_S_ls_Regex_gr_:
-
-.. das:function:: is_valid(re: Regex)
-
-is_valid returns bool
-
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+re      + :ref:`regex::Regex <struct-regex-Regex>` +
-+--------+------------------------------------------+
-
-
-|function-regex-is_valid|
-
 .. _function-_at_regex_c__c_re_early_out_[8]Y_ls_CharSet_gr_u_C1_ls_S_ls_ReNode_gr__gr_?:
 
 .. das:function:: re_early_out(cset: CharSet; node: regex::ReNode? const)
@@ -218,6 +190,38 @@ re_early_out returns bool
 
 
 |function-regex-re_early_out|
+
+.. _function-_at_regex_c__c_is_valid_S_ls_Regex_gr_:
+
+.. das:function:: is_valid(re: Regex)
+
+is_valid returns bool
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++re      + :ref:`regex::Regex <struct-regex-Regex>` +
++--------+------------------------------------------+
+
+
+|function-regex-is_valid|
+
+.. _function-_at_regex_c__c_regex_compile_S_ls_Regex_gr__Cs:
+
+.. das:function:: regex_compile(re: Regex; expr: string const)
+
+regex_compile returns bool
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++re      + :ref:`regex::Regex <struct-regex-Regex>` +
++--------+------------------------------------------+
++expr    +string const                              +
++--------+------------------------------------------+
+
+
+|function-regex-regex_compile|
 
 .. _function-_at_regex_c__c_regex_compile_Cs:
 
@@ -249,39 +253,11 @@ regex_compile returns  :ref:`regex::Regex <struct-regex-Regex>`
 
 |function-regex-regex_compile|
 
-.. _function-_at_regex_c__c_regex_compile_S_ls_Regex_gr__Cs:
+.. _function-_at_regex_c__c_regex_match_S_ls_Regex_gr__Cs_Ci:
 
-.. das:function:: regex_compile(re: Regex; expr: string const)
+.. das:function:: regex_match(regex: Regex; str: string const; offset: int const)
 
-regex_compile returns bool
-
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+re      + :ref:`regex::Regex <struct-regex-Regex>` +
-+--------+------------------------------------------+
-+expr    +string const                              +
-+--------+------------------------------------------+
-
-
-|function-regex-regex_compile|
-
-.. _function-_at_regex_c__c_regex_debug_CS_ls_Regex_gr_:
-
-.. das:function:: regex_debug(regex: Regex const)
-
-+--------+------------------------------------------------+
-+argument+argument type                                   +
-+========+================================================+
-+regex   + :ref:`regex::Regex <struct-regex-Regex>`  const+
-+--------+------------------------------------------------+
-
-
-|function-regex-regex_debug|
-
-.. _function-_at_regex_c__c_regex_foreach_S_ls_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cr_gr_1_ls_b_gr__builtin_:
-
-.. das:function:: regex_foreach(regex: Regex; str: string const; blk: block<(at:range const):bool> const)
+regex_match returns int
 
 +--------+------------------------------------------+
 +argument+argument type                             +
@@ -290,11 +266,11 @@ regex_compile returns bool
 +--------+------------------------------------------+
 +str     +string const                              +
 +--------+------------------------------------------+
-+blk     +block<(at:range const):bool> const        +
++offset  +int const                                 +
 +--------+------------------------------------------+
 
 
-|function-regex-regex_foreach|
+|function-regex-regex_match|
 
 .. _function-_at_regex_c__c_regex_group_CS_ls_Regex_gr__Ci_Cs:
 
@@ -315,11 +291,9 @@ regex_group returns string
 
 |function-regex-regex_group|
 
-.. _function-_at_regex_c__c_regex_match_S_ls_Regex_gr__Cs_Ci:
+.. _function-_at_regex_c__c_regex_foreach_S_ls_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cr_gr_1_ls_b_gr__builtin_:
 
-.. das:function:: regex_match(regex: Regex; str: string const; offset: int const)
-
-regex_match returns int
+.. das:function:: regex_foreach(regex: Regex; str: string const; blk: block<(at:range const):bool> const)
 
 +--------+------------------------------------------+
 +argument+argument type                             +
@@ -328,10 +302,36 @@ regex_match returns int
 +--------+------------------------------------------+
 +str     +string const                              +
 +--------+------------------------------------------+
-+offset  +int const                                 +
++blk     +block<(at:range const):bool> const        +
 +--------+------------------------------------------+
 
 
-|function-regex-regex_match|
+|function-regex-regex_foreach|
+
+.. _function-_at_regex_c__c_regex_debug_CS_ls_Regex_gr_:
+
+.. das:function:: regex_debug(regex: Regex const)
+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++regex   + :ref:`regex::Regex <struct-regex-Regex>`  const+
++--------+------------------------------------------------+
+
+
+|function-regex-regex_debug|
+
+.. _function-_at_regex_c__c_debug_set_C[8]Y_ls_CharSet_gr_u:
+
+.. das:function:: debug_set(cset: CharSet)
+
++--------+--------------------------------+
++argument+argument type                   +
++========+================================+
++cset    + :ref:`CharSet <alias-CharSet>` +
++--------+--------------------------------+
+
+
+|function-regex-debug_set|
 
 
