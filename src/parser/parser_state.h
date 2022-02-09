@@ -22,6 +22,7 @@ namespace das {
         das_set<string> das_already_include;
         das_map<string,string>   das_module_alias;
         Structure * g_thisStructure = nullptr;
+        vector<CommentReader *> g_CommentReaders;
         ReaderMacro * g_ReaderMacro = nullptr;
         ExprReader * g_ReaderExpr = nullptr;
         vector<FileInfo *> g_FileAccessStack;

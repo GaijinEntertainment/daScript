@@ -321,6 +321,12 @@ namespace das {
             } else {
                 das_yybegin(src, len, scanner);
             }
+            libGroup.foreach([&](Module * mod){
+                if ( mod->commentReader ) {
+                    parserState.g_CommentReaders.push_back(mod->commentReader.get());
+                }
+                return true;
+            },"*");
         } else {
             program->error(fileName + " not found", "","",LineInfo());
             program->isCompiling = false;

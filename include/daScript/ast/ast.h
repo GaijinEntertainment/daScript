@@ -42,6 +42,9 @@ namespace das
     struct ReaderMacro;
     typedef smart_ptr<ReaderMacro> ReaderMacroPtr;
 
+    struct CommentReader;
+    typedef smart_ptr<CommentReader> CommentReaderPtr;
+
     struct CallMacro;
     typedef smart_ptr<CallMacro> CallMacroPtr;
 
@@ -891,6 +894,7 @@ namespace das
         bool addAnnotation ( const AnnotationPtr & ptr, bool canFail = false );
         bool addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail = false );
         bool addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail = false );
+        bool addCommentReader ( const CommentReaderPtr & ptr, bool canFail = false );
         bool addCallMacro ( const CallMacroPtr & ptr, bool canFail = false );
         TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
@@ -962,6 +966,7 @@ namespace das
         vector<PassMacroPtr>                        globalLintMacros;   // lint macros which work everywhere
         vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
+        CommentReaderPtr                            commentReader;      // /* blah */ or // blah
         string  name;
         union {
             struct {
@@ -1143,6 +1148,12 @@ namespace das
         //      2. invoke of blocks will have extra prologue overhead
         bool debugger = false;
         string debug_module;
+    };
+
+    struct CommentReader : public ptr_ref_count {
+        virtual void open ( bool cppStyle, const LineInfo & at ) = 0;
+        virtual void accept ( int Ch, const LineInfo & at ) = 0;
+        virtual void close ( const LineInfo & at ) = 0;
     };
 
     class Program : public ptr_ref_count {

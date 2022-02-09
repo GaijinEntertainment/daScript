@@ -22,6 +22,7 @@ typedef
     PassMacroPtr = smart_ptr<PassMacro>
     VariantMacroPtr = smart_ptr<VariantMacro>
     ReaderMacroPtr = smart_ptr<ReaderMacro>
+    CommentReaderPtr = smart_ptr<CommentReader>
     CallMacroPtr = smart_ptr<CallMacro>
     TypeInfoMacroPtr = smart_ptr<TypeInfoMacro>
 
@@ -91,6 +92,12 @@ class AstVariantMacro
 class AstReaderMacro
     def abstract accept ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; ch:int; info:LineInfo ) : bool
     def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
+
+[macro_interface]
+class AstCommentReader
+    def abstract open ( prog:ProgramPtr; mod:Module?; cpp:bool; info:LineInfo ) : void
+    def abstract accept ( prog:ProgramPtr; mod:Module?; ch:int; info:LineInfo ) : void
+    def abstract close ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
 
 [macro_interface]
 class AstCallMacro
@@ -544,6 +551,15 @@ def make_reader_macro ( name : string; someClassPtr ) : ReaderMacroPtr
         return [[ReaderMacroPtr]]
 
 [macro_function]
+def make_comment_reader ( name : string; someClassPtr ) : CommentReaderPtr
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_comment_reader(someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[ReaderMacroPtr]]
+
+[macro_function]
 def make_call_macro ( name : string; someClassPtr ) : CallMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
@@ -625,6 +641,12 @@ def add_new_variant_macro ( name:string; someClassPtr )
 def add_new_reader_macro ( name:string; someClassPtr )
     var ann <- make_reader_macro(name, someClassPtr)
     this_module() |> add_reader_macro(ann)
+    unsafe
+        delete ann
+
+def add_new_comment_reader ( name:string; someClassPtr )
+    var ann <- make_comment_reader(name, someClassPtr)
+    this_module() |> add_comment_reader(ann)
     unsafe
         delete ann
 

@@ -276,6 +276,17 @@ namespace das {
         }
     }
 
+    bool Module::addCommentReader ( const CommentReaderPtr & ptr, bool canFail ) {
+        if ( commentReader ) {
+            if ( !canFail ) {
+                DAS_FATAL_ERROR("can't add 2nd comment reader to module %s\n", name.c_str() );
+            }
+            return false;
+        }
+        commentReader = ptr;
+        return true;
+    }
+
 
     bool Module::addVariable ( const VariablePtr & var, bool canFail ) {
         if ( globals.insert(var->name, var) ) {
@@ -462,6 +473,7 @@ namespace das {
             for ( auto & rm : ptm->readMacros ) {
                 addReaderMacro(rm.second);
             }
+            commentReader = ptm->commentReader;
             return true;
         } else {
             DAS_FATAL_ERROR("builtin module did not parse %s\n", modName.c_str());

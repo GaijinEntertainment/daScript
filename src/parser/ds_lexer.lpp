@@ -24,7 +24,8 @@
 
     #define YY_NO_INPUT
 
-    void das_yyfatalerror(DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr = CompilationError::syntax_error);
+    void das_yyfatalerror ( DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr = CompilationError::syntax_error );
+    LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
 
     #define YY_USER_ACTION \
         yylloc_param->first_line = yylloc_param->last_line = yylineno; \
@@ -45,6 +46,7 @@ void YYTAB() {
 }
 
 void YYNEWLINE(yyscan_t yyscanner);
+void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, DAS_YYLTYPE & li, const char * text );
 
 #define YY_DECL int yylex(DAS_YYSTYPE *yylval_param, DAS_YYLTYPE *yylloc_param, yyscan_t yyscanner)
 
@@ -96,18 +98,64 @@ void YYNEWLINE(yyscan_t yyscanner);
     }
 }
 <indent>"*/"                        das_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
-<indent>"/*"                        BEGIN(c_comment); yyextra->das_c_style_depth = 1; yyextra->das_in_normal = false;
+<indent>"/*" {
+    BEGIN(c_comment);
+    yyextra->das_c_style_depth = 1;
+    yyextra->das_in_normal = false;
+    if ( !yyextra->g_CommentReaders.empty() ) {
+        auto tak = tokAt(yyscanner,*yylloc_param);
+        for ( auto & crd : yyextra->g_CommentReaders ) crd->open(false, tak);
+    }
+}
 <normal>"*/"                        das_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
-<normal>"/*"                        BEGIN(c_comment); yyextra->das_c_style_depth = 1; yyextra->das_in_normal = true;
-<indent>"\/\/"                      BEGIN(cpp_comment);
-<normal>"\/\/"                      BEGIN(cpp_comment);
-<cpp_comment>.
-<cpp_comment>\n                     BEGIN(normal); unput('\n');
+<normal>"/*" {
+    BEGIN(c_comment);
+    yyextra->das_c_style_depth = 1;
+    yyextra->das_in_normal = true;
+    if ( !yyextra->g_CommentReaders.empty() ) {
+        auto tak = tokAt(yyscanner,*yylloc_param);
+        for ( auto & crd : yyextra->g_CommentReaders ) crd->open(false, tak);
+    }
+}
+<indent>"\/\/" {
+    BEGIN(cpp_comment);
+    if ( !yyextra->g_CommentReaders.empty() ) {
+        auto tak = tokAt(yyscanner,*yylloc_param);
+        for ( auto & crd : yyextra->g_CommentReaders ) crd->open(true, tak);
+    }
+}
+<normal>"\/\/" {
+    BEGIN(cpp_comment);
+    if ( !yyextra->g_CommentReaders.empty() ) {
+        auto tak = tokAt(yyscanner,*yylloc_param);
+        for ( auto & crd : yyextra->g_CommentReaders ) crd->open(true, tak);
+    }
+}
+<cpp_comment>\n {
+    BEGIN(normal);
+    unput('\n');
+    if ( !yyextra->g_CommentReaders.empty() ) {
+        auto tak = tokAt(yyscanner,*yylloc_param);
+        for ( auto & crd : yyextra->g_CommentReaders ) crd->close(tak);
+    }
+}
 <cpp_comment><<EOF>>                BEGIN(normal);
-<c_comment>"/*"                     yyextra->das_c_style_depth ++;
+<cpp_comment>. {
+    if ( !yyextra->g_CommentReaders.empty() ) {
+        auto tak = tokAt(yyscanner,*yylloc_param);
+        for ( auto & crd : yyextra->g_CommentReaders ) crd->accept(*yytext, tak);
+    }
+}
+<c_comment>"/*" {
+    yyextra->das_c_style_depth ++;
+}
 <c_comment>"*/" {
     yyextra->das_c_style_depth --;
     if ( yyextra->das_c_style_depth==0 ) {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto tak = tokAt(yyscanner,*yylloc_param);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->close(tak);
+        }
         if ( yyextra->das_in_normal ) {
             BEGIN(normal);
         } else {
@@ -115,8 +163,18 @@ void YYNEWLINE(yyscan_t yyscanner);
         }
     }
 }
-<c_comment>.                        /* skipping comment body */
-<c_comment>[\r\n]                   /* skipping comment eol */
+<c_comment>. {                      /* skipping comment body */
+    if ( !yyextra->g_CommentReaders.empty() ) {
+        auto tak = tokAt(yyscanner,*yylloc_param);
+        for ( auto & crd : yyextra->g_CommentReaders ) crd->accept(*yytext, tak);
+    }
+}
+<c_comment>[\r\n]  {                 /* skipping comment eol */
+    if ( !yyextra->g_CommentReaders.empty() ) {
+        auto tak = tokAt(yyscanner,*yylloc_param);
+        for ( auto & crd : yyextra->g_CommentReaders ) crd->accept(*yytext, tak);
+    }
+}
 <c_comment><<EOF>>             {
     das_yyfatalerror(yylloc_param,yyscanner,"end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
     BEGIN(normal);
@@ -197,6 +255,7 @@ void YYNEWLINE(yyscan_t yyscanner);
     #ifdef FLEX_DEBUG
         printf("new line\n");
     #endif
+    das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
 }
 <indent>.               {
     unput(*yytext);
@@ -283,9 +342,19 @@ void YYNEWLINE(yyscan_t yyscanner);
 <normal>"with"                                          yyextra->das_need_oxford_comma = false; return DAS_WITH;
 <normal>"aka"                                           return DAS_AKA;
 <normal>"assume"                                        return DAS_ASSUME;
-<normal>"let"[ \t\r]*\/\/.*\n                           yyextra->das_need_oxford_comma = false; unput('\n'); return DAS_LET;
+<normal>"let"[ \t\r]*\/\/.*\n {
+    yyextra->das_need_oxford_comma = false;
+    unput('\n');
+    das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
+    return DAS_LET;
+}
 <normal>"let"                                           return DAS_LET;
-<normal>"var"[ \t\r]*\/\/.*\n                           yyextra->das_need_oxford_comma = false; unput('\n'); return DAS_VAR;
+<normal>"var"[ \t\r]*\/\/.*\n {
+    yyextra->das_need_oxford_comma = false;
+    unput('\n');
+    das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
+    return DAS_VAR;
+}
 <normal>"var"                                           return DAS_VAR;
 <normal>"struct"                                        yyextra->das_need_oxford_comma = false; return DAS_STRUCT;
 <normal>"class"                                         yyextra->das_need_oxford_comma = false; return DAS_CLASS;
@@ -529,7 +598,12 @@ void YYNEWLINE(yyscan_t yyscanner);
 <normal>"\:\:"                              return COLCOL;
 <normal>"\.\."                              return DOTDOT;
 <normal>"\|\>"                              return RPIPE;
-<normal>\<\|[ \t\r]*\/\/.*\n                yyextra->das_need_oxford_comma = false; unput('\n'); return LBPIPE;
+<normal>\<\|[ \t\r]*\/\/.*\n {
+    yyextra->das_need_oxford_comma = false;
+    unput('\n');
+    das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
+    return LBPIPE;
+}
 <normal>\<\|[ \t\r]*\n                      yyextra->das_need_oxford_comma = false; unput('\n'); return LBPIPE;
 <normal>\<\|[ \t]\$                         {
     unput('$');
@@ -649,6 +723,7 @@ void YYNEWLINE(yyscan_t yyscanner);
 }
 <normal>(\/\/.*)*\n {
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
+    das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
     if  ( !yyextra->das_nested_parentheses && !yyextra->das_nested_curly_braces && !yyextra->das_nested_square_braces ) {
         bool ns = ((yyextra->das_current_line_indent!=0) && yyextra->das_need_oxford_comma) || yyextra->das_force_oxford_comma;
         #ifdef FLEX_DEBUG
@@ -730,6 +805,7 @@ void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
     yyextra->das_force_oxford_comma = false;
     yyextra->das_c_style_depth = 0;
     yyextra->das_arrow_depth = 0;
+    yyextra->g_CommentReaders.clear();
     yyextra->g_ReaderMacro = nullptr;
     yyextra->g_ReaderExpr = nullptr;
     BEGIN(normal);
@@ -742,3 +818,16 @@ void YYNEWLINE ( yyscan_t yyscanner ) {
     YYCOLUMN(yyextra->das_yycolumn = 0,"NEW LINE");
 }
 
+void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, DAS_YYLTYPE & li, const char * text ) {
+    if ( crdi.empty() ) return;
+    while ( !(text[0]=='/' && text[1]=='/') && *text ) text ++;
+    if ( *text==0 ) return;
+    auto tak = tokAt(scanner,li);
+    for ( auto & crd : crdi ) crd->open(false, tak);
+    for ( auto ch = text + 2; *ch!='\n'; ++ch ) {
+        if ( *ch!='\r' ) {
+            for ( auto & crd : crdi ) crd->accept(*ch, tak);
+        }
+    }
+    for ( auto & crd : crdi ) crd->close(tak);
+}

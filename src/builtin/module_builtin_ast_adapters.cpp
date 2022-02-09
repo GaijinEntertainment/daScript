@@ -945,6 +945,45 @@ namespace das {
         }
     };
 
+    struct CommentReaderAdapter : CommentReader, AstCommentReader_Adapter {
+        CommentReaderAdapter ( char * pClass, const StructInfo * info, Context * ctx )
+            : AstCommentReader_Adapter(info), classPtr(pClass), context(ctx) {
+        }
+        virtual void open ( bool cppStyle, const LineInfo & info ) override {
+            if ( auto fnOpen = get_open(classPtr) ) {
+                invoke_open(context,fnOpen,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        cppStyle,info);
+            }
+        }
+        virtual void accept ( int Ch, const LineInfo & info ) override {
+            if ( auto fnAccept = get_accept(classPtr) ) {
+                invoke_accept(context,fnAccept,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        Ch,info);
+            }
+        }
+        virtual void close ( const LineInfo & info ) override {
+            if ( auto fnClose = get_close(classPtr) ) {
+                invoke_close(context,fnClose,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
+
+    struct AstCommentReaderAnnotation : ManagedStructureAnnotation<CommentReader,false,true> {
+        AstCommentReaderAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("CommentReader", ml) {
+        }
+    };
+
     struct CallMacroAdapter : CallMacro, AstCallMacro_Adapter {
         CallMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : CallMacro(n), AstCallMacro_Adapter(info), classPtr(pClass), context(ctx) {
@@ -1006,6 +1045,17 @@ namespace das {
         ReaderMacroPtr newM = move(_newM);
         if ( !module->addReaderMacro(newM, true) ) {
             context->throw_error_ex("can't add reader macro %s to module %s", newM->name.c_str(), module->name.c_str());
+        }
+    }
+
+    CommentReaderPtr makeCommentReader ( const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<CommentReaderAdapter>((char *)pClass,info,context);
+    }
+
+    void addModuleCommentReader ( Module * module, CommentReaderPtr & _newM, Context * context ) {
+        CommentReaderPtr newM = move(_newM);
+        if ( !module->addCommentReader(newM, true) ) {
+            context->throw_error_ex("can't add comment reader to module %s", module->name.c_str());
         }
     }
 
@@ -1290,6 +1340,14 @@ namespace das {
         addExtern<DAS_BIND_FUN(addModuleReaderMacro)>(*this, lib,  "add_reader_macro",
             SideEffects::modifyExternal, "addModuleReaderMacro")
                 ->args({"module","annotation","context"});
+        // comment reader
+        addAnnotation(make_smart<AstCommentReaderAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(makeCommentReader)>(*this, lib,  "make_comment_reader",
+            SideEffects::modifyExternal, "makeCommentReader")
+                ->args({"class","info","context"});
+        addExtern<DAS_BIND_FUN(addModuleCommentReader)>(*this, lib,  "add_comment_reader",
+            SideEffects::modifyExternal, "addModuleCommentReader")
+                ->args({"module","reader","context"});
         // call macro
         addAnnotation(make_smart<AstCallMacroAnnotation>(lib));
         addExtern<DAS_BIND_FUN(makeCallMacro)>(*this, lib,  "make_call_macro",

@@ -475,6 +475,8 @@ namespace das {
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
     void addModuleReaderMacro ( Module * module, ReaderMacroPtr & newM, Context * context );
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
+    CommentReaderPtr makeCommentReader ( const void * pClass, const StructInfo * info, Context * context );
+    void addModuleCommentReader ( Module * module, CommentReaderPtr & _newM, Context * context );
     void addModuleCallMacro ( Module * module, CallMacroPtr & newM, Context * context );
     CallMacroPtr makeCallMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     TypeInfoMacroPtr makeTypeInfoMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );

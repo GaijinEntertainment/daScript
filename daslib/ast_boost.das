@@ -286,6 +286,9 @@ class SetupContractAnnotatoin : SetupAnyAnnotation
 class SetupReaderMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_reader_macro"
 
+class SetupCommentReader : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_comment_reader"
+
 class SetupVariantMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_variant_macro"
 
@@ -648,6 +651,7 @@ def private setup
         add_new_structure_annotation("enumeration_macro",new SetupEnumerationAnnotation())
         add_new_structure_annotation("contract",new SetupContractAnnotatoin())
         add_new_structure_annotation("reader_macro",new SetupReaderMacro())
+        add_new_structure_annotation("comment_reader",new SetupCommentReader())
         add_new_structure_annotation("call_macro",new SetupCallMacro())
         add_new_structure_annotation("typeinfo_macro",new SetupTypeInfoMacro())
         add_new_structure_annotation("variant_macro",new SetupVariantMacro())

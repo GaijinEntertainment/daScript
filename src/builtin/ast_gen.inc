@@ -306,6 +306,50 @@ public:
   }
 };
 
+class AstCommentReader_Adapter {
+protected:
+  enum {
+    __fn_open = 0,
+    __fn_accept = 1,
+    __fn_close = 2,
+  };
+protected:
+  int _das_class_method_offset[3];
+public:
+  AstCommentReader_Adapter ( const StructInfo * info ) {
+      _das_class_method_offset[__fn_open] = adapt_field_offset("open",info);
+      _das_class_method_offset[__fn_accept] = adapt_field_offset("accept",info);
+      _das_class_method_offset[__fn_close] = adapt_field_offset("close",info);
+  }
+  __forceinline Func get_open ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_open]);
+  }
+  __forceinline void invoke_open ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, bool cpp, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,bool,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,cpp,info);
+  }
+  __forceinline Func get_accept ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_accept]);
+  }
+  __forceinline void invoke_accept ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, int32_t ch, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,int32_t,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,ch,info);
+  }
+  __forceinline Func get_close ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_close]);
+  }
+  __forceinline void invoke_close ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+};
+
 class AstCallMacro_Adapter {
 protected:
   enum {
