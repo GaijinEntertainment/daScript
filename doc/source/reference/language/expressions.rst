@@ -70,6 +70,20 @@ Operators
 .. index::
     single: Operators
 
+^^^^^^^^^^^^^^^^^^^
+\.\. Operator
+^^^^^^^^^^^^^^^^^^^
+
+.. index::
+    single: \.\. Operator; Operators
+
+::
+
+    expr1 \.\. expr2
+
+is equivalent to `inverval(expr1,expr2)`. By default `interval(a,b:int)` is implemented as `range(a,b)`,
+and `interval(a,b:uint)` is implemented as `urange(a,b)`. Use can define their own interval functions or generics.
+
 ^^^^^^^^^^^^^
 ?: Operator
 ^^^^^^^^^^^^^

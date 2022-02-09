@@ -13,6 +13,10 @@ Unsafe keyword denotes unsafe contents, which is required for operations, which 
     unsafe
         let px = addr(x)
 
+Expressions (and subexpressions) can also be unsafe::
+
+    let px = unsafe(addr(x))
+
 Unsafe is followed by the block, which can include those operations. Nested unsafe sections are allowed. Unsafe is not inherited in the lambda, generator, or local functions; it is, however, inherited in the local blocks.
 
 Individual expressions can cause `CompilationError::unsafe` error, unless the are part of the unsafe section. Additionally macros can explicitly set the `ExprGenFlags::alwaysSafe` flag.
