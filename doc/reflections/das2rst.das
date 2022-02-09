@@ -207,7 +207,7 @@ def document_module_regex_boost(root:string)
     }]
     document("Boost package for REGEX",mod,"{root}/regex_boost.rst","{root}/detail/regex_boost.rst",groups)
 
-def document_module_regex_rst(root:string)
+def document_module_rst(root:string)
     var mod = find_module("rst")
     var groups <- [{DocGroup
         group_by_regex("Document writers", mod, %regex~document%%);
@@ -348,34 +348,56 @@ def main
     document_module_builtin(root)
     document_module_math(root)
     document_module_fio(root)
-    document_module_random(root)
     document_module_network(root)
     document_module_uriparser(root)
     document_module_rtti(root)
     document_module_ast(root)
-    document_module_ast_boost(root)
     document_module_strings(root)
-    document_module_strings_boost(root)
     document_module_jobque(root)
-    document_module_jobque_boost(root)
-    document_module_apply_in_context(root)
-    document_module_functional(root)
-    document_module_json(root)
-    document_module_json_boost(root)
-    document_module_regex(root)
-    document_module_regex_boost(root)
-    document_module_regex_rst(root)
-    document_module_apply(root)
+
     document_module_algorithm(root)
+    document_module_apply_in_context(root)
+    document_module_apply(root)
+    // document_module_archive(root)
+    // document_module_array_boost(root)
+    // document_module_assert_once(root)
+    // document_module_ast_block_to_loop(root)
+    document_module_ast_boost(root)
+    // document_module_used(root)
+    // document_module_constexpr(root)
     document_module_contracts(root)
+    // document_module_cpp_bind(root)
+    // document_module_cpp_gen(root)
+    // document_module_dap(root)                    // todo: ask to document
+    // document_module_das_source_formatter(root)   // todo: ask to document
+    // document_module_debug(root)                  // todo: document???
+    // document_module_decs_boost(root)                 // DECS
+    // document_module_decs_state(root)                 // DECS
+    // document_module_decs(root)                       // DECS
     document_module_defer(root)
+    // document_module_enum_trait(root)
+    document_module_functional(root)
     document_module_if_not_null(root)
     document_module_instance_function(root)
-    document_module_templates(root)
-    document_module_templates_boost(root)
     document_module_is_local(root)
-    document_module_safe_addr(root)
-    document_module_static_let(root)
+    document_module_jobque_boost(root)
+    document_module_json_boost(root)
+    document_module_json(root)
+    // document_module_lint_everything(root)        // todo: document?
+    // document_module_lint(root)                   // todo: document?
+    // document_module_live(root)
     document_module_lpipe(root)
-
-
+    // document_module_math_bits(root)
+    // document_module_math_boost(root)
+    document_module_random(root)
+    document_module_regex_boost(root)
+    document_module_regex(root)
+    document_module_rst(root)
+    document_module_safe_addr(root)
+    // document_module_sort_boost(root)
+    document_module_static_let(root)
+    document_module_strings_boost(root)
+    document_module_templates_boost(root)
+    document_module_templates(root)
+    // document_module_unroll(root)
+    // document_module_uriparser_boost(root)
