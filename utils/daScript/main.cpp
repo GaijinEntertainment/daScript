@@ -208,12 +208,24 @@ int das_aot_main ( int argc, char * argv[] ) {
     if (!Module::require("ast")) {
         NEED_MODULE(Module_Ast);
     }
-    NEED_MODULE(Module_Debugger);
-    NEED_MODULE(Module_Network);
-    NEED_MODULE(Module_UriParser);
-    NEED_MODULE(Module_JobQue);
-    NEED_MODULE(Module_FIO);
-    NEED_MODULE(Module_DASBIND);
+    if (!Module::require("debugapi")) {
+        NEED_MODULE(Module_Debugger);
+    }
+    if (!Module::require("network")) {
+        NEED_MODULE(Module_Network);
+    }
+    if (!Module::require("uriparser")) {
+        NEED_MODULE(Module_UriParser);
+    }
+    if (!Module::require("jobque")) {
+        NEED_MODULE(Module_JobQue);
+    }
+    if (!Module::require("fio")) {
+        NEED_MODULE(Module_FIO);
+    }
+    if (!Module::require("dasbind")) {
+        NEED_MODULE(Module_DASBIND);
+    }
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();

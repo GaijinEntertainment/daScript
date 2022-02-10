@@ -53,7 +53,7 @@ SETUP_LTO(tutorial02_dasAot)
 ### 2. setup aot target for the tutorial
 add_custom_target(tutorial02_dasAotStub)
 SET(TUTORIAL_02_AOT_GENERATED_SRC)
-DAS_AOT("tutorial02.das" TUTORIAL_02_AOT_GENERATED_SRC tutorial02_dasAotStub tutorial02_dasAot)
+DAS_AOT("examples/tutorial/tutorial02.das" TUTORIAL_02_AOT_GENERATED_SRC tutorial02_dasAotStub tutorial02_dasAot)
 
 ### setup main tutorial executable
 SET(TUTORIAL_02_AOT_SRC
