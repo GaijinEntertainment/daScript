@@ -28,7 +28,7 @@
 
 .. |function-builtin-gc0_save_smart_ptr| replace:: to be documented
 
-.. |function-builtin-get_clock| replace:: to be documented
+.. |function-builtin-get_clock| replace:: return a current calendar time. The value returned generally represents the number of seconds since 00:00 hours, Jan 1, 1970 UTC (i.e., the current unix timestamp).
 
 .. |function-builtin-get_command_line_arguments| replace:: to be documented
 
