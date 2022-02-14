@@ -16,6 +16,10 @@
 #define DAS_ALLOW_ANNOTATION_LOOKUP     1
 #endif
 
+#ifndef DAS_THREAD_SAFE_ANNOTATIONS
+#define DAS_THREAD_SAFE_ANNOTATIONS    1
+#endif
+
 namespace das
 {
     class Function;

@@ -611,7 +611,13 @@ namespace das {
                 ss << "nullptr";
             }
             if ( info->type==Type::tHandle ) {
-                ss << ", DAS_MAKE_ANNOTATION(L\"" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
+                char * annotationName = nullptr;
+                if ( intptr_t(info->annotation_or_name) & 1 ) {
+                    annotationName = (char *)(intptr_t(info->annotation_or_name) ^ 1);
+                    ss << ", DAS_MAKE_ANNOTATION(\"" << annotationName << "\")";
+                }  else {
+                    ss << ", DAS_MAKE_ANNOTATION(\"" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
+                }
             } else {
                 DAS_ASSERT(info->type!=Type::tHandle);
                 ss << ", nullptr";
