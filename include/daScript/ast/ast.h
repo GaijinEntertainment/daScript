@@ -1344,6 +1344,7 @@ namespace das
         bool            g_isInAot = false;
         Module *        modules = nullptr;
         int             das_def_tab_size = 4;
+        bool            g_resolve_annotations = true;
         static DAS_THREAD_LOCAL daScriptEnvironment * bound;
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;
         static void ensure();

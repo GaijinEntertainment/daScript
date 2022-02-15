@@ -59,17 +59,22 @@ namespace das {
             char * cvtbuf = (char *) ( ann & ~1 );
             string moduleName, annName;
             splitTypeName(cvtbuf, moduleName, annName);
-            info->annotation_or_name = nullptr;
+            TypeAnnotation * resolve = nullptr;
             for ( auto pm = daScriptEnvironment::bound->modules; pm!=nullptr; pm=pm->next ) {
                 if ( pm->name == moduleName ) {
                     if ( auto annT = pm->findAnnotation(annName) ) {
-                        info->annotation_or_name = (TypeAnnotation *) annT.get();
+                        resolve = (TypeAnnotation *) annT.get();
                     }
                     break;
                 }
             }
+            if ( daScriptEnvironment::bound->g_resolve_annotations ) {
+                info->annotation_or_name = resolve;
+            }
+            return resolve;
+        } else {
+            return info->annotation_or_name;
         }
-        return info->annotation_or_name;
     }
 
     void resetFusionEngine();
