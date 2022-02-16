@@ -123,7 +123,7 @@ def public invoke_live ( fn:string; a1; a2; a3; a4 )
 
 def public watch_files
     var clk = get_clock()
-    if (clk - watchTime) <= 0.
+    if (clk - watchTime) <= 0.0lf
         return false
     watchTime = clk
     var any = false
