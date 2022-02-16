@@ -56,7 +56,15 @@ namespace das {
     TypeAnnotation * Module::resolveAnnotation ( const TypeInfo * info ) {
         intptr_t ann = (intptr_t) (info->annotation_or_name);
         if ( ann & 1 ) {
-            char * cvtbuf = (char *) ( ann & ~1 );
+            // convert module name from w-char to regular char
+            wchar_t * wsname = (wchar_t *) ( ann & ~1 );
+            char cvtbuf[256], *cvt;
+            for (cvt = cvtbuf; *wsname; wsname++, cvt++) {
+                DAS_ASSERT(cvt - cvtbuf < 255);
+                *cvt = (char)*wsname;
+            }
+            *cvt = 0;
+            // end convert
             string moduleName, annName;
             splitTypeName(cvtbuf, moduleName, annName);
             TypeAnnotation * resolve = nullptr;

@@ -611,12 +611,13 @@ namespace das {
                 ss << "nullptr";
             }
             if ( info->type==Type::tHandle ) {
+                // the reason DAS_MAKE_ANNOTATION takes wchar_t is that wchar_t * constants are 2-byte aligned, and we need bottom bit to be 0
                 char * annotationName = nullptr;
                 if ( intptr_t(info->annotation_or_name) & 1 ) {
                     annotationName = (char *)(intptr_t(info->annotation_or_name) ^ 1);
-                    ss << ", DAS_MAKE_ANNOTATION(\"" << annotationName << "\")";
+                    ss << ", DAS_MAKE_ANNOTATION(\"L" << annotationName << "\")";
                 }  else {
-                    ss << ", DAS_MAKE_ANNOTATION(\"" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
+                    ss << ", DAS_MAKE_ANNOTATION(\"L" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
                 }
             } else {
                 DAS_ASSERT(info->type!=Type::tHandle);

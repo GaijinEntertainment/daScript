@@ -581,8 +581,10 @@ namespace das {
             return size;
         }
         char * allocateCachedName ( const string & name );
+        wchar_t * allocateCachedWideName ( const string & name );
         das_hash_map<uint64_t,TypeInfo *>    lookup;
         das_hash_map<string, char *>         stringLookup;
+        das_hash_map<string, wchar_t *>      stringWideLookup;
         uint64_t                             stringBytes = 0;
     };
 }

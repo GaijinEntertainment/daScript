@@ -344,4 +344,19 @@ namespace das {
         stringBytes += bytes;
         return nname;
     }
+
+    wchar_t * DebugInfoAllocator::allocateCachedWideName ( const string & name ) {
+        auto it = stringWideLookup.find(name);
+        if ( it!=stringWideLookup.end() )  return it->second;
+        wchar_t * wname = (wchar_t *) NodeAllocator::allocate(name.size()*2+2);
+        const char * cname = name.c_str();
+        wchar_t * w = wname;
+        while ( *cname ) *w++ = *cname++;
+        *w++ = 0;
+        stringWideLookup[name] = wname;
+        uint32_t bytes = uint32_t(name.size()*2+2);
+        bytes = (bytes+15) & ~15;
+        stringBytes += bytes;
+        return wname;
+    }
 }
