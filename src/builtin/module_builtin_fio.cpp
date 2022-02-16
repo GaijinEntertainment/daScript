@@ -70,6 +70,8 @@ namespace das {
             SideEffects::accessExternal, "ref_time_ticks");
         addExtern<DAS_BIND_FUN(get_time_usec)>(*this, lib, "get_time_usec",
             SideEffects::accessExternal, "get_time_usec");
+        addExtern<DAS_BIND_FUN(cast_int64)>(*this, lib, "int64",
+            SideEffects::none, "cast_int64");
     }
 }
 

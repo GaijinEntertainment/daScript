@@ -37,11 +37,12 @@ namespace das {
         static __forceinline bool Less  ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return to_time(a) < to_time(b);
         }
-        static __forceinline float Sub  ( vec4f a, vec4f b, Context &, LineInfo * ) {
-            return float(difftime(to_time(a), to_time(b)));
+        static __forceinline double Sub  ( vec4f a, vec4f b, Context &, LineInfo * ) {
+            return difftime(to_time(a), to_time(b));
         }
     };
 
+    static inline int64_t cast_int64(Time t) { return int64_t(t.time); }
     Time builtin_clock();
     void builtin_sleep ( uint32_t msec );
     void builtin_exit ( int32_t ec );
