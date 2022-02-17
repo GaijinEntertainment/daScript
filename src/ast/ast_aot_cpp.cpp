@@ -611,18 +611,15 @@ namespace das {
                 ss << "nullptr";
             }
             if ( info->type==Type::tHandle ) {
-                // the reason DAS_MAKE_ANNOTATION takes wchar_t is that wchar_t * constants are 2-byte aligned, and we need bottom bit to be 0
                 if ( intptr_t(info->annotation_or_name) & 1 ) {
-                    auto wsname = (wchar_t *)(intptr_t(info->annotation_or_name) ^ 1);
-                    char cvtbuf[256], *cvt;
-                    for (cvt = cvtbuf; *wsname; wsname++, cvt++) {
-                        DAS_ASSERT(cvt - cvtbuf < 255);
-                        *cvt = (char)*wsname;
-                    }
-                    *cvt = 0;
-                    ss << ", DAS_MAKE_ANNOTATION(L\"" << cvtbuf << "\")";
+                    auto tname = (char *)(intptr_t(info->annotation_or_name) ^ 1);  // already comes from string allocator
+                    ss << ", DAS_MAKE_ANNOTATION(\"" << tname << "\")";
                 }  else {
-                    ss << ", DAS_MAKE_ANNOTATION(L\"" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
+                    // we add ~ at the begining of the name for padding
+                    // if name is allocated by the compiler, it does not guarantee that it is aligned
+                    // we check if there is a ~ at the begining of the name, and if it is - we skip it
+                    // that way we can accept both aligned and unaligned names
+                    ss << ", DAS_MAKE_ANNOTATION(\"~" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
                 }
             } else {
                 DAS_ASSERT(info->type!=Type::tHandle);

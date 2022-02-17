@@ -182,7 +182,7 @@ namespace das {
             info->enumType = type->enumType ? makeEnumDebugInfo(*type->enumType) : nullptr;
         } else if ( type->annotation ) {
 #if DAS_THREAD_SAFE_ANNOTATIONS
-            auto annName = debugInfo->allocateCachedWideName(type->annotation->module->name + "::" + type->annotation->name);
+            auto annName = debugInfo->allocateCachedName("~" + type->annotation->module->name + "::" + type->annotation->name);
             info->annotation_or_name =  ((TypeAnnotation*)(intptr_t(annName)|1));
 #else
             info->annotation_or_name = type->annotation;
