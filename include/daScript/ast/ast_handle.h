@@ -646,7 +646,7 @@ namespace das
         addExtern<decltype(&das_nequ_val<TT>), das_nequ_val<TT>>(mod, lib, "!=", SideEffects::none, "das_nequ_val");
     }
 
-    void setParents ( Module * mod, const char * child, const initializer_list<const char *> & parents );
+    void setParents ( Module * mod, const char * child, const std::initializer_list<const char *> & parents );
 }
 
 MAKE_TYPE_FACTORY(das_string, das::string);

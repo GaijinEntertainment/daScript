@@ -5,7 +5,7 @@
 
 namespace das {
 
-    void setParents ( Module * mod, const char * child, const initializer_list<const char *> & parents ) {
+    void setParents ( Module * mod, const char * child, const std::initializer_list<const char *> & parents ) {
         auto chA = mod->findAnnotation(child);
         DAS_VERIFYF(chA,"missing child annotation");
         DAS_VERIFYF(chA->rtti_isBasicStructureAnnotation(),"expecting basic structure annotation");
