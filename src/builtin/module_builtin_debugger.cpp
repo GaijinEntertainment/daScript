@@ -1020,6 +1020,10 @@ namespace debugapi {
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            // lock debug context
+            addExtern<DAS_BIND_FUN(lockDebugAgent)>(*this, lib, "lock_debug_agent",
+                SideEffects::modifyExternal, "lockDebugAgent")
+                    ->args({"block","context","line"})->unsafeOperation = true;
             // hw breakpoints
             addExtern<DAS_BIND_FUN(set_hw_breakpoint)>(*this, lib,  "set_hw_breakpoint",
                 SideEffects::modifyExternal, "set_hw_breakpoint")

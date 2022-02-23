@@ -1533,6 +1533,11 @@ namespace das
         auto it = g_DebugAgents.find(category);
         return it != g_DebugAgents.end();
     }
+
+    void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        context->invoke(blk, nullptr, nullptr, line);
+    }
 }
 
 das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
