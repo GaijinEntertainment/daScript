@@ -695,6 +695,7 @@ namespace das
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
     bool isInDebugAgentCreation();
     bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
+    void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line );
     Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
 
     class SharedStackGuard {
