@@ -258,6 +258,19 @@ namespace das {
                     ss << "\n";
                 }
             }
+            if ( fn->moreFlags ) {
+                ss << "// ";
+                if ( fn->macroFunction ) {
+                    ss << "[macro_function]";
+                }
+                if ( fn->needStringCast ) {
+                    ss << "[need_string_cast]";
+                }
+                if ( fn->aotHashDeppendsOnArguments ) {
+                    ss << "[aot_hash_deppends_on_arguments]";
+                }
+                ss << "\n";
+            }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
             if ( fn->exports ) { ss << "[export]\n"; }
             if ( fn->init ) { ss << "[init]\n"; }
