@@ -12,6 +12,7 @@ require daslib/algorithm
 require daslib/sort_boost
 require daslib/functional
 require daslib/archive public
+require daslib/contracts
 require math
 require strings
 require daslib/defer
@@ -415,29 +416,50 @@ def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():E
                 return true
     return false
 
-[template(atype)]
-def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int ) : array<TT-const-&-#>
+// [template(atype)]
+def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int )
     assert(length(src)>0)
-    var dest : array<TT-const-&-#>
-    unsafe
-        _builtin_make_temp_array(dest, addr(src[0]), capacity)
-        return <- dest
+    static_if typeinfo(is_dim atype)
+        var dest : array<TT[typeinfo(dim atype)]-const-&-#>
+        unsafe
+            _builtin_make_temp_array(dest, addr(src[0]), capacity)
+            return <- dest
+    else
+        var dest : array<TT-const-&-#>
+        unsafe
+            _builtin_make_temp_array(dest, addr(src[0]), capacity)
+            return <- dest
 
-def public get ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&-#>
+def public get ( arch:Archetype; name:string; value:auto(TT) )
     let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
         let comp & = unsafe(arch.components[idx])
         if comp.name==name
             unsafe
-                let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
+                var cvinfo : TypeInfo const?
+                static_if typeinfo(is_dim value)
+                    cvinfo  = addr(typeinfo(rtti_typeinfo type<TT[typeinfo(dim value)]-const-&-#>))
+                else
+                    cvinfo  = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
                 if comp.info.hash != cvinfo.hash
                     panic("component array {name} type mismatch, expecting {describe(comp.info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
-            unsafe
-                return <- decs_array(type<TT>, comp.data, arch.size)
+                static_if typeinfo(is_dim value)
+                    return <- decs_array(type<TT[typeinfo(dim value)]>, comp.data, arch.size)
+                else
+                    return <- decs_array(type<TT>, comp.data, arch.size)
     panic("component array {name} not found")
     unsafe
-        return <- [[array<TT-const-&-#> ]]
+        static_if typeinfo(is_dim value)
+            return <- [[array<TT[typeinfo(dim value)]-const-&-#> ]]
+        else
+            return <- [[array<TT-const-&-#> ]]
 
+[expect_dim(value)]
+def public get_ro ( arch:Archetype; name:string; value:auto(TT)[] ) : array<TT[typeinfo(sizeof value)]-const-&-#> const
+    unsafe
+        return <- get(arch, name, value)
+
+[expect_not_dim(value)]
 def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&-#> const
     unsafe
         return <- get(arch, name, value)
@@ -448,13 +470,21 @@ def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iter
         let comp & = unsafe(arch.components[idx])
         if comp.name==name
             unsafe
-                let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
+                var cvinfo : TypeInfo const?
+                static_if typeinfo(is_dim value)
+                    cvinfo  = addr(typeinfo(rtti_typeinfo type<TT[typeinfo(dim value)]-const-&-#>))
+                else
+                    cvinfo  = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
                 if comp.info.hash != cvinfo.hash
                     panic("component array {name} type mismatch, expecting {describe(comp.info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
-            var it : iterator<TT const &>
-            unsafe
-                _builtin_make_fixed_array_iterator(it,addr(comp.data[0]),arch.size,comp.stride)
-            return <- it
+                static_if typeinfo(is_dim value)
+                    var it : iterator<TT[typeinfo(dim value)] const &>
+                    _builtin_make_fixed_array_iterator(it,addr(comp.data[0]),arch.size,comp.stride)
+                    return <- it
+                else
+                    var it : iterator<TT const &>
+                    _builtin_make_fixed_array_iterator(it,addr(comp.data[0]),arch.size,comp.stride)
+                    return <- it
     return <- repeat_ref(value,arch.size)
 
 def public get_optional ( arch:Archetype; name:string; value:auto(TT)? ) : iterator<TT-const-&-#?>
@@ -552,87 +582,150 @@ def public commit
     delete actions
 
 def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
-    concept_assert(!typeinfo(is_dim value),"dim is not supported as decs component yet")
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         unsafe
-            let cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
+            var cvinfo : TypeInfo const?
+            static_if typeinfo(is_dim value)
+                cvinfo = addr(typeinfo(rtti_typeinfo type<TT[typeinfo(dim value)]-const-&-#>))
+            else
+                cvinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
             if cmp[idx].info.hash != cvinfo.hash
                 panic("get component {name} type mismatch, expecting {describe(cmp[idx].info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
             memcpy ( addr(value), addr(cmp[idx].data), typeinfo(sizeof type<TT const-&>))
     return value
 
 def private make_callbacks ( var cv:ComponentValue; value:auto(TT) )
-    concept_assert(!typeinfo(is_dim value),"dim is not supported as decs component yet")
     cv.info.mkTypeInfo = @@ <| ( ) : TypeInfo const?
-        return unsafe(addr(typeinfo(rtti_typeinfo type<array<TT-const-&-#>>)))
+        static_if typeinfo(is_dim value)
+            return unsafe(addr(typeinfo(rtti_typeinfo type<array<TT[typeinfo(dim value)]-const-&-#>>)))
+        else
+            return unsafe(addr(typeinfo(rtti_typeinfo type<array<TT-const-&-#>>)))
     cv.info.dumper = @@ <| ( elem:void? )
         if elem==null
             return ""
         unsafe
-            var pTT = reinterpret<TT-const-&-#?> elem
-            return "{*pTT}"
+            static_if typeinfo(is_dim value)
+                var pTT = reinterpret<TT[typeinfo(dim value)]-const-&-#?> elem
+                return "{*pTT}"
+            else
+                var pTT = reinterpret<TT-const-&-#?> elem
+                return "{*pTT}"
     cv.info.gc = @@ <| ( var src:array<uint8> ) : lambda
         // the idea with this one is that we make a lambda
         //  which would capture an array of the right size and type
         //  which points to the right data
         //  and when lambda is deleted - we memzero the temp array
-        var gc_dummy : array<TT-const-&-#>
-        let stride = typeinfo(sizeof type<TT-const-&-#>)
-        let size = length(src) / stride
-        unsafe
-            _builtin_make_temp_array(gc_dummy, addr(src[0]), size )
-        var lmb <- @ <| [[<-gc_dummy]]
-            pass
-        finally
-            memzero(gc_dummy)
-        return <- lmb
+        static_if typeinfo(is_dim value)
+            var gc_dummy : array<TT[typeinfo(dim value)]-const-&-#>
+            let stride = typeinfo(sizeof type<TT[typeinfo(dim value)]-const-&-#>)
+            let size = length(src) / stride
+            unsafe
+                _builtin_make_temp_array(gc_dummy, addr(src[0]), size )
+            var lmb <- @ <| [[<-gc_dummy]]
+                pass
+            finally
+                memzero(gc_dummy)
+            return <- lmb
+        else
+            var gc_dummy : array<TT-const-&-#>
+            let stride = typeinfo(sizeof type<TT-const-&-#>)
+            let size = length(src) / stride
+            unsafe
+                _builtin_make_temp_array(gc_dummy, addr(src[0]), size )
+            var lmb <- @ <| [[<-gc_dummy]]
+                pass
+            finally
+                memzero(gc_dummy)
+            return <- lmb
     cv.info.clonner = @@ <| ( var dst:array<uint8>; src:array<uint8> )
         if length(src)==0
             return
-        let stride = typeinfo(sizeof type<TT-const-&-#>)
-        dst |> resize(length(src))
-        let size = length(src) / stride
-        var dsrc, ssrc : array<TT-const-&-#>
-        unsafe
-            _builtin_make_temp_array(dsrc, addr(dst[0]), size )
-            _builtin_make_temp_array(ssrc, addr(src[0]), size )
-        for d,s in dsrc,ssrc
-            d := s
-    cv.info.serializer = @@ <| ( var arch:Archive; var src:array<uint8> )
-        let stride = typeinfo(sizeof type<TT-const-&-#>)
-        if arch.reading
-            var temp : array<TT-const-&-#>
-            arch |> _::serialize(temp)
-            let size = length(temp)
-            src |> resize ( size*stride )
-            if size > 0
-                unsafe
-                    memcpy ( addr(src[0]), addr(temp[0]), size*stride )
-        else
-            var ssrc : array<TT-const-&-#>
+        static_if typeinfo(is_dim value)
+            let stride = typeinfo(sizeof type<TT[typeinfo (dim value)]-const-&-#>)
+            dst |> resize(length(src))
             let size = length(src) / stride
+            var dsrc, ssrc : array<TT[typeinfo (dim value)]-const-&-#>
             unsafe
-                if length(src)>0
-                    _builtin_make_temp_array(ssrc, addr(src[0]), size )
-            arch |> serialize(ssrc)
+                _builtin_make_temp_array(dsrc, addr(dst[0]), size )
+                _builtin_make_temp_array(ssrc, addr(src[0]), size )
+            for d,s in dsrc,ssrc
+                d := s
+        else
+            let stride = typeinfo(sizeof type<TT-const-&-#>)
+            dst |> resize(length(src))
+            let size = length(src) / stride
+            var dsrc, ssrc : array<TT-const-&-#>
+            unsafe
+                _builtin_make_temp_array(dsrc, addr(dst[0]), size )
+                _builtin_make_temp_array(ssrc, addr(src[0]), size )
+            for d,s in dsrc,ssrc
+                d := s
+    cv.info.serializer = @@ <| ( var arch:Archive; var src:array<uint8> )
+        static_if typeinfo(is_dim value)
+            let stride = typeinfo(sizeof type<TT[typeinfo (dim value)]-const-&-#>)
+            if arch.reading
+                var temp : array<TT[typeinfo (dim value)]-const-&-#>
+                arch |> _::serialize(temp)
+                let size = length(temp)
+                src |> resize ( size*stride )
+                if size > 0
+                    unsafe
+                        memcpy ( addr(src[0]), addr(temp[0]), size*stride )
+            else
+                var ssrc : array<TT-const-&-#>
+                let size = length(src) / stride
+                unsafe
+                    if length(src)>0
+                        _builtin_make_temp_array(ssrc, addr(src[0]), size )
+                arch |> serialize(ssrc)
+        else
+            let stride = typeinfo(sizeof type<TT-const-&-#>)
+            if arch.reading
+                var temp : array<TT-const-&-#>
+                arch |> _::serialize(temp)
+                let size = length(temp)
+                src |> resize ( size*stride )
+                if size > 0
+                    unsafe
+                        memcpy ( addr(src[0]), addr(temp[0]), size*stride )
+            else
+                var ssrc : array<TT-const-&-#>
+                let size = length(src) / stride
+                unsafe
+                    if length(src)>0
+                        _builtin_make_temp_array(ssrc, addr(src[0]), size )
+                arch |> serialize(ssrc)
     static_if typeinfo(can_delete type<TT-const-&-#>)
         cv.info.eraser = @@ <| ( var arr:array<uint8> )
             if length(arr)==0
                 return
-            let stride = typeinfo(sizeof type<TT-const-&-#>)
-            for i in range(length(arr)/stride)
-                let offset = i * stride
-                unsafe
-                    var adel = reinterpret<TT-const-&-#?> addr(arr[offset])
-                    delete * adel
+            static_if typeinfo(is_dim value)
+                let stride = typeinfo(sizeof type<TT[typeinfo (dim value)]-const-&-#>)
+                for i in range(length(arr)/stride)
+                    let offset = i * stride
+                    unsafe
+                        var adel = reinterpret<TT[typeinfo (dim value)]-const-&-#?> addr(arr[offset])
+                        delete * adel
+            else
+                let stride = typeinfo(sizeof type<TT-const-&-#>)
+                for i in range(length(arr)/stride)
+                    let offset = i * stride
+                    unsafe
+                        var adel = reinterpret<TT-const-&-#?> addr(arr[offset])
+                        delete * adel
 
 def private make_component ( name:string; value:auto(TT) )
-    concept_assert(!typeinfo(is_dim value),"dim is not supported as decs component yet")
     var cv = [[ComponentValue name=name]]
     unsafe
-        var tinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
-        var tname = typeinfo(fulltypename type<TT-const-&-#>)
+        var tinfo : TypeInfo const?
+        var tname : string
+        static_if typeinfo(is_dim value)
+            tinfo = addr(typeinfo(rtti_typeinfo type<TT[typeinfo(dim value)]-const-&-#>))
+            tname = typeinfo(fulltypename type<TT[typeinfo(dim value)]-const-&-#>)
+        else
+            tinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
+            tname = typeinfo(fulltypename type<TT-const-&-#>)
         cv.info = [[CTypeInfo basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo),
             fullName=tname,hash=tinfo.hash, size=tinfo.size]]
         make_callbacks(cv, value)
@@ -640,7 +733,6 @@ def private make_component ( name:string; value:auto(TT) )
     return cv
 
 def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
-    concept_assert(!typeinfo(is_dim value),"dim is not supported as decs component yet")
     concept_assert(typeinfo(sizeof value)<=typeinfo(sizeof cmp[0].data), "unsupported component type {typeinfo(typename value)} (its too big)")
     let cv = make_component(name, value)
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name

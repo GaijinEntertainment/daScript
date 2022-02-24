@@ -218,10 +218,14 @@ def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlo
         vtype.flags |= TypeDeclFlags constant
     elif getter=="get_ro"
         vtype.flags |= TypeDeclFlags constant
+        // if length(a._type.dim)==0
         vtype.flags |= TypeDeclFlags ref
     else
+        // if length(a._type.dim)==0
         vtype.flags |= TypeDeclFlags ref
-
+        // else
+        //    macro_error(compiling_program(),a.at,"[] arguments are not supported in eid queries yet")
+        //    return false
     vlet.variables |> emplace_new() <| new [[Variable() at = a.at,
         name := "{prefix}{a.name}{suffix}",
         _type <- vtype,

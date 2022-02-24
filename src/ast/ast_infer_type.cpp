@@ -130,10 +130,12 @@ namespace das {
                       decl->at,CompilationError::invalid_type);
                 */
             }
+            /*
             if ( decl->dim.size() && decl->ref ) {
                 error("can't declare an array of references, " + describeType(decl), "", "",
                       decl->at,CompilationError::invalid_type);
             }
+            */
             for ( auto di : decl->dim ) {
                 if ( di<=0 ) {
                     error("array dimension can't be 0 or less, " + describeType(decl), "", "",

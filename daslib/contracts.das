@@ -44,6 +44,28 @@ class IsAnyArrayMacro : IsAnyType
                         return false
         return true
 
+[contract(name="expect_dim")]
+class IsDimMacro : IsAnyType
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if length(typ.dim)==0
+                        errors := "argument {argv.name} is not an [], it is {describe(typ)}"
+                        return false
+        return true
+
+[contract(name="expect_not_dim")]
+class IsNotDimMacro : IsAnyType
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if length(typ.dim)!=0
+                        errors := "argument {argv.name} is [], it is {describe(typ)}"
+                        return false
+        return true
+
 [contract(name="expect_any_enum")]
 class IsAnyEnumMacro : IsAnyType
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
