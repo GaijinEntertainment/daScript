@@ -1978,7 +1978,7 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt64 * c ) override {
-            ss << c->getValue() << "ll";
+            ss << "INT64_C(" << c->getValue() << ")";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt8 * c ) override {
@@ -1990,7 +1990,7 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt64 * c ) override {
-            ss << "0x" << HEX << c->getValue() << DEC << "ull";
+            ss << "UINT64_C(0x" << HEX << c->getValue() << DEC << ")";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt * c ) override {
