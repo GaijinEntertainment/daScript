@@ -362,7 +362,7 @@ namespace das
 
     SimNode * SimNode_ForBase::copyNode ( Context & context, NodeAllocator * code ) {
         SimNode_ForBase * that = (SimNode_ForBase *) SimNode_Block::copyNode(context, code);
-        if ( total ) {
+        if ( totalSources ) {
             auto bytes = code->allocate( totalSources * ( sizeof(SimNode*) + sizeof(uint32_t)*2 ) );
             auto newSources = (SimNode **) (bytes);
             memcpy ( newSources, that->sources, totalSources*sizeof(SimNode *));
