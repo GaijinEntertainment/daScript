@@ -3030,9 +3030,12 @@ namespace das
         for ( int i=0; i!=context.totalFunctions; ++i ) {
             Function *func = indexToFunction[i];
             for (auto &ann : func->annotations) {
-                if (ann->annotation->rtti_isFunctionAnnotation()) {
+                if ( ann->annotation->rtti_isFunctionAnnotation() ) {
                     auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
                     fann->complete(&context);
+                } else if ( ann->annotation->rtti_isStructureAnnotation() ) {
+                    auto sann = static_pointer_cast<StructureAnnotation>(ann->annotation);
+                    sann->complete(&context);
                 }
             }
         }

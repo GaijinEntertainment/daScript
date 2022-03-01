@@ -451,6 +451,7 @@ namespace das
             const AnnotationArgumentList & args, string & err ) = 0;                    // this one happens after infer. structure is read-only, or at-least infer-safe
         virtual bool patch (const StructurePtr &, ModuleGroup &,
             const AnnotationArgumentList &, string &, bool & /*astChanged*/ ) { return true; } // this one happens after infer. this can restart infer by setting astChange
+        virtual void complete ( Context * ) { }
     };
     typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
 

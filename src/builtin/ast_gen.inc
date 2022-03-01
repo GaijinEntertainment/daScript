@@ -8,11 +8,12 @@ protected:
     __fn_patch = 4,
     __fn_fixup = 5,
     __fn_lint = 6,
-    __fn_isCompatible = 7,
-    __fn_isSpecialized = 8,
+    __fn_complete = 7,
+    __fn_isCompatible = 8,
+    __fn_isSpecialized = 9,
   };
 protected:
-  int _das_class_method_offset[9];
+  int _das_class_method_offset[10];
 public:
   AstFunctionAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_transform] = adapt_field_offset("transform",info);
@@ -22,6 +23,7 @@ public:
       _das_class_method_offset[__fn_patch] = adapt_field_offset("patch",info);
       _das_class_method_offset[__fn_fixup] = adapt_field_offset("fixup",info);
       _das_class_method_offset[__fn_lint] = adapt_field_offset("lint",info);
+      _das_class_method_offset[__fn_complete] = adapt_field_offset("complete",info);
       _das_class_method_offset[__fn_isCompatible] = adapt_field_offset("isCompatible",info);
       _das_class_method_offset[__fn_isSpecialized] = adapt_field_offset("isSpecialized",info);
   }
@@ -88,6 +90,15 @@ public:
         (__context__,nullptr,__funcCall__,
           self,func,group,args,progArgs,errors);
   }
+  __forceinline Func get_complete ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_complete]);
+  }
+  __forceinline void invoke_complete ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Context> ctx ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Context>>
+        (__context__,nullptr,__funcCall__,
+          self,ctx);
+  }
   __forceinline Func get_isCompatible ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_isCompatible]);
   }
@@ -147,14 +158,16 @@ protected:
     __fn_apply = 0,
     __fn_finish = 1,
     __fn_patch = 2,
+    __fn_complete = 3,
   };
 protected:
-  int _das_class_method_offset[3];
+  int _das_class_method_offset[4];
 public:
   AstStructureAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
       _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
       _das_class_method_offset[__fn_patch] = adapt_field_offset("patch",info);
+      _das_class_method_offset[__fn_complete] = adapt_field_offset("complete",info);
   }
   __forceinline Func get_apply ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_apply]);
@@ -182,6 +195,15 @@ public:
       <void *,smart_ptr_raw<Structure>,ModuleGroup &,AnnotationArgumentList const  &,das::string &,bool &>
         (__context__,nullptr,__funcCall__,
           self,st,group,args,errors,astChanged);
+  }
+  __forceinline Func get_complete ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_complete]);
+  }
+  __forceinline void invoke_complete ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Context> ctx ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Context>>
+        (__context__,nullptr,__funcCall__,
+          self,ctx);
   }
 };
 

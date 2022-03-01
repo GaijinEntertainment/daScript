@@ -781,6 +781,11 @@ namespace das {
                 return true;
             }
         }
+        virtual void  complete (  Context * ctx ) override {
+            if ( auto fnComplete = get_complete(classPtr) ) {
+                invoke_complete(context,fnComplete,classPtr,ctx);
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;
@@ -818,6 +823,11 @@ namespace das {
                 return invoke_patch(context,fnPatch,classPtr,st,group,args,errors,astChanged);
             } else {
                 return true;
+            }
+        }
+        virtual void  complete (  Context * ctx ) override {
+            if ( auto fnComplete = get_complete(classPtr) ) {
+                invoke_complete(context,fnComplete,classPtr,ctx);
             }
         }
     protected:
