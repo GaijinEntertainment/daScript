@@ -3013,20 +3013,15 @@ namespace das
             logs << "shared        " << context.getSharedMemorySize() << "\n";
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
         }
-        // debug info
-        if ( options.getBoolOption("log_debug_mem",false) ) {
-            helper.logMemInfo(logs);
-        }
+
         // log CPP
         if (options.getBoolOption("log_cpp")) {
             aotCpp(context,logs);
             registerAotCpp(logs,context);
         }
-        if ( !options.getBoolOption("rtti",policies.rtti) ) {
-            context.thisProgram = nullptr;
-        }
         context.debugger = getDebugger();
         isSimulating = false;
+        context.thisHelper = &helper;   // note - we may need helper for the 'complete'
         for ( int i=0; i!=context.totalFunctions; ++i ) {
             Function *func = indexToFunction[i];
             for (auto &ann : func->annotations) {
@@ -3045,6 +3040,13 @@ namespace das
                     }
                 }
             });
+        }
+        context.thisHelper = nullptr;
+        if ( options.getBoolOption("log_debug_mem",false) ) {
+            helper.logMemInfo(logs);
+        }
+        if ( !options.getBoolOption("rtti",policies.rtti) ) {
+            context.thisProgram = nullptr;
         }
         if ( options.getBoolOption("log_total_compile_time",false) ) {
             auto dt = get_time_usec(time0) / 1000000.;
