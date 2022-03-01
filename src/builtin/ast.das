@@ -64,7 +64,7 @@ class AstFunctionAnnotation
     def abstract patch ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
     def abstract fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
     def abstract lint ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
-    def abstract complete ( var ctx:smart_ptr<Context> ) : void
+    def abstract complete ( var func:FunctionPtr; var ctx:smart_ptr<Context> ) : void
     def abstract isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
     def abstract isSpecialized : bool
 
@@ -78,7 +78,7 @@ class AstStructureAnnotation
     def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
     def abstract finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
     def abstract patch ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
-    def abstract complete ( var ctx:smart_ptr<Context> ) : void
+    def abstract complete ( var st:StructurePtr; var ctx:smart_ptr<Context> ) : void
 
 [macro_interface]
 class AstPassMacro

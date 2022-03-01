@@ -781,9 +781,9 @@ namespace das {
                 return true;
             }
         }
-        virtual void  complete (  Context * ctx ) override {
+        virtual void  complete (  Context * ctx, const FunctionPtr & fnp ) override {
             if ( auto fnComplete = get_complete(classPtr) ) {
-                invoke_complete(context,fnComplete,classPtr,ctx);
+                invoke_complete(context,fnComplete,classPtr,fnp,ctx);
             }
         }
     protected:
@@ -825,9 +825,9 @@ namespace das {
                 return true;
             }
         }
-        virtual void  complete (  Context * ctx ) override {
+        virtual void  complete (  Context * ctx, const StructurePtr & stp ) override {
             if ( auto fnComplete = get_complete(classPtr) ) {
-                invoke_complete(context,fnComplete,classPtr,ctx);
+                invoke_complete(context,fnComplete,classPtr,stp,ctx);
             }
         }
     protected:

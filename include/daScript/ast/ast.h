@@ -337,7 +337,7 @@ namespace das
                                const AnnotationArgumentList &, string & ) { return true; }
         virtual SimNode * simulate ( Context *, Function *,
                             const AnnotationArgumentList &, string & ) { return nullptr; }
-        virtual void complete ( Context * ) { }
+        virtual void complete ( Context *, const FunctionPtr & ) { }
         virtual bool simulate ( Context *, SimFunction * ) { return true; }
         virtual bool verifyCall ( ExprCallFunc * /*call*/, const AnnotationArgumentList & /*args*/,
             const AnnotationArgumentList & /*progArgs */, string & /*err*/ ) { return true; }
@@ -451,7 +451,7 @@ namespace das
             const AnnotationArgumentList & args, string & err ) = 0;                    // this one happens after infer. structure is read-only, or at-least infer-safe
         virtual bool patch (const StructurePtr &, ModuleGroup &,
             const AnnotationArgumentList &, string &, bool & /*astChanged*/ ) { return true; } // this one happens after infer. this can restart infer by setting astChange
-        virtual void complete ( Context * ) { }
+        virtual void complete ( Context *, const StructurePtr & ) { }
     };
     typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
 

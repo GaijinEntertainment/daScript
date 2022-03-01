@@ -93,11 +93,11 @@ public:
   __forceinline Func get_complete ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_complete]);
   }
-  __forceinline void invoke_complete ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Context> ctx ) const {
+  __forceinline void invoke_complete ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, smart_ptr_raw<Context> ctx ) const {
     das_invoke_function<void>::invoke
-      <void *,smart_ptr_raw<Context>>
+      <void *,smart_ptr_raw<Function>,smart_ptr_raw<Context>>
         (__context__,nullptr,__funcCall__,
-          self,ctx);
+          self,func,ctx);
   }
   __forceinline Func get_isCompatible ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_isCompatible]);
@@ -199,11 +199,11 @@ public:
   __forceinline Func get_complete ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_complete]);
   }
-  __forceinline void invoke_complete ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Context> ctx ) const {
+  __forceinline void invoke_complete ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> st, smart_ptr_raw<Context> ctx ) const {
     das_invoke_function<void>::invoke
-      <void *,smart_ptr_raw<Context>>
+      <void *,smart_ptr_raw<Structure>,smart_ptr_raw<Context>>
         (__context__,nullptr,__funcCall__,
-          self,ctx);
+          self,st,ctx);
   }
 };
 

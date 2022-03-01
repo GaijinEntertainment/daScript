@@ -3032,12 +3032,19 @@ namespace das
             for (auto &ann : func->annotations) {
                 if ( ann->annotation->rtti_isFunctionAnnotation() ) {
                     auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
-                    fann->complete(&context);
-                } else if ( ann->annotation->rtti_isStructureAnnotation() ) {
-                    auto sann = static_pointer_cast<StructureAnnotation>(ann->annotation);
-                    sann->complete(&context);
+                    fann->complete(&context, func);
                 }
             }
+        }
+        for (auto pm : library.modules) {
+            pm->structures.foreach([&](auto st){
+                for ( auto & ann : st->annotations ) {
+                    if ( ann->annotation->rtti_isStructureAnnotation() ) {
+                        auto sann = static_pointer_cast<StructureAnnotation>(ann->annotation);
+                        sann->complete(&context, st);
+                    }
+                }
+            });
         }
         if ( options.getBoolOption("log_total_compile_time",false) ) {
             auto dt = get_time_usec(time0) / 1000000.;
