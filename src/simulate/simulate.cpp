@@ -1470,6 +1470,8 @@ namespace das
         });
     }
 
+    bool multiline_log = true;
+
     void toLog ( int level, const char * text ) {
         bool any = false;
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
@@ -1490,10 +1492,10 @@ namespace das
                 marker = "";
 
             if ( level>=LogLevel::warning ) {
-                fprintf(stderr,"%s%s\n", marker, text);
+                fprintf(stderr, multiline_log ? "%s%s\n" : "%s%s", marker, text);
                 fflush(stderr);
             } else {
-                fprintf(stdout,"%s%s\n", marker, text);
+                fprintf(stdout, multiline_log ? "%s%s\n" : "%s%s", marker, text);
                 fflush(stdout);
             }
         }
