@@ -695,7 +695,7 @@ namespace das
             DataWalker::beforePtr(pa, ti);
             if ( ti->firstType ) {
                 if ( auto ptr = *(char**)pa ) {
-                    PtrRange rdata(ptr, ti->size);
+                    PtrRange rdata(ptr, ti->firstType->size);
                     markAndPushRange(rdata);
                 }
             }
