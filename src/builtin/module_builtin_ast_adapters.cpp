@@ -983,6 +983,64 @@ namespace das {
                         info);
             }
         }
+        virtual void beforeStructure ( const LineInfo & info ) override {
+            if ( auto fnBeforeStructure = get_beforeStructure(classPtr) ) {
+                invoke_beforeStructure(context,fnBeforeStructure,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+        virtual void afterStructure ( Structure * st, const LineInfo & info ) override {
+            if ( auto fnAfterStructure = get_afterStructure(classPtr) ) {
+                invoke_afterStructure(context,fnAfterStructure,classPtr,
+                    st, daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+
+        }
+        virtual void beforeFunction ( const LineInfo & info ) override {
+            if ( auto fnBeforeFunction = get_beforeFunction(classPtr) ) {
+                invoke_beforeFunction(context,fnBeforeFunction,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+        virtual void afterFunction ( Function * fn, const LineInfo & info ) override {
+            if ( auto fnAfterFunction = get_afterFunction(classPtr) ) {
+                invoke_afterFunction(context,fnAfterFunction,classPtr,
+                    fn, daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+        virtual void beforeStructureFields ( const LineInfo & info ) override {
+            if ( auto fnBeforeStructureFields = get_beforeStructureFields(classPtr) ) {
+                invoke_beforeStructureFields(context,fnBeforeStructureFields,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+        virtual void afterStructureField ( const char * name, const LineInfo & info ) override {
+            if ( auto fnAfterStructureField = get_afterStructureField(classPtr) ) {
+                invoke_afterStructureField(context,fnAfterStructureField,classPtr,
+                    (char *) name, daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+        virtual void afterStructureFields ( const LineInfo & info ) override {
+            if ( auto fnAfterStructureFields = get_afterStructureFields(classPtr) ) {
+                invoke_afterStructureFields(context,fnAfterStructureFields,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+
     protected:
         void *      classPtr;
         Context *   context;

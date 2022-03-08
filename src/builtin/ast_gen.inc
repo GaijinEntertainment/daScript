@@ -334,14 +334,28 @@ protected:
     __fn_open = 0,
     __fn_accept = 1,
     __fn_close = 2,
+    __fn_beforeStructure = 3,
+    __fn_afterStructure = 4,
+    __fn_beforeStructureFields = 5,
+    __fn_afterStructureField = 6,
+    __fn_afterStructureFields = 7,
+    __fn_beforeFunction = 8,
+    __fn_afterFunction = 9,
   };
 protected:
-  int _das_class_method_offset[3];
+  int _das_class_method_offset[10];
 public:
   AstCommentReader_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_open] = adapt_field_offset("open",info);
       _das_class_method_offset[__fn_accept] = adapt_field_offset("accept",info);
       _das_class_method_offset[__fn_close] = adapt_field_offset("close",info);
+      _das_class_method_offset[__fn_beforeStructure] = adapt_field_offset("beforeStructure",info);
+      _das_class_method_offset[__fn_afterStructure] = adapt_field_offset("afterStructure",info);
+      _das_class_method_offset[__fn_beforeStructureFields] = adapt_field_offset("beforeStructureFields",info);
+      _das_class_method_offset[__fn_afterStructureField] = adapt_field_offset("afterStructureField",info);
+      _das_class_method_offset[__fn_afterStructureFields] = adapt_field_offset("afterStructureFields",info);
+      _das_class_method_offset[__fn_beforeFunction] = adapt_field_offset("beforeFunction",info);
+      _das_class_method_offset[__fn_afterFunction] = adapt_field_offset("afterFunction",info);
   }
   __forceinline Func get_open ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_open]);
@@ -369,6 +383,69 @@ public:
       <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,prog,mod,info);
+  }
+  __forceinline Func get_beforeStructure ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_beforeStructure]);
+  }
+  __forceinline void invoke_beforeStructure ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+  __forceinline Func get_afterStructure ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterStructure]);
+  }
+  __forceinline void invoke_afterStructure ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> const  st, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Structure> const ,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,st,prog,mod,info);
+  }
+  __forceinline Func get_beforeStructureFields ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_beforeStructureFields]);
+  }
+  __forceinline void invoke_beforeStructureFields ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+  __forceinline Func get_afterStructureField ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterStructureField]);
+  }
+  __forceinline void invoke_afterStructureField ( Context * __context__, Func __funcCall__, void * self, char * const  name, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,char * const ,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,name,prog,mod,info);
+  }
+  __forceinline Func get_afterStructureFields ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterStructureFields]);
+  }
+  __forceinline void invoke_afterStructureFields ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+  __forceinline Func get_beforeFunction ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_beforeFunction]);
+  }
+  __forceinline void invoke_beforeFunction ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+  __forceinline Func get_afterFunction ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterFunction]);
+  }
+  __forceinline void invoke_afterFunction ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> const  fn, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Function> const ,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,fn,prog,mod,info);
   }
 };
 

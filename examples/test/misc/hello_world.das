@@ -1,11 +1,25 @@
+require daslib/rst_comment
+
+struct Foo
+    /* this is a C comment in structure */
+    a : int // this is a C++ comment in the field
+    b,c : int // this is a C++ comment for the fields b, c
+
+struct Bar
+    // this is a C++ comment in structure
+    a : int
+
+
+[export]
+def foo ( a, b : int )
+    // this is a C++ comment
+    pass
+
+[export]
+def bar ( a, b : int )
+    /* this is a C comment */
+    pass
 
 [export]
 def main
-    var a <- [{int 1;2;3;4;5}]
-    var b <- a[1..3]
-    var c : array<int>
-    c |> push(a[0..5])
-    c |> push([[int 6; 7]])
-    print("a = {a} b = {b} c = {c}\n")
-
-options log
+    print("hello, world!\n")

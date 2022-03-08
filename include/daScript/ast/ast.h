@@ -1159,6 +1159,13 @@ namespace das
         virtual void open ( bool cppStyle, const LineInfo & at ) = 0;
         virtual void accept ( int Ch, const LineInfo & at ) = 0;
         virtual void close ( const LineInfo & at ) = 0;
+        virtual void beforeStructure ( const LineInfo & at ) = 0;
+        virtual void afterStructure ( Structure * st, const LineInfo & at ) = 0;
+        virtual void beforeStructureFields ( const LineInfo & at ) = 0;
+        virtual void afterStructureFields ( const LineInfo & at ) = 0;
+        virtual void afterStructureField ( const char * name, const LineInfo & at ) = 0;
+        virtual void beforeFunction ( const LineInfo & at ) = 0;
+        virtual void afterFunction ( Function *, const LineInfo & at ) = 0;
     };
 
     class Program : public ptr_ref_count {
