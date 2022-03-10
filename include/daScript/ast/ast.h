@@ -915,6 +915,7 @@ namespace das
         static Module * require ( const string & name );
         static Module * requireEx ( const string & name, bool allowPromoted );
         static void Initialize();
+        static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
         static void Shutdown();
         static void Reset(bool debAg);
         static void ClearSharedModules();
