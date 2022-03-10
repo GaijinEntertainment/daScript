@@ -98,6 +98,16 @@ namespace das {
         }
     }
 
+    void Module::CollectFileInfo(das::vector<FileInfoPtr> &finfos) {
+        DAS_ASSERT(daScriptEnvironment::owned!=nullptr);
+        DAS_ASSERT(daScriptEnvironment::bound!=nullptr);
+        auto m = daScriptEnvironment::bound->modules;
+        while ( m ) {
+            finfos.emplace_back(das::move(m->ownFileInfo));
+            m = m->next;
+        }
+    }
+
     void Module::Shutdown() {
         DAS_ASSERT(daScriptEnvironment::owned!=nullptr);
         DAS_ASSERT(daScriptEnvironment::bound!=nullptr);
