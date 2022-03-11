@@ -33,7 +33,11 @@ def _move_with_lockcheck ( var a:auto(valA)&; var b:auto(valB)& )
         _builtin_verify_locks(a)
     static_if typeinfo(need_lock_check type<valB>)
         _builtin_verify_locks(b)
-    a <- b
+    static_if typeinfo(is_class a)
+        unsafe
+            a <- b
+    else
+        a <- b
 
 def _return_with_lockcheck ( var a:auto(valT)& =const ) : valT&
     static_if typeinfo(need_lock_check type<valT>)

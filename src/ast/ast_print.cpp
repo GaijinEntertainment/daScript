@@ -585,6 +585,15 @@ namespace das {
             return Visitor::visit(c);
         }
     // looks like call
+        virtual void preVisit ( ExprCallMacro * call ) override {
+            Visitor::preVisit(call);
+            ss << call->name << "(";
+        }
+        virtual ExpressionPtr visit ( ExprCallMacro * c ) override {
+            ss << ")";
+            return Visitor::visit(c);
+        }
+    // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
             ss << call->name << "(";

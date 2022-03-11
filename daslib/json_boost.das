@@ -68,7 +68,7 @@ class private JsonReader : AstReaderMacro
             var exx <- convert_to_expression(json,expr.at)
             return exx
 
-[template(ent)]
+[expect_any_enum(ent), template(ent)]
 def from_JV ( v:JsonValue?; ent : auto(EnumT); defV : EnumT = [[EnumT]] ) : EnumT
     if v==null || !(v.value is _string)
         return defV
@@ -103,6 +103,13 @@ def from_JV ( var v : JsonValue?; ent:float; defV:float=0. )
         return defV
     else
         return float(v.value as _number)
+
+[generic,template(ent)]
+def from_JV ( var v : JsonValue?; ent:double; defV:double=0.lf )
+    if v==null || !(v.value is _number)
+        return defV
+    else
+        return v.value as _number
 
 [generic,template(ent)]
 def from_JV ( var v : JsonValue?; ent:int; defV:int=0 )
@@ -149,6 +156,25 @@ def from_JV ( var v : JsonValue?; ent: auto(VecT); defV:VecT=[[VecT]]  )
             vo["z"].value as _number,
             vo["w"].value as _number)
 
+def from_JV ( var v:JsonValue?; anything : auto(TT) )
+	static_if typeinfo(is_dim anything)
+		if v==null || !(v.value is _array)
+			return anything
+		unsafe
+			var arr & = v.value as _array
+			if arr |> length != typeinfo(dim anything)
+				return anything
+			var ret : TT[typeinfo(dim anything)]
+			for i in 0..typeinfo(dim anything)
+				ret[i] = from_JV(arr[i], decltype(anything[0]))
+			return <- ret
+	static_elif typeinfo(is_struct anything)
+		var ret : TT
+		apply(ret) <| $ ( name:string; var field )
+			field = from_JV((v as _object)[name], decltype(field))
+		return <- ret
+	else
+		return anything
 
 def JV ( v : float )
     return new [[JsonValue value <- [[JsValue _number = double(v)]]]]

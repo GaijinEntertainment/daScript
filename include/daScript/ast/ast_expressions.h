@@ -351,7 +351,7 @@ namespace das
     };
 
     struct ExprCallMacro : ExprLooksLikeCall {
-        ExprCallMacro () { __rtti = "ExprCallMacro"; };
+        ExprCallMacro () { __rtti = "ExprCallMacro"; name="__call_macro__"; };
         ExprCallMacro ( const LineInfo & a, const string & n )
             : ExprLooksLikeCall(a,n) { __rtti = "ExprCallMacro"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -927,7 +927,7 @@ namespace das
     };
 
     struct ExprInvoke : ExprLikeCall<ExprInvoke> {
-        ExprInvoke () { __rtti = "ExprInvoke"; };
+        ExprInvoke () { __rtti = "ExprInvoke"; name = "invoke"; };
         ExprInvoke ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprInvoke>(a,name) { __rtti = "ExprInvoke"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -940,7 +940,7 @@ namespace das
     };
 
     struct ExprAssert : ExprLikeCall<ExprAssert> {
-        ExprAssert ( ) { __rtti = "ExprAssert"; };
+        ExprAssert ( ) { __rtti = "ExprAssert"; name="assert"; };
         ExprAssert ( const LineInfo & a, const string & name, bool isV )
             : ExprLikeCall<ExprAssert>(a,name) { isVerify = isV; __rtti = "ExprAssert"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -949,7 +949,7 @@ namespace das
     };
 
     struct ExprQuote : ExprLikeCall<ExprQuote> {
-        ExprQuote ( ) { __rtti = "ExprQuote"; };
+        ExprQuote ( ) { __rtti = "ExprQuote"; name="quote"; };
         ExprQuote ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprQuote>(a,name) { __rtti = "ExprQuote"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -958,7 +958,7 @@ namespace das
     };
 
     struct ExprStaticAssert : ExprLikeCall<ExprStaticAssert> {
-        ExprStaticAssert () { __rtti = "ExprStaticAssert"; };
+        ExprStaticAssert () { __rtti = "ExprStaticAssert"; name="static_assert"; };
         ExprStaticAssert ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprStaticAssert>(a,name) { __rtti = "ExprStaticAssert"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -966,7 +966,7 @@ namespace das
     };
 
     struct ExprDebug : ExprLikeCall<ExprDebug> {
-        ExprDebug () { __rtti = "ExprDebug"; };
+        ExprDebug () { __rtti = "ExprDebug"; name="debug"; };
         ExprDebug ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprDebug>(a, name) { __rtti = "ExprDebug"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -974,7 +974,7 @@ namespace das
     };
 
     struct ExprMemZero : ExprLikeCall<ExprMemZero> {
-        ExprMemZero () { __rtti = "ExprMemZero"; };
+        ExprMemZero () { __rtti = "ExprMemZero"; name="memzero"; };
         ExprMemZero ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprMemZero>(a, name) { __rtti = "ExprMemZero"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -1021,7 +1021,7 @@ namespace das
     };
 
     struct ExprErase : ExprLikeCall<ExprErase> {
-        ExprErase() { __rtti = "ExprErase"; };
+        ExprErase() { __rtti = "ExprErase"; name="erase"; };
         ExprErase ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprErase>(a, "erase") { __rtti = "ExprErase"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -1029,7 +1029,7 @@ namespace das
     };
 
     struct ExprFind : ExprLikeCall<ExprFind> {
-        ExprFind() { __rtti = "ExprFind"; };
+        ExprFind() { __rtti = "ExprFind"; name="find"; };
         ExprFind ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprFind>(a, "find") { __rtti = "ExprFind"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -1037,7 +1037,7 @@ namespace das
     };
 
     struct ExprKeyExists : ExprLikeCall<ExprKeyExists> {
-        ExprKeyExists() { __rtti = "ExprKeyExists"; };
+        ExprKeyExists() { __rtti = "ExprKeyExists"; name="key_exists"; };
         ExprKeyExists ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprKeyExists>(a, "key_exists") { __rtti = "ExprKeyExists"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;

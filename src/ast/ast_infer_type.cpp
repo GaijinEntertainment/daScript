@@ -504,7 +504,9 @@ namespace das {
                     auto & declAT = decl->argTypes[iA];
                     resT->argTypes[iA] = inferPartialAliases(declAT,fptr,aliases);
                 }
-                resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                if ( decl->firstType) {
+                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                }
             }
             return resT;
         }
