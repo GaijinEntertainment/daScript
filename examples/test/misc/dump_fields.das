@@ -3,6 +3,7 @@ module dump_fields
 require ast
 require daslib/ast_boost
 
+[structure_macro(name=dump_fields)]
 class DumpFields : AstStructureAnnotation
     def override finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         print("struct {st.name} \{\n")
@@ -14,7 +15,4 @@ class DumpFields : AstStructureAnnotation
         print("\}\n")
         return true
 
-[macro]
-def private init
-    add_new_structure_annotation("dump_fields", new DumpFields())
 
