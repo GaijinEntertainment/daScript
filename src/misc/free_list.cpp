@@ -2,6 +2,8 @@
 
 #include "daScript/misc/free_list.h"
 
+#if DAS_FREE_LIST
+
 namespace das {
 
 struct ReuseChunk {
@@ -123,5 +125,16 @@ void operator delete[] ( void * data ) {
 
 #endif
 
+
+#endif
+
+#else
+
+namespace das {
+
+void reuse_cache_push() {}
+void reuse_cache_pop() {}
+
+}
 
 #endif
