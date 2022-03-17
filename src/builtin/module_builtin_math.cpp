@@ -428,6 +428,12 @@ namespace das {
         }
     }
 
+    float4x4 float4x4_from_float34 ( const float3x4 & mat ) {
+        mat44f res;
+        v_mat44_make_from_43ca(res, (const float*)&mat);
+        return reinterpret_cast<float4x4&>(res);
+    }
+
     float3x3 float3x3_from_float44 ( const float4x4 & mat ) {
         float3x3 res;
         res.m[0] = vec4f(mat.m[0]);
@@ -738,6 +744,8 @@ namespace das {
             addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float3x4>,float3x4 > >("float3x4",lib) );
             addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
             // 4x4
+            addExtern<DAS_BIND_FUN(float4x4_from_float34), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "float4x4",
+                SideEffects::none,"float4x4_from_float34");
             addExtern<DAS_BIND_FUN(float4x4_identity)>(*this, lib, "identity",
                 SideEffects::modifyArgument, "float4x4_identity")->arg("x");
             addExtern<DAS_BIND_FUN(float4x4_identity_m), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "identity4x4",

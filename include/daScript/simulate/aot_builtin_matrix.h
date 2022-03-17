@@ -17,6 +17,7 @@ namespace das {
     float4x4 float4x4_inverse( const float4x4 & src);
     float3x4 float3x4_inverse ( const float3x4 & src );
     float3x3 float3x3_inverse( const float3x3 & src);
+    float4x4 float4x4_from_float34 ( const float3x4 & mat );
     float3x3 float3x3_from_float44 ( const float4x4 & mat );
     float3x3 float3x3_from_float34 ( const float3x4 & mat );
     float3x4 float3x4_from_float44 ( const float4x4 & mat );
