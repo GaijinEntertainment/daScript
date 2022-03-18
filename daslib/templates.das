@@ -11,6 +11,7 @@ require daslib/ast_boost
 
 [call_macro(name="decltype")]
 class DecltypeMacro : AstCallMacro
+    remove_ref = false
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if expr.arguments.length !=1
             macro_error(prog,expr.at,"decltype expecting 1 argument")
@@ -18,10 +19,17 @@ class DecltypeMacro : AstCallMacro
         if expr.arguments[0]._type==null || expr.arguments[0]._type.isAutoOrAlias
             macro_error(prog,expr.at,"decltype requires fully inferred type")
             return [[ExpressionPtr]]
+        var tt <- clone_type(expr.arguments[0]._type)
+        if remove_ref
+            tt.flags &= ~TypeDeclFlags ref
         var mkt <- new [[ExprTypeDecl() at=expr.at,
-            typeexpr <- clone_type(expr.arguments[0]._type)
+            typeexpr <- tt
         ]]
         return <- mkt
+
+[call_macro(name="decltype_noref")]
+class DecltypeNoRefMacro : DecltypeMacro
+    override remove_ref = true
 
 class TemplateMacro : AstFunctionAnnotation
     def override transform ( var expr : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr

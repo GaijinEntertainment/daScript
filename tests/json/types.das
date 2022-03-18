@@ -4,10 +4,7 @@ require daslib/json_boost
 def test_equ ( t:T?; x:auto(TT) )
     var jv = JV(x)
     // to_log(LOG_INFO, "{x}:{typeinfo(typename x)} serialized as {write_json(jv)}\n")
-    if typeinfo(is_dim x)
-        t |> equal(x, from_JV(jv, x))
-    else
-        t |> equal(x, from_JV(jv, [[TT]]))
+    t |> equal(x, from_JV(jv, decltype_noref(x)))
     unsafe
         delete jv
 
