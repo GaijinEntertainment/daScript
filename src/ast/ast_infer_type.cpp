@@ -2895,6 +2895,12 @@ namespace das {
                 } else if ( expr->trait=="is_struct" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isStructure());
+                } else if ( expr->trait=="is_tuple" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isTuple());
+                } else if ( expr->trait=="is_variant" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isVariant());
                 } else if ( expr->trait=="is_class" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isClass());
