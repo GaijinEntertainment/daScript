@@ -238,9 +238,23 @@ def from_JV ( var v:JsonValue?; anything : auto(TT) )
             else
                 field = from_JV((v as _object)[name], field)
 		return <- ret
+    static_elif typeinfo(is_array anything)
+		if v==null || !(v.value is _array)
+			var ret : TT
+            return <- ret
+		unsafe
+			var arr & = v.value as _array
+			var ret : TT
+            if typeinfo(is_ref_type anything[0])
+                for i in range(arr |> length)
+                    ret |> emplace <| from_JV(arr[i], decltype(anything[0]))
+            else
+                for i in range(arr |> length)
+                    ret |> push <| from_JV(arr[i], type<TT-&>)
+			return <- ret
 	else
         concept_assert(false, "unsupported json serialization type. missing 'fromJV")
-		return anything
+		return <- anything
 
 def JV ( v : float )
     return new [[JsonValue value <- [[JsValue _number = double(v)]]]]

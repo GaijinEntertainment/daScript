@@ -3,13 +3,11 @@ require daslib/json_boost
 
 def test_equ ( t:T?; x:auto(TT) )
     var jv = JV(x)
-    // to_log(LOG_INFO, "{x} serialized as {write_json(jv)}\n")
+    // to_log(LOG_INFO, "{x}:{typeinfo(typename x)} serialized as {write_json(jv)}\n")
     if typeinfo(is_dim x)
-        let fjv = from_JV(jv, x)
-        t |> equal(x, fjv)
+        t |> equal(x, from_JV(jv, x))
     else
-        let fjv = from_JV(jv, [[TT]])
-        t |> equal(x, fjv)
+        t |> equal(x, from_JV(jv, [[TT]]))
     unsafe
         delete jv
 
@@ -83,6 +81,23 @@ def operator == ( a,b:SFoo[2] )
 def dim_types ( t: T? )
     test_equ(t, [[int 1;2;3;4]])
     test_equ(t, [[SFoo a=1,b=2.;a=2,b=3.]])
+
+def operator == ( a,b:array<int> )
+    for A,B in a,b
+        if A!=B
+            return false
+    return true
+
+def operator == ( a,b:array<SFoo> )
+    for A,B in a,b
+        if !(A==B)
+            return false
+    return true
+
+[test]
+def array_types ( t: T? )
+    test_equ(t, [{int 1;2;3;4}])
+    test_equ(t, [{SFoo a=1,b=2.;a=2,b=3.}])
 
 typedef TFoo = tuple<int; float; string>
 
