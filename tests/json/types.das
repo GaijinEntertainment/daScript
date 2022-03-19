@@ -105,4 +105,25 @@ def operator == ( a,b: TFoo )
 def tuple_types ( t: T? )
     test_equ(t, [[auto 1,2.0,"3"]])
 
+def op_equ_tab ( a,b:table<string;auto> )
+    if a|>length != b|> length
+        return false
+    for k,v in keys(a), values(a)
+        if !(b |> key_exists(k))
+            return false
+        var same = false
+        b |> find(k) <| $ ( pv )
+            same = pv!=null && *pv==v
+    return true
+
+def operator == ( a,b:table<string;int> )
+    return op_equ_tab(a,b)
+
+def operator == ( a,b:table<string;SFoo> )
+    return op_equ_tab(a,b)
+
+[test]
+def string_table ( t: T? )
+    test_equ(t, {{"one" => 1; "two" => 2}})
+    test_equ(t, {{"tab1" => [[SFoo a=1,b=2.]]; "tab2" => [[SFoo a=2,b=3.]]}})
 

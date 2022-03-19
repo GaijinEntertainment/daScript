@@ -213,6 +213,16 @@ def from_JV ( var v : JsonValue?; ent: auto(VecT); defV:VecT=[[VecT]]  )
             vo["z"].value as _number,
             vo["w"].value as _number)
 
+def from_JV ( var v:JsonValue?; anything : table< auto(KT);auto(VT) > )
+    var ret : table<KT;VT>
+    if v==null || !(v.value is _object)
+        return <- ret
+    unsafe
+        var tab & = v.value as _object
+        for k,v in keys(anything),values(anything)
+            ret[k] = from_JV(tab[k], type<VT-&>)
+    return <- ret
+
 def from_JV ( var v:JsonValue?; anything : auto(TT) )
 	static_if typeinfo(is_dim anything)
         var ret : TT[typeinfo(dim anything)]
