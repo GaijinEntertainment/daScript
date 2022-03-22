@@ -127,3 +127,19 @@ def string_table ( t: T? )
     test_equ(t, {{"one" => 1; "two" => 2}})
     test_equ(t, {{"tab1" => [[SFoo a=1,b=2.]]; "tab2" => [[SFoo a=2,b=3.]]}})
 
+variant VFoo
+    i : int
+    f : float
+
+def operator == ( a,b:VFoo )
+    if (a is i) && (b is i)
+        return (a as i)==(b as i)
+    elif (a is f) && (b is f)
+        return (a as f)==(b as f)
+    else
+        return false
+
+[test]
+def variant_types ( t: T? )
+    test_equ(t, [[VFoo i=1]])
+    test_equ(t, [[VFoo f=1.]])

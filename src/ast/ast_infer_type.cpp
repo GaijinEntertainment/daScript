@@ -4382,7 +4382,11 @@ namespace das {
             } else if ( valT->isPointer() ) {
                 expr->value = Expression::autoDereference(expr->value);
                 expr->unsafeDeref = func ? func->unsafeDeref : false;
-                if ( valT->firstType->isStructure() ) {
+                if ( !valT->firstType ) {
+                    error("can't get field " + expr->name + " of void pointer", "", "",
+                        expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                } else if ( valT->firstType->isStructure() ) {
                     expr->field = valT->firstType->structType->findField(expr->name);
                 } else if ( valT->firstType->isHandle() ) {
                     expr->annotation = valT->firstType->annotation;

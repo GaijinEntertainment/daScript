@@ -213,13 +213,14 @@ def from_JV ( var v : JsonValue?; ent: auto(VecT); defV:VecT=[[VecT]]  )
             vo["z"].value as _number,
             vo["w"].value as _number)
 
+[template(anything)]
 def from_JV ( var v:JsonValue?; anything : table< auto(KT);auto(VT) > )
     var ret : table<KT;VT>
     if v==null || !(v.value is _object)
         return <- ret
     unsafe
         var tab & = v.value as _object
-        for k,v in keys(anything),values(anything)
+        for k,v in keys(tab),values(tab)
             ret[k] = from_JV(tab[k], type<VT-&>)
     return <- ret
 
@@ -249,6 +250,18 @@ def from_JV ( var v:JsonValue?; anything : auto(TT) )
             for i in range(arr |> length)
                 ret |> emplace <| from_JV(arr[i], decltype_noref(anything[0]))
 			return <- ret
+    static_elif typeinfo(is_variant anything)
+        var ret : TT
+        if v==null || !(v.value is _object)
+            return <- ret
+        var vv : JsonValue? = (v.value as _object)?["$variant"] ?? null
+        if vv==null || !(vv.value is _number)
+            return <- ret
+        unsafe
+            set_variant_index(ret, int(vv.value as _number))
+		apply(ret) <| $ ( name:string; var field )
+            field = from_JV((v as _object)[name], decltype_noref(field))
+        return <- ret
 	else
         concept_assert(false, "unsupported json serialization type. missing 'fromJV")
 
@@ -325,6 +338,12 @@ def JV(value): JsonValue?
         for x in value
             arr |> push <| _::JV(x)
         return _::JV(arr)
+    static_elif typeinfo(is_variant value)
+        var map: table<string; JsonValue?>
+        map["$variant"] = _::JV(variant_index(value))
+        apply(value) <| $(name: string; field)
+            map[name] = _::JV(field)
+        return _::JV(map)
     else
         to_log(LOG_ERROR, "JSON: unsupported type {typeinfo(typename value)}\n")
         concept_assert(false, "unknown JV()")
