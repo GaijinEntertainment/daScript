@@ -12,13 +12,13 @@
 	url = https://github.com/borisbat/dasXbyak.git
 [submodule "modules/dasSound"]
 	path = modules/dasSound
-	url = git@github.com:imp5imp5/dasSound.git
+	url = https://github.com/imp5imp5/dasSound.git
 [submodule "modules/dasMinfft"]
 	path = modules/dasMinfft
-	url = git@github.com:imp5imp5/dasMinfft.git
+	url = https://github.com/imp5imp5/dasMinfft.git
 [submodule "modules/dasHV"]
 	path = modules/dasHV
-	url = git@github.com:borisbat/dasHV.git
+	url = https://github.com/borisbat/dasHV.git
 [submodule "modules/dasSFML"]
 	path = modules/dasSFML
-	url = git@github.com:borisbat/dasSFML.git
+	url = https://github.com/borisbat/dasSFML.git
