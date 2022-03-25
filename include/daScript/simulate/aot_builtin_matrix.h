@@ -11,11 +11,26 @@ namespace das {
     float3x3 float3x3_identity_m ( void );
     float4x4 float4x4_translation(float3 xyz);
     float3x3 float3x3_mul(const float3x3 &a, const float3x3 &b);
-    float3x4 float3x4_mul(const float3x4 &a, const float3x4 &b);
+    inline float3x4 float3x4_mul(const float3x4 &a, const float3x4 &b) {
+        mat44f va,vb,vc;
+        v_mat44_make_from_43cu(va, &a.m[0].x);
+        v_mat44_make_from_43cu(vb, &b.m[0].x);
+        v_mat44_mul43(vc, va, vb);
+        float3x4 ret;
+        v_mat_43cu_from_mat44(&ret.m[0].x, vc);
+        return ret;
+    }
     float4x4 float4x4_mul(const float4x4 &a, const float4x4 &b);
     float4x4 float4x4_transpose ( const float4x4 & src );
     float4x4 float4x4_inverse( const float4x4 & src);
-    float3x4 float3x4_inverse ( const float3x4 & src );
+    inline float3x4 float3x4_inverse( const float3x4 & src ) {
+        mat44f mat, invMat;
+        v_mat44_make_from_43cu(mat, &src.m[0].x);
+        v_mat44_inverse43(invMat, mat);
+        float3x4 ret;
+        v_mat_43cu_from_mat44(&ret.m[0].x, invMat);
+        return ret;
+    }
     float3x3 float3x3_inverse( const float3x3 & src);
     float4x4 float4x4_from_float34 ( const float3x4 & mat );
     float3x3 float3x3_from_float44 ( const float4x4 & mat );
