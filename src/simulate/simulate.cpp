@@ -392,7 +392,7 @@ namespace das
 
     SimNode * SimNode_ForWithIteratorBase::copyNode ( Context & context, NodeAllocator * code ) {
         SimNode_ForWithIteratorBase * that = (SimNode_ForWithIteratorBase *) SimNode_Block::copyNode(context, code);
-        if ( total ) {
+        if ( totalSources ) {
             auto bytes = code->allocate( totalSources * ( sizeof(SimNode*) + sizeof(uint32_t) ) );
             auto new_source_iterators = (SimNode **) (bytes);
             memcpy ( new_source_iterators, that->source_iterators, totalSources*sizeof(SimNode *));
