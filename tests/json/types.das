@@ -159,4 +159,4 @@ def operator == ( a,b: MFoo )
 
 [test]
 def moveable_struct_types ( t: T? )
-    test_equ(t, [[MFoo a=1,b=2.]])
+    test_equ(t, [[MFoo a=1,b=2.,c<-[{int 1;2;3}]]])
