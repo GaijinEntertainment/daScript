@@ -143,3 +143,20 @@ def operator == ( a,b:VFoo )
 def variant_types ( t: T? )
     test_equ(t, [[VFoo i=1]])
     test_equ(t, [[VFoo f=1.]])
+
+struct MFoo
+    a : int
+    b : float
+    c : array<int>
+
+def operator == ( a,b: MFoo )
+    if a.c |> length != b.c |> length
+        return false
+    for ac,bc in a.c,b.c
+        if ac!=bc
+            return false
+    return a.a==b.a && a.b==b.b
+
+[test]
+def moveable_struct_types ( t: T? )
+    test_equ(t, [[MFoo a=1,b=2.]])

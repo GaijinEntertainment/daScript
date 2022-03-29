@@ -221,7 +221,7 @@ def from_JV ( var v:JsonValue?; anything : table< auto(KT);auto(VT) > )
     unsafe
         var tab & = v.value as _object
         for k,v in keys(tab),values(tab)
-            ret[k] = from_JV(tab[k], type<VT-&>)
+            move_to_ref ( ret[k], from_JV(tab[k], type<VT-&>) )
     return <- ret
 
 def from_JV ( var v:JsonValue?; anything : auto(TT) )
@@ -234,12 +234,12 @@ def from_JV ( var v:JsonValue?; anything : auto(TT) )
 			if arr |> length != typeinfo(dim anything)
 				return <- ret
             for i in 0..typeinfo(dim anything)
-                ret[i] = from_JV(arr[i], decltype_noref(anything[0]))
+                move_to_ref ( ret[i], from_JV(arr[i], decltype_noref(anything[0])) )
 			return <- ret
 	static_elif typeinfo(is_struct anything) || typeinfo(is_tuple anything)
 		var ret : TT
 		apply(ret) <| $ ( name:string; var field )
-            field = from_JV((v as _object)[name], decltype_noref(field))
+            move_to_ref ( field, from_JV((v as _object)[name], decltype_noref(field)) )
 		return <- ret
     static_elif typeinfo(is_array anything)
         var ret : TT
@@ -260,7 +260,7 @@ def from_JV ( var v:JsonValue?; anything : auto(TT) )
         unsafe
             set_variant_index(ret, int(vv.value as _number))
 		apply(ret) <| $ ( name:string; var field )
-            field = from_JV((v as _object)[name], decltype_noref(field))
+            move_to_ref ( field, from_JV((v as _object)[name], decltype_noref(field)) )
         return <- ret
 	else
         concept_assert(false, "unsupported json serialization type. missing 'fromJV")

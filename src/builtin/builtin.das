@@ -685,3 +685,12 @@ def subarray ( a:array<auto(TT)>; r:urange )
         return <- ra
     else
         concept_assert(false,"can't get subarray of non-copyable type")
+
+def move_to_ref ( var a : auto &; var b )
+    static_if typeinfo(is_ref_type a)
+        static_if typeinfo(can_move a)
+            a <- b
+        else
+            concept_assert(false, "type is not movable")
+    else
+        a = b
