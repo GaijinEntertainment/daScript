@@ -1259,6 +1259,7 @@ namespace das
         }
     public:
         string                      thisNamespace;
+        string                      thisModuleName;
         unique_ptr<Module>          thisModule;
         ModuleLibrary               library;
         ModuleGroup *               thisModuleGroup;

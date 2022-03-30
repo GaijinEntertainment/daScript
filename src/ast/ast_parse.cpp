@@ -301,6 +301,7 @@ namespace das {
         program->needMacroModule = false;
         program->policies = policies;
         program->thisModuleGroup = &libGroup;
+        program->thisModuleName.clear();
         libGroup.foreach([&](Module * pm){
             program->library.addModule(pm);
             return true;

@@ -476,6 +476,7 @@ module_name
 
 module_declaration
     :   DAS_MODULE  module_name[name] optional_shared[mtype] optional_public_or_private_module[ispub] {
+        yyextra->g_Program->thisModuleName = *$name;
         yyextra->g_Program->thisModule->isPublic = $ispub;
         yyextra->g_Program->thisModule->isModule = true;
         if ( yyextra->g_Program->thisModule->name.empty() ) {
@@ -1557,10 +1558,8 @@ struct_variable_declaration_list
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@list);
             for ( auto & crd : yyextra->g_CommentReaders ) {
-                for ( const auto & pv : *$list ) {
-                    for ( const auto & nl : *pv->pNameList ) {
-                        crd->afterStructureField(nl.name.c_str(), nl.at);
-                    }
+                for ( const auto & nl : *($decl->pNameList) ) {
+                    crd->afterStructureField(nl.name.c_str(), nl.at);
                 }
             }
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterStructureFields(tak);

@@ -321,6 +321,7 @@ namespace das {
 
     struct ProgramAnnotation : ManagedStructureAnnotation <Program,false,true> {
         ProgramAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Program", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(thisModuleName)>("thisModuleName");
             addFieldEx ( "flags", "flags", offsetof(Program, flags), makeProgramFlags() );
             addField<DAS_BIND_MANAGED_FIELD(errors)>("errors");
         }
