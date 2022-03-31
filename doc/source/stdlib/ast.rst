@@ -687,6 +687,12 @@ Type aliases
 
 |typedef-ast-ReaderMacroPtr|
 
+.. _alias-CommentReaderPtr:
+
+.. das:attribute:: CommentReaderPtr = smart_ptr<ast::CommentReader>
+
+|typedef-ast-CommentReaderPtr|
+
 .. _alias-CallMacroPtr:
 
 .. das:attribute:: CallMacroPtr = smart_ptr<ast::CallMacro>
@@ -4096,6 +4102,12 @@ ReaderMacro fields are
 
 |structure_annotation-ast-ReaderMacro|
 
+.. _handle-ast-CommentReader:
+
+.. das:attribute:: CommentReader
+
+|structure_annotation-ast-CommentReader|
+
 .. _handle-ast-CallMacro:
 
 .. das:attribute:: CallMacro
@@ -4371,6 +4383,21 @@ lint returns bool
 
 |method-ast-AstFunctionAnnotation.lint|
 
+.. das:function:: AstFunctionAnnotation.complete(self: AstFunctionAnnotation; func: FunctionPtr; ctx: smart_ptr<rtti::Context>)
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
++--------+----------------------------------------------------------------------+
++func    + :ref:`FunctionPtr <alias-FunctionPtr>`                               +
++--------+----------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >               +
++--------+----------------------------------------------------------------------+
+
+
+|method-ast-AstFunctionAnnotation.complete|
+
 .. das:function:: AstFunctionAnnotation.isCompatible(self: AstFunctionAnnotation; func: FunctionPtr; types: VectorTypeDeclPtr; decl: AnnotationDeclaration const; errors: das_string)
 
 isCompatible returns bool
@@ -4527,6 +4554,21 @@ patch returns bool
 
 |method-ast-AstStructureAnnotation.patch|
 
+.. das:function:: AstStructureAnnotation.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast-AstStructureAnnotation.complete|
+
 .. _struct-ast-AstPassMacro:
 
 .. das:attribute:: AstPassMacro
@@ -4672,6 +4714,196 @@ visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 
 |method-ast-AstReaderMacro.visit|
+
+.. _struct-ast-AstCommentReader:
+
+.. das:attribute:: AstCommentReader
+
+|class-ast-AstCommentReader|
+
+it defines as follows
+
+  __rtti : void?
+
+.. das:function:: AstCommentReader.open(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; cpp: bool const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++cpp     +bool const                                                  +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.open|
+
+.. das:function:: AstCommentReader.accept(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; ch: int const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++ch      +int const                                                   +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.accept|
+
+.. das:function:: AstCommentReader.close(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.close|
+
+.. das:function:: AstCommentReader.beforeStructure(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeStructure|
+
+.. das:function:: AstCommentReader.afterStructure(self: AstCommentReader; st: StructurePtr; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                   +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterStructure|
+
+.. das:function:: AstCommentReader.beforeStructureFields(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeStructureFields|
+
+.. das:function:: AstCommentReader.afterStructureField(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++name    +string const                                                +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterStructureField|
+
+.. das:function:: AstCommentReader.afterStructureFields(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterStructureFields|
+
+.. das:function:: AstCommentReader.beforeFunction(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeFunction|
+
+.. das:function:: AstCommentReader.afterFunction(self: AstCommentReader; fn: FunctionPtr; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++fn      + :ref:`FunctionPtr <alias-FunctionPtr>`                     +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterFunction|
 
 .. _struct-ast-AstCallMacro:
 
@@ -9321,6 +9553,38 @@ make_reader_macro returns smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMa
 
 |function-ast-add_reader_macro|
 
+.. _function-_at_ast_c__c_make_comment_reader_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_comment_reader(class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_comment_reader returns smart_ptr< :ref:`ast::CommentReader <handle-ast-CommentReader>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_comment_reader|
+
+.. _function-_at_ast_c__c_add_comment_reader_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CommentReader_gr__gr_?W_C_c:
+
+.. das:function:: add_comment_reader(module: rtti::Module? const implicit; reader: smart_ptr<ast::CommentReader>& implicit)
+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                 +
++--------+---------------------------------------------------------------------------+
++reader  +smart_ptr< :ref:`ast::CommentReader <handle-ast-CommentReader>` >& implicit+
++--------+---------------------------------------------------------------------------+
+
+
+|function-ast-add_comment_reader|
+
 .. _function-_at_ast_c__c_make_call_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
 
 .. das:function:: make_call_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
@@ -10486,6 +10750,23 @@ make_reader_macro returns  :ref:`ReaderMacroPtr <alias-ReaderMacroPtr>`
 
 |function-ast-make_reader_macro|
 
+.. _function-_at_ast_c__c_make_comment_reader_Cs_C.:
+
+.. das:function:: make_comment_reader(name: string const; someClassPtr: auto const)
+
+make_comment_reader returns  :ref:`CommentReaderPtr <alias-CommentReaderPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_comment_reader|
+
 .. _function-_at_ast_c__c_make_call_macro_Cs_C.:
 
 .. das:function:: make_call_macro(name: string const; someClassPtr: auto const)
@@ -10672,6 +10953,23 @@ add_new_reader_macro returns auto
 
 
 |function-ast-add_new_reader_macro|
+
+.. _function-_at_ast_c__c_add_new_comment_reader_Cs_C.:
+
+.. das:function:: add_new_comment_reader(name: string const; someClassPtr: auto const)
+
+add_new_comment_reader returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_comment_reader|
 
 .. _function-_at_ast_c__c_add_new_call_macro_Cs_C.:
 

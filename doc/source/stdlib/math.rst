@@ -4157,6 +4157,7 @@ Matrix constructors
 
   *  :ref:`float3x4 () : math::float3x4 <function-_at_math_c__c_float3x4>` 
   *  :ref:`float4x4 () : math::float4x4 <function-_at_math_c__c_float4x4>` 
+  *  :ref:`float4x4 (arg0:math::float3x4 const implicit) : math::float4x4 <function-_at_math_c__c_float4x4_CIH_ls_math_c__c_float3x4_gr_>` 
   *  :ref:`float3x4 (arg0:math::float4x4 const implicit) : math::float3x4 <function-_at_math_c__c_float3x4_CIH_ls_math_c__c_float4x4_gr_>` 
 
 .. _function-_at_math_c__c_float3x4:
@@ -4172,6 +4173,21 @@ float3x4 returns  :ref:`math::float3x4 <handle-math-float3x4>`
 .. das:function:: float4x4()
 
 float4x4 returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+
+|function-math-float4x4|
+
+.. _function-_at_math_c__c_float4x4_CIH_ls_math_c__c_float3x4_gr_:
+
+.. das:function:: float4x4(arg0: float3x4 const implicit)
+
+float4x4 returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++arg0    + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
 
 |function-math-float4x4|
 

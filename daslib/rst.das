@@ -733,7 +733,7 @@ def hide_group(var group:DocGroup)
 def private generate_topic_stub(var tab:table<string;bool>;doc_file:file;topic:string implicit)
     if !tab[topic]
         tab[topic] = true
-        fwrite(doc_file,".. {topic} replace:: to be documented\n\n" )
+        fwrite(doc_file,".. {topic} replace:: to be documented in {topic}.rst\n\n" )
 
 def private generate_substitute_stub(mod:Module?;substname:string)
     var st : FStat

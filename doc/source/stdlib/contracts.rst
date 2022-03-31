@@ -19,6 +19,18 @@ Function annotations
 
 |function_annotation-contracts-expect_any_array|
 
+.. _handle-contracts-expect_dim:
+
+.. das:attribute:: expect_dim
+
+|function_annotation-contracts-expect_dim|
+
+.. _handle-contracts-expect_not_dim:
+
+.. das:attribute:: expect_not_dim
+
+|function_annotation-contracts-expect_not_dim|
+
 .. _handle-contracts-expect_any_enum:
 
 .. das:attribute:: expect_any_enum

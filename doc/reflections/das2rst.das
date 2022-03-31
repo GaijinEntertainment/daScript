@@ -7,9 +7,10 @@ require math
 require uriparser
 require strings
 require jobque
-require daslib/rst
 require daslib/ast_boost
 require daslib/strings_boost
+require daslib/rst
+require daslib/rst_comment
 require daslib/functional
 require daslib/json
 require daslib/json_boost

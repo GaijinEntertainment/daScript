@@ -193,6 +193,21 @@ lint returns bool
 
 |method-ast_boost-MacroMacro.lint|
 
+.. das:function:: MacroMacro.complete(self: AstFunctionAnnotation; func: FunctionPtr; ctx: smart_ptr<rtti::Context>)
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
++--------+----------------------------------------------------------------------+
++func    + :ref:`FunctionPtr <alias-FunctionPtr>`                               +
++--------+----------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >               +
++--------+----------------------------------------------------------------------+
+
+
+|method-ast_boost-MacroMacro.complete|
+
 .. das:function:: MacroMacro.isCompatible(self: AstFunctionAnnotation; func: FunctionPtr; types: VectorTypeDeclPtr; decl: AnnotationDeclaration const; errors: das_string)
 
 isCompatible returns bool
@@ -379,6 +394,21 @@ lint returns bool
 
 |method-ast_boost-TagFunctionAnnotation.lint|
 
+.. das:function:: TagFunctionAnnotation.complete(self: AstFunctionAnnotation; func: FunctionPtr; ctx: smart_ptr<rtti::Context>)
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>` +
++--------+----------------------------------------------------------------------+
++func    + :ref:`FunctionPtr <alias-FunctionPtr>`                               +
++--------+----------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >               +
++--------+----------------------------------------------------------------------+
+
+
+|method-ast_boost-TagFunctionAnnotation.complete|
+
 .. das:function:: TagFunctionAnnotation.isCompatible(self: AstFunctionAnnotation; func: FunctionPtr; types: VectorTypeDeclPtr; decl: AnnotationDeclaration const; errors: das_string)
 
 isCompatible returns bool
@@ -477,6 +507,21 @@ patch returns bool
 
 |method-ast_boost-TagStructureAnnotation.patch|
 
+.. das:function:: TagStructureAnnotation.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-TagStructureAnnotation.complete|
+
 .. _struct-ast_boost-SetupAnyAnnotation:
 
 .. das:attribute:: SetupAnyAnnotation : AstStructureAnnotation
@@ -552,6 +597,21 @@ patch returns bool
 
 
 |method-ast_boost-SetupAnyAnnotation.patch|
+
+.. das:function:: SetupAnyAnnotation.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupAnyAnnotation.complete|
 
 .. das:function:: SetupAnyAnnotation.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -644,6 +704,21 @@ patch returns bool
 
 |method-ast_boost-SetupFunctionAnnotatoin.patch|
 
+.. das:function:: SetupFunctionAnnotatoin.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupFunctionAnnotatoin.complete|
+
 .. das:function:: SetupFunctionAnnotatoin.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
 +--------+----------------------------------------------------------------------------+
@@ -734,6 +809,21 @@ patch returns bool
 
 
 |method-ast_boost-SetupBlockAnnotatoin.patch|
+
+.. das:function:: SetupBlockAnnotatoin.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupBlockAnnotatoin.complete|
 
 .. das:function:: SetupBlockAnnotatoin.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -826,6 +916,21 @@ patch returns bool
 
 |method-ast_boost-SetupStructureAnnotatoin.patch|
 
+.. das:function:: SetupStructureAnnotatoin.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupStructureAnnotatoin.complete|
+
 .. das:function:: SetupStructureAnnotatoin.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
 +--------+----------------------------------------------------------------------------+
@@ -916,6 +1021,21 @@ patch returns bool
 
 
 |method-ast_boost-SetupEnumerationAnnotation.patch|
+
+.. das:function:: SetupEnumerationAnnotation.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupEnumerationAnnotation.complete|
 
 .. das:function:: SetupEnumerationAnnotation.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -1008,6 +1128,21 @@ patch returns bool
 
 |method-ast_boost-SetupContractAnnotatoin.patch|
 
+.. das:function:: SetupContractAnnotatoin.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupContractAnnotatoin.complete|
+
 .. das:function:: SetupContractAnnotatoin.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
 +--------+----------------------------------------------------------------------------+
@@ -1099,6 +1234,21 @@ patch returns bool
 
 |method-ast_boost-SetupReaderMacro.patch|
 
+.. das:function:: SetupReaderMacro.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupReaderMacro.complete|
+
 .. das:function:: SetupReaderMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
 +--------+----------------------------------------------------------------------------+
@@ -1113,6 +1263,112 @@ patch returns bool
 
 
 |method-ast_boost-SetupReaderMacro.setup_call|
+
+.. _struct-ast_boost-SetupCommentReader:
+
+.. das:attribute:: SetupCommentReader : SetupAnyAnnotation
+
+|class-ast_boost-SetupCommentReader|
+
+it defines as follows
+
+  annotation_function_call : string
+  name                     : string
+
+.. das:function:: SetupCommentReader.apply(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
+
+apply returns bool
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupCommentReader.apply|
+
+.. das:function:: SetupCommentReader.finish(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
+
+finish returns bool
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupCommentReader.finish|
+
+.. das:function:: SetupCommentReader.patch(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string; astChanged: bool&)
+
+patch returns bool
+
++----------+--------------------------------------------------------------------------------+
++argument  +argument type                                                                   +
++==========+================================================================================+
++self      + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++----------+--------------------------------------------------------------------------------+
++st        + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++----------+--------------------------------------------------------------------------------+
++group     + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
++----------+--------------------------------------------------------------------------------+
++args      + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++----------+--------------------------------------------------------------------------------+
++errors    + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++----------+--------------------------------------------------------------------------------+
++astChanged+bool&                                                                           +
++----------+--------------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupCommentReader.patch|
+
+.. das:function:: SetupCommentReader.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupCommentReader.complete|
+
+.. das:function:: SetupCommentReader.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++self    + :ref:`ast_boost::SetupAnyAnnotation <struct-ast_boost-SetupAnyAnnotation>` +
++--------+----------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                   +
++--------+----------------------------------------------------------------------------+
++cll     +smart_ptr< :ref:`ast::ExprCall <handle-ast-ExprCall>` >                     +
++--------+----------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupCommentReader.setup_call|
 
 .. _struct-ast_boost-SetupVariantMacro:
 
@@ -1189,6 +1445,21 @@ patch returns bool
 
 
 |method-ast_boost-SetupVariantMacro.patch|
+
+.. das:function:: SetupVariantMacro.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupVariantMacro.complete|
 
 .. das:function:: SetupVariantMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -1281,6 +1552,21 @@ patch returns bool
 
 |method-ast_boost-SetupCallMacro.patch|
 
+.. das:function:: SetupCallMacro.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupCallMacro.complete|
+
 .. das:function:: SetupCallMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
 +--------+----------------------------------------------------------------------------+
@@ -1371,6 +1657,21 @@ patch returns bool
 
 
 |method-ast_boost-SetupTypeInfoMacro.patch|
+
+.. das:function:: SetupTypeInfoMacro.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupTypeInfoMacro.complete|
 
 .. das:function:: SetupTypeInfoMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -1463,6 +1764,21 @@ patch returns bool
 
 |method-ast_boost-SetupInferMacro.patch|
 
+.. das:function:: SetupInferMacro.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupInferMacro.complete|
+
 .. das:function:: SetupInferMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
 +--------+----------------------------------------------------------------------------+
@@ -1553,6 +1869,21 @@ patch returns bool
 
 
 |method-ast_boost-SetupDirtyInferMacro.patch|
+
+.. das:function:: SetupDirtyInferMacro.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupDirtyInferMacro.complete|
 
 .. das:function:: SetupDirtyInferMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -1645,6 +1976,21 @@ patch returns bool
 
 |method-ast_boost-SetupLintMacro.patch|
 
+.. das:function:: SetupLintMacro.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupLintMacro.complete|
+
 .. das:function:: SetupLintMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
 +--------+----------------------------------------------------------------------------+
@@ -1735,6 +2081,21 @@ patch returns bool
 
 
 |method-ast_boost-SetupGlobalLintMacro.patch|
+
+.. das:function:: SetupGlobalLintMacro.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupGlobalLintMacro.complete|
 
 .. das:function:: SetupGlobalLintMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
@@ -1827,6 +2188,21 @@ patch returns bool
 
 |method-ast_boost-SetupOptimizationMacro.patch|
 
+.. das:function:: SetupOptimizationMacro.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-SetupOptimizationMacro.complete|
+
 .. das:function:: SetupOptimizationMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 
 +--------+----------------------------------------------------------------------------+
@@ -1918,6 +2294,21 @@ patch returns bool
 
 
 |method-ast_boost-TagFunctionMacro.patch|
+
+.. das:function:: TagFunctionMacro.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>` +
++--------+------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                               +
++--------+------------------------------------------------------------------------+
++ctx     +smart_ptr< :ref:`rtti::Context <handle-rtti-Context>` >                 +
++--------+------------------------------------------------------------------------+
+
+
+|method-ast_boost-TagFunctionMacro.complete|
 
 .. das:function:: TagFunctionMacro.setup_call(self: SetupAnyAnnotation; st: StructurePtr; cll: smart_ptr<ast::ExprCall>)
 

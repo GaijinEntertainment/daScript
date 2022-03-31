@@ -681,11 +681,13 @@ Module fields are
 
 Program fields are
 
-+------+------------------------------------------------------------------+
-+flags + :ref:`ProgramFlags <alias-ProgramFlags>`                         +
-+------+------------------------------------------------------------------+
-+errors+ :ref:`builtin::dasvector`Error <handle-builtin-dasvector`Error>` +
-+------+------------------------------------------------------------------+
++--------------+------------------------------------------------------------------+
++thisModuleName+ :ref:`builtin::das_string <handle-builtin-das_string>`           +
++--------------+------------------------------------------------------------------+
++errors        + :ref:`builtin::dasvector`Error <handle-builtin-dasvector`Error>` +
++--------------+------------------------------------------------------------------+
++flags         + :ref:`ProgramFlags <alias-ProgramFlags>`                         +
++--------------+------------------------------------------------------------------+
 
 
 |structure_annotation-rtti-Program|

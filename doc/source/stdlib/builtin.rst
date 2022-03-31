@@ -2894,17 +2894,32 @@ _move_with_lockcheck returns auto
 
 |function-builtin-_move_with_lockcheck|
 
-.. _function-_at__builtin__c__c__return_with_lockcheck_&Y_ls_valT_gr_.:
+.. _function-_at__builtin__c__c__return_with_lockcheck_&_eq_Y_ls_valT_gr_.:
 
-.. das:function:: _return_with_lockcheck(a: auto(valT)&)
+.. das:function:: _return_with_lockcheck(a: auto(valT)& =const)
 
 _return_with_lockcheck returns valT&
 
 +--------+-------------+
 +argument+argument type+
 +========+=============+
-+a       +auto(valT)&  +
++a       +auto(valT)&! +
 +--------+-------------+
+
+
+|function-builtin-_return_with_lockcheck|
+
+.. _function-_at__builtin__c__c__return_with_lockcheck_C&_eq_Y_ls_valT_gr_.:
+
+.. das:function:: _return_with_lockcheck(a: auto(valT) const& =const)
+
+_return_with_lockcheck returns valT&
+
++--------+------------------+
++argument+argument type     +
++========+==================+
++a       +auto(valT) const&!+
++--------+------------------+
 
 
 |function-builtin-_return_with_lockcheck|
@@ -3038,5 +3053,22 @@ subarray returns auto
 
 
 |function-builtin-subarray|
+
+.. _function-_at__builtin__c__c_move_to_ref_&._.:
+
+.. das:function:: move_to_ref(a: auto&; b: auto)
+
+move_to_ref returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto&        +
++--------+-------------+
++b       +auto         +
++--------+-------------+
+
+
+|function-builtin-move_to_ref|
 
 

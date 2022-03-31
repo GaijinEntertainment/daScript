@@ -244,6 +244,25 @@ from_JV returns auto
 
 |function-json_boost-from_JV|
 
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Cd_Cd:
+
+.. das:function:: from_JV(v: json::JsonValue?; ent: double const; defV: double const)
+
+from_JV returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++v       + :ref:`json::JsonValue <struct-json-JsonValue>` ?+
++--------+-------------------------------------------------+
++ent     +double const                                     +
++--------+-------------------------------------------------+
++defV    +double const                                     +
++--------+-------------------------------------------------+
+
+
+|function-json_boost-from_JV|
+
 .. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Ci_Ci:
 
 .. das:function:: from_JV(v: json::JsonValue?; ent: int const; defV: int const)
@@ -258,6 +277,139 @@ from_JV returns auto
 +ent     +int const                                        +
 +--------+-------------------------------------------------+
 +defV    +int const                                        +
++--------+-------------------------------------------------+
+
+
+|function-json_boost-from_JV|
+
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Cu_Cu:
+
+.. das:function:: from_JV(v: json::JsonValue?; ent: uint const; defV: uint const)
+
+from_JV returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++v       + :ref:`json::JsonValue <struct-json-JsonValue>` ?+
++--------+-------------------------------------------------+
++ent     +uint const                                       +
++--------+-------------------------------------------------+
++defV    +uint const                                       +
++--------+-------------------------------------------------+
+
+
+|function-json_boost-from_JV|
+
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Ci64_Ci64:
+
+.. das:function:: from_JV(v: json::JsonValue?; ent: int64 const; defV: int64 const)
+
+from_JV returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++v       + :ref:`json::JsonValue <struct-json-JsonValue>` ?+
++--------+-------------------------------------------------+
++ent     +int64 const                                      +
++--------+-------------------------------------------------+
++defV    +int64 const                                      +
++--------+-------------------------------------------------+
+
+
+|function-json_boost-from_JV|
+
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Cu64_Cu64:
+
+.. das:function:: from_JV(v: json::JsonValue?; ent: uint64 const; defV: uint64 const)
+
+from_JV returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++v       + :ref:`json::JsonValue <struct-json-JsonValue>` ?+
++--------+-------------------------------------------------+
++ent     +uint64 const                                     +
++--------+-------------------------------------------------+
++defV    +uint64 const                                     +
++--------+-------------------------------------------------+
+
+
+|function-json_boost-from_JV|
+
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Ci8_Ci8:
+
+.. das:function:: from_JV(v: json::JsonValue?; ent: int8 const; defV: int8 const)
+
+from_JV returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++v       + :ref:`json::JsonValue <struct-json-JsonValue>` ?+
++--------+-------------------------------------------------+
++ent     +int8 const                                       +
++--------+-------------------------------------------------+
++defV    +int8 const                                       +
++--------+-------------------------------------------------+
+
+
+|function-json_boost-from_JV|
+
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Cu8_Cu8:
+
+.. das:function:: from_JV(v: json::JsonValue?; ent: uint8 const; defV: uint8 const)
+
+from_JV returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++v       + :ref:`json::JsonValue <struct-json-JsonValue>` ?+
++--------+-------------------------------------------------+
++ent     +uint8 const                                      +
++--------+-------------------------------------------------+
++defV    +uint8 const                                      +
++--------+-------------------------------------------------+
+
+
+|function-json_boost-from_JV|
+
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Ci16_Ci16:
+
+.. das:function:: from_JV(v: json::JsonValue?; ent: int16 const; defV: int16 const)
+
+from_JV returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++v       + :ref:`json::JsonValue <struct-json-JsonValue>` ?+
++--------+-------------------------------------------------+
++ent     +int16 const                                      +
++--------+-------------------------------------------------+
++defV    +int16 const                                      +
++--------+-------------------------------------------------+
+
+
+|function-json_boost-from_JV|
+
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Cu16_Cu16:
+
+.. das:function:: from_JV(v: json::JsonValue?; ent: uint16 const; defV: uint16 const)
+
+from_JV returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++v       + :ref:`json::JsonValue <struct-json-JsonValue>` ?+
++--------+-------------------------------------------------+
++ent     +uint16 const                                     +
++--------+-------------------------------------------------+
++defV    +uint16 const                                     +
 +--------+-------------------------------------------------+
 
 
@@ -311,6 +463,40 @@ from_JV returns auto
 +ent     +auto(VecT) const                                 +
 +--------+-------------------------------------------------+
 +defV    +VecT const                                       +
++--------+-------------------------------------------------+
+
+
+|function-json_boost-from_JV|
+
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_C1_ls_Y_ls_KT_gr_._gr_2_ls_Y_ls_VT_gr_._gr_T:
+
+.. das:function:: from_JV(v: json::JsonValue?; anything: table<auto(KT);auto(VT)> const)
+
+from_JV returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++v       + :ref:`json::JsonValue <struct-json-JsonValue>` ?+
++--------+-------------------------------------------------+
++anything+table<auto(KT);auto(VT)> const                   +
++--------+-------------------------------------------------+
+
+
+|function-json_boost-from_JV|
+
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_CY_ls_TT_gr_.:
+
+.. das:function:: from_JV(v: json::JsonValue?; anything: auto(TT) const)
+
+from_JV returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++v       + :ref:`json::JsonValue <struct-json-JsonValue>` ?+
++--------+-------------------------------------------------+
++anything+auto(TT) const                                   +
 +--------+-------------------------------------------------+
 
 

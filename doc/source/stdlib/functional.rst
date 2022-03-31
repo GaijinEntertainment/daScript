@@ -32,7 +32,7 @@ filter returns auto
 +--------+----------------------------------+
 
 
-|function-functional-filter|
+iterates over `src` and yields only those elements for which `blk` returns true
 
 .. _function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_:
 
@@ -49,7 +49,7 @@ filter returns auto
 +--------+------------------------------------+
 
 
-|function-functional-filter|
+iterates over `src` and yields only those elements for which `blk` returns true
 
 .. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at_:
 
@@ -66,7 +66,7 @@ map returns auto
 +--------+--------------------------------------+
 
 
-|function-functional-map|
+iterates over `src` and yields the result of `blk` for each element
 
 .. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at__at_:
 
@@ -83,7 +83,7 @@ map returns auto
 +--------+----------------------------------------+
 
 
-|function-functional-map|
+iterates over `src` and yields the result of `blk` for each element
 
 .. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_:
 
@@ -100,7 +100,8 @@ reduce returns auto
 +--------+-----------------------------------------------------+
 
 
-|function-functional-reduce|
+iterates over `it` and yields the reduced (combined) result of `blk` for each element
+and previous reduction result
 
 .. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_:
 
@@ -117,7 +118,8 @@ reduce returns auto
 +--------+-------------------------------------------------------+
 
 
-|function-functional-reduce|
+iterates over `it` and yields the reduced (combined) result of `blk` for each element
+and previous reduction result
 
 .. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_:
 
@@ -134,7 +136,8 @@ reduce returns auto
 +--------+----------------------------------------------------+
 
 
-|function-functional-reduce|
+iterates over `it` and yields the reduced (combined) result of `blk` for each element
+and previous reduction result
 
 .. _function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr_._gr_G:
 
@@ -149,7 +152,8 @@ sum returns auto
 +--------+------------------------+
 
 
-|function-functional-sum|
+iterates over `it` and yields the sum of all elements
+same as reduce(it, @(a,b) => a + b)
 
 .. _function-_at_functional_c__c_any_C.:
 
@@ -164,7 +168,7 @@ any returns auto
 +--------+-------------+
 
 
-|function-functional-any|
+iterates over `it` and yields true if any element is true
 
 .. _function-_at_functional_c__c_all_C.:
 
@@ -179,7 +183,7 @@ all returns auto
 +--------+-------------+
 
 
-|function-functional-all|
+iterates over `it` and yields true if all elements are true
 
 .. _function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr_._gr_G:
 
@@ -194,7 +198,7 @@ cycle returns auto
 +--------+------------------+
 
 
-|function-functional-cycle|
+endlessly iterates over `src`
 
 .. _function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr_._gr_G_Ci_Ci:
 
@@ -213,7 +217,7 @@ islice returns auto
 +--------+------------------+
 
 
-|function-functional-islice|
+iterates over `src` and yields only the elements in the range [start,stop)
 
 .. _function-_at_functional_c__c_count_i_i:
 
@@ -230,7 +234,7 @@ count returns iterator<int>
 +--------+-------------+
 
 
-|function-functional-count|
+endlessly iterates from `start` and yields `start+step`, `start+2*step`, ...
 
 .. _function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i:
 
@@ -247,7 +251,7 @@ repeat_ref returns auto
 +--------+--------------+
 
 
-|function-functional-repeat_ref|
+yields `value` by reference `count` times
 
 .. _function-_at_functional_c__c_repeat_CY_ls_TT_gr_._i:
 
@@ -264,7 +268,7 @@ repeat returns auto
 +--------+--------------+
 
 
-|function-functional-repeat|
+yields `value` `count` times
 
 .. _function-_at_functional_c__c_is_equal_C._C.:
 
@@ -281,7 +285,7 @@ is_equal returns auto
 +--------+-------------+
 
 
-|function-functional-is_equal|
+yields true if `a` and `b` are equal
 
 .. _function-_at_functional_c__c_is_not_equal_C._C.:
 
@@ -298,7 +302,7 @@ is_not_equal returns auto
 +--------+-------------+
 
 
-|function-functional-is_not_equal|
+yields true if `a` and `b` are not equal
 
 .. _function-_at_functional_c__c_not_C.:
 
@@ -313,7 +317,7 @@ not returns auto
 +--------+-------------+
 
 
-|function-functional-not|
+yeilds !x
 
 .. _function-_at_functional_c__c_echo_._Cs:
 
@@ -330,22 +334,7 @@ echo returns auto
 +--------+-------------+
 
 
-|function-functional-echo|
-
-.. _function-_at_functional_c__c_flatten_one_1_ls_1_ls_Y_ls_TT_gr_._gr_G_gr_G:
-
-.. das:function:: flatten_one(src: iterator<iterator<auto(TT)>>)
-
-flatten_one returns auto
-
-+--------+----------------------------+
-+argument+argument type               +
-+========+============================+
-+src     +iterator<iterator<auto(TT)>>+
-+--------+----------------------------+
-
-
-|function-functional-flatten_one|
+prints contents of the string to the output, with `extra` string appended
 
 .. _function-_at_functional_c__c_flatten_1_ls_Y_ls_TT_gr_._gr_G:
 
@@ -360,6 +349,6 @@ flatten returns auto
 +--------+------------------+
 
 
-|function-functional-flatten|
+iterates over `it`, than iterates over each element of each element of `it` and yields it
 
 

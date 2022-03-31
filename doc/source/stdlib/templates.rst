@@ -29,4 +29,10 @@ Call macros
 
 |function_annotation-templates-decltype|
 
+.. _call-macro-templates-decltype_noref:
+
+.. das:attribute:: decltype_noref
+
+|function_annotation-templates-decltype_noref|
+
 
