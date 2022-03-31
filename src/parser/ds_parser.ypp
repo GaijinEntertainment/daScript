@@ -1566,14 +1566,32 @@ struct_variable_declaration_list
         }
     }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
-            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT { yyextra->das_force_oxford_comma=true; } function_declaration_header[func] ';' {
-        $$ = ast_structVarDefAbstract(scanner,$list,$annL,$isPrivate,$func);
-    }
+            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT {
+                yyextra->das_force_oxford_comma=true;
+                if ( !yyextra->g_CommentReaders.empty() ) {
+                    auto tak = tokAt(scanner,@isPrivate);
+                    for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
+                }
+            } function_declaration_header[func] ';' {
+                if ( !yyextra->g_CommentReaders.empty() ) {
+                    auto tak = tokAt(scanner,@func);
+                    for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
+                }
+                $$ = ast_structVarDefAbstract(scanner,$list,$annL,$isPrivate,$func);
+            }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
-            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] optional_override[ovr] optional_constant[cnst]
-                function_declaration_header[func] expression_block[block] {
-        $$ = ast_structVarDef(scanner,$list,$annL,$isPrivate,$ovr,$cnst,$func,$block,tokRangeAt(scanner,@from,@block),tokAt(scanner,@annL));
-    }
+            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] optional_override[ovr] optional_constant[cnst] {
+                if ( !yyextra->g_CommentReaders.empty() ) {
+                    auto tak = tokAt(scanner,@cnst);
+                    for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
+                }
+            } function_declaration_header[func] expression_block[block] {
+                if ( !yyextra->g_CommentReaders.empty() ) {
+                    auto tak = tokAt(scanner,@block);
+                    for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
+                }
+                $$ = ast_structVarDef(scanner,$list,$annL,$isPrivate,$ovr,$cnst,$func,$block,tokRangeAt(scanner,@from,@block),tokAt(scanner,@annL));
+            }
     |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' ';' {
         das_yyerror(scanner,"structure field or class method annotation expected to remain on the same line with the field or the class",
             tokAt(scanner,@annL), CompilationError::syntax_error);

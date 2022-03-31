@@ -20,6 +20,19 @@ def bar ( a, b : int )
     /* this is a C comment */
     pass
 
+class MyClass
+    /* this is a C comment in class */
+    a : int // this is a C++ comment in the class field a
+    no_comment : float
+    b,c : int // this is a C++ comment for the class fields b, c
+    def abstract abstract_method ( t : int ) : void // this is comment for an abstract method
+    def no_comment_method
+        pass
+    def foo ( t : int ) : int       /* this is comment for the method foo */
+        // this is a C++ comment, for the method foo
+        return 1
+
 [export]
 def main
+    let c = new MyClass()
     print("hello, world!\n")
