@@ -22,6 +22,9 @@ def new_thread ( var l : lambda )
 
 [tag_function_macro(tag="new_job_tag")]
 class private NewJobMacro : AstFunctionAnnotation
+    //! this macro handles `new_job` and `new_thread` calls.
+    //! the call is replaced with `new_job_invoke` and `new_thread_invoke` accordingly.
+    //! a cloning infastructure is generated for the lambda, which is invoked in the new context.
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if !call.arguments[0] is ExprAscend
             compiling_program() |>macro_error(call.at,"expecting lambda declaration, ExprAscend")
