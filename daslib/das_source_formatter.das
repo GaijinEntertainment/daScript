@@ -134,7 +134,7 @@ def skip_spaces
 
 
 def on_token_added()
-    let t: Token& = tokens[length(tokens) - 1]
+    assume t = tokens[length(tokens) - 1]
     if indenting == 0 && newLineCounter > 0 && spaceCounter > 0 && t.tokenType != TokenType COMMENT
         indenting = spaceCounter
     if new_line_before(length(tokens) - 1)
@@ -490,7 +490,7 @@ finally
 
 
 def need_spaces_around(index: int): bool
-    let t & = tokens[index]
+    assume t = tokens[index]
     if t.tokenType != TokenType UNKNOWN || t.dontFormat
         return false
     if dont_need_space_around |> find_index(t.str) >= 0
@@ -501,7 +501,7 @@ def need_spaces_around(index: int): bool
 
 
 def need_space_only_before(index: int): bool
-    let t & = tokens[index]
+    assume t = tokens[index]
     if !t.isInType
         return false
     if t.tokenType != TokenType UNKNOWN || t.dontFormat
@@ -511,7 +511,7 @@ def need_space_only_before(index: int): bool
     if t.str == ">" || t.str == ">>" || t.str == ">>>" || t.str == "<" || empty(t.str)
         return false
     if index < length(tokens) - 1
-        let next & = tokens[index + 1]
+        assume next = tokens[index + 1]
         if next.str == ">" || next.str == ">>" || next.str == ">>>" || next.str == ";"
             return true
     return false
