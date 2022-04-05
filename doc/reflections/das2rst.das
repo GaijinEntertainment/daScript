@@ -46,7 +46,7 @@ dot|normalize|fast_normalize)$%%);
         group_by_regex("Noise functions", mod, %regex~(uint32_hash|uint_noise_1D|uint_noise_2D|uint_noise_3D)$%%);
         group_by_regex("lerp/mad/clamp", mod, %regex~(lerp|mad|clamp)$%%);
         group_by_regex("Matrix operations", mod, %regex~(\=\=|\!\=|\*)$%%);
-        group_by_regex("Matrix constructors", mod, %regex~(float3x4|float4x4)$%%);
+        group_by_regex("Matrix constructors", mod, %regex~(float3x4|float4x4|float3x3|identity3x4|identity4x4|identity3x3)$%%);
         group_by_regex("Matrix manipulation", mod, %regex~(identity|inverse|rotate|transpose|translation|compose|decompose|look_at|orthonormal_inverse|persp_forward|persp_reverse)$%%);
         group_by_regex("Quaternion operations", mod, %regex~(quat_conjugate|quat_mul|quat_mul_vec|un_quat|un_quat_from_unit_arc|un_quat_from_unit_vec_ang)$%%);
         group_by_regex("Packing and unpacking", mod, %regex~(pack_float_to_byte|unpack_byte_to_float)$%%)

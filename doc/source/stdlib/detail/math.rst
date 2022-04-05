@@ -114,7 +114,15 @@
 
 .. |function-math-float4x4| replace:: Returns empty matrix, where each component is 0.
 
+.. |function-math-float3x3| replace:: Returns empty matrix, where each component is 0.
+
 .. |function-math-identity| replace:: Returns identity matrix, where diagonal is 1 and every other component is 0.
+
+.. |function-math-identity4x4| replace:: Returns identity matrix, where diagonal is 1 and every other component is 0.
+
+.. |function-math-identity3x4| replace:: Returns identity matrix, where diagonal is 1 and every other component is 0.
+
+.. |function-math-identity3x3| replace:: Returns identity matrix, where diagonal is 1 and every other component is 0.
 
 .. |function-math-inverse| replace:: Returns the inverse of the matrix x.
 
@@ -125,3 +133,38 @@
 .. |any_annotation-math-float3x4| replace:: floating point matrix with 4 rows and 3 columns
 
 .. |any_annotation-math-float4x4| replace:: floating point matrix with 4 rows and 4 columns
+
+.. |any_annotation-math-float3x3| replace:: floating point matrix with 3 rows and 3 columns
+
+.. |function-math-is_nan| replace:: Returns true if `x` is NaN (not a number)
+
+.. |function-math-is_finite| replace:: Returns true if `x` is not a negative or positive infinity
+
+.. |function-math-un_quat_from_unit_arc| replace:: Quaternion which represents rotation from `v0` to `v1`, both arguments need to be normalized
+
+.. |function-math-un_quat_from_unit_vec_ang| replace:: Quaternion which represents rotation for `ang` radians around vector `v`. `v` needs to be normalized
+
+.. |function-math-un_quat| replace:: Quaternion from the rotation part of the matrix
+
+.. |function-math-quat_mul| replace:: Quaternion which is multiplication of `q1` and `q2`
+
+.. |function-math-quat_mul_vec| replace:: Transform vector `v` by quaternion `q`
+
+.. |function-math-quat_conjugate| replace:: Quaternion which is conjugate of `q`
+
+.. |function-math-pack_float_to_byte| replace:: Packs float4 vector `v` to byte4 vector and returns it as uint. Each component is clamped to [0..255] range.
+
+.. |function-math-unpack_byte_to_float| replace:: Unpacks byte4 vector to float4 vector.
+
+.. |function-math-persp_forward| replace:: Perspective matrix, zn - 0, zf - 1
+
+.. |function-math-persp_reverse| replace:: Perspective matrix, zn - 1, zf - 0
+
+.. |function-math-look_at| replace:: Look-at matrix with the origin at `eye`, looking at `at`, with `up` as up direction.
+
+.. |function-math-compose| replace:: Compose transformation out of translation, rotation and scale.
+
+.. |function-math-decompose| replace:: Decompose transformation into translation, rotation and scale.
+
+.. |function-math-orthonormal_inverse| replace:: Fast `inverse` for the orthonormal matrix.
+
