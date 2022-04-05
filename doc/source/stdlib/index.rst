@@ -26,6 +26,7 @@ THE SOFTWARE.
    introduction.rst
    builtin.rst
    math.rst
+   math_bits.rst
    fio.rst
    random.rst
    network.rst

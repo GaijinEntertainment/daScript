@@ -31,6 +31,8 @@ require daslib/safe_addr
 require daslib/static_let
 require daslib/lpipe
 require daslib/random
+require daslib/math_bits
+require daslib/math_boost
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -341,6 +343,14 @@ def document_module_lpipe(root:string)
     }]
     document("lpipe macro",mod,"{root}/lpipe.rst","{root}/detail/lpipe.rst",groups)
 
+def document_module_math_bits(root:string)
+    var mod = find_module("math_bits")
+    var groups <- [{DocGroup
+        group_by_regex("float in int,uint", mod, %regex~(int_bits_to_float|uint_bits_to_float)$%%);
+        group_by_regex("int,uint in float", mod, %regex~(float_bits_to_int|float_bits_to_uint)$%%)
+    }]
+    document("Math bit helpers",mod,"{root}/math_bits.rst","{root}/detail/math_bits.rst",groups)
+
 [export]
 def main
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -388,7 +398,7 @@ def main
     // document_module_lint(root)                   // todo: document?
     // document_module_live(root)
     document_module_lpipe(root)
-    // document_module_math_bits(root)
+    document_module_math_bits(root)
     // document_module_math_boost(root)
     document_module_random(root)
     document_module_regex_boost(root)
