@@ -62,18 +62,18 @@ def document_module_builtin(root:string)
         hide_group(group_by_regex("Internal finalize infrastructure", mod, %regex~finalize%%));
         group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|reserve|each|emplace|erase|find|
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|lock|each_enum|each_ref|
-find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_clone|sort|to_array|to_table|to_array_move|
-to_table_move|empty)$%%);
+find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_clone|back|sort|to_array|to_table|to_array_move|
+to_table_move|empty|subarray)$%%);
         group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%);
         group_by_regex("das::string manipulation", mod, %regex~(peek|set)$%%);
         group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%);
-        group_by_regex("Heap reporting", mod, %regex~(heap|string_heap)%%);
+        group_by_regex("Heap reporting", mod, %regex~(heap|string_heap|memory_report)%%);
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%);
         group_by_regex("GC0 infrastructure", mod, %regex~gc0%%);
-        group_by_regex("Smart ptr infrastructure", mod, %regex~(smart_ptr|get_ptr$)%%);
+        group_by_regex("Smart ptr infrastructure", mod, %regex~(smart_ptr|get_const_ptr|get_ptr$)%%);
         group_by_regex("Macro infrastructure", mod, %regex~is_compiling%%);
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%);
-        group_by_regex("System infastructure", mod, %regex~(panic|print|sprint|terminate|breakpoint|stackwalk|get_das_root|is_in_aot)$%%);
+        group_by_regex("System infastructure", mod, %regex~(panic|print|sprint|to_log|error|terminate|breakpoint|stackwalk|get_das_root|is_in_aot)$%%);
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%);
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%);
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments)$%%);

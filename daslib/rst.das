@@ -17,7 +17,7 @@ require daslib/regex_boost
 
 let
     log_documentation = true
-    show_hidden_groups = true
+    show_hidden_groups = false
 
 var
     topic_root = ""
@@ -570,6 +570,8 @@ def document_annotations(doc_file:file;mod:Module?)
     fwrite(doc_file,make_group("Handled types"))
     module_for_each_annotation(mod) <| $(value)
         if !value.isTypeAnnotation || value.isBasicStructureAnnotation
+            return
+        if string(value.name) |> starts_with("dasvector`")
             return
         document_annotation(doc_file,mod,value)
 

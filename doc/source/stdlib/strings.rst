@@ -24,67 +24,6 @@ Handled structures
 
 |structure_annotation-strings-StringBuilderWriter|
 
-++++++++++++++++++++++++++
-Internal builtin functions
-++++++++++++++++++++++++++
-
-.. warning:: 
-  This group of functions is hidden. It will not be in the final documentation.
-
-  *  :ref:`builtin_strdup (anything:any const) : void <function-_at_strings_c__c_builtin_strdup_C*>` 
-  *  :ref:`builtin_string_split_by_char (str:string const implicit;delimiter:string const implicit;block:block\<\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_strings_c__c_builtin_string_split_by_char_CIs_CIs_CI_builtin__C_c_C_l>` 
-  *  :ref:`builtin_string_split (str:string const implicit;delimiter:string const implicit;block:block\<\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_strings_c__c_builtin_string_split_CIs_CIs_CI_builtin__C_c_C_l>` 
-
-.. _function-_at_strings_c__c_builtin_strdup_C*:
-
-.. das:function:: builtin_strdup(anything: any const)
-
-.. warning:: 
-  This is unsafe operation.
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+anything+any const    +
-+--------+-------------+
-
-
-|function-strings-builtin_strdup|
-
-.. _function-_at_strings_c__c_builtin_string_split_by_char_CIs_CIs_CI_builtin__C_c_C_l:
-
-.. das:function:: builtin_string_split_by_char(str: string const implicit; delimiter: string const implicit; block: block<> const implicit)
-
-+---------+----------------------+
-+argument +argument type         +
-+=========+======================+
-+str      +string const implicit +
-+---------+----------------------+
-+delimiter+string const implicit +
-+---------+----------------------+
-+block    +block<> const implicit+
-+---------+----------------------+
-
-
-|function-strings-builtin_string_split_by_char|
-
-.. _function-_at_strings_c__c_builtin_string_split_CIs_CIs_CI_builtin__C_c_C_l:
-
-.. das:function:: builtin_string_split(str: string const implicit; delimiter: string const implicit; block: block<> const implicit)
-
-+---------+----------------------+
-+argument +argument type         +
-+=========+======================+
-+str      +string const implicit +
-+---------+----------------------+
-+delimiter+string const implicit +
-+---------+----------------------+
-+block    +block<> const implicit+
-+---------+----------------------+
-
-
-|function-strings-builtin_string_split|
-
 ++++++++++++++++
 Character groups
 ++++++++++++++++

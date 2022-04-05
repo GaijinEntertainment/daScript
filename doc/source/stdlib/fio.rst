@@ -109,30 +109,6 @@ FStat properties are
 
 |structure_annotation-fio-FStat|
 
-++++++++++++++++++++++++++
-Internal builtin functions
-++++++++++++++++++++++++++
-
-.. warning:: 
-  This group of functions is hidden. It will not be in the final documentation.
-
-  *  :ref:`builtin_dir (path:string const implicit;block:block\<\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_builtin_dir_CIs_CI_builtin__C_c_C_l>` 
-
-.. _function-_at_fio_c__c_builtin_dir_CIs_CI_builtin__C_c_C_l:
-
-.. das:function:: builtin_dir(path: string const implicit; block: block<> const implicit)
-
-+--------+----------------------+
-+argument+argument type         +
-+========+======================+
-+path    +string const implicit +
-+--------+----------------------+
-+block   +block<> const implicit+
-+--------+----------------------+
-
-
-|function-fio-builtin_dir|
-
 +++++++++++++++++
 File manipulation
 +++++++++++++++++

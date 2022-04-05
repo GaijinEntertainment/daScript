@@ -26,7 +26,7 @@ Constants
 
 .. _global-rst-show_hidden_groups:
 
-.. das:attribute:: show_hidden_groups = true
+.. das:attribute:: show_hidden_groups = false
 
 |variable-rst-show_hidden_groups|
 
