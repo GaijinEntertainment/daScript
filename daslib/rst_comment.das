@@ -59,14 +59,18 @@ class RstComment : AstCommentReader
         if state!=ParserState structure && state!=ParserState field
             panic("expecting structure or field, got {state}")
         state = ParserState none
+        var is_annotation = false
         if structure_comment != ""
             for ann in st.annotations
                 if ann.annotation.name=="tag_function_macro"
                     write_to_detail("function_annotation-{prog.thisModuleName}-{st.name}", structure_comment)
+                    is_annotation = true
                     break
                 else
                     to_log(LOG_WARNING, "WARNING: unsupported structure-annotation = {ann.annotation.name} in {st.name}\n")
         // to_log(LOG_WARNING, "WARNING: unsupported structure-annotation = {ann.annotation.name} in {st.name}\n")
+        if !is_annotation
+            write_to_detail("structure-{prog.thisModuleName}-{st.name}", structure_comment)
         for fc in field_comments
             debug_rst("    {fc.kind} {fc.name} // {fc.comment}")
         structure_comment = ""

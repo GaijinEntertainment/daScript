@@ -351,6 +351,18 @@ def document_module_math_bits(root:string)
     }]
     document("Math bit helpers",mod,"{root}/math_bits.rst","{root}/detail/math_bits.rst",groups)
 
+def document_module_math_boost(root:string)
+    var mod = find_module("math_boost")
+    var groups <- [{DocGroup
+        group_by_regex("Angle conversions", mod, %regex~(degrees|radians)$%%);
+        group_by_regex("Intersections", mod, %regex~(is_intersecting)$%%);
+        group_by_regex("Matrices", mod, %regex~(look_at_lh|look_at_rh|perspective_lh|perspective_rh|perspective_rh_opengl|ortho_rh|planar_shadow)$%%);
+        group_by_regex("Plane", mod, %regex~(plane_dot|plane_normalize|plane_from_point_normal)$%%);
+        group_by_regex("Color packig and unpacking", mod, %regex~(RGBA_TO_UCOLOR|UCOLOR_TO_RGBA|UCOLOR_TO_RGB)$%%)
+    }]
+    document("Boost package for math",mod,"{root}/math_boost.rst","{root}/detail/math_boost.rst",groups)
+
+
 [export]
 def main
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -399,7 +411,7 @@ def main
     // document_module_live(root)
     document_module_lpipe(root)
     document_module_math_bits(root)
-    // document_module_math_boost(root)
+    document_module_math_boost(root)
     document_module_random(root)
     document_module_regex_boost(root)
     document_module_regex(root)
