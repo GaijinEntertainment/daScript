@@ -1736,7 +1736,19 @@ global_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
-    |   global_variable_declaration_list[list] optional_field_annotation[ann] let_variable_declaration[decl] {
+    |   global_variable_declaration_list[list] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto tak = tokAt(scanner,@list);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeGlobalVariables(tak);
+        }
+    }   optional_field_annotation[ann] let_variable_declaration[decl] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto tak = tokAt(scanner,@decl);
+            for ( auto & crd : yyextra->g_CommentReaders )
+                for ( auto & nl : *($decl->pNameList) )
+                    crd->afterGlobalVariable(nl.name.c_str(),tak);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterGlobalVariables(tak);
+        }
         $$ = $list;
         $decl->annotation = $ann;
         $list->push_back($decl);
@@ -1758,7 +1770,20 @@ global_let
     :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] '{' global_variable_declaration_list[list] '}' {
         ast_globalLetList(scanner,$kwd_let,$glob_shar,$pub_var,$list);
     }
-    |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] { yyextra->das_force_oxford_comma=true; } optional_field_annotation[ann] let_variable_declaration[decl] {
+    |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] {
+        yyextra->das_force_oxford_comma=true;
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto tak = tokAt(scanner,@pub_var);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeGlobalVariables(tak);
+        }
+    } optional_field_annotation[ann] let_variable_declaration[decl] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto tak = tokAt(scanner,@decl);
+            for ( auto & crd : yyextra->g_CommentReaders )
+                for ( auto & nl : *($decl->pNameList) )
+                    crd->afterGlobalVariable(nl.name.c_str(),tak);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterGlobalVariables(tak);
+        }
         ast_globalLet(scanner,$kwd_let,$glob_shar,$pub_var,$ann,$decl);
     }
     ;

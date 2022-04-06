@@ -1040,7 +1040,30 @@ namespace das {
                         info);
             }
         }
-
+        virtual void beforeGlobalVariables ( const LineInfo & info ) override {
+            if ( auto fnGlobalVariables = get_beforeGlobalVariables(classPtr) ) {
+                invoke_beforeGlobalVariables(context,fnGlobalVariables,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+        virtual void afterGlobalVariable ( const char * name, const LineInfo & info ) override {
+            if ( auto fnGlobalVariable = get_afterGlobalVariable(classPtr) ) {
+                invoke_afterGlobalVariable(context,fnGlobalVariable,classPtr,
+                    (char *) name, daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+        virtual void afterGlobalVariables ( const LineInfo & info ) override {
+            if ( auto fnGlobalVariables = get_afterGlobalVariables(classPtr) ) {
+                invoke_afterGlobalVariables(context,fnGlobalVariables,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;

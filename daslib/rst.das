@@ -331,6 +331,8 @@ def document_global_constant(doc_file:file;mod:Module?;value:VariablePtr)
     document_topic(doc_file,topic("variable",mod,string(value.name)))
 
 def private is_global_constant(value:VariablePtr)
+    if value.flags.private_variable
+        return false
     if !value._type.flags.constant
         return false
     if !value._type.isWorkhorseType

@@ -4905,6 +4905,59 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterFunction|
 
+.. das:function:: AstCommentReader.beforeGlobalVariables(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeGlobalVariables|
+
+.. das:function:: AstCommentReader.afterGlobalVariable(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++name    +string const                                                +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterGlobalVariable|
+
+.. das:function:: AstCommentReader.afterGlobalVariables(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterGlobalVariables|
+
 .. _struct-ast-AstCallMacro:
 
 .. das:attribute:: AstCallMacro

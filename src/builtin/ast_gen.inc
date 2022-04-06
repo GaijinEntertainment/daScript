@@ -341,9 +341,12 @@ protected:
     __fn_afterStructureFields = 7,
     __fn_beforeFunction = 8,
     __fn_afterFunction = 9,
+    __fn_beforeGlobalVariables = 10,
+    __fn_afterGlobalVariable = 11,
+    __fn_afterGlobalVariables = 12,
   };
 protected:
-  int _das_class_method_offset[10];
+  int _das_class_method_offset[13];
 public:
   AstCommentReader_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_open] = adapt_field_offset("open",info);
@@ -356,6 +359,9 @@ public:
       _das_class_method_offset[__fn_afterStructureFields] = adapt_field_offset("afterStructureFields",info);
       _das_class_method_offset[__fn_beforeFunction] = adapt_field_offset("beforeFunction",info);
       _das_class_method_offset[__fn_afterFunction] = adapt_field_offset("afterFunction",info);
+      _das_class_method_offset[__fn_beforeGlobalVariables] = adapt_field_offset("beforeGlobalVariables",info);
+      _das_class_method_offset[__fn_afterGlobalVariable] = adapt_field_offset("afterGlobalVariable",info);
+      _das_class_method_offset[__fn_afterGlobalVariables] = adapt_field_offset("afterGlobalVariables",info);
   }
   __forceinline Func get_open ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_open]);
@@ -446,6 +452,33 @@ public:
       <void *,smart_ptr_raw<Function> const ,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,fn,prog,mod,info);
+  }
+  __forceinline Func get_beforeGlobalVariables ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_beforeGlobalVariables]);
+  }
+  __forceinline void invoke_beforeGlobalVariables ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+  __forceinline Func get_afterGlobalVariable ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterGlobalVariable]);
+  }
+  __forceinline void invoke_afterGlobalVariable ( Context * __context__, Func __funcCall__, void * self, char * const  name, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,char * const ,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,name,prog,mod,info);
+  }
+  __forceinline Func get_afterGlobalVariables ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterGlobalVariables]);
+  }
+  __forceinline void invoke_afterGlobalVariables ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
   }
 };
 

@@ -1166,7 +1166,10 @@ namespace das
         virtual void afterStructureFields ( const LineInfo & at ) = 0;
         virtual void afterStructureField ( const char * name, const LineInfo & at ) = 0;
         virtual void beforeFunction ( const LineInfo & at ) = 0;
-        virtual void afterFunction ( Function *, const LineInfo & at ) = 0;
+        virtual void afterFunction ( Function * fun, const LineInfo & at ) = 0;
+        virtual void beforeGlobalVariables ( const LineInfo & at ) = 0;
+        virtual void afterGlobalVariable ( const char * name, const LineInfo & at ) = 0;
+        virtual void afterGlobalVariables ( const LineInfo & at ) = 0;
     };
 
     class Program : public ptr_ref_count {

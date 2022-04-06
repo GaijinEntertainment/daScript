@@ -15,9 +15,10 @@ enum ParserState
     field
     func
     method
+    global
 
 def private debug_rst ( s : string )
-    // to_log(LOG_INFO,s)
+    to_log(LOG_INFO,s)
     pass
 
 [comment_reader]
@@ -27,6 +28,7 @@ class RstComment : AstCommentReader
     comment : string
     structure_comment : string
     function_comment : string
+    global_comment : string
     field_comment : string
     field_comments : array<tuple<kind:string;name:string;comment:string>>
     def override open ( prog:ProgramPtr; mod:Module?; cpp:bool; info:LineInfo ) : void
@@ -48,7 +50,26 @@ class RstComment : AstCommentReader
             function_comment += comment
         elif state==ParserState field
             field_comment += comment
+        elif state==ParserState global
+            global_comment += comment
+        else
+            debug_rst("uncategorized comment // {comment}")
         comment = ""
+    def override beforeGlobalVariables ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("beforeGlobalVariables")
+        if state != ParserState none
+            panic("expecting none, got {state}")
+        state = ParserState global
+    def override afterGlobalVariable ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("afterGlobalVariable {name} // {global_comment}")
+        if global_comment != ""
+            write_to_detail("variable-{prog.thisModuleName}-{name}", global_comment)
+    def override afterGlobalVariables ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("afterGlobalVariables")
+        if state != ParserState global
+            panic("expecting globl, got {state}")
+        state = ParserState none
+        global_comment = ""
     def override beforeStructure ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeStucture")
         if state != ParserState none

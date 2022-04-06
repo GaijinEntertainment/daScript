@@ -1,5 +1,7 @@
 require daslib/rst_comment
 
+var FOOBAR = 13 //! this is a C++ variable comment
+
 struct Foo
     /* this is a C comment in structure */
     a : int // this is a C++ comment in the field a
@@ -35,4 +37,4 @@ class MyClass
 [export]
 def main
     let c = new MyClass()
-    print("hello, world!\n")
+    print("hello, world! {FOOBAR}\n")

@@ -98,7 +98,7 @@ def document_module_fio(root:string)
 def document_module_random(root:string)
     var mod = get_module("random")
     var groups <- [{DocGroup
-        group_by_regex("Seed and basic generators", mod, %regex~(random_seed|random_float|random_float4|random_int|random_int4)$%%);
+        group_by_regex("Seed and basic generators", mod, %regex~(random_seed|random_seed2D|random_float|random_float4|random_int|random_big_int|random_int4)$%%);
         group_by_regex("Specific distributions", mod, %regex~(random_unit_vector|random_in_unit_disk|random_in_unit_sphere)$%%)
     }]
     document("Random generator library",mod,"{root}/random.rst","{root}/detail/random.rst",groups)

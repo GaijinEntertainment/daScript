@@ -1,16 +1,24 @@
-.. |function-random-random_float| replace:: random float 0..1
+.. |function-random-random_seed| replace:: to be documented in |function-random-random_seed|.rst
 
-.. |function-random-random_float4| replace:: random float4, each component is 0..1
+.. |function-random-random_seed2D| replace:: to be documented in |function-random-random_seed2D|.rst
 
-.. |function-random-random_in_unit_disk| replace:: random float3 unit vector (length=1) which happens to be inside a disk R=1, Z=0
+.. |function-random-random_int| replace:: to be documented in |function-random-random_int|.rst
 
-.. |function-random-random_in_unit_sphere| replace:: random float3 unit vector (length=1) which happens to be inside a sphere R=1
+.. |function-random-random_big_int| replace:: to be documented in |function-random-random_big_int|.rst
 
-.. |function-random-random_int| replace:: random integer 0..32767
+.. |function-random-random_int4| replace:: to be documented in |function-random-random_int4|.rst
 
-.. |function-random-random_int4| replace:: random int4, each component is 0..32767
+.. |function-random-random_float| replace:: to be documented in |function-random-random_float|.rst
 
-.. |function-random-random_seed| replace:: constructs seed vector out of single integer seed
+.. |function-random-random_float4| replace:: to be documented in |function-random-random_float4|.rst
 
-.. |function-random-random_unit_vector| replace:: random float3 unit vector (length=1)
+.. |function-random-random_unit_vector| replace:: to be documented in |function-random-random_unit_vector|.rst
+
+.. |function-random-random_in_unit_sphere| replace:: to be documented in |function-random-random_in_unit_sphere|.rst
+
+.. |function-random-random_in_unit_disk| replace:: to be documented in |function-random-random_in_unit_disk|.rst
+
+.. |variable-random-LCG_RAND_MAX| replace:: to be documented in |variable-random-LCG_RAND_MAX|.rst
+
+.. |variable-random-LCG_RAND_MAX_BIG| replace:: to be documented in |variable-random-LCG_RAND_MAX_BIG|.rst
 

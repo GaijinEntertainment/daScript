@@ -96,6 +96,8 @@
 			"xfacet": "cpp"
 		},
 		"dascript.experimental": true,
-		"dascript.hovers.verbose": true
+		"dascript.hovers.verbose": true,
+		"esbonio.server.enabled": true,
+		"esbonio.sphinx.confDir": "${workspaceFolder}\\doc\\source"
 	}
 }

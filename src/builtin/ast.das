@@ -107,6 +107,9 @@ class AstCommentReader
     def abstract afterStructureFields ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract beforeFunction ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract afterFunction ( fn:FunctionPtr; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract beforeGlobalVariables ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterGlobalVariable ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterGlobalVariables ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
 
 [macro_interface]
 class AstCallMacro
