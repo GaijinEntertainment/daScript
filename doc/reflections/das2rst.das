@@ -88,10 +88,10 @@ def document_module_fio(root:string)
     var mod = get_module("fio")
     var groups <- [{DocGroup
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%));
-        group_by_regex("File manipulation", mod, %regex~(f|stat$)%%);
-        group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name)$%%);
+        group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar)%%);
+        group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name)$%%);
         group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir)$%%);
-        group_by_regex("OS thread helper", mod, %regex~(sleep)$%%)
+        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|popen)$%%)
     }]
     document("File input output library",mod,"{root}/fio.rst","{root}/detail/fio.rst",groups)
 

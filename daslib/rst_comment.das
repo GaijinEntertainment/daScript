@@ -69,7 +69,7 @@ class RstComment : AstCommentReader
                 else
                     to_log(LOG_WARNING, "WARNING: unsupported structure-annotation = {ann.annotation.name} in {st.name}\n")
         // to_log(LOG_WARNING, "WARNING: unsupported structure-annotation = {ann.annotation.name} in {st.name}\n")
-        if !is_annotation
+        if !is_annotation && structure_comment != ""
             write_to_detail("structure-{prog.thisModuleName}-{st.name}", structure_comment)
         for fc in field_comments
             debug_rst("    {fc.kind} {fc.name} // {fc.comment}")
