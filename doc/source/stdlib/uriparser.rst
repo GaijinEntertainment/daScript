@@ -139,9 +139,16 @@ Uri properties are
 
 |structure_annotation-uriparser-Uri|
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++++++++++++++++++++
+Construction and finalization
++++++++++++++++++++++++++++++
+
+  *  :ref:`Uri () : uriparser::Uri <function-_at_uriparser_c__c_Uri>` 
+  *  :ref:`using (arg0:block\<(uriparser::Uri# explicit):void\> const implicit) : void <function-_at_uriparser_c__c_using_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`Uri (arg0:string const implicit) : uriparser::Uri <function-_at_uriparser_c__c_Uri_CIs>` 
+  *  :ref:`using (arg0:string const implicit;arg1:block\<(uriparser::Uri# explicit):void\> const implicit) : void <function-_at_uriparser_c__c_using_CIs_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`finalize (uri:uriparser::Uri implicit) : void <function-_at_uriparser_c__c_finalize_IH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`clone (dest:uriparser::Uri implicit;src:uriparser::Uri const implicit) : void <function-_at_uriparser_c__c_clone_IH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_>` 
 
 .. _function-_at_uriparser_c__c_Uri:
 
@@ -221,6 +228,60 @@ Uri returns  :ref:`uriparser::Uri <handle-uriparser-Uri>`
 
 
 |function-uriparser-clone|
+
++++++++++++++++++++
+Escape and unescape
++++++++++++++++++++
+
+  *  :ref:`escape_uri (uriStr:string const implicit;spaceToPlus:bool const;normalizeBreaks:bool const;context:__context const) : string <function-_at_uriparser_c__c_escape_uri_CIs_Cb_Cb_C_c>` 
+  *  :ref:`unescape_uri (uriStr:string const implicit;context:__context const) : string <function-_at_uriparser_c__c_unescape_uri_CIs_C_c>` 
+
+.. _function-_at_uriparser_c__c_escape_uri_CIs_Cb_Cb_C_c:
+
+.. das:function:: escape_uri(uriStr: string const implicit; spaceToPlus: bool const; normalizeBreaks: bool const)
+
+escape_uri returns string
+
++---------------+---------------------+
++argument       +argument type        +
++===============+=====================+
++uriStr         +string const implicit+
++---------------+---------------------+
++spaceToPlus    +bool const           +
++---------------+---------------------+
++normalizeBreaks+bool const           +
++---------------+---------------------+
+
+
+|function-uriparser-escape_uri|
+
+.. _function-_at_uriparser_c__c_unescape_uri_CIs_C_c:
+
+.. das:function:: unescape_uri(uriStr: string const implicit)
+
+unescape_uri returns string
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++uriStr  +string const implicit+
++--------+---------------------+
+
+
+|function-uriparser-unescape_uri|
+
++++++++++++++++++
+Uri manipulations
++++++++++++++++++
+
+  *  :ref:`strip_uri (uri:uriparser::Uri const implicit;query:bool const;fragment:bool const) : uriparser::Uri <function-_at_uriparser_c__c_strip_uri_CIH_ls_uriparser_c__c_Uri_gr__Cb_Cb>` 
+  *  :ref:`add_base_uri (base:uriparser::Uri const implicit;relative:uriparser::Uri const implicit) : uriparser::Uri <function-_at_uriparser_c__c_add_base_uri_CIH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`remove_base_uri (base:uriparser::Uri const implicit;relative:uriparser::Uri const implicit) : uriparser::Uri <function-_at_uriparser_c__c_remove_base_uri_CIH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`normalize (uri:uriparser::Uri implicit) : bool <function-_at_uriparser_c__c_normalize_IH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`string (uri:uriparser::Uri const implicit;context:__context const) : string <function-_at_uriparser_c__c_string_CIH_ls_uriparser_c__c_Uri_gr__C_c>` 
+  *  :ref:`string (range:uriparser::UriTextRangeA const implicit;context:__context const) : string <function-_at_uriparser_c__c_string_CIH_ls_uriparser_c__c_UriTextRangeA_gr__C_c>` 
+  *  :ref:`uri_for_each_query_kv (uri:uriparser::Uri const implicit;block:block\<(string#;string#):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_uriparser_c__c_uri_for_each_query_kv_CIH_ls_uriparser_c__c_Uri_gr__CI0_ls__hh_s;_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`normalize_uri (uriStr:string const implicit;context:__context const) : string <function-_at_uriparser_c__c_normalize_uri_CIs_C_c>` 
 
 .. _function-_at_uriparser_c__c_strip_uri_CIH_ls_uriparser_c__c_Uri_gr__Cb_Cb:
 
@@ -320,6 +381,53 @@ string returns string
 
 |function-uriparser-string|
 
+.. _function-_at_uriparser_c__c_uri_for_each_query_kv_CIH_ls_uriparser_c__c_Uri_gr__CI0_ls__hh_s;_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: uri_for_each_query_kv(uri: Uri const implicit; block: block<(string#;string#):void> const implicit)
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
++--------+-------------------------------------------------------------+
++block   +block<(string#;string#):void> const implicit                 +
++--------+-------------------------------------------------------------+
+
+
+|function-uriparser-uri_for_each_query_kv|
+
+.. _function-_at_uriparser_c__c_normalize_uri_CIs_C_c:
+
+.. das:function:: normalize_uri(uriStr: string const implicit)
+
+normalize_uri returns string
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++uriStr  +string const implicit+
++--------+---------------------+
+
+
+|function-uriparser-normalize_uri|
+
++++++++++++++++++++++
+File name conversions
++++++++++++++++++++++
+
+  *  :ref:`to_unix_file_name (uri:uriparser::Uri const implicit;context:__context const) : string <function-_at_uriparser_c__c_to_unix_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c>` 
+  *  :ref:`to_windows_file_name (uri:uriparser::Uri const implicit;context:__context const) : string <function-_at_uriparser_c__c_to_windows_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c>` 
+  *  :ref:`to_file_name (uri:uriparser::Uri const implicit;context:__context const) : string <function-_at_uriparser_c__c_to_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c>` 
+  *  :ref:`uri_from_file_name (filename:string const implicit) : uriparser::Uri <function-_at_uriparser_c__c_uri_from_file_name_CIs>` 
+  *  :ref:`uri_from_windows_file_name (filename:string const implicit) : uriparser::Uri <function-_at_uriparser_c__c_uri_from_windows_file_name_CIs>` 
+  *  :ref:`uri_from_unix_file_name (filename:string const implicit) : uriparser::Uri <function-_at_uriparser_c__c_uri_from_unix_file_name_CIs>` 
+  *  :ref:`uri_to_unix_file_name (uriStr:string const implicit;context:__context const) : string <function-_at_uriparser_c__c_uri_to_unix_file_name_CIs_C_c>` 
+  *  :ref:`uri_to_windows_file_name (uriStr:string const implicit;context:__context const) : string <function-_at_uriparser_c__c_uri_to_windows_file_name_CIs_C_c>` 
+  *  :ref:`unix_file_name_to_uri (uriStr:string const implicit;context:__context const) : string <function-_at_uriparser_c__c_unix_file_name_to_uri_CIs_C_c>` 
+  *  :ref:`windows_file_name_to_uri (uriStr:string const implicit;context:__context const) : string <function-_at_uriparser_c__c_windows_file_name_to_uri_CIs_C_c>` 
+  *  :ref:`uri_to_file_name (uriStr:string const implicit;context:__context const) : string <function-_at_uriparser_c__c_uri_to_file_name_CIs_C_c>` 
+  *  :ref:`file_name_to_uri (uriStr:string const implicit;context:__context const) : string <function-_at_uriparser_c__c_file_name_to_uri_CIs_C_c>` 
+
 .. _function-_at_uriparser_c__c_to_unix_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c:
 
 .. das:function:: to_unix_file_name(uri: Uri const implicit)
@@ -409,29 +517,6 @@ uri_from_unix_file_name returns  :ref:`uriparser::Uri <handle-uriparser-Uri>`
 
 
 |function-uriparser-uri_from_unix_file_name|
-
-.. _function-_at_uriparser_c__c_uri_for_each_query_kv_CIH_ls_uriparser_c__c_Uri_gr__CI0_ls__hh_s;_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: uri_for_each_query_kv(uri: Uri const implicit; block: block<(string#;string#):void> const implicit)
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-+block   +block<(string#;string#):void> const implicit                 +
-+--------+-------------------------------------------------------------+
-
-
-|function-uriparser-uri_for_each_query_kv|
-
-.. _function-_at_uriparser_c__c_make_new_guid_C_c:
-
-.. das:function:: make_new_guid()
-
-make_new_guid returns string
-
-|function-uriparser-make_new_guid|
 
 .. _function-_at_uriparser_c__c_uri_to_unix_file_name_CIs_C_c:
 
@@ -523,53 +608,18 @@ file_name_to_uri returns string
 
 |function-uriparser-file_name_to_uri|
 
-.. _function-_at_uriparser_c__c_escape_uri_CIs_Cb_Cb_C_c:
+++++
+GUID
+++++
 
-.. das:function:: escape_uri(uriStr: string const implicit; spaceToPlus: bool const; normalizeBreaks: bool const)
+  *  :ref:`make_new_guid (context:__context const) : string <function-_at_uriparser_c__c_make_new_guid_C_c>` 
 
-escape_uri returns string
+.. _function-_at_uriparser_c__c_make_new_guid_C_c:
 
-+---------------+---------------------+
-+argument       +argument type        +
-+===============+=====================+
-+uriStr         +string const implicit+
-+---------------+---------------------+
-+spaceToPlus    +bool const           +
-+---------------+---------------------+
-+normalizeBreaks+bool const           +
-+---------------+---------------------+
+.. das:function:: make_new_guid()
 
+make_new_guid returns string
 
-|function-uriparser-escape_uri|
-
-.. _function-_at_uriparser_c__c_unescape_uri_CIs_C_c:
-
-.. das:function:: unescape_uri(uriStr: string const implicit)
-
-unescape_uri returns string
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+uriStr  +string const implicit+
-+--------+---------------------+
-
-
-|function-uriparser-unescape_uri|
-
-.. _function-_at_uriparser_c__c_normalize_uri_CIs_C_c:
-
-.. das:function:: normalize_uri(uriStr: string const implicit)
-
-normalize_uri returns string
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+uriStr  +string const implicit+
-+--------+---------------------+
-
-
-|function-uriparser-normalize_uri|
+|function-uriparser-make_new_guid|
 
 

@@ -113,8 +113,11 @@ def document_module_network(root:string)
 def document_module_uriparser(root:string)
     var mod = get_module("uriparser")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Construction and finalization", mod, %regex~(Uri|using|clone|finalize)$%%);
+        group_by_regex("Escape and unescape", mod, %regex~(escape_uri|unescape_uri)$%%);
+        group_by_regex("Uri manipulations", mod, %regex~(normalize_uri|unescape_uri|string|uri_for_each_query_kv|remove_base_uri|add_base_uri|strip_uri|normalize)$%%);
+        group_by_regex("File name conversions", mod, %regex~(to_unix_file_name|to_windows_file_name|to_file_name|uri_from_file_name|uri_from_windows_file_name|uri_from_unix_file_name|uri_to_unix_file_name|uri_to_windows_file_name|unix_file_name_to_uri|windows_file_name_to_uri|uri_to_file_name|file_name_to_uri)$%%);
+        group_by_regex("GUID", mod, %regex~(make_new_guid)$%%)
     }]
     document("URI manipulation library based on UriParser",mod,"{root}/uriparser.rst","{root}/detail/uriparser.rst",groups)
 
