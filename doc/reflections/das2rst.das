@@ -106,8 +106,7 @@ def document_module_random(root:string)
 def document_module_network(root:string)
     var mod = get_module("network")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Low lever NetworkServer IO", mod, %regex~(make_server|server_init|server_is_open|server_is_connected|server_tick|server_send|server_restore)$%%)
     }]
     document("Network socket library",mod,"{root}/network.rst","{root}/detail/network.rst",groups)
 
