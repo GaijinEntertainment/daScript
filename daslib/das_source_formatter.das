@@ -1,6 +1,7 @@
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options no_global_variables = false
 
 module das_source_formatter shared private
 
@@ -17,7 +18,7 @@ let sorted_tokens_source <- [[auto "<<<="; ">>>=";
     ]]
 
 let dont_need_space_around <- [[auto "("; ")"; "["; "]"; "\{"; "\}";
-    "."; ";"; ","; "`"; "::"; "++"; "--"; "?."; "?["; "@@"; "!"; "~"; "#"
+    "."; ";"; ","; "`"; "::"; "++"; "--"; "?."; "?["; "@@"; "!"; "~"; "#"; "->"
     ]]
 
 let type_after_keyword <- [[auto "generator"; "cast"; "upcast"; "smart_ptr";
@@ -48,6 +49,7 @@ struct Token
     isInFunctionParam: bool = false
     isInType: bool = false
     dontFormat: bool = false
+    dontAddSpacesAround: bool = false
 
 
 var tokenTemplates: array<TokenTemplate>
@@ -420,6 +422,8 @@ def mark_token_context()
             let ident = tokens[i].spaces
             for j in range(i + 1, length(tokens) - 3)
                 if (new_line_before(j))
+                    if eq(j, "def")
+                        break
                     if (tokens[j].spaces <= ident)
                         break
                     var colonPos = search_token_in_line(j, eq(i, "typedef") ? "=" : ":")
@@ -447,6 +451,47 @@ def mark_token_context()
                 if endParams < length(tokens) - 1
                     if eq(endParams + 1, ":")
                         mark_tokens_as_type(endParams + 1)
+
+    // annotations
+    for i in range(0, length(tokens) - 1)
+        if eq(i, "[") && !eq(i + 1, "[") && !eq(i + 1, "\{")
+            for j in range(i + 1, length(tokens))
+                if eq(j, "]")
+                    break
+                if eq(j, "=")
+                    tokens[j].dontAddSpacesAround = true
+
+
+def fmt_function_arguments()
+    // function arguments
+    var lastNewLineToken = 0
+    var i = 0
+    let n = length(tokens) - 3
+    while i < n
+        if tokens[i].newLines > 0
+            lastNewLineToken = i
+
+        if tokens[i].isInFunctionParam
+            var firstBracketColumn = -1
+            while i < n && tokens[i].isInFunctionParam
+                if tokens[i].newLines > 0
+                    lastNewLineToken = i
+
+                if firstBracketColumn == -1
+                    if eq(i, "(")
+                        firstBracketColumn = 0
+                        for k in range(lastNewLineToken, i + 1)
+                            if tokens[k].newLines > 0
+                                firstBracketColumn = 0
+                            firstBracketColumn += tokens[k].spaces + length(tokens[k].str)
+
+                elif tokens[i].newLines > 0
+                    lastNewLineToken = i
+                    tokens[i].spaces = firstBracketColumn
+                    tokens[i].column = firstBracketColumn
+
+                i++
+        i++
 
 
 def debug_print_tokens()
@@ -491,7 +536,7 @@ finally
 
 def need_spaces_around(index: int): bool
     assume t = tokens[index]
-    if t.tokenType != TokenType UNKNOWN || t.dontFormat
+    if t.tokenType != TokenType UNKNOWN || t.dontFormat || t.dontAddSpacesAround
         return false
     if dont_need_space_around |> find_index(t.str) >= 0
         return false
@@ -504,7 +549,7 @@ def need_space_only_before(index: int): bool
     assume t = tokens[index]
     if !t.isInType
         return false
-    if t.tokenType != TokenType UNKNOWN || t.dontFormat
+    if t.tokenType != TokenType UNKNOWN || t.dontFormat || t.dontAddSpacesAround
         return false
     if dont_need_space_around |> find_index(t.str) >= 0
         return false
@@ -531,7 +576,7 @@ def remove_space_before(i)
 
 
 let tokens_before_unary <- [[auto "("; "["; "?["; "\{"; "auto"; "int"; "float"; "int16"; "int32"; "int8"; ";"; ",";
-    "if"; "while"; "switch"; "return"; "yield"; "in"
+    "if"; "while"; "switch"; "return"; "yield"; "in"; "="
     ]]
 
 def is_unary(index: int): bool
@@ -566,7 +611,7 @@ def fmt_space_after_comma()
 
 def fmt_space_after_semicolon()
     for i in range(1, length(tokens))
-        if !new_line_before(i) && eq(i - 1, ";") && tokens[i].spaces == 0
+        if !eq(i, "") && !new_line_before(i) && eq(i - 1, ";") && tokens[i].spaces == 0
             add_space_before(i)
 
 
@@ -585,7 +630,7 @@ def fmt_remove_space_before_semicolon()
 def fmt_type_colon()
     for i in range(1, length(tokens) - 1)
         if tokens[i].isInType && eq(i, ":")
-            remove_space_before(i)
+            add_space_before(i)
             if !new_line_before(i + 1)
                 add_space_before(i + 1)
 
