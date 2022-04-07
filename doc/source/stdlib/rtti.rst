@@ -133,7 +133,7 @@ Type aliases
 
 .. _alias-RttiValue:
 
-.. das:attribute:: RttiValueis a variant type
+.. das:attribute:: RttiValue is a variant type
 
 +-------+------+
 +tBool  +bool  +
@@ -1214,9 +1214,16 @@ Handled types
 
 |any_annotation-rtti-AnnotationList|
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++++++++++++++++++++++
+Initialization and finalization
++++++++++++++++++++++++++++++++
+
+  *  :ref:`LineInfo () : rtti::LineInfo <function-_at_rtti_c__c_LineInfo>` 
+  *  :ref:`LineInfo (arg0:rtti::FileInfo? const implicit;arg1:int const;arg2:int const;arg3:int const;arg4:int const) : rtti::LineInfo <function-_at_rtti_c__c_LineInfo_CI1_ls_H_ls_rtti_c__c_FileInfo_gr__gr_?_Ci_Ci_Ci_Ci>` 
+  *  :ref:`CodeOfPolicies () : rtti::CodeOfPolicies <function-_at_rtti_c__c_CodeOfPolicies>` 
+  *  :ref:`using (arg0:block\<(rtti::CodeOfPolicies# explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_CodeOfPolicies_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`using (arg0:block\<(rtti::ModuleGroup# explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_ModuleGroup_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`RttiValue_nothing () : auto <function-_at_rtti_c__c_RttiValue_nothing>` 
 
 .. _function-_at_rtti_c__c_LineInfo:
 
@@ -1283,6 +1290,32 @@ CodeOfPolicies returns  :ref:`rtti::CodeOfPolicies <handle-rtti-CodeOfPolicies>`
 
 |function-rtti-using|
 
+.. _function-_at_rtti_c__c_RttiValue_nothing:
+
+.. das:function:: RttiValue_nothing()
+
+RttiValue_nothing returns auto
+
+|function-rtti-RttiValue_nothing|
+
++++++++++++
+Type access
++++++++++++
+
+  *  :ref:`get_dim (typeinfo:rtti::TypeInfo const implicit;index:int const;context:__context const) : int <function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_TypeInfo_gr__Ci_C_c>` 
+  *  :ref:`get_dim (typeinfo:rtti::VarInfo const implicit;index:int const;context:__context const) : int <function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_VarInfo_gr__Ci_C_c>` 
+  *  :ref:`builtin_is_same_type (a:rtti::TypeInfo const? const implicit;b:rtti::TypeInfo const? const implicit;refMatters:rtti::RefMatters const;cosntMatters:rtti::ConstMatters const;tempMatters:rtti::TemporaryMatters const;topLevel:bool const) : bool <function-_at_rtti_c__c_builtin_is_same_type_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb>` 
+  *  :ref:`is_compatible_cast (from:rtti::StructInfo const? const implicit;to:rtti::StructInfo const? const implicit) : bool <function-_at_rtti_c__c_is_compatible_cast_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?>` 
+  *  :ref:`get_das_type_name (type:rtti::Type const;context:__context const) : string <function-_at_rtti_c__c_get_das_type_name_CE_ls_rtti_c__c_Type_gr__C_c>` 
+  *  :ref:`is_same_type (a:rtti::TypeInfo const;b:rtti::TypeInfo const;refMatters:rtti::RefMatters const;constMatters:rtti::ConstMatters const;temporaryMatters:rtti::TemporaryMatters const;topLevel:bool const) : auto <function-_at_rtti_c__c_is_same_type_CH_ls_rtti_c__c_TypeInfo_gr__CH_ls_rtti_c__c_TypeInfo_gr__CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb>` 
+  *  :ref:`is_compatible_cast (a:rtti::StructInfo const;b:rtti::StructInfo const) : auto <function-_at_rtti_c__c_is_compatible_cast_CH_ls_rtti_c__c_StructInfo_gr__CH_ls_rtti_c__c_StructInfo_gr_>` 
+  *  :ref:`each_dim (info:rtti::TypeInfo const) : auto <function-_at_rtti_c__c_each_dim_CH_ls_rtti_c__c_TypeInfo_gr_>` 
+  *  :ref:`each_dim (info:rtti::VarInfo const) : auto <function-_at_rtti_c__c_each_dim_CH_ls_rtti_c__c_VarInfo_gr_>` 
+  *  :ref:`arg_types (info:rtti::TypeInfo const) : auto <function-_at_rtti_c__c_arg_types_CH_ls_rtti_c__c_TypeInfo_gr_>` 
+  *  :ref:`arg_types (info:rtti::VarInfo const) : auto <function-_at_rtti_c__c_arg_types_CH_ls_rtti_c__c_VarInfo_gr_>` 
+  *  :ref:`arg_names (info:rtti::TypeInfo const) : auto <function-_at_rtti_c__c_arg_names_CH_ls_rtti_c__c_TypeInfo_gr_>` 
+  *  :ref:`arg_names (info:rtti::VarInfo const) : auto <function-_at_rtti_c__c_arg_names_CH_ls_rtti_c__c_VarInfo_gr_>` 
+
 .. _function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_TypeInfo_gr__Ci_C_c:
 
 .. das:function:: get_dim(typeinfo: TypeInfo const implicit; index: int const)
@@ -1316,6 +1349,215 @@ get_dim returns int
 
 
 |function-rtti-get_dim|
+
+.. _function-_at_rtti_c__c_builtin_is_same_type_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb:
+
+.. das:function:: builtin_is_same_type(a: rtti::TypeInfo const? const implicit; b: rtti::TypeInfo const? const implicit; refMatters: RefMatters const; cosntMatters: ConstMatters const; tempMatters: TemporaryMatters const; topLevel: bool const)
+
+builtin_is_same_type returns bool
+
++------------+--------------------------------------------------------------------+
++argument    +argument type                                                       +
++============+====================================================================+
++a           + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const? const implicit+
++------------+--------------------------------------------------------------------+
++b           + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const? const implicit+
++------------+--------------------------------------------------------------------+
++refMatters  + :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const              +
++------------+--------------------------------------------------------------------+
++cosntMatters+ :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const          +
++------------+--------------------------------------------------------------------+
++tempMatters + :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const  +
++------------+--------------------------------------------------------------------+
++topLevel    +bool const                                                          +
++------------+--------------------------------------------------------------------+
+
+
+|function-rtti-builtin_is_same_type|
+
+.. _function-_at_rtti_c__c_is_compatible_cast_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?:
+
+.. das:function:: is_compatible_cast(from: rtti::StructInfo const? const implicit; to: rtti::StructInfo const? const implicit)
+
+is_compatible_cast returns bool
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++from    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
++to      + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-rtti-is_compatible_cast|
+
+.. _function-_at_rtti_c__c_get_das_type_name_CE_ls_rtti_c__c_Type_gr__C_c:
+
+.. das:function:: get_das_type_name(type: Type const)
+
+get_das_type_name returns string
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++type    + :ref:`rtti::Type <enum-rtti-Type>`  const+
++--------+------------------------------------------+
+
+
+|function-rtti-get_das_type_name|
+
+.. _function-_at_rtti_c__c_is_same_type_CH_ls_rtti_c__c_TypeInfo_gr__CH_ls_rtti_c__c_TypeInfo_gr__CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb:
+
+.. das:function:: is_same_type(a: TypeInfo const; b: TypeInfo const; refMatters: RefMatters const; constMatters: ConstMatters const; temporaryMatters: TemporaryMatters const; topLevel: bool const)
+
+is_same_type returns auto
+
++----------------+------------------------------------------------------------------+
++argument        +argument type                                                     +
++================+==================================================================+
++a               + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const              +
++----------------+------------------------------------------------------------------+
++b               + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const              +
++----------------+------------------------------------------------------------------+
++refMatters      + :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const            +
++----------------+------------------------------------------------------------------+
++constMatters    + :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const        +
++----------------+------------------------------------------------------------------+
++temporaryMatters+ :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const+
++----------------+------------------------------------------------------------------+
++topLevel        +bool const                                                        +
++----------------+------------------------------------------------------------------+
+
+
+|function-rtti-is_same_type|
+
+.. _function-_at_rtti_c__c_is_compatible_cast_CH_ls_rtti_c__c_StructInfo_gr__CH_ls_rtti_c__c_StructInfo_gr_:
+
+.. das:function:: is_compatible_cast(a: StructInfo const; b: StructInfo const)
+
+is_compatible_cast returns auto
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++a       + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
++--------+--------------------------------------------------------+
++b       + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
++--------+--------------------------------------------------------+
+
+
+|function-rtti-is_compatible_cast|
+
+.. _function-_at_rtti_c__c_each_dim_CH_ls_rtti_c__c_TypeInfo_gr_:
+
+.. das:function:: each_dim(info: TypeInfo const)
+
+each_dim returns auto
+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
++--------+----------------------------------------------------+
+
+
+|function-rtti-each_dim|
+
+.. _function-_at_rtti_c__c_each_dim_CH_ls_rtti_c__c_VarInfo_gr_:
+
+.. das:function:: each_dim(info: VarInfo const)
+
+each_dim returns auto
+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
++--------+--------------------------------------------------+
+
+
+|function-rtti-each_dim|
+
+.. _function-_at_rtti_c__c_arg_types_CH_ls_rtti_c__c_TypeInfo_gr_:
+
+.. das:function:: arg_types(info: TypeInfo const)
+
+arg_types returns auto
+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
++--------+----------------------------------------------------+
+
+
+|function-rtti-arg_types|
+
+.. _function-_at_rtti_c__c_arg_types_CH_ls_rtti_c__c_VarInfo_gr_:
+
+.. das:function:: arg_types(info: VarInfo const)
+
+arg_types returns auto
+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
++--------+--------------------------------------------------+
+
+
+|function-rtti-arg_types|
+
+.. _function-_at_rtti_c__c_arg_names_CH_ls_rtti_c__c_TypeInfo_gr_:
+
+.. das:function:: arg_names(info: TypeInfo const)
+
+arg_names returns auto
+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
++--------+----------------------------------------------------+
+
+
+|function-rtti-arg_names|
+
+.. _function-_at_rtti_c__c_arg_names_CH_ls_rtti_c__c_VarInfo_gr_:
+
+.. das:function:: arg_names(info: VarInfo const)
+
+arg_names returns auto
+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
++--------+--------------------------------------------------+
+
+
+|function-rtti-arg_names|
+
++++++++++++++++++++
+Rtti context access
++++++++++++++++++++
+
+  *  :ref:`get_total_functions (context:rtti::Context implicit) : int <function-_at_rtti_c__c_get_total_functions_IH_ls_rtti_c__c_Context_gr_>` 
+  *  :ref:`get_total_variables (context:rtti::Context implicit) : int <function-_at_rtti_c__c_get_total_variables_IH_ls_rtti_c__c_Context_gr_>` 
+  *  :ref:`get_function_info (context:any const;index:int const) : rtti::FuncInfo const& <function-_at_rtti_c__c_get_function_info_C*_Ci>` 
+  *  :ref:`get_variable_info (context:any const;index:int const) : rtti::VarInfo const& <function-_at_rtti_c__c_get_variable_info_C*_Ci>` 
+  *  :ref:`get_variable_value (varInfo:rtti::VarInfo const implicit) : variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\> <function-_at_rtti_c__c_get_variable_value_CIH_ls_rtti_c__c_VarInfo_gr_>` 
+  *  :ref:`get_function_info (context:rtti::Context implicit;function:function\<\> const) : rtti::FuncInfo const? const <function-_at_rtti_c__c_get_function_info_IH_ls_rtti_c__c_Context_gr__C_at__at_>` 
+  *  :ref:`get_function_by_mnh (context:rtti::Context implicit;MNH:uint64 const) : function\<\> <function-_at_rtti_c__c_get_function_by_mnh_IH_ls_rtti_c__c_Context_gr__Cu64>` 
+  *  :ref:`get_line_info (line:__lineInfo const) : rtti::LineInfo <function-_at_rtti_c__c_get_line_info_C_l>` 
+  *  :ref:`get_line_info (depth:int const;context:__context const;line:__lineInfo const) : rtti::LineInfo <function-_at_rtti_c__c_get_line_info_Ci_C_c_C_l>` 
+  *  :ref:`this_context (context:__context const) : rtti::Context& <function-_at_rtti_c__c_this_context_C_c>` 
+  *  :ref:`context_for_each_function (blk:block\<(info:rtti::FuncInfo const):void\> const) : auto <function-_at_rtti_c__c_context_for_each_function_CN_ls_info_gr_0_ls_CH_ls_rtti_c__c_FuncInfo_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`context_for_each_variable (blk:block\<(info:rtti::VarInfo const):void\> const) : auto <function-_at_rtti_c__c_context_for_each_variable_CN_ls_info_gr_0_ls_CH_ls_rtti_c__c_VarInfo_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`class_info (cl:auto const) : rtti::StructInfo const? <function-_at_rtti_c__c_class_info_C.>` 
+  *  :ref:`type_info (vinfo:rtti::LocalVariableInfo const) : rtti::TypeInfo const? <function-_at_rtti_c__c_type_info_CH_ls_rtti_c__c_LocalVariableInfo_gr_>` 
+  *  :ref:`type_info (vinfo:rtti::VarInfo const) : rtti::TypeInfo const? <function-_at_rtti_c__c_type_info_CH_ls_rtti_c__c_VarInfo_gr_>` 
 
 .. _function-_at_rtti_c__c_get_total_functions_IH_ls_rtti_c__c_Context_gr_:
 
@@ -1381,6 +1623,170 @@ get_variable_info returns  :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const&
 
 |function-rtti-get_variable_info|
 
+.. _function-_at_rtti_c__c_get_variable_value_CIH_ls_rtti_c__c_VarInfo_gr_:
+
+.. das:function:: get_variable_value(varInfo: VarInfo const implicit)
+
+get_variable_value returns  :ref:`RttiValue <alias-RttiValue>` 
+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++varInfo + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const implicit+
++--------+-----------------------------------------------------------+
+
+
+|function-rtti-get_variable_value|
+
+.. _function-_at_rtti_c__c_get_function_info_IH_ls_rtti_c__c_Context_gr__C_at__at_:
+
+.. das:function:: get_function_info(context: Context implicit; function: function<> const)
+
+get_function_info returns  :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const? const
+
++--------+-----------------------------------------------------+
++argument+argument type                                        +
++========+=====================================================+
++context + :ref:`rtti::Context <handle-rtti-Context>`  implicit+
++--------+-----------------------------------------------------+
++function+function<> const                                     +
++--------+-----------------------------------------------------+
+
+
+|function-rtti-get_function_info|
+
+.. _function-_at_rtti_c__c_get_function_by_mnh_IH_ls_rtti_c__c_Context_gr__Cu64:
+
+.. das:function:: get_function_by_mnh(context: Context implicit; MNH: uint64 const)
+
+get_function_by_mnh returns function<>
+
++--------+-----------------------------------------------------+
++argument+argument type                                        +
++========+=====================================================+
++context + :ref:`rtti::Context <handle-rtti-Context>`  implicit+
++--------+-----------------------------------------------------+
++MNH     +uint64 const                                         +
++--------+-----------------------------------------------------+
+
+
+|function-rtti-get_function_by_mnh|
+
+.. _function-_at_rtti_c__c_get_line_info_C_l:
+
+.. das:function:: get_line_info()
+
+get_line_info returns  :ref:`rtti::LineInfo <handle-rtti-LineInfo>` 
+
+|function-rtti-get_line_info|
+
+.. _function-_at_rtti_c__c_get_line_info_Ci_C_c_C_l:
+
+.. das:function:: get_line_info(depth: int const)
+
+get_line_info returns  :ref:`rtti::LineInfo <handle-rtti-LineInfo>` 
+
++--------+-------------+
++argument+argument type+
++========+=============+
++depth   +int const    +
++--------+-------------+
+
+
+|function-rtti-get_line_info|
+
+.. _function-_at_rtti_c__c_this_context_C_c:
+
+.. das:function:: this_context()
+
+this_context returns  :ref:`rtti::Context <handle-rtti-Context>` &
+
+|function-rtti-this_context|
+
+.. _function-_at_rtti_c__c_context_for_each_function_CN_ls_info_gr_0_ls_CH_ls_rtti_c__c_FuncInfo_gr__gr_1_ls_v_gr__builtin_:
+
+.. das:function:: context_for_each_function(blk: block<(info:rtti::FuncInfo const):void> const)
+
+context_for_each_function returns auto
+
++--------+-----------------------------------------------------------------------------+
++argument+argument type                                                                +
++========+=============================================================================+
++blk     +block<(info: :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const+
++--------+-----------------------------------------------------------------------------+
+
+
+|function-rtti-context_for_each_function|
+
+.. _function-_at_rtti_c__c_context_for_each_variable_CN_ls_info_gr_0_ls_CH_ls_rtti_c__c_VarInfo_gr__gr_1_ls_v_gr__builtin_:
+
+.. das:function:: context_for_each_variable(blk: block<(info:rtti::VarInfo const):void> const)
+
+context_for_each_variable returns auto
+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++blk     +block<(info: :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const):void> const+
++--------+---------------------------------------------------------------------------+
+
+
+|function-rtti-context_for_each_variable|
+
+.. _function-_at_rtti_c__c_class_info_C.:
+
+.. das:function:: class_info(cl: auto const)
+
+class_info returns  :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++cl      +auto const   +
++--------+-------------+
+
+
+|function-rtti-class_info|
+
+.. _function-_at_rtti_c__c_type_info_CH_ls_rtti_c__c_LocalVariableInfo_gr_:
+
+.. das:function:: type_info(vinfo: LocalVariableInfo const)
+
+type_info returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const?
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++vinfo   + :ref:`rtti::LocalVariableInfo <handle-rtti-LocalVariableInfo>`  const+
++--------+----------------------------------------------------------------------+
+
+
+|function-rtti-type_info|
+
+.. _function-_at_rtti_c__c_type_info_CH_ls_rtti_c__c_VarInfo_gr_:
+
+.. das:function:: type_info(vinfo: VarInfo const)
+
+type_info returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const?
+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++vinfo   + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
++--------+--------------------------------------------------+
+
+
+|function-rtti-type_info|
+
+++++++++++++++
+Program access
+++++++++++++++
+
+  *  :ref:`get_this_module (program:smart_ptr\<rtti::Program\> const implicit) : rtti::Module? <function-_at_rtti_c__c_get_this_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M>` 
+  *  :ref:`get_module (name:string const implicit) : rtti::Module? <function-_at_rtti_c__c_get_module_CIs>` 
+  *  :ref:`program_for_each_module (program:smart_ptr\<rtti::Program\> const implicit;block:block\<(rtti::Module?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_program_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`program_for_each_registered_module (block:block\<(rtti::Module?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_program_for_each_registered_module_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+
 .. _function-_at_rtti_c__c_get_this_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M:
 
 .. das:function:: get_this_module(program: smart_ptr<rtti::Program> const implicit)
@@ -1410,6 +1816,185 @@ get_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
 
 |function-rtti-get_module|
+
+.. _function-_at_rtti_c__c_program_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: program_for_each_module(program: smart_ptr<rtti::Program> const implicit; block: block<(rtti::Module?):void> const implicit)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++program +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit  +
++--------+------------------------------------------------------------------------+
++block   +block<( :ref:`rtti::Module <handle-rtti-Module>` ?):void> const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-rtti-program_for_each_module|
+
+.. _function-_at_rtti_c__c_program_for_each_registered_module_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: program_for_each_registered_module(block: block<(rtti::Module?):void> const implicit)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++block   +block<( :ref:`rtti::Module <handle-rtti-Module>` ?):void> const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-rtti-program_for_each_registered_module|
+
++++++++++++++
+Module access
++++++++++++++
+
+  *  :ref:`module_for_each_structure (module:rtti::Module? const implicit;block:block\<(rtti::StructInfo const):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_module_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`module_for_each_enumeration (module:rtti::Module? const implicit;block:block\<(rtti::EnumInfo const):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_module_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_EnumInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`module_for_each_function (module:rtti::Module? const implicit;block:block\<(rtti::FuncInfo const):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_module_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_FuncInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`module_for_each_generic (module:rtti::Module? const implicit;block:block\<(rtti::FuncInfo const):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_module_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_FuncInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`module_for_each_global (module:rtti::Module? const implicit;block:block\<(rtti::VarInfo const):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_module_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_VarInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`module_for_each_annotation (module:rtti::Module? const implicit;block:block\<(rtti::Annotation const):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_module_for_each_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_Annotation_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+
+.. _function-_at_rtti_c__c_module_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: module_for_each_structure(module: rtti::Module? const implicit; block: block<(rtti::StructInfo const):void> const implicit)
+
++--------+-------------------------------------------------------------------------------------+
++argument+argument type                                                                        +
++========+=====================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                           +
++--------+-------------------------------------------------------------------------------------+
++block   +block<( :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const):void> const implicit+
++--------+-------------------------------------------------------------------------------------+
+
+
+|function-rtti-module_for_each_structure|
+
+.. _function-_at_rtti_c__c_module_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_EnumInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: module_for_each_enumeration(module: rtti::Module? const implicit; block: block<(rtti::EnumInfo const):void> const implicit)
+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
++--------+---------------------------------------------------------------------------------+
++block   +block<( :ref:`rtti::EnumInfo <handle-rtti-EnumInfo>`  const):void> const implicit+
++--------+---------------------------------------------------------------------------------+
+
+
+|function-rtti-module_for_each_enumeration|
+
+.. _function-_at_rtti_c__c_module_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_FuncInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: module_for_each_function(module: rtti::Module? const implicit; block: block<(rtti::FuncInfo const):void> const implicit)
+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
++--------+---------------------------------------------------------------------------------+
++block   +block<( :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const implicit+
++--------+---------------------------------------------------------------------------------+
+
+
+|function-rtti-module_for_each_function|
+
+.. _function-_at_rtti_c__c_module_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_FuncInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: module_for_each_generic(module: rtti::Module? const implicit; block: block<(rtti::FuncInfo const):void> const implicit)
+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
++--------+---------------------------------------------------------------------------------+
++block   +block<( :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const implicit+
++--------+---------------------------------------------------------------------------------+
+
+
+|function-rtti-module_for_each_generic|
+
+.. _function-_at_rtti_c__c_module_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_VarInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: module_for_each_global(module: rtti::Module? const implicit; block: block<(rtti::VarInfo const):void> const implicit)
+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                     +
++--------+-------------------------------------------------------------------------------+
++block   +block<( :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const):void> const implicit+
++--------+-------------------------------------------------------------------------------+
+
+
+|function-rtti-module_for_each_global|
+
+.. _function-_at_rtti_c__c_module_for_each_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_Annotation_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: module_for_each_annotation(module: rtti::Module? const implicit; block: block<(rtti::Annotation const):void> const implicit)
+
++--------+-------------------------------------------------------------------------------------+
++argument+argument type                                                                        +
++========+=====================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                           +
++--------+-------------------------------------------------------------------------------------+
++block   +block<( :ref:`rtti::Annotation <handle-rtti-Annotation>`  const):void> const implicit+
++--------+-------------------------------------------------------------------------------------+
+
+
+|function-rtti-module_for_each_annotation|
+
++++++++++++++++++
+Annotation access
++++++++++++++++++
+
+  *  :ref:`get_annotation_argument_value (info:rtti::AnnotationArgument const implicit;context:__context const) : variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\> <function-_at_rtti_c__c_get_annotation_argument_value_CIH_ls_rtti_c__c_AnnotationArgument_gr__C_c>` 
+  *  :ref:`add_annotation_argument (annotation:rtti::AnnotationArgumentList implicit;name:string const implicit) : int <function-_at_rtti_c__c_add_annotation_argument_IH_ls_rtti_c__c_AnnotationArgumentList_gr__CIs>` 
+
+.. _function-_at_rtti_c__c_get_annotation_argument_value_CIH_ls_rtti_c__c_AnnotationArgument_gr__C_c:
+
+.. das:function:: get_annotation_argument_value(info: AnnotationArgument const implicit)
+
+get_annotation_argument_value returns  :ref:`RttiValue <alias-RttiValue>` 
+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++info    + :ref:`rtti::AnnotationArgument <handle-rtti-AnnotationArgument>`  const implicit+
++--------+---------------------------------------------------------------------------------+
+
+
+|function-rtti-get_annotation_argument_value|
+
+.. _function-_at_rtti_c__c_add_annotation_argument_IH_ls_rtti_c__c_AnnotationArgumentList_gr__CIs:
+
+.. das:function:: add_annotation_argument(annotation: AnnotationArgumentList implicit; name: string const implicit)
+
+add_annotation_argument returns int
+
++----------+-----------------------------------------------------------------------------------+
++argument  +argument type                                                                      +
++==========+===================================================================================+
++annotation+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  implicit+
++----------+-----------------------------------------------------------------------------------+
++name      +string const implicit                                                              +
++----------+-----------------------------------------------------------------------------------+
+
+
+|function-rtti-add_annotation_argument|
+
+++++++++++++++++++++++++++
+Compilation and simulation
+++++++++++++++++++++++++++
+
+  *  :ref:`compile (module_name:string const implicit;codeText:string const implicit;codeOfPolicies:rtti::CodeOfPolicies const implicit;block:block\<(bool;smart_ptr\<rtti::Program\>;$::das_string const):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_compile_CIs_CIs_CIH_ls_rtti_c__c_CodeOfPolicies_gr__CI0_ls_b;1_ls_H_ls_rtti_c__c_Program_gr__gr_?W;CH_ls__builtin__c__c_das_string_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`compile (module_name:string const implicit;codeText:string const implicit;codeOfPolicies:rtti::CodeOfPolicies const implicit;exportAll:bool const;block:block\<(bool;smart_ptr\<rtti::Program\>;$::das_string const):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_compile_CIs_CIs_CIH_ls_rtti_c__c_CodeOfPolicies_gr__Cb_CI0_ls_b;1_ls_H_ls_rtti_c__c_Program_gr__gr_?W;CH_ls__builtin__c__c_das_string_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`compile_file (module_name:string const implicit;fileAccess:smart_ptr\<rtti::FileAccess\> const implicit;moduleGroup:rtti::ModuleGroup? const implicit;codeOfPolicies:rtti::CodeOfPolicies const implicit;block:block\<(bool;smart_ptr\<rtti::Program\>;$::das_string const):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_compile_file_CIs_CI1_ls_H_ls_rtti_c__c_FileAccess_gr__gr_?W_CI1_ls_H_ls_rtti_c__c_ModuleGroup_gr__gr_?_CIH_ls_rtti_c__c_CodeOfPolicies_gr__CI0_ls_b;1_ls_H_ls_rtti_c__c_Program_gr__gr_?W;CH_ls__builtin__c__c_das_string_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_expected_error (program:smart_ptr\<rtti::Program\> const implicit;block:block\<(rtti::CompilationError;int):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_for_each_expected_error_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CI0_ls_E_ls_rtti_c__c_CompilationError_gr_;i_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_require_declaration (program:smart_ptr\<rtti::Program\> const implicit;block:block\<(rtti::Module?;string const#;string const#;bool;rtti::LineInfo const&):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_for_each_require_declaration_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?;C_hh_s;C_hh_s;b;C&H_ls_rtti_c__c_LineInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`simulate (program:smart_ptr\<rtti::Program\> const& implicit;block:block\<(bool;smart_ptr\<rtti::Context\>;$::das_string):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_simulate_C&I1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CI0_ls_b;1_ls_H_ls_rtti_c__c_Context_gr__gr_?W;H_ls__builtin__c__c_das_string_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at_rtti_c__c_compile_CIs_CIs_CIH_ls_rtti_c__c_CodeOfPolicies_gr__CI0_ls_b;1_ls_H_ls_rtti_c__c_Program_gr__gr_?W;CH_ls__builtin__c__c_das_string_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
 
@@ -1517,6 +2102,14 @@ get_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
 |function-rtti-simulate|
 
++++++++++++
+File access
++++++++++++
+
+  *  :ref:`make_file_access (project:string const implicit;context:__context const) : smart_ptr\<rtti::FileAccess\> <function-_at_rtti_c__c_make_file_access_CIs_C_c>` 
+  *  :ref:`set_file_source (access:smart_ptr\<rtti::FileAccess\> const implicit;fileName:string const implicit;text:string const implicit;context:__context const;line:__lineInfo const) : bool <function-_at_rtti_c__c_set_file_source_CI1_ls_H_ls_rtti_c__c_FileAccess_gr__gr_?M_CIs_CIs_C_c_C_l>` 
+  *  :ref:`add_file_access_root (access:smart_ptr\<rtti::FileAccess\> const implicit;mod:string const implicit;path:string const implicit) : bool <function-_at_rtti_c__c_add_file_access_root_CI1_ls_H_ls_rtti_c__c_FileAccess_gr__gr_?W_CIs_CIs>` 
+
 .. _function-_at_rtti_c__c_make_file_access_CIs_C_c:
 
 .. das:function:: make_file_access(project: string const implicit)
@@ -1570,153 +2163,13 @@ add_file_access_root returns bool
 
 |function-rtti-add_file_access_root|
 
-.. _function-_at_rtti_c__c_program_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
+++++++++++++++++
+Structure access
+++++++++++++++++
 
-.. das:function:: program_for_each_module(program: smart_ptr<rtti::Program> const implicit; block: block<(rtti::Module?):void> const implicit)
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+program +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit  +
-+--------+------------------------------------------------------------------------+
-+block   +block<( :ref:`rtti::Module <handle-rtti-Module>` ?):void> const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-rtti-program_for_each_module|
-
-.. _function-_at_rtti_c__c_program_for_each_registered_module_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: program_for_each_registered_module(block: block<(rtti::Module?):void> const implicit)
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+block   +block<( :ref:`rtti::Module <handle-rtti-Module>` ?):void> const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-rtti-program_for_each_registered_module|
-
-.. _function-_at_rtti_c__c_module_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: module_for_each_structure(module: rtti::Module? const implicit; block: block<(rtti::StructInfo const):void> const implicit)
-
-+--------+-------------------------------------------------------------------------------------+
-+argument+argument type                                                                        +
-+========+=====================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                           +
-+--------+-------------------------------------------------------------------------------------+
-+block   +block<( :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const):void> const implicit+
-+--------+-------------------------------------------------------------------------------------+
-
-
-|function-rtti-module_for_each_structure|
-
-.. _function-_at_rtti_c__c_get_variable_value_CIH_ls_rtti_c__c_VarInfo_gr_:
-
-.. das:function:: get_variable_value(varInfo: VarInfo const implicit)
-
-get_variable_value returns  :ref:`RttiValue <alias-RttiValue>` 
-
-+--------+-----------------------------------------------------------+
-+argument+argument type                                              +
-+========+===========================================================+
-+varInfo + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const implicit+
-+--------+-----------------------------------------------------------+
-
-
-|function-rtti-get_variable_value|
-
-.. _function-_at_rtti_c__c_get_annotation_argument_value_CIH_ls_rtti_c__c_AnnotationArgument_gr__C_c:
-
-.. das:function:: get_annotation_argument_value(info: AnnotationArgument const implicit)
-
-get_annotation_argument_value returns  :ref:`RttiValue <alias-RttiValue>` 
-
-+--------+---------------------------------------------------------------------------------+
-+argument+argument type                                                                    +
-+========+=================================================================================+
-+info    + :ref:`rtti::AnnotationArgument <handle-rtti-AnnotationArgument>`  const implicit+
-+--------+---------------------------------------------------------------------------------+
-
-
-|function-rtti-get_annotation_argument_value|
-
-.. _function-_at_rtti_c__c_module_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_EnumInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: module_for_each_enumeration(module: rtti::Module? const implicit; block: block<(rtti::EnumInfo const):void> const implicit)
-
-+--------+---------------------------------------------------------------------------------+
-+argument+argument type                                                                    +
-+========+=================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
-+--------+---------------------------------------------------------------------------------+
-+block   +block<( :ref:`rtti::EnumInfo <handle-rtti-EnumInfo>`  const):void> const implicit+
-+--------+---------------------------------------------------------------------------------+
-
-
-|function-rtti-module_for_each_enumeration|
-
-.. _function-_at_rtti_c__c_module_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_FuncInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: module_for_each_function(module: rtti::Module? const implicit; block: block<(rtti::FuncInfo const):void> const implicit)
-
-+--------+---------------------------------------------------------------------------------+
-+argument+argument type                                                                    +
-+========+=================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
-+--------+---------------------------------------------------------------------------------+
-+block   +block<( :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const implicit+
-+--------+---------------------------------------------------------------------------------+
-
-
-|function-rtti-module_for_each_function|
-
-.. _function-_at_rtti_c__c_module_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_FuncInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: module_for_each_generic(module: rtti::Module? const implicit; block: block<(rtti::FuncInfo const):void> const implicit)
-
-+--------+---------------------------------------------------------------------------------+
-+argument+argument type                                                                    +
-+========+=================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                       +
-+--------+---------------------------------------------------------------------------------+
-+block   +block<( :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const implicit+
-+--------+---------------------------------------------------------------------------------+
-
-
-|function-rtti-module_for_each_generic|
-
-.. _function-_at_rtti_c__c_module_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_VarInfo_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: module_for_each_global(module: rtti::Module? const implicit; block: block<(rtti::VarInfo const):void> const implicit)
-
-+--------+-------------------------------------------------------------------------------+
-+argument+argument type                                                                  +
-+========+===============================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                     +
-+--------+-------------------------------------------------------------------------------+
-+block   +block<( :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const):void> const implicit+
-+--------+-------------------------------------------------------------------------------+
-
-
-|function-rtti-module_for_each_global|
-
-.. _function-_at_rtti_c__c_module_for_each_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_CH_ls_rtti_c__c_Annotation_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: module_for_each_annotation(module: rtti::Module? const implicit; block: block<(rtti::Annotation const):void> const implicit)
-
-+--------+-------------------------------------------------------------------------------------+
-+argument+argument type                                                                        +
-+========+=====================================================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                           +
-+--------+-------------------------------------------------------------------------------------+
-+block   +block<( :ref:`rtti::Annotation <handle-rtti-Annotation>`  const):void> const implicit+
-+--------+-------------------------------------------------------------------------------------+
-
-
-|function-rtti-module_for_each_annotation|
+  *  :ref:`rtti_builtin_structure_for_each_annotation (struct:rtti::StructInfo const implicit;block:block\<\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_rtti_builtin_structure_for_each_annotation_CIH_ls_rtti_c__c_StructInfo_gr__CI_builtin__C_c_C_l>` 
+  *  :ref:`basic_struct_for_each_field (annotation:rtti::BasicStructureAnnotation const implicit;block:block\<(string;string;rtti::TypeInfo const;uint):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_basic_struct_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;CH_ls_rtti_c__c_TypeInfo_gr_;u_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`structure_for_each_annotation (st:rtti::StructInfo const;subexpr:block\<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void\> const) : auto <function-_at_rtti_c__c_structure_for_each_annotation_CH_ls_rtti_c__c_StructInfo_gr__CN_ls_ann;args_gr_0_ls_CH_ls_rtti_c__c_Annotation_gr_;CH_ls_rtti_c__c_AnnotationArguments_gr__gr_1_ls_v_gr__builtin_>` 
 
 .. _function-_at_rtti_c__c_rtti_builtin_structure_for_each_annotation_CIH_ls_rtti_c__c_StructInfo_gr__CI_builtin__C_c_C_l:
 
@@ -1748,79 +2201,32 @@ get_annotation_argument_value returns  :ref:`RttiValue <alias-RttiValue>`
 
 |function-rtti-basic_struct_for_each_field|
 
-.. _function-_at_rtti_c__c_builtin_is_same_type_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb:
+.. _function-_at_rtti_c__c_structure_for_each_annotation_CH_ls_rtti_c__c_StructInfo_gr__CN_ls_ann;args_gr_0_ls_CH_ls_rtti_c__c_Annotation_gr_;CH_ls_rtti_c__c_AnnotationArguments_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: builtin_is_same_type(a: rtti::TypeInfo const? const implicit; b: rtti::TypeInfo const? const implicit; refMatters: RefMatters const; cosntMatters: ConstMatters const; tempMatters: TemporaryMatters const; topLevel: bool const)
+.. das:function:: structure_for_each_annotation(st: StructInfo const; subexpr: block<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void> const)
 
-builtin_is_same_type returns bool
+structure_for_each_annotation returns auto
 
-+------------+--------------------------------------------------------------------+
-+argument    +argument type                                                       +
-+============+====================================================================+
-+a           + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const? const implicit+
-+------------+--------------------------------------------------------------------+
-+b           + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const? const implicit+
-+------------+--------------------------------------------------------------------+
-+refMatters  + :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const              +
-+------------+--------------------------------------------------------------------+
-+cosntMatters+ :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const          +
-+------------+--------------------------------------------------------------------+
-+tempMatters + :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const  +
-+------------+--------------------------------------------------------------------+
-+topLevel    +bool const                                                          +
-+------------+--------------------------------------------------------------------+
++--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
++argument+argument type                                                                                                                                                   +
++========+================================================================================================================================================================+
++st      + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const                                                                                                        +
++--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
++subexpr +block<(ann: :ref:`rtti::Annotation <handle-rtti-Annotation>`  const;args: :ref:`rtti::AnnotationArguments <handle-rtti-AnnotationArguments>`  const):void> const+
++--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
-|function-rtti-builtin_is_same_type|
+|function-rtti-structure_for_each_annotation|
 
-.. _function-_at_rtti_c__c_is_compatible_cast_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?:
++++++++++++++++++++++++++
+Data walking and printing
++++++++++++++++++++++++++
 
-.. das:function:: is_compatible_cast(from: rtti::StructInfo const? const implicit; to: rtti::StructInfo const? const implicit)
-
-is_compatible_cast returns bool
-
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+from    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
-+to      + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
-
-
-|function-rtti-is_compatible_cast|
-
-.. _function-_at_rtti_c__c_get_das_type_name_CE_ls_rtti_c__c_Type_gr__C_c:
-
-.. das:function:: get_das_type_name(type: Type const)
-
-get_das_type_name returns string
-
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+type    + :ref:`rtti::Type <enum-rtti-Type>`  const+
-+--------+------------------------------------------+
-
-
-|function-rtti-get_das_type_name|
-
-.. _function-_at_rtti_c__c_add_annotation_argument_IH_ls_rtti_c__c_AnnotationArgumentList_gr__CIs:
-
-.. das:function:: add_annotation_argument(annotation: AnnotationArgumentList implicit; name: string const implicit)
-
-add_annotation_argument returns int
-
-+----------+-----------------------------------------------------------------------------------+
-+argument  +argument type                                                                      +
-+==========+===================================================================================+
-+annotation+ :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  implicit+
-+----------+-----------------------------------------------------------------------------------+
-+name      +string const implicit                                                              +
-+----------+-----------------------------------------------------------------------------------+
-
-
-|function-rtti-add_annotation_argument|
+  *  :ref:`sprint_data (data:void? const implicit;type:rtti::TypeInfo const? const implicit;flags:bitfield const;context:__context const) : string <function-_at_rtti_c__c_sprint_data_CI?_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_Ct_C_c>` 
+  *  :ref:`sprint_data (data:float4 const;type:rtti::TypeInfo const? const implicit;flags:bitfield const;context:__context const) : string <function-_at_rtti_c__c_sprint_data_Cf4_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_Ct_C_c>` 
+  *  :ref:`describe (type:rtti::TypeInfo const? const implicit;context:__context const) : string <function-_at_rtti_c__c_describe_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_C_c>` 
+  *  :ref:`describe (lineinfo:rtti::LineInfo const implicit;fully:bool const;context:__context const) : string <function-_at_rtti_c__c_describe_CIH_ls_rtti_c__c_LineInfo_gr__Cb_C_c>` 
+  *  :ref:`get_mangled_name (type:rtti::TypeInfo const? const implicit;context:__context const) : string <function-_at_rtti_c__c_get_mangled_name_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_C_c>` 
 
 .. _function-_at_rtti_c__c_sprint_data_CI?_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_Ct_C_c:
 
@@ -1907,70 +2313,12 @@ get_mangled_name returns string
 
 |function-rtti-get_mangled_name|
 
-.. _function-_at_rtti_c__c_get_function_info_IH_ls_rtti_c__c_Context_gr__C_at__at_:
+++++++++++++++++++++++++++++++
+Function and mangled name hash
+++++++++++++++++++++++++++++++
 
-.. das:function:: get_function_info(context: Context implicit; function: function<> const)
-
-get_function_info returns  :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const? const
-
-+--------+-----------------------------------------------------+
-+argument+argument type                                        +
-+========+=====================================================+
-+context + :ref:`rtti::Context <handle-rtti-Context>`  implicit+
-+--------+-----------------------------------------------------+
-+function+function<> const                                     +
-+--------+-----------------------------------------------------+
-
-
-|function-rtti-get_function_info|
-
-.. _function-_at_rtti_c__c_get_function_by_mnh_IH_ls_rtti_c__c_Context_gr__Cu64:
-
-.. das:function:: get_function_by_mnh(context: Context implicit; MNH: uint64 const)
-
-get_function_by_mnh returns function<>
-
-+--------+-----------------------------------------------------+
-+argument+argument type                                        +
-+========+=====================================================+
-+context + :ref:`rtti::Context <handle-rtti-Context>`  implicit+
-+--------+-----------------------------------------------------+
-+MNH     +uint64 const                                         +
-+--------+-----------------------------------------------------+
-
-
-|function-rtti-get_function_by_mnh|
-
-.. _function-_at_rtti_c__c_get_line_info_C_l:
-
-.. das:function:: get_line_info()
-
-get_line_info returns  :ref:`rtti::LineInfo <handle-rtti-LineInfo>` 
-
-|function-rtti-get_line_info|
-
-.. _function-_at_rtti_c__c_get_line_info_Ci_C_c_C_l:
-
-.. das:function:: get_line_info(depth: int const)
-
-get_line_info returns  :ref:`rtti::LineInfo <handle-rtti-LineInfo>` 
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+depth   +int const    +
-+--------+-------------+
-
-
-|function-rtti-get_line_info|
-
-.. _function-_at_rtti_c__c_this_context_C_c:
-
-.. das:function:: this_context()
-
-this_context returns  :ref:`rtti::Context <handle-rtti-Context>` &
-
-|function-rtti-this_context|
+  *  :ref:`get_function_by_mangled_name_hash (src:uint64 const;context:__context const) : function\<\> <function-_at_rtti_c__c_get_function_by_mangled_name_hash_Cu64_C_c>` 
+  *  :ref:`get_function_mangled_name_hash (src:function\<\> const;context:__context const) : uint64 <function-_at_rtti_c__c_get_function_mangled_name_hash_C_at__at__C_c>` 
 
 .. _function-_at_rtti_c__c_get_function_by_mangled_name_hash_Cu64_C_c:
 
@@ -2001,237 +2349,5 @@ get_function_mangled_name_hash returns uint64
 
 
 |function-rtti-get_function_mangled_name_hash|
-
-.. _function-_at_rtti_c__c_structure_for_each_annotation_CH_ls_rtti_c__c_StructInfo_gr__CN_ls_ann;args_gr_0_ls_CH_ls_rtti_c__c_Annotation_gr_;CH_ls_rtti_c__c_AnnotationArguments_gr__gr_1_ls_v_gr__builtin_:
-
-.. das:function:: structure_for_each_annotation(st: StructInfo const; subexpr: block<(ann:rtti::Annotation const;args:rtti::AnnotationArguments const):void> const)
-
-structure_for_each_annotation returns auto
-
-+--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                                                                                   +
-+========+================================================================================================================================================================+
-+st      + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const                                                                                                        +
-+--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-+subexpr +block<(ann: :ref:`rtti::Annotation <handle-rtti-Annotation>`  const;args: :ref:`rtti::AnnotationArguments <handle-rtti-AnnotationArguments>`  const):void> const+
-+--------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-
-
-|function-rtti-structure_for_each_annotation|
-
-.. _function-_at_rtti_c__c_is_same_type_CH_ls_rtti_c__c_TypeInfo_gr__CH_ls_rtti_c__c_TypeInfo_gr__CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb:
-
-.. das:function:: is_same_type(a: TypeInfo const; b: TypeInfo const; refMatters: RefMatters const; constMatters: ConstMatters const; temporaryMatters: TemporaryMatters const; topLevel: bool const)
-
-is_same_type returns auto
-
-+----------------+------------------------------------------------------------------+
-+argument        +argument type                                                     +
-+================+==================================================================+
-+a               + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const              +
-+----------------+------------------------------------------------------------------+
-+b               + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const              +
-+----------------+------------------------------------------------------------------+
-+refMatters      + :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const            +
-+----------------+------------------------------------------------------------------+
-+constMatters    + :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const        +
-+----------------+------------------------------------------------------------------+
-+temporaryMatters+ :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const+
-+----------------+------------------------------------------------------------------+
-+topLevel        +bool const                                                        +
-+----------------+------------------------------------------------------------------+
-
-
-|function-rtti-is_same_type|
-
-.. _function-_at_rtti_c__c_is_compatible_cast_CH_ls_rtti_c__c_StructInfo_gr__CH_ls_rtti_c__c_StructInfo_gr_:
-
-.. das:function:: is_compatible_cast(a: StructInfo const; b: StructInfo const)
-
-is_compatible_cast returns auto
-
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+a       + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
-+--------+--------------------------------------------------------+
-+b       + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const+
-+--------+--------------------------------------------------------+
-
-
-|function-rtti-is_compatible_cast|
-
-.. _function-_at_rtti_c__c_context_for_each_function_CN_ls_info_gr_0_ls_CH_ls_rtti_c__c_FuncInfo_gr__gr_1_ls_v_gr__builtin_:
-
-.. das:function:: context_for_each_function(blk: block<(info:rtti::FuncInfo const):void> const)
-
-context_for_each_function returns auto
-
-+--------+-----------------------------------------------------------------------------+
-+argument+argument type                                                                +
-+========+=============================================================================+
-+blk     +block<(info: :ref:`rtti::FuncInfo <handle-rtti-FuncInfo>`  const):void> const+
-+--------+-----------------------------------------------------------------------------+
-
-
-|function-rtti-context_for_each_function|
-
-.. _function-_at_rtti_c__c_context_for_each_variable_CN_ls_info_gr_0_ls_CH_ls_rtti_c__c_VarInfo_gr__gr_1_ls_v_gr__builtin_:
-
-.. das:function:: context_for_each_variable(blk: block<(info:rtti::VarInfo const):void> const)
-
-context_for_each_variable returns auto
-
-+--------+---------------------------------------------------------------------------+
-+argument+argument type                                                              +
-+========+===========================================================================+
-+blk     +block<(info: :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const):void> const+
-+--------+---------------------------------------------------------------------------+
-
-
-|function-rtti-context_for_each_variable|
-
-.. _function-_at_rtti_c__c_each_dim_CH_ls_rtti_c__c_TypeInfo_gr_:
-
-.. das:function:: each_dim(info: TypeInfo const)
-
-each_dim returns auto
-
-+--------+----------------------------------------------------+
-+argument+argument type                                       +
-+========+====================================================+
-+info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
-+--------+----------------------------------------------------+
-
-
-|function-rtti-each_dim|
-
-.. _function-_at_rtti_c__c_each_dim_CH_ls_rtti_c__c_VarInfo_gr_:
-
-.. das:function:: each_dim(info: VarInfo const)
-
-each_dim returns auto
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
-+--------+--------------------------------------------------+
-
-
-|function-rtti-each_dim|
-
-.. _function-_at_rtti_c__c_arg_types_CH_ls_rtti_c__c_TypeInfo_gr_:
-
-.. das:function:: arg_types(info: TypeInfo const)
-
-arg_types returns auto
-
-+--------+----------------------------------------------------+
-+argument+argument type                                       +
-+========+====================================================+
-+info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
-+--------+----------------------------------------------------+
-
-
-|function-rtti-arg_types|
-
-.. _function-_at_rtti_c__c_arg_types_CH_ls_rtti_c__c_VarInfo_gr_:
-
-.. das:function:: arg_types(info: VarInfo const)
-
-arg_types returns auto
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
-+--------+--------------------------------------------------+
-
-
-|function-rtti-arg_types|
-
-.. _function-_at_rtti_c__c_arg_names_CH_ls_rtti_c__c_TypeInfo_gr_:
-
-.. das:function:: arg_names(info: TypeInfo const)
-
-arg_names returns auto
-
-+--------+----------------------------------------------------+
-+argument+argument type                                       +
-+========+====================================================+
-+info    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const+
-+--------+----------------------------------------------------+
-
-
-|function-rtti-arg_names|
-
-.. _function-_at_rtti_c__c_arg_names_CH_ls_rtti_c__c_VarInfo_gr_:
-
-.. das:function:: arg_names(info: VarInfo const)
-
-arg_names returns auto
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+info    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
-+--------+--------------------------------------------------+
-
-
-|function-rtti-arg_names|
-
-.. _function-_at_rtti_c__c_class_info_C.:
-
-.. das:function:: class_info(cl: auto const)
-
-class_info returns  :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const?
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+cl      +auto const   +
-+--------+-------------+
-
-
-|function-rtti-class_info|
-
-.. _function-_at_rtti_c__c_type_info_CH_ls_rtti_c__c_LocalVariableInfo_gr_:
-
-.. das:function:: type_info(vinfo: LocalVariableInfo const)
-
-type_info returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const?
-
-+--------+----------------------------------------------------------------------+
-+argument+argument type                                                         +
-+========+======================================================================+
-+vinfo   + :ref:`rtti::LocalVariableInfo <handle-rtti-LocalVariableInfo>`  const+
-+--------+----------------------------------------------------------------------+
-
-
-|function-rtti-type_info|
-
-.. _function-_at_rtti_c__c_type_info_CH_ls_rtti_c__c_VarInfo_gr_:
-
-.. das:function:: type_info(vinfo: VarInfo const)
-
-type_info returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const?
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+vinfo   + :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const+
-+--------+--------------------------------------------------+
-
-
-|function-rtti-type_info|
-
-.. _function-_at_rtti_c__c_RttiValue_nothing:
-
-.. das:function:: RttiValue_nothing()
-
-RttiValue_nothing returns auto
-
-|function-rtti-RttiValue_nothing|
 
 

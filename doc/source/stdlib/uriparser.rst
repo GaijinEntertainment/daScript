@@ -139,9 +139,9 @@ Uri properties are
 
 |structure_annotation-uriparser-Uri|
 
-+++++++++++++++++++++++++++++
-Construction and finalization
-+++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++
+Initialization and finalization
++++++++++++++++++++++++++++++++
 
   *  :ref:`Uri () : uriparser::Uri <function-_at_uriparser_c__c_Uri>` 
   *  :ref:`using (arg0:block\<(uriparser::Uri# explicit):void\> const implicit) : void <function-_at_uriparser_c__c_using_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_>` 

@@ -305,7 +305,7 @@ def document_typedef(doc_file:file;mod:Module?;name:string implicit;value)
         fwrite(doc_file," is a bitfield\n\n")
         document_bitfield(doc_file,value)
     elif value.baseType==Type tVariant
-        fwrite(doc_file,"is a variant type\n\n")
+        fwrite(doc_file," is a variant type\n\n")
         document_variant(doc_file,value)
     else
         var tp = describe(value,false,false,false)

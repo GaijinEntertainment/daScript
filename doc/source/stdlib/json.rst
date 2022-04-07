@@ -20,7 +20,7 @@ Type aliases
 
 .. _alias-JsValue:
 
-.. das:attribute:: JsValueis a variant type
+.. das:attribute:: JsValue is a variant type
 
 +-------+------------------------+
 +_object+table<string;JsonValue?>+
@@ -41,7 +41,7 @@ Type aliases
 
 .. _alias-Token:
 
-.. das:attribute:: Tokenis a variant type
+.. das:attribute:: Token is a variant type
 
 +-------+------+
 +_string+string+

@@ -28,7 +28,7 @@ Type aliases
 
 .. _alias-MaybeReNode:
 
-.. das:attribute:: MaybeReNodeis a variant type
+.. das:attribute:: MaybeReNode is a variant type
 
 +-------+---------------------------------------------+
 +value  + :ref:`regex::ReNode <struct-regex-ReNode>` ?+

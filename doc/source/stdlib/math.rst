@@ -4152,7 +4152,7 @@ Matrix operations
 |function-math-!=|
 
 +++++++++++++++++++
-Matrix constructors
+Matrix initializers
 +++++++++++++++++++
 
   *  :ref:`float3x3 () : math::float3x3 <function-_at_math_c__c_float3x3>` 

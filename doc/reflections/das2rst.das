@@ -48,7 +48,7 @@ dot|normalize|fast_normalize)$%%);
         group_by_regex("Noise functions", mod, %regex~(uint32_hash|uint_noise_1D|uint_noise_2D|uint_noise_3D)$%%);
         group_by_regex("lerp/mad/clamp", mod, %regex~(lerp|mad|clamp)$%%);
         group_by_regex("Matrix operations", mod, %regex~(\=\=|\!\=|\*)$%%);
-        group_by_regex("Matrix constructors", mod, %regex~(float3x4|float4x4|float3x3|identity3x4|identity4x4|identity3x3)$%%);
+        group_by_regex("Matrix initializers", mod, %regex~(float3x4|float4x4|float3x3|identity3x4|identity4x4|identity3x3)$%%);
         group_by_regex("Matrix manipulation", mod, %regex~(identity|inverse|rotate|transpose|translation|compose|decompose|look_at|orthonormal_inverse|persp_forward|persp_reverse)$%%);
         group_by_regex("Quaternion operations", mod, %regex~(quat_conjugate|quat_mul|quat_mul_vec|un_quat|un_quat_from_unit_arc|un_quat_from_unit_vec_ang)$%%);
         group_by_regex("Packing and unpacking", mod, %regex~(pack_float_to_byte|unpack_byte_to_float)$%%)
@@ -113,7 +113,7 @@ def document_module_network(root:string)
 def document_module_uriparser(root:string)
     var mod = get_module("uriparser")
     var groups <- [{DocGroup
-        group_by_regex("Construction and finalization", mod, %regex~(Uri|using|clone|finalize)$%%);
+        group_by_regex("Initialization and finalization", mod, %regex~(Uri|using|clone|finalize)$%%);
         group_by_regex("Escape and unescape", mod, %regex~(escape_uri|unescape_uri)$%%);
         group_by_regex("Uri manipulations", mod, %regex~(normalize_uri|unescape_uri|string|uri_for_each_query_kv|remove_base_uri|add_base_uri|strip_uri|normalize)$%%);
         group_by_regex("File name conversions", mod, %regex~(to_unix_file_name|to_windows_file_name|to_file_name|uri_from_file_name|uri_from_windows_file_name|uri_from_unix_file_name|uri_to_unix_file_name|uri_to_windows_file_name|unix_file_name_to_uri|windows_file_name_to_uri|uri_to_file_name|file_name_to_uri)$%%);
@@ -124,7 +124,17 @@ def document_module_uriparser(root:string)
 def document_module_rtti(root:string)
     var mod = get_module("rtti")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
+        group_by_regex("Initialization and finalization", mod, %regex~(using|LineInfo|CodeOfPolicies|RttiValue_nothing)$%%);
+        group_by_regex("Type access", mod, %regex~(get_dim|builtin_is_same_type|is_compatible_cast|get_das_type_name|is_same_type|each_dim|arg_types|arg_names)$%%);
+        group_by_regex("Rtti context access", mod, %regex~(get_total_functions|get_total_variables|get_function_info|get_variable_info|get_variable_value|get_function_by_mnh|get_line_info|this_context|context_for_each_function|context_for_each_variable|class_info|type_info)$%%);
+        group_by_regex("Program access", mod, %regex~(program_for_each_module|program_for_each_registered_module|get_this_module|get_module)$%%);
+        group_by_regex("Module access", mod, %regex~(module_for_each_structure|module_for_each_enumeration|module_for_each_function|module_for_each_generic|module_for_each_global|module_for_each_annotation)$%%);
+        group_by_regex("Annotation access", mod, %regex~(get_annotation_argument_value|add_annotation_argument)$%%);
+        group_by_regex("Compilation and simulation", mod, %regex~(compile|compile_file|for_each_expected_error|for_each_require_declaration|simulate)$%%);
+        group_by_regex("File access", mod, %regex~(make_file_access|set_file_source|add_file_access_root)$%%);
+        group_by_regex("Structure access", mod, %regex~(rtti_builtin_structure_for_each_annotation|basic_struct_for_each_field|structure_for_each_annotation)$%%);
+        group_by_regex("Data walking and printing", mod, %regex~(sprint_data|describe|get_mangled_name)$%%);
+        group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
     document("Runtime type information library",mod,"{root}/rtti.rst","{root}/detail/rtti.rst",groups)
