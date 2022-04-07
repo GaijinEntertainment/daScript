@@ -142,8 +142,23 @@ def document_module_rtti(root:string)
 def document_module_ast(root:string)
     var mod = get_module("ast")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Call generation", mod, %regex~(make_call)$%%);
+        group_by_regex("Visitor pattern", mod, %regex~visit.*%%);
+        group_by_regex("Adapter generation", mod, %regex~make_.*%%);
+        group_by_regex("Adapter application", mod, %regex~(add_.*_(annotation|macro)|add_new_comment_reader|add_comment_reader)%%);
+        group_by_regex("Adding objects to objects", mod, %regex~add_.*%%);
+        group_by_regex("Program and module access", mod, %regex~(this_program|this_module|compiling_program|compiling_module)$%%);
+        group_by_regex("Textual descriptions of the objects", mod, %regex~(describe.*|das_to_string)%%);
+        group_by_regex("Searching", mod, %regex~find.*%%);
+        group_by_regex("Iterating", mod, %regex~(for_each.*|.*_foreach)%%);
+        group_by_regex("Cloning", mod, %regex~clone.*%%);
+        group_by_regex("Mangled name", mod, %regex~(parse_mangled_name|get_mangled_name)%%);
+        group_by_regex("Size and offset", mod, %regex~.*_(size|offset)%%);
+        group_by_regex("Properties", mod, %regex~(is|has)_.*%%);
+        group_by_regex("Pointer conversion", mod, %regex~(ExpressionPtr|FunctionPtr)%%);
+        group_by_regex("Evaluations", mod, %regex~(eval_single_expression)%%);
+        group_by_regex("Error reporting", mod, %regex~(macro_error)%%);
+        group_by_regex("Location and context", mod, %regex~(force_at|collect_dependencies|get_ast_context)%%)
     }]
     document("AST manipulation library",mod,"{root}/ast.rst","{root}/detail/ast.rst",groups)
 

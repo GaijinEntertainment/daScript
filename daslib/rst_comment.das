@@ -18,7 +18,7 @@ enum ParserState
     global
 
 def private debug_rst ( s : string )
-    to_log(LOG_INFO,s)
+    // to_log(LOG_INFO,s)
     pass
 
 [comment_reader]
