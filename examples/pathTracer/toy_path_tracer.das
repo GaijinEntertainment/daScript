@@ -2,16 +2,13 @@
 // options logCpp
 // options log_nodes
 
-module toy_path_tracer
-
 require path_tracer
 
-require math
 require strings
 require stbimage
 require daslib/jobque_boost
-require daslib/tga
 require daslib/random
+require daslib/math_boost
 
 enum Mode
     SingleThread
@@ -97,6 +94,7 @@ def main
     pixels |> reserve(width*height)
     for y in range(height)
         for x in range(width)
-            pixels |> push <| linear_to_SRGB(backbuffer[x + (height-1-y)*width].zyx)
+            let srgb = linear_to_SRGB(float4(backbuffer[x + (height-1-y)*width].zyx,1.0f))
+            pixels |> push <| RGBA_TO_UCOLOR(srgb)
     unsafe
         stbi_write_png( "{get_das_root()}/examples/pathTracer/path_tracer.png", width, height, 4, addr(pixels[0]), width*4  )

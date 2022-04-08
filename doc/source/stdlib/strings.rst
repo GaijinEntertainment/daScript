@@ -1013,6 +1013,9 @@ String conversion routines
   *  :ref:`float (str:string const implicit;context:__context const) : float <function-_at_strings_c__c_float_CIs_C_c>` 
   *  :ref:`double (str:string const implicit;context:__context const) : double <function-_at_strings_c__c_double_CIs_C_c>` 
   *  :ref:`to_int (value:string const implicit;hex:bool const) : int <function-_at_strings_c__c_to_int_CIs_Cb>` 
+  *  :ref:`to_uint (value:string const implicit;hex:bool const) : uint <function-_at_strings_c__c_to_uint_CIs_Cb>` 
+  *  :ref:`to_int64 (value:string const implicit;hex:bool const) : int64 <function-_at_strings_c__c_to_int64_CIs_Cb>` 
+  *  :ref:`to_uint64 (value:string const implicit;hex:bool const) : uint64 <function-_at_strings_c__c_to_uint64_CIs_Cb>` 
   *  :ref:`to_float (value:string const implicit) : float <function-_at_strings_c__c_to_float_CIs>` 
 
 .. _function-_at_strings_c__c_string_CI1_ls_u8_gr_A_C_c:
@@ -1122,6 +1125,57 @@ to_int returns int
 
 |function-strings-to_int|
 
+.. _function-_at_strings_c__c_to_uint_CIs_Cb:
+
+.. das:function:: to_uint(value: string const implicit; hex: bool const)
+
+to_uint returns uint
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++value   +string const implicit+
++--------+---------------------+
++hex     +bool const           +
++--------+---------------------+
+
+
+|function-strings-to_uint|
+
+.. _function-_at_strings_c__c_to_int64_CIs_Cb:
+
+.. das:function:: to_int64(value: string const implicit; hex: bool const)
+
+to_int64 returns int64
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++value   +string const implicit+
++--------+---------------------+
++hex     +bool const           +
++--------+---------------------+
+
+
+|function-strings-to_int64|
+
+.. _function-_at_strings_c__c_to_uint64_CIs_Cb:
+
+.. das:function:: to_uint64(value: string const implicit; hex: bool const)
+
+to_uint64 returns uint64
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++value   +string const implicit+
++--------+---------------------+
++hex     +bool const           +
++--------+---------------------+
+
+
+|function-strings-to_uint64|
+
 .. _function-_at_strings_c__c_to_float_CIs:
 
 .. das:function:: to_float(value: string const implicit)
@@ -1215,60 +1269,5 @@ reserve_string_buffer returns string
 
 
 |function-strings-reserve_string_buffer|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_strings_c__c_to_uint_CIs_Cb:
-
-.. das:function:: to_uint(value: string const implicit; hex: bool const)
-
-to_uint returns uint
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
-
-
-|function-strings-to_uint|
-
-.. _function-_at_strings_c__c_to_int64_CIs_Cb:
-
-.. das:function:: to_int64(value: string const implicit; hex: bool const)
-
-to_int64 returns int64
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
-
-
-|function-strings-to_int64|
-
-.. _function-_at_strings_c__c_to_uint64_CIs_Cb:
-
-.. das:function:: to_uint64(value: string const implicit; hex: bool const)
-
-to_uint64 returns uint64
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
-
-
-|function-strings-to_uint64|
 
 

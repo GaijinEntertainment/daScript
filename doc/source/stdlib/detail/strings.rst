@@ -14,45 +14,43 @@
 
 .. |function-strings-character_uat| replace:: Returns character of the string 'str' at index 'idx'. This function does not check bounds of index.
 
-.. |function-strings-chop| replace:: to be documented
+.. |function-strings-chop| replace:: Return all part of the strings starting at start and ending at start + length.
 
-.. |function-strings-delete_string| replace:: to be documented
+.. |function-strings-delete_string| replace:: Removes string from the string heap. This is unsafe because it will free the memory and all dangling strings will be broken.
 
-.. |function-strings-double| replace:: to be documented
+.. |function-strings-double| replace:: Converts string to double.
 
-.. |function-strings-empty| replace:: to be documented
+.. |function-strings-empty| replace:: Returns true if string is empty (null or "").
 
 .. |function-strings-ends_with| replace:: returns `true` if the end of the string `str`  matches a the string `cmp` otherwise returns `false`
 
-.. |function-strings-escape| replace:: to be documented
+.. |function-strings-escape| replace:: Escape string so that escape sequences are printable, for example converting "\n" into "\\n".
 
 .. |function-strings-find| replace:: Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
 
-.. |function-strings-find_first_of| replace:: to be documented
+.. |function-strings-float| replace:: Converts string to float.
 
-.. |function-strings-float| replace:: to be documented
+.. |function-strings-format| replace:: Converts value to string given specified format (that of C printf).
 
-.. |function-strings-format| replace:: to be documented
+.. |function-strings-int| replace:: Converts string to integer.
 
-.. |function-strings-int| replace:: to be documented
+.. |function-strings-is_alpha| replace:: Returns true if character is [A-Za-z].
 
-.. |function-strings-is_alpha| replace:: to be documented
+.. |function-strings-is_char_in_set| replace:: Returns true if character bit is set in the set (of 256 bits in uint32[8]).
 
-.. |function-strings-is_char_in_set| replace:: to be documented
+.. |function-strings-is_new_line| replace:: Returns true if character is '\n' or '\r'.
 
-.. |function-strings-is_new_line| replace:: to be documented
+.. |function-strings-is_number| replace:: Returns true if character is [0-9].
 
-.. |function-strings-is_number| replace:: to be documented
-
-.. |function-strings-is_white_space| replace:: to be documented
+.. |function-strings-is_white_space| replace:: Returns true if character is [ \t\n\r].
 
 .. |function-strings-length| replace:: Return length of string
 
-.. |function-strings-repeat| replace:: to be documented
+.. |function-strings-repeat| replace:: Repeat string specified number of times, and return the result.
 
-.. |function-strings-replace| replace:: to be documented
+.. |function-strings-replace| replace:: Replace all occurances of the stubstring in the string with another substring.
 
-.. |function-strings-resize| replace:: to be documented
+.. |function-strings-resize| replace:: Resize string, i.e make it specified length.
 
 .. |function-strings-reverse| replace:: Return reversed string
 
@@ -60,7 +58,7 @@
 
 .. |function-strings-starts_with| replace:: returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
 
-.. |function-strings-string| replace:: to be documented
+.. |function-strings-string| replace:: Return string from the byte array.
 
 .. |function-strings-strip| replace:: Strips white-space-only characters that might appear at the beginning or end of the given string and returns the new stripped string.
 
@@ -68,11 +66,17 @@
 
 .. |function-strings-strip_right| replace:: Strips white-space-only characters that might appear at the end of the given string and returns the new stripped string.
 
-.. |function-strings-to_char| replace:: to be documented
+.. |function-strings-to_char| replace:: Convert character to string.
 
-.. |function-strings-to_float| replace:: to be documented
+.. |function-strings-to_float| replace:: Convert string to float.
 
-.. |function-strings-to_int| replace:: to be documented
+.. |function-strings-to_int| replace:: Convert string to int.
+
+.. |function-strings-to_uint| replace:: Convert string to uint.
+
+.. |function-strings-to_int64| replace:: Convert string to int64.
+
+.. |function-strings-to_uint64| replace:: Convert string to uint64.
 
 .. |function-strings-to_lower| replace:: Return all lower case string
 
@@ -82,17 +86,32 @@
 
 .. |function-strings-to_upper_in_place| replace:: Modify string in place to be all upper case string
 
-.. |function-strings-uint| replace:: to be documented
+.. |function-strings-uint| replace:: Convert string to uint.
 
-.. |function-strings-unescape| replace:: to be documented
+.. |function-strings-unescape| replace:: Unescape string i.e reverse effects of `escape`. For example "\\n" is converted to "\n".
 
-.. |function-strings-write| replace:: to be documented
+.. |function-strings-write| replace:: Returns textual representation of the value.
 
-.. |function-strings-write_char| replace:: to be documented
+.. |function-strings-write_char| replace:: Writes character into StringBuilderWriter.
 
-.. |function-strings-write_chars| replace:: to be documented
+.. |function-strings-write_chars| replace:: Writes multiple characters into StringBuilderWriter.
 
-.. |function-strings-write_escape_string| replace:: to be documented
+.. |function-strings-write_escape_string| replace:: Writes escaped string into StringBuilderWriter.
 
-.. |structure_annotation-strings-StringBuilderWriter| replace:: to be documented
+.. |structure_annotation-strings-StringBuilderWriter| replace:: Object representing a string builder. Its significantly faster to write data to the string builder and than convert it to a string, as oppose to using sequences of string concatenations.
+
+.. |function-strings-rtrim| replace:: Removes trailing white space.
+
+.. |function-strings-peek_data| replace:: Passes temporary array which is mapped to the string data to a block as read-only.
+
+.. |function-strings-modify_data| replace:: Passes temporary array which is mapped to the string data to a block for both reading and writing.
+
+.. |function-strings-reserve_string_buffer| replace:: Allocate copy of the string data on the heap.
+
+
+
+
+
+
+
 

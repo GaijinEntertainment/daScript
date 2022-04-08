@@ -35,6 +35,9 @@ def RGBA_TO_UCOLOR(x,y,z,w:float)
     //! conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
     return pack_float_to_byte(float4(x,y,z,w)*255.)
 
+def RGBA_TO_UCOLOR(xyzw:float4)
+    return pack_float_to_byte(xyzw*255.)
+
 def UCOLOR_TO_RGBA(x:uint)
     //! conversion from ucolor to RGBA. x components are in [0,255] range
     return float4(
@@ -49,6 +52,19 @@ def UCOLOR_TO_RGB(x:uint)
         float((x>>16u)&255u)/255.0,
         float((x>> 8u)&255u)/255.0,
         float((x>> 0u)&255u)/255.0)
+
+def linear_to_SRGB ( x:float )
+    //! convert value from linear space to sRGB curve space
+    if x <= 0.00031308
+        return 12.92 * x
+    else
+        return 1.055*pow(x,(1.0 / 2.4) ) - 0.055
+
+def linear_to_SRGB ( c:float3 )
+    return float3(linear_to_SRGB(c.x),linear_to_SRGB(c.y),linear_to_SRGB(c.z))
+
+def linear_to_SRGB ( c:float4 )
+    return float4(linear_to_SRGB(c.x),linear_to_SRGB(c.y),linear_to_SRGB(c.z),c.w)
 
 def is_intersecting ( a, b : AABR ) // A.LO<=B.HI && A.HI>=B.LO
     //! returns true if inputs intersect
