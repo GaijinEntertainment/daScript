@@ -195,7 +195,9 @@ strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_pla
 def document_module_strings_boost(root:string)
     var mod = find_module("strings_boost")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
+        group_by_regex("Split and join", mod, %regex~(split|split_by_chars|join)$%%);
+        group_by_regex("Formatting", mod, %regex~(wide)$%%);
+        group_by_regex("Queries and comparisons", mod, %regex~(is_character_at|eq)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
     document("Boost package for string manipulation library",mod,"{root}/strings_boost.rst","{root}/detail/strings_boost.rst",groups)
