@@ -448,7 +448,7 @@ def document_classes(doc_file:file;mod:Module?)
             fwrite(doc_file,"it defines as follows\n\n")
             for fld in value.fields
                 if !is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType)
-                    fwrite(doc_file,"  {wide(string(fld.name),w)} : {describe_type(fld._type)}\n")
+                    fwrite(doc_file,"  | {wide(string(fld.name),w)} : {describe_type(fld._type)}\n")
             fwrite(doc_file,"\n")
         for fld in value.fields
             if is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType) && (fld.flags.implemented)
@@ -758,7 +758,7 @@ def private generate_substitute_stub(mod:Module?;substname:string)
                     // classes and methods
                     generate_topic_stub(tab,stub_file,topic("class",mod,string(value.name)))
                     for fld in value.fields
-                        if is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType)
+                        if is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType) && (fld.flags.implemented)
                             generate_topic_stub(tab,stub_file,topic("method",mod,"{value.name}.{fld.name}"))
                 elif !value.flags.generated
                     // structures

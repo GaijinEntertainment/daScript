@@ -39,8 +39,8 @@ Classes
 
 it defines as follows
 
-  __rtti  : void?
-  _server : smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` >
+  | __rtti  : void?
+  | _server : smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` >
 
 .. das:function:: Server.make_server_adapter(self: Server)
 

@@ -1,310 +1,118 @@
-.. |class-ast_boost-MacroMacro| replace:: to be documented in |class-ast_boost-MacroMacro|.rst
+.. |class-ast_boost-MacroMacro| replace:: This macro implements [macro] function annotation.
+    This adds macro initialization function, which will only be called during macro compilation.
 
-.. |method-ast_boost-MacroMacro.transform| replace:: to be documented in |method-ast_boost-MacroMacro.transform|.rst
+.. |method-ast_boost-MacroMacro.apply| replace:: Implements [macro] function annotation.
+    Internally it adds macro initialiation flag, as well as wraps function block in `if is_compiling_macros()` condition.
 
-.. |method-ast_boost-MacroMacro.verifyCall| replace:: to be documented in |method-ast_boost-MacroMacro.verifyCall|.rst
+.. |class-ast_boost-TagFunctionAnnotation| replace:: This annotation is used for tagging specific funcstion.
 
-.. |method-ast_boost-MacroMacro.apply| replace:: to be documented in |method-ast_boost-MacroMacro.apply|.rst
+.. |method-ast_boost-TagFunctionAnnotation.apply| replace:: Implements [tag_function] annotaiton.
+    Internally this just verifies if tag has a name, i.e. bool argument without value (set to true).
 
-.. |method-ast_boost-MacroMacro.finish| replace:: to be documented in |method-ast_boost-MacroMacro.finish|.rst
+.. |class-ast_boost-TagStructureAnnotation| replace:: This annotation is used for tagging specific structure.
+    This annotation is used to tag structure with a name, which can be used to identify structure in the code.
 
-.. |method-ast_boost-MacroMacro.patch| replace:: to be documented in |method-ast_boost-MacroMacro.patch|.rst
+.. |method-ast_boost-TagStructureAnnotation.apply| replace:: Implements [tag_structure] annotation.
+    Internally this just verifies if tag has a name, i.e. bool argument without value (set to true).
 
-.. |method-ast_boost-MacroMacro.fixup| replace:: to be documented in |method-ast_boost-MacroMacro.fixup|.rst
+.. |class-ast_boost-SetupAnyAnnotation| replace:: This is base class for any annotation or macro setup.
 
-.. |method-ast_boost-MacroMacro.lint| replace:: to be documented in |method-ast_boost-MacroMacro.lint|.rst
+.. |method-ast_boost-SetupAnyAnnotation.apply| replace:: Implements macro registration setup.
+    Internally this creates __setup_macros function, which is only called during this module macro compilation.
+    For the particular macro it adds call to the annotation registration function call (which is overrideable member `annotation_function_call`).
 
-.. |method-ast_boost-MacroMacro.complete| replace:: to be documented in |method-ast_boost-MacroMacro.complete|.rst
+.. |method-ast_boost-SetupAnyAnnotation.setup_call| replace:: Implements macro registration name setup.
+    Internally this adds name parameter to the annotation registration function call (which is overridable member `name`).
 
-.. |method-ast_boost-MacroMacro.isCompatible| replace:: to be documented in |method-ast_boost-MacroMacro.isCompatible|.rst
+.. |class-ast_boost-SetupFunctionAnnotatoin| replace:: [function_macro] implementation.
 
-.. |method-ast_boost-MacroMacro.isSpecialized| replace:: to be documented in |method-ast_boost-MacroMacro.isSpecialized|.rst
+.. |class-ast_boost-SetupBlockAnnotatoin| replace:: [block_macro] implementation.
 
-.. |class-ast_boost-TagFunctionAnnotation| replace:: to be documented in |class-ast_boost-TagFunctionAnnotation|.rst
+.. |class-ast_boost-SetupStructureAnnotatoin| replace:: [structure_macro] implementation.
 
-.. |method-ast_boost-TagFunctionAnnotation.transform| replace:: to be documented in |method-ast_boost-TagFunctionAnnotation.transform|.rst
+.. |class-ast_boost-SetupEnumerationAnnotation| replace:: [enumration_macro] implementation.
 
-.. |method-ast_boost-TagFunctionAnnotation.verifyCall| replace:: to be documented in |method-ast_boost-TagFunctionAnnotation.verifyCall|.rst
+.. |class-ast_boost-SetupContractAnnotatoin| replace:: [contract] implementation.
 
-.. |method-ast_boost-TagFunctionAnnotation.apply| replace:: to be documented in |method-ast_boost-TagFunctionAnnotation.apply|.rst
+.. |class-ast_boost-SetupReaderMacro| replace:: [reader_macro] implementation.
 
-.. |method-ast_boost-TagFunctionAnnotation.finish| replace:: to be documented in |method-ast_boost-TagFunctionAnnotation.finish|.rst
+.. |class-ast_boost-SetupCommentReader| replace:: [comment_reader] implementation.
 
-.. |method-ast_boost-TagFunctionAnnotation.patch| replace:: to be documented in |method-ast_boost-TagFunctionAnnotation.patch|.rst
+.. |class-ast_boost-SetupVariantMacro| replace:: [variant_macro] implementation.
 
-.. |method-ast_boost-TagFunctionAnnotation.fixup| replace:: to be documented in |method-ast_boost-TagFunctionAnnotation.fixup|.rst
+.. |class-ast_boost-SetupCallMacro| replace:: [call_macro] implementation.
 
-.. |method-ast_boost-TagFunctionAnnotation.lint| replace:: to be documented in |method-ast_boost-TagFunctionAnnotation.lint|.rst
+.. |class-ast_boost-SetupTypeInfoMacro| replace:: [typeinfo_macro] implementation.
 
-.. |method-ast_boost-TagFunctionAnnotation.complete| replace:: to be documented in |method-ast_boost-TagFunctionAnnotation.complete|.rst
+.. |class-ast_boost-SetupInferMacro| replace:: [infer_macro] implementation.
 
-.. |method-ast_boost-TagFunctionAnnotation.isCompatible| replace:: to be documented in |method-ast_boost-TagFunctionAnnotation.isCompatible|.rst
+.. |class-ast_boost-SetupDirtyInferMacro| replace:: [dirty_infer_macro] implementation.
 
-.. |method-ast_boost-TagFunctionAnnotation.isSpecialized| replace:: to be documented in |method-ast_boost-TagFunctionAnnotation.isSpecialized|.rst
+.. |class-ast_boost-SetupLintMacro| replace:: [lint_macro] implementation.
 
-.. |class-ast_boost-TagStructureAnnotation| replace:: to be documented in |class-ast_boost-TagStructureAnnotation|.rst
+.. |class-ast_boost-SetupGlobalLintMacro| replace:: [global_lint_macro] implementation.
 
-.. |method-ast_boost-TagStructureAnnotation.apply| replace:: to be documented in |method-ast_boost-TagStructureAnnotation.apply|.rst
+.. |class-ast_boost-SetupOptimizationMacro| replace:: [optimization_macro] implementation.
 
-.. |method-ast_boost-TagStructureAnnotation.finish| replace:: to be documented in |method-ast_boost-TagStructureAnnotation.finish|.rst
+.. |class-ast_boost-TagFunctionMacro| replace:: [tag_function_macro] implementation.
+    Applies annotation to all tagged functions.
 
-.. |method-ast_boost-TagStructureAnnotation.patch| replace:: to be documented in |method-ast_boost-TagStructureAnnotation.patch|.rst
+.. |method-ast_boost-TagFunctionMacro.apply| replace:: Makes sure tag is defined and is a string.
 
-.. |method-ast_boost-TagStructureAnnotation.complete| replace:: to be documented in |method-ast_boost-TagStructureAnnotation.complete|.rst
+.. |method-ast_boost-TagFunctionMacro.setup_call| replace:: Attaches tag as well as name to the setup call.
 
-.. |class-ast_boost-SetupAnyAnnotation| replace:: to be documented in |class-ast_boost-SetupAnyAnnotation|.rst
+.. |class-ast_boost-BetterRttiVisitor| replace:: Implements `expr is type` and `expr as type` checks, using RTTI.
 
-.. |method-ast_boost-SetupAnyAnnotation.apply| replace:: to be documented in |method-ast_boost-SetupAnyAnnotation.apply|.rst
+.. |method-ast_boost-BetterRttiVisitor.visitExprIsVariant| replace:: Implements `is type`.
 
-.. |method-ast_boost-SetupAnyAnnotation.finish| replace:: to be documented in |method-ast_boost-SetupAnyAnnotation.finish|.rst
+.. |method-ast_boost-BetterRttiVisitor.visitExprAsVariant| replace:: Implements `as type`.
 
-.. |method-ast_boost-SetupAnyAnnotation.patch| replace:: to be documented in |method-ast_boost-SetupAnyAnnotation.patch|.rst
+.. |method-ast_boost-BetterRttiVisitor.visitExprSafeAsVariant| replace:: Implements `?as type`.
 
-.. |method-ast_boost-SetupAnyAnnotation.complete| replace:: to be documented in |method-ast_boost-SetupAnyAnnotation.complete|.rst
+.. |function-ast_boost-isVectorType| replace:: Returns true if type is vector type, i.e. int2, float3, and such, including range and urange.
 
-.. |method-ast_boost-SetupAnyAnnotation.setup_call| replace:: to be documented in |method-ast_boost-SetupAnyAnnotation.setup_call|.rst
+.. |function-ast_boost-describe| replace:: Returns textuan description of the object.
 
-.. |class-ast_boost-SetupFunctionAnnotatoin| replace:: to be documented in |class-ast_boost-SetupFunctionAnnotatoin|.rst
+.. |function-ast_boost-describe_function_short| replace:: Gives short (name, arguments with types, result type) description of the function.
 
-.. |method-ast_boost-SetupFunctionAnnotatoin.apply| replace:: to be documented in |method-ast_boost-SetupFunctionAnnotatoin.apply|.rst
+.. |function-ast_boost-isExpression| replace:: Returns true if given object is derived from ast::Expression.
 
-.. |method-ast_boost-SetupFunctionAnnotatoin.finish| replace:: to be documented in |method-ast_boost-SetupFunctionAnnotatoin.finish|.rst
+.. |function-ast_boost-is_same_or_inherited| replace:: Returns true if child is the same class as parent, or is inherited from the parent.
 
-.. |method-ast_boost-SetupFunctionAnnotatoin.patch| replace:: to be documented in |method-ast_boost-SetupFunctionAnnotatoin.patch|.rst
+.. |function-ast_boost-is_class_method| replace:: Returns true if field is a class method.
 
-.. |method-ast_boost-SetupFunctionAnnotatoin.complete| replace:: to be documented in |method-ast_boost-SetupFunctionAnnotatoin.complete|.rst
+.. |function-ast_boost-emplace_new| replace:: Emplaces newly created object into the container without memory leak (i.e. correct ptr_ref_count).
 
-.. |method-ast_boost-SetupFunctionAnnotatoin.setup_call| replace:: to be documented in |method-ast_boost-SetupFunctionAnnotatoin.setup_call|.rst
+.. |function-ast_boost-override_method| replace:: Override class method `name` with new function.
 
-.. |class-ast_boost-SetupBlockAnnotatoin| replace:: to be documented in |class-ast_boost-SetupBlockAnnotatoin|.rst
+.. |function-ast_boost-find_arg| replace:: Find argument in annotation argument list.
 
-.. |method-ast_boost-SetupBlockAnnotatoin.apply| replace:: to be documented in |method-ast_boost-SetupBlockAnnotatoin.apply|.rst
+.. |function-ast_boost-find_unique_function| replace:: Returns unique function of that specific name, or null if there is none or more than one.
 
-.. |method-ast_boost-SetupBlockAnnotatoin.finish| replace:: to be documented in |method-ast_boost-SetupBlockAnnotatoin.finish|.rst
+.. |function-ast_boost-find_unique_generic| replace:: Returns unique generic function of that specific name, or null if there is none or more than one.
 
-.. |method-ast_boost-SetupBlockAnnotatoin.patch| replace:: to be documented in |method-ast_boost-SetupBlockAnnotatoin.patch|.rst
+.. |function-ast_boost-setup_call_list| replace:: Create new function which will contain collection of calls. Returns body block to where the call is to be appended.
 
-.. |method-ast_boost-SetupBlockAnnotatoin.complete| replace:: to be documented in |method-ast_boost-SetupBlockAnnotatoin.complete|.rst
+.. |function-ast_boost-setup_macro| replace:: Setup macro initialization function, which will only be called during compilation of this module. Returns body block to where the macro initialization is to be appended.
 
-.. |method-ast_boost-SetupBlockAnnotatoin.setup_call| replace:: to be documented in |method-ast_boost-SetupBlockAnnotatoin.setup_call|.rst
+.. |function-ast_boost-panic_expr_as| replace:: Function call which panics with "invalid 'as' expression or null pointer dereference" message.
 
-.. |class-ast_boost-SetupStructureAnnotatoin| replace:: to be documented in |class-ast_boost-SetupStructureAnnotatoin|.rst
+.. |function-ast_boost-find_annotation| replace:: Finds annotation in the module.
 
-.. |method-ast_boost-SetupStructureAnnotatoin.apply| replace:: to be documented in |method-ast_boost-SetupStructureAnnotatoin.apply|.rst
+.. |function-ast_boost-append_annotation| replace:: Appends function annotation to the function given its name and arguments.
 
-.. |method-ast_boost-SetupStructureAnnotatoin.finish| replace:: to be documented in |method-ast_boost-SetupStructureAnnotatoin.finish|.rst
+.. |function-ast_boost-add_annotation_argument| replace:: Adds annotation argument to the argument list.
 
-.. |method-ast_boost-SetupStructureAnnotatoin.patch| replace:: to be documented in |method-ast_boost-SetupStructureAnnotatoin.patch|.rst
+.. |function-ast_boost-get_for_source_index| replace:: Find index of the for loop source variable.
 
-.. |method-ast_boost-SetupStructureAnnotatoin.complete| replace:: to be documented in |method-ast_boost-SetupStructureAnnotatoin.complete|.rst
+.. |function-ast_boost-make_static_assert_false| replace:: Creates `static_assert(false,text)` expression.
 
-.. |method-ast_boost-SetupStructureAnnotatoin.setup_call| replace:: to be documented in |method-ast_boost-SetupStructureAnnotatoin.setup_call|.rst
+.. |function-ast_boost-describe_bitfield| replace:: Returns textual description of the bitfield.
 
-.. |class-ast_boost-SetupEnumerationAnnotation| replace:: to be documented in |class-ast_boost-SetupEnumerationAnnotation|.rst
+.. |function-ast_boost-setup_tag_annotation| replace:: Creates annotation and applies it to all tagged functions given tag.
 
-.. |method-ast_boost-SetupEnumerationAnnotation.apply| replace:: to be documented in |method-ast_boost-SetupEnumerationAnnotation.apply|.rst
+.. |function-ast_boost-convert_to_expression| replace:: Converts value to expression, which generates this value.
 
-.. |method-ast_boost-SetupEnumerationAnnotation.finish| replace:: to be documented in |method-ast_boost-SetupEnumerationAnnotation.finish|.rst
+.. |function_annotation-ast_boost-macro| replace:: MacroMacro function annotation.
 
-.. |method-ast_boost-SetupEnumerationAnnotation.patch| replace:: to be documented in |method-ast_boost-SetupEnumerationAnnotation.patch|.rst
-
-.. |method-ast_boost-SetupEnumerationAnnotation.complete| replace:: to be documented in |method-ast_boost-SetupEnumerationAnnotation.complete|.rst
-
-.. |method-ast_boost-SetupEnumerationAnnotation.setup_call| replace:: to be documented in |method-ast_boost-SetupEnumerationAnnotation.setup_call|.rst
-
-.. |class-ast_boost-SetupContractAnnotatoin| replace:: to be documented in |class-ast_boost-SetupContractAnnotatoin|.rst
-
-.. |method-ast_boost-SetupContractAnnotatoin.apply| replace:: to be documented in |method-ast_boost-SetupContractAnnotatoin.apply|.rst
-
-.. |method-ast_boost-SetupContractAnnotatoin.finish| replace:: to be documented in |method-ast_boost-SetupContractAnnotatoin.finish|.rst
-
-.. |method-ast_boost-SetupContractAnnotatoin.patch| replace:: to be documented in |method-ast_boost-SetupContractAnnotatoin.patch|.rst
-
-.. |method-ast_boost-SetupContractAnnotatoin.complete| replace:: to be documented in |method-ast_boost-SetupContractAnnotatoin.complete|.rst
-
-.. |method-ast_boost-SetupContractAnnotatoin.setup_call| replace:: to be documented in |method-ast_boost-SetupContractAnnotatoin.setup_call|.rst
-
-.. |class-ast_boost-SetupReaderMacro| replace:: to be documented in |class-ast_boost-SetupReaderMacro|.rst
-
-.. |method-ast_boost-SetupReaderMacro.apply| replace:: to be documented in |method-ast_boost-SetupReaderMacro.apply|.rst
-
-.. |method-ast_boost-SetupReaderMacro.finish| replace:: to be documented in |method-ast_boost-SetupReaderMacro.finish|.rst
-
-.. |method-ast_boost-SetupReaderMacro.patch| replace:: to be documented in |method-ast_boost-SetupReaderMacro.patch|.rst
-
-.. |method-ast_boost-SetupReaderMacro.complete| replace:: to be documented in |method-ast_boost-SetupReaderMacro.complete|.rst
-
-.. |method-ast_boost-SetupReaderMacro.setup_call| replace:: to be documented in |method-ast_boost-SetupReaderMacro.setup_call|.rst
-
-.. |class-ast_boost-SetupCommentReader| replace:: to be documented in |class-ast_boost-SetupCommentReader|.rst
-
-.. |method-ast_boost-SetupCommentReader.apply| replace:: to be documented in |method-ast_boost-SetupCommentReader.apply|.rst
-
-.. |method-ast_boost-SetupCommentReader.finish| replace:: to be documented in |method-ast_boost-SetupCommentReader.finish|.rst
-
-.. |method-ast_boost-SetupCommentReader.patch| replace:: to be documented in |method-ast_boost-SetupCommentReader.patch|.rst
-
-.. |method-ast_boost-SetupCommentReader.complete| replace:: to be documented in |method-ast_boost-SetupCommentReader.complete|.rst
-
-.. |method-ast_boost-SetupCommentReader.setup_call| replace:: to be documented in |method-ast_boost-SetupCommentReader.setup_call|.rst
-
-.. |class-ast_boost-SetupVariantMacro| replace:: to be documented in |class-ast_boost-SetupVariantMacro|.rst
-
-.. |method-ast_boost-SetupVariantMacro.apply| replace:: to be documented in |method-ast_boost-SetupVariantMacro.apply|.rst
-
-.. |method-ast_boost-SetupVariantMacro.finish| replace:: to be documented in |method-ast_boost-SetupVariantMacro.finish|.rst
-
-.. |method-ast_boost-SetupVariantMacro.patch| replace:: to be documented in |method-ast_boost-SetupVariantMacro.patch|.rst
-
-.. |method-ast_boost-SetupVariantMacro.complete| replace:: to be documented in |method-ast_boost-SetupVariantMacro.complete|.rst
-
-.. |method-ast_boost-SetupVariantMacro.setup_call| replace:: to be documented in |method-ast_boost-SetupVariantMacro.setup_call|.rst
-
-.. |class-ast_boost-SetupCallMacro| replace:: to be documented in |class-ast_boost-SetupCallMacro|.rst
-
-.. |method-ast_boost-SetupCallMacro.apply| replace:: to be documented in |method-ast_boost-SetupCallMacro.apply|.rst
-
-.. |method-ast_boost-SetupCallMacro.finish| replace:: to be documented in |method-ast_boost-SetupCallMacro.finish|.rst
-
-.. |method-ast_boost-SetupCallMacro.patch| replace:: to be documented in |method-ast_boost-SetupCallMacro.patch|.rst
-
-.. |method-ast_boost-SetupCallMacro.complete| replace:: to be documented in |method-ast_boost-SetupCallMacro.complete|.rst
-
-.. |method-ast_boost-SetupCallMacro.setup_call| replace:: to be documented in |method-ast_boost-SetupCallMacro.setup_call|.rst
-
-.. |class-ast_boost-SetupTypeInfoMacro| replace:: to be documented in |class-ast_boost-SetupTypeInfoMacro|.rst
-
-.. |method-ast_boost-SetupTypeInfoMacro.apply| replace:: to be documented in |method-ast_boost-SetupTypeInfoMacro.apply|.rst
-
-.. |method-ast_boost-SetupTypeInfoMacro.finish| replace:: to be documented in |method-ast_boost-SetupTypeInfoMacro.finish|.rst
-
-.. |method-ast_boost-SetupTypeInfoMacro.patch| replace:: to be documented in |method-ast_boost-SetupTypeInfoMacro.patch|.rst
-
-.. |method-ast_boost-SetupTypeInfoMacro.complete| replace:: to be documented in |method-ast_boost-SetupTypeInfoMacro.complete|.rst
-
-.. |method-ast_boost-SetupTypeInfoMacro.setup_call| replace:: to be documented in |method-ast_boost-SetupTypeInfoMacro.setup_call|.rst
-
-.. |class-ast_boost-SetupInferMacro| replace:: to be documented in |class-ast_boost-SetupInferMacro|.rst
-
-.. |method-ast_boost-SetupInferMacro.apply| replace:: to be documented in |method-ast_boost-SetupInferMacro.apply|.rst
-
-.. |method-ast_boost-SetupInferMacro.finish| replace:: to be documented in |method-ast_boost-SetupInferMacro.finish|.rst
-
-.. |method-ast_boost-SetupInferMacro.patch| replace:: to be documented in |method-ast_boost-SetupInferMacro.patch|.rst
-
-.. |method-ast_boost-SetupInferMacro.complete| replace:: to be documented in |method-ast_boost-SetupInferMacro.complete|.rst
-
-.. |method-ast_boost-SetupInferMacro.setup_call| replace:: to be documented in |method-ast_boost-SetupInferMacro.setup_call|.rst
-
-.. |class-ast_boost-SetupDirtyInferMacro| replace:: to be documented in |class-ast_boost-SetupDirtyInferMacro|.rst
-
-.. |method-ast_boost-SetupDirtyInferMacro.apply| replace:: to be documented in |method-ast_boost-SetupDirtyInferMacro.apply|.rst
-
-.. |method-ast_boost-SetupDirtyInferMacro.finish| replace:: to be documented in |method-ast_boost-SetupDirtyInferMacro.finish|.rst
-
-.. |method-ast_boost-SetupDirtyInferMacro.patch| replace:: to be documented in |method-ast_boost-SetupDirtyInferMacro.patch|.rst
-
-.. |method-ast_boost-SetupDirtyInferMacro.complete| replace:: to be documented in |method-ast_boost-SetupDirtyInferMacro.complete|.rst
-
-.. |method-ast_boost-SetupDirtyInferMacro.setup_call| replace:: to be documented in |method-ast_boost-SetupDirtyInferMacro.setup_call|.rst
-
-.. |class-ast_boost-SetupLintMacro| replace:: to be documented in |class-ast_boost-SetupLintMacro|.rst
-
-.. |method-ast_boost-SetupLintMacro.apply| replace:: to be documented in |method-ast_boost-SetupLintMacro.apply|.rst
-
-.. |method-ast_boost-SetupLintMacro.finish| replace:: to be documented in |method-ast_boost-SetupLintMacro.finish|.rst
-
-.. |method-ast_boost-SetupLintMacro.patch| replace:: to be documented in |method-ast_boost-SetupLintMacro.patch|.rst
-
-.. |method-ast_boost-SetupLintMacro.complete| replace:: to be documented in |method-ast_boost-SetupLintMacro.complete|.rst
-
-.. |method-ast_boost-SetupLintMacro.setup_call| replace:: to be documented in |method-ast_boost-SetupLintMacro.setup_call|.rst
-
-.. |class-ast_boost-SetupGlobalLintMacro| replace:: to be documented in |class-ast_boost-SetupGlobalLintMacro|.rst
-
-.. |method-ast_boost-SetupGlobalLintMacro.apply| replace:: to be documented in |method-ast_boost-SetupGlobalLintMacro.apply|.rst
-
-.. |method-ast_boost-SetupGlobalLintMacro.finish| replace:: to be documented in |method-ast_boost-SetupGlobalLintMacro.finish|.rst
-
-.. |method-ast_boost-SetupGlobalLintMacro.patch| replace:: to be documented in |method-ast_boost-SetupGlobalLintMacro.patch|.rst
-
-.. |method-ast_boost-SetupGlobalLintMacro.complete| replace:: to be documented in |method-ast_boost-SetupGlobalLintMacro.complete|.rst
-
-.. |method-ast_boost-SetupGlobalLintMacro.setup_call| replace:: to be documented in |method-ast_boost-SetupGlobalLintMacro.setup_call|.rst
-
-.. |class-ast_boost-SetupOptimizationMacro| replace:: to be documented in |class-ast_boost-SetupOptimizationMacro|.rst
-
-.. |method-ast_boost-SetupOptimizationMacro.apply| replace:: to be documented in |method-ast_boost-SetupOptimizationMacro.apply|.rst
-
-.. |method-ast_boost-SetupOptimizationMacro.finish| replace:: to be documented in |method-ast_boost-SetupOptimizationMacro.finish|.rst
-
-.. |method-ast_boost-SetupOptimizationMacro.patch| replace:: to be documented in |method-ast_boost-SetupOptimizationMacro.patch|.rst
-
-.. |method-ast_boost-SetupOptimizationMacro.complete| replace:: to be documented in |method-ast_boost-SetupOptimizationMacro.complete|.rst
-
-.. |method-ast_boost-SetupOptimizationMacro.setup_call| replace:: to be documented in |method-ast_boost-SetupOptimizationMacro.setup_call|.rst
-
-.. |class-ast_boost-TagFunctionMacro| replace:: to be documented in |class-ast_boost-TagFunctionMacro|.rst
-
-.. |method-ast_boost-TagFunctionMacro.apply| replace:: to be documented in |method-ast_boost-TagFunctionMacro.apply|.rst
-
-.. |method-ast_boost-TagFunctionMacro.finish| replace:: to be documented in |method-ast_boost-TagFunctionMacro.finish|.rst
-
-.. |method-ast_boost-TagFunctionMacro.patch| replace:: to be documented in |method-ast_boost-TagFunctionMacro.patch|.rst
-
-.. |method-ast_boost-TagFunctionMacro.complete| replace:: to be documented in |method-ast_boost-TagFunctionMacro.complete|.rst
-
-.. |method-ast_boost-TagFunctionMacro.setup_call| replace:: to be documented in |method-ast_boost-TagFunctionMacro.setup_call|.rst
-
-.. |class-ast_boost-BetterRttiVisitor| replace:: to be documented in |class-ast_boost-BetterRttiVisitor|.rst
-
-.. |method-ast_boost-BetterRttiVisitor.visitExprIsVariant| replace:: to be documented in |method-ast_boost-BetterRttiVisitor.visitExprIsVariant|.rst
-
-.. |method-ast_boost-BetterRttiVisitor.visitExprAsVariant| replace:: to be documented in |method-ast_boost-BetterRttiVisitor.visitExprAsVariant|.rst
-
-.. |method-ast_boost-BetterRttiVisitor.visitExprSafeAsVariant| replace:: to be documented in |method-ast_boost-BetterRttiVisitor.visitExprSafeAsVariant|.rst
-
-.. |function-ast_boost-isVectorType| replace:: to be documented in |function-ast_boost-isVectorType|.rst
-
-.. |function-ast_boost-describe| replace:: to be documented in |function-ast_boost-describe|.rst
-
-.. |function-ast_boost-describe_function_short| replace:: to be documented in |function-ast_boost-describe_function_short|.rst
-
-.. |function-ast_boost-isExpression| replace:: to be documented in |function-ast_boost-isExpression|.rst
-
-.. |function-ast_boost-is_same_or_inherited| replace:: to be documented in |function-ast_boost-is_same_or_inherited|.rst
-
-.. |function-ast_boost-is_class_method| replace:: to be documented in |function-ast_boost-is_class_method|.rst
-
-.. |function-ast_boost-emplace_new| replace:: to be documented in |function-ast_boost-emplace_new|.rst
-
-.. |function-ast_boost-override_method| replace:: to be documented in |function-ast_boost-override_method|.rst
-
-.. |function-ast_boost-find_arg| replace:: to be documented in |function-ast_boost-find_arg|.rst
-
-.. |function-ast_boost-find_unique_function| replace:: to be documented in |function-ast_boost-find_unique_function|.rst
-
-.. |function-ast_boost-find_unique_generic| replace:: to be documented in |function-ast_boost-find_unique_generic|.rst
-
-.. |function-ast_boost-setup_call_list| replace:: to be documented in |function-ast_boost-setup_call_list|.rst
-
-.. |function-ast_boost-setup_macro| replace:: to be documented in |function-ast_boost-setup_macro|.rst
-
-.. |function-ast_boost-panic_expr_as| replace:: to be documented in |function-ast_boost-panic_expr_as|.rst
-
-.. |function-ast_boost-find_annotation| replace:: to be documented in |function-ast_boost-find_annotation|.rst
-
-.. |function-ast_boost-append_annotation| replace:: to be documented in |function-ast_boost-append_annotation|.rst
-
-.. |function-ast_boost-add_annotation_argument| replace:: to be documented in |function-ast_boost-add_annotation_argument|.rst
-
-.. |function-ast_boost-get_for_source_index| replace:: to be documented in |function-ast_boost-get_for_source_index|.rst
-
-.. |function-ast_boost-make_static_assert_false| replace:: to be documented in |function-ast_boost-make_static_assert_false|.rst
-
-.. |function-ast_boost-describe_bitfield| replace:: to be documented in |function-ast_boost-describe_bitfield|.rst
-
-.. |function-ast_boost-setup_tag_annotation| replace:: to be documented in |function-ast_boost-setup_tag_annotation|.rst
-
-.. |function-ast_boost-convert_to_expression| replace:: to be documented in |function-ast_boost-convert_to_expression|.rst
-
+.. |function_annotation-ast_boost-tag_function| replace:: TagFunctionAnnotation function annotation.

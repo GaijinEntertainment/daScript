@@ -165,8 +165,12 @@ def document_module_ast(root:string)
 def document_module_ast_boost(root:string)
     var mod = find_module("ast_boost")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Containers", mod, %regex~(emplace_new)%%);
+        group_by_regex("Textual descriptions of the objects", mod, %regex~describe.*%%);
+        group_by_regex("Queries", mod, %regex~(is.*|find.*|get.*)%%);
+        group_by_regex("Annotations", mod, %regex~(append.*|add.*)%%);
+        group_by_regex("Expression generation", mod, %regex~(override_method|panic_expr_as|make_static_assert_false|convert_to_expression)%%);
+        group_by_regex("Setup", mod, %regex~setup.*$%%)
     }]
     document("Boost package for the AST",mod,"{root}/ast_boost.rst","{root}/detail/ast_boost.rst",groups)
 
