@@ -80,6 +80,8 @@ Type aliases
 +----------------+---+-----+
 +sealed          +7  +128  +
 +----------------+---+-----+
++implemented     +8  +256  +
++----------------+---+-----+
 
 
 |typedef-ast-FieldDeclarationFlags|

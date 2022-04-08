@@ -176,6 +176,7 @@ namespace das
                     bool            doNotDelete : 1;
                     bool            privateField : 1;
                     bool            sealed : 1;
+                    bool            implemented : 1;
                 };
                 uint32_t            flags = 0;
             };
