@@ -1,24 +1,36 @@
-.. |function-jobque-append| replace:: to be documented
+.. |function-jobque-append| replace:: Increase entry count to the channel.
 
-.. |function-jobque-get_total_hw_jobs| replace:: to be documented
+.. |function-jobque-with_channel| replace:: Creates `Channel`, makes it available inside the scope of the block.
 
-.. |function-jobque-get_total_hw_threads| replace:: to be documented
+.. |function-jobque-join| replace:: Wait until channel entry count reaches 0.
 
-.. |function-jobque-join| replace:: to be documented
+.. |function-jobque-notify| replace:: Notify channel that entry is completed (decrease entry count).
 
-.. |function-jobque-new_job_invoke| replace:: to be documented
+.. |function-jobque-with_job_status| replace:: Creates `JobStatus`, makes it available inside the scope of the block.
 
-.. |function-jobque-new_thread_invoke| replace:: to be documented
+.. |function-jobque-new_job_invoke| replace:: Creates clone of the current context, moves attached lambda to it.
+    Adds a job to a job que, which once invoked will execute the lambda on the context clone.
+    `new_job_invoke` is part of the low level (internal) job infrastructure. Recommended approach is to use `jobque_boost::new_job`.
 
-.. |function-jobque-notify| replace:: to be documented
+.. |function-jobque-with_job_que| replace:: Makes sure jobque infrastructure is available inside the scope of the block.
+    There is cost associated with creating such infrastructure (i.e. creating hardware threads, jobs, etc).
+    If jobs are integral part of the application, with_job_que should be high in the call stack.
+    If it`s a one-off - it should be encricled accordingly to reduce runtime memory footprint of the application.
 
-.. |function-jobque-with_channel| replace:: to be documented
+.. |function-jobque-get_total_hw_jobs| replace:: Total number of hardware threads supporting job system.
 
-.. |function-jobque-with_job_que| replace:: to be documented
+.. |function-jobque-get_total_hw_threads| replace:: Total number of hardware threads available.
 
-.. |function-jobque-with_job_status| replace:: to be documented
+.. |function-jobque-new_thread_invoke| replace:: Creates clone of the current context, moves attached lambda to it.
+    Creates a thread, invokes the lambda on the new context in that thread.
+    `new_thread_invoke` is part of the low level (internal) thread infrastructure. Recommended approach is to use `jobque_boost::new_thread`.
 
-.. |structure_annotation-jobque-Channel| replace:: to be documented
+.. |function-jobque-is_job_que_shutting_down| replace:: Returns true if job que infrastructure is shut-down or not initialized.
+    This is useful for debug contexts, since it allows to check if job que is still alive.
 
-.. |structure_annotation-jobque-JobStatus| replace:: to be documented
+.. |structure_annotation-jobque-Channel| replace:: Channel provides a way to communicate between multiple contexts, including threads and jobs. Channel has internal entry count.
+
+.. |structure_annotation-jobque-JobStatus| replace:: Job status indicator (ready or not, as well as entry count).
+
+
 

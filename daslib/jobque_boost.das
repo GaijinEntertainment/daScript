@@ -14,10 +14,20 @@ require daslib/templates
 
 [tag_function(new_job_tag)]
 def new_job ( var l : lambda )
-    invoke(l)   // note, this is never called if job-que is there
+    //! Create a new job.
+    //!     * new context is cloned from the current context.
+    //!     * lambda is cloned to the new context.
+    //!     * new job is added to the job queue.
+    //!     * once new job is invoked, lambda is invoked on the new context on the job thread.
+    invoke(l)   // note, this is never called if job-que is there.
 
 [tag_function(new_job_tag)]
 def new_thread ( var l : lambda )
+    //! Create a new thread
+    //!     * new context is cloned from the current context.
+    //!     * lambda is cloned to the new context.
+    //!     * new thread is created.
+    //!     * lambda is invoked on the new context on the new thread.
     invoke(l)   // note, this is never called if job-que is there
 
 [tag_function_macro(tag="new_job_tag")]
@@ -62,6 +72,9 @@ class private NewJobMacro : AstFunctionAnnotation
         return <- ncall
 
 def for_each ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
+    //! reads input from the channel (in order it was pushed) and invokes the block on each input.
+    //! stops once channel is depleted (internal entry counter is 0)
+    //! this can happen on multiple threads or jobs at the same time.
     while true
         let void_data = _builtin_channel_pop(channel)
         if void_data==null
@@ -71,15 +84,20 @@ def for_each ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
             invoke ( blk, *typed_data )
 
 def push_clone ( channel:Channel?; data : auto(TT) )
+    //! clones data and pushed value to the channel (at the end)
     var heap_data = new TT
     *heap_data := data
     _builtin_channel_push(channel, heap_data)
 
 def push ( channel:Channel?; data : auto? )
+    //! pushes value to the channel (at the end)
     _builtin_channel_push(channel, data)
 
 [template (tinfo)]
 def each ( channel:Channel?; tinfo : auto(TT) )
+    //! this iterator is used to iterate over the channel in order it was pushed.
+    //! iterator stops once channel is depleted (internal entry counter is 0)
+    //! iteration can happen on multiple threads or jobs at the same time.
     unsafe
         return <- generator<TT&#> () <| $ ()
             while true

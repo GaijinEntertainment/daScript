@@ -267,16 +267,19 @@ def document_module_apply(root:string)
 def document_module_jobque(root:string)
     var mod = find_module("jobque")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Channel and JobStatus", mod, %regex~(append|notify|join)$%%);
+        group_by_regex("Queries", mod, %regex~(get_total_hw_jobs|get_total_hw_threads|is_job_que_shutting_down)$%%);
+        group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke)$%%);
+        group_by_regex("Construction", mod, %regex~(with_channel|with_job_status|with_job_que)$%%)
     }]
     document("Jobs and threads",mod,"{root}/jobque.rst","{root}/detail/jobque.rst",groups)
 
 def document_module_jobque_boost(root:string)
     var mod = find_module("jobque_boost")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Invocations", mod, %regex~(new_job|new_thread)$%%);
+        group_by_regex("Iteration", mod, %regex~(for_each|each)$%%);
+        group_by_regex("Passing data", mod, %regex~(push|push_clone)$%%)
     }]
     document("Boost package for jobs and threads",mod,"{root}/jobque_boost.rst","{root}/detail/jobque_boost.rst",groups)
 
