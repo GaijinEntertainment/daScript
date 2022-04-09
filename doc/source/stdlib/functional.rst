@@ -13,9 +13,28 @@ All functions and symbols are in "functional" module, use require to get access 
 
     require daslib/functional
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++
+Map, reduce
++++++++++++
+
+  *  :ref:`filter (src:iterator\<auto(TT)\> -const;blk:lambda\<(what:TT const -&):bool\> const) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at_>` 
+  *  :ref:`filter (src:iterator\<auto(TT)\> -const;blk:function\<(what:TT const -&):bool\> const) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_>` 
+  *  :ref:`map (src:iterator\<auto(TT)\> -const;blk:lambda\<(what:TT const -&):auto(QQ)\> const) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at_>` 
+  *  :ref:`map (src:iterator\<auto(TT)\> -const;blk:function\<(what:TT const -&):auto(QQ)\> const) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at__at_>` 
+  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:lambda\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_>` 
+  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:function\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_>` 
+  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:block\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_>` 
+  *  :ref:`sum (it:iterator\<auto(TT)\> const) : auto <function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr_._gr_G>` 
+  *  :ref:`any (it:auto const) : auto <function-_at_functional_c__c_any_C.>` 
+  *  :ref:`all (it:auto const) : auto <function-_at_functional_c__c_all_C.>` 
+  *  :ref:`cycle (src:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr_._gr_G>` 
+  *  :ref:`islice (src:iterator\<auto(TT)\> -const;start:int const;stop:int const) : auto <function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr_._gr_G_Ci_Ci>` 
+  *  :ref:`count (start:int -const;step:int -const) : iterator\<int\> <function-_at_functional_c__c_count_i_i>` 
+  *  :ref:`repeat_ref (value:auto(TT) const;total:int -const) : auto <function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i>` 
+  *  :ref:`repeat (value:auto(TT) const;count:int -const) : auto <function-_at_functional_c__c_repeat_CY_ls_TT_gr_._i>` 
+  *  :ref:`not (x:auto const) : auto <function-_at_functional_c__c_not_C.>` 
+  *  :ref:`echo (x:auto -const;extra:string const) : auto <function-_at_functional_c__c_echo_._Cs>` 
+  *  :ref:`flatten (it:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_flatten_1_ls_Y_ls_TT_gr_._gr_G>` 
 
 .. _function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at_:
 
@@ -270,40 +289,6 @@ repeat returns auto
 
 yields `value` `count` times
 
-.. _function-_at_functional_c__c_is_equal_C._C.:
-
-.. das:function:: is_equal(a: auto const; b: auto const)
-
-is_equal returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-
-
-yields true if `a` and `b` are equal
-
-.. _function-_at_functional_c__c_is_not_equal_C._C.:
-
-.. das:function:: is_not_equal(a: auto const; b: auto const)
-
-is_not_equal returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-
-
-yields true if `a` and `b` are not equal
-
 .. _function-_at_functional_c__c_not_C.:
 
 .. das:function:: not(x: auto const)
@@ -350,5 +335,46 @@ flatten returns auto
 
 
 iterates over `it`, than iterates over each element of each element of `it` and yields it
+
++++++++
+Queries
++++++++
+
+  *  :ref:`is_equal (a:auto const;b:auto const) : auto <function-_at_functional_c__c_is_equal_C._C.>` 
+  *  :ref:`is_not_equal (a:auto const;b:auto const) : auto <function-_at_functional_c__c_is_not_equal_C._C.>` 
+
+.. _function-_at_functional_c__c_is_equal_C._C.:
+
+.. das:function:: is_equal(a: auto const; b: auto const)
+
+is_equal returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
+
+
+yields true if `a` and `b` are equal
+
+.. _function-_at_functional_c__c_is_not_equal_C._C.:
+
+.. das:function:: is_not_equal(a: auto const; b: auto const)
+
+is_not_equal returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
+
+
+yields true if `a` and `b` are not equal
 
 

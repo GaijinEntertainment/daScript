@@ -206,8 +206,8 @@ def document_module_strings_boost(root:string)
 def document_module_functional(root:string)
     var mod = find_module("functional")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Map, reduce", mod, %regex~(filter|map|reduce|any|sum|all|cycle|islice|count|repeat_ref|repeat|not|echo|flatten)$%%);
+        group_by_regex("Queries", mod, %regex~(is_equal|is_not_equal)$%%)
     }]
     document("Functional programming library",mod,"{root}/functional.rst","{root}/detail/functional.rst",groups)
 
