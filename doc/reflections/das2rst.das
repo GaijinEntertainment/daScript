@@ -214,8 +214,8 @@ def document_module_functional(root:string)
 def document_module_json(root:string)
     var mod = find_module("json")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Value conversion", mod, %regex~(JV|JVNull)$%%);
+        group_by_regex("Read and write", mod, %regex~(read_json|write_json)$%%)
     }]
     document("JSON manipulation library",mod,"{root}/json.rst","{root}/detail/json.rst",groups)
 

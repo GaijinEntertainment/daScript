@@ -4960,6 +4960,42 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterGlobalVariables|
 
+.. das:function:: AstCommentReader.beforeVariant(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeVariant|
+
+.. das:function:: AstCommentReader.afterVariant(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++name    +string const                                                +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterVariant|
+
 .. _struct-ast-AstCallMacro:
 
 .. das:attribute:: AstCallMacro

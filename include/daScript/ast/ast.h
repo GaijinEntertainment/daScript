@@ -1171,6 +1171,8 @@ namespace das
         virtual void beforeGlobalVariables ( const LineInfo & at ) = 0;
         virtual void afterGlobalVariable ( const char * name, const LineInfo & at ) = 0;
         virtual void afterGlobalVariables ( const LineInfo & at ) = 0;
+        virtual void beforeVariant ( const LineInfo & at ) = 0;
+        virtual void afterVariant ( const char * name, const LineInfo & at ) = 0;
     };
 
     class Program : public ptr_ref_count {

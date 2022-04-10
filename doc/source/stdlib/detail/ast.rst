@@ -169,6 +169,10 @@
 
 .. |method-ast-AstCommentReader.afterFunction| replace:: This callback occurs during the `parse` pass after the function body block.
 
+.. |method-ast-AstCommentReader.beforeVariant| replace:: This callback occurs during the `parse` pass before the variant alias declaration.
+
+.. |method-ast-AstCommentReader.afterVariant| replace:: This callback occurs during the `parse` after before the variant alias declaration.
+
 .. |method-ast-AstCommentReader.beforeGlobalVariables| replace:: This callback occurs during the `parse` pass before the first global variable declaration but after `let` or `var` keyword.
 
 .. |method-ast-AstCommentReader.afterGlobalVariable| replace:: This callback occurs during the `parse` pass after global variable is declaraed (after the following comment section, should it have one).
@@ -1204,3 +1208,4 @@
 
 .. |function_annotation-ast-quote| replace:: Returns ast expression tree of the input, without evaluating or infering it.
     This is useful for macros which generate code as a shortcut for generating boilerplate code.
+

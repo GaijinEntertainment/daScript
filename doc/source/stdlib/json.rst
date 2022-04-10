@@ -8,6 +8,7 @@ JSON manipulation library
 .. include:: detail/json.rst
 
 The JSON module implements JSON parser and serialization routines.
+See `JHSON <www.json.org>` for details.
 
 All functions and symbols are in "json" module, use require to get access to it. ::
 
@@ -37,7 +38,7 @@ Type aliases
 +-------+------------------------+
 
 
-|typedef-json-JsValue|
+Single JSON element.
 
 .. _alias-Token:
 
@@ -58,23 +59,7 @@ Type aliases
 +-------+------+
 
 
-|typedef-json-Token|
-
-+++++++++
-Constants
-+++++++++
-
-.. _global-json-Token_string:
-
-.. das:attribute:: Token_string = 0
-
-|variable-json-Token_string|
-
-.. _global-json-Token_symbol:
-
-.. das:attribute:: Token_symbol = 4
-
-|variable-json-Token_symbol|
+JSON input stream token.
 
 .. _struct-json-JsonValue:
 
@@ -89,11 +74,18 @@ JsonValue fields are
 +-----+--------------------------------+
 
 
-|structure-json-JsonValue|
+JSON value, wraps any JSON element.
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++
+Value conversion
+++++++++++++++++
+
+  *  :ref:`JV (v:string const) : json::JsonValue? <function-_at_json_c__c_JV_Cs>` 
+  *  :ref:`JV (v:double const) : json::JsonValue? <function-_at_json_c__c_JV_Cd>` 
+  *  :ref:`JV (v:bool const) : json::JsonValue? <function-_at_json_c__c_JV_Cb>` 
+  *  :ref:`JVNull () : json::JsonValue? <function-_at_json_c__c_JVNull>` 
+  *  :ref:`JV (v:table\<string;json::JsonValue?\> -const) : json::JsonValue? <function-_at_json_c__c_JV_1_ls_s_gr_2_ls_1_ls_S_ls_JsonValue_gr__gr_?_gr_T>` 
+  *  :ref:`JV (v:array\<json::JsonValue?\> -const) : json::JsonValue? <function-_at_json_c__c_JV_1_ls_1_ls_S_ls_JsonValue_gr__gr_?_gr_A>` 
 
 .. _function-_at_json_c__c_JV_Cs:
 
@@ -108,7 +100,7 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 +--------+-------------+
 
 
-|function-json-JV|
+Creates `JsonValue` out of value.
 
 .. _function-_at_json_c__c_JV_Cd:
 
@@ -123,7 +115,7 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 +--------+-------------+
 
 
-|function-json-JV|
+Creates `JsonValue` out of value.
 
 .. _function-_at_json_c__c_JV_Cb:
 
@@ -138,7 +130,7 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 +--------+-------------+
 
 
-|function-json-JV|
+Creates `JsonValue` out of value.
 
 .. _function-_at_json_c__c_JVNull:
 
@@ -146,7 +138,7 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 JVNull returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-|function-json-JVNull|
+Creates `JsonValue` representing `null`.
 
 .. _function-_at_json_c__c_JV_1_ls_s_gr_2_ls_1_ls_S_ls_JsonValue_gr__gr_?_gr_T:
 
@@ -161,7 +153,7 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 +--------+---------------------------------------------------------------+
 
 
-|function-json-JV|
+Creates `JsonValue` out of value.
 
 .. _function-_at_json_c__c_JV_1_ls_1_ls_S_ls_JsonValue_gr__gr_?_gr_A:
 
@@ -176,7 +168,15 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 +--------+--------------------------------------------------------+
 
 
-|function-json-JV|
+Creates `JsonValue` out of value.
+
+++++++++++++++
+Read and write
+++++++++++++++
+
+  *  :ref:`read_json (text:string const implicit;error:string& -const) : json::JsonValue? <function-_at_json_c__c_read_json_CIs_&s>` 
+  *  :ref:`read_json (text:array\<uint8\> const;error:string& -const) : json::JsonValue? <function-_at_json_c__c_read_json_C1_ls_u8_gr_A_&s>` 
+  *  :ref:`write_json (val:json::JsonValue? const) : string <function-_at_json_c__c_write_json_C1_ls_S_ls_JsonValue_gr__gr_?>` 
 
 .. _function-_at_json_c__c_read_json_CIs_&s:
 
@@ -193,7 +193,8 @@ read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 +--------+---------------------+
 
 
-|function-json-read_json|
+reads JSON from the `text` string.
+if `error` is not empty, it contains the parsing error message.
 
 .. _function-_at_json_c__c_read_json_C1_ls_u8_gr_A_&s:
 
@@ -210,7 +211,8 @@ read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 +--------+------------------+
 
 
-|function-json-read_json|
+reads JSON from the `text` string.
+if `error` is not empty, it contains the parsing error message.
 
 .. _function-_at_json_c__c_write_json_C1_ls_S_ls_JsonValue_gr__gr_?:
 
@@ -225,6 +227,6 @@ write_json returns string
 +--------+-------------------------------------------------------+
 
 
-|function-json-write_json|
+returns JSON (textual) representation of JsonValue as a string.
 
 

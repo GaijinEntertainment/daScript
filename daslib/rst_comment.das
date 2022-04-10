@@ -16,11 +16,14 @@ enum ParserState
     func
     method
     global
+    variant_alias
+
+let private DEBUG_COMMENT_READER = false
 
 [macro_function]
 def private debug_rst ( s : string )
-    // to_log(LOG_INFO,s)
-    pass
+    if DEBUG_COMMENT_READER
+        to_log(LOG_INFO,s)
 
 [macro_function]
 def private get_function_macro_name ( st:StructurePtr )
@@ -40,13 +43,14 @@ class RstComment : AstCommentReader
     function_comment : string
     global_comment : string
     field_comment : string
+    variant_comment : string
     field_comments : array<tuple<kind:string;name:string;comment:string>>
     def override open ( prog:ProgramPtr; mod:Module?; cpp:bool; info:LineInfo ) : void
         assert(length(chars)==0,"already open")
     def override accept ( prog:ProgramPtr; mod:Module?; ch:int; info:LineInfo ) : void
         chars |> push(uint8(ch))
     def override close ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
-        if length(chars) <2 || int(chars[0]) != '!' || int(chars[1]) != ' '
+        if !DEBUG_COMMENT_READER && (length(chars) <2 || int(chars[0]) != '!' || int(chars[1]) != ' ')
             delete chars
             return
         chars |> erase(1)
@@ -62,9 +66,24 @@ class RstComment : AstCommentReader
             field_comment += comment
         elif state==ParserState global
             global_comment += comment
+        elif state==ParserState variant_alias
+            variant_comment += comment
         else
             debug_rst("uncategorized comment // {comment}")
         comment = ""
+    def override beforeVariant ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("beforeVariant")
+        if state != ParserState none
+            panic("expecting none, got {state}")
+        state = ParserState variant_alias
+    def override afterVariant ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("afterVariant {name} // {variant_comment}")
+        if state != ParserState variant_alias
+            panic("expecting variant_alias, got {state}")
+        if variant_comment != ""
+            write_to_detail("typedef-{prog.thisModuleName}-{name}", variant_comment)
+        state = ParserState none
+        variant_comment = ""
     def override beforeGlobalVariables ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeGlobalVariables")
         if state != ParserState none

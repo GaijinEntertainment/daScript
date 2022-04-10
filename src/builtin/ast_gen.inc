@@ -344,9 +344,11 @@ protected:
     __fn_beforeGlobalVariables = 10,
     __fn_afterGlobalVariable = 11,
     __fn_afterGlobalVariables = 12,
+    __fn_beforeVariant = 13,
+    __fn_afterVariant = 14,
   };
 protected:
-  int _das_class_method_offset[13];
+  int _das_class_method_offset[15];
 public:
   AstCommentReader_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_open] = adapt_field_offset("open",info);
@@ -362,6 +364,8 @@ public:
       _das_class_method_offset[__fn_beforeGlobalVariables] = adapt_field_offset("beforeGlobalVariables",info);
       _das_class_method_offset[__fn_afterGlobalVariable] = adapt_field_offset("afterGlobalVariable",info);
       _das_class_method_offset[__fn_afterGlobalVariables] = adapt_field_offset("afterGlobalVariables",info);
+      _das_class_method_offset[__fn_beforeVariant] = adapt_field_offset("beforeVariant",info);
+      _das_class_method_offset[__fn_afterVariant] = adapt_field_offset("afterVariant",info);
   }
   __forceinline Func get_open ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_open]);
@@ -479,6 +483,24 @@ public:
       <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,prog,mod,info);
+  }
+  __forceinline Func get_beforeVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_beforeVariant]);
+  }
+  __forceinline void invoke_beforeVariant ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+  __forceinline Func get_afterVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterVariant]);
+  }
+  __forceinline void invoke_afterVariant ( Context * __context__, Func __funcCall__, void * self, char * const  name, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,char * const ,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,name,prog,mod,info);
   }
 };
 

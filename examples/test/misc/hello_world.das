@@ -1,6 +1,11 @@
 require daslib/rst_comment
 
-var FOOBAR = 13 //! this is a C++ variable comment
+var FOOBAR = 13 // this is a C++ variable comment
+
+variant BarBar
+    // this is a C++ variant comment
+    i :int
+    f : float
 
 struct Foo
     /* this is a C comment in structure */

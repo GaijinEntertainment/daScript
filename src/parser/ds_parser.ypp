@@ -2189,7 +2189,12 @@ type_declaration
     ;
 
 variant_alias_declaration
-    :   DAS_TVARIANT { yyextra->das_need_oxford_comma=false; } NAME[vname] '{' variant_type_list[list] ';' '}' {
+    :   DAS_TVARIANT { yyextra->das_need_oxford_comma=false; } NAME[vname] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@vname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariant(atvname);
+        }
+    } '{' variant_type_list[list] ';' '}' {
         auto vtype = make_smart<TypeDecl>(Type::tVariant);
         vtype->alias = *$vname;
         vtype->at = tokAt(scanner,@vname);
@@ -2198,6 +2203,10 @@ variant_alias_declaration
         if ( !yyextra->g_Program->addAlias(vtype) ) {
             das_yyerror(scanner,"type alias is already defined "+*$vname,tokAt(scanner,@vname),
                 CompilationError::type_alias_already_declared);
+        }
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@vname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterVariant($vname->c_str(),atvname);
         }
         delete $vname;
     }
