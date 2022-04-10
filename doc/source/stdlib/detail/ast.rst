@@ -830,6 +830,10 @@
 
 .. |function-ast-for_each_generic| replace:: Iterates through each generic function in the given `Module`.
 
+.. |function-ast-for_each_reader_macro| replace:: Iterates through each reader macro in the given `Module`.
+
+.. |function-ast-for_each_variant_macro| replace:: Iterates through each variant macro in the given `Module`.
+
 .. |function-ast-force_at| replace:: Replaces line info in the expression, its subexpressions, and its types.
 
 .. |function-ast-parse_mangled_name| replace:: Parses mangled name and creates corresponding `TypeDecl`.
@@ -1208,4 +1212,5 @@
 
 .. |function_annotation-ast-quote| replace:: Returns ast expression tree of the input, without evaluating or infering it.
     This is useful for macros which generate code as a shortcut for generating boilerplate code.
+
 

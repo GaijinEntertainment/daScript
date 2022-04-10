@@ -320,6 +320,16 @@ Call macros
 |function_annotation-builtin-__builtin_table_erase|
 
 +++++++++++++
+Reader macros
++++++++++++++
+
+.. _call-macro-builtin-_esc:
+
+.. das:attribute:: _esc
+
+|reader_macro-builtin-_esc|
+
++++++++++++++
 Handled types
 +++++++++++++
 

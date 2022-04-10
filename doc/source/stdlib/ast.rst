@@ -10780,6 +10780,8 @@ Iterating
   *  :ref:`for_each_generic (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`for_each_global (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::Variable\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`for_each_call_macro (module:rtti::Module? const implicit;block:block\<(string#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_reader_macro (module:rtti::Module? const implicit;block:block\<(string#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_variant_macro (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::VariantMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`for_each_field (annotation:rtti::BasicStructureAnnotation const implicit;block:block\<(string;string;smart_ptr\<ast::TypeDecl\>;uint):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W;u_gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
@@ -10941,6 +10943,36 @@ Iterating
 
 
 |function-ast-for_each_call_macro|
+
+.. _function-_at_ast_c__c_for_each_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_reader_macro(module: rtti::Module? const implicit; block: block<(string#):void> const implicit)
+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++--------+----------------------------------------------------------+
++block   +block<(string#):void> const implicit                      +
++--------+----------------------------------------------------------+
+
+
+|function-ast-for_each_reader_macro|
+
+.. _function-_at_ast_c__c_for_each_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_variant_macro(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::VariantMacro>):void> const implicit)
+
++--------+--------------------------------------------------------------------------------------------+
++argument+argument type                                                                               +
++========+============================================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                                  +
++--------+--------------------------------------------------------------------------------------------+
++block   +block<(smart_ptr< :ref:`ast::VariantMacro <handle-ast-VariantMacro>` >):void> const implicit+
++--------+--------------------------------------------------------------------------------------------+
+
+
+|function-ast-for_each_variant_macro|
 
 .. _function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W;u_gr_1_ls_v_gr__builtin__C_c_C_l:
 

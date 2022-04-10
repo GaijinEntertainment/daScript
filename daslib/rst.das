@@ -593,6 +593,24 @@ def document_call_macros(doc_file:file;mod:Module?)
     for_each_call_macro(mod) <| $(value)
         document_call_macro(doc_file,mod,value)
 
+
+def document_reader_macro(doc_file:file;mod:Module?;value:string implicit)
+    fwrite(doc_file,make_label(call_macro_label_name(mod,value)))
+    fwrite(doc_file,make_domain("das:attribute"))
+    fwrite(doc_file,"{value}\n\n")
+    document_topic(doc_file,topic("reader_macro",mod,value))
+
+def document_reader_macros(doc_file:file;mod:Module?)
+    var any = false
+    for_each_reader_macro(mod) <| $(value)
+        any = true
+    if !any
+        return
+    fwrite(doc_file,make_group("Reader macros"))
+    for_each_reader_macro(mod) <| $(value)
+        document_reader_macro(doc_file,mod,value)
+
+
 def function_needs_documenting(func:FunctionPtr)
     if func.flags.generated
         return false
@@ -818,6 +836,7 @@ def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGrou
     document_structure_annotations(doc_file,mod)
     document_function_annotations(doc_file,mod)
     document_call_macros(doc_file,mod)
+    document_reader_macros(doc_file,mod)
     document_annotations(doc_file,mod)
     document_classes(doc_file,mod)
     document_functions(doc_file,mod,groups)

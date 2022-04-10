@@ -14,4 +14,14 @@ All functions and symbols are in "regex_boost" module, use require to get access
     require daslib/regex_boost
 
 
++++++++++++++
+Reader macros
++++++++++++++
+
+.. _call-macro-regex_boost-regex:
+
+.. das:attribute:: regex
+
+|reader_macro-regex_boost-regex|
+
 

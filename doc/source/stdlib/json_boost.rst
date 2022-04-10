@@ -15,6 +15,16 @@ All functions and symbols are in "json_boost" module, use require to get access 
 
 
 +++++++++++++
+Reader macros
++++++++++++++
+
+.. _call-macro-json_boost-json:
+
+.. das:attribute:: json
+
+|reader_macro-json_boost-json|
+
++++++++++++++
 Uncategorized
 +++++++++++++
 

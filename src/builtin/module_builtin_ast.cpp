@@ -253,6 +253,18 @@ namespace das {
         }
     }
 
+    void for_each_reader_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at ) {
+        for ( auto & td : mod->readMacros ) {
+            das_invoke<void>::invoke<const char *>(context,at,block,td.first.c_str());
+        }
+    }
+
+    void for_each_variant_macro ( Module * mod, const TBlock<void,VariantMacroPtr> & block, Context * context, LineInfoArg * at ) {
+        for ( auto & td : mod->variantMacros ) {
+            das_invoke<void>::invoke<VariantMacroPtr>(context,at,block,td);
+        }
+    }
+
     bool isSameAstType ( TypeDeclPtr THIS,
                      TypeDeclPtr decl,
                      RefMatters refMatters,
@@ -497,6 +509,12 @@ namespace das {
                 ->args({"module","block","context","line"});
         addExtern<DAS_BIND_FUN(for_each_call_macro)>(*this, lib,  "for_each_call_macro",
             SideEffects::modifyExternal, "for_each_call_macro")
+                ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_reader_macro)>(*this, lib,  "for_each_reader_macro",
+            SideEffects::modifyExternal, "for_each_reader_macro")
+                ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_variant_macro)>(*this, lib,  "for_each_variant_macro",
+            SideEffects::modifyExternal, "for_each_variant_macro")
                 ->args({"module","block","context","line"});
         addExtern<DAS_BIND_FUN(builtin_structure_for_each_field)>(*this, lib,  "for_each_field",
             SideEffects::modifyExternal, "builtin_structure_for_each_field")
