@@ -17,9 +17,19 @@ enum ParserState
     method
     global
 
+[macro_function]
 def private debug_rst ( s : string )
     // to_log(LOG_INFO,s)
     pass
+
+[macro_function]
+def private get_function_macro_name ( st:StructurePtr )
+    for ann in st.annotations
+        if ann.annotation.name=="function_macro"
+            for arg in ann.arguments
+                if arg.name=="name"
+                    return string(arg.sValue)
+    return ""
 
 [comment_reader]
 class RstComment : AstCommentReader
@@ -85,6 +95,11 @@ class RstComment : AstCommentReader
             for ann in st.annotations
                 if ann.annotation.name=="tag_function_macro"
                     write_to_detail("function_annotation-{prog.thisModuleName}-{st.name}", structure_comment)
+                    is_annotation = true
+                    break
+                elif ann.annotation.name=="function_macro"
+                    let ann_name = get_function_macro_name(st)
+                    write_to_detail("function_annotation-{prog.thisModuleName}-{ann_name}", structure_comment)
                     is_annotation = true
                     break
                 else
