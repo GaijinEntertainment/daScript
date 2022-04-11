@@ -222,7 +222,7 @@ def document_module_json(root:string)
 def document_module_json_boost(root:string)
     var mod = find_module("json_boost")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
+        group_by_regex("Value conversion", mod, %regex~(JV|from_JV)$%%);
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     }]
     document("Boost package for JSON",mod,"{root}/json_boost.rst","{root}/detail/json_boost.rst",groups)

@@ -79,6 +79,7 @@ class private JsonReader : AstReaderMacro
 
 [expect_any_enum(ent), template(ent)]
 def from_JV ( v:JsonValue?; ent : auto(EnumT); defV : EnumT = [[EnumT]] ) : EnumT
+    //! Parse a JSON value and return the corresponding native value.
     if v==null || !(v.value is _string)
         return defV
     let name = v.value as _string
@@ -193,6 +194,7 @@ def from_JV ( var v : JsonValue?; ent:bitfield; defV:bitfield=[[bitfield]] )
 
 [expect_any_vector_type(v)]
 def JV ( v : auto(VecT) )
+    //! Creates `JsonValue` out of value.
     static_if typeinfo(vector_dim type<VecT>)==2
         return JV({{"x" => JV(v.x); "y" => JV(v.y)}})
     static_elif typeinfo(vector_dim type<VecT>)==3
