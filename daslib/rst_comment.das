@@ -26,9 +26,9 @@ def private debug_rst ( s : string )
         to_log(LOG_INFO,s)
 
 [macro_function]
-def private get_function_macro_name ( st:StructurePtr )
+def private get_macro_name ( st:StructurePtr; mtype:string )
     for ann in st.annotations
-        if ann.annotation.name=="function_macro"
+        if ann.annotation.name==mtype
             for arg in ann.arguments
                 if arg.name=="name"
                     return string(arg.sValue)
@@ -117,8 +117,18 @@ class RstComment : AstCommentReader
                     is_annotation = true
                     break
                 elif ann.annotation.name=="function_macro"
-                    let ann_name = get_function_macro_name(st)
+                    let ann_name = get_macro_name(st,"function_macro")
                     write_to_detail("function_annotation-{prog.thisModuleName}-{ann_name}", structure_comment)
+                    is_annotation = true
+                    break
+                elif ann.annotation.name=="variant_macro"
+                    let ann_name = get_macro_name(st,"variant_macro")
+                    write_to_detail("variant_macro-{prog.thisModuleName}-{ann_name}", structure_comment)
+                    is_annotation = true
+                    break
+                elif ann.annotation.name=="reader_macro"
+                    let ann_name = get_macro_name(st,"reader_macro")
+                    write_to_detail("reader_macro-{prog.thisModuleName}-{ann_name}", structure_comment)
                     is_annotation = true
                     break
                 else

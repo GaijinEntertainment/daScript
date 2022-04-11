@@ -30,6 +30,16 @@ Function annotations
 
 |function_annotation-ast_boost-tag_function|
 
+++++++++++++++
+Variant macros
+++++++++++++++
+
+.. _call-macro-ast_boost-better_rtti_in_expr:
+
+.. das:attribute:: better_rtti_in_expr
+
+|variant_macro-ast_boost-better_rtti_in_expr|
+
 +++++++
 Classes
 +++++++

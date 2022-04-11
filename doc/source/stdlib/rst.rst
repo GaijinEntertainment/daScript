@@ -72,6 +72,8 @@ Document writers
   *  :ref:`document_call_macros (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_call_macros_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?>` 
   *  :ref:`document_reader_macro (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:string const implicit) : void <function-_at_rst_c__c_document_reader_macro_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs>` 
   *  :ref:`document_reader_macros (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_reader_macros_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?>` 
+  *  :ref:`document_variant_macro (doc_file:fio::FILE const? const;mod:rtti::Module? const;value:string const implicit) : void <function-_at_rst_c__c_document_variant_macro_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs>` 
+  *  :ref:`document_variant_macros (doc_file:fio::FILE const? const;mod:rtti::Module? const) : void <function-_at_rst_c__c_document_variant_macros_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?>` 
   *  :ref:`document_warning (doc_file:fio::FILE const? const;issue:string const) : void <function-_at_rst_c__c_document_warning_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_Cs>` 
   *  :ref:`document_function (doc_file:fio::FILE const? const;mod:rtti::Module? const;func:smart_ptr\<ast::Function\> const) : void <function-_at_rst_c__c_document_function_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M>` 
   *  :ref:`document_functions (doc_file:fio::FILE const? const;mod:rtti::Module? const;groups:array\<rst::DocGroup\> const) : void <function-_at_rst_c__c_document_functions_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C1_ls_S_ls_DocGroup_gr__gr_A>` 
@@ -385,6 +387,38 @@ Document writers
 
 
 |function-rst-document_reader_macros|
+
+.. _function-_at_rst_c__c_document_variant_macro_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs:
+
+.. das:function:: document_variant_macro(doc_file: file; mod: rtti::Module? const; value: string const implicit)
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++doc_file+ :ref:`file <alias-file>`                        +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
++value   +string const implicit                            +
++--------+-------------------------------------------------+
+
+
+|function-rst-document_variant_macro|
+
+.. _function-_at_rst_c__c_document_variant_macros_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?:
+
+.. das:function:: document_variant_macros(doc_file: file; mod: rtti::Module? const)
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++doc_file+ :ref:`file <alias-file>`                        +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
+
+
+|function-rst-document_variant_macros|
 
 .. _function-_at_rst_c__c_document_warning_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_Cs:
 

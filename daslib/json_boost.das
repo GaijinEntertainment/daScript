@@ -32,6 +32,8 @@ def private is_json_ptr_value ( td : TypeDeclPtr )
 // if value is json::JsonValue?
 [variant_macro(name="better_json")]
 class private BetterJsonMacro : AstVariantMacro
+    //! This macro is used to implement `is json_value` and `as json_value` runtime checks.
+    //! It essencially substitutes `value as name` with `value.value as name` and `value is name` with `value.value is name`.
     def override visitExprIsVariant(prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
         if is_json_ptr_value(expr.value._type)
             var vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
@@ -49,6 +51,13 @@ class private BetterJsonMacro : AstVariantMacro
 
 [reader_macro(name="json")]
 class private JsonReader : AstReaderMacro
+    //! This macro implements embedding of the JSON object into the program::
+    //!   var jsv = %json~
+    //!   {
+    //!     "name": "main_window",
+    //!     "value": 500,
+    //!     "size": [1,2,3]
+    //!   } %%
     def override accept ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; ch:int; info:LineInfo ) : bool
         append(expr.sequence,ch)
         if ends_with(expr.sequence,"%%")

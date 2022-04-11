@@ -22,7 +22,24 @@ Reader macros
 
 .. das:attribute:: json
 
-|reader_macro-json_boost-json|
+This macro implements embedding of the JSON object into the program::
+  var jsv = %json~
+  {
+    "name": "main_window",
+    "value": 500,
+    "size": [1,2,3]
+  } %%
+
+++++++++++++++
+Variant macros
+++++++++++++++
+
+.. _call-macro-json_boost-better_json:
+
+.. das:attribute:: better_json
+
+This macro is used to implement `is json_value` and `as json_value` runtime checks.
+It essencially substitutes `value as name` with `value.value as name` and `value is name` with `value.value is name`.
 
 +++++++++++++
 Uncategorized

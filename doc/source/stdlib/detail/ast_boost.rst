@@ -116,3 +116,8 @@
 .. |function_annotation-ast_boost-macro| replace:: MacroMacro function annotation.
 
 .. |function_annotation-ast_boost-tag_function| replace:: TagFunctionAnnotation function annotation.
+
+.. |variant_macro-ast_boost-better_rtti_in_expr| replace:: This macro is used to implement `is type`, `as type` and `?as type` runtime checks for the `Expression` class and its subclasses.
+
+
+
