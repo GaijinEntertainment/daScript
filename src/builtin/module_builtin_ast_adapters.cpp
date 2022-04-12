@@ -1080,6 +1080,22 @@ namespace das {
                         info);
             }
         }
+        virtual void beforeEnumeration ( const LineInfo & info ) override {
+            if ( auto fnEnum = get_beforeEnumeration(classPtr) ) {
+                invoke_beforeEnumeration(context,fnEnum,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+        virtual void afterEnumeration ( const char * name, const LineInfo & info ) override {
+            if ( auto fnEnum = get_afterEnumeration(classPtr) ) {
+                invoke_afterEnumeration(context,fnEnum,classPtr,
+                    (char *) name, daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;

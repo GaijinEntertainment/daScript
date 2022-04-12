@@ -171,7 +171,11 @@
 
 .. |method-ast-AstCommentReader.beforeVariant| replace:: This callback occurs during the `parse` pass before the variant alias declaration.
 
-.. |method-ast-AstCommentReader.afterVariant| replace:: This callback occurs during the `parse` after before the variant alias declaration.
+.. |method-ast-AstCommentReader.afterVariant| replace:: This callback occurs during the `parse` after the variant alias declaration.
+
+.. |method-ast-AstCommentReader.beforeEnumeration| replace:: This callback occurs during the `parse` before the enumeration declaration.
+
+.. |method-ast-AstCommentReader.afterEnumeration| replace:: This callback occurs during the `parse` after the enumeration declaration.
 
 .. |method-ast-AstCommentReader.beforeGlobalVariables| replace:: This callback occurs during the `parse` pass before the first global variable declaration but after `let` or `var` keyword.
 

@@ -293,6 +293,7 @@
 %token      END_STRING_EXPR         "}"
 %token      END_OF_READ             "end of failed eader macro"
 
+%type <s>               enum_name
 %type <pNameList>       bitfield_bits
 %type <pNameWithPosList>variable_name_with_pos_list
 %type <type>            basic_type_declaration
@@ -1841,11 +1842,29 @@ optional_public_or_private_enum
     |   DAS_PUBLIC   { $$ = true; }
     ;
 
+enum_name
+    :   NAME[name] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto pubename = tokAt(scanner,@name);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeEnumeration(pubename);
+        }
+        $$ = $name;
+    }
+    ;
+
 enum_declaration
-    :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] NAME[name] '{' enum_list[pE] '}' {
+    :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[name] '{' enum_list[pE] '}' {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto pubename = tokAt(scanner,@pE);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumeration($name->c_str(),pubename);
+        }
         ast_enumDeclaration(scanner,$annL,tokAt(scanner,@annL),$pubE,$name,tokAt(scanner,@name),$pE,tokAt(scanner,@pE),Type::tInt);
     }
-    |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] NAME[name] ':' enum_basic_type_declaration[ebt] '{' enum_list[pE] '}' {
+    |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[name] ':' enum_basic_type_declaration[ebt] '{' enum_list[pE] '}' {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto pubename = tokAt(scanner,@pE);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumeration($name->c_str(),pubename);
+        }
         ast_enumDeclaration(scanner,$annL,tokAt(scanner,@annL),$pubE,$name,tokAt(scanner,@name),$pE,tokAt(scanner,@pE),$ebt);
     }
     ;

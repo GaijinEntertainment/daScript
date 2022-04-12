@@ -2,6 +2,12 @@ require daslib/rst_comment
 
 var FOOBAR = 13 // this is a C++ variable comment
 
+enum EEENum
+    //! this is EEEnum comment
+    one
+    two
+    three
+
 variant BarBar
     // this is a C++ variant comment
     i :int

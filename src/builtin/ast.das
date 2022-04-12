@@ -112,6 +112,8 @@ class AstCommentReader
     def abstract afterGlobalVariables ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract beforeVariant ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract afterVariant ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract beforeEnumeration ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterEnumeration ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
 
 [macro_interface]
 class AstCallMacro

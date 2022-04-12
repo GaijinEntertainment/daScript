@@ -17,6 +17,7 @@ enum ParserState
     method
     global
     variant_alias
+    enum_decl
 
 let private DEBUG_COMMENT_READER = false
 
@@ -44,6 +45,7 @@ class RstComment : AstCommentReader
     global_comment : string
     field_comment : string
     variant_comment : string
+    enum_comment : string
     field_comments : array<tuple<kind:string;name:string;comment:string>>
     def override open ( prog:ProgramPtr; mod:Module?; cpp:bool; info:LineInfo ) : void
         assert(length(chars)==0,"already open")
@@ -68,9 +70,24 @@ class RstComment : AstCommentReader
             global_comment += comment
         elif state==ParserState variant_alias
             variant_comment += comment
+        elif state==ParserState enum_decl
+            enum_comment += comment
         else
             debug_rst("uncategorized comment // {comment}")
         comment = ""
+    def override beforeEnumeration ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("beforeEnumeration")
+        if state != ParserState none
+            panic("expecting none, got {state}")
+        state = ParserState enum_decl
+    def override afterEnumeration ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("afterEnumeration {name} // {enum_comment}")
+        if state != ParserState enum_decl
+            panic("expecting enum_decl, got {state}")
+        if enum_comment != ""
+            write_to_detail("enum-{prog.thisModuleName}-{name}", variant_comment)
+        state = ParserState none
+        enum_comment = ""
     def override beforeVariant ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeVariant")
         if state != ParserState none
