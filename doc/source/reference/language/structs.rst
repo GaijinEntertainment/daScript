@@ -83,6 +83,15 @@ the previous code example is a syntactic sugar for::
     fPostConstruction.x = 13
     fPostConstruction.y = 2
 
+"Clone initializer" is useful patter for creating clone of an existing structure, when both structures are on the heap::
+
+    def Foo ( p : Foo? )                // "clone initializer" takes pointer to existing structure
+        var self := *p
+        return <- self
+    ...
+    let a = new [[Foo x=1, y=2.]]       // create new instance of Foo on the heap, initialize it
+    let b = new Foo(a)                  // clone of b is created here
+
 --------------------------
 Structure Function Members
 --------------------------
