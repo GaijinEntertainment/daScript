@@ -85,7 +85,7 @@ class RstComment : AstCommentReader
         if state != ParserState enum_decl
             panic("expecting enum_decl, got {state}")
         if enum_comment != ""
-            write_to_detail("enum-{prog.thisModuleName}-{name}", variant_comment)
+            write_to_detail("enumeration-{prog.thisModuleName}-{name}", enum_comment)
         state = ParserState none
         enum_comment = ""
     def override beforeVariant ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void

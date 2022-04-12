@@ -9,8 +9,8 @@ require strings
 require jobque
 require daslib/ast_boost
 require daslib/strings_boost
-require daslib/rst
 require daslib/rst_comment
+require daslib/rst
 require daslib/functional
 require daslib/json
 require daslib/json_boost
@@ -230,8 +230,9 @@ def document_module_json_boost(root:string)
 def document_module_regex(root:string)
     var mod = find_module("regex")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Compilation and validation", mod, %regex~(regex_compile|is_valid|regex_debug|debug_set)$%%);
+        group_by_regex("Access", mod, %regex~(regex_group|regex_foreach)$%%);
+        group_by_regex("Match", mod, %regex~(regex_match)$%%)
     }]
     document("Regular expression library",mod,"{root}/regex.rst","{root}/detail/regex.rst",groups)
 
