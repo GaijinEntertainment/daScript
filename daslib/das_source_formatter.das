@@ -52,8 +52,14 @@ struct Token
     dontAddSpacesAround: bool = false
 
 
+struct FormatterToken
+    tokenIndex: int
+    command: string
+
+
 var tokenTemplates: array<TokenTemplate>
 var tokens: array<Token>
+var formatterTokens: array<FormatterToken>
 var pos: int             // current char pos
 var c: int               // current char
 var data: array<uint8>   // file data as array of uints
@@ -372,6 +378,27 @@ def search_token_in_line(from_index: int; str: string const): int
         if eq(j, str)
             return j
     return 0
+
+
+def process_formatter_tokens()
+    let formatterTokenPrefix = "//fmt:"
+    let formatterTokenPrefixSize = formatterTokenPrefix |> length()
+    for i in range(0, length(tokens))
+        let token = tokens[i]
+        let str = token.str
+        let strSize = str |> length()
+        if str |> starts_with(formatterTokenPrefix)
+            let command = str |> chop(formatterTokenPrefixSize, strSize - formatterTokenPrefixSize)
+            formatterTokens |> push([[ FormatterToken
+                tokenIndex = i,
+                command = command
+                ]])
+
+def have_formatter_token(command: string)
+    for formatterToken in formatterTokens
+        if formatterToken.command == command
+            return true
+    return false
 
 
 def mark_token_context()
@@ -714,6 +741,11 @@ def fmt_space_after_cast_type()
 
 def do_format
     parse_all_tokens()
+    process_formatter_tokens()
+
+    if have_formatter_token("ignore-file")
+        return
+
     mark_token_context()
     //debug_print_tokens()
     fmt_spaces_around_operators()
