@@ -1815,12 +1815,21 @@ enum_list
 
 
 single_alias
-    :   NAME[name] '=' type_declaration[tdecl] {
+    :   NAME[name] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto pubename = tokAt(scanner,@name);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeAlias(pubename);
+        }
+    } '=' type_declaration[tdecl] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         $tdecl->alias = *$name;
         if ( !yyextra->g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
             das_yyerror(scanner,"type alias is already defined "+*$name,tokAt(scanner,@name),
                 CompilationError::type_alias_already_declared);
+        }
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto pubename = tokAt(scanner,@tdecl);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterAlias($name->c_str(),pubename);
         }
         delete $name;
     }

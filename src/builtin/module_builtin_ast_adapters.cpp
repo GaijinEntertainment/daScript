@@ -1096,6 +1096,22 @@ namespace das {
                         info);
             }
         }
+        virtual void beforeAlias ( const LineInfo & info ) override {
+            if ( auto fnAlias = get_beforeAlias(classPtr) ) {
+                invoke_beforeAlias(context,fnAlias,classPtr,
+                    daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
+        virtual void afterAlias ( const char * name, const LineInfo & info ) override {
+            if ( auto fnAlias = get_afterAlias(classPtr) ) {
+                invoke_afterAlias(context,fnAlias,classPtr,
+                    (char *) name, daScriptEnvironment::bound->g_Program,
+                    daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        info);
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;

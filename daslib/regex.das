@@ -20,7 +20,7 @@ enum ReOp
     Union
 
 typedef
-    CharSet = uint[8]
+    CharSet = uint[8]   //! Bit array which represents an 8-bit character set.
 
 struct ReNode
     //! Single node in regular expression parsing tree.

@@ -1175,6 +1175,8 @@ namespace das
         virtual void afterVariant ( const char * name, const LineInfo & at ) = 0;
         virtual void beforeEnumeration ( const LineInfo & at ) = 0;
         virtual void afterEnumeration ( const char * name, const LineInfo & at ) = 0;
+        virtual void beforeAlias ( const LineInfo & at ) = 0;
+        virtual void afterAlias ( const char * name, const LineInfo & at ) = 0;
     };
 
     class Program : public ptr_ref_count {

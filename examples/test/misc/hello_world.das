@@ -2,6 +2,12 @@ require daslib/rst_comment
 
 var FOOBAR = 13 // this is a C++ variable comment
 
+typedef GOO = int // GOO is INT
+
+typedef
+    GOO1 = float    // GOO1 is FLOAT
+    GOO2 = int      // GOO2 is INT
+
 enum EEENum
     //! this is EEEnum comment
     one

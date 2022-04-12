@@ -24,7 +24,6 @@ Type aliases
 
 .. das:attribute:: CharSet = uint[8]
 
-|typedef-regex-CharSet|
 
 .. _alias-MaybeReNode:
 

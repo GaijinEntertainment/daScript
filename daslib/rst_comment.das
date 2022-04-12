@@ -18,6 +18,7 @@ enum ParserState
     global
     variant_alias
     enum_decl
+    type_alias
 
 let private DEBUG_COMMENT_READER = false
 
@@ -46,6 +47,7 @@ class RstComment : AstCommentReader
     field_comment : string
     variant_comment : string
     enum_comment : string
+    alias_comment : string
     field_comments : array<tuple<kind:string;name:string;comment:string>>
     def override open ( prog:ProgramPtr; mod:Module?; cpp:bool; info:LineInfo ) : void
         assert(length(chars)==0,"already open")
@@ -72,9 +74,24 @@ class RstComment : AstCommentReader
             variant_comment += comment
         elif state==ParserState enum_decl
             enum_comment += comment
+        elif state==ParserState type_alias
+            alias_comment += comment
         else
             debug_rst("uncategorized comment // {comment}")
         comment = ""
+    def override beforeAlias ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("beforeAlias")
+        if state != ParserState none
+            panic("expecting none, got {state}")
+        state = ParserState type_alias
+    def override afterAlias ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("afterAlias {name} // {alias_comment}")
+        if state != ParserState type_alias
+            panic("expecting type_alias, got {state}")
+        if alias_comment != ""
+            write_to_detail("typedef-{prog.thisModuleName}-{name}", enum_comment)
+        state = ParserState none
+        alias_comment = ""
     def override beforeEnumeration ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeEnumeration")
         if state != ParserState none
