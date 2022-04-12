@@ -3,7 +3,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
 
-module rst public
+module rst private
 
 require fio
 require math
@@ -19,7 +19,7 @@ let
     log_documentation = true
     show_hidden_groups = false
 
-var
+var public
     topic_root = ""
 
 def module_name(mod)
@@ -736,7 +736,8 @@ def document_functions(doc_file:file;mod:Module?;groups:array<DocGroup>)
             first_function = false
         document_function(doc_file,mod,func)
 
-struct DocGroup
+struct public DocGroup
+    //! Group of functions with shared category.
     name : string
     func : array<Function?>
     hidden : bool
@@ -757,12 +758,15 @@ def append_to_group_by_regex(var group:DocGroup; mod:Module?; var reg:Regex)
             if regex_match(reg,string(func.name)) != -1
                 push(group.func,get_ptr(func))
 
-def group_by_regex(name:string; mod:Module?; var reg:Regex)
+def public group_by_regex(name:string; mod:Module?; var reg:Regex)
+    //! Creates a group of functions with shared category.
+    //! Functions will be added to the group if they match the regular expression.
     var group <- [[DocGroup name=name, hidden=false]]
     append_to_group_by_regex(group,mod,reg)
     return <- group
 
-def hide_group(var group:DocGroup)
+def public hide_group(var group:DocGroup)
+    //! Marks the group as hidden.
     group.hidden = true
     return <- group
 
@@ -826,7 +830,10 @@ def private getDetailIncludePath ( fname, substname : string )
         var ipath = join ( [[ for i in range(index,length(snp)); snp[i] ]], "/" )
         return ipath
 
-def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGroup>)
+def public document(name:string;mod:Module?;fname,substname:string;groups:array<DocGroup>)
+    //! Document single module given list of `DocGropus`.
+    //! This will generate RST file with documentation for the module.
+    //! Functions which do not match any `DocGroup` will be placed in the `Uncategorized` group.
     static_if log_documentation
         to_log(LOG_INFO, "Documenting {name} into {fname}\n")
     if mod==null
