@@ -150,7 +150,7 @@ class RstComment : AstCommentReader
                     write_to_detail("function_annotation-{prog.thisModuleName}-{st.name}", structure_comment)
                     is_annotation = true
                     break
-                elif ann.annotation.name=="function_macro" || ann.annotation.name=="call_macro"
+                elif ann.annotation.name=="function_macro" || ann.annotation.name=="call_macro" || ann.annotation.name=="contract"
                     let ann_name = get_macro_name(st,string(ann.annotation.name))
                     write_to_detail("function_annotation-{prog.thisModuleName}-{ann_name}", structure_comment)
                     is_annotation = true

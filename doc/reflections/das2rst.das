@@ -303,8 +303,7 @@ def document_module_algorithm(root:string)
 def document_module_contracts(root:string)
     var mod = find_module("contracts")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Type queries", mod, %regex~(isYetAnotherVectorTemplate)$%%)
     }]
     document("Miscelanious contract annotations",mod,"{root}/contracts.rst","{root}/detail/contracts.rst",groups)
 
