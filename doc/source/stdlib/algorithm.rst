@@ -7,73 +7,33 @@ Miscelanious algorithms
 
 .. include:: detail/algorithm.rst
 
-|module-algorithm|
+The ALGORITHM module exposes collection of miscellaneous array manipulation algorithms.
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+All functions and symbols are in "algorithm" module, use require to get access to it. ::
 
-.. _function-_at_algorithm_c__c_unique_1_ls_Y_ls_TT_gr_._gr_A:
-
-.. das:function:: unique(a: array<auto(TT)>)
-
-unique returns auto
-
-+--------+---------------+
-+argument+argument type  +
-+========+===============+
-+a       +array<auto(TT)>+
-+--------+---------------+
+    require daslib/algorithm
 
 
-|function-algorithm-unique|
+++++++
+Search
+++++++
 
-.. _function-_at_algorithm_c__c_sort_unique_1_ls_Y_ls_TT_gr_._gr_A:
-
-.. das:function:: sort_unique(a: array<auto(TT)>)
-
-sort_unique returns auto
-
-+--------+---------------+
-+argument+argument type  +
-+========+===============+
-+a       +array<auto(TT)>+
-+--------+---------------+
-
-
-|function-algorithm-sort_unique|
-
-.. _function-_at_algorithm_c__c_reverse_1_ls_._gr_A:
-
-.. das:function:: reverse(a: array<auto>)
-
-reverse returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +array<auto>  +
-+--------+-------------+
-
-
-|function-algorithm-reverse|
-
-.. _function-_at_algorithm_c__c_combine_C1_ls_Y_ls_TT_gr_._gr_A_C1_ls_Y_ls_TT_gr_._gr_A:
-
-.. das:function:: combine(a: array<auto(TT)> const; b: array<auto(TT)> const)
-
-combine returns auto
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+a       +array<auto(TT)> const+
-+--------+---------------------+
-+b       +array<auto(TT)> const+
-+--------+---------------------+
-
-
-|function-algorithm-combine|
+  *  :ref:`lower_bound (a:array\<auto(TT)\> const;f:int const;l:int const;val:TT const -&) : auto <function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L>` 
+  *  :ref:`lower_bound (a:array\<auto(TT)\> const;val:TT const -&) : auto <function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L>` 
+  *  :ref:`lower_bound (a:array\<auto(TT)\> const;f:int const;l:int const;value:TT const -&;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`lower_bound (a:array\<auto(TT)\> const;value:TT const -&;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`binary_search (a:array\<auto(TT)\> const;val:TT const -&) : auto <function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L>` 
+  *  :ref:`binary_search (a:array\<auto(TT)\> const;f:int const;last:int const;val:TT const -&) : auto <function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L>` 
+  *  :ref:`binary_search (a:array\<auto(TT)\> const;val:TT const -&;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`binary_search (a:array\<auto(TT)\> const;f:int const;last:int const;val:TT const -&;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`lower_bound (a:auto const;f:int const;l:int const;val:auto const) : auto <function-_at_algorithm_c__c_lower_bound_C._Ci_Ci_C.>` 
+  *  :ref:`lower_bound (a:auto const;val:auto const) : auto <function-_at_algorithm_c__c_lower_bound_C._C.>` 
+  *  :ref:`lower_bound (a:auto const;f:int const;l:int const;val:auto(TT) const;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_lower_bound_C._Ci_Ci_CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`lower_bound (a:auto const;val:auto(TT) const;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_lower_bound_C._CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`binary_search (a:auto const;val:auto const) : auto <function-_at_algorithm_c__c_binary_search_C._C.>` 
+  *  :ref:`binary_search (a:auto const;f:int const;last:int const;val:auto const) : auto <function-_at_algorithm_c__c_binary_search_C._Ci_Ci_C.>` 
+  *  :ref:`binary_search (a:auto const;val:auto(TT) const;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_binary_search_C._CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`binary_search (a:auto const;f:int const;last:int const;val:auto(TT) const;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_binary_search_C._Ci_Ci_CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
 
 .. _function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L:
 
@@ -94,7 +54,7 @@ lower_bound returns auto
 +--------+---------------------+
 
 
-|function-algorithm-lower_bound|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 .. _function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L:
 
@@ -111,7 +71,7 @@ lower_bound returns auto
 +--------+---------------------+
 
 
-|function-algorithm-lower_bound|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 .. _function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -134,7 +94,7 @@ lower_bound returns auto
 +--------+-----------------------------------------+
 
 
-|function-algorithm-lower_bound|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 .. _function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -153,7 +113,7 @@ lower_bound returns auto
 +--------+-----------------------------------------+
 
 
-|function-algorithm-lower_bound|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L:
 
@@ -170,7 +130,8 @@ binary_search returns auto
 +--------+---------------------+
 
 
-|function-algorithm-binary_search|
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L:
 
@@ -191,7 +152,8 @@ binary_search returns auto
 +--------+---------------------+
 
 
-|function-algorithm-binary_search|
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -210,7 +172,8 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-|function-algorithm-binary_search|
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -233,39 +196,8 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-|function-algorithm-binary_search|
-
-.. _function-_at_algorithm_c__c_reverse_.:
-
-.. das:function:: reverse(a: auto)
-
-reverse returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto         +
-+--------+-------------+
-
-
-|function-algorithm-reverse|
-
-.. _function-_at_algorithm_c__c_combine_C._C.:
-
-.. das:function:: combine(a: auto const; b: auto const)
-
-combine returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-
-
-|function-algorithm-combine|
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_lower_bound_C._Ci_Ci_C.:
 
@@ -286,7 +218,7 @@ lower_bound returns auto
 +--------+-------------+
 
 
-|function-algorithm-lower_bound|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 .. _function-_at_algorithm_c__c_lower_bound_C._C.:
 
@@ -303,7 +235,7 @@ lower_bound returns auto
 +--------+-------------+
 
 
-|function-algorithm-lower_bound|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 .. _function-_at_algorithm_c__c_lower_bound_C._Ci_Ci_CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -326,7 +258,7 @@ lower_bound returns auto
 +--------+-----------------------------------------+
 
 
-|function-algorithm-lower_bound|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 .. _function-_at_algorithm_c__c_lower_bound_C._CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -345,7 +277,7 @@ lower_bound returns auto
 +--------+-----------------------------------------+
 
 
-|function-algorithm-lower_bound|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 .. _function-_at_algorithm_c__c_binary_search_C._C.:
 
@@ -362,7 +294,8 @@ binary_search returns auto
 +--------+-------------+
 
 
-|function-algorithm-binary_search|
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C._Ci_Ci_C.:
 
@@ -383,7 +316,8 @@ binary_search returns auto
 +--------+-------------+
 
 
-|function-algorithm-binary_search|
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C._CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -402,7 +336,8 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-|function-algorithm-binary_search|
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C._Ci_Ci_CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -425,6 +360,114 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-|function-algorithm-binary_search|
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
+
+++++++++++++++++++
+Array manipulation
+++++++++++++++++++
+
+  *  :ref:`unique (a:array\<auto(TT)\> -const) : auto <function-_at_algorithm_c__c_unique_1_ls_Y_ls_TT_gr_._gr_A>` 
+  *  :ref:`sort_unique (a:array\<auto(TT)\> -const) : auto <function-_at_algorithm_c__c_sort_unique_1_ls_Y_ls_TT_gr_._gr_A>` 
+  *  :ref:`reverse (a:array\<auto\> -const) : auto <function-_at_algorithm_c__c_reverse_1_ls_._gr_A>` 
+  *  :ref:`combine (a:array\<auto(TT)\> const;b:array\<auto(TT)\> const) : auto <function-_at_algorithm_c__c_combine_C1_ls_Y_ls_TT_gr_._gr_A_C1_ls_Y_ls_TT_gr_._gr_A>` 
+  *  :ref:`reverse (a:auto -const) : auto <function-_at_algorithm_c__c_reverse_.>` 
+  *  :ref:`combine (a:auto const;b:auto const) : auto <function-_at_algorithm_c__c_combine_C._C.>` 
+
+.. _function-_at_algorithm_c__c_unique_1_ls_Y_ls_TT_gr_._gr_A:
+
+.. das:function:: unique(a: array<auto(TT)>)
+
+unique returns auto
+
++--------+---------------+
++argument+argument type  +
++========+===============+
++a       +array<auto(TT)>+
++--------+---------------+
+
+
+Returns array of the elements of a with duplicates removed.
+
+.. _function-_at_algorithm_c__c_sort_unique_1_ls_Y_ls_TT_gr_._gr_A:
+
+.. das:function:: sort_unique(a: array<auto(TT)>)
+
+sort_unique returns auto
+
++--------+---------------+
++argument+argument type  +
++========+===============+
++a       +array<auto(TT)>+
++--------+---------------+
+
+
+Returns array of the elements of a, sorted and with duplicates removed.
+The elements of a are sorted in ascending order.
+The resulted array has only unqiue elements.
+
+.. _function-_at_algorithm_c__c_reverse_1_ls_._gr_A:
+
+.. das:function:: reverse(a: array<auto>)
+
+reverse returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +array<auto>  +
++--------+-------------+
+
+
+Returns array of the elements of a in reverse order.
+
+.. _function-_at_algorithm_c__c_combine_C1_ls_Y_ls_TT_gr_._gr_A_C1_ls_Y_ls_TT_gr_._gr_A:
+
+.. das:function:: combine(a: array<auto(TT)> const; b: array<auto(TT)> const)
+
+combine returns auto
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++a       +array<auto(TT)> const+
++--------+---------------------+
++b       +array<auto(TT)> const+
++--------+---------------------+
+
+
+Returns array of the elements of a and then b.
+
+.. _function-_at_algorithm_c__c_reverse_.:
+
+.. das:function:: reverse(a: auto)
+
+reverse returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto         +
++--------+-------------+
+
+
+Returns array of the elements of a in reverse order.
+
+.. _function-_at_algorithm_c__c_combine_C._C.:
+
+.. das:function:: combine(a: auto const; b: auto const)
+
+combine returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
+
+
+Returns array of the elements of a and then b.
 
 

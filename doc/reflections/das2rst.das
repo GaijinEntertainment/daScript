@@ -295,8 +295,8 @@ def document_module_apply_in_context(root:string)
 def document_module_algorithm(root:string)
     var mod = find_module("algorithm")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Search", mod, %regex~(lower_bound|binary_search)$%%);
+        group_by_regex("Array manipulation", mod, %regex~(unique|sort_unique|reverse|combine)$%%)
     }]
     document("Miscelanious algorithms",mod,"{root}/algorithm.rst","{root}/detail/algorithm.rst",groups)
 
