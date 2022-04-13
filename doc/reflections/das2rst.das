@@ -251,7 +251,7 @@ def document_module_rst(root:string)
         group_by_regex("Descriptions", mod, %regex~describe%%);
         group_by_regex("Label makers", mod, %regex~\w+_label_name%%);
         group_by_regex("RST section makers", mod, %regex~make%%);
-        group_by_regex("Documentation queries", mod, %regex~.+_needs%%);
+        group_by_regex("Documentaton queries", mod, %regex~.+_needs%%);
         group_by_regex("Group operations", mod, %regex~.*group%%);
         group_by_regex("Naming helpers", mod, %regex~(topic|module_name|function_name)$%%)
     }]

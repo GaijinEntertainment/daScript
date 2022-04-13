@@ -167,11 +167,13 @@ def generateApplyVisitVariant ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
 class ApplyMacro : AstCallMacro
     //! This macro implements the apply() pattern. The idea is that for each entry in the structure, variant, or tuple,
     //! the block will be invoked. Both element name, and element value are passed to the block.
-    //! For example::
+    //! For example
+    //!
     //!     struct Bar
 	//!         x, y : float
 	//!     apply([[Bar x=1.,y=2.]]) <| $ ( name:string; field )
     //!         print("{name} = {field} ")
+    //!
     //! Would print x = 1.0 y = 2.0
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if expr.arguments.length != 2

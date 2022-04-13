@@ -54,10 +54,11 @@ class RstComment : AstCommentReader
     def override accept ( prog:ProgramPtr; mod:Module?; ch:int; info:LineInfo ) : void
         chars |> push(uint8(ch))
     def override close ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
-        if !DEBUG_COMMENT_READER && (length(chars) <2 || int(chars[0]) != '!' || int(chars[1]) != ' ')
+        if !DEBUG_COMMENT_READER && (length(chars)<1 || int(chars[0])!='!')
             delete chars
             return
-        chars |> erase(1)
+        if length(chars)>1 && int(chars[1])==' '
+            chars |> erase(1)
         chars |> erase(0)
         chars |> push(uint8('\n'))
         comment = string(chars)

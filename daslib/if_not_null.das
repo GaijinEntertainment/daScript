@@ -10,16 +10,18 @@ require rtti
 require daslib/ast_boost
 require daslib/templates_boost
 
-/*
-    transforms
-        ptr |> if_not_null() <| call(...)
-    to
-        var _ptr_var = ptr
-        if _ptr_var
-            call(*_ptr_var,...)
-*/
 [call_macro(name="if_not_null")]
 class ApplyMacro : AstCallMacro
+    //! This macro transforms::
+    //!
+    //!     ptr |> if_not_null <| call(...)
+    //!
+    //! to::
+    //!
+    //!     var _ptr_var = ptr
+    //!     if _ptr_var
+    //!         call(*_ptr_var,...)
+    //!
     if_not_null_index : int = 0
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if expr.arguments.length !=2
