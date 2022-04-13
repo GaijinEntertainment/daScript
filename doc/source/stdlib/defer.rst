@@ -7,7 +7,12 @@ defer and defer_delete macros
 
 .. include:: detail/defer.rst
 
-|module-defer|
+Apply module implements `defer` and `defer_delete` pattern, i.e. ability to attach a bit of code or a delete operation to a finally section of the block, without leaving the context of the code.
+
+All functions and symbols are in "defer" module, use require to get access to it. ::
+
+    require daslib/defer
+
 
 ++++++++++++++++++++
 Function annotations
@@ -17,7 +22,8 @@ Function annotations
 
 .. das:attribute:: DeferMacro
 
-|function_annotation-defer-DeferMacro|
+This macro covnerts defer() <| block expression
+into {}, and move block to the finally section of the current block
 
 +++++++++++
 Call macros
@@ -27,11 +33,14 @@ Call macros
 
 .. das:attribute:: defer_delete
 
-|function_annotation-defer-defer_delete|
+This macro converts defer_delete() expression
+into {}, and add delete expression to the finally section of the current block
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++
+Defer
++++++
+
+  *  :ref:`defer (blk:block\<void\> const) : void <function-_at_defer_c__c_defer_C1_ls_v_gr__builtin_>` 
 
 .. _function-_at_defer_c__c_defer_C1_ls_v_gr__builtin_:
 
@@ -44,12 +53,22 @@ Uncategorized
 +--------+-------------+
 
 
-|function-defer-defer|
+defer a block of code. For example::
+    var a = fopen("filename.txt","r")
+    defer <|
+        fclose(a)
+Will close the file when 'a' is out of scope.
+
+++++
+Stub
+++++
+
+  *  :ref:`nada () : void <function-_at_defer_c__c_nada>` 
 
 .. _function-_at_defer_c__c_nada:
 
 .. das:function:: nada()
 
-|function-defer-nada|
+helper function which does nothing and will be optimized out
 
 

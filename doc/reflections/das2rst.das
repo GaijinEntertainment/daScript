@@ -310,8 +310,8 @@ def document_module_contracts(root:string)
 def document_module_defer(root:string)
     var mod = find_module("defer")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Defer", mod, %regex~(defer)$%%);
+        group_by_regex("Stub", mod, %regex~(nada)$%%)
     }]
     document("defer and defer_delete macros",mod,"{root}/defer.rst","{root}/detail/defer.rst",groups)
 

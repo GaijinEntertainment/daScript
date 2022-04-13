@@ -11,14 +11,22 @@ require daslib/ast_boost
 require daslib/templates_boost
 
 [tag_function(defer_tag)]
-def public defer ( blk : block<():void> ) {}
+def public defer ( blk : block<():void> )
+    //! defer a block of code. For example::
+    //!     var a = fopen("filename.txt","r")
+    //!     defer <|
+    //!         fclose(a)
+    //! Will close the file when 'a' is out of scope.
+    pass
 
-def public nada() {}
+def public nada()
+    //! helper function which does nothing and will be optimized out
+    pass
 
-// covnert defer() <| block expression
-// into {}, and move block to the finally section of the current block
 [tag_function_macro(tag="defer_tag")]
 class DeferMacro : AstFunctionAnnotation
+    //! This macro covnerts defer() <| block expression
+    //! into {}, and move block to the finally section of the current block
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         var success = true
         compiling_program() |> get_ast_context(call) <| $(valid, astc)
@@ -36,10 +44,10 @@ class DeferMacro : AstFunctionAnnotation
                 scope.finalList |> emplace(from_block,0)
         return !success ? [[ExpressionPtr]] : quote() <| nada()
 
-// convert defer_delete() expression
-// into {}, and add delete expression to the finally section of the current block
 [call_macro(name="defer_delete")]
 class DeferDeleteMacro : AstCallMacro
+    //! This macro converts defer_delete() expression
+    //! into {}, and add delete expression to the finally section of the current block
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if call.arguments.length!=1
             prog |> macro_error(call.at,"expecting defer_delete(expr)")
