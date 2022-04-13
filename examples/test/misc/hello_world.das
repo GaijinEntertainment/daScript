@@ -9,7 +9,7 @@ typedef
     GOO2 = int      // GOO2 is INT
 
 enum EEENum
-    //! this is EEEnum comment
+    // this is EEEnum comment
     one
     two
     three
