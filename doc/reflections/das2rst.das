@@ -353,8 +353,7 @@ def document_module_templates_boost(root:string)
 def document_module_is_local(root:string)
     var mod = find_module("is_local")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Scope checks", mod, %regex~(is_local_expr|is_local_or_global_expr|is_scope_expr)$%%)
     }]
     document("is_local_xxx ast helpers",mod,"{root}/is_local.rst","{root}/detail/is_local.rst",groups)
 

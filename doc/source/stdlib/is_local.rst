@@ -7,11 +7,20 @@ is_local_xxx ast helpers
 
 .. include:: detail/is_local.rst
 
-|module-is_local|
+The is_local module exposes collection of helper routines to establish locality of expression.
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+All functions and symbols are in "is_local" module, use require to get access to it. ::
+
+    require daslib/is_local
+
+
+++++++++++++
+Scope checks
+++++++++++++
+
+  *  :ref:`is_local_expr (expr:smart_ptr\<ast::Expression\> const) : bool const <function-_at_is_local_c__c_is_local_expr_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
+  *  :ref:`is_local_or_global_expr (expr:smart_ptr\<ast::Expression\> const) : bool const <function-_at_is_local_c__c_is_local_or_global_expr_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
+  *  :ref:`is_scope_expr (expr:smart_ptr\<ast::Expression\> const) : bool const <function-_at_is_local_c__c_is_scope_expr_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
 
 .. _function-_at_is_local_c__c_is_local_expr_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
 
@@ -26,7 +35,7 @@ is_local_expr returns bool const
 +--------+--------------------------------------------+
 
 
-|function-is_local-is_local_expr|
+Returns true if the expression is local to the current scope.
 
 .. _function-_at_is_local_c__c_is_local_or_global_expr_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
 
@@ -41,7 +50,7 @@ is_local_or_global_expr returns bool const
 +--------+--------------------------------------------+
 
 
-|function-is_local-is_local_or_global_expr|
+Returns true if expression is local the current scope or global scope.
 
 .. _function-_at_is_local_c__c_is_scope_expr_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
 
@@ -56,6 +65,6 @@ is_scope_expr returns bool const
 +--------+--------------------------------------------+
 
 
-|function-is_local-is_scope_expr|
+Returns true if the expression is a scoped expression, i.e. eventually points to a variable.
 
 

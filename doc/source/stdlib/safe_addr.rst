@@ -7,7 +7,12 @@ safe_addr macro
 
 .. include:: detail/safe_addr.rst
 
-|module-safe_addr|
+The safe_addr module implements safe_addr pattern, which returns temporary address of local expression.
+
+All functions and symbols are in "safe_addr" module, use require to get access to it. ::
+
+    require daslib/safe_addr
+
 
 ++++++++++++++++++++
 Function annotations
@@ -17,7 +22,8 @@ Function annotations
 
 .. das:attribute:: SafeAddrMacro
 
-|function_annotation-safe_addr-SafeAddrMacro|
+This macro reports an error if safe_addr is attempted on the object, which is not local to the scope.
+I.e. if the object can `expire` while in scope, with delete, garbage collection, or on the C++ side.
 
 ++++++++++++++++++++++
 Safe temporary address
@@ -39,7 +45,7 @@ safe_addr returns T?#
 +--------+-------------+
 
 
-|function-safe_addr-safe_addr|
+returns temporary pointer to the given expression
 
 .. _function-_at_safe_addr_c__c_safe_addr_C&_eq_Y_ls_T_gr_.:
 
@@ -54,6 +60,6 @@ safe_addr returns T? const#
 +--------+---------------+
 
 
-|function-safe_addr-safe_addr|
+returns temporary pointer to the given expression
 
 
