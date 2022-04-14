@@ -228,13 +228,16 @@ namespace das {
         walker.walk_struct((char *)data, sti);
     }
 
-    void BasicStructureAnnotation::from(const char* parentName) {
-        auto pann = (BasicStructureAnnotation*)(this->module->findAnnotation(parentName).get());
-        parents.reserve(pann->parents.size() + 1);
-        parents.push_back(pann);
-        for (auto pp : pann->parents) {
+    void BasicStructureAnnotation::from ( BasicStructureAnnotation * ann ) {
+        parents.reserve(ann->parents.size() + 1);
+        parents.push_back(ann);
+        for (auto pp : ann->parents) {
             parents.push_back(pp);
         }
+    }
+
+    void BasicStructureAnnotation::from ( const char * parentName ) {
+        from((BasicStructureAnnotation*)(this->module->findAnnotation(parentName).get()));
     }
 
     void Program::validateAotCpp ( TextWriter & logs, Context & ) {

@@ -115,6 +115,7 @@ namespace das
         StructureField & addFieldEx(const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT);
         virtual void walk(DataWalker & walker, void * data) override;
         int32_t fieldCount() const { return int32_t(fields.size()); }
+        void from(BasicStructureAnnotation * ann);
         void from(const char* parentName);
         das_map<string,StructureField> fields;
         vector<string>                 fieldsInOrder;
