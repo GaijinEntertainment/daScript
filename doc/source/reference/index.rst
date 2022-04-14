@@ -1,10 +1,10 @@
 .. _reference:
 
 #################################
-  daScript 0.2 Reference Manual
+  daScript 0.3 Reference Manual
 #################################
 
-Copyright (c) 2018-2020 Gaijin Entertainment
+Copyright (c) 2018-2022 Gaijin Entertainment
 
 The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.

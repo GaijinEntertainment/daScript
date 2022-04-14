@@ -33,6 +33,7 @@ require daslib/lpipe
 require daslib/random
 require daslib/math_bits
 require daslib/math_boost
+require daslib/array_boost
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -401,6 +402,14 @@ def document_module_math_boost(root:string)
     document("Boost package for math",mod,"{root}/math_boost.rst","{root}/detail/math_boost.rst",groups)
 
 
+def document_module_array_boost(root:string)
+    var mod = find_module("array_boost")
+    var groups <- [{DocGroup
+        group_by_regex("Temporary arrays", mod, %regex~(temp_array)$%%);
+        group_by_regex("Empty check", mod, %regex~(empty)$%%)
+    }]
+    document("Boost package for array manipulation",mod,"{root}/array_boost.rst","{root}/detail/array_boost.rst",groups)
+
 [export]
 def main
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -420,7 +429,7 @@ def main
     document_module_apply_in_context(root)
     document_module_apply(root)
     // document_module_archive(root)
-    // document_module_array_boost(root)
+    document_module_array_boost(root)
     // document_module_assert_once(root)
     // document_module_ast_block_to_loop(root)
     document_module_ast_boost(root)

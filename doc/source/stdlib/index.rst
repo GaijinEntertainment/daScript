@@ -1,10 +1,10 @@
 .. _stdlib:
 
 #################################
-  daScript Standard Library 0.2
+  daScript Standard Library 0.3
 #################################
 
-Copyright (c) 2018-2020 Gaijin Entertainment
+Copyright (c) 2018-2022 Gaijin Entertainment
 Authors: Anton Yudintsev, Boris Batkin
 
 The above copyright notice and this permission notice shall be included in
@@ -58,5 +58,5 @@ THE SOFTWARE.
    safe_addr.rst
    static_let.rst
    lpipe.rst
-
+   array_boost.rst
 
