@@ -4230,7 +4230,6 @@ Classes
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstFunctionAnnotation.transform(self: AstFunctionAnnotation; call: smart_ptr<ast::ExprCallFunc>; errors: das_string)
 
@@ -4435,7 +4434,6 @@ isSpecialized returns bool
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstBlockAnnotation.apply(self: AstBlockAnnotation; blk: smart_ptr<ast::ExprBlock>; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -4489,7 +4487,6 @@ finish returns bool
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstStructureAnnotation.apply(self: AstStructureAnnotation; st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -4579,7 +4576,6 @@ patch returns bool
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstPassMacro.apply(self: AstPassMacro; prog: ProgramPtr; mod: rtti::Module? const)
 
@@ -4606,7 +4602,6 @@ apply returns bool
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstVariantMacro.visitExprIsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprIsVariant> const)
 
@@ -4673,7 +4668,6 @@ visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstReaderMacro.accept(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: ast::ExprReader? const; ch: int const; info: LineInfo const)
 
@@ -4725,7 +4719,6 @@ visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstCommentReader.open(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; cpp: bool const; info: LineInfo const)
 
@@ -5076,7 +5069,6 @@ it defines as follows
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstCallMacro.preVisit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
 
@@ -5122,7 +5114,6 @@ visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstTypeInfoMacro.getAstChange(self: AstTypeInfoMacro; expr: smart_ptr<ast::ExprTypeInfo> const; errors: das_string)
 
@@ -5168,7 +5159,6 @@ getAstType returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstEnumerationAnnotation.apply(self: AstEnumerationAnnotation; st: EnumerationPtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
@@ -5199,7 +5189,6 @@ apply returns bool
 
 it defines as follows
 
-  | __rtti : void?
 
 .. das:function:: AstVisitor.preVisitProgram(self: AstVisitor; prog: ProgramPtr)
 

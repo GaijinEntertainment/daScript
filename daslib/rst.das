@@ -447,7 +447,7 @@ def document_classes(doc_file:file;mod:Module?)
         if w != 0
             fwrite(doc_file,"it defines as follows\n\n")
             for fld in value.fields
-                if !is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType)
+                if !is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType) && (fld.name!="__rtti")
                     fwrite(doc_file,"  | {wide(string(fld.name),w)} : {describe_type(fld._type)}\n")
             fwrite(doc_file,"\n")
         for fld in value.fields

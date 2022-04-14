@@ -59,4 +59,5 @@ THE SOFTWARE.
    static_let.rst
    lpipe.rst
    array_boost.rst
+   archive.rst
 

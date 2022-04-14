@@ -12,32 +12,41 @@ require strings
 require rtti
 
 class public Serializer
-    def abstract write ( bytes:void? implicit; size:int ) : bool
-    def abstract read ( bytes:void? implicit; size:int ) : bool
-    def abstract error ( code:string ) : void
-    def abstract OK : bool
+    //! Base class for serializers.
+    def abstract write ( bytes:void? implicit; size:int ) : bool    //! Write binary data to stream.
+    def abstract read ( bytes:void? implicit; size:int ) : bool     //! Read binary data from stream.
+    def abstract error ( code:string ) : void                       //! Report error to the archive
+    def abstract OK : bool                                          //! Return status of the archive
 
 class public MemSerializer : Serializer
+    //! This serializer stores data in memory (in the array<uint8>)
     def MemSerializer
+        //! Initialize the serializer for reading or writing.
         pass    // writing
     def MemSerializer ( from:array<uint8> )
         data := from
     def extractData : array<uint8>
+        //! Extract the data from the serializer.
         return <- data
     def getCopyOfData : array<uint8>
+        //! Returns copy of the data from the seiralizer.
         var cdata := data
         return <- cdata
     def getLastError
+        //! Returns last serialization error.
         return lastError
     def override OK
+        //! Implements 'OK' method, which returns true if the serializer is in a valid state.
         return lastError==""
     def override write ( bytes:void? implicit; size:int ) : bool
+        //! Appends bytes at the end of the data.
         let pos = length(data)
         data |> resize(pos + size)
         unsafe
             memcpy ( addr(data[pos]), bytes, size)
         return true
     def override read ( bytes:void? implicit; size:int ) : bool
+        //! Reads bytes from data, advances the reading position.
         let newOffset = readOffset + size
         let maxOffset = length(data)
         if newOffset > maxOffset
@@ -49,32 +58,38 @@ class public MemSerializer : Serializer
         readOffset = newOffset
         return true
     def override error ( code:string ) : void
+        //! Sets the last error code.
         lastError = code
     private data:array<uint8>
     private readOffset:int
     private lastError:string
 
 struct public Archive
+    //! Archive is a combination of serialization stream, and state (version, and reading status).
     version : uint
     reading : bool
     stream  : Serializer?
 
 def public serialize_raw ( var arch:Archive; var value : auto(TT)& )
+    //! Serialize raw data (straight up bytes for raw pod)
     if arch.reading
         arch.stream->read(unsafe(addr(value)), typeinfo(sizeof value))
     else
         arch.stream->write(unsafe(addr(value)), typeinfo(sizeof value))
 
 def public read_raw ( var arch:Archive; var value : auto(TT)& )
+    //! Read raw data (straight up bytes for raw pod)
     assert(arch.reading)
     arch.stream->read(unsafe(addr(value)), typeinfo(sizeof value))
 
 def public write_raw ( var arch:Archive; var value : auto(TT)& )
+    //! Write raw data (straight up bytes for raw pod)
     assert(!arch.reading)
     arch.stream->write(unsafe(addr(value)), typeinfo(sizeof value))
 
 [expect_any_enum(value), template(dummy=false)]
 def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&?????? = null )
+    //! Serializes structured data, based on the `value` type.
     arch |> serialize_raw(value)
 
 [expect_any_function(value), template(dummy=false)]
@@ -186,12 +201,14 @@ def public serialize ( var arch:Archive; var value:auto(TT)? )
         value = null
 
 def public mem_archive_save ( var t:auto& )
+    //! Saves the object to a memory archive. Result is array<uint8> with the serialized data.
     var mems = new MemSerializer()
     var sarch = [[Archive reading=false, stream=mems]]
     sarch |> serialize(t)
     return <- mems->extractData()
 
 def public mem_archive_load ( var data:array<uint8>; var t:auto&; canfail:bool=false ) : bool
+    //! Loads the object from a memory archive. `data` is the array<uint8> with the serialized data, returned from `mem_archive_save`.
     var memr = new MemSerializer(data)
     var rarch = [[Archive reading=true, stream=memr]]
     rarch |> serialize(t)

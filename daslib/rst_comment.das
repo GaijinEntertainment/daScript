@@ -170,8 +170,11 @@ class RstComment : AstCommentReader
                     to_log(LOG_WARNING, "WARNING: unsupported structure-annotation = {ann.annotation.name} in {st.name}\n")
         // to_log(LOG_WARNING, "WARNING: unsupported structure-annotation = {ann.annotation.name} in {st.name}\n")
         if !is_annotation && structure_comment != ""
-            write_to_detail("structure-{prog.thisModuleName}-{st.name}", structure_comment)
+            let topic_name = st.flags.isClass ? "class" : "structure"
+            write_to_detail("{topic_name}-{prog.thisModuleName}-{st.name}", structure_comment)
         for fc in field_comments
+            if fc.kind=="method"
+                write_to_detail("method-{prog.thisModuleName}-{st.name}.{fc.name}", fc.comment)
             debug_rst("    {fc.kind} {fc.name} // {fc.comment}")
         structure_comment = ""
         delete field_comments
