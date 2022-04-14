@@ -342,8 +342,11 @@ def document_module_templates(root:string)
 def document_module_templates_boost(root:string)
     var mod = find_module("templates_boost")
     var groups <- [{DocGroup
-        group_by_regex("stub0", mod, %regex~(stub0)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Template rules", mod, %regex~(kaboomVarField|replaceVariable|renameVariable|replaceType|replaceAnnotationArgument|replaceBlockArgument)$%%);
+        group_by_regex("Template application", mod, %regex~(apply_template)$%%);
+        group_by_regex("Block helpers", mod, %regex~(unquote_block|move_unquote_block)$%%);
+        group_by_regex("Global variable helpers", mod, %regex~(add_global_var|add_global_let|add_global_private_var|add_global_private_let)$%%);
+        group_by_regex("Hygenic names", mod, %regex~(make_unique_private_name)$%%)
     }]
     document("Template application helpers",mod,"{root}/templates_boost.rst","{root}/detail/templates_boost.rst",groups)
 
