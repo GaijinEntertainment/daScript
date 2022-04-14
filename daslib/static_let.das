@@ -11,10 +11,15 @@ require daslib/ast_boost
 require daslib/templates_boost
 
 [tag_function(static_let_tag)]
-def public static_let ( blk : block ) {}
+def public static_let ( blk : block )
+    //! Given a scope with the variable declarations, this function will make those variables global.
+    //! Variable will be renamed under the hood, and all local access to it will be renamed as well.
+    pass
 
 [tag_function(static_let_tag)]
-def public static_let_finalize ( blk : block ) {}
+def public static_let_finalize ( blk : block )
+    //! This is very similar to regular static_let, but additionally the variable will be deleted on the context shutdown.
+    pass
 
 def private make_shutdown_function ( varname:string; at:LineInfo )
     var fn <- new [[Function() at=at, atDecl=at, name:="shutdown`{varname}"]]
@@ -32,6 +37,7 @@ def private make_shutdown_function ( varname:string; at:LineInfo )
 
 [tag_function_macro(tag="static_let_tag")]
 class StaticLetMacro : AstFunctionAnnotation
+    //! This macro implements the `static_let` and `static_let_finalize` functions.
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         assert(call.arguments[0] is ExprMakeBlock)
         let mblk = call.arguments[0] as ExprMakeBlock
