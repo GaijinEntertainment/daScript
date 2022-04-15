@@ -35,6 +35,7 @@ require daslib/math_bits
 require daslib/math_boost
 require daslib/array_boost
 require daslib/archive
+require daslib/unroll
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -346,6 +347,7 @@ def document_module_templates_boost(root:string)
     var groups <- [{DocGroup
         group_by_regex("Template rules", mod, %regex~(kaboomVarField|replaceVariable|renameVariable|replaceType|replaceAnnotationArgument|replaceBlockArgument)$%%);
         group_by_regex("Template application", mod, %regex~(apply_template)$%%);
+        group_by_regex("Expression helpers", mod, %regex~(remove_deref)$%%);
         group_by_regex("Block helpers", mod, %regex~(unquote_block|move_unquote_block)$%%);
         group_by_regex("Global variable helpers", mod, %regex~(add_global_var|add_global_let|add_global_private_var|add_global_private_let)$%%);
         group_by_regex("Hygenic names", mod, %regex~(make_unique_private_name)$%%)
@@ -418,6 +420,13 @@ def document_module_archive(root:string)
     }]
     document("General prupose serialization",mod,"{root}/archive.rst","{root}/detail/archive.rst",groups)
 
+def document_module_unroll(root:string)
+    var mod = find_module("unroll")
+    var groups <- [{DocGroup
+        group_by_regex("Unrolling", mod, %regex~(unroll)$%%)
+    }]
+    document("Loop unrolling",mod,"{root}/unroll.rst","{root}/detail/unroll.rst",groups)
+
 [export]
 def main
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -477,5 +486,5 @@ def main
     document_module_strings_boost(root)
     document_module_templates_boost(root)
     document_module_templates(root)
-    // document_module_unroll(root)
+    document_module_unroll(root)
     // document_module_uriparser_boost(root)

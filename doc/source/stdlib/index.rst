@@ -60,4 +60,5 @@ THE SOFTWARE.
    lpipe.rst
    array_boost.rst
    archive.rst
+   unroll.rst
 

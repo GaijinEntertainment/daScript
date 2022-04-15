@@ -200,3 +200,24 @@ def apply_template ( var expr:smart_ptr<Expression>; blk:block<(var rules:Templa
     invoke(blk, rules)
     apply_template(rules,expr.at, expr, false)
     delete rules
+
+class private RemoveDerefVisitor : AstVisitor
+    vname : string
+    def RemoveDerefVisitor ( n : string )
+        vname = n
+    def override visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
+        if expr.subexpr is ExprVar
+            let vvar = expr.subexpr as ExprVar
+            if "{vvar.name}"==vname
+                return clone_expression(expr.subexpr)
+        return expr
+
+def public remove_deref ( varname : string; var expr:smart_ptr<Expression> )
+    //! Removes dereferences of the variable `varname` from the expression.
+    //! This is typically used when replacing 'workhorse' variable with constant.
+    var astVisitor = new RemoveDerefVisitor(varname)
+    var astVisitorAdapter <- make_visitor(*astVisitor)
+    expr |> visit(astVisitorAdapter)
+    unsafe
+        delete astVisitor
+    astVisitorAdapter := null

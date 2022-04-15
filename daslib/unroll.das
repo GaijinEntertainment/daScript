@@ -12,29 +12,20 @@ require daslib/templates_boost
 
 [tag_function(unroll_tag)]
 def public unroll ( blk : block )
+    //! Unrolls the for loop (with fixed range)
     invoke(blk)
-
-class private RemoveDerefVisitor : AstVisitor
-    vname : string
-    def RemoveDerefVisitor ( n : string )
-        vname = n
-    def override visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
-        if expr.subexpr is ExprVar
-            let vvar = expr.subexpr as ExprVar
-            if "{vvar.name}"==vname
-                return clone_expression(expr.subexpr)
-        return expr
-
-def remove_deref ( varname : string; var expr:smart_ptr<Expression> )
-    var astVisitor = new RemoveDerefVisitor(varname)
-    var astVisitorAdapter <- make_visitor(*astVisitor)
-    expr |> visit(astVisitorAdapter)
-    unsafe
-        delete astVisitor
-    astVisitorAdapter := null
 
 [tag_function_macro(tag="unroll_tag")]
 class UnrollMacro : AstFunctionAnnotation
+    //! This macro implements loop unrolling in the form of `unroll` function.
+    //! Unroll function expects block with the single for loop in it.
+    //! Moveover only range for is supported, and only with the fixed range.
+    //! For example:::
+    //!
+    //!     var n : float4[9]
+    //!     unroll <|   // contents of the loop will be replaced with 9 image load instructions.
+    //!         for i in range(9)
+    //!             n[i] = imageLoad(c_bloom_htex, xy + int2(0,i-4))
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         assert(call.arguments[0] is ExprMakeBlock)
         unsafe

@@ -214,6 +214,28 @@ Applies the template to the given expression. If `forceAt` is set, the resulting
 
 Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
 
+++++++++++++++++++
+Expression helpers
+++++++++++++++++++
+
+  *  :ref:`remove_deref (varname:string const;expr:smart_ptr\<ast::Expression\> -const) : void <function-_at_templates_boost_c__c_remove_deref_Cs_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
+
+.. _function-_at_templates_boost_c__c_remove_deref_Cs_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
+
+.. das:function:: remove_deref(varname: string const; expr: smart_ptr<ast::Expression>)
+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++varname +string const                                               +
++--------+-----------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++--------+-----------------------------------------------------------+
+
+
+Removes dereferences of the variable `varname` from the expression.
+This is typically used when replacing 'workhorse' variable with constant.
+
 +++++++++++++
 Block helpers
 +++++++++++++
