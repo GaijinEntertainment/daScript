@@ -38,6 +38,7 @@ require daslib/archive
 require daslib/unroll
 require daslib/assert_once
 require daslib/ast_block_to_loop
+require daslib/ast_used
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -443,6 +444,13 @@ def document_module_ast_block_to_loop(root:string)
     }]
     document("DECS, AST block to loop",mod,"{root}/ast_block_to_loop.rst","{root}/detail/ast_block_to_loop.rst",groups)
 
+def document_module_ast_used(root:string)
+    var mod = find_module("ast_used")
+    var groups <- [{DocGroup
+        group_by_regex("Collecting type information", mod, %regex~(collect_used_types)$%%)
+    }]
+    document("AST type ussage collection",mod,"{root}/ast_used.rst","{root}/detail/ast_used.rst",groups)
+
 [export]
 def main
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -466,11 +474,11 @@ def main
     document_module_assert_once(root)
     document_module_ast_block_to_loop(root)
     document_module_ast_boost(root)
-    // document_module_used(root)
+    document_module_ast_used(root)
     // document_module_constexpr(root)
     document_module_contracts(root)
     // document_module_cpp_bind(root)
-    // document_module_cpp_gen(root)
+    // document_module_cpp_gen(root)                // NOTE - do not document. its obsolete. use cbind_boost instead
     // document_module_dap(root)                    // todo: ask to document
     // document_module_das_source_formatter(root)   // todo: ask to document
     // document_module_debug(root)                  // todo: document???
