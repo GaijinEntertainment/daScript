@@ -11,6 +11,16 @@ require daslib/strings_boost
 
 [function_macro(name=constexpr)]
 class ConstExprAnnotation : AstFunctionAnnotation
+    //! This macro implements a constexpr function argument checker. Given list of arguments to verify, it will fail for every one where non-constant expression is passed. For example::
+    //!
+    //!     [constexpr (a)]
+    //!     def foo ( t:string; a : int )
+    //!         print("{t} = {a}\n")
+    //!     var BOO = 13
+    //!     [export]
+    //!     def main
+    //!         foo("blah", 1)
+    //!         foo("ouch", BOO)    // comilation error: `a is not a constexpr, BOO`
     def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         for aa in args
             if aa.basicType == Type tBool

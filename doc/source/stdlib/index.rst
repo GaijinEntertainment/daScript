@@ -64,6 +64,8 @@ THE SOFTWARE.
    assert_once.rst
    ast_block_to_loop.rst
    ast_used.rst
+   constexpr.rst
+
 
 
 
