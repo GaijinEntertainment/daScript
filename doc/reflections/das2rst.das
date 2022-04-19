@@ -41,6 +41,7 @@ require daslib/ast_block_to_loop
 require daslib/ast_used
 require daslib/constexpr
 require daslib/uriparser_boost
+require daslib/sort_boost
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -468,6 +469,12 @@ def document_module_uriparser_boost(root:string)
     }]
     document("Boost package for the URI parser",mod,"{root}/uriparser_boost.rst","{root}/detail/uriparser_boost.rst",groups)
 
+def document_module_sort_boost(root:string)
+    var mod = find_module("sort_boost")
+    var groups <- [{DocGroup
+        group_by_regex("stub", mod, %regex~(stub)$%%)
+    }]
+    document("Boost package for the builtin sort",mod,"{root}/sort_boost.rst","{root}/detail/sort_boost.rst",groups)
 
 [export]
 def main
@@ -523,7 +530,7 @@ def main
     document_module_regex(root)
     document_module_rst(root)
     document_module_safe_addr(root)
-    // document_module_sort_boost(root)
+    document_module_sort_boost(root)
     document_module_static_let(root)
     document_module_strings_boost(root)
     document_module_templates_boost(root)

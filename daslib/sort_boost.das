@@ -9,6 +9,9 @@ require daslib/array_boost public
 
 [call_macro(name="qsort")]
 class QsortMacro : AstCallMacro
+    //! Implements `qsort` macro. I'ts `qsort(value,block)`.
+    //! For the regular array<> or dim it's replaced with `sort(value,block)`.
+    //! For the handled types like das`vector its replaced with `sort(temp_array(value),block)`.
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if expr.arguments.length != 2
             macro_error(prog,expr.at,"expecting qsort(value, block)")

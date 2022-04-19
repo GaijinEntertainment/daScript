@@ -66,6 +66,7 @@ THE SOFTWARE.
    ast_block_to_loop.rst
    ast_used.rst
    constexpr.rst
+   sort_boost.rst
 
 
 
