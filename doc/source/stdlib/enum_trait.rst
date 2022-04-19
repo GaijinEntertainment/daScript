@@ -1,9 +1,9 @@
 
 .. _stdlib_enum_trait:
 
-==================================
-Boost package for the builtin sort
-==================================
+==================
+Enumeration traits
+==================
 
 .. include:: detail/enum_trait.rst
 

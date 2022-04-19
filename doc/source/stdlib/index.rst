@@ -68,6 +68,8 @@ THE SOFTWARE.
    constexpr.rst
    sort_boost.rst
    enum_trait.rst
+   cpp_bind.rst
+
 
 
 

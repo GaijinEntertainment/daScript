@@ -43,6 +43,7 @@ require daslib/constexpr
 require daslib/uriparser_boost
 require daslib/sort_boost
 require daslib/enum_trait
+require daslib/cpp_bind
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -482,7 +483,14 @@ def document_module_enum_trait(root:string)
     var groups <- [{DocGroup
         group_by_regex("stub", mod, %regex~(stub)$%%)
     }]
-    document("Boost package for the builtin sort",mod,"{root}/enum_trait.rst","{root}/detail/enum_trait.rst",groups)
+    document("Enumeration traits",mod,"{root}/enum_trait.rst","{root}/detail/enum_trait.rst",groups)
+
+def document_module_cpp_bind(root:string)
+    var mod = find_module("cpp_bind")
+    var groups <- [{DocGroup
+        group_by_regex("Generation of bindings", mod, %regex~(log_cpp_class_adapter)$%%)
+    }]
+    document("C++ bindings generator",mod,"{root}/cpp_bind.rst","{root}/detail/cpp_bind.rst",groups)
 
 [export]
 def main
@@ -510,7 +518,7 @@ def main
     document_module_ast_used(root)
     document_module_constexpr(root)
     document_module_contracts(root)
-    // document_module_cpp_bind(root)
+    document_module_cpp_bind(root)
     // document_module_cpp_gen(root)                // NOTE - do not document. its obsolete. use cbind_boost instead
     // document_module_dap(root)                    // todo: ask to document
     // document_module_das_source_formatter(root)   // todo: ask to document
