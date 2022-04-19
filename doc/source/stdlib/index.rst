@@ -32,6 +32,7 @@ THE SOFTWARE.
    random.rst
    network.rst
    uriparser.rst
+   uriparser_boost.rst
    rtti.rst
    ast.rst
    ast_boost.rst

@@ -40,6 +40,7 @@ require daslib/assert_once
 require daslib/ast_block_to_loop
 require daslib/ast_used
 require daslib/constexpr
+require daslib/uriparser_boost
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -459,6 +460,14 @@ def document_module_constexpr(root:string)
     }]
     document("Constant expression checker",mod,"{root}/constexpr.rst","{root}/detail/constexpr.rst",groups)
 
+def document_module_uriparser_boost(root:string)
+    var mod = find_module("uriparser_boost")
+    var groups <- [{DocGroup
+        group_by_regex("Split and compose", mod, %regex~(uri_split_full_path|uri_compose_query|uri_compose_query_in_order|uri_compose)$%%);
+        group_by_regex("Component accessors", mod, %regex~(scheme|user_info|host|port|path|query|fragment)$%%)
+    }]
+    document("Boost package for the URI parser",mod,"{root}/uriparser_boost.rst","{root}/detail/uriparser_boost.rst",groups)
+
 
 [export]
 def main
@@ -520,4 +529,4 @@ def main
     document_module_templates_boost(root)
     document_module_templates(root)
     document_module_unroll(root)
-    // document_module_uriparser_boost(root)
+    document_module_uriparser_boost(root)
