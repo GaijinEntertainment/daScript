@@ -62,5 +62,7 @@ THE SOFTWARE.
    archive.rst
    unroll.rst
    assert_once.rst
+   ast_block_to_loop.rst
+
 
 
