@@ -61,4 +61,6 @@ THE SOFTWARE.
    array_boost.rst
    archive.rst
    unroll.rst
+   assert_once.rst
+
 

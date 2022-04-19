@@ -36,6 +36,7 @@ require daslib/math_boost
 require daslib/array_boost
 require daslib/archive
 require daslib/unroll
+require daslib/assert_once
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -427,6 +428,13 @@ def document_module_unroll(root:string)
     }]
     document("Loop unrolling",mod,"{root}/unroll.rst","{root}/detail/unroll.rst",groups)
 
+def document_module_assert_once(root:string)
+    var mod = find_module("assert_once")
+    var groups <- [{DocGroup
+        group_by_regex("Assertion", mod, %regex~(assert_once)$%%)
+    }]
+    document("Assert once",mod,"{root}/assert_once.rst","{root}/detail/assert_once.rst",groups)
+
 [export]
 def main
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -447,7 +455,7 @@ def main
     document_module_apply(root)
     document_module_archive(root)
     document_module_array_boost(root)
-    // document_module_assert_once(root)
+    document_module_assert_once(root)
     // document_module_ast_block_to_loop(root)
     document_module_ast_boost(root)
     // document_module_used(root)
