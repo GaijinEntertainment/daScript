@@ -329,6 +329,16 @@ Reader macros
 
 |reader_macro-builtin-_esc|
 
++++++++++++++++
+Typeinfo macros
++++++++++++++++
+
+.. _call-macro-builtin-rtti_classinfo:
+
+.. das:attribute:: rtti_classinfo
+
+|typeinfo_macro-builtin-rtti_classinfo|
+
 +++++++++++++
 Handled types
 +++++++++++++

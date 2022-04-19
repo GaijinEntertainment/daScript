@@ -184,3 +184,4 @@
 
 .. |function-rtti-type_info| replace:: Returns `TypeInfo` object for the local variable.
 
+.. |typeinfo_macro-rtti-rtti_typeinfo| replace:: Generates `TypeInfo` for the given expression or type.

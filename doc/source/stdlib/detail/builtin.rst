@@ -315,3 +315,5 @@
 .. |function-builtin-move_to_ref| replace:: moves `b` into `a`. if `b` is value, it will be copied to `a` instead
 
 .. |reader_macro-builtin-_esc| replace:: returns raw string input, without regards for escape sequences. For example %_esc\\n\\r%_esc will return 4 character string '\\','n','\\','r'
+
+.. |typeinfo_macro-builtin-rtti_classinfo| replace:: Generates TypeInfo for the class initialization.

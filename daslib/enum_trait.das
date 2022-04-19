@@ -10,6 +10,7 @@ require daslib/ast_boost
 
 [typeinfo_macro(name="enum_length")]
 class TypeInfoGetEnumLength : AstTypeInfoMacro
+    //! Implements typeinfo(enum_length EnumOrEnumType) which returns total number of elements in enumeration.
     def override getAstChange ( expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : ExpressionPtr
         if expr.typeexpr != null
             if !expr.typeexpr.isEnum

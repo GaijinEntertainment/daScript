@@ -838,6 +838,8 @@
 
 .. |function-ast-for_each_variant_macro| replace:: Iterates through each variant macro in the given `Module`.
 
+.. |function-ast-for_each_typeinfo_macro| replace:: Iterates through each typeinfo macro in the given `Module`.
+
 .. |function-ast-force_at| replace:: Replaces line info in the expression, its subexpressions, and its types.
 
 .. |function-ast-parse_mangled_name| replace:: Parses mangled name and creates corresponding `TypeDecl`.

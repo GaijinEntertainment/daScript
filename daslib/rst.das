@@ -625,6 +625,22 @@ def document_variant_macros(doc_file:file;mod:Module?)
     for_each_variant_macro(mod) <| $(value)
         document_variant_macro(doc_file,mod,string(value.name))
 
+def document_typeinfo_macro(doc_file:file;mod:Module?;value:string implicit)
+    fwrite(doc_file,make_label(call_macro_label_name(mod,value)))
+    fwrite(doc_file,make_domain("das:attribute"))
+    fwrite(doc_file,"{value}\n\n")
+    document_topic(doc_file,topic("typeinfo_macro",mod,value))
+
+def document_typeinfo_macros(doc_file:file;mod:Module?)
+    var any = false
+    for_each_typeinfo_macro(mod) <| $(value)
+        any = true
+    if !any
+        return
+    fwrite(doc_file,make_group("Typeinfo macros"))
+    for_each_typeinfo_macro(mod) <| $(value)
+        document_typeinfo_macro(doc_file,mod,string(value.name))
+
 def function_needs_documenting(func:FunctionPtr)
     if func.flags.generated
         return false
@@ -859,6 +875,7 @@ def public document(name:string;mod:Module?;fname,substname:string;groups:array<
     document_call_macros(doc_file,mod)
     document_reader_macros(doc_file,mod)
     document_variant_macros(doc_file,mod)
+    document_typeinfo_macros(doc_file,mod)
     document_annotations(doc_file,mod)
     document_classes(doc_file,mod)
     document_functions(doc_file,mod,groups)

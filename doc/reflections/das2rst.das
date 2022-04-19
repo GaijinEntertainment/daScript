@@ -42,6 +42,7 @@ require daslib/ast_used
 require daslib/constexpr
 require daslib/uriparser_boost
 require daslib/sort_boost
+require daslib/enum_trait
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -476,6 +477,13 @@ def document_module_sort_boost(root:string)
     }]
     document("Boost package for the builtin sort",mod,"{root}/sort_boost.rst","{root}/detail/sort_boost.rst",groups)
 
+def document_module_enum_trait(root:string)
+    var mod = find_module("enum_trait")
+    var groups <- [{DocGroup
+        group_by_regex("stub", mod, %regex~(stub)$%%)
+    }]
+    document("Boost package for the builtin sort",mod,"{root}/enum_trait.rst","{root}/detail/enum_trait.rst",groups)
+
 [export]
 def main
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -511,7 +519,7 @@ def main
     // document_module_decs_state(root)                 // DECS
     // document_module_decs(root)                       // DECS
     document_module_defer(root)
-    // document_module_enum_trait(root)
+    document_module_enum_trait(root)
     document_module_functional(root)
     document_module_if_not_null(root)
     document_module_instance_function(root)

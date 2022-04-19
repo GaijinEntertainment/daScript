@@ -67,6 +67,7 @@ THE SOFTWARE.
    ast_used.rst
    constexpr.rst
    sort_boost.rst
+   enum_trait.rst
 
 
 

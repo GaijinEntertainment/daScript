@@ -1192,6 +1192,16 @@ CodeOfPolicies fields are
 
 |structure_annotation-rtti-CodeOfPolicies|
 
++++++++++++++++
+Typeinfo macros
++++++++++++++++
+
+.. _call-macro-rtti-rtti_typeinfo:
+
+.. das:attribute:: rtti_typeinfo
+
+|typeinfo_macro-rtti-rtti_typeinfo|
+
 +++++++++++++
 Handled types
 +++++++++++++

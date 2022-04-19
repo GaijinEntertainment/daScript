@@ -161,6 +161,11 @@ class RstComment : AstCommentReader
                     write_to_detail("variant_macro-{prog.thisModuleName}-{ann_name}", structure_comment)
                     is_annotation = true
                     break
+                elif ann.annotation.name=="typeinfo_macro"
+                    let ann_name = get_macro_name(st,"typeinfo_macro")
+                    write_to_detail("typeinfo_macro-{prog.thisModuleName}-{ann_name}", structure_comment)
+                    is_annotation = true
+                    break
                 elif ann.annotation.name=="reader_macro"
                     let ann_name = get_macro_name(st,"reader_macro")
                     write_to_detail("reader_macro-{prog.thisModuleName}-{ann_name}", structure_comment)
