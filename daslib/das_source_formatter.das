@@ -762,6 +762,7 @@ def do_format
     fmt_space_after_keyword()
     fmt_space_after_paren()
     fmt_space_after_square_brackets()
+    fmt_function_arguments()
 
 
 def public format_source_string(file_data: string const& implicit): string
