@@ -40,9 +40,12 @@ namespace das {
     char* builtin_string_chop( const char * str, int start, int length, Context * context );
     unsigned string_to_uint ( const char *str, Context * context );
     int string_to_int ( const char *str, Context * context );
+    uint64_t string_to_uint64 ( const char *str, Context * context );
+    int64_t string_to_int64 ( const char *str, Context * context );
     float string_to_float ( const char *str, Context * context );
     double string_to_double ( const char *str, Context * context );
     float fast_to_float ( const char *str );
+    double fast_to_double ( const char *str );
     int32_t fast_to_int ( const char *str, bool hex );
     uint32_t fast_to_uint ( const char *str, bool hex );
     int64_t fast_to_int64 ( const char *str, bool hex );

@@ -18,8 +18,6 @@
 
 .. |function-strings-delete_string| replace:: Removes string from the string heap. This is unsafe because it will free the memory and all dangling strings will be broken.
 
-.. |function-strings-double| replace:: Converts string to double.
-
 .. |function-strings-empty| replace:: Returns true if string is empty (null or "").
 
 .. |function-strings-ends_with| replace:: returns `true` if the end of the string `str`  matches a the string `cmp` otherwise returns `false`
@@ -28,11 +26,19 @@
 
 .. |function-strings-find| replace:: Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
 
-.. |function-strings-float| replace:: Converts string to float.
+.. |function-strings-float| replace:: Converts string to float. In case of error panic.
+
+.. |function-strings-double| replace:: Converts string to double. In case of error panic.
+
+.. |function-strings-int| replace:: Converts string to integer. In case of error panic.
+
+.. |function-strings-uint| replace:: Convert string to uint. In case of error panic.
+
+.. |function-strings-int64| replace:: Converts string to int64. In case of error panic.
+
+.. |function-strings-uint64| replace:: Convert string to uint64. In case of error panic.
 
 .. |function-strings-format| replace:: Converts value to string given specified format (that of C printf).
-
-.. |function-strings-int| replace:: Converts string to integer.
 
 .. |function-strings-is_alpha| replace:: Returns true if character is [A-Za-z].
 
@@ -68,15 +74,17 @@
 
 .. |function-strings-to_char| replace:: Convert character to string.
 
-.. |function-strings-to_float| replace:: Convert string to float.
+.. |function-strings-to_float| replace:: Convert string to float. In case of error returns 0.0
 
-.. |function-strings-to_int| replace:: Convert string to int.
+.. |function-strings-to_double| replace:: Convert string to double. In case of error returns 0.0lf
 
-.. |function-strings-to_uint| replace:: Convert string to uint.
+.. |function-strings-to_int| replace:: Convert string to int. In case of error returns 0
 
-.. |function-strings-to_int64| replace:: Convert string to int64.
+.. |function-strings-to_uint| replace:: Convert string to uint. In case of error returns 0u
 
-.. |function-strings-to_uint64| replace:: Convert string to uint64.
+.. |function-strings-to_int64| replace:: Convert string to int64. In case of error returns 0l
+
+.. |function-strings-to_uint64| replace:: Convert string to uint64. In case of error returns 0ul
 
 .. |function-strings-to_lower| replace:: Return all lower case string
 
@@ -85,8 +93,6 @@
 .. |function-strings-to_upper| replace:: Return all upper case string
 
 .. |function-strings-to_upper_in_place| replace:: Modify string in place to be all upper case string
-
-.. |function-strings-uint| replace:: Convert string to uint.
 
 .. |function-strings-unescape| replace:: Unescape string i.e reverse effects of `escape`. For example "\\n" is converted to "\n".
 

@@ -1010,6 +1010,8 @@ String conversion routines
   *  :ref:`to_char (char:int const;context:__context const) : string <function-_at_strings_c__c_to_char_Ci_C_c>` 
   *  :ref:`int (str:string const implicit;context:__context const) : int <function-_at_strings_c__c_int_CIs_C_c>` 
   *  :ref:`uint (str:string const implicit;context:__context const) : uint <function-_at_strings_c__c_uint_CIs_C_c>` 
+  *  :ref:`int64 (str:string const implicit;context:__context const) : int64 <function-_at_strings_c__c_int64_CIs_C_c>` 
+  *  :ref:`uint64 (str:string const implicit;context:__context const) : uint64 <function-_at_strings_c__c_uint64_CIs_C_c>` 
   *  :ref:`float (str:string const implicit;context:__context const) : float <function-_at_strings_c__c_float_CIs_C_c>` 
   *  :ref:`double (str:string const implicit;context:__context const) : double <function-_at_strings_c__c_double_CIs_C_c>` 
   *  :ref:`to_int (value:string const implicit;hex:bool const) : int <function-_at_strings_c__c_to_int_CIs_Cb>` 
@@ -1017,6 +1019,7 @@ String conversion routines
   *  :ref:`to_int64 (value:string const implicit;hex:bool const) : int64 <function-_at_strings_c__c_to_int64_CIs_Cb>` 
   *  :ref:`to_uint64 (value:string const implicit;hex:bool const) : uint64 <function-_at_strings_c__c_to_uint64_CIs_Cb>` 
   *  :ref:`to_float (value:string const implicit) : float <function-_at_strings_c__c_to_float_CIs>` 
+  *  :ref:`to_double (value:string const implicit) : double <function-_at_strings_c__c_to_double_CIs>` 
 
 .. _function-_at_strings_c__c_string_CI1_ls_u8_gr_A_C_c:
 
@@ -1077,6 +1080,36 @@ uint returns uint
 
 
 |function-strings-uint|
+
+.. _function-_at_strings_c__c_int64_CIs_C_c:
+
+.. das:function:: int64(str: string const implicit)
+
+int64 returns int64
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++str     +string const implicit+
++--------+---------------------+
+
+
+|function-strings-int64|
+
+.. _function-_at_strings_c__c_uint64_CIs_C_c:
+
+.. das:function:: uint64(str: string const implicit)
+
+uint64 returns uint64
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++str     +string const implicit+
++--------+---------------------+
+
+
+|function-strings-uint64|
 
 .. _function-_at_strings_c__c_float_CIs_C_c:
 
@@ -1190,6 +1223,21 @@ to_float returns float
 
 
 |function-strings-to_float|
+
+.. _function-_at_strings_c__c_to_double_CIs:
+
+.. das:function:: to_double(value: string const implicit)
+
+to_double returns double
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++value   +string const implicit+
++--------+---------------------+
+
+
+|function-strings-to_double|
 
 +++++++++++++++
 String as array
