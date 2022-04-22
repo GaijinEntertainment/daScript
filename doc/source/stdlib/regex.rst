@@ -24,6 +24,7 @@ Type aliases
 
 .. das:attribute:: CharSet = uint[8]
 
+Bit array which represents an 8-bit character set.
 
 .. _alias-MaybeReNode:
 

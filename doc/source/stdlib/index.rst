@@ -69,6 +69,8 @@ THE SOFTWARE.
    sort_boost.rst
    enum_trait.rst
    cpp_bind.rst
+   decs.rst
+   decs_boost.rst
 
 
 

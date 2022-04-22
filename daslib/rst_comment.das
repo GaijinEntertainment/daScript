@@ -90,7 +90,7 @@ class RstComment : AstCommentReader
         if state != ParserState type_alias
             panic("expecting type_alias, got {state}")
         if alias_comment != ""
-            write_to_detail("typedef-{prog.thisModuleName}-{name}", enum_comment)
+            write_to_detail("typedef-{prog.thisModuleName}-{name}", alias_comment)
         state = ParserState none
         alias_comment = ""
     def override beforeEnumeration ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void

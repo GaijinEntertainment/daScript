@@ -17,10 +17,12 @@ require math
 require strings
 require daslib/defer
 
-typedef ComponentHash = uint64
-typedef TypeHash = uint64
+typedef ComponentHash = uint64  //! Hash value of the ECS component type
+typedef TypeHash = uint64       //! Hash value of the individual type
 
 struct CTypeInfo
+    //! Type information for the individual component subtype.
+    //! Consists of type name and collection of type-specific routines to control type values during its lifetime, serialization, etc.
     basicType : Type
     mangledName : string
     fullName : string
@@ -34,6 +36,7 @@ struct CTypeInfo
     gc         : function<(var src:array<uint8>):lambda>
 
 struct public Component
+    //! Single ECS component. Contains component name, data, and data layout.
     name : string
     hash : ComponentHash
     stride : int
@@ -42,36 +45,43 @@ struct public Component
     gc_dummy : lambda           // this is here so that GC can find real representation of data
 
 struct public EntityId
+    //! Unique identifier of the entity. Consists of id (index in the data array) and generation.
     id : uint
     generation : int
 
 struct public Archetype
+    //! ECS archetype. Archetype is unique combination of components.
     hash : ComponentHash
     components : array<Component>
     size : int
     eidIndex : int
 
 struct public ComponentValue
+    //! Value of the component during creation or transformation.
     name : string
     info : CTypeInfo
     data : float4[4]
 
-typedef DeferEval = lambda<(var act:DeferAction):void>
+typedef DeferEval = lambda<(var act:DeferAction):void> //! Lambda which holds deferred action. Typically creation of destruction of an entity.
 
 struct private DeferAction
     eid : EntityId
     action : DeferEval
 
-typedef ComponentMap = array<ComponentValue>
+typedef ComponentMap = array<ComponentValue> //! Table of component values for individual entity.
 
 struct EcsRequestPos
+    //! Location of the ECS request in the code (source file and line number).
     file: string
     line: uint
 
 def EcsRequestPos(at: rtti::LineInfo): EcsRequestPos
+    //! Constructs EcsRequestPos from rtti::LineInfo.
     return [[EcsRequestPos file=at.fileInfo != null ? string(at.fileInfo.name) : "", line=at.line]]
 
 struct public EcsRequest
+    //! Individual ESC requests. Contains list of required components, list of components which are required to be absent.
+    //! Caches list of archetypes, which match the request.
     hash : ComponentHash
     req : array<string>
     reqn : array<string>
@@ -79,6 +89,8 @@ struct public EcsRequest
     at: EcsRequestPos
 
 struct public DecsState
+    //! Entire state of the ECS system.
+    //! Conntains archtypes, entities and entity free-list, entity lokup table, all archetypes and archetype lookups, etc.
     archetypeLookup : table<ComponentHash; int>
     allArchetypes : array<Archetype>
     entityFreeList : array<EntityId>
@@ -87,29 +99,38 @@ struct public DecsState
     ecsQueries : array<EcsRequest>
     queryLookup : table<ComponentHash; int>
 
-typedef PassFunction = function<():void>
+typedef PassFunction = function<():void>    //! One of the callbacks which form individual pass.
 
 struct public DecsPass
+    //! Individual pass of the update of the ECS system.
+    //! Contains pass name and list of all pass calblacks.
     name : string
     calls : array<PassFunction>
 
-var public decsState : DecsState
+var public decsState : DecsState    //! Full state of the ESC system.
 var private deferActions : array<DeferAction>
 var private decsPasses : array<DecsPass>
 var private insideQuery : int
 
-let INVALID_ENTITY_ID = [[decs::EntityId]]
+let INVALID_ENTITY_ID = [[decs::EntityId]]  //! Entity ID which represents invalid entity.
 
 def operator ==(a, b: decs::EntityId implicit)
+    //! Equality operator for entity IDs.
     return a.id == b.id && a.generation == b.generation
 
 def operator !=(a, b: decs::EntityId implicit)
+    //! Inequality operator for entity IDs.
     return a.id != b.id || a.generation != b.generation
 
 def public describe ( info:CTypeInfo )
+    //! Returns textual description of the type.
     return "{info.fullName} {info.basicType} MNH={info.mangledName} hash={info.hash} size={info.size}"
 
 def public operator . ( var cmp:ComponentMap; name:string ) : ComponentValue &
+    //! Access to component value by name. For example::
+    //!
+    //!     create_entity <| @ ( eid, cmp )
+    //!         cmp.pos := float3(i)    // same as cmp |> set("pos",float3(i))
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if !(idx<length(cmp) && cmp[idx].name==name)
         cmp |> push([[ComponentValue name=name]], idx)
@@ -117,6 +138,7 @@ def public operator . ( var cmp:ComponentMap; name:string ) : ComponentValue &
         return cmp[idx]
 
 def public set ( var cv:ComponentValue; val:auto )
+    //! Sets individual component value. Verifies that the value is of the correct type.
     var cval = make_component(cv.name, val)
     assert(cv.info.hash==0ul || cv.info.hash==cval.info.hash)
     cv = cval
@@ -150,6 +172,7 @@ def public operator := ( var cv:ComponentValue; val:float4x4 )    { set(cv, val)
 def public operator := ( var cv:ComponentValue; val:double )      { set(cv, val); }
 
 def public clone ( var dst:Component; src:Component )
+    //! Clones component value.
     dst.name := src.name
     dst.hash = src.hash
     dst.stride = src.stride
@@ -160,6 +183,7 @@ def public clone ( var dst:Component; src:Component )
         dst.data := src.data
 
 def public serialize ( var arch:Archive; var src:Component )
+    //! Serializes component value.
     arch |> serialize(src.name)
     arch |> serialize(src.hash)
     arch |> serialize(src.stride)
@@ -167,6 +191,7 @@ def public serialize ( var arch:Archive; var src:Component )
     invoke(src.info.serializer, arch, src.data)
 
 def public register_decs_stage_call ( name:string; pcall:PassFunction )
+    //! Registration of a single pass callback. This is a low-level function, used by decs_boost macros.
     var dpass <- [[DecsPass name=name]]
     let idx = lower_bound(decsPasses,dpass) <| $ ( x,y ) => x.name < y.name
     if idx<length(decsPasses) && decsPasses[idx].name==name
@@ -176,6 +201,8 @@ def public register_decs_stage_call ( name:string; pcall:PassFunction )
         decsPasses |> emplace(dpass, idx)    // insert new one
 
 def public decs_stage ( name : string )
+    //! Invokes specific ECS pass.
+    //! `commit` is called before and after the invocation.
     commit()
     let idx = lower_bound(decsPasses,[[DecsPass name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(decsPasses) && decsPasses[idx].name==name
@@ -184,12 +211,14 @@ def public decs_stage ( name : string )
     commit()
 
 def operator delete ( var cmp:Component )
+    //! Deletes component.
     if cmp.info.eraser != null
         invoke(cmp.info.eraser,cmp.data)
     delete cmp.data
     delete cmp.info
 
 def public restart
+    //! Restarts ECS by erasing all deferred actions and entire state.
     if insideQuery!=0
         panic("can't call `restart` from inside query")
     delete deferActions
@@ -207,6 +236,8 @@ def private new_entity_id()
     return eid
 
 def public before_gc
+    //! Low level callback to be called before the garbage collection.
+    //! This is a low-level function typically used by `live`.
     if insideQuery!=0
         panic("can't call 'before_gc' from inside query")
     for arch in decsState.allArchetypes
@@ -216,6 +247,8 @@ def public before_gc
                     comp.gc_dummy <- invoke(comp.info.gc, comp.data)
 
 def public after_gc
+    //! Low level callback to be called after the garbage collection.
+    //! This is a low-level function typically used by `live`.
     if insideQuery!=0
         panic("can't call 'after_gc' from inside query")
     for arch in decsState.allArchetypes
@@ -225,6 +258,7 @@ def public after_gc
                     delete comp.gc_dummy
 
 def public debug_dump
+    //! Prints out state of the ECS system.
     for arch in decsState.allArchetypes
         to_log(LOG_DEBUG, "archtype {arch.hash} : {arch.size}\n")
         // debug(arch)
@@ -320,6 +354,7 @@ def private req_hash ( erq : EcsRequest )
     return ahash
 
 def public has ( arch:Archetype; name:string )
+    //! Returns true if object has specified subobjec.
     return arch.components |> binary_search ( [[Component name=name]] ) <| $ ( x, y ) => x.name < y.name
 
 def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
@@ -334,6 +369,7 @@ def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
     return true
 
 def public verify_request ( var erq : EcsRequest ) : tuple<ok:bool;error:string>
+    //! Verifies ESC request. Returns pair of boolean (true for OK) and error message.
     if erq.hash==0ul || (empty(erq.req) && empty(erq.reqn))
         return [[auto true, ""]]    // this queries just about everything
     for N in erq.reqn   // assuming require_not is typically shorter
@@ -342,11 +378,13 @@ def public verify_request ( var erq : EcsRequest ) : tuple<ok:bool;error:string>
     return [[auto true,""]]
 
 def public compile_request ( var erq : EcsRequest )
+    //! Compiles ESC request, by creating request hash.
     sort_unique(erq.req)
     sort_unique(erq.reqn)
     erq.hash = req_hash(erq)
 
 def public lookup_request ( var erq : EcsRequest )
+    //! Looks up ESC request in the request cache.
     if erq.hash==0ul
         compile_request(erq)
     var ql & = unsafe(decsState.queryLookup[erq.hash])
@@ -359,6 +397,7 @@ def public lookup_request ( var erq : EcsRequest )
     return ql - 1
 
 def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype):void> )
+    //! Invokes block for each entity of each archetype that can be processed by the request.
     let qi = lookup_request(erq)
     var aclone := decsState.ecsQueries[qi].archetypes
     defer_delete(aclone)
@@ -368,6 +407,8 @@ def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype)
             ++insideQuery; invoke ( blk, arch ); --insideQuery
 
 def public for_eid_archetype ( eid:EntityId implicit; hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype;index:int):void> )
+    //! Invokes block for the specific entity id, given request.
+    //! Request is returned by a specified function.
     var lookup = decsState.entityLookup[eid.id]
     if lookup.generation != eid.generation
         return false
@@ -388,6 +429,8 @@ def public for_eid_archetype ( eid:EntityId implicit; hash:ComponentHash; var er
         return false
 
 def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype):void> )
+    //! Invokes block for each entity of each archetype that can be processed by the request.
+    //! Request is returned by a specified function.
     var qi = -1
     decsState.queryLookup |> find_if_exists(hash) <| $ ( ql )
         qi = *ql - 1
@@ -401,6 +444,9 @@ def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsReq
             ++insideQuery; invoke ( blk, arch ); --insideQuery
 
 def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():EcsRequest>; blk:block<(arch:Archetype):bool> )
+    //! Invokes block for each entity of each archetype that can be processed by the request.
+    //! Request is returned by a specified function.
+    //! If block returns true, iteration is stopped.
     var qi = -1
     decsState.queryLookup |> find_if_exists(hash) <| $ ( ql )
         qi = *ql - 1
@@ -418,6 +464,7 @@ def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():E
 
 // [template(atype)]
 def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int )
+    //! Low level function returns temporary array of component given specific type of component.
     assert(length(src)>0)
     static_if typeinfo(is_dim atype)
         var dest : array<TT[typeinfo(dim atype)]-const-&-#>
@@ -431,6 +478,8 @@ def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int )
             return <- dest
 
 def public get ( arch:Archetype; name:string; value:auto(TT) )
+    //! Creates temporary array of component given specific name and type of component.
+    //! If component is not found - panic.
     let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
         let comp & = unsafe(arch.components[idx])
@@ -456,15 +505,19 @@ def public get ( arch:Archetype; name:string; value:auto(TT) )
 
 [expect_dim(value)]
 def public get_ro ( arch:Archetype; name:string; value:auto(TT)[] ) : array<TT[typeinfo(sizeof value)]-const-&-#> const
+    //! Returns const temporary array of component given specific name and type of component for array components.
     unsafe
         return <- get(arch, name, value)
 
 [expect_not_dim(value)]
 def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&-#> const
+    //! Returns const temporary array of component given specific name and type of component for regular components.
     unsafe
         return <- get(arch, name, value)
 
 def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iterator<TT const &>
+    //! Returns const iterator of component given specific name and type of component.
+    //! If component is not found - iterator will kepp returning the specified value.
     let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
         let comp & = unsafe(arch.components[idx])
@@ -488,6 +541,8 @@ def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iter
     return <- repeat_ref(value,arch.size)
 
 def public get_optional ( arch:Archetype; name:string; value:auto(TT)? ) : iterator<TT-const-&-#?>
+    //! Returns const iterator of component given specific name and type of component.
+    //! If component is not found - iterator will kepp returning default value for the component type.
     let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
         let comp & = unsafe(arch.components[idx])
@@ -557,11 +612,13 @@ def private delete_entity_imm ( eid:EntityId )
         remove_entity(decsState.allArchetypes[decsState.archetypeLookup[lookup.archetype]-1], di)
 
 def public update_entity ( entityid:EntityId implicit; var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+    //! Creates deferred action to update entity specified by id.
     var deval <- @ <| [[<-blk]] ( var act:DeferAction )
         update_entity_imm(act.eid,blk)
     deferActions |> emplace([[DeferAction action<-deval, eid=entityid]])
 
 def public create_entity ( var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
+    //! Creates deferred action to create entity.
     var deval <- @ <| [[<-blk]] ( var act:DeferAction )
         create_entity_imm(act.eid, blk)
     var eid = new_entity_id()
@@ -569,11 +626,13 @@ def public create_entity ( var blk : lambda<(eid:EntityId; var cmp:ComponentMap)
     return eid
 
 def public delete_entity ( entityid:EntityId implicit )
+    //! Creates deferred action to delete entity specified by id.
     var deval <- @ <| ( var act:DeferAction )
         delete_entity_imm(act.eid)
     deferActions |> emplace([[DeferAction action<-deval, eid=entityid]])
 
 def public commit
+    //! Finishes all deferred actions.
     if insideQuery!=0
         panic("can't call `commit` from inside query")
     var actions <- deferActions
@@ -582,6 +641,8 @@ def public commit
     delete actions
 
 def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
+    //! Gets component value specified by name and type.
+    //! Will panic if name matches but type does not.
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         unsafe
@@ -733,6 +794,8 @@ def private make_component ( name:string; value:auto(TT) )
     return cv
 
 def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
+    //! Set component value specified by name and type.
+    //! If value already exists, it is overwritten. If already existing value type is not the same - panic.
     concept_assert(typeinfo(sizeof value)<=typeinfo(sizeof cmp[0].data), "unsupported component type {typeinfo(typename value)} (its too big)")
     let cv = make_component(name, value)
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
@@ -747,6 +810,7 @@ def public has ( var cmp:ComponentMap; name:string )
     return binary_search(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
 
 def public remove ( var cmp:ComponentMap; name:string )
+    //! Removes speicified value from the component map.
     let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         cmp |> erase(idx)
