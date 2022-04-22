@@ -178,6 +178,7 @@ int das_aot_main ( int argc, char * argv[] ) {
         return -1;
     }
     bool dryRun = false;
+    bool scriptArgs = false;
     if ( argc>3  ) {
         for (int ai = 4; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
@@ -186,7 +187,9 @@ int das_aot_main ( int argc, char * argv[] ) {
                 paranoid_validation = true;
             } else if ( strcmp(argv[ai],"-dry-run")==0 ) {
                 dryRun = true;
-            } else {
+            } else if ( strcmp(argv[ai],"--")==0 ) {
+                scriptArgs = true;
+            } else if ( !scriptArgs ) {
                 tout << "unsupported option " << argv[ai];
                 return -1;
             }
