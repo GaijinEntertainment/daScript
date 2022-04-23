@@ -231,8 +231,8 @@ def from_JV ( var v:JsonValue?; anything : table< auto(KT);auto(VT) > )
         return <- ret
     unsafe
         var tab & = v.value as _object
-        for k,v in keys(tab),values(tab)
-            move_to_ref ( ret[k], from_JV(tab[k], type<VT-&>) )
+        for k,vv in keys(tab),values(tab)
+            move_to_ref ( ret[k], from_JV(vv, type<VT-&>) )
     return <- ret
 
 def from_JV ( var v:JsonValue?; anything : auto(TT) )

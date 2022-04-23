@@ -107,16 +107,16 @@ def test
     var x : IorA
     unsafe
         set_variant_index(x, 1)
-        x.a <- [{for t in range(10); t}]
+        x.a <- [{for tt in range(10); tt}]
     var y := x
     assert(y is a)
-    for t in range(10)
-        assert(y as a[t]==t)
+    for tt in range(10)
+        assert(y as a[tt]==tt)
     delete x
     assert(x is i)
     assert(y is a)
-    for t in range(10)
-        assert(y as a[t]==t)
+    for tt in range(10)
+        assert(y as a[tt]==tt)
 
     test_ifs()
 

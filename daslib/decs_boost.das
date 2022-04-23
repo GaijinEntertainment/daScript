@@ -341,6 +341,7 @@ class DecsQueryMacro : AstCallMacro
             // for s1, s2 ...
             var qloop <- new [[ExprFor() at=qblk.at, visibility=qblk.at]]
             qloop.allowIteratorOptimization = true
+            qloop.canShadow = true
             for a in qblk.arguments
                 let detp = a |> is_decs_template
                 if detp is yes

@@ -801,6 +801,7 @@ namespace das
         ExpressionPtr           body;
         LineInfo                visibility;
         bool                    allowIteratorOptimization = false;  // if enabled, unused source variables can be removed
+        bool                    canShadow = false;                  // if enabled, local variables can shadow
     };
 
     struct ExprUnsafe : Expression {

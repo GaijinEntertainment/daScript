@@ -21,9 +21,9 @@ def test
     var tot = 0
     var same = 0
     for x aka X in range(10)        // think nested DECS
-        for x in range(10)
+        for xx in range(10)
             tot ++
-            if x==X
+            if xx==X
                 same ++
     assert(tot==100)
     assert(same==10)

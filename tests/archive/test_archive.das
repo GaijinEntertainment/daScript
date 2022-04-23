@@ -38,7 +38,7 @@ def test_save_and_load_mem_table ( t:T? )
 [test]
 def test_save_and_load_mem_array ( t:T? )
     // save
-    var reference <- [{for t in range(10); t+1}]
+    var reference <- [{for tt in range(10); tt+1}]
     var data <- mem_archive_save(reference)
     // load
     var test : array<int>

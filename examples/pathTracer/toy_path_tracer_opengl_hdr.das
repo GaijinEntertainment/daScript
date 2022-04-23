@@ -10,7 +10,6 @@ require math
 
 require daslib/safe_addr
 require daslib/random
-require daslib/tga
 
 require path_tracer
 

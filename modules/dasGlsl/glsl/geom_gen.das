@@ -300,7 +300,7 @@ def load_obj_mesh ( fname:string )
                 delete xyz
             elif st |> starts_with("f ")
                 var f012 <- st |> split(" ")
-                var v012 <- [{for v in range(1,length(f012)); split_sptn(f012[v])}]
+                var v012 <- [{for vv in range(1,length(f012)); split_sptn(f012[vv])}]
                 var i012 : array<int>
                 for pvi in v012
                     var vtx = [[GeometryPreviewVertex

@@ -5681,6 +5681,39 @@ namespace das {
                 pVar->type->constant |= src->type->isConst();
                 pVar->type->temporary |= src->type->isTemp();
                 pVar->source = src;
+                pVar->can_shadow = expr->canShadow;
+                if ( !pVar->can_shadow && !program->policies.allow_local_variable_shadowing ) {
+                    if ( func ) {
+                        for ( auto & fna : func->arguments ) {
+                            if ( fna->name==pVar->name ) {
+                                error("for loop iterator variable " + pVar->name +" is shadowed by function argument "
+                                    + fna->name + " : " + describeType(fna->type) + " at line " + to_string(fna->at.line), "", "",
+                                        pVar->at, CompilationError::variable_not_found);
+                            }
+                        }
+                    }
+                    for ( auto & blk : blocks ) {
+                        for ( auto & bna : blk->arguments ) {
+                            if ( bna->name==pVar->name ) {
+                                error("for loop iterator variable " + pVar->name +" is shadowed by block argument "
+                                    + bna->name + " : " + describeType(bna->type) + " at line " + to_string(bna->at.line), "", "",
+                                        pVar->at, CompilationError::variable_not_found);
+                            }
+                        }
+                    }
+                    for ( auto & lv : local ) {
+                        if ( lv->name==pVar->name ) {
+                            error("for loop iterator variable " + pVar->name +" is shadowed by another local variable "
+                                + lv->name + " : " + describeType(lv->type) + " at line " + to_string(lv->at.line), "", "",
+                                pVar->at, CompilationError::variable_not_found);
+                            break;
+                        }
+                    }
+                    if ( auto eW = hasMatchingWith(pVar->name) ) {
+                        error("for loop iterator variable " + pVar->name + " is shadowed by with expression at line " + to_string(eW->at.line), "", "",
+                            pVar->at, CompilationError::variable_not_found);
+                    }
+                }
                 local.push_back(pVar);
                 expr->iteratorVariables.push_back(pVar);
                 ++ idx;
