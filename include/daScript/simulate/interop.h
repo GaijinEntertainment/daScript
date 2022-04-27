@@ -136,11 +136,19 @@ namespace das
         }
     };
 
-    template <typename CType, bool Pointer, bool IsEnum, typename ...Args> // void
-    struct ImplCallStaticFunctionImpl<CType,Pointer,IsEnum,void,Args...> {
-        static __forceinline CType call ( void (*fn)(Args...), Context & ctx, SimNode ** args ) {
+    // note: this is here because SimNode_At and such can call evalInt, while index is UInt
+    //  this is going to be allowed for now, since the fix will result either in duplicating SimNode_AtU or a cast node
+    template <typename ...Args>
+    struct ImplCallStaticFunctionImpl<int32_t, false, false, uint32_t, Args...> {   // int <- uint
+        static __forceinline int32_t call ( uint32_t (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return CallStaticFunction<uint32_t,Args...>(fn,ctx,args);;
+        }
+    };
+
+    template <bool Pointer, bool IsEnum, typename ...Args> // void
+    struct ImplCallStaticFunctionImpl<void,Pointer,IsEnum,void,Args...> {
+        static __forceinline void call ( void (*fn)(Args...), Context & ctx, SimNode ** args ) {
             CallStaticFunction<void,Args...>(fn,ctx,args);
-            return CType();
         }
     };
 
