@@ -603,6 +603,9 @@ namespace das
         virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const override {
             return context.code->makeNode<SimNode_Ref2Value<OT>>(at, l);
         }
+        virtual SimNode * simulateNullCoalescing ( Context & context, const LineInfo & at, SimNode * s, SimNode * dv ) const override {
+            return context.code->makeNode<SimNode_NullCoalescing<OT>>(at,s,dv);
+        }
     };
 
     template <typename TT>

@@ -1032,6 +1032,13 @@ namespace das
     SimNode * ExprNullCoalescing::simulate (Context & context) const {
         if ( type->isRef() ) {
             return context.code->makeNode<SimNode_NullCoalescingRef>(at,subexpr->simulate(context),defaultValue->simulate(context));
+        } else if ( type->isHandle() ) {
+            if ( auto resN = type->annotation->simulateNullCoalescing(context, at, subexpr->simulate(context), defaultValue->simulate(context)) ) {
+                return resN;
+            } else {
+                context.thisProgram->error("internal compilation error, simluateNullCoalescing returned null", "", "", at);
+                return nullptr;
+            }
         } else {
             return context.code->makeValueNode<SimNode_NullCoalescing>(type->baseType,at,subexpr->simulate(context),defaultValue->simulate(context));
         }
