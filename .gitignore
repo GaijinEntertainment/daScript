@@ -32,3 +32,12 @@ doc/sphinx-build/
 doc/source/__pycache__/
 doc/source/_build/doctrees/environment.pickle
 doc/source/_build/
+
+web/emsdk/
+web/cmake_temp/
+web/CMakeXxdImpl.txt
+web/output/daScript.html
+web/output/daScript.js
+web/output/daScript.js.mem
+web/output/daScript.wasm
+web/output/.idea/
