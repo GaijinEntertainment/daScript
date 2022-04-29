@@ -60,6 +60,12 @@
     #define _USE_MATH_DEFINES 1
   #endif
 #endif
+
+
+#ifdef _EMSCRIPTEN_VER
+    typedef struct _IO_FILE { char __x; } FILE;
+#endif
+
 #include <math.h>
 
 #include <stdint.h>
@@ -192,7 +198,7 @@ inline void das_aligned_free16(void *ptr) {
 }
 #if defined(__APPLE__)
 #include <malloc/malloc.h>
-#elif defined (__linux__)
+#elif defined (__linux__) || defined (_EMSCRIPTEN_VER)
 #include <malloc.h>
 #endif
 inline size_t das_aligned_memsize(void * ptr){

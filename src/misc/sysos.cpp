@@ -96,7 +96,7 @@
             return ret ? buffer : "";
         }
     }
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(_EMSCRIPTEN_VER)
     #include <unistd.h>
     #include <dlfcn.h>
     namespace das {
