@@ -534,7 +534,7 @@ namespace das {
             ss << " };\n";
         }
         void describeCppStructInfo ( TextWriter & ss, StructInfo * info ) const {
-            ss << "\"" << info->name << "\", " << "\"" << info->module_name << "\", " << info->flags << ", ";
+            ss << "(char*)\"" << info->name << "\", " << "(char*)\"" << info->module_name << "\", " << info->flags << ", ";
             if ( info->fields ) {
                 ss << structInfoName(info) << "_fields, ";
             } else {
@@ -583,7 +583,7 @@ namespace das {
         void describeCppEnumInfoValues ( TextWriter & ss, EnumInfo * einfo ) const {
             for ( uint32_t v=0; v!=einfo->count; ++v ) {
                 auto val = einfo->fields[v];
-                ss << "EnumValueInfo " << enumInfoName(einfo) << "_value_" << v << " = { \""
+                ss << "EnumValueInfo " << enumInfoName(einfo) << "_value_" << v << " = { (char*)\""
                 << val->name << "\", " << val->value << " };\n";
             }
             ss << "EnumValueInfo * " << enumInfoName(einfo) << "_values [] = { ";
@@ -594,7 +594,7 @@ namespace das {
             ss << " };\n";
         }
         void describeCppEnumInfo ( TextWriter & ss, EnumInfo * info ) const {
-            ss  << "\"" << info->name << "\", " << "\"" << info->module_name << "\", " << enumInfoName(info) << "_values, "
+            ss  << "(char*)\"" << info->name << "\", " << "(char*)\"" << info->module_name << "\", " << enumInfoName(info) << "_values, "
                 << info->count << ", 0x" << HEX << info->hash << DEC << "ul";
         }
         void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info, const string & suffix = "" ) const {
