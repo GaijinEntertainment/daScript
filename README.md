@@ -10,7 +10,7 @@ macOS build status [![Build status](https://ci.appveyor.com/api/projects/status/
   * hardware breakpoints are now supported on mac arm64
   * linux build is functional again
 
-11/25/2012
+11/25/2021
   * better parallel build with msvc under vscode and all around
   * we can now generate xcode projects again
 
