@@ -6703,7 +6703,7 @@ namespace das {
                 error("[[" + describeType(expr->makeType) + "]] can't be reference", "", "",
                     expr->at, CompilationError::invalid_type);
             } else if ( !expr->makeType->isLocal() && !expr->isNewHandle ) {
-                error("[[" + describeType(expr->makeType) + "]] can't make a non local type", "", "",
+                error("[[" + describeType(expr->makeType) + "]] can`t be allocated locally (on the stack), since Handled type isLocal() returned false. Allocate it on the heap (new [[...]]) or modify your C++ bindings.", "", "",
                     expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->baseType==Type::tHandle && expr->isNewHandle && !expr->useInitializer ) {
                 error("new [[" + describeType(expr->makeType) + "]] requires initializer syntax", "",
