@@ -11,7 +11,7 @@ namespace das {
         void *              data = nullptr;
         shared_ptr<Context> from;
         Feature() {}
-        __forceinline Feature ( void * d, Context * c) : data(d), from(c->shared_from_this()) {}
+        __forceinline Feature ( void * d, Context * c) : data(d), from(c ? c->shared_from_this() : nullptr) {}
         __forceinline void clear() {
             data = nullptr;
             from.reset();
