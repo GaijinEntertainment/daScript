@@ -258,6 +258,8 @@ namespace das
         void strip();
         void logMemInfo(TextWriter & tw);
 
+        void makeWorkerFor(const Context & ctx);
+
         uint32_t getGlobalSize() const {
             return globalsSize;
         }
@@ -656,6 +658,7 @@ namespace das
 #endif
     protected:
         GlobalVariable * globalVariables = nullptr;
+        bool     globalsOwner = true;
         uint32_t sharedSize = 0;
         bool     sharedOwner = true;
         uint32_t globalsSize = 0;
