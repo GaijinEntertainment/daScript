@@ -6,7 +6,7 @@
 // if enabled, the generated interop will be marginally slower
 // the upside is that it well generate significantly less templated code, thus reducing compile time (and binary size)
 #ifndef DAS_SLOW_CALL_INTEROP
-#define DAS_SLOW_CALL_INTEROP 1
+#define DAS_SLOW_CALL_INTEROP 0
 #endif
 
 namespace das
@@ -226,7 +226,7 @@ namespace das
             DAS_PROFILE_NODE
             return ImplCallStaticFunction<FuncT>::call(*fn, context, arguments);
         }
-#if !(DAS_SLOW_CALL_INTEROP)
+// #if !(DAS_SLOW_CALL_INTEROP)
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override { \
                 DAS_PROFILE_NODE \
@@ -234,7 +234,7 @@ namespace das
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE
-#endif
+// #endif
     };
 
 #if DAS_SLOW_CALL_INTEROP
