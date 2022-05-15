@@ -289,6 +289,14 @@ namespace das
             return prune<TT,vec4f>::from(x);
         }
         static __forceinline vec4f from ( const TT & x )       {
+#if __SANITIZE_THREAD__
+            if ( sizeof(TT) != sizeof(float) * 4 )
+            {
+              vec4f v;
+              memcpy(&v, &x, sizeof(x));
+              return v;
+            }
+#endif
             return v_ldu((const float*)&x);
         }
     };
@@ -313,6 +321,14 @@ namespace das
             return prune<TT,vec4f>::from(x);
         }
         static __forceinline vec4f from ( const TT & x ) {
+#if __SANITIZE_THREAD__
+            if ( sizeof(TT) != sizeof(int) * 4 )
+            {
+              vec4f v;
+              memcpy(&v, &x, sizeof(x));
+              return v;
+            }
+#endif
             return  v_cast_vec4f(v_ldui((const int*)&x));
         }
     };

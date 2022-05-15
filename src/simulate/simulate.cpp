@@ -941,7 +941,7 @@ namespace das
         stringHeap.reset();
         heap.reset();
         stack.strip();
-        if ( globals ) {
+        if ( globals && globalsOwner ) {
             das_aligned_free16(globals);
             globals = nullptr;
         }
@@ -1035,6 +1035,41 @@ namespace das
             << (bytesTotal - bytesUsed) << ")\n";
     }
 
+    void Context::makeWorkerFor(const Context & ctx)
+    {
+        if (code == ctx.code)
+            return;
+
+        code = ctx.code;
+        constStringHeap = ctx.constStringHeap;
+        debugInfo = ctx.debugInfo;
+        thisProgram = ctx.thisProgram;
+        thisHelper = ctx.thisHelper;
+        category.value = ctx.category.value;
+
+        // globals (on condition that all context globals are read-only)
+        globals = ctx.globals;
+        globalsOwner = false;
+        annotationData = ctx.annotationData;
+        globalsSize = ctx.globalsSize;
+        globalInitStackSize = ctx.globalInitStackSize;
+        globalVariables = ctx.globalVariables;
+        totalVariables = ctx.totalVariables;
+
+        // shared
+        sharedSize = ctx.sharedSize;
+        shared = ctx.shared;
+        sharedOwner = false;
+        // functions
+        functions = ctx.functions;
+        totalFunctions = ctx.totalFunctions;
+
+        // mangled name table
+        tabMnLookup = ctx.tabMnLookup;
+        tabGMnLookup = ctx.tabGMnLookup;
+        tabAdLookup = ctx.tabAdLookup;
+    }
+
     uint64_t Context::getSharedMemorySize() const {
         uint64_t mem = 0;
         mem += code ? code->totalAlignedMemoryAllocated() : 0;
@@ -1122,7 +1157,7 @@ namespace das
         // shutdown
         runShutdownScript();
         // and free memory
-        if ( globals ) {
+        if ( globals && globalsOwner ) {
             das_aligned_free16(globals);
         }
         if ( shared && sharedOwner ) {
