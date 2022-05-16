@@ -349,7 +349,7 @@ def mark_tokens_as_type(var ctx: FormatterCtx; i: int)
     for j in range(i, length(ctx.tokens))
         ctx |> update_paren(j, pc)
         if pc.angle <= 0 && pc.paren <= 0
-            if (ctx |> new_line_before(j) || pc.paren < 0 || pc.square < 0 || 
+            if (ctx |> new_line_before(j) || pc.paren < 0 || pc.square < 0 ||
                 ctx |> eq(j, ":=") || ctx |> eq(j, "<-") || ctx |> eq(j, ";") || ctx |> eq(j, "="))
                 break
         if (ctx.tokens[j].tokenType != TokenType COMMENT)
@@ -791,7 +791,7 @@ def public format_source(file_data: array<uint8> const& implicit): string
 
 def public format_file(var ctx: FormatterCtx; file_name: string const&)
     var unformatted: string = ""
-    var formatted: string = "" 
+    var formatted: string = ""
     fopen(file_name, "rb") <| $(fr)
         if fr == null
             to_log(LOG_ERROR, "cannot open '{file_name}'\n")
