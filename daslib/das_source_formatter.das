@@ -180,8 +180,8 @@ def parse_token(var ctx: FormatterCtx)
     let fromColumn = ctx.curColumn
 
     // keywords and identifiers
-    if is_alpha(ctx.c) || ctx.c == '_'
-        while !ctx.eof && (is_alpha(ctx.c) || is_number(ctx.c) || ctx.c == '_')
+    if is_alpha(ctx.c) || ctx.c == '_' || ctx.c == '`'
+        while !ctx.eof && (is_alpha(ctx.c) || is_number(ctx.c) || ctx.c == '_' || ctx.c == '`')
             ctx |> next_char()
         ctx |> push_token(from, ctx.pos, ctx.spaceCounter, ctx.newLineCounter, ctx.srcLine, fromColumn, TokenType KEYWORD_OR_IDENTIFIER)
         return
@@ -349,7 +349,7 @@ def mark_tokens_as_type(var ctx: FormatterCtx; i: int)
     for j in range(i, length(ctx.tokens))
         ctx |> update_paren(j, pc)
         if pc.angle <= 0 && pc.paren <= 0
-            if (ctx |> new_line_before(j) || pc.paren < 0 || pc.square < 0 || 
+            if (ctx |> new_line_before(j) || pc.paren < 0 || pc.square < 0 ||
                 ctx |> eq(j, ":=") || ctx |> eq(j, "<-") || ctx |> eq(j, ";") || ctx |> eq(j, "="))
                 break
         if (ctx.tokens[j].tokenType != TokenType COMMENT)
@@ -457,7 +457,18 @@ def mark_token_context(var ctx: FormatterCtx)
                         break
                     var colonPos = ctx |> search_token_in_line(j, ctx |> eq(i, "typedef") ? "=" : ":")
                     if colonPos > 0
-                        ctx |> mark_tokens_as_type(colonPos)
+                        ctx |> mark_tokens_as_type(colonPos + 1)
+
+    // oneline typedefs
+    for i in range(0, length(ctx.tokens) - 3)
+        if ctx |> new_line_before(i) && (ctx |> eq(i, "typedef") && !ctx |> new_line_before(i + 1))
+            let ident = ctx.tokens[i].spaces
+            for j in range(i + 1, length(ctx.tokens) - 3)
+                if ctx |> new_line_before(j)
+                    break
+                var colonPos = ctx |> search_token_in_line(j, ctx |> eq(i, "typedef") ? "=" : ":")
+                if colonPos > 0
+                    ctx |> mark_tokens_as_type(colonPos + 1)
 
     // functions
     for i in range(0, length(ctx.tokens) - 3)
@@ -791,7 +802,7 @@ def public format_source(file_data: array<uint8> const& implicit): string
 
 def public format_file(var ctx: FormatterCtx; file_name: string const&)
     var unformatted: string = ""
-    var formatted: string = "" 
+    var formatted: string = ""
     fopen(file_name, "rb") <| $(fr)
         if fr == null
             to_log(LOG_ERROR, "cannot open '{file_name}'\n")
