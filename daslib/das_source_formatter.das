@@ -180,8 +180,8 @@ def parse_token(var ctx: FormatterCtx)
     let fromColumn = ctx.curColumn
 
     // keywords and identifiers
-    if is_alpha(ctx.c) || ctx.c == '_'
-        while !ctx.eof && (is_alpha(ctx.c) || is_number(ctx.c) || ctx.c == '_')
+    if is_alpha(ctx.c) || ctx.c == '_' || ctx.c == '`'
+        while !ctx.eof && (is_alpha(ctx.c) || is_number(ctx.c) || ctx.c == '_' || ctx.c == '`')
             ctx |> next_char()
         ctx |> push_token(from, ctx.pos, ctx.spaceCounter, ctx.newLineCounter, ctx.srcLine, fromColumn, TokenType KEYWORD_OR_IDENTIFIER)
         return
