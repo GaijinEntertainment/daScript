@@ -457,7 +457,18 @@ def mark_token_context(var ctx: FormatterCtx)
                         break
                     var colonPos = ctx |> search_token_in_line(j, ctx |> eq(i, "typedef") ? "=" : ":")
                     if colonPos > 0
-                        ctx |> mark_tokens_as_type(colonPos)
+                        ctx |> mark_tokens_as_type(colonPos + 1)
+
+    // oneline typedefs
+    for i in range(0, length(ctx.tokens) - 3)
+        if ctx |> new_line_before(i) && (ctx |> eq(i, "typedef") && !ctx |> new_line_before(i + 1))
+            let ident = ctx.tokens[i].spaces
+            for j in range(i + 1, length(ctx.tokens) - 3)
+                if ctx |> new_line_before(j)
+                    break
+                var colonPos = ctx |> search_token_in_line(j, ctx |> eq(i, "typedef") ? "=" : ":")
+                if colonPos > 0
+                    ctx |> mark_tokens_as_type(colonPos + 1)
 
     // functions
     for i in range(0, length(ctx.tokens) - 3)
