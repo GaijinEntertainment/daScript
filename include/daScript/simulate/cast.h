@@ -339,7 +339,7 @@ namespace das
             return prune<TT,vec4f>::from(x);
         }
         static __forceinline vec4f from ( const TT & x ) {
-            return  v_cast_vec4f(v_ldu_half_w((const int*)&x));
+            return  v_cast_vec4f(v_ldui_half((const int*)&x));
         }
     };
 

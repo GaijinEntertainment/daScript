@@ -38,7 +38,7 @@ namespace das
     __forceinline vec4f vec_loadu(const int *v) {return v_cast_vec4f(v_ldui(v));}
     __forceinline vec4f vec_loadu(const unsigned int *v) {return vec_loadu((const int *)v);}
     __forceinline vec4f vec_loadu_half(const float *v) {return v_ldu_half(v);}
-    __forceinline vec4f vec_loadu_half(const int *v) {return v_cast_vec4f(v_ldu_half_w(v));}
+    __forceinline vec4f vec_loadu_half(const int *v) {return v_cast_vec4f(v_ldui_half(v));}
     __forceinline vec4f vec_loadu_half(const unsigned int *v) {return vec_loadu_half((const int *)v);}
 
     template <typename TT>
