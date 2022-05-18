@@ -17,12 +17,27 @@
 //we use direct conversion to bool from int
 #endif
 
+NO_ASAN_INLINE vec3f v_ldu_p3(const float *m)
+{
+#if __SANITIZE_THREAD__
+  return v_ldu_p3_safe(m);
+#else
+  return v_ldu(m);
+#endif
+}
+NO_ASAN_INLINE vec3f v_ldu_p3_safe(const float *m) { return v_perm_xyab(v_ldu_half(m), v_ldu_x(m + 2)); }
+
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_le(vec4f a, vec4f b) { return v_cmp_ge(b, a); }
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_lt(vec4f a, vec4f b) { return v_cmp_gt(b, a); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_clamp(vec4f t, vec4f min_val, vec4f max_val)
 {
   return v_max(v_min(t, max_val), min_val);
+}
+
+VECMATH_FINLINE vec4i VECTORCALL v_clampi(vec4i t, vec4i min_val, vec4i max_val)
+{
+  return v_maxi(v_mini(t, max_val), min_val);
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_safediv(vec4f a, vec4f b)
@@ -170,13 +185,13 @@ VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f x, vec4f& s, vec4f& c)
   vec4f cx = v_madd(ct2, xl2, V_C_ONE);
   vec4f sx = v_madd(st2, xl3, xl);
 
-  vec4f sinMask = v_cmp_eq_w(v_cast_vec4f(v_andi(offsetSin, V_CI_1)), vzero);
-  vec4f cosMask = v_cmp_eq_w(v_cast_vec4f(v_andi(offsetCos, V_CI_1)), vzero);
+  vec4f sinMask = v_cmp_eqi(v_cast_vec4f(v_andi(offsetSin, V_CI_1)), vzero);
+  vec4f cosMask = v_cmp_eqi(v_cast_vec4f(v_andi(offsetCos, V_CI_1)), vzero);
   s = v_sel(cx, sx, sinMask);
   c = v_sel(cx, sx, cosMask);
 
-  sinMask = v_cmp_eq_w(v_cast_vec4f(v_andi(offsetSin, V_CI_2)), vzero);
-  cosMask = v_cmp_eq_w(v_cast_vec4f(v_andi(offsetCos, V_CI_2)), vzero);
+  sinMask = v_cmp_eqi(v_cast_vec4f(v_andi(offsetSin, V_CI_2)), vzero);
+  cosMask = v_cmp_eqi(v_cast_vec4f(v_andi(offsetCos, V_CI_2)), vzero);
 
   s = v_sel(v_neg(s), s, sinMask);
   c = v_sel(v_neg(c), c, cosMask);
@@ -1822,134 +1837,67 @@ VECMATH_INLINE int VECTORCALL v_test_segment_box_intersection_dir(vec3f start, v
 }
 
 VECMATH_FINLINE int VECTORCALL v_test_segment_box_intersection(vec3f start, vec3f end, bbox3f_cref box)
-{ return v_test_segment_box_intersection_dir(start, v_sub(end, start), box); }
-
-
-//Point3 pc = sphere_center - p;
-//real t = min(max(pc*normalized_dir, 0), mint);
-//return lengthSq(normalized_dir*t - pc) < r2;
-VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection_dir_t(vec3f p0,
-                                            vec3f normalized_dir,
-                                            vec4f len,
-                                            const vec4f &sphere_center__sr2)
 {
-  vec3f ap = v_sub(sphere_center__sr2, p0);
-  vec4f t = v_min (v_max(v_dot3(ap, normalized_dir), v_zero()), len);
-  return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(normalized_dir, t), ap)), v_splat_w(sphere_center__sr2));
+  return v_test_segment_box_intersection_dir(start, v_sub(end, start), box);
 }
 
-//actually the same speed as scalar version! (could be a bit faster, if true, and not early true)
-// use only if you are working with vectors
-///returns 0 if hit, 0xFF otherwise
-#if _TARGET_SIMD_SSE
-VECMATH_INLINE vec4f VECTORCALL v_test_segment_sphere_intersection_dir(vec3f p0,
-                                            vec3f dir,
-                                            vec3f sphere_center,
-                                            const vec4f &squared_sphere_radius)
-#else
-VECMATH_INLINE vec4f VECTORCALL v_test_segment_sphere_intersection_dir(vec3f p0,
-                                            vec3f dir,
-                                            vec3f sphere_center,
-                                            vec4f squared_sphere_radius)
-#endif
+VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection_dir_t(vec3f p0,
+                                                                         vec3f normalized_dir,
+                                                                         vec4f len,
+                                                                         vec4f sphere_center,
+                                                                         vec4f sphere_r2)
 {
   vec3f ap = v_sub(sphere_center, p0);
-  vec4f lenSq = v_length3_sq(dir);
-  vec4f t = v_min(v_max(v_div(v_dot3(ap, dir), v_max(lenSq, v_splats(0.00001f))), v_zero()), V_C_ONE);
-  return v_cmp_gt(v_length3_sq(v_sub(v_mul(dir, t), ap)), squared_sphere_radius);
+  vec4f t = v_min(v_max(v_dot3(ap, normalized_dir), v_zero()), len);
+  return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(normalized_dir, t), ap)), sphere_r2);
 }
 
-#if _TARGET_SIMD_SSE
 VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection(vec3f p0,
-                                              vec3f p1,
-                                              vec3f sphere_center,
-                                              const vec4f &squared_sphere_radius)
-#else
-//actually just a be a bit faster than scalar version! use only if you are working with vectors already
-VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection(vec3f p0,
-                                              vec3f p1,
-                                              vec3f sphere_center,
-                                              vec4f squared_sphere_radius)
-#endif
+                                                                   vec3f p1,
+                                                                   vec3f sphere_center,
+                                                                   vec4f sphere_r2)
 {
   vec3f dir = v_sub(p1, p0);
   vec4f lenSq = v_length3_sq(dir);
   vec3f ap = v_sub(sphere_center, p0);
   vec4f t = v_min(v_max(v_div(v_dot3(ap, dir), v_max(lenSq, v_splats(0.00001f))), v_zero()), V_C_ONE);
-  return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(dir,t), ap)), squared_sphere_radius);
+  return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(dir, t), ap)), sphere_r2);
 }
 
-#if _TARGET_SIMD_SSE
 VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection_dir_b(vec3f p0,
-                                              vec3f dir,
-                                              vec3f sphere_center,
-                                              const vec4f &squared_sphere_radius)
-#else
-//actually just a be a bit faster than scalar version! use only if you are working with vectors already
-VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection_dir_b(vec3f p0,
-                                              vec3f dir,
-                                              vec3f sphere_center,
-                                              vec4f squared_sphere_radius)
-#endif
+                                                                         vec3f dir,
+                                                                         vec3f sphere_center,
+                                                                         vec4f sphere_r2)
 {
   vec3f ap = v_sub(sphere_center, p0);
   vec4f lenSq = v_length3_sq(dir);
   vec4f t = v_min(v_max(v_div(v_dot3(ap, dir), v_max(lenSq, v_splats(0.00001f))), v_zero()), V_C_ONE);
-  return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(dir,t), ap)), squared_sphere_radius);
+  return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(dir,t), ap)), sphere_r2);
 }
 
-#if _TARGET_SIMD_SSE
 VECMATH_INLINE bool VECTORCALL v_test_ray_sphere_intersection_b(vec3f p0,
-                                            vec3f normalized_dir,
-                                            vec3f sphere_center,
-                                            const vec4f &squared_sphere_radius)
-#else
-VECMATH_INLINE bool VECTORCALL v_test_ray_sphere_intersection_b(vec3f p0,
-                                            vec3f normalized_dir,
-                                            vec3f sphere_center,
-                                            vec4f squared_sphere_radius)
-#endif
+                                                                vec3f normalized_dir,
+                                                                vec3f sphere_center,
+                                                                vec4f sphere_r2)
 {
 
   vec3f ap = v_sub(sphere_center, p0);
   vec4f t = v_max(v_dot3(ap, normalized_dir), v_zero());
-  return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(normalized_dir, t), ap)), squared_sphere_radius);
+  return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(normalized_dir, t), ap)), sphere_r2);
 }
 
 VECMATH_FINLINE void VECTORCALL v_mat_43ca_from_mat44(float * __restrict m43, const mat44f &tm)
 {
-  vec4f c0 = tm.col0;
-  vec4f c1 = tm.col1;
-  vec4f c2 = tm.col2;
-  vec4f c3 = tm.col3;
-  //overlapped writes
-  v_st(m43, c0);
-  v_stu(((char *)(m43+3)), c1);
-  v_stu(((char *)(m43+6)), c2);
-  alignas(16) float vc4[4];
-  v_st(vc4, c3);
-  m43[ 9] = vc4[0];
-  m43[10] = vc4[1];
-  m43[11] = vc4[2];
+  v_mat_43cu_from_mat44(m43, tm);
 }
 
 VECMATH_FINLINE void VECTORCALL v_mat_43cu_from_mat44(float * __restrict m43, const mat44f &tm)
 {
-  vec4f c0 = tm.col0;
-  vec4f c1 = tm.col1;
-  vec4f c2 = tm.col2;
-  vec4f c3 = tm.col3;
-  //overlapped writes
-  v_stu(m43, c0);
-  v_stu(((char *)(m43+3)), c1);
-  v_stu(((char *)(m43+6)), c2);
-  alignas(16) float vc4[4];
-  v_st(vc4, c3);
-  m43[ 9] = vc4[0];
-  m43[10] = vc4[1];
-  m43[11] = vc4[2];
+  v_stu_p3(m43 + 0, tm.col0);
+  v_stu_p3(m43 + 3, tm.col1);
+  v_stu_p3(m43 + 6, tm.col2);
+  v_stu_p3(m43 + 9, tm.col3);
 }
-
 
 //mat44f from unaligned TMatrix
 VECMATH_FINLINE void VECTORCALL v_mat44_make_from_43cu(mat44f &tmV, const float *const __restrict m43)
@@ -1957,7 +1905,7 @@ VECMATH_FINLINE void VECTORCALL v_mat44_make_from_43cu(mat44f &tmV, const float 
   tmV.col0 = v_and(v_ldu(m43+0), (vec4f)V_CI_MASK1110);
   tmV.col1 = v_and(v_ldu(m43+3), (vec4f)V_CI_MASK1110);
   tmV.col2 = v_and(v_ldu(m43+6), (vec4f)V_CI_MASK1110);
-  tmV.col3 = v_add(v_and(v_ldu(m43+9), (vec4f)V_CI_MASK1110), V_C_UNIT_0001);
+  tmV.col3 = v_add(v_and(v_rot_1(v_ldu(m43+8)), (vec4f)V_CI_MASK1110), V_C_UNIT_0001);
 }
 
 //mat44f from aligned TMatrix
@@ -1966,14 +1914,14 @@ VECMATH_FINLINE void VECTORCALL v_mat44_make_from_43ca(mat44f &tmV, const float 
   tmV.col0 = v_and(v_ld(m43+0), (vec4f)V_CI_MASK1110);
   tmV.col1 = v_and(v_ldu(m43+3), (vec4f)V_CI_MASK1110);
   tmV.col2 = v_and(v_ldu(m43+6), (vec4f)V_CI_MASK1110);
-  tmV.col3 = v_add(v_and(v_ldu(m43+9), (vec4f)V_CI_MASK1110), V_C_UNIT_0001);
+  tmV.col3 = v_add(v_and(v_rot_1(v_ldu(m43+8)), (vec4f)V_CI_MASK1110), V_C_UNIT_0001);
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_div_est(vec4f a, vec4f b) {return v_mul(a, v_rcp_est(b));}
 #if _TARGET_SIMD_SSE
 VECMATH_FINLINE vec4f VECTORCALL is_neg_special(vec4f a) {return v_cast_vec4f(v_srai(v_cast_vec4i(a), 31));}
 #else
-VECMATH_FINLINE vec4f VECTORCALL is_neg_special(vec4f a) {vec4f msbit = v_msbit(); return v_cmp_eq_w(v_and(a, msbit), msbit);}
+VECMATH_FINLINE vec4f VECTORCALL is_neg_special(vec4f a) {vec4f msbit = v_msbit(); return v_cmp_eqi(v_and(a, msbit), msbit);}
 #endif
 #define REPLICATE4(v) {v, v, v, v}
 alignas(16)static const float V_C_MINUS_ONE[4] = REPLICATE4(-1.f);
@@ -2375,7 +2323,7 @@ VECMATH_FINLINE vec4i VECTORCALL v_float_to_half(vec4f v)
 
 VECMATH_FINLINE void VECTORCALL v_float_to_half(uint16_t* __restrict m, const vec4f v)
 {
-  v_stu_w_half(m, v_packus(v_float_to_half(v)));
+  v_stui_half(m, v_packus(v_float_to_half(v)));
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_half_to_float(const uint16_t* __restrict m)
