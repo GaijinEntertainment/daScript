@@ -12,12 +12,9 @@ require daslib/templates_boost
 struct public SOA_INDEX {}
 
 [tag_function(soa_call)]
-def public operator . ( var src : SOA_INDEX; field:string )
+def public operator . ( src : SOA_INDEX explicit; field:string )
+    // its important that this operator returns `void`, because it would prevent the compiler from cascading infer of wrong type
     assert(false,"this code should never been instanced. soa_call macro replaces the soa[index].field with soa.field[index]")
-
-// this is what annotation also generates
-def operator [] ( var src : auto; index:int )
-    return [[SOA_INDEX]]    // note SOA_INDEX
 
 [tag_function_macro(tag="soa_call")]
 class SoaCallMacro : AstFunctionAnnotation
@@ -55,22 +52,37 @@ class SoaStructMacro : AstStructureAnnotation
     //! * structure, where every field is replaced by an array
     //! * operator [] to access the structure, which returns [[SOA_INDEX]]
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        if st.fields.length == 0
+            errors := "soa macro expects at least one field"
+            return false
         // soa
         var stype <- clone_structure(get_ptr(st))
         stype.name := "{stype.name}`SOA"
         for fld in stype.fields
-            fld._type := new [[TypeDecl() at=fld.at,
-                baseType = Type tArray,
-                firstType <- clone_type(fld._type)
-            ]]
+            fld._type := make_field_type(fld)
         // [] operator
+        var idx_op <- make_index_op(st, stype)
+        compiling_module() |> add_function(idx_op)
+        // length()
+        var length_op <- make_length(st, stype)
+        compiling_module() |> add_function(length_op)
+        // now types
+        compiling_module() |> add_structure(stype)
+        return true
+    def make_field_type ( fld:FieldDeclaration ) : TypeDeclPtr
+        return <- new [[TypeDecl() at=fld.at,
+                        baseType = Type tArray,
+                        firstType <- clone_type(fld._type)
+                    ]]
+    def make_index_op ( st, stype : StructurePtr ) : FunctionPtr
         var idx_op <- new [[Function() at = st.at, atDecl = st.at, name := "[]"]]
         idx_op.flags |= FunctionFlags generated
         idx_op.result <- new [[TypeDecl() baseType=Type autoinfer, at=st.at]]
         var idx_body <- quote() <|
             return [[SOA_INDEX]]
-        idx_op.body := move_unquote_block(idx_body)
-        (idx_op.body as ExprBlock).blockFlags &= ~ ExprBlockFlags isClosure
+        var qres <- move_unquote_block(idx_body)
+        qres.blockFlags &= ~ ExprBlockFlags isClosure
+        idx_op.body <- qres
         idx_op.arguments |> emplace_new <| new [[Variable()
             name:="st",
             at=st.at,
@@ -81,15 +93,25 @@ class SoaStructMacro : AstStructureAnnotation
             at=st.at,
             _type <- new [[TypeDecl() baseType=Type tInt, at=st.at, flags=TypeDeclFlags constant]]
         ]]
-        // now types
-        compiling_module() |> add_structure(stype)
-        compiling_module() |> add_function(idx_op)
-
-
-/*
-// this is what annotation also generates
-def operator [] ( var src : Particle`SOA; index:int )
-    return [[SOA_INDEX]]    // note SOA_INDEX
-*/
-
-        return true
+        return <- idx_op
+    def make_length ( st, stype : StructurePtr  ) : FunctionPtr
+        var length_op <- new [[Function() at = st.at, atDecl = st.at, name := "length"]]
+        length_op.flags |= FunctionFlags generated
+        length_op.result <- new [[TypeDecl() baseType=Type tInt, at=st.at]]
+        var length_body <- new [[ExprBlock() at=st.at]]
+        var length_call <- new [[ExprCall() at=st.at, name:="length"]]
+        length_call.arguments |> emplace_new <| new [[ExprField() at=st.at,
+            value <- new [[ExprVar() at=st.at, name:="st"]],
+            name := st.fields[0].name,
+            fieldFlags = ExprFieldFieldFlags no_promotion
+        ]]
+        length_body.list |> emplace_new <| new [[ExprReturn() at=st.at,
+            subexpr <- length_call
+        ]]
+        length_op.arguments |> emplace_new <| new [[Variable()
+            name:="st",
+            at=st.at,
+            _type <- new [[TypeDecl() baseType=Type tStructure, at=st.at, structType=get_ptr(stype), flags=TypeDeclFlags constant]]
+        ]]
+        length_op.body <- length_body
+        return <- length_op
