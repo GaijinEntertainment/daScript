@@ -605,8 +605,7 @@ def need_space_only_before(ctx: FormatterCtx; index: int): bool
 def add_space_before(var ctx: FormatterCtx; i)
     if (ctx.tokens[i].dontFormat || ctx.tokens[i - 1].dontFormat) || ctx |> new_line_before(i)
         return
-    if ctx.tokens[i].spaces == 0
-        ctx.tokens[i].spaces = 1
+    ctx.tokens[i].spaces = 1
 
 
 def remove_space_before(var ctx: FormatterCtx; i)
