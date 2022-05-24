@@ -8,8 +8,14 @@ struct Particle
 [export]
 def main
     var soa : Particle`SOA
-    let t = soa[11].pos     // macro replaces this with soa.pos[11]
+    for i in range(3)
+        soa |> push <| [[Particle pos=float3(i)]]
+    let t = soa[2].pos     // macro replaces this with soa.pos[11]
+    assert(t==float3(2))
     let len = length(soa)
-    print("len={len}, t = {t}\n")
+    assert(len==3)
+    soa |> erase(1)
+    assert(length(soa)==2)
+    assert(soa[1].pos==float3(2))
 
-options log_infer_passes
+options log

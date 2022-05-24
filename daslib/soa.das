@@ -51,6 +51,7 @@ class SoaStructMacro : AstStructureAnnotation
     //! This macro generates the following::
     //! * structure, where every field is replaced by an array
     //! * operator [] to access the structure, which returns [[SOA_INDEX]]
+    //! * length, push, emplace, push_clone, erase
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         if st.fields.length == 0
             errors := "soa macro expects at least one field"
@@ -66,6 +67,18 @@ class SoaStructMacro : AstStructureAnnotation
         // length()
         var length_op <- make_length(st, stype)
         compiling_module() |> add_function(length_op)
+        // push
+        var push_op <- make_named_call(st, stype, "push", "push", true)
+        compiling_module() |> add_generic(push_op)
+        // push_clone
+        var push_clone_op <- make_named_call(st, stype, "push_clone", "push_clone", true)
+        compiling_module() |> add_function(push_clone_op)
+        // emplace
+        var emplace_op <- make_named_call(st, stype, "emplace", "emplace", false)
+        compiling_module() |> add_function(emplace_op)
+        // erase
+        var erase_op <- make_erase(st, stype)
+        compiling_module() |> add_function(erase_op)
         // now types
         compiling_module() |> add_structure(stype)
         return true
@@ -115,3 +128,42 @@ class SoaStructMacro : AstStructureAnnotation
         ]]
         length_op.body <- length_body
         return <- length_op
+    def make_any_named_call ( st,stype:StructurePtr; var argT:TypeDeclPtr; fnName, callName:string; argField:bool ) : FunctionPtr
+        var push_op <- new [[Function() at = st.at, atDecl = st.at, name := fnName]]
+        push_op.flags |= FunctionFlags generated
+        push_op.result <- new [[TypeDecl() baseType=Type tVoid, at=st.at]]
+        var push_body <- new [[ExprBlock() at=st.at]]
+        for fld in st.fields
+            var push_call <- new [[ExprCall() at=st.at, name:=callName]]
+            push_call.arguments |> emplace_new <| new [[ExprField() at=st.at,
+                value <- new [[ExprVar() at=st.at, name:="st"]],
+                name := fld.name,
+                fieldFlags = ExprFieldFieldFlags no_promotion
+            ]]
+            if argField
+                push_call.arguments |> emplace_new <| new [[ExprField() at=st.at,
+                    value <- new [[ExprVar() at=st.at, name:="arg"]],
+                    name := fld.name,
+                    fieldFlags = ExprFieldFieldFlags no_promotion
+                ]]
+            else
+                push_call.arguments |> emplace_new <| new [[ExprVar() at=st.at, name:="arg"]]
+            push_body.list |> emplace(push_call)
+        push_op.arguments |> emplace_new <| new [[Variable()
+            name:="st",
+            at=st.at,
+            _type <- new [[TypeDecl() baseType=Type tStructure, at=st.at, structType=get_ptr(stype)]]
+        ]]
+        push_op.arguments |> emplace_new <| new [[Variable()
+            name:="arg",
+            at=st.at,
+            _type <- argT
+        ]]
+        push_op.body <- push_body
+        return <- push_op
+    def make_erase ( st, stype:StructurePtr )
+        var argT <- new [[TypeDecl() baseType=Type tInt, at=st.at]]
+        return <- make_any_named_call(st,stype,argT,"erase","erase",false)
+    def make_named_call ( st,stype:StructurePtr; fnName, callName:string; isConst:bool=false ) : FunctionPtr
+        var argT <- new [[TypeDecl() baseType=Type tStructure, at=st.at, structType=get_ptr(st), flags= isConst ? TypeDeclFlags constant : bitfield(0)]]
+        return <- make_any_named_call(st,stype,argT,fnName,callName,true)
