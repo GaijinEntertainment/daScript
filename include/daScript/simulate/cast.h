@@ -115,37 +115,37 @@ namespace das
     template <typename TT>
     struct cast <TT *> {
         static __forceinline TT * to ( vec4f a )               { return (TT *) v_extract_ptr(v_cast_vec4i((a))); }
-        static __forceinline vec4f from ( const TT * p )       { return v_cast_vec4f(v_splats_ptr((const void *)p)); }
+        static __forceinline vec4f from ( const TT * p )       { return v_cast_vec4f(v_ldu_ptr((const void *)p)); }
     };
 
     template <typename TT>
     struct cast <TT &> {
         static __forceinline TT & to ( vec4f a )               { return *(TT *) v_extract_ptr(v_cast_vec4i((a))); }
-        static __forceinline vec4f from ( const TT & p )       { return v_cast_vec4f(v_splats_ptr((const void *)&p)); }
+        static __forceinline vec4f from ( const TT & p )       { return v_cast_vec4f(v_ldu_ptr((const void *)&p)); }
     };
 
     template <typename TT>
     struct cast <const TT *> {
         static __forceinline const TT * to ( vec4f a )         { return (const TT *) v_extract_ptr(v_cast_vec4i((a))); }
-        static __forceinline vec4f from ( const TT * p )       { return v_cast_vec4f(v_splats_ptr((const void *)p)); }
+        static __forceinline vec4f from ( const TT * p )       { return v_cast_vec4f(v_ldu_ptr((const void *)p)); }
     };
 
     template <typename TT>
     struct cast <const TT &> {
         static __forceinline const TT & to ( vec4f a )         { return *(const TT *) v_extract_ptr(v_cast_vec4i((a))); }
-        static __forceinline vec4f from ( const TT & p )       { return v_cast_vec4f(v_splats_ptr((const void *)&p)); }
+        static __forceinline vec4f from ( const TT & p )       { return v_cast_vec4f(v_ldu_ptr((const void *)&p)); }
     };
 
     template <typename T>
     struct cast <smart_ptr<T>> {
         static __forceinline smart_ptr<T> to ( vec4f a )               { return (T *) v_extract_ptr(v_cast_vec4i((a))); }
-        static __forceinline vec4f from ( const smart_ptr<T> p )       { return v_cast_vec4f(v_splats_ptr((const void *)p.get())); }
+        static __forceinline vec4f from ( const smart_ptr<T> p )       { return v_cast_vec4f(v_ldu_ptr((const void *)p.get())); }
     };
 
     template <typename T>
     struct cast <smart_ptr_raw<T>> {
         static __forceinline smart_ptr_raw<T> to ( vec4f a )           { smart_ptr_raw<T> p; p.ptr = (T *) v_extract_ptr(v_cast_vec4i((a))); return p; }
-        static __forceinline vec4f from ( const smart_ptr_raw<T> p )   { return v_cast_vec4f(v_splats_ptr((const void *)p.get())); }
+        static __forceinline vec4f from ( const smart_ptr_raw<T> p )   { return v_cast_vec4f(v_ldu_ptr((const void *)p.get())); }
     };
 
     template <>
@@ -157,56 +157,56 @@ namespace das
     template <>
     struct cast <bool> {
         static __forceinline bool to ( vec4f x )               { return (bool) v_extract_xi(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( bool x )             { return v_cast_vec4f(v_splatsi(x)); }
+        static __forceinline vec4f from ( bool x )             { return v_cast_vec4f(v_seti_x(x)); }
     };
 
     template <>
     struct cast <int8_t> {
         static __forceinline int8_t to ( vec4f x )             { return int8_t(v_extract_xi(v_cast_vec4i(x))); }
-        static __forceinline vec4f from ( int8_t x )           { return v_cast_vec4f(v_splatsi(x)); }
+        static __forceinline vec4f from ( int8_t x )           { return v_cast_vec4f(v_seti_x(x)); }
     };
 
     template <>
     struct cast <uint8_t> {
         static __forceinline uint8_t to ( vec4f x )            { return uint8_t(v_extract_xi(v_cast_vec4i(x))); }
-        static __forceinline vec4f from ( uint8_t x )          { return v_cast_vec4f(v_splatsi(x)); }
+        static __forceinline vec4f from ( uint8_t x )          { return v_cast_vec4f(v_seti_x(x)); }
     };
 
     template <>
     struct cast <int16_t> {
         static __forceinline int16_t to ( vec4f x )            { return int16_t(v_extract_xi(v_cast_vec4i(x))); }
-        static __forceinline vec4f from ( int16_t x )          { return v_cast_vec4f(v_splatsi(x)); }
+        static __forceinline vec4f from ( int16_t x )          { return v_cast_vec4f(v_seti_x(x)); }
     };
 
     template <>
     struct cast <uint16_t> {
         static __forceinline uint16_t to ( vec4f x )           { return uint16_t(v_extract_xi(v_cast_vec4i(x))); }
-        static __forceinline vec4f from ( uint16_t x )         { return v_cast_vec4f(v_splatsi(x)); }
+        static __forceinline vec4f from ( uint16_t x )         { return v_cast_vec4f(v_seti_x(x)); }
     };
 
     template <>
     struct cast <int32_t> {
         static __forceinline int32_t to ( vec4f x )            { return v_extract_xi(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( int32_t x )          { return v_cast_vec4f(v_splatsi(x)); }
+        static __forceinline vec4f from ( int32_t x )          { return v_cast_vec4f(v_seti_x(x)); }
     };
 
     template <>
     struct cast <uint32_t> {
         static __forceinline uint32_t to ( vec4f x )           { return v_extract_xi(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( uint32_t x )         { return v_cast_vec4f(v_splatsi(x)); }
+        static __forceinline vec4f from ( uint32_t x )         { return v_cast_vec4f(v_seti_x(x)); }
     };
 
     template <>
     struct cast <Bitfield> {
         static __forceinline Bitfield to ( vec4f x )           { return v_extract_xi(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( Bitfield x )         { return v_cast_vec4f(v_splatsi(x.value)); }
+        static __forceinline vec4f from ( Bitfield x )         { return v_cast_vec4f(v_seti_x(x.value)); }
     };
 
 
     template <>
     struct cast <int64_t> {
         static __forceinline int64_t to ( vec4f x )            { return v_extract_xi64(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( int64_t x )          { return v_cast_vec4f(v_splatsi64(x)); }
+        static __forceinline vec4f from ( int64_t x )          { return v_cast_vec4f(v_ldui_half(&x)); }
     };
 
 
@@ -215,13 +215,13 @@ namespace das
         template <>
         struct cast <size_t> {
             static __forceinline size_t to ( vec4f x )           { return v_extract_xi64(v_cast_vec4i(x)); }
-            static __forceinline vec4f from ( size_t x )         { return v_cast_vec4f(v_splatsi64(x)); }
+            static __forceinline vec4f from ( size_t x )         { return v_cast_vec4f(v_ldui_half(&x)); }
         };
     #else
         template <>
         struct cast <size_t> {
             static __forceinline size_t to ( vec4f x )           { return v_extract_xi(v_cast_vec4i(x)); }
-            static __forceinline vec4f from ( size_t x )         { return v_cast_vec4f(v_splatsi(x)); }
+            static __forceinline vec4f from ( size_t x )         { return v_cast_vec4f(v_seti_x(x)); }
         };
     #endif
 #endif
@@ -229,7 +229,7 @@ namespace das
     template <>
     struct cast <uint64_t> {
         static __forceinline uint64_t to ( vec4f x )           { return v_extract_xi64(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( uint64_t x )         { return v_cast_vec4f(v_splatsi64(x)); }
+        static __forceinline vec4f from ( uint64_t x )         { return v_cast_vec4f(v_ldui_half(&x)); }
     };
 
 #if defined(__linux__)
@@ -238,19 +238,19 @@ namespace das
     template <>
     struct cast <long long int> {
         static __forceinline long long int to ( vec4f x )            { return v_extract_xi64(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( long long int x )          { return v_cast_vec4f(v_splatsi64(x)); }
+        static __forceinline vec4f from ( long long int x )          { return v_cast_vec4f(v_ldui_half(&x)); }
     };
     template <>
     struct cast <unsigned long long int> {
         static __forceinline unsigned long long int to ( vec4f x )           { return v_extract_xi64(v_cast_vec4i(x)); }
-        static __forceinline vec4f from ( unsigned long long int x )         { return v_cast_vec4f(v_splatsi64(x)); }
+        static __forceinline vec4f from ( unsigned long long int x )         { return v_cast_vec4f(v_ldui_half(&x)); }
     };
 #endif
 
     template <>
     struct cast <float> {
         static __forceinline float to ( vec4f x )              { return v_extract_x(x); }
-        static __forceinline vec4f from ( float x )            { return v_splats(x); }
+        static __forceinline vec4f from ( float x )            { return v_set_x(x); }
     };
 
     template <>
@@ -357,7 +357,7 @@ namespace das
     template <typename TT>
     struct cast_enum {
       static __forceinline TT to ( vec4f x )            { return (TT) v_extract_xi(v_cast_vec4i(x)); }
-      static __forceinline vec4f from ( TT x )          { return v_cast_vec4f(v_splatsi(int32_t(x))); }
-      static __forceinline vec4f from ( int x )         { return v_cast_vec4f(v_splatsi(int32_t(x))); }
+      static __forceinline vec4f from ( TT x )          { return v_cast_vec4f(v_seti_x(int32_t(x))); }
+      static __forceinline vec4f from ( int x )         { return v_cast_vec4f(v_seti_x(int32_t(x))); }
     };
 }

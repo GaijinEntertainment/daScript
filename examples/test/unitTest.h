@@ -232,7 +232,7 @@ namespace das {
     template <>
     struct cast<EntityId> {
         static __forceinline EntityId to ( vec4f x )            { return EntityId(v_extract_xi(v_cast_vec4i(x))); }
-        static __forceinline vec4f from ( EntityId x )          { return v_cast_vec4f(v_splatsi(x.value)); }
+        static __forceinline vec4f from ( EntityId x )          { return v_cast_vec4f(v_seti_x(x.value)); }
     };
 }
 __forceinline EntityId make_invalid_id() {
