@@ -36,6 +36,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(FileAccess,FileAccess)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Context,Context)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(SimFunction,SimFunction)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(CodeOfPolicies,CodeOfPolicies)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(recursive_mutex,das::recursive_mutex)
 
 DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
         unspecified
@@ -263,6 +264,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(exception)>("exception");
             addField<DAS_BIND_MANAGED_FIELD(last_exception)>("last_exception");
             addField<DAS_BIND_MANAGED_FIELD(exceptionAt)>("exceptionAt");
+            addField<DAS_BIND_MANAGED_FIELD(contextMutex)>("contextMutex");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalFunctions)>("totalFunctions",
                 "getTotalFunctions");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalVariables)>("totalVariables",
@@ -1127,6 +1129,23 @@ namespace das {
         return func.PTR ? func.PTR->mangledNameHash : 0;
     }
 
+    void lockThisContext ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
+        context->threadlock_context([&](){
+            context->invoke(block, nullptr, nullptr, lineInfo);
+        });
+    }
+
+    void lockAnyContext ( Context & ctx, const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
+        ctx.threadlock_context([&](){
+            context->invoke(block, nullptr, nullptr, lineInfo);
+        });
+    }
+
+    void lockAnyMutex ( recursive_mutex & rm, const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
+        lock_guard<recursive_mutex> guard(rm);
+        context->invoke(block, nullptr, nullptr, lineInfo);
+    }
+
     class Module_Rtti : public Module {
     public:
         template <typename RecAnn>
@@ -1152,6 +1171,8 @@ namespace das {
             addAnnotation(make_smart<LineInfoAnnotation>(lib));
                 addCtor<LineInfo>(*this,lib,"LineInfo","LineInfo");
                 addCtor<LineInfo,FileInfo *,int,int,int,int>(*this,lib,"LineInfo","LineInfo");
+            addAnnotation(make_smart<DummyTypeAnnotation>("recursive_mutex","recursive_mutex",sizeof(recursive_mutex),alignof(recursive_mutex)));
+            addUsing<recursive_mutex>(*this, lib, "das::recursive_mutex");
             addAnnotation(make_smart<ContextAnnotation>(lib));
             addAnnotation(make_smart<ErrorAnnotation>(lib));
             addAnnotation(make_smart<FileAccessAnnotation>(lib));
@@ -1337,6 +1358,16 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_getFunctionMnh)>(*this, lib, "get_function_mangled_name_hash",
                 SideEffects::none, "builtin_getFunctionMnh")
                     ->args({"src","context"});
+            // mutex & lock
+            addExtern<DAS_BIND_FUN(lockThisContext)>(*this, lib, "lock_this_context",
+                SideEffects::worstDefault, "lockThisContext")
+                    ->args({"block","context","line"});
+            addExtern<DAS_BIND_FUN(lockAnyContext)>(*this, lib, "lock_context",
+                SideEffects::worstDefault, "lockAnyContext")
+                    ->args({"lock_context","block","context","line"});
+            addExtern<DAS_BIND_FUN(lockAnyMutex)>(*this, lib,  "lock_mutex",
+                SideEffects::worstDefault, "lockAnyMutex")
+                    ->args({"mutex","block","context","line"});
             // extras
             registerVectorFunctions<AnnotationList>::init(this,lib,false,true);
             registerVectorFunctions<AnnotationArgumentList>::init(this,lib,false,false);

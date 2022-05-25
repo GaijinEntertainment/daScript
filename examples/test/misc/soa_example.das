@@ -10,7 +10,7 @@ def main
     var soa : Particle`SOA
     for i in range(3)
         soa |> push <| [[Particle pos=float3(i)]]
-    let t = soa[2].pos     // macro replaces this with soa.pos[11]
+    let t = soa[2].pos     // macro replaces this with soa . . pos[2]
     assert(t==float3(2))
     let len = length(soa)
     assert(len==3)

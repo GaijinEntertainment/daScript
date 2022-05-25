@@ -319,6 +319,14 @@ namespace das
             return callWithCopyOnReturn(fnPtr, args, res, 0);
         }
 
+        template <typename TT>
+        __forceinline void threadlock_context ( TT && subexpr ) {
+            lock_guard<recursive_mutex> guard(contextMutex);
+            lock();
+            subexpr();
+            unlock();
+        }
+
         vec4f evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
         vec4f evalWithCatch ( SimNode * node );
         bool  runWithCatch ( const callable<void()> & subexpr );
@@ -684,6 +692,8 @@ namespace das
         uint32_t stopFlags = 0;
         uint32_t gotoLabel = 0;
         vec4f result;
+    public:
+        recursive_mutex contextMutex;
     public:
 #if DAS_ENABLE_SMART_PTR_TRACKING
         static vector<smart_ptr<ptr_ref_count>> sptrAllocations;

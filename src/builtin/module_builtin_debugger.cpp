@@ -731,22 +731,32 @@ namespace debugapi {
         if ( !invCtx ) context.throw_error_at(call->debugInfo, "pinvoke with null context");
         auto fn = cast<const char *>::to(args[1]);
         if ( !fn ) context.throw_error_at(call->debugInfo, "can't pinvoke empty string");
-        auto simFn = invCtx->findFunction(fn);
-        if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find %s function", fn);
-        invCtx->lock();
-        vec4f res;
-        invCtx->exception = nullptr;
-        invCtx->runWithCatch([&](){
-            if ( !invCtx->ownStack ) {
-                StackAllocator sharedStack(8*1024);
-                SharedStackGuard guard(*invCtx, sharedStack);
-                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-            } else {
-                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        vec4f res = v_zero();
+        LineInfo exAt;
+        string exText;
+        invCtx->threadlock_context([&](){
+            auto simFn = invCtx->findFunction(fn);
+            if ( !simFn ) {
+                exAt = call->debugInfo;
+                exText = string("pinvoke can't find ") + fn + " function";
+                return;
+            }
+            invCtx->exception = nullptr;
+            invCtx->runWithCatch([&](){
+                if ( !invCtx->ownStack ) {
+                    StackAllocator sharedStack(8*1024);
+                    SharedStackGuard guard(*invCtx, sharedStack);
+                    res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+                } else {
+                    res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+                }
+            });
+            if ( invCtx->exception ) {
+                exAt = invCtx->exceptionAt;
+                exText = invCtx->exception;
             }
         });
-        invCtx->unlock();
-        if ( invCtx->exception ) context.throw_error_at(invCtx->exceptionAt, invCtx->exception);
+        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
         return res;
     }
 
@@ -757,20 +767,26 @@ namespace debugapi {
         if ( !fn.PTR ) context.throw_error_at(call->debugInfo, "pnvoke can't invoke null function");
         auto simFn = fn.PTR;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void *)simFn);
-        invCtx->lock();
-        vec4f res;
-        invCtx->exception = nullptr;
-        invCtx->runWithCatch([&](){
-            if ( !invCtx->ownStack ) {
-                StackAllocator sharedStack(8*1024);
-                SharedStackGuard guard(*invCtx, sharedStack);
-                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-            } else {
-                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        vec4f res = v_zero();
+        LineInfo exAt;
+        string exText;
+        invCtx->threadlock_context([&](){
+            invCtx->exception = nullptr;
+            invCtx->runWithCatch([&](){
+                if ( !invCtx->ownStack ) {
+                    StackAllocator sharedStack(8*1024);
+                    SharedStackGuard guard(*invCtx, sharedStack);
+                    res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+                } else {
+                    res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+                }
+            });
+            if ( invCtx->exception ) {
+                exAt = invCtx->exceptionAt;
+                exText = invCtx->exception;
             }
         });
-        invCtx->unlock();
-        if ( invCtx->exception ) context.throw_error_at(invCtx->exceptionAt, invCtx->exception);
+        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
         return res;
     }
 
@@ -782,20 +798,26 @@ namespace debugapi {
         if (!fnMnh) context.throw_error_at(call->debugInfo, "invoke null lambda");
         SimFunction * simFn = *fnMnh;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void*)simFn);
-        invCtx->lock();
-        vec4f res;
-        invCtx->exception = nullptr;
-        invCtx->runWithCatch([&](){
-            if ( !invCtx->ownStack ) {
-                StackAllocator sharedStack(8*1024);
-                SharedStackGuard guard(*invCtx, sharedStack);
-                res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
-            } else {
-                res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
+        vec4f res = v_zero();
+        LineInfo exAt;
+        string exText;
+        invCtx->threadlock_context([&](){
+            invCtx->exception = nullptr;
+            invCtx->runWithCatch([&](){
+                if ( !invCtx->ownStack ) {
+                    StackAllocator sharedStack(8*1024);
+                    SharedStackGuard guard(*invCtx, sharedStack);
+                    res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
+                } else {
+                    res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
+                }
+            });
+            if ( invCtx->exception ) {
+                exAt = invCtx->exceptionAt;
+                exText = invCtx->exception;
             }
         });
-        invCtx->unlock();
-        if ( invCtx->exception ) context.throw_error_at(invCtx->exceptionAt, invCtx->exception);
+        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
         return res;
     }
 
