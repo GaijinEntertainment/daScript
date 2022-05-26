@@ -189,14 +189,15 @@ namespace  das {
         static __forceinline float Rcp   ( float a, Context &, LineInfo * )          { return v_extract_x(v_rcp_x(v_set_x(a))); }
         static __forceinline float RcpEst( float a, Context &, LineInfo * )          { return v_extract_x(v_rcp_est_x(v_set_x(a))); }
 
-        static __forceinline float Sin   ( float a, Context &, LineInfo * )          { vec4f s,c; v_sincos4(v_set_x(a), s, c);return v_extract_x(s); }
-        static __forceinline float Cos   ( float a, Context &, LineInfo * )          { vec4f s,c; v_sincos4(v_set_x(a), s, c);return v_extract_x(c); }
-        static __forceinline float Tan   ( float a, Context &, LineInfo * )          { vec4f s,c; v_sincos4(v_set_x(a), s, c);return v_extract_x(v_div_x(s,c)); }
-        static __forceinline float ATan   ( float a, Context &, LineInfo * )         { return v_extract_x(v_atan(v_set_x(a))); }
+        static __forceinline float Sin   ( float a, Context &, LineInfo * )          { return v_extract_x(v_sin_x(v_set_x(a))); }
+        static __forceinline float Cos   ( float a, Context &, LineInfo * )          { return v_extract_x(v_cos_x(v_set_x(a))); }
+        static __forceinline float Tan   ( float a, Context &, LineInfo * )          { return v_extract_x(v_tan_x(v_set_x(a))); }
+        static __forceinline float ATan   ( float a, Context &, LineInfo * )         { return v_extract_x(v_atan_x(v_set_x(a))); }
+        static __forceinline float ATan_est ( float a, Context &, LineInfo * )       { return v_extract_x(v_atan_est_x(v_set_x(a))); }
         static __forceinline float ASin   ( float a, Context &, LineInfo * )         { return v_extract_x(v_asin_x(v_set_x(a))); }
         static __forceinline float ACos   ( float a, Context &, LineInfo * )         { return v_extract_x(v_acos_x(v_set_x(a))); }
-        static __forceinline float ATan2 ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_atan2(v_set_x(a), v_set_x(b))); }
-        static __forceinline float ATan2_est ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_atan2_est(v_set_x(a), v_set_x(b))); }
+        static __forceinline float ATan2 ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_atan2_x(v_set_x(a), v_set_x(b))); }
+        static __forceinline float ATan2_est ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_atan2_est_x(v_set_x(a), v_set_x(b))); }
     };
 
     struct SimPolicy_F2IVec {
@@ -234,10 +235,11 @@ namespace  das {
         static __forceinline vec4f Rcp   ( vec4f a, Context &, LineInfo * )          { return v_rcp(a); }
         static __forceinline vec4f RcpEst( vec4f a, Context &, LineInfo * )          { return v_rcp_est(a); }
 
-        static __forceinline vec4f Sin ( vec4f a, Context &, LineInfo * ) { vec4f s,c; v_sincos4(a, s, c);return s; }
-        static __forceinline vec4f Cos ( vec4f a, Context &, LineInfo * ) { vec4f s,c; v_sincos4(a, s, c);return c; }
-        static __forceinline vec4f Tan ( vec4f a, Context &, LineInfo * ) { vec4f s,c; v_sincos4(a, s, c);return v_div(s,c); }
+        static __forceinline vec4f Sin ( vec4f a, Context &, LineInfo * ) { return v_sin(a); }
+        static __forceinline vec4f Cos ( vec4f a, Context &, LineInfo * ) { return v_cos(a); }
+        static __forceinline vec4f Tan ( vec4f a, Context &, LineInfo * ) { return v_tan(a); }
         static __forceinline vec4f ATan( vec4f a, Context &, LineInfo * ) { return v_atan(a); }
+        static __forceinline vec4f ATan_est( vec4f a, Context &, LineInfo * ) { return v_atan_est(a); }
         static __forceinline vec4f ASin( vec4f a, Context &, LineInfo * ) { return v_asin(a); }
         static __forceinline vec4f ACos( vec4f a, Context &, LineInfo * ) { return v_acos(a); }
         static __forceinline vec4f ATan2 ( vec4f a, vec4f b, Context &, LineInfo * ) { return v_atan2(a, b); }

@@ -126,6 +126,7 @@ namespace das {
     MATH_FUN_OP1(Cos)
     MATH_FUN_OP1(Tan)
     MATH_FUN_OP1(ATan)
+    MATH_FUN_OP1(ATan_est)
     MATH_FUN_OP1(ASin)
     MATH_FUN_OP1(ACos)
 
@@ -145,6 +146,7 @@ namespace das {
         mod.addFunction( make_smart<BuiltInFn<Sim_Cos<TT>,        TT,   TT>        >("cos",       lib, "Cos")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Tan<TT>,        TT,   TT>        >("tan",       lib, "Tan")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_ATan<TT>,       TT,   TT>        >("atan",      lib, "ATan")->arg("x") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_ATan_est<TT>,   TT,   TT>        >("atan_est",  lib, "ATan_est")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_ASin<TT>,       TT,   TT>        >("asin",      lib, "ASin")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_ACos<TT>,       TT,   TT>        >("acos",      lib, "ACos")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_ATan2<TT>,      TT,   TT,  TT>   >("atan2",     lib, "ATan2")->args({"y","x"}) );

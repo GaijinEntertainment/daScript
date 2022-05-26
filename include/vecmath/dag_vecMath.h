@@ -332,13 +332,6 @@ VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a, vec4i b);
 //! pack 16x 16-bit ints into 16x unsigned 8-bit ints
 VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a);
 
-//! compute sine and cosine for all components: for C={xyzw}  s.C = sin(a.C); c.C = cos(a.C);
-VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f a, vec4f& s, vec4f& c);
-
-//! compute sine and cosine for .x: s.xyzw = sin(a.x); c.xyzw = cos(a.x);
-//! for portability, set a.yzw=a.x on ALTIVEC targets (they redirect to v_sincos4)
-VECMATH_FINLINE void VECTORCALL v_sincos_x(vec4f a, vec4f& s, vec4f& c);
-
 
 //
 // vector algebra
@@ -754,24 +747,37 @@ VECMATH_FINLINE quat4f VECTORCALL v_quat_qslerp(float t, quat4f a, quat4f b);
 VECMATH_FINLINE quat4f VECTORCALL v_quat_qsquad(float t,
   const quat4f &q0, const quat4f &q1, const quat4f &q2, const quat4f &q3);
 
-//arctan
+//
+// Trigonometry
+//
 
-//approximate atan |error| is < 0.00045
-VECMATH_INLINE vec4f VECTORCALL v_atan_est(vec4f x);  // any x
-// fast atan version. |error| is < 0.000007
-VECMATH_INLINE vec4f VECTORCALL v_atan(vec4f x);  // any x
+//! compute sine and cosine for all components: for C={xyzw}  s.C = sin(a.C); c.C = cos(a.C);
+VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f a, vec4f& s, vec4f& c);
 
-// fast asin/acos. Uses atan, so it is not precise
-VECMATH_INLINE vec4f VECTORCALL v_asin(vec4f a);
-VECMATH_INLINE vec4f VECTORCALL v_acos(vec4f a);
-VECMATH_INLINE vec4f VECTORCALL v_asin_x(vec4f a);
-VECMATH_INLINE vec4f VECTORCALL v_acos_x(vec4f a);
+//! compute sine and cosine for .x: s.x = sin(a.x); c.x = cos(a.x);
+VECMATH_FINLINE void VECTORCALL v_sincos_x(vec4f a, vec4f& s, vec4f& c);
 
-// fast atan2 version. |error| is < 0.000007
-VECMATH_INLINE vec4f VECTORCALL v_atan2(vec4f y, vec4f x);
+//! compute sine, cosine, tangent or arc for all components
+VECMATH_FINLINE vec4f VECTORCALL v_sin(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_cos(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_tan(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_asin(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_acos(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_atan(vec4f a);
 
-// fast approx atan version. |error| is < 0.0004
-// ~50% faster then v_atan2
+//! compute sine, cosine, tangent or arc for .x component
+VECMATH_FINLINE vec4f VECTORCALL v_sin_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_cos_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_tan_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_asin_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_acos_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_atan_x(vec4f a);
+
+// compute approximate atan |error| is < 0.00045
+VECMATH_FINLINE vec4f VECTORCALL v_atan_est(vec4f x);  // any x
+
+// compute approximate atan2 |error| is < 0.0004
+// ~40% faster then v_atan2
 // NOTE: does not handle any of the following inputs:
 // (+0, +0), (+0, -0), (-0, +0), (-0, -0)
 VECMATH_INLINE vec4f VECTORCALL v_atan2_est(vec4f y, vec4f x);
@@ -868,5 +874,6 @@ VECMATH_FINLINE int VECTORCALL v_test_vec_x_le_0(vec3f v);
 #endif
 
 #include "dag_vecMath_common.h"
+#include "dag_vecMath_trig.h"
 
 #endif
