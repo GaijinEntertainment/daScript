@@ -295,6 +295,39 @@ public:
   }
 };
 
+class AstForLoopMacro_Adapter {
+protected:
+  enum {
+    __fn_preVisitExprFor = 0,
+    __fn_visitExprFor = 1,
+  };
+protected:
+  int _das_class_method_offset[2];
+public:
+  AstForLoopMacro_Adapter ( const StructInfo * info ) {
+      _das_class_method_offset[__fn_preVisitExprFor] = adapt_field_offset("preVisitExprFor",info);
+      _das_class_method_offset[__fn_visitExprFor] = adapt_field_offset("visitExprFor",info);
+  }
+  __forceinline Func get_preVisitExprFor ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprFor]);
+  }
+  __forceinline void invoke_preVisitExprFor ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<ExprFor> const  expr ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprFor> const >
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,expr);
+  }
+  __forceinline Func get_visitExprFor ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprFor]);
+  }
+  __forceinline smart_ptr<Expression> invoke_visitExprFor ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<ExprFor> const  expr ) const {
+    return das_invoke_function<smart_ptr_raw<Expression>>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprFor> const >
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,expr).marshal();
+  }
+};
+
 class AstReaderMacro_Adapter {
 protected:
   enum {

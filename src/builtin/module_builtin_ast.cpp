@@ -265,6 +265,12 @@ namespace das {
         }
     }
 
+    void for_each_for_loop_macro ( Module * mod, const TBlock<void,ForLoopMacroPtr> & block, Context * context, LineInfoArg * at ) {
+        for ( auto & td : mod->forLoopMacros ) {
+            das_invoke<void>::invoke<ForLoopMacroPtr>(context,at,block,td);
+        }
+    }
+
     void for_each_typeinfo_macro ( Module * mod, const TBlock<void,TypeInfoMacroPtr> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->typeInfoMacros ) {
             das_invoke<void>::invoke<TypeInfoMacroPtr>(context,at,block,td.second);
@@ -521,6 +527,9 @@ namespace das {
                 ->args({"module","block","context","line"});
         addExtern<DAS_BIND_FUN(for_each_variant_macro)>(*this, lib,  "for_each_variant_macro",
             SideEffects::modifyExternal, "for_each_variant_macro")
+                ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_for_loop_macro)>(*this, lib,  "for_each_for_loop_macro",
+            SideEffects::modifyExternal, "for_each_for_loop_macro")
                 ->args({"module","block","context","line"});
         addExtern<DAS_BIND_FUN(for_each_typeinfo_macro)>(*this, lib,  "for_each_typeinfo_macro",
             SideEffects::modifyExternal, "for_each_typeinfo_macro")

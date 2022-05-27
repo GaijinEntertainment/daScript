@@ -91,6 +91,11 @@ class AstVariantMacro
     def abstract visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr
 
 [macro_interface]
+class AstForLoopMacro
+    def abstract preVisitExprFor ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprFor> ) : void
+    def abstract visitExprFor ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprFor> ) : ExpressionPtr
+
+[macro_interface]
 class AstReaderMacro
     def abstract accept ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; ch:int; info:LineInfo ) : bool
     def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
@@ -614,6 +619,15 @@ def make_variant_macro ( name : string; someClassPtr ) : VariantMacroPtr
         return [[VariantMacroPtr]]
 
 [macro_function]
+def make_for_loop_macro ( name : string; someClassPtr ) : VariantMacroPtr
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_for_loop_macro(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[ForLoopMacroPtr]]
+
+[macro_function]
 def add_new_block_annotation ( name:string; someClassPtr )
     var ann <- make_block_annotation(name, someClassPtr)
     this_module() |> add_function_annotation(ann)
@@ -652,6 +666,13 @@ def add_new_enumeration_annotation ( name:string; someClassPtr )
 def add_new_variant_macro ( name:string; someClassPtr )
     var ann <- make_variant_macro(name, someClassPtr)
     this_module() |> add_variant_macro(ann)
+    unsafe
+        delete ann
+
+[macro_function]
+def add_new_for_loop_macro ( name:string; someClassPtr )
+    var ann <- make_for_loop_macro(name, someClassPtr)
+    this_module() |> add_for_loop_macro(ann)
     unsafe
         delete ann
 

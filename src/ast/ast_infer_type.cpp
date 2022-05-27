@@ -5627,6 +5627,15 @@ namespace das {
             DAS_ASSERT(expr->visibility.line);
             loop.push_back(expr);
             pushVarStack();
+            auto thisModule = ctx.thisProgram->thisModule.get();
+            Module::foreach([&](Module * mod) -> bool {
+                if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule ) {
+                    for ( const auto & pm : mod->forLoopMacros ) {
+                        pm->preVisit(ctx.thisProgram, thisModule, expr);
+                    }
+                }
+                return true;
+            });
         }
         virtual void preVisitForStack ( ExprFor * expr ) override {
             Visitor::preVisitForStack(expr);
@@ -5749,6 +5758,25 @@ namespace das {
                     reportAstChanged();
                     return blk;
                 }
+            }
+            // implement for loop macro
+            ExpressionPtr substitute;
+            auto thisModule = ctx.thisProgram->thisModule.get();
+            auto modMacro = [&](Module * mod) -> bool {
+                if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule ) {
+                    for ( const auto & pm : mod->forLoopMacros ) {
+                        if ( (substitute = pm->visit(ctx.thisProgram, thisModule, expr)) ) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            };
+            Module::foreach(modMacro);
+            if ( !substitute ) ctx.thisProgram->library.foreach(modMacro, "*");
+            if ( substitute ) {
+                reportAstChanged();
+                return substitute;
             }
             return Visitor::visit(expr);
         }

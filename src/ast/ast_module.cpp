@@ -476,6 +476,7 @@ namespace das {
                     addAnnotation(fna);
                 });
             }
+            forLoopMacros.insert(forLoopMacros.end(), ptm->forLoopMacros.begin(), ptm->forLoopMacros.end());
             variantMacros.insert(variantMacros.end(), ptm->variantMacros.begin(), ptm->variantMacros.end());
             macros.insert(macros.end(), ptm->macros.begin(), ptm->macros.end());
             inferMacros.insert(inferMacros.end(), ptm->inferMacros.begin(), ptm->inferMacros.end());

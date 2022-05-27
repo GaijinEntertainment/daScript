@@ -292,6 +292,9 @@ class SetupCommentReader : SetupAnyAnnotation
 class SetupVariantMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_variant_macro"
 
+class SetupForLoopMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_for_loop_macro"
+
 class SetupCallMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_call_macro"
 
@@ -655,6 +658,7 @@ def private setup
         add_new_structure_annotation("call_macro",new SetupCallMacro())
         add_new_structure_annotation("typeinfo_macro",new SetupTypeInfoMacro())
         add_new_structure_annotation("variant_macro",new SetupVariantMacro())
+        add_new_structure_annotation("for_loop_macro",new SetupForLoopMacro())
         add_new_structure_annotation("tag_structure",new TagStructureAnnotation())
         add_new_structure_annotation("tag_function_macro",new TagFunctionMacro())
         add_new_structure_annotation("infer_macro",new SetupInferMacro())

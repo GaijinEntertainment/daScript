@@ -924,6 +924,33 @@ namespace das {
         }
     };
 
+    struct ForLoopMacroAdapter : ForLoopMacro, AstForLoopMacro_Adapter {
+        ForLoopMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : ForLoopMacro(n), AstForLoopMacro_Adapter(info), classPtr(pClass), context(ctx) {
+        }
+        virtual void preVisit ( Program * prog, Module * mod, ExprFor * loop ) override {
+            if ( auto fnPreVisit = get_preVisitExprFor(classPtr) ) {
+                invoke_preVisitExprFor(context,fnPreVisit,classPtr,prog,mod,loop);
+            }
+        }
+        virtual ExpressionPtr visit ( Program * prog, Module * mod, ExprFor * loop ) override {
+            if ( auto fnVisit = get_visitExprFor(classPtr) ) {
+                return invoke_visitExprFor(context,fnVisit,classPtr,prog,mod,loop);
+            } else {
+                return nullptr;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
+    struct AstForLoopMacroAnnotation : ManagedStructureAnnotation<ForLoopMacro,false,true> {
+        AstForLoopMacroAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("ForLoopMacro", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+        }
+    };
+
     struct ReaderMacroAdapter : ReaderMacro, AstReaderMacro_Adapter {
         ReaderMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : ReaderMacro(n), AstReaderMacro_Adapter(info), classPtr(pClass), context(ctx) {
@@ -1241,6 +1268,15 @@ namespace das {
         module->variantMacros.push_back(newM);
     }
 
+    ForLoopMacroPtr makeForLoopMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<ForLoopMacroAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleForLoopMacro ( Module * module, ForLoopMacroPtr & _newM, Context * ) {
+        ForLoopMacroPtr newM = move(_newM);
+        module->forLoopMacros.push_back(newM);
+    }
+
     void addModuleInferMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
         PassMacroPtr newM = move(_newM);
         module->macros.push_back(newM);
@@ -1509,6 +1545,14 @@ namespace das {
                 ->args({"name","class","info","context"});
         addExtern<DAS_BIND_FUN(addModuleVariantMacro)>(*this, lib,  "add_variant_macro",
             SideEffects::modifyExternal, "addModuleVariantMacro")
+                ->args({"module","annotation","context"});
+        // for loop macro
+        addAnnotation(make_smart<AstForLoopMacroAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(makeForLoopMacro)>(*this, lib,  "make_for_loop_macro",
+            SideEffects::modifyExternal, "makeForLoopMacro")
+                ->args({"name","class","info","context"});
+        addExtern<DAS_BIND_FUN(addModuleForLoopMacro)>(*this, lib,  "add_for_loop_macro",
+            SideEffects::modifyExternal, "addModuleForLoopMacro")
                 ->args({"module","annotation","context"});
     }
 }

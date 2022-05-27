@@ -52,6 +52,9 @@ namespace das
     struct CallMacro;
     typedef smart_ptr<CallMacro> CallMacroPtr;
 
+    struct ForLoopMacro;
+    typedef smart_ptr<ForLoopMacro> ForLoopMacroPtr;
+
     struct AnnotationArgumentList;
 
     //      [annotation (value,value,...,value)]
@@ -973,6 +976,7 @@ namespace das
         vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
         vector<PassMacroPtr>                        globalLintMacros;   // lint macros which work everywhere
         vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
+        vector<ForLoopMacroPtr>                     forLoopMacros;
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         CommentReaderPtr                            commentReader;      // /* blah */ or // blah
         string  name;
@@ -1072,12 +1076,20 @@ namespace das
 
     struct ExprCallMacro;
     struct CallMacro : ptr_ref_count {
-        CallMacro ( const string na = "" ) : name(na) {}
+        CallMacro ( const string & na = "" ) : name(na) {}
         virtual void preVisit (  Program *, Module *, ExprCallMacro * ) { }
         virtual ExpressionPtr visit (  Program *, Module *, ExprCallMacro * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
         string name;
         Module * module = nullptr;
+    };
+
+    struct ExprFor;
+    struct ForLoopMacro : ptr_ref_count {
+        ForLoopMacro ( const string & na = "" ) : name(na) {}
+        virtual void preVisit ( Program *, Module *, ExprFor * ) {}
+        virtual ExpressionPtr visit ( Program *, Module *, ExprFor * ) { return nullptr; }
+        string name;
     };
 
     struct ExprIsVariant;
