@@ -227,7 +227,8 @@ class SoaForLoop : AstForLoopMacro
                 new_for.iteratorsAt |> push(expr.iteratorsAt[soa_index])
                 var nsrc <- new [[ExprField() at=expr.sources[soa_index].at,
                     value <- clone_expression(expr.sources[soa_index]),
-                    name := itn
+                    name := itn,
+                    fieldFlags = ExprFieldFieldFlags no_promotion
                 ]]
                 new_for.sources |> emplace(nsrc)
             new_for.iteratorVariables |> clear()
