@@ -928,11 +928,6 @@ namespace das {
         ForLoopMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : ForLoopMacro(n), AstForLoopMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
-        virtual void preVisit ( Program * prog, Module * mod, ExprFor * loop ) override {
-            if ( auto fnPreVisit = get_preVisitExprFor(classPtr) ) {
-                invoke_preVisitExprFor(context,fnPreVisit,classPtr,prog,mod,loop);
-            }
-        }
         virtual ExpressionPtr visit ( Program * prog, Module * mod, ExprFor * loop ) override {
             if ( auto fnVisit = get_visitExprFor(classPtr) ) {
                 return invoke_visitExprFor(context,fnVisit,classPtr,prog,mod,loop);

@@ -5627,15 +5627,6 @@ namespace das {
             DAS_ASSERT(expr->visibility.line);
             loop.push_back(expr);
             pushVarStack();
-            auto thisModule = ctx.thisProgram->thisModule.get();
-            Module::foreach([&](Module * mod) -> bool {
-                if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule ) {
-                    for ( const auto & pm : mod->forLoopMacros ) {
-                        pm->preVisit(ctx.thisProgram, thisModule, expr);
-                    }
-                }
-                return true;
-            });
         }
         virtual void preVisitForStack ( ExprFor * expr ) override {
             Visitor::preVisitForStack(expr);

@@ -92,7 +92,6 @@ class AstVariantMacro
 
 [macro_interface]
 class AstForLoopMacro
-    def abstract preVisitExprFor ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprFor> ) : void
     def abstract visitExprFor ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprFor> ) : ExpressionPtr
 
 [macro_interface]

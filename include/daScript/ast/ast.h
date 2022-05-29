@@ -1087,7 +1087,6 @@ namespace das
     struct ExprFor;
     struct ForLoopMacro : ptr_ref_count {
         ForLoopMacro ( const string & na = "" ) : name(na) {}
-        virtual void preVisit ( Program *, Module *, ExprFor * ) {}
         virtual ExpressionPtr visit ( Program *, Module *, ExprFor * ) { return nullptr; }
         string name;
     };
