@@ -2,10 +2,11 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
-module soa public
+module soa private
 
 require daslib/ast_boost
 require daslib/templates_boost
+require daslib/strings_boost
 
 // replacing a[index].b with a.b[index]
 
@@ -167,3 +168,68 @@ class SoaStructMacro : AstStructureAnnotation
     def make_named_call ( st,stype:StructurePtr; fnName, callName:string; isConst:bool=false ) : FunctionPtr
         var argT <- new [[TypeDecl() baseType=Type tStructure, at=st.at, structType=get_ptr(st), flags= isConst ? TypeDeclFlags constant : bitfield(0)]]
         return <- make_any_named_call(st,stype,argT,fnName,callName,true)
+
+class CollectAndReplaceIteratorFields : AstVisitor
+    it_prefix : string
+    names : table<string;bool>
+    def CollectAndReplaceIteratorFields ( prefix:string )
+        it_prefix = prefix
+    def override visitExprField(expr:smart_ptr<ExprField>) : ExpressionPtr
+        if expr.value is ExprVar
+            if (expr.value as ExprVar).name==it_prefix
+                let ename = string(expr.name)
+                names[ename] = true
+                return <- new [[ExprVar() at=expr.at, name:=it_prefix+"`"+ename]]
+        return expr
+
+def collect_and_replace_iterator_fields ( prefix:string; blk:ExpressionPtr ) : array<string>
+    var names : array<string>
+    var astVisitor = new CollectAndReplaceIteratorFields(prefix)
+    var astVisitorAdapter <- make_visitor(*astVisitor)
+    visit(blk, astVisitorAdapter)
+    for n in keys(astVisitor.names)
+        names |> push(n)
+    astVisitorAdapter := null
+    unsafe
+        delete astVisitor
+    return <- names
+
+[for_loop_macro(name=soa_for_loop)]
+class SoaForLoop : AstForLoopMacro
+    def override visitExprFor ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprFor> ) : ExpressionPtr
+        var soa_index = -1
+        for index,its in range(100500),expr.sources
+            if its._type!=null && its._type.isStructure
+                var is_soa = false
+                peek(its._type.structType.name) <| $(sn)
+                    if sn |> ends_with("`SOA")
+                        is_soa = true
+                if is_soa
+                    soa_index = index
+                    break
+        if soa_index != -1
+            let it_prefix = string(expr.iterators[soa_index])
+            var new_for_e <- clone_expression(expr)
+            var new_for = new_for_e as ExprFor
+            new_for.sources |> erase(soa_index)
+            new_for.iterators |> erase(soa_index)
+            new_for.iteratorsAt |> erase(soa_index)
+            new_for.iteratorsAka |> erase(soa_index)
+            var names <- collect_and_replace_iterator_fields(it_prefix,new_for.body)
+            if names |> length == 0
+                names |> push<| string(expr.sources[soa_index]._type.structType.fields[0].name)
+            for itn in names
+                let si = new_for.iterators |> length            // todo: add 'push'
+                new_for.iterators |> resize(si+1)
+                new_for.iterators[si] := "{it_prefix}`{itn}"
+                new_for.iteratorsAka |> resize(si+1)
+                new_for.iteratorsAka[si] := ""
+                new_for.iteratorsAt |> push(expr.iteratorsAt[soa_index])
+                var nsrc <- new [[ExprField() at=expr.sources[soa_index].at,
+                    value <- clone_expression(expr.sources[soa_index]),
+                    name := itn
+                ]]
+                new_for.sources |> emplace(nsrc)
+            new_for.iteratorVariables |> clear()
+            return new_for_e
+        return [[ExpressionPtr]]

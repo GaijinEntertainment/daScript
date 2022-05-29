@@ -17,5 +17,10 @@ def main
     soa |> erase(1)
     assert(length(soa)==2)
     assert(soa[1].pos==float3(2))
+    for it in soa
+        print("it.pos={it.pos} it.color={it.color}\n")
+    var count = 0
+    for q,it in range(100500),soa
+        count ++
+    assert(count==2)
 
-options log

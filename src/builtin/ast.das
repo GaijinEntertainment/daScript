@@ -25,6 +25,7 @@ typedef
     CommentReaderPtr = smart_ptr<CommentReader>
     CallMacroPtr = smart_ptr<CallMacro>
     TypeInfoMacroPtr = smart_ptr<TypeInfoMacro>
+    ForLoopMacroPtr = smart_ptr<ForLoopMacro>
 
 [generic]
 def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true )
@@ -618,7 +619,7 @@ def make_variant_macro ( name : string; someClassPtr ) : VariantMacroPtr
         return [[VariantMacroPtr]]
 
 [macro_function]
-def make_for_loop_macro ( name : string; someClassPtr ) : VariantMacroPtr
+def make_for_loop_macro ( name : string; someClassPtr ) : ForLoopMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_for_loop_macro(name, someClassPtr, classInfo)
