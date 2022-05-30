@@ -11,6 +11,7 @@ class DapiDebugAgent
     def abstract onUninstall ( agent:DebugAgent? ) : void
     def abstract onCreateContext ( var ctx:Context ) : void
     def abstract onDestroyContext ( var ctx:Context ) : void
+    def abstract onSimulateContext ( var ctx:Context ) : void
     def abstract onSingleStep ( var ctx:Context; at:LineInfo ) : void
     def abstract onInstrument ( var ctx:Context; at:LineInfo ) : void
     def abstract onInstrumentFunction ( var ctx:Context; fn:SimFunction?; entering:bool ) : void

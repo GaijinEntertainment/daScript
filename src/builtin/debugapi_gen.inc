@@ -775,23 +775,25 @@ protected:
     __fn_onUninstall = 1,
     __fn_onCreateContext = 2,
     __fn_onDestroyContext = 3,
-    __fn_onSingleStep = 4,
-    __fn_onInstrument = 5,
-    __fn_onInstrumentFunction = 6,
-    __fn_onBreakpoint = 7,
-    __fn_onVariable = 8,
-    __fn_onTick = 9,
-    __fn_onCollect = 10,
-    __fn_onLog = 11,
+    __fn_onSimulateContext = 4,
+    __fn_onSingleStep = 5,
+    __fn_onInstrument = 6,
+    __fn_onInstrumentFunction = 7,
+    __fn_onBreakpoint = 8,
+    __fn_onVariable = 9,
+    __fn_onTick = 10,
+    __fn_onCollect = 11,
+    __fn_onLog = 12,
   };
 protected:
-  int _das_class_method_offset[12];
+  int _das_class_method_offset[13];
 public:
   DapiDebugAgent_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_onInstall] = adapt_field_offset("onInstall",info);
       _das_class_method_offset[__fn_onUninstall] = adapt_field_offset("onUninstall",info);
       _das_class_method_offset[__fn_onCreateContext] = adapt_field_offset("onCreateContext",info);
       _das_class_method_offset[__fn_onDestroyContext] = adapt_field_offset("onDestroyContext",info);
+      _das_class_method_offset[__fn_onSimulateContext] = adapt_field_offset("onSimulateContext",info);
       _das_class_method_offset[__fn_onSingleStep] = adapt_field_offset("onSingleStep",info);
       _das_class_method_offset[__fn_onInstrument] = adapt_field_offset("onInstrument",info);
       _das_class_method_offset[__fn_onInstrumentFunction] = adapt_field_offset("onInstrumentFunction",info);
@@ -832,6 +834,15 @@ public:
     return getDasClassMethod(self,_das_class_method_offset[__fn_onDestroyContext]);
   }
   __forceinline void invoke_onDestroyContext ( Context * __context__, Func __funcCall__, void * self, Context & ctx ) const {
+    das_invoke_function<void>::invoke
+      <void *,Context &>
+        (__context__,nullptr,__funcCall__,
+          self,ctx);
+  }
+  __forceinline Func get_onSimulateContext ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onSimulateContext]);
+  }
+  __forceinline void invoke_onSimulateContext ( Context * __context__, Func __funcCall__, void * self, Context & ctx ) const {
     das_invoke_function<void>::invoke
       <void *,Context &>
         (__context__,nullptr,__funcCall__,

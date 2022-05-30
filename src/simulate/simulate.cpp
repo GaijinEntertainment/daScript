@@ -926,6 +926,12 @@ namespace das
         });
     }
 
+    void dapiSimulateContext ( Context & ctx ) {
+        for_each_debug_agent([&]( const DebugAgentPtr & pAgent ){
+            pAgent->onSimulateContext(&ctx);
+        });
+    }
+
     Context::Context(uint32_t stackSize, bool ph) : stack(stackSize) {
         code = make_shared<NodeAllocator>();
         constStringHeap = make_shared<ConstStringAllocator>();

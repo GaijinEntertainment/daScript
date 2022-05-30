@@ -3059,6 +3059,7 @@ namespace das
             auto dt = get_time_usec(time0) / 1000000.;
             logs << "simulate (including init script) took " << dt << "\n";
         }
+        dapiSimulateContext(context);
         return errors.size() == 0;
     }
 

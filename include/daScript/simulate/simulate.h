@@ -205,6 +205,7 @@ namespace das
         virtual void onUninstall ( DebugAgent * ) {}
         virtual void onCreateContext ( Context * ) {}
         virtual void onDestroyContext ( Context * ) {}
+        virtual void onSimulateContext ( Context * ) {}
         virtual void onSingleStep ( Context *, const LineInfo & ) {}
         virtual void onInstrument ( Context *, const LineInfo & ) {}
         virtual void onInstrumentFunction ( Context *, SimFunction *, bool ) {}
@@ -237,6 +238,7 @@ namespace das
     int32_t dapiStackDepth ( Context & context );
     void dumpTrackingLeaks();
     void dapiReportContextState ( Context & ctx, const char * category, const char * name, const TypeInfo * info, void * data );
+    void dapiSimulateContext ( Context & ctx );
 
     typedef shared_ptr<Context> ContextPtr;
 

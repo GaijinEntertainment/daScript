@@ -75,6 +75,13 @@ namespace debugapi {
                 context->unlock();
             }
         }
+        virtual void onSimulateContext ( Context * ctx ) override {
+            if ( auto fnOnSimulateContext = get_onSimulateContext(classPtr)) {
+                context->lock();
+                invoke_onSimulateContext(context,fnOnSimulateContext,classPtr,*ctx);
+                context->unlock();
+            }
+        }
         virtual void onSingleStep ( Context * ctx, const LineInfo & at ) override {
             if ( auto fnOnSingleStep = get_onSingleStep(classPtr) ) {
                 context->lock();
