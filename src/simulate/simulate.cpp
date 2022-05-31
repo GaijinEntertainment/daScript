@@ -1982,9 +1982,9 @@ namespace das
         });
     }
 
-    void Context::instrumentFunctionCallback ( SimFunction * sim, bool entering ) {
+    void Context::instrumentFunctionCallback ( SimFunction * sim, bool entering, uint64_t userData ) {
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-            pAgent->onInstrumentFunction(this, sim, entering);
+            pAgent->onInstrumentFunction(this, sim, entering, userData);
         });
     }
 

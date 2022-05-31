@@ -14,7 +14,7 @@ class DapiDebugAgent
     def abstract onSimulateContext ( var ctx:Context ) : void
     def abstract onSingleStep ( var ctx:Context; at:LineInfo ) : void
     def abstract onInstrument ( var ctx:Context; at:LineInfo ) : void
-    def abstract onInstrumentFunction ( var ctx:Context; fn:SimFunction?; entering:bool ) : void
+    def abstract onInstrumentFunction ( var ctx:Context; fn:SimFunction?; entering:bool; userData:uint64 ) : void
     def abstract onBreakpoint ( var ctx:Context; at:LineInfo; reason,text:string ) : void
     def abstract onVariable ( var ctx:Context; category,name:string; info:TypeInfo; data:void? ) : void
     def abstract onTick : void

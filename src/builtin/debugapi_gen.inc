@@ -869,11 +869,11 @@ public:
   __forceinline Func get_onInstrumentFunction ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onInstrumentFunction]);
   }
-  __forceinline void invoke_onInstrumentFunction ( Context * __context__, Func __funcCall__, void * self, Context & ctx, SimFunction * const  fn, bool entering ) const {
+  __forceinline void invoke_onInstrumentFunction ( Context * __context__, Func __funcCall__, void * self, Context & ctx, SimFunction * const  fn, bool entering, uint64_t userData ) const {
     das_invoke_function<void>::invoke
-      <void *,Context &,SimFunction * const ,bool>
+      <void *,Context &,SimFunction * const ,bool,uint64_t>
         (__context__,nullptr,__funcCall__,
-          self,ctx,fn,entering);
+          self,ctx,fn,entering,userData);
   }
   __forceinline Func get_onBreakpoint ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onBreakpoint]);

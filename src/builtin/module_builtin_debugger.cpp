@@ -97,11 +97,11 @@ namespace debugapi {
                 context->unlock();
             }
         }
-        virtual void onInstrumentFunction ( Context * ctx, SimFunction * sim, bool entering ) override {
+        virtual void onInstrumentFunction ( Context * ctx, SimFunction * sim, bool entering, uint64_t userData ) override {
             if ( ctx==context ) return;  // do not step into the same context
             if ( auto fnOnInstrumentFunction = get_onInstrumentFunction(classPtr) ) {
                 context->lock();
-                invoke_onInstrumentFunction(context,fnOnInstrumentFunction,classPtr,*ctx,sim,entering);
+                invoke_onInstrumentFunction(context,fnOnInstrumentFunction,classPtr,*ctx,sim,entering,userData);
                 context->unlock();
             }
         }
@@ -840,13 +840,22 @@ namespace debugapi {
         ctx.instrumentContextNode(blk, isInstrumenting, context, line);
     }
 
-    void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, Context * context, LineInfoArg * arg ) {
+    void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, uint64_t userData, Context * context, LineInfoArg * arg ) {
         if ( !fn ) context->throw_error_at(*arg, "expecting function");
-        ctx.instrumentFunction(fn.PTR, isInstrumenting);
+        ctx.instrumentFunction(fn.PTR, isInstrumenting, userData);
     }
 
     void instrument_all_functions ( Context & ctx ) {
-        ctx.instrumentFunction(0, true);
+        ctx.instrumentFunction(0, true, 0ul);
+    }
+
+    void instrument_all_functions_ex ( Context & ctx, const TBlock<uint64_t,Func,const SimFunction *> & blk, LineInfoArg * arg ) {
+        for ( int fni=0; fni!=ctx.getTotalFunctions(); ++fni ) {
+            Func fn;
+            fn.PTR = ctx.getFunction(fni);
+            uint64_t userData = das_invoke<uint64_t>::invoke(&ctx,arg,blk,fn,fn.PTR);
+            ctx.instrumentFunction(fn.PTR, true, userData);
+        }
     }
 
     void clear_instruments ( Context & ctx ) {
@@ -949,6 +958,9 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(instrument_all_functions)>(*this, lib,  "instrument_all_functions",
                 SideEffects::modifyExternal, "instrument_all_functions")
                     ->arg("context");
+            addExtern<DAS_BIND_FUN(instrument_all_functions_ex)>(*this, lib,  "instrument_all_functions",
+                SideEffects::modifyExternal|SideEffects::invoke, "instrument_all_functions_ex")
+                    ->args({"context","block","line"});
             addExtern<DAS_BIND_FUN(clear_instruments)>(*this, lib,  "clear_instruments",
                 SideEffects::modifyExternal, "clear_instruments")
                     ->arg("context");

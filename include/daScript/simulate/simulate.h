@@ -208,7 +208,7 @@ namespace das
         virtual void onSimulateContext ( Context * ) {}
         virtual void onSingleStep ( Context *, const LineInfo & ) {}
         virtual void onInstrument ( Context *, const LineInfo & ) {}
-        virtual void onInstrumentFunction ( Context *, SimFunction *, bool ) {}
+        virtual void onInstrumentFunction ( Context *, SimFunction *, bool, uint64_t ) {}
         virtual void onBreakpoint ( Context *, const LineInfo &, const char *, const char * ) {}
         virtual void onVariable ( Context *, const char *, const char *, TypeInfo *, void * ) {}
         virtual void onTick () {}
@@ -596,7 +596,7 @@ namespace das
         void collectStringHeap(LineInfo * at, bool validate);
         void collectHeap(LineInfo * at, bool stringHeap, bool validate);
         void reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly);
-        void instrumentFunction ( SimFunction * , bool isInstrumenting );
+        void instrumentFunction ( SimFunction * , bool isInstrumenting, uint64_t userData );
         void instrumentContextNode ( const Block & blk, bool isInstrumenting, Context * context, LineInfo * line );
         void clearInstruments();
         void runVisitor ( SimVisitor * vis ) const;
@@ -612,7 +612,7 @@ namespace das
         char * intern ( const char * str );
 
         void bpcallback ( const LineInfo & at );
-        void instrumentFunctionCallback ( SimFunction * sim, bool entering );
+        void instrumentFunctionCallback ( SimFunction * sim, bool entering, uint64_t userData );
         void instrumentCallback ( const LineInfo & at );
 
 #define DAS_SINGLE_STEP(context,at,forceStep) \

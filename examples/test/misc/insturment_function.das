@@ -4,8 +4,8 @@ require rtti
 require debugapi
 
 class SampleDebugAgent : DapiDebugAgent
-    def override onInstrumentFunction ( var ctx:Context; fun:SimFunction?; entering:bool ) : void
-        print("{entering} {fun.mangledName}\n")
+    def override onInstrumentFunction ( var ctx:Context; fun:SimFunction?; entering:bool; userData:uint64 ) : void
+        print("{entering} {fun.mangledName} - {userData}\n")
 
 [export]
 def debug_agent ( ctx : Context )
@@ -30,7 +30,11 @@ def operator delete (var a:Foo&)
 [export]
 def main()
     this_context().name := "stackwalk main context"
-    instrument_all_functions(this_context())
+    var count = 0
+    instrument_all_functions(this_context()) <| $ ( fn, sfn )
+        let info = get_function_info(this_context(),fn)
+        print("instrumenting {sfn.mangledName}\n")
+        return uint64(count++)
     fork_debug_agent_context(@@debug_agent)
 
     var a = [[Foo a=0]]
