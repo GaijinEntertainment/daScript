@@ -954,7 +954,7 @@ namespace debugapi {
                     ->args({"context","isInstrumenting","block","context","line"});
             addExtern<DAS_BIND_FUN(instrument_function)>(*this, lib,  "instrument_function",
                 SideEffects::modifyExternal, "instrument_function")
-                    ->args({"context","function","isInstrumenting","context","line"});;
+                    ->args({"context","function","isInstrumenting","userData","context","line"});;
             addExtern<DAS_BIND_FUN(instrument_all_functions)>(*this, lib,  "instrument_all_functions",
                 SideEffects::modifyExternal, "instrument_all_functions")
                     ->arg("context");
