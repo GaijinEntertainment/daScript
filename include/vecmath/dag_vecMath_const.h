@@ -34,13 +34,21 @@
   DECL_VEC_CONST vec4f_const V_C_HALF = { REPLICATE(0.5f) };
   DECL_VEC_CONST vec4f_const V_C_ONE = { REPLICATE(1.0f) };
   DECL_VEC_CONST vec4f_const V_C_TWO = { REPLICATE(2.0f) };
+  DECL_VEC_CONST vec4f_const V_C_PI = { REPLICATE(3.141592f) };                  // pi
+  DECL_VEC_CONST vec4f_const V_C_HALFPI = { REPLICATE(3.141592f / 2.f) };        // pi/2
+  DECL_VEC_CONST vec4f_const V_C_TWOPI = { REPLICATE(2.f * 3.141592f) };         // pi*2
+  DECL_VEC_CONST vec4f_const V_C_PI_DIV_4 = { REPLICATE(0.785398f) };            // pi/4
+  DECL_VEC_CONST vec4f_const V_C_2_DIV_PI = { REPLICATE(0.636619f) };            // 2/pi
+  DECL_VEC_CONST vec4f_const V_C_4_DIV_PI = { REPLICATE(1.273239f) };            // 4/pi
+  DECL_VEC_CONST vec4f_const V_C_FLT_EPSILON = { REPLICATE(1.192092896e-07f) };
 
   DECL_VEC_CONST vec4i_const V_CI_SIGN_MASK = { REPLICATE(0x80000000) };
-  DECL_VEC_CONST vec4i_const V_CI_0 = { 0, 0, 0, 0 };
-  DECL_VEC_CONST vec4i_const V_CI_1 = { 1, 1, 1, 1 };
-  DECL_VEC_CONST vec4i_const V_CI_2 = { 2, 2, 2, 2 };
-  DECL_VEC_CONST vec4i_const V_CI_3 = { 3, 3, 3, 3 };
-  DECL_VEC_CONST vec4i_const V_CI_4 = { 4, 4, 4, 4 };
+  DECL_VEC_CONST vec4i_const V_CI_INV_SIGN_MASK = { REPLICATE(0x7FFFFFFF) };
+  DECL_VEC_CONST vec4i_const V_CI_0 = { REPLICATE(0) };
+  DECL_VEC_CONST vec4i_const V_CI_1 = { REPLICATE(1) };
+  DECL_VEC_CONST vec4i_const V_CI_2 = { REPLICATE(2) };
+  DECL_VEC_CONST vec4i_const V_CI_3 = { REPLICATE(3) };
+  DECL_VEC_CONST vec4i_const V_CI_4 = { REPLICATE(4) };
 #endif
 
 #if _TARGET_SIMD_SSE
@@ -119,27 +127,24 @@
 #endif
 
 #if _TARGET_SIMD_NEON
-  #define V_C_HALF    vdupq_n_f32(0.5f)
-  #define V_C_ONE     vdupq_n_f32(1.0f)
-  #define V_C_TWO     vdupq_n_f32(2.0f)
+  #define V_C_HALF            vdupq_n_f32(0.5f)
+  #define V_C_ONE             vdupq_n_f32(1.0f)
+  #define V_C_TWO             vdupq_n_f32(2.0f)
+  #define V_C_PI              vdupq_n_f32(3.141592f)           // pi
+  #define V_C_HALFPI          vdupq_n_f32(3.141592f / 2.f)     // pi/2
+  #define V_C_TWOPI           vdupq_n_f32(2.f * 3.141592f)     // pi*2
+  #define V_C_PI_DIV_4        vdupq_n_f32(0.785398f)           // pi/4
+  #define V_C_2_DIV_PI        vdupq_n_f32(0.636619f)           // 2/pi
+  #define V_C_4_DIV_PI        vdupq_n_f32(1.273239f)           // 4/pi
+  #define V_C_FLT_EPSILON     vdupq_n_f32(1.192092896e-07f)
 
-  #define V_CI_SIGN_MASK vdupq_n_s32(0x80000000)
-  #define V_CI_0      vdupq_n_s32(0)
-  #define V_CI_1      vdupq_n_s32(1)
-  #define V_CI_2      vdupq_n_s32(2)
-  #define V_CI_3      vdupq_n_s32(3)
-  #define V_CI_4      vdupq_n_s32(4)
-#endif
-
-#if _TARGET_SIMD_SSE|_TARGET_SIMD_NEON
-  #define _SINCOS_CC0  -0.0013602249f
-  #define _SINCOS_CC1   0.0416566950f
-  #define _SINCOS_CC2  -0.4999990225f
-  #define _SINCOS_SC0  -0.0001950727f
-  #define _SINCOS_SC1   0.0083320758f
-  #define _SINCOS_SC2  -0.1666665247f
-  #define _SINCOS_KC1  1.57079625129f
-  #define _SINCOS_KC2  7.54978995489e-8f
+  #define V_CI_SIGN_MASK      vdupq_n_s32(0x80000000)
+  #define V_CI_INV_SIGN_MASK  vdupq_n_s32(0x7FFFFFFF)
+  #define V_CI_0              vdupq_n_s32(0)
+  #define V_CI_1              vdupq_n_s32(1)
+  #define V_CI_2              vdupq_n_s32(2)
+  #define V_CI_3              vdupq_n_s32(3)
+  #define V_CI_4              vdupq_n_s32(4)
 #endif
 
 #undef REPLICATE

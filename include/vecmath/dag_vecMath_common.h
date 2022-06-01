@@ -153,51 +153,6 @@ VECMATH_FINLINE vec3f VECTORCALL v_vtriple3(vec3f a, vec3f b, vec3f c)
   return v_nmsub(c, ab, v_mul(b, ac));
 }
 
-VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f x, vec4f& s, vec4f& c)
-{
-  vec4f xl, xl2, xl3;
-  vec4i q;
-  vec4i offsetSin, offsetCos;
-  vec4f vzero = v_zero();
-
-  xl = v_mul(x, v_splats(0.63661977236f));
-  xl = v_add(xl, v_sel(V_C_HALF, x, v_msbit()));
-
-  q = v_cvt_vec4i(xl);
-
-  offsetSin = v_andi(q, V_CI_3);
-  offsetCos = v_addi(V_CI_1, offsetSin);
-
-  vec4f qf = v_cvt_vec4f(q);
-  vec4f p1 = v_nmsub(qf, v_splats(_SINCOS_KC1), x);
-  xl  = v_nmsub(qf, v_splats(_SINCOS_KC2), p1);
-
-  xl2 = v_mul(xl, xl);
-  xl3 = v_mul(xl2, xl);
-
-
-  vec4f ct1 = v_madd(v_splats(_SINCOS_CC0), xl2, v_splats(_SINCOS_CC1));
-  vec4f st1 = v_madd(v_splats(_SINCOS_SC0), xl2, v_splats(_SINCOS_SC1));
-
-  vec4f ct2 = v_madd(ct1, xl2, v_splats(_SINCOS_CC2));
-  vec4f st2 = v_madd(st1, xl2, v_splats(_SINCOS_SC2));
-
-  vec4f cx = v_madd(ct2, xl2, V_C_ONE);
-  vec4f sx = v_madd(st2, xl3, xl);
-
-  vec4f sinMask = v_cmp_eqi(v_cast_vec4f(v_andi(offsetSin, V_CI_1)), vzero);
-  vec4f cosMask = v_cmp_eqi(v_cast_vec4f(v_andi(offsetCos, V_CI_1)), vzero);
-  s = v_sel(cx, sx, sinMask);
-  c = v_sel(cx, sx, cosMask);
-
-  sinMask = v_cmp_eqi(v_cast_vec4f(v_andi(offsetSin, V_CI_2)), vzero);
-  cosMask = v_cmp_eqi(v_cast_vec4f(v_andi(offsetCos, V_CI_2)), vzero);
-
-  s = v_sel(v_neg(s), s, sinMask);
-  c = v_sel(v_neg(c), c, cosMask);
-}
-VECMATH_FINLINE void VECTORCALL v_sincos_x(vec4f a, vec4f& s, vec4f& c) { return v_sincos4(a, s, c); }
-
 VECMATH_FINLINE void VECTORCALL v_mat44_make_persp_forward(mat44f &dest, float wk, float hk, float zn, float zf)
 {
   float q = zf/(zf-zn);
@@ -1917,185 +1872,30 @@ VECMATH_FINLINE void VECTORCALL v_mat44_make_from_43ca(mat44f &tmV, const float 
   tmV.col3 = v_add(v_and(v_rot_1(v_ldu(m43+8)), (vec4f)V_CI_MASK1110), V_C_UNIT_0001);
 }
 
+//mat44f from unaligned 4x4 matrix
+VECMATH_FINLINE void VECTORCALL v_mat44_make_from_44cu(mat44f &tmV, const float *const __restrict m44)
+{
+  tmV.col0 = v_ldu(m44+0);
+  tmV.col1 = v_ldu(m44+4);
+  tmV.col2 = v_ldu(m44+8);
+  tmV.col3 = v_ldu(m44+12);
+}
+
+//mat44f from aligned 4x4 matrix
+VECMATH_FINLINE void VECTORCALL v_mat44_make_from_44ca(mat44f &tmV, const float *const __restrict m44)
+{
+  tmV.col0 = v_ld(m44+0);
+  tmV.col1 = v_ld(m44+4);
+  tmV.col2 = v_ld(m44+8);
+  tmV.col3 = v_ld(m44+12);
+}
+
 VECMATH_FINLINE vec4f VECTORCALL v_div_est(vec4f a, vec4f b) {return v_mul(a, v_rcp_est(b));}
 #if _TARGET_SIMD_SSE
 VECMATH_FINLINE vec4f VECTORCALL is_neg_special(vec4f a) {return v_cast_vec4f(v_srai(v_cast_vec4i(a), 31));}
 #else
 VECMATH_FINLINE vec4f VECTORCALL is_neg_special(vec4f a) {vec4f msbit = v_msbit(); return v_cmp_eqi(v_and(a, msbit), msbit);}
 #endif
-#define REPLICATE4(v) {v, v, v, v}
-alignas(16)static const float V_C_MINUS_ONE[4] = REPLICATE4(-1.f);
-alignas(16)static const float _ps_atan_t0[4] = REPLICATE4(-0.91646118527267623468e-1f);
-alignas(16)static const float _ps_atan_t1[4] = REPLICATE4(-0.13956945682312098640e1f);
-alignas(16)static const float _ps_atan_t2[4] = REPLICATE4(-0.94393926122725531747e2f);
-alignas(16)static const float _ps_atan_t3[4] = REPLICATE4( 0.12888383034157279340e2f);
-
-alignas(16)static const float _ps_atan_s0[4] = REPLICATE4(0.12797564625607904396e1f);
-alignas(16)static const float _ps_atan_s1[4] = REPLICATE4(0.21972168858277355914e1f);
-alignas(16)static const float _ps_atan_s2[4] = REPLICATE4(0.68193064729268275701e1f);
-alignas(16)static const float _ps_atan_s3[4] = REPLICATE4(0.28205206687035841409e2f);
-alignas(16)static const float _ps_am_pi_o_2[4] = REPLICATE4(1.570796326794895f);
-
-static const vec4f_const _pi          = v_cast_vec4f(v_splatsi(0x40490fdb)); // 3.141593f
-static const vec4f_const _half_pi     = v_cast_vec4f(v_splatsi(0x3fc90fdb));
-static const vec4f_const _neg_pi      = v_neg(_pi);
-static const vec4f_const _neg_half_pi = v_neg(_half_pi);
-
-#undef REPLICATE4
-//approximate atan |error| is < 0.00045
-VECMATH_INLINE vec4f VECTORCALL v_atan_est(vec4f x)  // any x
-{
-  vec4f xRcp = v_rcp_est(x);
-
-  vec4f isOut1m1 = v_or(v_cmp_gt(x, V_C_ONE), v_cmp_ge(*(vec4f*)V_C_MINUS_ONE, x));
-  vec4f xUsed = v_sel(x, xRcp, isOut1m1);
-
-  vec4f xUsedSq = v_mul(xUsed, xUsed);
-  vec4f atanPoly;
-  atanPoly = v_add(xUsedSq, *(vec4f*)_ps_atan_s0);
-  atanPoly = v_mul(v_rcp_est(atanPoly), *(vec4f*)_ps_atan_t0);
-
-  atanPoly = v_add(atanPoly, v_add(xUsedSq, *(vec4f*)_ps_atan_s1));
-  atanPoly = v_mul(v_rcp_est(atanPoly), *(vec4f*)_ps_atan_t1);
-
-  atanPoly = v_add(atanPoly, v_add(xUsedSq, *(vec4f*)_ps_atan_s2));
-  atanPoly = v_mul(v_rcp_est(atanPoly), *(vec4f*)_ps_atan_t2);
-
-  atanPoly = v_add(  atanPoly, v_add(xUsedSq, *(vec4f*)_ps_atan_s3));
-  atanPoly = v_mul(v_rcp_est(atanPoly), v_mul(xUsed, *(vec4f*)_ps_atan_t3));
-
-  vec4f res = v_or(v_and(xUsed, v_msbit()), *(vec4f*)_ps_am_pi_o_2);
-  res = v_sub(res, atanPoly);
-
-  return v_sel(atanPoly, res, isOut1m1);
-}
-
-// fast atan version. |error| is < 0.000007
-VECMATH_INLINE vec4f VECTORCALL v_atan(vec4f x)  // any x
-{
-  vec4f xRcp = v_rcp(x);
-
-  vec4f isOut1m1 = v_or(v_cmp_gt(x, V_C_ONE), v_cmp_ge(*(vec4f*)V_C_MINUS_ONE, x));
-  vec4f xUsed = v_sel(x, xRcp, isOut1m1);
-
-  vec4f xUsedSq = v_mul(xUsed, xUsed);
-  vec4f atanPoly;
-  atanPoly = v_add(xUsedSq, *(vec4f*)_ps_atan_s0);
-  atanPoly = v_mul(v_rcp(atanPoly), *(vec4f*)_ps_atan_t0);
-
-  atanPoly = v_add(atanPoly, v_add(xUsedSq, *(vec4f*)_ps_atan_s1));
-  atanPoly = v_mul(v_rcp(atanPoly), *(vec4f*)_ps_atan_t1);
-
-  atanPoly = v_add(atanPoly, v_add(xUsedSq, *(vec4f*)_ps_atan_s2));
-  atanPoly = v_mul(v_rcp(atanPoly), *(vec4f*)_ps_atan_t2);
-
-  atanPoly = v_add(  atanPoly, v_add(xUsedSq, *(vec4f*)_ps_atan_s3));
-  atanPoly = v_mul(v_rcp(atanPoly), v_mul(xUsed, *(vec4f*)_ps_atan_t3));
-
-  vec4f res = v_or(v_and(xUsed, v_msbit()), *(vec4f*)_ps_am_pi_o_2);
-  res = v_sub(res, atanPoly);
-
-  return v_sel(atanPoly, res, isOut1m1);
-}
-
-// fast atan2 version. |error| is < 0.000007
-VECMATH_INLINE vec4f VECTORCALL v_atan2(vec4f y, vec4f x)
-{
-  vec4f pi = v_cast_vec4f(v_splatsi(0x40490fdb));        // 3.141593f
-
-
-  // compute the atan
-  vec4f raw_atan = v_atan(v_div(y, x));
-
-  vec4f neg_x = is_neg_special(x);
-  vec4f neg_y = is_neg_special(y);
-
-  vec4f in_quad2 = v_andnot(neg_y, neg_x);
-  vec4f quad2_fixed = v_sel(raw_atan, v_add(raw_atan, pi), in_quad2);
-
-
-  // move from quadrant 1 to 3 by subtracting PI
-  vec4f in_quad3 = v_and(neg_x, neg_y);
-  vec4f quad23_fixed = v_sel(quad2_fixed, v_sub(raw_atan, pi), in_quad3);
-
-
-
-  vec4f y_zero = v_cmp_eq(x, v_zero());
-  vec4f halfpi = v_cast_vec4f(v_splatsi(0x3fc90fdb));
-  vec4f yzeropos_fixed = v_sel(quad23_fixed, halfpi, v_and(y_zero, v_cmp_gt(y, v_zero())));
-  vec4f yzeroneg_fixed = v_sel(yzeropos_fixed, v_neg(halfpi), v_and(y_zero, v_cmp_ge(v_zero(), y)));
-  vec4f x_yzero = v_andnot(v_and(y_zero, v_cmp_eq(y, v_zero())), yzeroneg_fixed);
-
-
-  return x_yzero;
-}
-
-// fast approx atan version. |error| is < 0.0004
-// ~50% faster then v_atan
-// NOTE: does not handle any of the following inputs:
-// (+0, +0), (+0, -0), (-0, +0), (-0, -0)
-// could be fixed to handle
-VECMATH_INLINE vec4f VECTORCALL v_atan2_est(vec4f y, vec4f x)
-{
-  vec4f pi = v_cast_vec4f(v_splatsi(0x40490fdb));        // 3.141593f
-
-
-  // compute the atan
-  vec4f raw_atan = v_atan_est(v_div_est(y, x));
-
-  vec4f neg_x = is_neg_special(x);
-  vec4f neg_y = is_neg_special(y);
-
-  vec4f in_quad2 = v_andnot(neg_y, neg_x);
-  vec4f quad2_fixed = v_sel(raw_atan, v_add(raw_atan, pi), in_quad2);
-
-
-  // move from quadrant 1 to 3 by subtracting PI
-  vec4f in_quad3 = v_and(neg_x, neg_y);
-  vec4f quad23_fixed = v_sel(quad2_fixed, v_sub(raw_atan, pi), in_quad3);
-
-
-
-  vec4f y_zero = v_cmp_eq(x, v_zero());
-  vec4f halfpi = v_cast_vec4f(v_splatsi(0x3fc90fdb));
-  vec4f yzeropos_fixed = v_sel(quad23_fixed, halfpi, v_and(y_zero, v_cmp_gt(y, v_zero())));
-  vec4f yzeroneg_fixed = v_sel(yzeropos_fixed, v_neg(halfpi), v_and(y_zero, v_cmp_ge(v_zero(), y)));
-
-
-  return yzeroneg_fixed;
-}
-
-
-VECMATH_INLINE vec4f VECTORCALL v_asin(vec4f a)
-{
-  vec4f divisor = v_sqrt4(v_sub(V_C_ONE, v_mul(a,a)));
-  return v_sel(v_atan(v_div(a, divisor)), _neg_half_pi, v_cmp_eq(divisor, v_zero()));
-}
-
-VECMATH_INLINE vec4f VECTORCALL v_acos(vec4f a)
-{
-  vec4f one = V_C_ONE;
-  vec4f divisor = v_add(one, a);
-  a = v_sqrt4(v_div(v_sub(one, a), divisor));
-  a = v_atan(a);
-  return v_sel(v_add(a, a), _neg_pi, v_cmp_ge(v_zero(), divisor));
-}
-
-VECMATH_INLINE vec4f VECTORCALL v_asin_x(vec4f a)
-{
-  vec4f divisor = v_sqrt_x(v_sub_x(V_C_ONE, v_mul_x(a,a)));
-  return v_sel(v_atan(v_div_x(a, divisor)), _neg_half_pi, v_cmp_eq(divisor, v_zero()));
-}
-
-VECMATH_INLINE vec4f VECTORCALL v_acos_x(vec4f a)
-{
-  vec4f one = V_C_ONE;
-  vec4f divisor = v_add_x(one, a);
-  a = v_sqrt_x(v_div_x(v_sub_x(one, a), divisor));
-  a = v_atan(a);
-  return v_sel(v_add_x(a, a), _neg_pi, v_cmp_ge(v_zero(), divisor));
-}
-
 
 #define POLY0(x, c0) v_splats(c0)
 #define POLY1(x, c0, c1) v_add(v_mul(POLY0(x, c1), x), v_splats(c0))
