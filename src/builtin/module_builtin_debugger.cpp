@@ -960,7 +960,7 @@ namespace debugapi {
                     ->arg("context");
             addExtern<DAS_BIND_FUN(instrument_all_functions_ex)>(*this, lib,  "instrument_all_functions",
                 SideEffects::modifyExternal|SideEffects::invoke, "instrument_all_functions_ex")
-                    ->args({"context","block","line"});
+                    ->args({"ctx","block","context","line"});
             addExtern<DAS_BIND_FUN(clear_instruments)>(*this, lib,  "clear_instruments",
                 SideEffects::modifyExternal, "clear_instruments")
                     ->arg("context");
