@@ -849,11 +849,11 @@ namespace debugapi {
         ctx.instrumentFunction(0, true, 0ul);
     }
 
-    void instrument_all_functions_ex ( Context & ctx, const TBlock<uint64_t,Func,const SimFunction *> & blk, LineInfoArg * arg ) {
+    void instrument_all_functions_ex ( Context & ctx, const TBlock<uint64_t,Func,const SimFunction *> & blk, Context * context, LineInfoArg * arg ) {
         for ( int fni=0; fni!=ctx.getTotalFunctions(); ++fni ) {
             Func fn;
             fn.PTR = ctx.getFunction(fni);
-            uint64_t userData = das_invoke<uint64_t>::invoke(&ctx,arg,blk,fn,fn.PTR);
+            uint64_t userData = das_invoke<uint64_t>::invoke(context,arg,blk,fn,fn.PTR);
             ctx.instrumentFunction(fn.PTR, true, userData);
         }
     }
