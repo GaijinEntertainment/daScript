@@ -33,8 +33,11 @@ namespace das {
         int size() const;
         bool isReady() const;
         void notify();
+        void notifyAndRelease();
         void wait();
         int append(int size);
+        int addRef() { return mRef++; }
+        int releaseRef() { return --mRef; }
     protected:
         uint32_t            mSleepMs = 1;
         mutable mutex       lock;
@@ -43,6 +46,7 @@ namespace das {
         uint32_t			remaining = 0;
         condition_variable	cond;
         Context *           owner = nullptr;
+        atomic<int>         mRef;
     };
 
     bool is_job_que_shutting_down();
@@ -52,13 +56,19 @@ namespace das {
     int getTotalHwJobs( Context * context, LineInfoArg * at );
     int getTotalHwThreads ();
     void withJobStatus ( int32_t total, const TBlock<void,JobStatus *> & block, Context * context, LineInfoArg * lineInfo );
+    void jobStatusAddRef ( JobStatus * status );
+    void jobStatusReleaseRef ( JobStatus * status );
     void waitForJob ( JobStatus * status );
     void notifyJob ( JobStatus * status );
+    void notifyAndReleaseJob ( JobStatus * status );
     void channelPush ( Channel * ch, void * data, Context * ctx );
     void * channelPop ( Channel * ch );
     int channelAppend ( Channel * ch, int size );
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
+    void channelAddRef ( Channel * ch );
+    void channelReleaseRef ( Channel * ch );
     void waitForChannel ( Channel * status );
     void notifyChannel ( Channel * status );
+    void notifyAndReleaseChannel ( Channel * status );
 }

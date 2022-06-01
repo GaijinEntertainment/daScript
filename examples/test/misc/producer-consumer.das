@@ -12,16 +12,20 @@ def main
         with_job_status(total_threads) <| $ ( completion )
             // create threads
             for t in range(total_threads)
+                job_status_add_ref(completion)  // we might add macro to generate this
+                channel_add_ref(channel)        // we might add macro to generate this
                 new_thread <| @
                     print("in thread {t}\n")
                     for_each(channel) <| $ ( j : OneJob# )
                         // each thread reads from channel, until its empty
                         print("in thread {t} job {j.name}\n")
-                    channel = null
+                    channel_release_ref(channel)
                     // once done, notifies for the job completion
-                    completion |> notify
-                    completion = null
+                    completion |> notify_and_release
                     print("done thread {t}\n")
+                finally
+                    channel = null              // we might add macro to generate this
+                    completion = null           // we might add macro to generate this
             // this could be anywhere
             print("pushing jobs\n")
             for jb in some_job_list
@@ -29,7 +33,7 @@ def main
                 channel |> notify
             print("done pushing jobs\n")
             // wait for threads to finish
-            completion |> join
+            completion |> join  // if we comment out this line, we get `job status beeing deleted while being used` exception
         print("done\n")
 
 

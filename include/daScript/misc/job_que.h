@@ -29,16 +29,21 @@ namespace das {
         JobStatus(uint32_t count) { Clear( count); };
         JobStatus ( JobStatus && ) = delete;
         JobStatus ( const JobStatus & ) = delete;
+        ~JobStatus();
         JobStatus & operator = ( JobStatus && ) = delete;
         JobStatus & operator = ( const JobStatus & ) = delete;
         void Notify();
+        void NotifyAndRelease();
         bool isReady();
         void Wait();
         void Clear(uint32_t count = 1);
+        int addRef() { return mRef++; }
+        int releaseRef() { return --mRef; }
     protected:
         mutex				mCompleteMutex;
         uint32_t			mRemaining = 0;
         condition_variable	mCond;
+        atomic<int>         mRef;
     };
 
     class JobQue {

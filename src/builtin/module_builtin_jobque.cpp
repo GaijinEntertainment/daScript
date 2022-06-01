@@ -14,6 +14,7 @@ namespace das {
         lock_guard<mutex> guard(lock);
         pipe = {};
         tail.clear();
+        DAS_ASSERT(mRef==0);
     }
 
     void Channel::push ( void * data, Context * context ) {
@@ -63,6 +64,16 @@ namespace das {
         }
     }
 
+    void Channel::notifyAndRelease() {
+        lock_guard<mutex> guard(lock);
+        mRef--;
+        DAS_ASSERTF(remaining != 0, "Nothing to notify!");
+        --remaining;
+        if ( remaining==0 ) {
+            cond.notify_all();
+        }
+    }
+
     void Channel::wait() {
         unique_lock<mutex> uguard(lock);
         while ( remaining ) {
@@ -95,12 +106,28 @@ namespace das {
 
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * at ) {
         Channel ch(context);
+        ch.addRef();
         das_invoke<void>::invoke<Channel *>(context, at, blk, &ch);
+        if ( ch.releaseRef() ) {
+            context->throw_error_at(*at, "channel beeing deleted while being used");
+        }
     }
 
     void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * at ) {
         Channel ch(context,count);
+        ch.addRef();
         das_invoke<void>::invoke<Channel *>(context, at, blk, &ch);
+        if ( ch.releaseRef() ) {
+            context->throw_error_at(*at, "channel beeing deleted while being used");
+        }
+    }
+
+    void channelAddRef ( Channel * ch ) {
+        ch->addRef();
+    }
+
+    void channelReleaseRef ( Channel * ch ) {
+        ch->releaseRef();
     }
 
     void waitForChannel ( Channel * status ) {
@@ -111,6 +138,11 @@ namespace das {
     void notifyChannel ( Channel * status ) {
         if ( !status ) return;
         status->notify();
+    }
+
+    void notifyAndReleaseChannel ( Channel * status ) {
+        if ( !status ) return;
+        status->notifyAndRelease();
     }
 
     struct ChannelAnnotation : ManagedStructureAnnotation<Channel,false> {
@@ -198,11 +230,23 @@ namespace das {
         }
     }
 
+    void jobStatusAddRef ( JobStatus * status ) {
+        status->addRef();
+    }
+
+    void jobStatusReleaseRef ( JobStatus * status ) {
+        status->releaseRef();
+    }
+
     void withJobStatus ( int32_t total, const TBlock<void,JobStatus *> & block, Context * context, LineInfoArg * lineInfo ) {
         JobStatus status(total);
+        status.addRef();
         vec4f args[1];
         args[0] = cast<JobStatus *>::from(&status);
         context->invoke(block,args,nullptr,lineInfo);
+        if ( status.releaseRef() ) {
+            context->throw_error_at(*lineInfo, "job status beeing deleted while being used");
+        }
     }
 
     void waitForJob ( JobStatus * status ) {
@@ -213,6 +257,11 @@ namespace das {
     void notifyJob ( JobStatus * status ) {
         if ( !status ) return;
         status->Notify();
+    }
+
+    void notifyAndReleaseJob ( JobStatus * status ) {
+        if ( !status ) return;
+        status->NotifyAndRelease();
     }
 
     int getTotalHwJobs( Context * context, LineInfoArg * at ) {
@@ -251,22 +300,40 @@ namespace das {
             addExtern<DAS_BIND_FUN(withChannelEx)>(*this, lib,  "with_channel",
                 SideEffects::invoke, "withChannelEx")
                     ->args({"count","block","context","line"});
+            addExtern<DAS_BIND_FUN(channelAddRef)>(*this, lib,  "channel_add_ref",
+                SideEffects::modifyArgumentAndAccessExternal, "channelAddRef")
+                    ->args({"channel"});
+            addExtern<DAS_BIND_FUN(channelReleaseRef)>(*this, lib,  "channel_release_ref",
+                SideEffects::modifyArgumentAndAccessExternal, "channelReleaseRef")
+                    ->args({"channel"});
             addExtern<DAS_BIND_FUN(waitForChannel)>(*this, lib,  "join",
                 SideEffects::modifyExternal, "waitForChannel")
                     ->arg("channel");
             addExtern<DAS_BIND_FUN(notifyChannel)>(*this, lib,  "notify",
                 SideEffects::modifyExternal, "notifyChannel")
                     ->arg("channel");
+            addExtern<DAS_BIND_FUN(notifyAndReleaseChannel)>(*this, lib,  "notify_and_release",
+                SideEffects::modifyExternal, "notifyAndReleaseChannel")
+                    ->arg("channel");
             // job
             addAnnotation(make_smart<JobStatusAnnotation>(lib));
             addExtern<DAS_BIND_FUN(withJobStatus)>(*this, lib,  "with_job_status",
                 SideEffects::modifyExternal, "withJobStatus")
                     ->args({"total","block","context","line"});
+            addExtern<DAS_BIND_FUN(jobStatusAddRef)>(*this, lib, "job_status_add_ref",
+                SideEffects::modifyArgumentAndAccessExternal, "jobStatusAddRef")
+                    ->arg("status");
+            addExtern<DAS_BIND_FUN(jobStatusReleaseRef)>(*this, lib, "job_status_release_ref",
+                SideEffects::modifyArgumentAndAccessExternal, "jobStatusReleaseRef")
+                    ->arg("status");
             addExtern<DAS_BIND_FUN(waitForJob)>(*this, lib,  "join",
                 SideEffects::modifyExternal, "waitForJob")
                     ->arg("job");
             addExtern<DAS_BIND_FUN(notifyJob)>(*this, lib,  "notify",
                 SideEffects::modifyExternal, "notifyJob")
+                    ->arg("job");
+            addExtern<DAS_BIND_FUN(notifyAndReleaseJob)>(*this, lib,  "notify_and_release",
+                SideEffects::modifyExternal, "notifyAndReleaseJob")
                     ->arg("job");
             // fork \ invoke \ etc
             addExtern<DAS_BIND_FUN(new_job_invoke)>(*this, lib,  "new_job_invoke",
