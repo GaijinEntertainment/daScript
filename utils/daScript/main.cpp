@@ -411,6 +411,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();
+    daScriptEnvironment::bound->g_isInAot = true;
     // compile and run
     int failedFiles = 0;
     for ( auto & fn : files ) {
