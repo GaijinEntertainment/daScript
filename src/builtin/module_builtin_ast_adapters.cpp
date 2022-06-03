@@ -939,9 +939,38 @@ namespace das {
         void *      classPtr;
         Context *   context;
     };
+
     struct AstForLoopMacroAnnotation : ManagedStructureAnnotation<ForLoopMacro,false,true> {
         AstForLoopMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("ForLoopMacro", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+        }
+    };
+
+    struct CaptureMacroAdapter : CaptureMacro, AstCaptureMacro_Adapter {
+        CaptureMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : CaptureMacro(n), AstCaptureMacro_Adapter(info), classPtr(pClass), context(ctx) {
+        }
+        virtual ExpressionPtr captureExpression ( Program * prog, Module * mod, Expression * expr, TypeDecl * typ ) override {
+            if ( auto fnCaptureExpression = get_captureExpression(classPtr) ) {
+                return invoke_captureExpression(context,fnCaptureExpression,classPtr,prog,mod,expr,typ);
+            } else {
+                return nullptr;
+            }
+        }
+        virtual void captureFunction ( Program * prog, Module * mod, Structure * lcs, Function * fun ) override {
+            if ( auto fnCaptureFunction = get_captureFunction(classPtr) ) {
+                return invoke_captureFunction(context,fnCaptureFunction,classPtr,prog,mod,lcs,fun);
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
+
+    struct AstCaptureMacroAnnotation : ManagedStructureAnnotation<CaptureMacro,false,true> {
+        AstCaptureMacroAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("CaptureMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };
@@ -1272,6 +1301,15 @@ namespace das {
         module->forLoopMacros.push_back(newM);
     }
 
+    CaptureMacroPtr makeCaptureMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<CaptureMacroAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleCaptureMacro ( Module * module, CaptureMacroPtr & _newM, Context * ) {
+        CaptureMacroPtr newM = move(_newM);
+        module->captureMacros.push_back(newM);
+    }
+
     void addModuleInferMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
         PassMacroPtr newM = move(_newM);
         module->macros.push_back(newM);
@@ -1548,6 +1586,14 @@ namespace das {
                 ->args({"name","class","info","context"});
         addExtern<DAS_BIND_FUN(addModuleForLoopMacro)>(*this, lib,  "add_for_loop_macro",
             SideEffects::modifyExternal, "addModuleForLoopMacro")
+                ->args({"module","annotation","context"});
+        // capture macro
+        addAnnotation(make_smart<AstCaptureMacroAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(makeCaptureMacro)>(*this, lib,  "make_capture_macro",
+            SideEffects::modifyExternal, "makeCaptureMacro")
+                ->args({"name","class","info","context"});
+        addExtern<DAS_BIND_FUN(addModuleCaptureMacro)>(*this, lib,  "add_capture_macro",
+            SideEffects::modifyExternal, "addModuleCaptureMacro")
                 ->args({"module","annotation","context"});
     }
 }

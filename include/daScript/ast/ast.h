@@ -55,6 +55,9 @@ namespace das
     struct ForLoopMacro;
     typedef smart_ptr<ForLoopMacro> ForLoopMacroPtr;
 
+    struct CaptureMacro;
+    typedef smart_ptr<CaptureMacro> CaptureMacroPtr;
+
     struct AnnotationArgumentList;
 
     //      [annotation (value,value,...,value)]
@@ -976,7 +979,8 @@ namespace das
         vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
         vector<PassMacroPtr>                        globalLintMacros;   // lint macros which work everywhere
         vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
-        vector<ForLoopMacroPtr>                     forLoopMacros;
+        vector<ForLoopMacroPtr>                     forLoopMacros;      // for loop macros (for every for loop)
+        vector<CaptureMacroPtr>                     captureMacros;      // lambda capture macros
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         CommentReaderPtr                            commentReader;      // /* blah */ or // blah
         string  name;
@@ -1088,6 +1092,13 @@ namespace das
     struct ForLoopMacro : ptr_ref_count {
         ForLoopMacro ( const string & na = "" ) : name(na) {}
         virtual ExpressionPtr visit ( Program *, Module *, ExprFor * ) { return nullptr; }
+        string name;
+    };
+
+    struct CaptureMacro : ptr_ref_count {
+        CaptureMacro ( const string & na = "" ) : name(na) {}
+        virtual ExpressionPtr captureExpression ( Program *, Module *, Expression *, TypeDecl * ) { return nullptr; }
+        virtual void captureFunction ( Program *, Module *, Structure *, Function * ) { }
         string name;
     };
 

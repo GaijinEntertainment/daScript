@@ -2238,7 +2238,7 @@ namespace das {
                                 string lname = generateNewLambdaName(block->at);
                                 auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, true);
                                 if ( program->addStructure(ls) ) {
-                                    auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, true);
+                                    auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, true, program);
                                     if ( program->addFunction(pFn) ) {
                                         auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                         if ( program->addFunction(pFnFin) ) {
@@ -2252,7 +2252,7 @@ namespace das {
                                                 DAS_ASSERT(pFnFin->classParent);
                                             }
                                             reportAstChanged();
-                                            auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at );
+                                            auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at, program );
                                             // each ( [[ ]]] )
                                             auto cEach = make_smart<ExprCall>(block->at, makeRef ? "each_ref" : "each");
                                             cEach->generated = true;
@@ -2352,9 +2352,9 @@ namespace das {
                         bool isUnsafe = !safeExpression(expr);
                         if ( verifyCapture(expr->capture, cl, isUnsafe, expr->at) ) {
                             string lname = generateNewLambdaName(block->at);
-                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture);
+                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, false);
                             if ( program->addStructure(ls) ) {
-                                auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, false);
+                                auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, false, program);
                                 if ( program->addFunction(pFn) ) {
                                     auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                     if ( program->addFunction(pFnFin) ) {
@@ -2368,7 +2368,7 @@ namespace das {
                                             DAS_ASSERT(pFnFin->classParent);
                                         }
                                         reportAstChanged();
-                                        auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at );
+                                        auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at, program );
                                         return ms;
                                     } else {
                                         error("lambda finalizer name mismatch",  "", "",

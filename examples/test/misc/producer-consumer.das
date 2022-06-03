@@ -12,20 +12,15 @@ def main
         with_job_status(total_threads) <| $ ( completion )
             // create threads
             for t in range(total_threads)
-                job_status_add_ref(completion)  // we might add macro to generate this
-                channel_add_ref(channel)        // we might add macro to generate this
                 new_thread <| @
                     print("in thread {t}\n")
                     for_each(channel) <| $ ( j : OneJob# )
                         // each thread reads from channel, until its empty
                         print("in thread {t} job {j.name}\n")
-                    channel_release_ref(channel)
+                    channel |> release
                     // once done, notifies for the job completion
                     completion |> notify_and_release
                     print("done thread {t}\n")
-                finally
-                    channel = null              // we might add macro to generate this
-                    completion = null           // we might add macro to generate this
             // this could be anywhere
             print("pushing jobs\n")
             for jb in some_job_list

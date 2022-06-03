@@ -20,6 +20,7 @@ def main
         log_cpp_class_adapter(cpp_file, "AstPassMacro_Adapter", typeinfo(ast_typedecl type<AstPassMacro>))
         log_cpp_class_adapter(cpp_file, "AstVarianMacro_Adapter", typeinfo(ast_typedecl type<AstVariantMacro>))
         log_cpp_class_adapter(cpp_file, "AstForLoopMacro_Adapter", typeinfo(ast_typedecl type<AstForLoopMacro>))
+        log_cpp_class_adapter(cpp_file, "AstCaptureMacro_Adapter", typeinfo(ast_typedecl type<AstCaptureMacro>))
         log_cpp_class_adapter(cpp_file, "AstReaderMacro_Adapter", typeinfo(ast_typedecl type<AstReaderMacro>))
         log_cpp_class_adapter(cpp_file, "AstCommentReader_Adapter", typeinfo(ast_typedecl type<AstCommentReader>))
         log_cpp_class_adapter(cpp_file, "AstCallMacro_Adapter", typeinfo(ast_typedecl type<AstCallMacro>))

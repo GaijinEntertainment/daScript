@@ -26,6 +26,7 @@ typedef
     CallMacroPtr = smart_ptr<CallMacro>
     TypeInfoMacroPtr = smart_ptr<TypeInfoMacro>
     ForLoopMacroPtr = smart_ptr<ForLoopMacro>
+    CaptureMacroPtr = smart_ptr<CaptureMacro>
 
 [generic]
 def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true )
@@ -94,6 +95,11 @@ class AstVariantMacro
 [macro_interface]
 class AstForLoopMacro
     def abstract visitExprFor ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprFor> ) : ExpressionPtr
+
+[macro_interface]
+class AstCaptureMacro
+    def abstract captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; etype:TypeDeclPtr ) : ExpressionPtr
+    def abstract captureFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
 
 [macro_interface]
 class AstReaderMacro
@@ -628,6 +634,15 @@ def make_for_loop_macro ( name : string; someClassPtr ) : ForLoopMacroPtr
         return [[ForLoopMacroPtr]]
 
 [macro_function]
+def make_capture_macro ( name : string; someClassPtr ) : CaptureMacroPtr
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_capture_macro(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[CaptureMacroPtr]]
+
+[macro_function]
 def add_new_block_annotation ( name:string; someClassPtr )
     var ann <- make_block_annotation(name, someClassPtr)
     this_module() |> add_function_annotation(ann)
@@ -673,6 +688,13 @@ def add_new_variant_macro ( name:string; someClassPtr )
 def add_new_for_loop_macro ( name:string; someClassPtr )
     var ann <- make_for_loop_macro(name, someClassPtr)
     this_module() |> add_for_loop_macro(ann)
+    unsafe
+        delete ann
+
+[macro_function]
+def add_new_capture_macro ( name:string; someClassPtr )
+    var ann <- make_capture_macro(name, someClassPtr)
+    this_module() |> add_capture_macro(ann)
     unsafe
         delete ann
 

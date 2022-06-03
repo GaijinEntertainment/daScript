@@ -44,7 +44,7 @@ def main
                             var rayCount = 0
                             draw(i, width, height, y, y+1, *pbb, rayCount)
                             *ptr += rayCount
-                            status |> notify
+                            status |> notify_and_release
                     status |> join
                     i ++
             var dt = get_time_usec(t0)
@@ -70,7 +70,7 @@ def main
                         var rayCount = 0
                         draw(i, width, height, yMin, yMax, *pbb, rayCount)
                         *ptr += rayCount
-                        status |> notify
+                        status |> notify_and_release
                 status |> join
                 i ++
         var dt = get_time_usec(t0)
