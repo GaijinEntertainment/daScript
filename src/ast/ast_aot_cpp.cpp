@@ -481,6 +481,14 @@ namespace das {
                 ss << " };\n";
             }
             ss << "\n";
+            ss << "static void resolveTypeInfoAnnotations()\n{\n";
+            for ( auto & ti : tmn2t ) {
+                auto tinfo = ti.second;
+                if ( tinfo->type==Type::tHandle ) {
+                    ss << "\t" << typeInfoName(ti.second) << ".getAnnotation();\n";
+                };
+            }
+            ss << "}\n\n";
             return ss.str();
         }
         string enumInfoName ( EnumInfo * info ) const {

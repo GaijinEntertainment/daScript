@@ -136,9 +136,10 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 program->aotCpp(*pctx, tw);
                 daScriptEnvironment::bound->g_Program.reset();
                 // list STUFF
-                tw << "\tstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
+                tw << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
                 program->registerAotCpp(tw, *pctx, false);
-                tw << "\t};\n";
+                tw << "\tresolveTypeInfoAnnotations();\n";
+                tw << "};\n";
                 tw << "\n";
                 tw << "AotListBase impl(registerAotFunctions);\n";
                 // validation stuff
