@@ -1527,7 +1527,7 @@ namespace das
         auto it = g_DebugAgents.find(category);
         CppOnlyDebugAgent * agent = nullptr;
         if ( it != g_DebugAgents.end() ) {
-            DAS_VERIFY(agent->isCppOnlyAgent());
+            DAS_VERIFY(it->second.debugAgent->isCppOnlyAgent());
             agent = (CppOnlyDebugAgent *) it->second.debugAgent.get();
         } else {
             auto da = make_smart<CppOnlyDebugAgent>();
