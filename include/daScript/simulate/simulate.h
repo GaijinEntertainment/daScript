@@ -214,6 +214,7 @@ namespace das
         virtual void onTick () {}
         virtual void onCollect ( Context * ) {}
         virtual bool onLog ( int /*level*/, const char * /*text*/ ) { return false; }
+        virtual bool isCppOnlyAgent() const { return false; }
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
 
@@ -712,6 +713,9 @@ namespace das
     bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
     void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line );
     Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
+    void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && );
+    void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && );
+    void uninstallCppDebugAgent ( const char * category );
 
     class SharedStackGuard {
     public:

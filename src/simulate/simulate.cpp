@@ -1511,6 +1511,56 @@ namespace das
         });
     }
 
+    class CppOnlyDebugAgent : public DebugAgent {
+    public:
+        virtual void onCreateContext ( Context * ctx ) { if ( onCreateContextOp ) onCreateContextOp(ctx); }
+        virtual void onDestroyContext ( Context * ctx ) { if ( onDestroyContextOp ) onDestroyContextOp(ctx); }
+        virtual bool isCppOnlyAgent() const { return true; }
+    public:
+        function<void(Context*)> onCreateContextOp;
+        function<void(Context*)> onDestroyContextOp;
+    };
+
+    template <typename TT>
+    void onCppDebugAgent ( const char * category, TT && lmb ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        CppOnlyDebugAgent * agent = nullptr;
+        if ( it != g_DebugAgents.end() ) {
+            DAS_VERIFY(agent->isCppOnlyAgent());
+            agent = (CppOnlyDebugAgent *) it->second.debugAgent.get();
+        } else {
+            auto da = make_smart<CppOnlyDebugAgent>();
+            agent = (CppOnlyDebugAgent *) da.get();
+            g_DebugAgents[category] = {
+                da,
+                nullptr
+            };
+        }
+        lmb(agent);
+    }
+
+    void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && lmb ) {
+        onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
+            agent->onCreateContextOp = move(lmb);
+        });
+    }
+
+    void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && lmb ) {
+        onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
+            agent->onDestroyContextOp = move(lmb);
+        });
+
+    }
+
+    void uninstallCppDebugAgent ( const char * category ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        if ( it != g_DebugAgents.end() ) {
+            g_DebugAgents.erase(it);
+        }
+    }
+
     bool multiline_log = true;
 
     void toLog ( int level, const char * text ) {
@@ -1567,6 +1617,7 @@ namespace das
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it == g_DebugAgents.end() ) context->throw_error_at(*at, "can't get debug agent '%s'", category);
+        if ( !it->second.debugAgentContext ) context->throw_error_at(*at, "debug agent '%s' is a CPP-only agent", category);
         return *it->second.debugAgentContext;
     }
 
