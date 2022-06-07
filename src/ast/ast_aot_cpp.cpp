@@ -485,7 +485,7 @@ namespace das {
             for ( auto & ti : tmn2t ) {
                 auto tinfo = ti.second;
                 if ( tinfo->type==Type::tHandle ) {
-                    ss << "\t" << typeInfoName(ti.second) << ".getAnnotation();\n";
+                    ss << "\t" << typeInfoName(ti.second) << ".resolveAnnotation();\n";
                 };
             }
             ss << "}\n\n";
