@@ -1141,6 +1141,7 @@ namespace das
     struct CodeOfPolicies {
         bool        aot = false;                        // enable AOT
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
+        bool        completion = false;                 // this code is being compiled for 'completion' mode
     // memory
         uint32_t    stack = 16*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap

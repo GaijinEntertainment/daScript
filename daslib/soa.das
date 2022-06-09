@@ -21,6 +21,8 @@ def public operator . ( src : SOA_INDEX explicit; field:string )
 class SoaCallMacro : AstFunctionAnnotation
     //! This macro is used to promote a[index].b to a.b[index] for SOA operations
     def override transform ( var expr : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
+        if is_in_completion()
+            return [[ExpressionPtr]]
         if expr.arguments.length != 2
             errors := "expecting soa[index].field"
             return [[ExpressionPtr]]
@@ -54,6 +56,17 @@ class SoaStructMacro : AstStructureAnnotation
     //! * operator [] to access the structure, which returns [[SOA_INDEX]]
     //! * length, push, emplace, push_clone, erase
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        if is_in_completion()
+            var tdef <- new [[TypeDecl() at=st.at,
+                baseType = Type tArray,
+                alias := "{st.name}`SOA",
+                firstType <- new [[TypeDecl() at=st.at,
+                    baseType = Type tStructure,
+                    structType = get_ptr(st)
+                ]]
+            ]]
+            compiling_module() |> add_alias(tdef)
+            return true
         if st.fields.length == 0
             errors := "soa macro expects at least one field"
             return false
@@ -197,6 +210,8 @@ def collect_and_replace_iterator_fields ( prefix:string; blk:ExpressionPtr ) : a
 [for_loop_macro(name=soa_for_loop)]
 class SoaForLoop : AstForLoopMacro
     def override visitExprFor ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprFor> ) : ExpressionPtr
+        if is_in_completion()
+            return [[ExpressionPtr]]
         var soa_index = -1
         for index,its in range(100500),expr.sources
             if its._type!=null && its._type.isStructure
@@ -234,3 +249,4 @@ class SoaForLoop : AstForLoopMacro
             new_for.iteratorVariables |> clear()
             return new_for_e
         return [[ExpressionPtr]]
+

@@ -941,7 +941,14 @@ namespace das
     }
 
     bool is_in_aot ( ) {
-        return daScriptEnvironment::bound->g_isInAot;
+        return daScriptEnvironment::bound ? daScriptEnvironment::bound->g_isInAot : false;
+    }
+
+    bool is_in_completion ( ) {
+        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_Program ) {
+            return daScriptEnvironment::bound->g_Program->policies.completion;
+        }
+        return false;
     }
 
 #define STR_DSTR_REG(OPNAME,EXPR) \
@@ -1277,6 +1284,9 @@ namespace das
         // migrate data
         addExtern<DAS_BIND_FUN(is_in_aot)>(*this, lib, "is_in_aot",
             SideEffects::worstDefault, "is_in_aot");
+        // completion
+        addExtern<DAS_BIND_FUN(is_in_completion)>(*this, lib, "is_in_completion",
+            SideEffects::worstDefault, "is_in_completion");
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
             SideEffects::modifyExternal, "toLog");

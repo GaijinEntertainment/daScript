@@ -595,6 +595,7 @@ namespace das {
         // aot
             addField<DAS_BIND_MANAGED_FIELD(aot)>("aot");
             addField<DAS_BIND_MANAGED_FIELD(aot_module)>("aot_module");
+            addField<DAS_BIND_MANAGED_FIELD(completion)>("completion");
         // memory
             addField<DAS_BIND_MANAGED_FIELD(stack)>("stack");
             addField<DAS_BIND_MANAGED_FIELD(intern_strings)>("intern_strings");

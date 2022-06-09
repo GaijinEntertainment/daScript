@@ -475,7 +475,9 @@ namespace das {
     bool addModuleGeneric ( Module * module, FunctionPtr & func, Context * context );
     bool addModuleVariable ( Module * module, VariablePtr & var, Context * );
     VariablePtr findModuleVariable ( Module * module, const char * name );
-    bool addModuleStructure ( Module * module, StructurePtr & stru, Context * );
+    bool removeModuleStructure ( Module * module, StructurePtr & _stru );
+    bool addModuleStructure ( Module * module, StructurePtr & stru );
+    bool addModuleAlias ( Module * module, TypeDeclPtr & _ptr );
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
     void addModuleReaderMacro ( Module * module, ReaderMacroPtr & newM, Context * context );
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
