@@ -2,11 +2,10 @@ require UnitTest
 
 expect 30106
 expect 30303:4    // operator_not_found
-expect 30304:2    // function_not_found
+expect 30304:3    // function_not_found
 expect 30504:6    // cant_write_to_const
 expect 30505:2    // cant_move_to_const
 expect 30507      // cant_copy
-
 
 def const_iter(var a:table<string;int>)
     for k,v in keys(a),values(a)
@@ -14,7 +13,8 @@ def const_iter(var a:table<string;int>)
         v = 1           // this one okay
 
 def add(a:int const&; b:int)
-    a += b              // no matching operator             (30303)
+    a += b              // 30304: no matching functions or generics _::+= ( int const&, int const& )
+                        // 30303: numeric operator += left side can't be constant.
 
 def set(a:string const&; b:string)
     a = b               // can't write to constant value    (30504)

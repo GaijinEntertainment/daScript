@@ -1,7 +1,18 @@
+struct Foo
+    a : string
+
+def operator == ( a:Foo; b )
+    print("{a} == {b}:{typeinfo(typename b)}??\n")
+    return false
+
+def operator ++ ( a )
+    print("anything goes\n")
+
 [export]
 def main
-    for x aka X in range(4)
-        for y in range(3)
-            print("x={X} x={y}\n")
+    var f : Foo
+    f == 10
+    f == "10"
+    f++
 
-
+options log

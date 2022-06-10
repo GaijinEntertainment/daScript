@@ -4782,19 +4782,16 @@ namespace das {
                     }
                 }
             }
-            // infer
-            vector<TypeDeclPtr> types = { expr->subexpr->type };
-            auto functions = findMatchingFunctions(expr->op, types);
-            applyLSP(types, functions);
-            if ( functions.size()==0 ) {
-                reportMissing(expr, types, "no matching operator ", true, CompilationError::operator_not_found);
-            } else if ( functions.size()>1 ) {
-                string candidates = verbose ? program->describeCandidates(functions) : "";
-                error("too many matching operators '" + expr->op
-                      + "' with argument " + describeType(expr->subexpr->type), candidates, "",
-                    expr->at, CompilationError::operator_not_found);
-            } else {
-                expr->func = functions.front();
+            auto opName = "_::" + expr->op;
+            auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
+            tempCall->arguments.push_back(expr->subexpr);
+            expr->func = inferFunctionCall(tempCall.get()).get();
+            if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
+                auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
+                opCall->arguments = move(tempCall->arguments);
+                return opCall;
+            }
+            if ( expr->func ) {
                 if ( expr->func->firstArgReturnType ) {
                     expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
                     expr->type->ref = false;
@@ -4929,10 +4926,17 @@ namespace das {
                 if ( !expr->left->type->isSameType(*expr->right->type,RefMatters::no, ConstMatters::no, TemporaryMatters::no) )
                     error("operations on different enumerations are prohibited", "", "",
                         expr->at, CompilationError::invalid_type);
-            vector<TypeDeclPtr> types = { expr->left->type, expr->right->type };
-            auto functions = findMatchingFunctions("_::" + expr->op, types);    // NOTE: operators always in the context of the callee
-            applyLSP(types, functions);
-            if (functions.size() != 1) {
+            auto opName = "_::" + expr->op;
+            auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
+            tempCall->arguments.push_back(expr->left);
+            tempCall->arguments.push_back(expr->right);
+            expr->func = inferFunctionCall(tempCall.get()).get();
+            if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
+                auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
+                opCall->arguments = move(tempCall->arguments);
+                return opCall;
+            }
+            if ( !expr->func ) {
                 if (expr->left->type->isNumeric() && expr->right->type->isNumeric()) {
                     if ( isAssignmentOperator(expr->op) ) {
                         if ( !expr->left->type->ref ) {
@@ -4978,22 +4982,9 @@ namespace das {
                                 expr->at, CompilationError::operator_not_found);
                         }
                     }
-                } else if (functions.size() == 0) {
-                    reportMissing(expr, types, "no matching operator ", true, CompilationError::operator_not_found);
-                } else if (functions.size() > 1) {
-                    if ( verbose ) {
-                        string candidates = program->describeCandidates(functions);
-                        error("too many matching operators '" + expr->op
-                            + "' with arguments (" + describeType(expr->left->type) + ", " + describeType(expr->right->type)
-                            + ")", candidates, "", expr->at, CompilationError::operator_not_found);
-                    } else {
-                        error("too many matching operators '" + expr->op + "'", "", "",
-                            expr->at, CompilationError::operator_not_found);
-                    }
                 }
             }
             else {
-                expr->func = functions.front();
                 if ( expr->func->firstArgReturnType ) {
                     expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
                     expr->type->ref = false;
@@ -6187,13 +6178,41 @@ namespace das {
                 }
             }
             name += "`";
-            name += fn->name;
-            for ( auto & ch : name ) {
-                if ( !isalnum(ch) && ch!='_' && ch!='`' ) {
-                    ch = '_';
-                }
+            auto fCh = fn->name[0];
+            if ( !(isalnum(fCh) || fCh=='_' || fCh=='`') ) {
+                name += "`operator";
             }
-            return name;
+            name += fn->name;
+            string newName;
+            newName.reserve(fn->name.length());
+            for ( auto & ch : name ) {
+                if ( isalnum(ch) || ch=='_' || ch=='`' ) {
+                    newName.append(1,ch);
+                } else {
+                    switch ( ch ) {
+                        case '=':   newName += "`eq"; break;
+                        case '+':   newName += "`add"; break;
+                        case '-':   newName += "`sub"; break;
+                        case '*':   newName += "`mul"; break;
+                        case '/':   newName += "`div"; break;
+                        case '%':   newName += "`mod"; break;
+                        case '<':   newName += "`less"; break;
+                        case '>':   newName += "`gt"; break;
+                        case '!':   newName += "`not"; break;
+                        case '~':   newName += "`bnot"; break;
+                        case '&':   newName += "`and"; break;
+                        case '|':   newName += "`or"; break;
+                        case '^':   newName += "`xor"; break;
+                        case '?':   newName += "`qmark"; break;
+                        case '@':   newName += "`at"; break;
+                        case ':':   newName += "`col"; break;
+                        case '.':   newName += "`dot"; break;
+                        default:    newName += "_`_"; break;
+                    }
+                }
+
+            }
+            return newName;
         }
         string callCloneName ( const string & name ) {
             return "__::" + name;

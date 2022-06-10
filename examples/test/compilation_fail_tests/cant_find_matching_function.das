@@ -1,4 +1,4 @@
-expect 30304, 30303
+expect 30304:2, 30303
 
 def madd(a;b:int;c)
     return a*b+c
@@ -9,7 +9,8 @@ def madd(a,b;c:int)
 def join(a:array<auto>)
     var t = 0
     for x in a
-        t += x              // 30303: no matching operator '+=' with arguments (int&, float&)
+        t += x              // 30304: no matching functions or generics _::+= ( int&, float const& )
+                            // 30303: numeric operator += type mismatch. both sides have to be of the same type. int += float is not defined
     return t
 
 def test
