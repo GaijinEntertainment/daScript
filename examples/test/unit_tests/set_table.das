@@ -1,6 +1,6 @@
 [export]
 def test
-    var tab : table<int;void>
+    var tab : table<int>    // smae as table<int;void>
 
     assert ( length(tab)==0 )
 

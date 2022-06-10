@@ -80,6 +80,11 @@ extern int das_yydebug;
     LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
     LineInfo tokRangeAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
 
+    struct TypePair {
+        TypeDecl * firstType;
+        TypeDecl * secondType;
+    };
+
 
 /* Token kinds.  */
 #ifndef DAS_YYTOKENTYPE
@@ -286,6 +291,7 @@ union DAS_YYSTYPE
     Function *                      pFuncDecl;
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
+    TypePair                        aTypePair;
 
 
 };

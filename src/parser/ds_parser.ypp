@@ -36,6 +36,11 @@
 
     LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
     LineInfo tokRangeAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
+
+    struct TypePair {
+        TypeDecl * firstType;
+        TypeDecl * secondType;
+    };
 }
 
 %{
@@ -108,6 +113,7 @@
     Function *                      pFuncDecl;
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
+    TypePair                        aTypePair;
 }
 
 %destructor { delete $$; } <s>
@@ -125,6 +131,7 @@
 %destructor { delete $$; } <pEnum>
 %destructor { delete $$; } <pCapt>
 %destructor { delete $$; } <pCaptList>
+%destructor { delete $$.firstType; $$.secondType; } <aTypePair>
 
 %token  LEXER_ERROR         "lexer error"
 
@@ -330,6 +337,7 @@
 %type <faList>          annotation_list
 %type <faList>          optional_annotation_list
 %type <pStructure>      structure_name
+%type <aTypePair>       table_type_pair
 
 %type <b>               class_or_struct
 %type <b>               copy_or_move
@@ -2044,6 +2052,17 @@ bitfield_type_declaration
     }
     ;
 
+table_type_pair
+    :   type_declaration[keyTypeDecl] {
+        $$.firstType = $keyTypeDecl;
+        $$.secondType = new TypeDecl(Type::tVoid);
+    }
+    |   type_declaration[keyTypeDecl] ';' type_declaration[valueTypeDecl] {
+        $$.firstType = $keyTypeDecl;
+        $$.secondType = $valueTypeDecl;
+    }
+    ;
+
 type_declaration
     :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(scanner,@basicType); }
     |   auto_type_declaration[typeDecl]                     { $$ = $typeDecl; }
@@ -2137,11 +2156,11 @@ type_declaration
         $$->at = tokAt(scanner,@loc);
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   DAS_TABLE[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration[keyTypeDecl] ';' type_declaration[valueTypeDecl] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TABLE[loc] '<' { yyextra->das_arrow_depth ++; } table_type_pair[ttp] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tTable);
         $$->at = tokAt(scanner,@loc);
-        $$->firstType = TypeDeclPtr($keyTypeDecl);
-        $$->secondType = TypeDeclPtr($valueTypeDecl);
+        $$->firstType = TypeDeclPtr($ttp.firstType);
+        $$->secondType = TypeDeclPtr($ttp.secondType);
     }
     |   DAS_ITERATOR[loc] '<'  { yyextra->das_arrow_depth ++; } type_declaration[itTypeDecl] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tIterator);
