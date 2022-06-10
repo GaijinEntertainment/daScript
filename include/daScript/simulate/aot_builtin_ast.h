@@ -125,6 +125,7 @@ namespace das {
         DECL_VISIT(ExprDebug);
         DECL_VISIT(ExprInvoke);
         DECL_VISIT(ExprErase);
+        DECL_VISIT(ExprSetInsert);
         DECL_VISIT(ExprFind);
         DECL_VISIT(ExprKeyExists);
         DECL_VISIT(ExprAscend);
@@ -350,6 +351,7 @@ namespace das {
         IMPL_BIND_EXPR(ExprDebug);
         IMPL_BIND_EXPR(ExprInvoke);
         IMPL_BIND_EXPR(ExprErase);
+        IMPL_BIND_EXPR(ExprSetInsert);
         IMPL_BIND_EXPR(ExprFind);
         IMPL_BIND_EXPR(ExprKeyExists);
         IMPL_BIND_EXPR(ExprAscend);

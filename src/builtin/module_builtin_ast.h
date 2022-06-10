@@ -70,6 +70,7 @@ MAKE_EXTERNAL_TYPE_FACTORY(ExprQuote,das::ExprQuote);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprDebug,das::ExprDebug);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprInvoke,das::ExprInvoke);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprErase,das::ExprErase);
+MAKE_EXTERNAL_TYPE_FACTORY(ExprSetInsert,das::ExprSetInsert);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprFind,das::ExprFind);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprKeyExists,das::ExprKeyExists);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprAscend,das::ExprAscend);

@@ -1210,6 +1210,20 @@ namespace das
         }
     }
 
+    SimNode * ExprSetInsert::simulate (Context & context) const {
+        auto cont = arguments[0]->simulate(context);
+        auto val = arguments[1]->simulate(context);
+        if ( arguments[0]->type->isGoodTableType() ) {
+            uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
+            DAS_ASSERTF(valueTypeSize==0,"Expecting value type size to be 0 for set insert");
+            return context.code->makeValueNode<SimNode_TableSetInsert>(arguments[0]->type->firstType->baseType, at, cont, val);
+        } else {
+            DAS_ASSERTF(0, "we should not even be here. erase can only accept tables. infer type should have failed.");
+            context.thisProgram->error("internal compilation error, generating erase for non-table type", "", "", at);
+            return nullptr;
+        }
+    }
+
     SimNode * ExprFind::simulate (Context & context) const {
         auto cont = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);

@@ -90,6 +90,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprQuote,ExprQuote);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprDebug,ExprDebug);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprInvoke,ExprInvoke);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprErase,ExprErase);
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprSetInsert,ExprSetInsert);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprFind,ExprFind);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprKeyExists,ExprKeyExists);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprAscend,ExprAscend);
@@ -595,6 +596,12 @@ namespace das {
     struct AstExprEraseAnnotation : AstExprLikeCallAnnotation<ExprErase> {
         AstExprEraseAnnotation(ModuleLibrary & ml)
             :  AstExprLikeCallAnnotation<ExprErase> ("ExprErase", ml) {
+        }
+    };
+
+    struct AstExprSetInsertAnnotation : AstExprLikeCallAnnotation<ExprSetInsert> {
+        AstExprSetInsertAnnotation(ModuleLibrary & ml)
+            :  AstExprLikeCallAnnotation<ExprSetInsert> ("ExprSetInsert", ml) {
         }
     };
 
@@ -1249,6 +1256,7 @@ namespace das {
         addExpressionAnnotation(make_smart<AstExprDebugAnnotation>(lib))->from("ExprLooksLikeCall");
         addExpressionAnnotation(make_smart<AstExprInvokeAnnotation>(lib))->from("ExprLooksLikeCall");
         addExpressionAnnotation(make_smart<AstExprEraseAnnotation>(lib))->from("ExprLooksLikeCall");
+        addExpressionAnnotation(make_smart<AstExprSetInsertAnnotation>(lib))->from("ExprLooksLikeCall");
         addExpressionAnnotation(make_smart<AstExprFindAnnotation>(lib))->from("ExprLooksLikeCall");
         addExpressionAnnotation(make_smart<AstExprKeyExistsAnnotation>(lib))->from("ExprLooksLikeCall");
         addExpressionAnnotation(make_smart<AstExprAscendAnnotation>(lib))->from("Expression");

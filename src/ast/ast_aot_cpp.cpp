@@ -2804,6 +2804,8 @@ namespace das {
                 }
             } else if (call->name == "erase") {
                 ss << "__builtin_table_erase(__context__,";
+            } else if (call->name == "insert") {
+                ss << "__builtin_table_set_insert(__context__,";
             } else if (call->name == "find") {
                 ss << "__builtin_table_find(__context__,";
             } else if (call->name == "key_exists") {

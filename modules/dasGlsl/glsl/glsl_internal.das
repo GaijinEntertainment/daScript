@@ -1228,6 +1228,9 @@ class GlslExport : AstVisitor
 // erase
     def override preVisitExprErase(expr:smart_ptr<ExprErase>) : void
         self->error ("erase is not supported", expr.at)
+// set insert
+    def override preVisitExprSetInsert(expr:smart_ptr<ExprSetInsert>) : void
+        self->error ("insert is not supported", expr.at)
 // find
     def override preVisitExprFind(expr:smart_ptr<ExprFind>) : void
         self->error ("find is not supported", expr.at)

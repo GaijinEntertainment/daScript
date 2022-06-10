@@ -176,6 +176,9 @@ def find(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(p:valT?):v
     invoke(blk,val)
     __builtin_table_unlock(Tab)
 
+def find(Tab:table<auto(keyT);void>;at:keyT implicit;blk:block<(p:void?):void>)
+    concept_assert(false,"find(table<keyT;void>,...) is not supported")
+
 def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
@@ -186,19 +189,31 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(
     else
         return false
 
+def find_if_exists(Tab:table<auto(keyT);void>;at:keyT implicit;blk:block<(p:void?):void>)
+    concept_assert(false,"find_if_exists(table<keyT;void>,...) is not supported")
+
 def find(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):valT const?
     unsafe
         return reinterpret<valT const?>(__builtin_table_find(Tab,at))
 
+def find(Tab:table<auto(keyT);void>;at:keyT implicit):void const?
+    concept_assert(false,"find(table<keyT;void>,...) is not supported")
+
 def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT implicit):valT const?#
     unsafe
         return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
+
+def find(Tab:table<auto(keyT);void>#;at:keyT implicit):void const?#
+    concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
 def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(var p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
+
+def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT implicit;blk:block<(var p:void?):void>)
+    concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 
 def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(var p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
@@ -207,9 +222,16 @@ def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT implici
         invoke(blk,val)
         __builtin_table_unlock(Tab)
 
+def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT implicit;blk:block<(var p:void?):void>)
+    concept_assert(false,"find_for_edit_if_exists(table<keyT;void>,...) is not supported")
+
 [unsafe_operation]
 def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):valT?
     return __builtin_table_find(Tab,at)
+
+[unsafe_operation]
+def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT implicit):void?
+    concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 
 def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT implicit ) : valT &
     static_if typeinfo(need_lock_check type<valT>)
@@ -221,6 +243,9 @@ def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):bool
     if typeinfo(need_lock_check type<valT>)
         _builtin_verify_locks(Tab)
     return __builtin_table_erase(Tab,at)
+
+def insert(var Tab:table<auto(keyT);void>;at:keyT implicit)
+    __builtin_table_set_insert(Tab,at)
 
 def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):bool
     return __builtin_table_key_exists(Tab,at)
@@ -256,6 +281,17 @@ def clone(var a:array<auto(TT)>;b:array<TT>#)
     for aV,bV in a,b
         aV := bV
 
+def clone(var a:table<auto(KT);void>;b:table<KT;void> implicit)
+    clear(a)
+    for k in keys(b)
+        __builtin_table_set_insert(a,k)
+
+def clone(var a:table<string;void>;b:table<string;void> implicit)
+    clear(a)
+    for k in keys(b)
+        let kk := k
+        __builtin_table_set_insert(a,kk)
+
 def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT> implicit)
     clear(a)
     for k,v in keys(b),values(b)
@@ -271,6 +307,12 @@ def keys(a:table<auto(keyT);auto(valT)> implicit) : iterator<keyT & const>
     var it : iterator<keyT & const>
     __builtin_table_keys(it,a,typeinfo(sizeof type<keyT>))
     return <- it
+
+def values(a:table<auto(keyT);void> =const implicit)
+    concept_assert(false,"can't iterate over values of a table<...;void>")
+
+def values(var a:table<auto(keyT);void> =const implicit)
+    concept_assert(false,"can't iterate over values of a table<...;void>")
 
 def values(a:table<auto(keyT);auto(valT)> =const implicit) : iterator<valT & const>
     var it : iterator<valT & const>

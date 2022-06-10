@@ -1218,6 +1218,14 @@ namespace das {
         return cexpr;
     }
 
+    // ExprSetInsert
+
+    ExpressionPtr ExprSetInsert::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprSetInsert>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
+
     // ExprFind
 
     ExpressionPtr ExprFind::clone( const ExpressionPtr & expr ) const {

@@ -220,6 +220,7 @@ namespace das {
         IMPL_ADAPT(ExprDebug);
         IMPL_ADAPT(ExprInvoke);
         IMPL_ADAPT(ExprErase);
+        IMPL_ADAPT(ExprSetInsert);
         IMPL_ADAPT(ExprFind);
         IMPL_ADAPT(ExprKeyExists);
         IMPL_ADAPT(ExprAscend);
@@ -591,6 +592,7 @@ namespace das {
     IMPL_BIND_EXPR(ExprDebug);
     IMPL_BIND_EXPR(ExprInvoke);
     IMPL_BIND_EXPR(ExprErase);
+    IMPL_BIND_EXPR(ExprSetInsert);
     IMPL_BIND_EXPR(ExprFind);
     IMPL_BIND_EXPR(ExprKeyExists);
     IMPL_BIND_EXPR(ExprAscend);

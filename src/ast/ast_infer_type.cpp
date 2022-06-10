@@ -2582,6 +2582,31 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
+
+    // ExprSetInsert
+        virtual ExpressionPtr visit ( ExprSetInsert * expr ) override {
+            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->arguments.size()!=2 ) {
+                error("insert(table,key)",  "", "",
+                    expr->at, CompilationError::invalid_argument_count);
+                return Visitor::visit(expr);
+            }
+            // infer
+            expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
+            auto containerType = expr->arguments[0]->type;
+            auto valueType = expr->arguments[1]->type;
+            if ( containerType->isGoodTableType() ) {
+                if ( !containerType->firstType->isSameType(*valueType,RefMatters::no, ConstMatters::no, TemporaryMatters::no) )
+                    error("key must be of the same type as table<key,...>",  "", "",
+                        expr->at, CompilationError::invalid_argument_type);
+                expr->type = make_smart<TypeDecl>(Type::tBool);
+            } else {
+                error("first argument must be fully qualified table",  "", "",
+                    expr->at, CompilationError::invalid_argument_type);
+            }
+            valueType->constant = true;
+            return Visitor::visit(expr);
+        }
     // ExprErase
         virtual ExpressionPtr visit ( ExprErase * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
@@ -3715,6 +3740,11 @@ namespace das {
                         expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
+                if ( seT->secondType->isVoid() ) {
+                    error("can't index into table<...;void>", "", "",
+                        expr->index->at, CompilationError::invalid_index_type);
+                    return Visitor::visit(expr);
+                }
                 if ( seT->secondType && seT->secondType->lockCheck() ) {
                     if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
                         reportAstChanged(); // we promote tab[index] into _at_with_lockcheck(tab,index)
@@ -3922,6 +3952,11 @@ namespace das {
                 if ( !seT->firstType->isSameType(*ixT,RefMatters::no, ConstMatters::no, TemporaryMatters::no) ) {
                     error("table safe-index type mismatch, "
                         + describeType(seT->firstType) + " vs " + describeType(ixT),  "", "",
+                        expr->index->at, CompilationError::invalid_index_type);
+                    return Visitor::visit(expr);
+                }
+                if ( seT->secondType->isVoid() ) {
+                    error("can't safe-index into table<...;void>", "", "",
                         expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }

@@ -1169,6 +1169,7 @@ namespace das
                 ->args({"table","sizeOfKey","sizeOfValue","context"});
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
+        addCall<ExprSetInsert>("__builtin_table_set_insert");
         addCall<ExprFind>("__builtin_table_find");
         addCall<ExprKeyExists>("__builtin_table_key_exists");
         // blocks

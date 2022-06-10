@@ -367,6 +367,9 @@ class AstVisitor
 // erase
     def abstract preVisitExprErase(expr:smart_ptr<ExprErase>) : void
     def abstract visitExprErase(expr:smart_ptr<ExprErase>) : ExpressionPtr
+// insert
+    def abstract preVisitExprSetInsert(expr:smart_ptr<ExprSetInsert>) : void
+    def abstract visitExprSetInsert(expr:smart_ptr<ExprSetInsert>) : ExpressionPtr
 // find
     def abstract preVisitExprFind(expr:smart_ptr<ExprFind>) : void
     def abstract visitExprFind(expr:smart_ptr<ExprFind>) : ExpressionPtr

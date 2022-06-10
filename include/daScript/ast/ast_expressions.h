@@ -1045,6 +1045,14 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
     };
 
+    struct ExprSetInsert : ExprLikeCall<ExprSetInsert> {
+        ExprSetInsert() { __rtti = "ExprSetInsert"; name="insert"; };
+        ExprSetInsert ( const LineInfo & a, const string & )
+            : ExprLikeCall<ExprSetInsert>(a, "insert") { __rtti = "ExprSetInsert"; }
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+
     struct ExprTypeInfo : Expression {
         ExprTypeInfo () { __rtti = "ExprTypeInfo"; }
         ExprTypeInfo ( const LineInfo & a, const string & tr, const ExpressionPtr & s,
