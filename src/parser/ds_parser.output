@@ -12,6 +12,7 @@ State 168 conflicts: 1 shift/reduce
 State 169 conflicts: 1 shift/reduce
 State 359 conflicts: 2 shift/reduce
 State 422 conflicts: 7 shift/reduce
+State 589 conflicts: 3 reduce/reduce
 State 606 conflicts: 2 shift/reduce
 State 917 conflicts: 6 shift/reduce
 State 919 conflicts: 6 shift/reduce
@@ -799,26 +800,27 @@ Grammar
   571           | make_tuple ',' expr
 
   572 make_map_tuple: expr "=>" expr
+  573               | expr
 
-  573 make_any_tuple: make_tuple
-  574               | make_map_tuple
+  574 make_any_tuple: make_tuple
+  575               | make_map_tuple
 
-  575 make_dim: make_any_tuple
-  576         | make_dim ';' make_any_tuple
+  576 make_dim: make_any_tuple
+  577         | make_dim ';' make_any_tuple
 
-  577 make_dim_decl: "[[" type_declaration make_dim ']' ']'
-  578              | "[{" type_declaration make_dim '}' ']'
+  578 make_dim_decl: "[[" type_declaration make_dim ']' ']'
+  579              | "[{" type_declaration make_dim '}' ']'
 
-  579 make_table: make_map_tuple
-  580           | make_table ';' make_map_tuple
+  580 make_table: make_map_tuple
+  581           | make_table ';' make_map_tuple
 
-  581 make_table_decl: "{{" make_table '}' '}'
+  582 make_table_decl: "{{" make_table '}' '}'
 
-  582 array_comprehension_where: %empty
-  583                          | ';' "where" expr
+  583 array_comprehension_where: %empty
+  584                          | ';' "where" expr
 
-  584 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' ']'
-  585                    | "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' ']'
+  585 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' ']'
+  586                    | "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' ']'
 
 
 Terminals, with rules where they appear
@@ -838,18 +840,18 @@ Terminals, with rules where they appear
     '.' (46) 37 146 280 281 284 326 328 330
     '/' (47) 38 120 305
     ':' (58) 47 48 99 342 384 387 394 395 403 404 405 433 435
-    ';' (59) 13 59 159 162 163 170 171 176 177 178 195 196 197 200 201 222 373 375 378 382 386 389 403 404 406 420 421 424 425 486 516 549 551 561 576 580 583 584 585
+    ';' (59) 13 59 159 162 163 170 171 176 177 178 195 196 197 200 201 222 373 375 378 382 386 389 403 404 406 420 421 424 425 486 516 549 551 561 577 581 584 585 586
     '<' (60) 122 210 213 216 219 221 222 276 279 307 339 340 345 489 509 513 516 519 523 526 530 533 537 540 543 546
     '=' (61) 64 76 77 78 79 80 81 83 232 248 266 267 390 398 421 423 505
     '>' (62) 123 210 213 216 219 221 222 276 279 308 339 340 345 489 509 513 516 519 523 526 530 533 537 540 543 546
     '?' (63) 342 348 506
     '@' (64) 229 230 273 276 279
     '[' (91) 94 144 270 325 326 378 494 495 496
-    ']' (93) 94 144 145 238 270 325 326 327 328 361 378 494 495 496 564 565 566 567 568 569 577 578 584 585
+    ']' (93) 94 144 145 238 270 325 326 327 328 361 378 494 495 496 564 565 566 567 568 569 578 579 585 586
     '^' (94) 131 315
     '{' (123) 157 158 416 426 432 433 446 549 551
     '|' (124) 130 314
-    '}' (125) 157 158 416 426 432 433 446 549 551 568 569 578 581 585
+    '}' (125) 157 158 416 426 432 433 446 549 551 568 569 579 582 586
     '~' (126) 102 295
     error (256) 181 284
     "lexer error" (258)
@@ -861,14 +863,14 @@ Terminals, with rules where they appear
     "if" (264) 56
     "static_if" (265) 57
     "else" (266) 54
-    "for" (267) 59 584 585
+    "for" (267) 59 585 586
     "recover" (268) 204
     "true" (269) 69 80 291
     "false" (270) 70 81 292
     "new" (271) 189 190 191 192
     "typeinfo" (272) 220 221 222
     "type" (273) 74 219 345
-    "in" (274) 59 75 584 585
+    "in" (274) 59 75 585 586
     "is" (275) 345 346
     "as" (276) 40 347 348
     "elif" (277) 51
@@ -900,7 +902,7 @@ Terminals, with rules where they appear
     "var" (303) 206 380
     "addr" (304) 338
     "continue" (305) 194
-    "where" (306) 563 583
+    "where" (306) 563 584
     "pass" (307) 178
     "reinterpret" (308) 216
     "module" (309) 19
@@ -989,9 +991,9 @@ Terminals, with rules where they appear
     "||=" (392) 112 255
     "^^=" (393) 113 256
     ".." (394) 124 319
-    "[[" (395) 238 361 564 565 566 567 577 584
-    "[{" (396) 568 569 578 585
-    "{{" (397) 581
+    "[[" (395) 238 361 564 565 566 567 578 585
+    "[{" (396) 568 569 579 586
+    "{{" (397) 582
     "integer constant" <i> (398) 46 47 48 49 67 78 241
     "long integer constant" <i64> (399) 243
     "unsigned integer constant" <ui> (400) 242
@@ -1240,7 +1242,7 @@ Nonterminals, with rules where they appear
         on right: 349
     expr_list <pExpression> (265)
         on left: 223 224
-        on right: 59 191 224 272 333 335 584 585
+        on right: 59 191 224 272 333 335 585 586
     block_or_simple_block <pExpression> (266)
         on left: 225 226 227
         on right: 240
@@ -1300,7 +1302,7 @@ Nonterminals, with rules where they appear
         on right: 284
     expr <pExpression> (285)
         on left: 285 286 287 288 289 290 291 292 293 294 295 296 297 298 299 300 301 302 303 304 305 306 307 308 309 310 311 312 313 314 315 316 317 318 319 320 321 322 323 324 325 326 327 328 329 330 331 332 333 334 335 336 337 338 339 340 341 342 345 346 347 348 349 350 351 352 353 354 355 356 357 358 359
-        on right: 27 50 55 58 61 62 64 188 196 197 200 201 210 213 216 220 221 222 223 224 226 227 247 248 249 250 251 252 253 254 255 256 257 258 259 260 261 262 263 264 265 266 267 268 269 271 272 280 281 284 294 295 296 297 298 299 300 301 302 303 304 305 306 307 308 309 310 311 312 313 314 315 316 317 318 319 320 321 322 323 324 325 326 327 328 329 330 336 337 338 340 341 342 345 346 347 348 356 357 359 395 396 404 406 421 494 556 557 558 559 570 571 572 583 584 585
+        on right: 27 50 55 58 61 62 64 188 196 197 200 201 210 213 216 220 221 222 223 224 226 227 247 248 249 250 251 252 253 254 255 256 257 258 259 260 261 262 263 264 265 266 267 268 269 271 272 280 281 284 294 295 296 297 298 299 300 301 302 303 304 305 306 307 308 309 310 311 312 313 314 315 316 317 318 319 320 321 322 323 324 325 326 327 328 329 330 336 337 338 340 341 342 345 346 347 348 356 357 359 395 396 404 406 421 494 556 557 558 559 570 571 572 573 584 585 586
     $@18 (286)
         on left: 343
         on right: 345
@@ -1435,7 +1437,7 @@ Nonterminals, with rules where they appear
         on right: 446
     variable_name_with_pos_list <pNameWithPosList> (330)
         on left: 447 448 449 450
-        on right: 59 392 393 394 395 396 397 403 404 405 406 407 449 450 584 585
+        on right: 59 392 393 394 395 396 397 403 404 405 406 407 449 450 585 586
     basic_type_declaration <type> (331)
         on left: 451 452 453 454 455 456 457 458 459 460 461 462 463 464 465 466 467 468 469 470 471 472 473 474 475
         on right: 334 335 490
@@ -1462,7 +1464,7 @@ Nonterminals, with rules where they appear
         on right: 489
     type_declaration <pTypeDecl> (339)
         on left: 490 491 492 493 494 495 496 497 498 499 500 501 502 503 504 505 506 509 510 513 516 519 520 523 526 527 530 533 534 537 540 543 546
-        on right: 99 189 190 191 210 213 216 219 276 339 340 345 383 384 387 394 395 403 404 405 423 494 495 496 497 498 499 500 501 502 503 504 505 506 509 510 513 516 519 523 530 537 564 565 566 567 568 569 577 578
+        on right: 99 189 190 191 210 213 216 219 276 339 340 345 383 384 387 394 395 403 404 405 423 494 495 496 497 498 499 500 501 502 503 504 505 506 509 510 513 516 519 523 530 537 564 565 566 567 568 569 578 579
     $@30 (340)
         on left: 507
         on right: 509
@@ -1567,30 +1569,30 @@ Nonterminals, with rules where they appear
         on right: 552
     make_tuple <pExpression> (374)
         on left: 570 571
-        on right: 571 573
+        on right: 571 574
     make_map_tuple <pExpression> (375)
-        on left: 572
-        on right: 574 579 580
+        on left: 572 573
+        on right: 575 580 581
     make_any_tuple <pExpression> (376)
-        on left: 573 574
-        on right: 575 576
+        on left: 574 575
+        on right: 576 577
     make_dim <pExpression> (377)
-        on left: 575 576
-        on right: 576 577 578
+        on left: 576 577
+        on right: 577 578 579
     make_dim_decl <pExpression> (378)
-        on left: 577 578
+        on left: 578 579
         on right: 553
     make_table <pExpression> (379)
-        on left: 579 580
-        on right: 580 581
+        on left: 580 581
+        on right: 581 582
     make_table_decl <pExpression> (380)
-        on left: 581
+        on left: 582
         on right: 554
     array_comprehension_where <pExpression> (381)
-        on left: 582 583
-        on right: 584 585
+        on left: 583 584
+        on right: 585 586
     array_comprehension <pExpression> (382)
-        on left: 584 585
+        on left: 585 586
         on right: 555
 
 
@@ -5203,8 +5205,8 @@ State 336
   565                 | "[[" . type_declaration optional_block ']' ']'
   566                 | "[[" . type_declaration '(' ')' optional_block ']' ']'
   567                 | "[[" . type_declaration '(' ')' make_struct_dim optional_block ']' ']'
-  577 make_dim_decl: "[[" . type_declaration make_dim ']' ']'
-  584 array_comprehension: "[[" . "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' ']'
+  578 make_dim_decl: "[[" . type_declaration make_dim ']' ']'
+  585 array_comprehension: "[[" . "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' ']'
 
     "for"        shift, and go to state 435
     "array"      shift, and go to state 141
@@ -5257,8 +5259,8 @@ State 337
 
   568 make_struct_decl: "[{" . type_declaration make_struct_dim optional_block '}' ']'
   569                 | "[{" . type_declaration '(' ')' make_struct_dim optional_block '}' ']'
-  578 make_dim_decl: "[{" . type_declaration make_dim '}' ']'
-  585 array_comprehension: "[{" . "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' ']'
+  579 make_dim_decl: "[{" . type_declaration make_dim '}' ']'
+  586 array_comprehension: "[{" . "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' ']'
 
     "for"        shift, and go to state 437
     "array"      shift, and go to state 141
@@ -5309,7 +5311,7 @@ State 337
 
 State 338
 
-  581 make_table_decl: "{{" . make_table '}' '}'
+  582 make_table_decl: "{{" . make_table '}' '}'
 
     "true"                            shift, and go to state 320
     "false"                           shift, and go to state 321
@@ -7641,7 +7643,7 @@ State 434
 
 State 435
 
-  584 array_comprehension: "[[" "for" . variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' ']'
+  585 array_comprehension: "[[" "for" . variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' ']'
 
     "name"  shift, and go to state 297
 
@@ -7668,7 +7670,7 @@ State 436
   565                 | "[[" type_declaration . optional_block ']' ']'
   566                 | "[[" type_declaration . '(' ')' optional_block ']' ']'
   567                 | "[[" type_declaration . '(' ')' make_struct_dim optional_block ']' ']'
-  577 make_dim_decl: "[[" type_declaration . make_dim ']' ']'
+  578 make_dim_decl: "[[" type_declaration . make_dim ']' ']'
 
     "true"                            shift, and go to state 320
     "false"                           shift, and go to state 321
@@ -7778,7 +7780,7 @@ State 436
 
 State 437
 
-  585 array_comprehension: "[{" "for" . variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' ']'
+  586 array_comprehension: "[{" "for" . variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' ']'
 
     "name"  shift, and go to state 297
 
@@ -7803,7 +7805,7 @@ State 438
   510                 | type_declaration . "??"
   568 make_struct_decl: "[{" type_declaration . make_struct_dim optional_block '}' ']'
   569                 | "[{" type_declaration . '(' ')' make_struct_dim optional_block '}' ']'
-  578 make_dim_decl: "[{" type_declaration . make_dim '}' ']'
+  579 make_dim_decl: "[{" type_declaration . make_dim '}' ']'
 
     "true"                            shift, and go to state 320
     "false"                           shift, and go to state 321
@@ -7953,6 +7955,7 @@ State 439
   356     | expr . "<|" expr
   357     | expr . "|>" expr
   572 make_map_tuple: expr . "=>" expr
+  573               | expr .
 
     "is"   shift, and go to state 454
     "as"   shift, and go to state 455
@@ -7991,18 +7994,20 @@ State 439
     '.'    shift, and go to state 487
     '['    shift, and go to state 488
 
+    $default  reduce using rule 573 (make_map_tuple)
+
 
 State 440
 
-  579 make_table: make_map_tuple .
+  580 make_table: make_map_tuple .
 
-    $default  reduce using rule 579 (make_table)
+    $default  reduce using rule 580 (make_table)
 
 
 State 441
 
-  580 make_table: make_table . ';' make_map_tuple
-  581 make_table_decl: "{{" make_table . '}' '}'
+  581 make_table: make_table . ';' make_map_tuple
+  582 make_table_decl: "{{" make_table . '}' '}'
 
     ';'  shift, and go to state 602
     '}'  shift, and go to state 603
@@ -13723,7 +13728,7 @@ State 584
 
   449 variable_name_with_pos_list: variable_name_with_pos_list . ',' "name"
   450                            | variable_name_with_pos_list . ',' "name" "aka" "name"
-  584 array_comprehension: "[[" "for" variable_name_with_pos_list . "in" expr_list ';' expr array_comprehension_where ']' ']'
+  585 array_comprehension: "[[" "for" variable_name_with_pos_list . "in" expr_list ';' expr array_comprehension_where ']' ']'
 
     "in"  shift, and go to state 755
     ','   shift, and go to state 400
@@ -13999,6 +14004,7 @@ State 589
   357     | expr . "|>" expr
   570 make_tuple: expr .
   572 make_map_tuple: expr . "=>" expr
+  573               | expr .
 
     "is"   shift, and go to state 454
     "as"   shift, and go to state 455
@@ -14037,6 +14043,12 @@ State 589
     '.'    shift, and go to state 487
     '['    shift, and go to state 488
 
+    ']'       reduce using rule 570 (make_tuple)
+    ']'       [reduce using rule 573 (make_map_tuple)]
+    ';'       reduce using rule 570 (make_tuple)
+    ';'       [reduce using rule 573 (make_map_tuple)]
+    '}'       reduce using rule 570 (make_tuple)
+    '}'       [reduce using rule 573 (make_map_tuple)]
     $default  reduce using rule 570 (make_tuple)
 
 
@@ -14074,31 +14086,31 @@ State 592
 State 593
 
   571 make_tuple: make_tuple . ',' expr
-  573 make_any_tuple: make_tuple .
+  574 make_any_tuple: make_tuple .
 
     ','  shift, and go to state 764
-
-    $default  reduce using rule 573 (make_any_tuple)
-
-
-State 594
-
-  574 make_any_tuple: make_map_tuple .
 
     $default  reduce using rule 574 (make_any_tuple)
 
 
+State 594
+
+  575 make_any_tuple: make_map_tuple .
+
+    $default  reduce using rule 575 (make_any_tuple)
+
+
 State 595
 
-  575 make_dim: make_any_tuple .
+  576 make_dim: make_any_tuple .
 
-    $default  reduce using rule 575 (make_dim)
+    $default  reduce using rule 576 (make_dim)
 
 
 State 596
 
-  576 make_dim: make_dim . ';' make_any_tuple
-  577 make_dim_decl: "[[" type_declaration make_dim . ']' ']'
+  577 make_dim: make_dim . ';' make_any_tuple
+  578 make_dim_decl: "[[" type_declaration make_dim . ']' ']'
 
     ']'  shift, and go to state 765
     ';'  shift, and go to state 766
@@ -14108,7 +14120,7 @@ State 597
 
   449 variable_name_with_pos_list: variable_name_with_pos_list . ',' "name"
   450                            | variable_name_with_pos_list . ',' "name" "aka" "name"
-  585 array_comprehension: "[{" "for" variable_name_with_pos_list . "in" expr_list ';' expr array_comprehension_where '}' ']'
+  586 array_comprehension: "[{" "for" variable_name_with_pos_list . "in" expr_list ';' expr array_comprehension_where '}' ']'
 
     "in"  shift, and go to state 767
     ','   shift, and go to state 400
@@ -14222,8 +14234,8 @@ State 599
 
 State 600
 
-  576 make_dim: make_dim . ';' make_any_tuple
-  578 make_dim_decl: "[{" type_declaration make_dim . '}' ']'
+  577 make_dim: make_dim . ';' make_any_tuple
+  579 make_dim_decl: "[{" type_declaration make_dim . '}' ']'
 
     ';'  shift, and go to state 766
     '}'  shift, and go to state 770
@@ -14322,7 +14334,7 @@ State 601
 
 State 602
 
-  580 make_table: make_table ';' . make_map_tuple
+  581 make_table: make_table ';' . make_map_tuple
 
     "true"                            shift, and go to state 320
     "false"                           shift, and go to state 321
@@ -14414,7 +14426,7 @@ State 602
 
 State 603
 
-  581 make_table_decl: "{{" make_table '}' . '}'
+  582 make_table_decl: "{{" make_table '}' . '}'
 
     '}'  shift, and go to state 773
 
@@ -20693,7 +20705,7 @@ State 754
 
 State 755
 
-  584 array_comprehension: "[[" "for" variable_name_with_pos_list "in" . expr_list ';' expr array_comprehension_where ']' ']'
+  585 array_comprehension: "[[" "for" variable_name_with_pos_list "in" . expr_list ';' expr array_comprehension_where ']' ']'
 
     "true"                            shift, and go to state 320
     "false"                           shift, and go to state 321
@@ -21111,14 +21123,14 @@ State 764
 
 State 765
 
-  577 make_dim_decl: "[[" type_declaration make_dim ']' . ']'
+  578 make_dim_decl: "[[" type_declaration make_dim ']' . ']'
 
     ']'  shift, and go to state 877
 
 
 State 766
 
-  576 make_dim: make_dim ';' . make_any_tuple
+  577 make_dim: make_dim ';' . make_any_tuple
 
     "true"                            shift, and go to state 320
     "false"                           shift, and go to state 321
@@ -21212,7 +21224,7 @@ State 766
 
 State 767
 
-  585 array_comprehension: "[{" "for" variable_name_with_pos_list "in" . expr_list ';' expr array_comprehension_where '}' ']'
+  586 array_comprehension: "[{" "for" variable_name_with_pos_list "in" . expr_list ';' expr array_comprehension_where '}' ']'
 
     "true"                            shift, and go to state 320
     "false"                           shift, and go to state 321
@@ -21321,7 +21333,7 @@ State 769
 
 State 770
 
-  578 make_dim_decl: "[{" type_declaration make_dim '}' . ']'
+  579 make_dim_decl: "[{" type_declaration make_dim '}' . ']'
 
     ']'  shift, and go to state 882
 
@@ -21414,16 +21426,16 @@ State 771
 
 State 772
 
-  580 make_table: make_table ';' make_map_tuple .
+  581 make_table: make_table ';' make_map_tuple .
 
-    $default  reduce using rule 580 (make_table)
+    $default  reduce using rule 581 (make_table)
 
 
 State 773
 
-  581 make_table_decl: "{{" make_table '}' '}' .
+  582 make_table_decl: "{{" make_table '}' '}' .
 
-    $default  reduce using rule 581 (make_table_decl)
+    $default  reduce using rule 582 (make_table_decl)
 
 
 State 774
@@ -25185,7 +25197,7 @@ State 866
 State 867
 
   224 expr_list: expr_list . ',' expr
-  584 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list . ';' expr array_comprehension_where ']' ']'
+  585 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list . ';' expr array_comprehension_where ']' ']'
 
     ','  shift, and go to state 781
     ';'  shift, and go to state 937
@@ -25508,22 +25520,22 @@ State 876
 
 State 877
 
-  577 make_dim_decl: "[[" type_declaration make_dim ']' ']' .
+  578 make_dim_decl: "[[" type_declaration make_dim ']' ']' .
 
-    $default  reduce using rule 577 (make_dim_decl)
+    $default  reduce using rule 578 (make_dim_decl)
 
 
 State 878
 
-  576 make_dim: make_dim ';' make_any_tuple .
+  577 make_dim: make_dim ';' make_any_tuple .
 
-    $default  reduce using rule 576 (make_dim)
+    $default  reduce using rule 577 (make_dim)
 
 
 State 879
 
   224 expr_list: expr_list . ',' expr
-  585 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list . ';' expr array_comprehension_where '}' ']'
+  586 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list . ';' expr array_comprehension_where '}' ']'
 
     ','  shift, and go to state 781
     ';'  shift, and go to state 943
@@ -25551,9 +25563,9 @@ State 881
 
 State 882
 
-  578 make_dim_decl: "[{" type_declaration make_dim '}' ']' .
+  579 make_dim_decl: "[{" type_declaration make_dim '}' ']' .
 
-    $default  reduce using rule 578 (make_dim_decl)
+    $default  reduce using rule 579 (make_dim_decl)
 
 
 State 883
@@ -27316,7 +27328,7 @@ State 936
 
 State 937
 
-  584 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' . expr array_comprehension_where ']' ']'
+  585 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' . expr array_comprehension_where ']' ']'
 
     "true"                            shift, and go to state 320
     "false"                           shift, and go to state 321
@@ -27610,7 +27622,7 @@ State 942
 
 State 943
 
-  585 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' . expr array_comprehension_where '}' ']'
+  586 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' . expr array_comprehension_where '}' ']'
 
     "true"                            shift, and go to state 320
     "false"                           shift, and go to state 321
@@ -28659,7 +28671,7 @@ State 973
   348     | expr . '?' "as" "name"
   356     | expr . "<|" expr
   357     | expr . "|>" expr
-  584 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr . array_comprehension_where ']' ']'
+  585 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr . array_comprehension_where ']' ']'
 
     "is"   shift, and go to state 454
     "as"   shift, and go to state 455
@@ -28698,7 +28710,7 @@ State 973
     '['    shift, and go to state 488
     ';'    shift, and go to state 994
 
-    $default  reduce using rule 582 (array_comprehension_where)
+    $default  reduce using rule 583 (array_comprehension_where)
 
     array_comprehension_where  go to state 995
 
@@ -28934,7 +28946,7 @@ State 978
   348     | expr . '?' "as" "name"
   356     | expr . "<|" expr
   357     | expr . "|>" expr
-  585 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr . array_comprehension_where '}' ']'
+  586 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr . array_comprehension_where '}' ']'
 
     "is"   shift, and go to state 454
     "as"   shift, and go to state 455
@@ -28973,7 +28985,7 @@ State 978
     '['    shift, and go to state 488
     ';'    shift, and go to state 994
 
-    $default  reduce using rule 582 (array_comprehension_where)
+    $default  reduce using rule 583 (array_comprehension_where)
 
     array_comprehension_where  go to state 997
 
@@ -29355,14 +29367,14 @@ State 993
 
 State 994
 
-  583 array_comprehension_where: ';' . "where" expr
+  584 array_comprehension_where: ';' . "where" expr
 
     "where"  shift, and go to state 1007
 
 
 State 995
 
-  584 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where . ']' ']'
+  585 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where . ']' ']'
 
     ']'  shift, and go to state 1008
 
@@ -29376,7 +29388,7 @@ State 996
 
 State 997
 
-  585 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where . '}' ']'
+  586 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where . '}' ']'
 
     '}'  shift, and go to state 1009
 
@@ -29611,7 +29623,7 @@ State 1006
 
 State 1007
 
-  583 array_comprehension_where: ';' "where" . expr
+  584 array_comprehension_where: ';' "where" . expr
 
     "true"                            shift, and go to state 320
     "false"                           shift, and go to state 321
@@ -29702,14 +29714,14 @@ State 1007
 
 State 1008
 
-  584 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' . ']'
+  585 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' . ']'
 
     ']'  shift, and go to state 1015
 
 
 State 1009
 
-  585 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' . ']'
+  586 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' . ']'
 
     ']'  shift, and go to state 1016
 
@@ -29789,7 +29801,7 @@ State 1014
   348     | expr . '?' "as" "name"
   356     | expr . "<|" expr
   357     | expr . "|>" expr
-  583 array_comprehension_where: ';' "where" expr .
+  584 array_comprehension_where: ';' "where" expr .
 
     "is"   shift, and go to state 454
     "as"   shift, and go to state 455
@@ -29827,21 +29839,21 @@ State 1014
     '.'    shift, and go to state 487
     '['    shift, and go to state 488
 
-    $default  reduce using rule 583 (array_comprehension_where)
+    $default  reduce using rule 584 (array_comprehension_where)
 
 
 State 1015
 
-  584 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' ']' .
+  585 array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' ']' .
 
-    $default  reduce using rule 584 (array_comprehension)
+    $default  reduce using rule 585 (array_comprehension)
 
 
 State 1016
 
-  585 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' ']' .
+  586 array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' ']' .
 
-    $default  reduce using rule 585 (array_comprehension)
+    $default  reduce using rule 586 (array_comprehension)
 
 
 State 1017

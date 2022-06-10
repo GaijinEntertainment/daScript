@@ -2385,6 +2385,9 @@ make_map_tuple
         mt->values.push_back(ExpressionPtr($vval));
         $$ = mt;
     }
+    | expr[kval] {
+        $$ = $kval;
+    }
     ;
 
 make_any_tuple

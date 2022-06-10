@@ -481,6 +481,18 @@ def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
         tab[x._0] := x._1
     return <- tab
 
+def to_table(a:auto(keyT)[]) : table<keyT -const;void>
+    var tab : table<keyT -const;void>
+    for at in a
+        __builtin_table_set_insert(tab,at)
+    return <- tab
+
+def to_table_move(var a:auto(keyT)[]) : table<keyT -const;void>
+    var tab : table<keyT -const;void>
+    for at in a
+        __builtin_table_set_insert(tab,at)
+    return <- tab
+
 def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
     var tab : table<keyT -const;valT>
     static_if typeinfo(can_copy type<valT>)

@@ -845,7 +845,7 @@ union yyalloc
 /* YYNNTS -- Number of nonterminals.  */
 #define YYNNTS  192
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  586
+#define YYNRULES  587
 /* YYNSTATES -- Number of states.  */
 #define YYNSTATES  1018
 
@@ -969,8 +969,8 @@ static const yytype_int16 yyrline[] =
     2196,  2196,  2205,  2205,  2205,  2211,  2211,  2211,  2220,  2220,
     2220,  2244,  2244,  2264,  2265,  2266,  2267,  2271,  2278,  2285,
     2291,  2300,  2305,  2312,  2313,  2317,  2323,  2330,  2338,  2345,
-    2353,  2365,  2368,  2382,  2391,  2392,  2396,  2401,  2408,  2413,
-    2423,  2428,  2435,  2447,  2448,  2452,  2455
+    2353,  2365,  2368,  2382,  2388,  2394,  2395,  2399,  2404,  2411,
+    2416,  2426,  2431,  2438,  2450,  2451,  2455,  2458
 };
 #endif
 
@@ -1278,8 +1278,8 @@ static const yytype_int16 yydefact[] =
        0,     0,   403,     0,     0,     0,     0,     0,   485,     0,
        0,    99,     0,    99,     0,    99,   186,   386,     0,   384,
        0,   497,   190,   193,     0,   218,     0,   209,   212,     0,
-     215,     0,     0,   321,   322,     0,   563,     0,     0,     0,
-     580,     0,     0,   298,   297,   337,    32,   296,   295,     0,
+     215,     0,     0,   321,   322,     0,   563,     0,     0,   574,
+     581,     0,     0,   298,   297,   337,    32,   296,   295,     0,
      231,   359,     0,   238,     0,     0,     0,     0,   323,   324,
        0,     0,     0,     0,     0,     0,     0,     0,     0,     0,
        0,     0,     0,     0,     0,     0,     0,     0,     0,     0,
@@ -1294,7 +1294,7 @@ static const yytype_int16 yydefact[] =
      509,   489,     0,   523,     0,   530,     0,   537,     0,     0,
      543,     0,   546,     0,     0,     0,     0,     0,     0,     0,
        0,     0,     0,     0,     0,     0,   186,     0,     0,   571,
-     561,   563,     0,   574,   575,   576,     0,     0,     0,   563,
+     561,   563,     0,   575,   576,   577,     0,     0,     0,   563,
        0,     0,     0,     0,    29,     0,    27,     0,   325,   275,
      274,     0,   333,     0,   224,     0,    96,     0,   347,   348,
      299,   300,   312,   313,   310,   311,     0,   342,   330,     0,
@@ -1312,7 +1312,7 @@ static const yytype_int16 yydefact[] =
      544,   387,   547,   191,     0,     0,     0,     0,   338,     0,
        0,   339,     0,   360,   238,     0,   564,     0,     0,   563,
        0,     0,     0,     0,     0,     0,     0,     0,     0,     0,
-       0,   573,   581,   582,     0,    30,    33,     0,    96,     0,
+       0,   573,   582,   583,     0,    30,    33,     0,    96,     0,
        0,     0,   334,     0,     0,     0,     0,   236,     0,    99,
      344,     0,   328,   349,     0,   331,     0,   282,     0,   284,
      326,   336,   395,   398,   397,    62,     0,   200,   248,     0,
@@ -1322,8 +1322,8 @@ static const yytype_int16 yydefact[] =
      255,   256,   257,     0,     0,   249,   422,     0,   368,   363,
        0,   451,   406,   248,   407,   516,   527,   534,   541,   192,
        0,   221,   219,   210,   213,   216,     0,     0,   558,   557,
-     563,     0,     0,   562,     0,   566,   572,   578,   577,     0,
-     563,     0,   579,    28,    31,     0,    99,     0,   225,   234,
+     563,     0,     0,   562,     0,   566,   572,   579,   578,     0,
+     563,     0,   580,    28,    31,     0,    99,     0,   225,   234,
      235,   233,   232,     0,     0,     0,     0,   272,     0,   343,
      329,   327,   285,   391,     0,     0,   198,   205,     0,   202,
        0,     0,    52,    53,     0,    59,   269,   270,   267,   268,
@@ -1332,11 +1332,11 @@ static const yytype_int16 yydefact[] =
        0,     0,   565,     0,     0,   569,   276,     0,   271,   237,
      239,     0,   226,   241,     0,   273,   396,     0,    65,   159,
       55,     0,   379,   375,   366,     0,     0,     0,   211,   214,
-     217,   340,     0,   583,     0,   567,   560,   559,   583,     0,
+     217,   340,     0,   584,     0,   567,   560,   559,   584,     0,
        0,   279,     0,   227,   345,    60,    54,     0,   367,   377,
      371,   222,     0,   341,     0,     0,   568,     0,   570,   277,
        0,   228,   346,    56,     0,     0,     0,     0,     0,     0,
-     280,   376,     0,   223,   584,   585,   586,   378
+     280,   376,     0,   223,   585,   586,   587,   378
 };
 
   /* YYPGOTO[NTERM-NUM].  */
@@ -3140,8 +3140,8 @@ static const yytype_int16 yyr1[] =
      359,   339,   360,   361,   339,   362,   363,   339,   365,   366,
      364,   368,   367,   369,   369,   369,   369,   370,   370,   370,
      370,   371,   371,   372,   372,   373,   373,   373,   373,   373,
-     373,   374,   374,   375,   376,   376,   377,   377,   378,   378,
-     379,   379,   380,   381,   381,   382,   382
+     373,   374,   374,   375,   375,   376,   376,   377,   377,   378,
+     378,   379,   379,   380,   381,   381,   382,   382
 };
 
   /* YYR2[YYN] -- Number of symbols on the right hand side of rule YYN.  */
@@ -3204,8 +3204,8 @@ static const yytype_int8 yyr2[] =
        0,     7,     0,     0,     6,     0,     0,     6,     0,     0,
        8,     0,     7,     1,     1,     1,     1,     3,     3,     5,
        5,     1,     3,     0,     2,     6,     5,     7,     8,     6,
-       8,     1,     3,     3,     1,     1,     1,     3,     5,     5,
-       1,     3,     4,     0,     3,    10,    10
+       8,     1,     3,     3,     1,     1,     1,     1,     3,     5,
+       5,     1,     3,     4,     0,     3,    10,    10
 };
 
 
@@ -7665,15 +7665,21 @@ yyreduce:
     }
     break;
 
-  case 574: /* make_any_tuple: make_tuple  */
+  case 574: /* make_map_tuple: expr  */
+                 {
+        (yyval.pExpression) = (yyvsp[0].pExpression);
+    }
+    break;
+
+  case 575: /* make_any_tuple: make_tuple  */
                                 { (yyval.pExpression) = (yyvsp[0].pExpression); }
     break;
 
-  case 575: /* make_any_tuple: make_map_tuple  */
+  case 576: /* make_any_tuple: make_map_tuple  */
                                 { (yyval.pExpression) = (yyvsp[0].pExpression); }
     break;
 
-  case 576: /* make_dim: make_any_tuple  */
+  case 577: /* make_dim: make_any_tuple  */
                             {
         auto mka = new ExprMakeArray();
         mka->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
@@ -7681,14 +7687,14 @@ yyreduce:
     }
     break;
 
-  case 577: /* make_dim: make_dim ';' make_any_tuple  */
+  case 578: /* make_dim: make_dim ';' make_any_tuple  */
                                               {
         ((ExprMakeArray *) (yyvsp[-2].pExpression))->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
     break;
 
-  case 578: /* make_dim_decl: "[[" type_declaration make_dim ']' ']'  */
+  case 579: /* make_dim_decl: "[[" type_declaration make_dim ']' ']'  */
                                                                   {
        ((ExprMakeArray *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
        (yyvsp[-2].pExpression)->at = tokAt(scanner,(yylsp[-4]));
@@ -7696,7 +7702,7 @@ yyreduce:
     }
     break;
 
-  case 579: /* make_dim_decl: "[{" type_declaration make_dim '}' ']'  */
+  case 580: /* make_dim_decl: "[{" type_declaration make_dim '}' ']'  */
                                                                   {
        ((ExprMakeArray *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
        (yyvsp[-2].pExpression)->at = tokAt(scanner,(yylsp[-4]));
@@ -7706,7 +7712,7 @@ yyreduce:
     }
     break;
 
-  case 580: /* make_table: make_map_tuple  */
+  case 581: /* make_table: make_map_tuple  */
                             {
         auto mka = new ExprMakeArray();
         mka->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
@@ -7714,14 +7720,14 @@ yyreduce:
     }
     break;
 
-  case 581: /* make_table: make_table ';' make_map_tuple  */
+  case 582: /* make_table: make_table ';' make_map_tuple  */
                                                 {
         ((ExprMakeArray *) (yyvsp[-2].pExpression))->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
     break;
 
-  case 582: /* make_table_decl: "{{" make_table '}' '}'  */
+  case 583: /* make_table_decl: "{{" make_table '}' '}'  */
                                               {
         auto mkt = make_smart<TypeDecl>(Type::autoinfer);
         mkt->dim.push_back(TypeDecl::dimAuto);
@@ -7733,21 +7739,21 @@ yyreduce:
     }
     break;
 
-  case 583: /* array_comprehension_where: %empty  */
+  case 584: /* array_comprehension_where: %empty  */
                                     { (yyval.pExpression) = nullptr; }
     break;
 
-  case 584: /* array_comprehension_where: ';' "where" expr  */
+  case 585: /* array_comprehension_where: ';' "where" expr  */
                                     { (yyval.pExpression) = (yyvsp[0].pExpression); }
     break;
 
-  case 585: /* array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' ']'  */
+  case 586: /* array_comprehension: "[[" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where ']' ']'  */
                                                                                                                                                             {
         (yyval.pExpression) = ast_arrayComprehension(scanner,tokAt(scanner,(yylsp[-8])),(yyvsp[-7].pNameWithPosList),(yyvsp[-5].pExpression),(yyvsp[-3].pExpression),(yyvsp[-2].pExpression),tokRangeAt(scanner,(yylsp[-3]),(yylsp[0])),true);
     }
     break;
 
-  case 586: /* array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' ']'  */
+  case 587: /* array_comprehension: "[{" "for" variable_name_with_pos_list "in" expr_list ';' expr array_comprehension_where '}' ']'  */
                                                                                                                                                             {
         (yyval.pExpression) = ast_arrayComprehension(scanner,tokAt(scanner,(yylsp[-8])),(yyvsp[-7].pNameWithPosList),(yyvsp[-5].pExpression),(yyvsp[-3].pExpression),(yyvsp[-2].pExpression),tokRangeAt(scanner,(yylsp[-3]),(yylsp[0])),false);
     }

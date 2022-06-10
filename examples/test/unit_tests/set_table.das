@@ -41,6 +41,15 @@ def test
     tc |> find_if_exists(3) <| $ ( p )  // 40103: find_if_exists(table<keyT;void>,...) is not supported
         print("p = {p}\n")
     */
+
+    var ttt <- {{ 1; 2; 3; 4 }}
+    for k,i in keys(ttt),[{int 2;1;4;3}]
+        assert(k == i)
+
+    var qqq <- to_table([[int 1;2;3;4]])
+    for k,i in keys(qqq),[{int 2;1;4;3}]
+        assert(k == i)
+
     return true
 
 
