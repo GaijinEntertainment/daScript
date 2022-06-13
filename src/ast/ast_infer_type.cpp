@@ -4930,61 +4930,13 @@ namespace das {
             auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
             tempCall->arguments.push_back(expr->left);
             tempCall->arguments.push_back(expr->right);
-            expr->func = inferFunctionCall(tempCall.get()).get();
+            expr->func = inferFunctionCall(tempCall.get(),InferCallError::operatorOp2).get();
             if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
                 auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
                 opCall->arguments = move(tempCall->arguments);
                 return opCall;
             }
-            if ( !expr->func ) {
-                if (expr->left->type->isNumeric() && expr->right->type->isNumeric()) {
-                    if ( isAssignmentOperator(expr->op) ) {
-                        if ( !expr->left->type->ref ) {
-                            error("numeric operator " + expr->op + " left side must be reference.", "", "",
-                                expr->at, CompilationError::operator_not_found);
-                        } else if ( expr->left->type->isConst() ) {
-                            error("numeric operator " + expr->op + " left side can't be constant.", "", "",
-                                expr->at, CompilationError::operator_not_found);
-                        } else  {
-                            if ( verbose ) {
-                                TextWriter tw;
-                                tw << "\t" << *expr->left << " " << expr->op << " " << das_to_string(expr->left->type->baseType) << " (" << *expr->right << ")\n";
-                                error("numeric operator " + expr->op + " type mismatch. both sides have to be of the same type. " +
-                                    das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType)
-                                    + " is not defined", "", "try the following\n" + tw.str(),
-                                    expr->at, CompilationError::operator_not_found);
-                            } else {
-                                error("numeric operator " + expr->op + " type mismatch. both sides have to be of the same type. ",  "", "",
-                                    expr->at, CompilationError::operator_not_found);
-                            }
-                        }
-                    } else {
-                        if ( verbose ) {
-                            if ( expr->left->type->baseType != expr->right->type->baseType ) {
-                                TextWriter tw;
-                                tw << "\t" << *expr->left << " " << expr->op << " " << das_to_string(expr->left->type->baseType) << " (" << *expr->right << ")\n";
-                                tw << "\t" << das_to_string(expr->right->type->baseType) << "(" << *expr->left << ") " << expr->op << " " << *expr->right << "\n";
-                                error("numeric operator " + expr->op + " type mismatch. both sides have to be of the same type. " +
-                                    das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType)
-                                        + " is not defined", "", "try one of the following\n" + tw.str(),
-                                        expr->at, CompilationError::operator_not_found);
-                            } else if ( expr->left->type->isNumericStorage()  ) {
-                                error("numeric operator " + expr->op + " is not defined for storage types (int8,uint8,int16,uint16).",
-                                    "\t" + das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType),
-                                        "", expr->at, CompilationError::operator_not_found);
-                            } else {
-                                error("numeric operator " + expr->op + " type mismatch.",
-                                    "\t" + das_to_string(expr->left->type->baseType) + " " + expr->op + " " + das_to_string(expr->right->type->baseType),
-                                        "", expr->at, CompilationError::operator_not_found);
-                            }
-                        } else {
-                            error("numeric operator " + expr->op + " type mismatch.", "" , "",
-                                expr->at, CompilationError::operator_not_found);
-                        }
-                    }
-                }
-            }
-            else {
+            if ( expr->func ) {
                 if ( expr->func->firstArgReturnType ) {
                     expr->type = make_smart<TypeDecl>(*expr->arguments[0]->type);
                     expr->type->ref = false;
@@ -6386,7 +6338,64 @@ namespace das {
             }
         }
 
-        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr ) {
+        void reportOp2Errors ( ExprLooksLikeCall * expr ) {
+            auto expr_left = expr->arguments[0].get();
+            auto expr_right = expr->arguments[1].get();
+            auto expr_op = expr->name.substr(2);
+            if (expr_left->type->isNumeric() && expr_right->type->isNumeric()) {
+                if ( isAssignmentOperator(expr_op) ) {
+                    if ( !expr_left->type->ref ) {
+                        error("numeric operator " + expr_op + " left side must be reference.", "", "",
+                            expr->at, CompilationError::operator_not_found);
+                    } else if ( expr_left->type->isConst() ) {
+                        error("numeric operator " + expr_op + " left side can't be constant.", "", "",
+                            expr->at, CompilationError::operator_not_found);
+                    } else  {
+                        if ( verbose ) {
+                            TextWriter tw;
+                            tw << "\t" << *expr_left << " " << expr_op << " " << das_to_string(expr_left->type->baseType) << " (" << *expr_right << ")\n";
+                            error("numeric operator " + expr_op + " type mismatch. both sides have to be of the same type. " +
+                                das_to_string(expr_left->type->baseType) + " " + expr_op + " " + das_to_string(expr_right->type->baseType)
+                                + " is not defined", "", "try the following\n" + tw.str(),
+                                expr->at, CompilationError::operator_not_found);
+                        } else {
+                            error("numeric operator " + expr_op + " type mismatch. both sides have to be of the same type. ",  "", "",
+                                expr->at, CompilationError::operator_not_found);
+                        }
+                    }
+                } else {
+                    if ( verbose ) {
+                        if ( expr_left->type->baseType != expr_right->type->baseType ) {
+                            TextWriter tw;
+                            tw << "\t" << *expr_left << " " << expr_op << " " << das_to_string(expr_left->type->baseType) << " (" << *expr_right << ")\n";
+                            tw << "\t" << das_to_string(expr_right->type->baseType) << "(" << *expr_left << ") " << expr_op << " " << *expr_right << "\n";
+                            error("numeric operator " + expr_op + " type mismatch. both sides have to be of the same type. " +
+                                das_to_string(expr_left->type->baseType) + " " + expr_op + " " + das_to_string(expr_right->type->baseType)
+                                    + " is not defined", "", "try one of the following\n" + tw.str(),
+                                    expr->at, CompilationError::operator_not_found);
+                        } else if ( expr_left->type->isNumericStorage()  ) {
+                            error("numeric operator " + expr_op + " is not defined for storage types (int8,uint8,int16,uint16).",
+                                "\t" + das_to_string(expr_left->type->baseType) + " " + expr_op + " " + das_to_string(expr_right->type->baseType),
+                                    "", expr->at, CompilationError::operator_not_found);
+                        } else {
+                            error("numeric operator " + expr_op + " type mismatch.",
+                                "\t" + das_to_string(expr_left->type->baseType) + " " + expr_op + " " + das_to_string(expr_right->type->baseType),
+                                    "", expr->at, CompilationError::operator_not_found);
+                        }
+                    } else {
+                        error("numeric operator " + expr_op + " type mismatch.", "" , "",
+                            expr->at, CompilationError::operator_not_found);
+                    }
+                }
+            }
+        }
+
+        enum class InferCallError {
+            functionOrGeneric,
+            operatorOp2
+        };
+
+        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric ) {
             // infer
             vector<TypeDeclPtr> types;
             types.reserve(expr->arguments.size());
@@ -6581,10 +6590,18 @@ namespace das {
                             expr->name = aliasT->structType->name;
                             reportAstChanged();
                         } else {
-                            reportMissing(expr, types, "no matching functions or generics ", true);
+                            if ( cerr==InferCallError::operatorOp2 ) {
+                                reportOp2Errors(expr);
+                            } else {
+                                reportMissing(expr, types, "no matching functions or generics ", true);
+                            }
                         }
                     } else {
-                        reportMissing(expr, types, "no matching functions or generics ", true);
+                        if ( cerr==InferCallError::operatorOp2 ) {
+                            reportOp2Errors(expr);
+                        } else {
+                            reportMissing(expr, types, "no matching functions or generics ", true);
+                        }
                     }
                 }
             }
