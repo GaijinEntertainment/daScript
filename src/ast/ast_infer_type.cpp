@@ -1884,10 +1884,15 @@ namespace das {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
             // infer
             if ( !expr->subexpr->type->isRef() ) {
-                TextWriter tw;
-                tw << *expr->subexpr;
-                error("can only dereference a reference", tw.str(), "",
-                    expr->at, CompilationError::invalid_type);
+                if ( expr->subexpr->rtti_isConstant() ) {
+                    reportAstChanged();
+                    return expr->subexpr;
+                } else {
+                    TextWriter tw;
+                    tw << *expr->subexpr;
+                    error("can only dereference a reference", tw.str(), "",
+                        expr->at, CompilationError::invalid_type);
+                }
             } else if ( !expr->subexpr->type->isSimpleType() ) {
                 error("can only dereference value types, not a " + describeType(expr->subexpr->type),  "", "",
                     expr->at, CompilationError::invalid_type);
