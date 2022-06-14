@@ -2030,7 +2030,27 @@ namespace das {
             }
         }
         virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override {
-            if ( !expr->subexpr->type | !expr->defaultValue->type ) return Visitor::visit(expr);
+            if ( !expr->subexpr->type      || expr->subexpr->type->isAliasOrExpr()      ) return Visitor::visit(expr);  // failed to infer
+            if ( !expr->defaultValue->type || expr->defaultValue->type->isAliasOrExpr() ) return Visitor::visit(expr);  // failed to infer
+            // lets look for an overload of ??
+            if ( true /* !expr->no_promotion */ ) { // note, we might need to add 'no promotion' option at some point
+                auto opName = "_::??";
+                auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
+                tempCall->arguments.push_back(expr->subexpr);
+                tempCall->arguments.push_back(expr->defaultValue);
+                auto ffunc = inferFunctionCall(tempCall.get(),InferCallError::tryOperator).get();
+                if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
+                    reportAstChanged();
+                    auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
+                    opCall->arguments = move(tempCall->arguments);
+                    return opCall;
+                } else if ( ffunc ) { // function ?? found
+                    reportAstChanged();
+                    auto opCall = make_smart<ExprCall>(expr->at, "??");
+                    opCall->arguments = move(tempCall->arguments);
+                    return opCall;
+                }
+            }
             // infer
             expr->subexpr = Expression::autoDereference(expr->subexpr);
             auto seT = expr->subexpr->type;

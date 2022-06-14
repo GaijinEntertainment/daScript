@@ -920,6 +920,7 @@ function_name
     |   DAS_OPERATOR QDOT    { $$ = new string("?."); }
     |   DAS_OPERATOR CLONEEQU   { $$ = new string("clone"); }
     |   DAS_OPERATOR DAS_DELETE { $$ = new string("finalize"); }
+    |   DAS_OPERATOR QQ    { $$ = new string("??"); }
     ;
 
 global_function_declaration
