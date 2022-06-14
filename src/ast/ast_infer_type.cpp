@@ -3606,6 +3606,7 @@ namespace das {
             return Visitor::visitNewArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
+            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( !expr->typeexpr ) {
                 error("new type did not infer", "", "",
                     expr->at, CompilationError::type_not_found);
@@ -3696,7 +3697,8 @@ namespace das {
         }
     // ExprAt
         virtual ExpressionPtr visit ( ExprAt * expr ) override {
-            if ( !expr->subexpr->type || !expr->index->type) return Visitor::visit(expr);
+            if ( !expr->subexpr->type || expr->subexpr->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
+            if ( !expr->index->type   || expr->index->type->isAliasOrExpr()   ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->no_promotion ) {
                 auto opName = "_::[]";
                 auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
@@ -3823,7 +3825,8 @@ namespace das {
         }
     // ExprSafeAt
         virtual ExpressionPtr visit ( ExprSafeAt * expr ) override {
-            if ( !expr->subexpr->type || !expr->index->type) return Visitor::visit(expr);
+            if ( !expr->subexpr->type || expr->subexpr->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
+            if ( !expr->index->type   || expr->index->type->isAliasOrExpr()   ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->no_promotion ) {
                 auto opName = "_::?[]";
                 auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
@@ -4354,7 +4357,7 @@ namespace das {
             return true;
         }
         virtual ExpressionPtr visit ( ExprField * expr ) override {
-            if ( !expr->value->type ) return Visitor::visit(expr);
+            if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( expr->name.empty() ) {
                 error("syntax error, expecting field after .", "", "",
                         expr->at, CompilationError::cant_get_field);
@@ -4497,7 +4500,7 @@ namespace das {
         }
     // ExprSafeField
         virtual ExpressionPtr visit ( ExprSafeField * expr ) override {
-            if ( !expr->value->type ) return Visitor::visit(expr);
+            if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->no_promotion ) {
                 auto opName = "_::?.";
                 auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
@@ -4729,7 +4732,7 @@ namespace das {
         }
     // ExprOp1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
-            if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            if ( !expr->subexpr->type || expr->subexpr->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             // pointer arithmetics
             if ( expr->subexpr->type->isPointer() ) {
                 if ( !expr->subexpr->type->firstType ) {
@@ -4848,7 +4851,8 @@ namespace das {
         }
 
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
-            if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
+            if ( !expr->left->type  || expr->left->type->isAliasOrExpr()  ) return Visitor::visit(expr);    // failed to infer
+            if ( !expr->right->type || expr->right->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             // flippling commutative operations, if the constant is on the left
             if ( expr->left->rtti_isConstant() && !expr->right->rtti_isConstant() ) {                   // if left is const, but right is not
                 if ( expr->left->type->isNumericComparable() && isCommutativeOperator(expr->op) ) {     // if its compareable, and its a logic operator
