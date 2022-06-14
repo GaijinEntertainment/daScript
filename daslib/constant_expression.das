@@ -22,8 +22,10 @@ class ConstantExpressionMacro : AstFunctionAnnotation
             compiling_program() |> macro_error(expr.at,"expecting inferred function")
             return [[ExpressionPtr]]
         var argi : array<int>
-        for ann in expr.func.annotations
+        var anni = -1
+        for ann,idd in expr.func.annotations,range(100500)
             if ann.annotation.name=="constant_expression"
+                anni = idd
                 for arg in ann.arguments
                     if arg.basicType==Type tBool
                         for farg,fidx in expr.func.arguments,range(100500)
@@ -59,6 +61,7 @@ class ConstantExpressionMacro : AstFunctionAnnotation
             func_copy.arguments |> erase(i)
         // func_copy.flags |= FunctionFlags exports
         func_copy.flags |= FunctionFlags generated
+        func_copy.annotations |> erase(anni)
         compiling_module() |> add_function(func_copy)
         var new_call <- clone_expression(expr)
         var ncall = new_call as ExprCall
