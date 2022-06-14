@@ -69,6 +69,7 @@ class AstFunctionAnnotation
     def abstract complete ( var func:FunctionPtr; var ctx:smart_ptr<Context> ) : void
     def abstract isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
     def abstract isSpecialized : bool
+    def abstract appendToMangledName ( func:FunctionPtr; decl:AnnotationDeclaration; var mangledName:das_string ) : void
 
 [macro_interface]
 class AstBlockAnnotation

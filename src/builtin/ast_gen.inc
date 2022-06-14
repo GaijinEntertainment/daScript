@@ -11,9 +11,10 @@ protected:
     __fn_complete = 7,
     __fn_isCompatible = 8,
     __fn_isSpecialized = 9,
+    __fn_appendToMangledName = 10,
   };
 protected:
-  int _das_class_method_offset[10];
+  int _das_class_method_offset[11];
 public:
   AstFunctionAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_transform] = adapt_field_offset("transform",info);
@@ -26,6 +27,7 @@ public:
       _das_class_method_offset[__fn_complete] = adapt_field_offset("complete",info);
       _das_class_method_offset[__fn_isCompatible] = adapt_field_offset("isCompatible",info);
       _das_class_method_offset[__fn_isSpecialized] = adapt_field_offset("isSpecialized",info);
+      _das_class_method_offset[__fn_appendToMangledName] = adapt_field_offset("appendToMangledName",info);
   }
   __forceinline Func get_transform ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_transform]);
@@ -116,6 +118,15 @@ public:
       <void *>
         (__context__,nullptr,__funcCall__,
           self);
+  }
+  __forceinline Func get_appendToMangledName ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_appendToMangledName]);
+  }
+  __forceinline void invoke_appendToMangledName ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> const  func, AnnotationDeclaration const  & decl, das::string & mangledName ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Function> const ,AnnotationDeclaration const  &,das::string &>
+        (__context__,nullptr,__funcCall__,
+          self,func,decl,mangledName);
   }
 };
 

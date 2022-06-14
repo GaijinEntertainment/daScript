@@ -788,6 +788,11 @@ namespace das {
                 invoke_complete(context,fnComplete,classPtr,fnp,ctx);
             }
         }
+        virtual void appendToMangledName( const FunctionPtr & fnp, const AnnotationDeclaration & decl, string & mangledName ) const override {
+            if ( auto fnAppend = get_appendToMangledName(classPtr) ) {
+                invoke_appendToMangledName(context,fnAppend,classPtr,fnp,decl,mangledName);
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;

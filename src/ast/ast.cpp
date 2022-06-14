@@ -601,6 +601,16 @@ namespace das {
             ss << " ";
             arg->type->getMangledName(ss);
         }
+        for ( auto & ann : annotations ) {
+            if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                auto fna = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                string mname;
+                fna->appendToMangledName((Function *)this, *ann, mname);
+                if ( !mname.empty() ) {
+                    ss << " %<" << mname << ">";
+                }
+            }
+        }
     }
 
     uint64_t Function::getMangledNameHash() const {
