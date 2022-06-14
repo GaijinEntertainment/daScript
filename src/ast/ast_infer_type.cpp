@@ -2904,6 +2904,20 @@ namespace das {
                                 expr->at,CompilationError::typeinfo_undefined);
                         }
                     }
+                } else if ( expr->trait=="is_argument" ) {
+                    if ( !expr->subexpr ) {
+                        error("is argument requires subexpression", "", "",
+                            expr->at,CompilationError::typeinfo_undefined);
+                    } else {
+                        if ( expr->subexpr->rtti_isVar() ) {
+                            auto evar = static_pointer_cast<ExprVar>(expr->subexpr);
+                            reportAstChanged();
+                            return make_smart<ExprConstBool>(expr->at, func->findArgument(evar->name) != nullptr);
+                        } else {
+                            reportAstChanged();
+                            return make_smart<ExprConstBool>(expr->at, false);
+                        }
+                    }
                 } else if ( expr->trait=="typename" ) {
                     reportAstChanged();
                     return make_smart<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no));

@@ -8,6 +8,7 @@ module constant_expression shared private
 require daslib/ast_boost
 require daslib/algorithm
 require daslib/strings_boost
+require daslib/templates_boost
 
 def public isConstantExpression ( expr:ExpressionPtr ) : bool
     if expr is ExprRef2Value
@@ -48,16 +49,17 @@ class ConstantExpressionMacro : AstFunctionAnnotation
             let fhash = hash(describe(expr.arguments[i]))
             func_name += "`{fhash}"
         func_copy.name := func_name
-        var blk <- func_copy.body as ExprBlock
+        if expr.func.fromGeneric != null
+            func_copy.body := null
+            func_copy.result := null
+            unsafe
+                func_copy.body <- clone_expression(expr.func.fromGeneric.body)
+                func_copy.result <- clone_type(expr.func.fromGeneric.result)
+
+        apply_template(func_copy.body) <| $ ( rules )
+            for i in argi
+                rules |> replaceVariable(string(expr.func.arguments[i].name)) <| clone_expression(expr.arguments[i])
         for i in argi
-            assume atArg = expr.func.arguments[i].at
-            var vlet <- new [[ExprLet() at=atArg, atInit=atArg ]]
-            vlet.variables |> emplace_new() <| new [[Variable() at=atArg,
-                name := expr.func.arguments[i].name,
-                _type <- new [[TypeDecl() baseType=Type autoinfer,at=atArg]],
-                init <- clone_expression(expr.arguments[i])
-            ]]
-            blk.list |> emplace(vlet, 0)
             func_copy.arguments |> erase(i)
         // func_copy.flags |= FunctionFlags exports
         func_copy.flags |= FunctionFlags generated
