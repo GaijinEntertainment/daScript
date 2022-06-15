@@ -6369,7 +6369,7 @@ namespace das {
             }
         }
 
-        void reportOp2Errors ( ExprLooksLikeCall * expr ) {
+        bool reportOp2Errors ( ExprLooksLikeCall * expr ) {
             auto expr_left = expr->arguments[0].get();
             auto expr_right = expr->arguments[1].get();
             auto expr_op = expr->name.substr(2);
@@ -6378,9 +6378,11 @@ namespace das {
                     if ( !expr_left->type->ref ) {
                         error("numeric operator " + expr_op + " left side must be reference.", "", "",
                             expr->at, CompilationError::operator_not_found);
+                        return true;
                     } else if ( expr_left->type->isConst() ) {
                         error("numeric operator " + expr_op + " left side can't be constant.", "", "",
                             expr->at, CompilationError::operator_not_found);
+                        return true;
                     } else  {
                         if ( verbose ) {
                             TextWriter tw;
@@ -6389,9 +6391,11 @@ namespace das {
                                 das_to_string(expr_left->type->baseType) + " " + expr_op + " " + das_to_string(expr_right->type->baseType)
                                 + " is not defined", "", "try the following\n" + tw.str(),
                                 expr->at, CompilationError::operator_not_found);
+                            return true;
                         } else {
                             error("numeric operator " + expr_op + " type mismatch. both sides have to be of the same type. ",  "", "",
                                 expr->at, CompilationError::operator_not_found);
+                            return true;
                         }
                     }
                 } else {
@@ -6404,21 +6408,26 @@ namespace das {
                                 das_to_string(expr_left->type->baseType) + " " + expr_op + " " + das_to_string(expr_right->type->baseType)
                                     + " is not defined", "", "try one of the following\n" + tw.str(),
                                     expr->at, CompilationError::operator_not_found);
+                            return true;
                         } else if ( expr_left->type->isNumericStorage()  ) {
                             error("numeric operator " + expr_op + " is not defined for storage types (int8,uint8,int16,uint16).",
                                 "\t" + das_to_string(expr_left->type->baseType) + " " + expr_op + " " + das_to_string(expr_right->type->baseType),
                                     "", expr->at, CompilationError::operator_not_found);
+                            return true;
                         } else {
                             error("numeric operator " + expr_op + " type mismatch.",
                                 "\t" + das_to_string(expr_left->type->baseType) + " " + expr_op + " " + das_to_string(expr_right->type->baseType),
                                     "", expr->at, CompilationError::operator_not_found);
+                            return true;
                         }
                     } else {
                         error("numeric operator " + expr_op + " type mismatch.", "" , "",
                             expr->at, CompilationError::operator_not_found);
+                        return true;
                     }
                 }
             }
+            return false;
         }
         enum class InferCallError {
             functionOrGeneric,
@@ -6621,14 +6630,18 @@ namespace das {
                             reportAstChanged();
                         } else {
                             if ( cerr==InferCallError::operatorOp2 ) {
-                                reportOp2Errors(expr);
+                                if ( !reportOp2Errors(expr) ) {
+                                    reportMissing(expr, types, "no matching functions or generics ", true);
+                                }
                             } else if ( cerr!=InferCallError::tryOperator ) {
                                 reportMissing(expr, types, "no matching functions or generics ", true);
                             }
                         }
                     } else {
                         if ( cerr==InferCallError::operatorOp2 ) {
-                            reportOp2Errors(expr);
+                            if ( !reportOp2Errors(expr) ) {
+                                reportMissing(expr, types, "no matching functions or generics ", true);
+                            }
                         } else if ( cerr!=InferCallError::tryOperator ) {
                             reportMissing(expr, types, "no matching functions or generics ", true);
                         }

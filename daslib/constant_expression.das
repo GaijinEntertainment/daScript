@@ -10,6 +10,7 @@ require daslib/algorithm
 require daslib/strings_boost
 require daslib/templates_boost
 
+[macro_function]
 def public isConstantExpression ( expr:ExpressionPtr ) : bool
     if expr is ExprRef2Value
         return isConstantExpression( (expr as ExprRef2Value).subexpr )
