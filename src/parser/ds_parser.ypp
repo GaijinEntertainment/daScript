@@ -1495,6 +1495,11 @@ expr
     |   expr[subexpr] DAS_IS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
         $$ = new ExprIs(tokAt(scanner,@loc),ExpressionPtr($subexpr),TypeDeclPtr($decl));
     }
+    |   expr[subexpr] DAS_IS[loc] basic_type_declaration[decl] {
+        auto vdecl = new TypeDecl($decl);
+        vdecl->at = tokAt(scanner,@decl);
+        $$ = new ExprIs(tokAt(scanner,@loc),ExpressionPtr($subexpr),vdecl);
+    }
     |   expr[subexpr] DAS_IS[loc] NAME[vname] {
         $$ = new ExprIsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),*$vname);
         delete $vname;
@@ -1503,9 +1508,25 @@ expr
         $$ = new ExprAsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),*$vname);
         delete $vname;
     }
+    |   expr[subexpr] DAS_AS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
+        auto vname = $decl->describe();
+        $$ = new ExprAsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),vname);
+        delete $decl;
+    }
+    |   expr[subexpr] DAS_AS[loc] basic_type_declaration[decl] {
+        $$ = new ExprAsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),das_to_string($decl));
+    }
     |   expr[subexpr] '?' DAS_AS[loc] NAME[vname] {
         $$ = new ExprSafeAsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),*$vname);
         delete $vname;
+    }
+    |   expr[subexpr] '?' DAS_AS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
+        auto vname = $decl->describe();
+        $$ = new ExprSafeAsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),vname);
+        delete $decl;
+    }
+    |   expr[subexpr] '?' DAS_AS[loc] basic_type_declaration[decl] {
+        $$ = new ExprSafeAsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),das_to_string($decl));
     }
     |   expr_type_info[subexpr]                 { $$ = $subexpr; }
     |   expr_type_decl[subexpr]                 { $$ = $subexpr; }
