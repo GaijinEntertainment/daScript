@@ -2037,25 +2037,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override {
             if ( !expr->subexpr->type      || expr->subexpr->type->isAliasOrExpr()      ) return Visitor::visit(expr);  // failed to infer
             if ( !expr->defaultValue->type || expr->defaultValue->type->isAliasOrExpr() ) return Visitor::visit(expr);  // failed to infer
-            // lets look for an overload of ??
-            if ( true /* !expr->no_promotion */ ) { // note, we might need to add 'no promotion' option at some point
-                auto opName = "_::??";
-                auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
-                tempCall->arguments.push_back(expr->subexpr);
-                tempCall->arguments.push_back(expr->defaultValue);
-                auto ffunc = inferFunctionCall(tempCall.get(),InferCallError::tryOperator).get();
-                if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
-                    reportAstChanged();
-                    auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
-                    opCall->arguments = move(tempCall->arguments);
-                    return opCall;
-                } else if ( ffunc ) { // function ?? found
-                    reportAstChanged();
-                    auto opCall = make_smart<ExprCall>(expr->at, "??");
-                    opCall->arguments = move(tempCall->arguments);
-                    return opCall;
-                }
-            }
+            if ( auto opE = inferGenericOperator("??",expr->at,expr->subexpr,expr->defaultValue) ) return opE;
             // infer
             expr->subexpr = Expression::autoDereference(expr->subexpr);
             auto seT = expr->subexpr->type;
@@ -3739,22 +3721,7 @@ namespace das {
             if ( !expr->subexpr->type || expr->subexpr->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->index->type   || expr->index->type->isAliasOrExpr()   ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->no_promotion ) {
-                auto opName = "_::[]";
-                auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
-                tempCall->arguments.push_back(expr->subexpr);
-                tempCall->arguments.push_back(expr->index);
-                auto ffunc = inferFunctionCall(tempCall.get(),InferCallError::tryOperator).get();
-                if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
-                    reportAstChanged();
-                    auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
-                    opCall->arguments = move(tempCall->arguments);
-                    return opCall;
-                } else if ( ffunc ) { // function [] found
-                    reportAstChanged();
-                    auto opCall = make_smart<ExprCall>(expr->at, "[]");
-                    opCall->arguments = move(tempCall->arguments);
-                    return opCall;
-                }
+                if ( auto opE = inferGenericOperator("[]",expr->at,expr->subexpr,expr->index) ) return opE;
             }
             expr->index = Expression::autoDereference(expr->index);
             auto seT = expr->subexpr->type;
@@ -3867,22 +3834,7 @@ namespace das {
             if ( !expr->subexpr->type || expr->subexpr->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->index->type   || expr->index->type->isAliasOrExpr()   ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->no_promotion ) {
-                auto opName = "_::?[]";
-                auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
-                tempCall->arguments.push_back(expr->subexpr);
-                tempCall->arguments.push_back(expr->index);
-                auto ffunc = inferFunctionCall(tempCall.get(),InferCallError::tryOperator).get();
-                if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
-                    reportAstChanged();
-                    auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
-                    opCall->arguments = move(tempCall->arguments);
-                    return opCall;
-                } else if ( ffunc ) { // function ?[] found
-                    reportAstChanged();
-                    auto opCall = make_smart<ExprCall>(expr->at, "?[]");
-                    opCall->arguments = move(tempCall->arguments);
-                    return opCall;
-                }
+                if ( auto opE = inferGenericOperator("?[]",expr->at,expr->subexpr,expr->index) ) return opE;
             }
             if ( !expr->subexpr->type->isVectorType() ) {
                 expr->subexpr = Expression::autoDereference(expr->subexpr);
@@ -4403,26 +4355,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             if ( !expr->no_promotion ) {
-                auto opName = "_::.";
-                auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
-                tempCall->arguments.push_back(expr->value);
-                auto conststring = make_smart<TypeDecl>(Type::tString);
-                conststring->constant = true;
-                auto fieldName = make_smart<ExprConstString>(expr->at,expr->name);
-                fieldName->type = conststring;
-                tempCall->arguments.push_back(fieldName);
-                auto ffunc = inferFunctionCall(tempCall.get(),InferCallError::tryOperator).get();
-                if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
-                    reportAstChanged();
-                    auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
-                    opCall->arguments = move(tempCall->arguments);
-                    return opCall;
-                } else if ( ffunc ) { // function . found
-                    reportAstChanged();
-                    auto opCall = make_smart<ExprCall>(expr->at, ".");
-                    opCall->arguments = move(tempCall->arguments);
-                    return opCall;
-                }
+                if ( auto opE = inferGenericOperatorWithName(".",expr->at,expr->value,expr->name) ) return opE;
             }
             auto valT = expr->value->type;
             if ( valT->isVectorType() ) {
@@ -4541,26 +4474,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprSafeField * expr ) override {
             if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->no_promotion ) {
-                auto opName = "_::?.";
-                auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
-                tempCall->arguments.push_back(expr->value);
-                auto conststring = make_smart<TypeDecl>(Type::tString);
-                conststring->constant = true;
-                auto fieldName = make_smart<ExprConstString>(expr->at,expr->name);
-                fieldName->type = conststring;
-                tempCall->arguments.push_back(fieldName);
-                auto ffunc = inferFunctionCall(tempCall.get(),InferCallError::tryOperator).get();
-                if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
-                    reportAstChanged();
-                    auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
-                    opCall->arguments = move(tempCall->arguments);
-                    return opCall;
-                } else if ( ffunc ) { // function ?. found
-                    reportAstChanged();
-                    auto opCall = make_smart<ExprCall>(expr->at, "?.");
-                    opCall->arguments = move(tempCall->arguments);
-                    return opCall;
-                }
+                if ( auto opE = inferGenericOperatorWithName("?.",expr->at,expr->value,expr->name) ) return opE;
             }
             auto valT = expr->value->type;
             if ( !valT->isPointer() || !valT->firstType ) {
@@ -6649,6 +6563,33 @@ namespace das {
                 }
             }
             return nullptr;
+        }
+        ExpressionPtr inferGenericOperator ( const string & opN, const LineInfo & expr_at, const ExpressionPtr & arg0, const ExpressionPtr & arg1, InferCallError err = InferCallError::tryOperator ) {
+            auto opName = "_::" + opN;
+            auto tempCall = make_smart<ExprLooksLikeCall>(expr_at,opName);
+            tempCall->arguments.push_back(arg0);
+            if ( arg1 ) tempCall->arguments.push_back(arg1);
+            auto ffunc = inferFunctionCall(tempCall.get(),err).get();
+            if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
+                reportAstChanged();
+                auto opCall = make_smart<ExprCall>(expr_at, tempCall->name);
+                opCall->arguments = move(tempCall->arguments);
+                return opCall;
+            } else if ( ffunc ) { // function found
+                reportAstChanged();
+                auto opCall = make_smart<ExprCall>(expr_at, opN);
+                opCall->arguments = move(tempCall->arguments);
+                return opCall;
+            } else {
+                return nullptr;
+            }
+        }
+        ExpressionPtr inferGenericOperatorWithName ( const string & opN, const LineInfo & expr_at, const ExpressionPtr & arg0, const string & arg1, InferCallError err = InferCallError::tryOperator ) {
+            auto conststring = make_smart<TypeDecl>(Type::tString);
+            conststring->constant = true;
+            auto fieldName = make_smart<ExprConstString>(expr_at,arg1);
+            fieldName->type = conststring;
+            return inferGenericOperator(opN, expr_at, arg0, fieldName, err);
         }
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
