@@ -4193,7 +4193,7 @@ namespace das {
         }
     // ExprAsVariant
         virtual ExpressionPtr visit(ExprAsVariant * expr) override {
-            if (!expr->value->type) return Visitor::visit(expr);
+            if (!expr->value->type || expr->value->type->isAliasOrExpr()) return Visitor::visit(expr);
             // implement variant macros
             ExpressionPtr substitute;
             auto thisModule = ctx.thisProgram->thisModule.get();
@@ -4213,6 +4213,8 @@ namespace das {
                 reportAstChanged();
                 return substitute;
             }
+            // generic operator
+            if ( auto opE = inferGenericOperatorWithName("`as",expr->at,expr->value,expr->name) ) return opE;
             // regular infer
             auto valT = expr->value->type;
             if ( !valT->isGoodVariantType() ) {
@@ -4236,7 +4238,7 @@ namespace das {
         }
     // ExprSafeAsVariant
         virtual ExpressionPtr visit(ExprSafeAsVariant * expr) override {
-            if (!expr->value->type) return Visitor::visit(expr);
+            if (!expr->value->type || expr->value->type->isAliasOrExpr()) return Visitor::visit(expr);
             // implement variant macros
             ExpressionPtr substitute;
             auto thisModule = ctx.thisProgram->thisModule.get();
@@ -4256,6 +4258,8 @@ namespace das {
                 reportAstChanged();
                 return substitute;
             }
+            // generic operator
+            if ( auto opE = inferGenericOperatorWithName("?as",expr->at,expr->value,expr->name) ) return opE;
             // regular infer
             if ( !expr->value->type->isPointer() && !safeExpression(expr) ) {
                 error("variant ?as on non-pointer requires unsafe", "", "",
@@ -4288,7 +4292,7 @@ namespace das {
         }
     // ExprIsVariant
         virtual ExpressionPtr visit(ExprIsVariant * expr) override {
-            if (!expr->value->type) return Visitor::visit(expr);
+            if (!expr->value->type || expr->value->type->isAliasOrExpr()) return Visitor::visit(expr);
             // implement variant macros
             ExpressionPtr substitute;
             auto thisModule = ctx.thisProgram->thisModule.get();
@@ -4308,6 +4312,8 @@ namespace das {
                 reportAstChanged();
                 return substitute;
             }
+            // generic operator
+            if ( auto opE = inferGenericOperatorWithName("`is",expr->at,expr->value,expr->name) ) return opE;
             // regular infer
             auto valT = expr->value->type;
             if ( !valT->isGoodVariantType() ) {

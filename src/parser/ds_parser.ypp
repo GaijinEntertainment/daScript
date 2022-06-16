@@ -921,6 +921,9 @@ function_name
     |   DAS_OPERATOR CLONEEQU   { $$ = new string("clone"); }
     |   DAS_OPERATOR DAS_DELETE { $$ = new string("finalize"); }
     |   DAS_OPERATOR QQ    { $$ = new string("??"); }
+    |   DAS_OPERATOR DAS_IS { $$ = new string("`is"); }
+    |   DAS_OPERATOR DAS_AS { $$ = new string("`as"); }
+    |   DAS_OPERATOR '?' DAS_AS { $$ = new string("?as"); }
     ;
 
 global_function_declaration
