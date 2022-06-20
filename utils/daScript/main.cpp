@@ -109,6 +109,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 tw << "#pragma warning(disable:4623)   // default constructor was implicitly defined as deleted\n";
                 tw << "#pragma warning(disable:4946)   // reinterpret_cast used between related classes\n";
                 tw << "#pragma warning(disable:4269)   // 'const' automatic data initialized with compiler generated default constructor produces unreliable results\n";
+                tw << "#pragma warning(disable:4555)   // result of expression not used\n";
                 tw << "#endif\n";
                 tw << "#if defined(__GNUC__) && !defined(__clang__)\n";
                 tw << "#pragma GCC diagnostic push\n";
