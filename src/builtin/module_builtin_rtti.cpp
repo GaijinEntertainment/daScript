@@ -171,6 +171,7 @@ DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
     )
 
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
+das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
 namespace das {
     template <>
@@ -684,7 +685,7 @@ namespace das {
     void rtti_builtin_simulate ( const smart_ptr<Program> & program,
             const TBlock<void,bool,smart_ptr<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
         TextWriter issues;
-        auto ctx = make_smart<Context>(program->getContextStackSize());
+        auto ctx = get_context(program->getContextStackSize());
         bool failed = !program->simulate(*ctx, issues);
         if ( failed ) {
             for ( auto & err : program->errors ) {

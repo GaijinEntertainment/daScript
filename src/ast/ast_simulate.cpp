@@ -14,6 +14,8 @@
 
 #include "daScript/simulate/simulate_visit_op.h"
 
+das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
+
 namespace das
 {
     // common for move and copy
@@ -1215,8 +1217,7 @@ namespace das
         auto cont = arguments[0]->simulate(context);
         auto val = arguments[1]->simulate(context);
         if ( arguments[0]->type->isGoodTableType() ) {
-            uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
-            DAS_ASSERTF(valueTypeSize==0,"Expecting value type size to be 0 for set insert");
+            DAS_ASSERTF(arguments[0]->type->secondType->getSizeOf()==0,"Expecting value type size to be 0 for set insert");
             return context.code->makeValueNode<SimNode_TableSetInsert>(arguments[0]->type->firstType->baseType, at, cont, val);
         } else {
             DAS_ASSERTF(0, "we should not even be here. erase can only accept tables. infer type should have failed.");
@@ -2791,7 +2792,7 @@ namespace das
 
     void Program::makeMacroModule ( TextWriter & logs ) {
         isCompilingMacros = true;
-        thisModule->macroContext = make_smart<Context>(getContextStackSize());
+        thisModule->macroContext = get_context(getContextStackSize());
         auto oldAot = policies.aot;
         policies.aot = false;
         simulate(*thisModule->macroContext, logs);
