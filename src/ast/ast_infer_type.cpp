@@ -5828,6 +5828,10 @@ namespace das {
                     error("local variable " + var->name + " initialization type can't be inferred, "
                           + describeType(var->type) + " = " + describeType(var->init->type), "", "",
                           var->at, CompilationError::cant_infer_mismatching_restrictions );
+                } else if ( varT->isVoid() ) {
+                    error("local variable " + var->name + " initialization can't be void, "
+                          + describeType(var->type), "", "",
+                          var->at, CompilationError::cant_infer_mismatching_restrictions );
                 } else {
                     varT->ref = false;
                     TypeDecl::applyAutoContracts(varT, var->type);
