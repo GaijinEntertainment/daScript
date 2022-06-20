@@ -268,6 +268,7 @@ namespace das
         LineInfo        at;
         int             index = -1;
         uint32_t        stackTop = 0;
+        uint32_t        extraLocalOffset = 0;   // this is here for fake variables only
         Module *        module = nullptr;
         das_set<Function *> useFunctions;
         das_set<Variable *> useGlobalVariables;

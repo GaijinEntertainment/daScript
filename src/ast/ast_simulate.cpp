@@ -632,7 +632,8 @@ namespace das
             if ( useCMRES ) {
                 fakeVariable->aliasCMRES = true;
             } else if ( useStackRef ) {
-                fakeVariable->stackTop = stackTop + extraOffset;
+                fakeVariable->stackTop = stackTop;
+                fakeVariable->extraLocalOffset = extraOffset;
                 fakeVariable->type->ref = true;
                 if ( total != 1 ) {
                     fakeVariable->type->dim.push_back(total);
@@ -1942,10 +1943,10 @@ namespace das
             if ( variable->type->ref ) {
                 if ( r2vType->baseType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_GetLocalRefOffR2V>(r2vType->baseType, at,
-                                                    variable->stackTop, extraOffset);
+                                                    variable->stackTop, extraOffset + variable->extraLocalOffset);
                 } else {
                     return context.code->makeNode<SimNode_GetLocalRefOff>(at,
-                                                    variable->stackTop, extraOffset);
+                                                    variable->stackTop, extraOffset + variable->extraLocalOffset);
                 }
             } else if ( variable->aliasCMRES ) {
                 if ( r2vType->baseType!=Type::none ) {
@@ -2018,9 +2019,9 @@ namespace das
             }
         } else if ( local ) {
             if ( r2v ) {
-                return trySimulate(context, 0, type);
+                return trySimulate(context, variable->extraLocalOffset, type);
             } else {
-                return trySimulate(context, 0, make_smart<TypeDecl>(Type::none));
+                return trySimulate(context, variable->extraLocalOffset, make_smart<TypeDecl>(Type::none));
             }
         } else if ( argument) {
             if (variable->type->isRef()) {
