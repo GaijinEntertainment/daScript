@@ -32,7 +32,7 @@ def test
     verify(is_utf8_string_valid(""))
 
     let invalidStr <- [{ uint8 uint8(0x1F); uint8(0xFF); uint8(0xFF) }]
-    verify(is_utf8_string_valid(" "))
+    verify(!is_utf8_string_valid(invalidStr))
 
     return true
 
