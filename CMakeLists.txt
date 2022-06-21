@@ -602,6 +602,7 @@ DAS_AOT("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
 DAS_AOT("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
 DAS_AOT("daslib/random.das" AOT_GENERATED_SRC dasAotStub daScript)
 DAS_AOT("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+DAS_AOT("daslib/utf8_utils.das" AOT_GENERATED_SRC dasAotStub daScript)
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
