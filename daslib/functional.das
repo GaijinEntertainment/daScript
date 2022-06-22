@@ -222,3 +222,15 @@ def flatten ( var it : iterator<auto(TT)> )
             return <- flatten_one ( [[for i in it; flatten(i)]] )
         else
             return <- [[for i in it; i]]
+
+def sorted ( var arr:array<auto> )
+    arr |> sort
+    return <- arr
+
+def sorted ( var it:iterator<auto(TT)> )
+    var arr <- to_array(it)
+    sort(arr)
+    return <- generator<TT> [[<-arr]] () <|
+        for x in arr
+            yield x
+        return false
