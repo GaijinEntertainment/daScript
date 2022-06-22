@@ -2121,6 +2121,11 @@ namespace das
                                                     right->simulate(context));
     }
 
+    SimNode * ExprTag::simulate (Context & context) const {
+        context.thisProgram->error("internal compilation error, trying to simulate a tag", "", "", at);
+        return nullptr;
+    }
+
     SimNode * ExprMove::simulate (Context & context) const {
         auto retN = makeMove(at,context,left,right);
         if ( !retN ) {

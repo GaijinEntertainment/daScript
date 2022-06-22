@@ -1086,6 +1086,7 @@ namespace das
         virtual void preVisit (  Program *, Module *, ExprCallMacro * ) { }
         virtual ExpressionPtr visit (  Program *, Module *, ExprCallMacro * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
+        virtual bool canVisitArguments ( ExprCallMacro * ) { return true; }
         string name;
         Module * module = nullptr;
     };

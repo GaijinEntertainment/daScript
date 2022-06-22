@@ -262,6 +262,7 @@ namespace das {
         VISIT_EXPR(ExprArrayComprehension)
         VISIT_EXPR(ExprMemZero)
         VISIT_EXPR(ExprTypeDecl)
+        VISIT_EXPR(ExprTag)
 #undef VISIT_EXPR
     };
 #if defined(_MSC_VER)

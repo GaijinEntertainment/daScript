@@ -133,6 +133,7 @@ class AstCommentReader
 class AstCallMacro
     def abstract preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void
     def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+    def abstract canVisitArguments ( expr:smart_ptr<ExprCallMacro> ) : bool
 
 [macro_interface]
 class AstTypeInfoMacro
@@ -389,6 +390,9 @@ class AstVisitor
 // var
     def abstract preVisitExprVar(expr:smart_ptr<ExprVar>) : void
     def abstract visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
+// tag
+    def abstract preVisitExprTag(expr:smart_ptr<ExprTag>) : void
+    def abstract visitExprTag(expr:smart_ptr<ExprTag>) : ExpressionPtr
 // field
     def abstract preVisitExprField(expr:smart_ptr<ExprField>) : void
     def abstract visitExprField(expr:smart_ptr<ExprField>) : ExpressionPtr

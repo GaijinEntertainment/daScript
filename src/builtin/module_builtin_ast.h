@@ -77,6 +77,7 @@ MAKE_EXTERNAL_TYPE_FACTORY(ExprAscend,das::ExprAscend);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprCast,das::ExprCast);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprDelete,das::ExprDelete);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprVar,das::ExprVar);
+MAKE_EXTERNAL_TYPE_FACTORY(ExprTag,das::ExprTag);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprSwizzle,das::ExprSwizzle);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprField,das::ExprField);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprSafeField,das::ExprSafeField);

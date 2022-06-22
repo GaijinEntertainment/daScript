@@ -221,3 +221,67 @@ def public remove_deref ( varname : string; var expr:smart_ptr<Expression> )
     unsafe
         delete astVisitor
     astVisitorAdapter := null
+
+class private QRulesVisitor : AstVisitor
+    tag_index : int = 0
+    [[do_not_delete]] rblock : ExprBlock?
+    def QRulesVisitor ( rb:ExprBlock? )
+        rblock = rb
+    def override visitExprTag ( expr:smart_ptr<ExprTag> ) : ExpressionPtr
+        let new_tag_name = "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
+        // print("replacing {new_tag_name} <- {describe(expr.subexpr)}\n")
+        // deppending on a tag now?
+
+        // renameVariable(rules,new_tag_name,expr.subexpr)
+        var rvc <- new [[ExprCall() at=expr.at, name:="renameVariable"]]
+        rvc.arguments |> emplace_new <| new [[ExprVar() at=expr.at, name:="rules"]]
+        rvc.arguments |> emplace_new <| new [[ExprConstString() at=expr.at, value:=new_tag_name]]
+        rvc.arguments |> emplace_new <| clone_expression(expr.subexpr)
+        rblock.list |> emplace(rvc)
+
+        return <- new [[ExprVar() at=expr.at, name:=new_tag_name]]
+
+[macro_function]
+def private apply_qrules ( var expr:smart_ptr<Expression> ) : smart_ptr<ExprBlock>
+    var eblk <- new [[ExprBlock() at=expr.at,
+        returnType <- new [[TypeDecl() at=expr.at, baseType=Type tVoid]]
+    ]]
+    eblk.arguments |> emplace_new <| new [[Variable() at=expr.at,
+        name := "rules",
+        _type <- typeinfo(ast_typedecl type<Template>)
+    ]]
+    eblk.blockFlags |= ExprBlockFlags isClosure
+    var astVisitor = new QRulesVisitor(get_ptr(eblk))
+    var astVisitorAdapter <- make_visitor(*astVisitor)
+    expr |> visit(astVisitorAdapter)
+    unsafe
+        delete astVisitor
+    astVisitorAdapter := null
+    return eblk
+
+def public apply_qmacro ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> )
+    apply_template(expr, blk)
+    return expr
+
+[call_macro(name="qmacro")]
+class QMacro : AstCallMacro
+    //! This macro will implement expression substitution macro
+    def override canVisitArguments ( call:smart_ptr<ExprCallMacro> ) : bool
+        return false    // nop, this one is just like quote
+    def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+        if call.arguments.length != 1
+            debug(call.arguments)
+            macro_error(prog,call.at,"expecting 1 argument, qmacro(expression)")
+            return [[ExpressionPtr]]
+        if call.arguments[0] is Expression
+            macro_error(prog,call.at,"expecting expression, qmacro(expression)")
+            return [[ExpressionPtr]]
+        var qclone <- clone_expression(call.arguments[0])
+        var qblk <- apply_qrules(qclone)
+
+        var qquote <- new [[ExprQuote() at=call.at]]
+        qquote.arguments |> emplace(qclone)
+        var acall <- new [[ExprCall() at=call.at, name:="apply_qmacro"]]
+        acall.arguments |> emplace<| qquote
+        acall.arguments |> emplace_new <| new [[ExprMakeBlock() _block<-qblk, at=call.at]]
+        return acall

@@ -227,6 +227,7 @@ namespace das {
         IMPL_ADAPT(ExprCast);
         IMPL_ADAPT(ExprDelete);
         IMPL_ADAPT(ExprVar);
+        IMPL_ADAPT(ExprTag);
         IMPL_ADAPT(ExprSwizzle);
         IMPL_ADAPT(ExprField);
         IMPL_ADAPT(ExprSafeField);
@@ -599,6 +600,7 @@ namespace das {
     IMPL_BIND_EXPR(ExprCast);
     IMPL_BIND_EXPR(ExprDelete);
     IMPL_BIND_EXPR(ExprVar);
+    IMPL_BIND_EXPR(ExprTag);
     IMPL_BIND_EXPR(ExprSwizzle);
     IMPL_BIND_EXPR(ExprField);
     IMPL_BIND_EXPR(ExprSafeField);
@@ -1195,6 +1197,13 @@ namespace das {
                 return invoke_visit(context,fnVisit,classPtr,prog,mod,expr);
             } else {
                 return nullptr;
+            }
+        }
+        virtual bool canVisitArguments ( ExprCallMacro * expr ) override {
+            if ( auto fnCanVisitArguments = get_canVisitArguments(classPtr) ) {
+                return invoke_canVisitArguments(context,fnCanVisitArguments,classPtr,expr);
+            } else {
+                return true;
             }
         }
     protected:

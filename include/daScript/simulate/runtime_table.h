@@ -152,7 +152,7 @@ namespace das
             uint32_t newCapacity = das::max(uint32_t(minCapacity), tab.capacity*2);
         repeatIt:;
             Table newTab;
-            uint64_t memSize64 = uint64_t(newCapacity) * (valueTypeSize + sizeof(KeyType) + sizeof(uint64_t));
+            uint64_t memSize64 = uint64_t(newCapacity) * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + uint64_t(sizeof(uint64_t)));
             if ( memSize64>=0xffffffff ) {
                 context->throw_error_ex("can't grow table, out of index space [capacity=%i]", newCapacity);
                 return false;

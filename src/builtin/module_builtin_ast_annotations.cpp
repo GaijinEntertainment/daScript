@@ -97,6 +97,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprAscend,ExprAscend);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprCast,ExprCast);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprDelete,ExprDelete);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprVar,ExprVar);
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprTag,ExprTag);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprSwizzle,ExprSwizzle);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprField,ExprField);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprSafeField,ExprSafeField);
@@ -652,6 +653,14 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(pBlock)>("pBlock");
             addField<DAS_BIND_MANAGED_FIELD(argumentIndex)>("argumentIndex");
             addFieldEx ( "varFlags", "varFlags", offsetof(ExprVar, varFlags), makeExprVarFlags() );
+        }
+    };
+
+    struct AstExprTagAnnotation : AstExpressionAnnotation<ExprTag> {
+        AstExprTagAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprTag> ("ExprTag", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };
 
@@ -1263,6 +1272,7 @@ namespace das {
         addExpressionAnnotation(make_smart<AstExprCastAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprDeleteAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprVarAnnotation>(lib))->from("Expression");
+        addExpressionAnnotation(make_smart<AstExprTagAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprSwizzleAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprFieldAnnotation<ExprField>>("ExprField",lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprSafeFieldAnnotation>(lib))->from("ExprField");

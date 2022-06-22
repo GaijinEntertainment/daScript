@@ -1781,6 +1781,22 @@ namespace das {
         return cexpr;
     }
 
+    // ExprTag
+
+    ExpressionPtr ExprTag::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprTag::clone ( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprTag>(expr);
+        Expression::clone(cexpr);
+        cexpr->subexpr = subexpr->clone();
+        cexpr->name = name;
+        return cexpr;
+    }
+
     // ExprOp
 
     ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const {
@@ -2259,10 +2275,12 @@ namespace das {
 
     ExpressionPtr ExprCallMacro::visit(Visitor & vis) {
         vis.preVisit(this);
-        for ( auto & arg : arguments ) {
-            vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
-            arg = arg->visit(vis);
-            arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+        if ( !macro || macro->canVisitArguments(this) ) {
+            for ( auto & arg : arguments ) {
+                vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+                arg = arg->visit(vis);
+                arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+            }
         }
         return vis.visit(this);
     }

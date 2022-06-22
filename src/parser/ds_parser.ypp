@@ -276,6 +276,7 @@
 %token  OROREQU             "||="
 %token  XORXOREQU           "^^="
 %token  DOTDOT              ".."
+%token  MTAG                "$$"
 
 
 %token  BRABRAB             "[["    /* [[ */
@@ -1543,6 +1544,8 @@ expr
         $subexpr->userSaidItsSafe = true;
         $$ = $subexpr;
     }
+    |   MTAG '(' expr[subexpr] ')'                   { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,""); }
+    |   MTAG NAME[subname] '(' expr[subexpr] ')'     { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,*$subname); delete $subname; }
     ;
 
 optional_field_annotation

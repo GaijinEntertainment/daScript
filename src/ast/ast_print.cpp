@@ -540,6 +540,15 @@ namespace das {
             Visitor::preVisit(wh);
             ss << "with " << wh->alias << " = ";
         }
+    // tag
+        virtual void preVisit ( ExprTag * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "$$" << expr->name << "(";
+        }
+        virtual ExpressionPtr visit ( ExprTag * expr ) override {
+            ss << ")";
+            return Visitor::visit(expr);
+        }
     // while
         virtual void preVisit ( ExprWhile * wh ) override {
             Visitor::preVisit(wh);

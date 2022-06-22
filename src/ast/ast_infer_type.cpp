@@ -4545,6 +4545,11 @@ namespace das {
             verifyPrivateFieldLookup(expr);
             return Visitor::visit(expr);
         }
+    // tag
+        virtual void preVisit ( ExprTag * expr ) override {
+            Visitor::preVisit(expr);
+            error("macro tags can only appear in macro blocks", "", "", expr->at, CompilationError::unbound_macro_tag);
+        }
     // ExprVar
         vector<VariablePtr> findMatchingVar ( const string & name, bool seePrivate ) const {
             string moduleName, varName;
