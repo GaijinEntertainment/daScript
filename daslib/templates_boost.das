@@ -232,8 +232,7 @@ class private QRulesVisitor : AstVisitor
         let new_tag_name = "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
         // print("replacing {new_tag_name} <- {describe(expr.subexpr)}\n")
         // deppending on a tag now?
-        // renameVariable(rules,new_tag_name,expr.subexpr)
-        if expr.name=="e"
+        if expr.name=="v"   // value
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
                 name:="replaceVariable",
                 arguments:=[{ExpressionPtr
@@ -243,7 +242,15 @@ class private QRulesVisitor : AstVisitor
                         arguments := [{ExpressionPtr[1] clone_expression(expr.subexpr) }]
                     ]]
                 }]]]
-        elif expr.name==""
+        elif expr.name=="" || expr.name=="e"    // expression
+            rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+                name:="replaceVariable",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=expr.at, name:="rules"]];
+                    new [[ExprConstString() at=expr.at, value:=new_tag_name]];
+                    clone_expression(expr.subexpr)
+                }]]]
+        elif expr.name=="i" // identificator
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
                 name:="renameVariable",
                 arguments:=[{ExpressionPtr
