@@ -576,11 +576,14 @@ def private walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
     else
         return walk_and_convert_basic(data,info,at)
 
-def convert_to_expression ( var value : auto&; at:LineInfo )
+def convert_to_expression ( value : auto; at:LineInfo )
 	let info <- typeinfo(ast_typedecl value)
     unsafe
 	    let pval = addr(value)
 	    return walk_and_convert(reinterpret<uint8?> pval, info, at)
+
+def convert_to_expression ( value : auto )
+    return convert_to_expression(value,[[LineInfo]])
 
 def find_annotation ( mod_name,ann_name:string ) : Annotation const?
     var mod = find_compiling_module(mod_name)

@@ -224,6 +224,7 @@ def public remove_deref ( varname : string; var expr:smart_ptr<Expression> )
 
 class private QRulesVisitor : AstVisitor
     tag_index : int = 0
+    failed : bool = false
     [[do_not_delete]] rblock : ExprBlock?
     def QRulesVisitor ( rb:ExprBlock? )
         rblock = rb
@@ -232,13 +233,27 @@ class private QRulesVisitor : AstVisitor
         // print("replacing {new_tag_name} <- {describe(expr.subexpr)}\n")
         // deppending on a tag now?
         // renameVariable(rules,new_tag_name,expr.subexpr)
-        rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
-            name:="renameVariable",
-            arguments:=[{ExpressionPtr
-                new [[ExprVar() at=expr.at, name:="rules"]];
-                new [[ExprConstString() at=expr.at, value:=new_tag_name]];
-                clone_expression(expr.subexpr)
-            }]]]
+        if expr.name=="e"
+            rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+                name:="replaceVariable",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=expr.at, name:="rules"]];
+                    new [[ExprConstString() at=expr.at, value:=new_tag_name]];
+                    new [[ExprCall() at=expr.at, name:="convert_to_expression",
+                        arguments := [{ExpressionPtr[1] clone_expression(expr.subexpr) }]
+                    ]]
+                }]]]
+        elif expr.name==""
+            rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+                name:="renameVariable",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=expr.at, name:="rules"]];
+                    new [[ExprConstString() at=expr.at, value:=new_tag_name]];
+                    clone_expression(expr.subexpr)
+                }]]]
+        else
+            compiling_program() |> macro_error(expr.at,"unsupported ExprTag {expr.name}")
+            failed = true
         return <- new [[ExprVar() at=expr.at, name:=new_tag_name]]
 
 [macro_function]
@@ -253,6 +268,8 @@ def private apply_qrules ( var expr:smart_ptr<Expression> ) : smart_ptr<ExprBloc
     var astVisitor = new QRulesVisitor(get_ptr(eblk))
     var astVisitorAdapter <- make_visitor(*astVisitor)
     expr |> visit(astVisitorAdapter)
+    if astVisitor.failed
+        eblk := null
     unsafe
         delete astVisitor
     astVisitorAdapter := null
