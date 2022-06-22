@@ -231,26 +231,25 @@ class private QRulesVisitor : AstVisitor
         let new_tag_name = "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
         // print("replacing {new_tag_name} <- {describe(expr.subexpr)}\n")
         // deppending on a tag now?
-
         // renameVariable(rules,new_tag_name,expr.subexpr)
-        var rvc <- new [[ExprCall() at=expr.at, name:="renameVariable"]]
-        rvc.arguments |> emplace_new <| new [[ExprVar() at=expr.at, name:="rules"]]
-        rvc.arguments |> emplace_new <| new [[ExprConstString() at=expr.at, value:=new_tag_name]]
-        rvc.arguments |> emplace_new <| clone_expression(expr.subexpr)
-        rblock.list |> emplace(rvc)
-
+        rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+            name:="renameVariable",
+            arguments:=[{ExpressionPtr
+                new [[ExprVar() at=expr.at, name:="rules"]];
+                new [[ExprConstString() at=expr.at, value:=new_tag_name]];
+                clone_expression(expr.subexpr)
+            }]]]
         return <- new [[ExprVar() at=expr.at, name:=new_tag_name]]
 
 [macro_function]
 def private apply_qrules ( var expr:smart_ptr<Expression> ) : smart_ptr<ExprBlock>
     var eblk <- new [[ExprBlock() at=expr.at,
-        returnType <- new [[TypeDecl() at=expr.at, baseType=Type tVoid]]
+        returnType <- new [[TypeDecl() at=expr.at, baseType=Type tVoid]],
+        arguments := [{VariablePtr[1]
+            new [[Variable() at=expr.at, name := "rules", _type <- typeinfo(ast_typedecl type<Template>) ]]
+        }],
+        blockFlags = ExprBlockFlags isClosure
     ]]
-    eblk.arguments |> emplace_new <| new [[Variable() at=expr.at,
-        name := "rules",
-        _type <- typeinfo(ast_typedecl type<Template>)
-    ]]
-    eblk.blockFlags |= ExprBlockFlags isClosure
     var astVisitor = new QRulesVisitor(get_ptr(eblk))
     var astVisitorAdapter <- make_visitor(*astVisitor)
     expr |> visit(astVisitorAdapter)
@@ -278,10 +277,14 @@ class QMacro : AstCallMacro
             return [[ExpressionPtr]]
         var qclone <- clone_expression(call.arguments[0])
         var qblk <- apply_qrules(qclone)
-
-        var qquote <- new [[ExprQuote() at=call.at]]
-        qquote.arguments |> emplace(qclone)
-        var acall <- new [[ExprCall() at=call.at, name:="apply_qmacro"]]
-        acall.arguments |> emplace<| qquote
-        acall.arguments |> emplace_new <| new [[ExprMakeBlock() _block<-qblk, at=call.at]]
+        var acall <- new [[ExprCall() at=call.at,
+            name:="apply_qmacro",
+            arguments := [{ExpressionPtr
+                new [[ExprQuote()
+                    at=call.at,
+                    arguments := [{ExpressionPtr[1] qclone}]
+                ]];
+                new [[ExprMakeBlock() _block<-qblk, at=call.at]]
+            }]
+        ]]
         return acall

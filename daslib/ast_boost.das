@@ -10,6 +10,18 @@ require ast public
 require strings
 require daslib/strings_boost
 
+def clone ( var args : dasvector`smart_ptr`Variable; var nargs:array<VariablePtr> )
+    args |> clear
+    for narg in nargs
+        args |> emplace(narg)
+    delete nargs
+
+def clone ( var args : dasvector`smart_ptr`Expression; var nargs:array<ExpressionPtr> )
+    args |> clear
+    for narg in nargs
+        args |> emplace(narg)
+    delete nargs
+
 def isVectorType ( typ:Type )
     return (
         typ==Type tInt2   || typ==Type tInt3   || typ==Type tInt4   ||
