@@ -88,10 +88,11 @@ def public contains_utf8_bom(utf8_string: array<uint8> const implicit): bool
 
 
 def public contains_utf8_bom(utf8_string: string const): bool
-    return (length(utf8_string) >= 3 &&
-          uint(utf8_string |> character_at(0)) == 0xEF &&
-          uint(utf8_string |> character_at(1)) == 0xBB &&
-          uint(utf8_string |> character_at(2)) == 0xBF)
+    unsafe
+        return (!empty(utf8_string) &&
+              uint(utf8_string |> character_uat(0)) == 0xEF &&
+              uint(utf8_string |> character_uat(1)) == 0xBB &&
+              uint(utf8_string |> character_uat(2)) == 0xBF)
 
 
 
