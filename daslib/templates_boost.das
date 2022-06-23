@@ -343,11 +343,21 @@ def public apply_qmacro ( var expr:smart_ptr<Expression>; blk:block<(var rules:T
     apply_template(expr, blk)
     return expr
 
-[call_macro(name="qmacro")]
-class QMacro : AstCallMacro
+def public apply_qblock ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> )
+    //! Implementation details for the expression reificaiton.
+    apply_template(expr, blk)
+    assert(expr is ExprMakeBlock)
+    var qblk <- move_unquote_block(expr)
+    // qblk.flags ^= ExprBlockFlags isClosure
+    return qblk
+
+class AstQCallMacro : AstCallMacro
+    apply_call = "apply_qmacro"
     //! This macro will implement expression reification
     def override canVisitArguments ( call:smart_ptr<ExprCallMacro> ) : bool
         return false    // nop, this one is just like quote
+    def wrap_call ( var expr:ExpressionPtr ) : ExpressionPtr
+        return expr
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if call.arguments.length != 1
             debug(call.arguments)
@@ -361,7 +371,7 @@ class QMacro : AstCallMacro
         if qblk==null
             return [[ExpressionPtr]]
         var acall <- new [[ExprCall() at=call.at,
-            name:="apply_qmacro",
+            name:=apply_call,
             arguments := [{ExpressionPtr
                 new [[ExprQuote()
                     at=call.at,
@@ -370,4 +380,11 @@ class QMacro : AstCallMacro
                 new [[ExprMakeBlock() _block<-qblk, at=call.at]]
             }]
         ]]
-        return acall
+        return wrap_call(acall)
+
+[call_macro(name="qmacro")]
+class QMacro : AstQCallMacro {}
+
+[call_macro(name="qmacro_block")]
+class QBlockMacro : AstQCallMacro
+    override apply_call = "apply_qblock"
