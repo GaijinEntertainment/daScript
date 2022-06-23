@@ -131,6 +131,14 @@ def move_unquote_block ( var expr:ExpressionPtr& ) : smart_ptr<ExprBlock>
         mkb := null
         return res
 
+def make_expression_block ( var exprs:array<ExpressionPtr> ) : smart_ptr<ExprBlock>
+    //! Create ExprBlock and move all expressions from expr to the list of the block.
+    var blk <- new [[ExprBlock()]]
+    for e in exprs
+        blk.list |> emplace(e)
+    delete exprs
+    return blk
+
 def private add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDeclFlags; var value:ExpressionPtr; priv:bool )
     var vvar <- new [[Variable() at=vat,
         name:=vname,
@@ -249,6 +257,16 @@ class private QRulesVisitor : AstVisitor
                     new [[ExprVar() at=expr.at, name:="rules"]];
                     new [[ExprConstString() at=expr.at, value:=new_tag_name]];
                     clone_expression(expr.subexpr)
+                }]]]
+        elif expr.name=="b"
+            rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+                name:="replaceVariable",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=expr.at, name:="rules"]];
+                    new [[ExprConstString() at=expr.at, value:=new_tag_name]];
+                    new [[ExprCall() at=expr.at,name:="make_expression_block",
+                        arguments:=[{ExpressionPtr[1] clone_expression(expr.subexpr)}]
+                    ]]
                 }]]]
         elif expr.name=="i" // identificator
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
