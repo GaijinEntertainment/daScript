@@ -7,12 +7,14 @@ module templates_boost shared public
 
 require ast
 require daslib/ast_boost
+require daslib/algorithm
 
 struct Template
     //! This structure contains collection of subsitution rules for a template.
     kaboomVar : table<string; tuple<prefix:string;suffix:string> >
     var2name : table<string; string>
     var2expr : table<string; smart_ptr<Expression>>
+    var2exprList : table<string; array<smart_ptr<Expression>>>
     type2type : table<string; string>
     blockArgName : table<string; string>
     annArg : table<string; lambda<(var ann: AnnotationDeclaration):void> >
@@ -25,6 +27,10 @@ def kaboomVarField ( var self:Template; name,prefix,suffix:string )
 def replaceVariable ( var self:Template; name:string; var expr : smart_ptr<ast::Expression> )
     //! Adds a rule to the template to replace a variable with an expression.
     self.var2expr[name] <- expr
+
+def replaceVariableWithList ( var self:Template; name:string; var expr : array<smart_ptr<ast::Expression>> )
+    //! Adds a rule to the template to replace a variable with an expression list.
+    self.var2exprList[name] <- expr
 
 def renameVariable ( var self:Template; name, newName:string )
     //! Adds a rule to the template to rename a variable.
@@ -97,6 +103,30 @@ class private TemplateVisitor : AstVisitor
         for ann in blk.annotations
             rules.annArg |> find_if_exists("{ann.annotation.name}") <| $(cb)
                 (*cb) |> invoke(*ann)
+    def preVisitAnythingCall(var arguments:dasvector`smart_ptr`Expression) : void
+        if length(rules.var2exprList)==0
+            return
+        let nargs = arguments.length
+        if nargs == 0
+            return
+        for ai in range(nargs)
+            let rai = nargs - ai - 1
+            assume arg = arguments[rai]
+            if arg is ExprVar
+                let vname = string((arg as ExprVar).name)
+                if key_exists(rules.var2exprList, vname)
+                    var new_args <- [{for a in rules.var2exprList[vname]; clone_expression(a)}]
+                    new_args |> reverse
+                    arguments |> erase(rai)
+                    for na in new_args
+                        arguments |> emplace(na, rai)
+                    delete new_args
+    def override preVisitExprLooksLikeCall(var expr:smart_ptr<ExprLooksLikeCall>): void
+        preVisitAnythingCall(expr.arguments)
+    def override preVisitExprCall(var expr:smart_ptr<ExprCall>): void
+        preVisitAnythingCall(expr.arguments)
+    def override preVisitExprMakeArray(var expr:smart_ptr<ExprMakeArray>): void
+        preVisitAnythingCall(expr.values)
 
 
 def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Expression>; forceAt:bool = true )
@@ -258,7 +288,15 @@ class private QRulesVisitor : AstVisitor
                     new [[ExprConstString() at=expr.at, value:=new_tag_name]];
                     clone_expression(expr.subexpr)
                 }]]]
-        elif expr.name=="b"
+        elif expr.name=="a"    // arguments
+            rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+                name:="replaceVariableWithList",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=expr.at, name:="rules"]];
+                    new [[ExprConstString() at=expr.at, value:=new_tag_name]];
+                    clone_expression(expr.subexpr)
+                }]]]
+        elif expr.name=="b" // expression block
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
                 name:="replaceVariable",
                 arguments:=[{ExpressionPtr
@@ -286,7 +324,7 @@ def private apply_qrules ( var expr:smart_ptr<Expression> ) : smart_ptr<ExprBloc
     var eblk <- new [[ExprBlock() at=expr.at,
         returnType <- new [[TypeDecl() at=expr.at, baseType=Type tVoid]],
         arguments := [{VariablePtr[1]
-            new [[Variable() at=expr.at, name := "rules", _type <- typeinfo(ast_typedecl type<Template>) ]]
+            new [[Variable() at=expr.at, name := "rules", _type <- clone_type(typeinfo(ast_typedecl type<Template>)) ]]
         }],
         blockFlags = ExprBlockFlags isClosure
     ]]
@@ -301,12 +339,13 @@ def private apply_qrules ( var expr:smart_ptr<Expression> ) : smart_ptr<ExprBloc
     return eblk
 
 def public apply_qmacro ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> )
+    //! Implementation details for the expression reificaiton.
     apply_template(expr, blk)
     return expr
 
 [call_macro(name="qmacro")]
 class QMacro : AstCallMacro
-    //! This macro will implement expression substitution macro
+    //! This macro will implement expression reification
     def override canVisitArguments ( call:smart_ptr<ExprCallMacro> ) : bool
         return false    // nop, this one is just like quote
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
@@ -319,6 +358,8 @@ class QMacro : AstCallMacro
             return [[ExpressionPtr]]
         var qclone <- clone_expression(call.arguments[0])
         var qblk <- apply_qrules(qclone)
+        if qblk==null
+            return [[ExpressionPtr]]
         var acall <- new [[ExprCall() at=call.at,
             name:="apply_qmacro",
             arguments := [{ExpressionPtr
