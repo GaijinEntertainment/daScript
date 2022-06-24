@@ -606,23 +606,24 @@ DAS_AOT("daslib/utf8_utils.das" AOT_GENERATED_SRC dasAotStub daScript)
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
+SET(DAS_DASCRIPT_MAIN_SRC
+    ${PROJECT_SOURCE_DIR}/utils/daScript/main.cpp
+    ${DAS_MODULES_NEED_INC}
+)
+
 if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
 # Stand alone command line compiler
 
-  SET(DASCRIPT_MAIN_SRC
-  utils/daScript/main.cpp
-  ${DAS_MODULES_NEED_INC}
-  )
-  SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
+  SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
 
-  add_executable(daScript ${DASCRIPT_MAIN_SRC})
+  add_executable(daScript ${DAS_DASCRIPT_MAIN_SRC})
   TARGET_LINK_LIBRARIES(daScript libDaScript libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
   # ADD_DEPENDENCIES(daScript libDaScript libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
   SETUP_CPP11(daScript)
   SETUP_LTO(daScript)
 
   #IF(APPLE)
-  #  add_executable(daScriptOsx MACOSX_BUNDLE ${DASCRIPT_MAIN_SRC})
+  #  add_executable(daScriptOsx MACOSX_BUNDLE ${DAS_DASCRIPT_MAIN_SRC})
   #  TARGET_LINK_LIBRARIES(daScriptOsx libDaScript libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
   #  ADD_DEPENDENCIES(daScriptOsx libDaScript libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
   #  SETUP_CPP11(daScriptOsx)
