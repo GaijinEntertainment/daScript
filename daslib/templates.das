@@ -11,6 +11,12 @@ require daslib/ast_boost
 
 [call_macro(name="decltype")]
 class DecltypeMacro : AstCallMacro
+    //! This macro returns ast::TypeDecl for the corresponding expression. For example::
+    //!
+    //!     let x = 1
+    //!     let y <- decltype(x) // [[TypeDecl() baseType==Type tInt, flags=TypeDeclFlags constant | TypeDeclFlags ref]]
+    //!
+    remove_ref = false
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if expr.arguments.length !=1
             macro_error(prog,expr.at,"decltype expecting 1 argument")
@@ -18,12 +24,32 @@ class DecltypeMacro : AstCallMacro
         if expr.arguments[0]._type==null || expr.arguments[0]._type.isAutoOrAlias
             macro_error(prog,expr.at,"decltype requires fully inferred type")
             return [[ExpressionPtr]]
+        var tt <- clone_type(expr.arguments[0]._type)
+        if remove_ref
+            tt.flags &= ~TypeDeclFlags ref
         var mkt <- new [[ExprTypeDecl() at=expr.at,
-            typeexpr <- clone_type(expr.arguments[0]._type)
+            typeexpr <- tt
         ]]
         return <- mkt
 
+[call_macro(name="decltype_noref")]
+class DecltypeNoRefMacro : DecltypeMacro
+    //! This macro returns TypeDecl for the corresponding expression, minus the ref (&) portion.
+    override remove_ref = true
+
+[function_macro(name="template")]
 class TemplateMacro : AstFunctionAnnotation
+    //! This macro is used to remove unused (template) arguments from the instantiation of the generic function.
+    //! When [template(x)] is specified, the argument x is removed from the function call, but the type of the instance remains.
+    //! The call where the function is instanciated is adjusted as well.
+    //! For example::
+    //!
+    //!     [template (a), sideeffects]
+    //!     def boo ( x : int; a : auto(TT) )   // when boo(1,type<int>)
+    //!         return "{x}_{typeinfo(typename type<TT>)}"
+    //!     ...
+    //!     boo(1,type<int>) // will be replaced with boo(1). instace will print "1_int"
+    //!
     def override transform ( var expr : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if expr.func==null
             compiling_program() |> macro_error(expr.at,"expecting inferred function")
@@ -77,8 +103,3 @@ class TemplateMacro : AstFunctionAnnotation
         // result
         compiling_module() |> add_function(fclone)
         return newcall
-
-[macro]
-def init
-    if is_compiling_macros_in_module("templates")
-        add_new_function_annotation("template", new TemplateMacro())

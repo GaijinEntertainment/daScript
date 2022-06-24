@@ -22,26 +22,22 @@ Constants
 
 .. das:attribute:: LCG_RAND_MAX = 32767
 
-|variable-random-LCG_RAND_MAX|
+maximum possible output of random number generator
 
 .. _global-random-LCG_RAND_MAX_BIG:
 
 .. das:attribute:: LCG_RAND_MAX_BIG = 1073741823
 
-|variable-random-LCG_RAND_MAX_BIG|
-
-.. _global-random-LCG_IRAND_MAX_FLT:
-
-.. das:attribute:: LCG_IRAND_MAX_FLT = 3.05185e-05f
-
-|variable-random-LCG_IRAND_MAX_FLT|
+maximum possible output of random_big_int
 
 +++++++++++++++++++++++++
 Seed and basic generators
 +++++++++++++++++++++++++
 
   *  :ref:`random_seed (seed:int const) : int4 <function-_at_random_c__c_random_seed_Ci>` 
+  *  :ref:`random_seed2D (seed:int4& -const;co:int2 const;cf:int const) : float4 <function-_at_random_c__c_random_seed2D_&i4_Ci2_Ci>` 
   *  :ref:`random_int (seed:int4& -const) : int <function-_at_random_c__c_random_int_&i4>` 
+  *  :ref:`random_big_int (seed:int4& -const) : int <function-_at_random_c__c_random_big_int_&i4>` 
   *  :ref:`random_int4 (seed:int4& -const) : int4 <function-_at_random_c__c_random_int4_&i4>` 
   *  :ref:`random_float (seed:int4& -const) : float <function-_at_random_c__c_random_float_&i4>` 
   *  :ref:`random_float4 (seed:int4& -const) : float4 <function-_at_random_c__c_random_float4_&i4>` 
@@ -59,7 +55,26 @@ random_seed returns int4
 +--------+-------------+
 
 
-|function-random-random_seed|
+constructs seed vector out of single integer seed
+
+.. _function-_at_random_c__c_random_seed2D_&i4_Ci2_Ci:
+
+.. das:function:: random_seed2D(seed: int4&; co: int2 const; cf: int const)
+
+random_seed2D returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++seed    +int4&        +
++--------+-------------+
++co      +int2 const   +
++--------+-------------+
++cf      +int const    +
++--------+-------------+
+
+
+constructs seed vector out of 2d screen coordinates and frame counter `cf`
 
 .. _function-_at_random_c__c_random_int_&i4:
 
@@ -74,7 +89,22 @@ random_int returns int
 +--------+-------------+
 
 
-|function-random-random_int|
+random integer 0..32767 (LCG_RAND_MAX)
+
+.. _function-_at_random_c__c_random_big_int_&i4:
+
+.. das:function:: random_big_int(seed: int4&)
+
+random_big_int returns int
+
++--------+-------------+
++argument+argument type+
++========+=============+
++seed    +int4&        +
++--------+-------------+
+
+
+random integer 0..32768*32768-1 (LCG_RAND_MAX_BIG)
 
 .. _function-_at_random_c__c_random_int4_&i4:
 
@@ -89,7 +119,7 @@ random_int4 returns int4
 +--------+-------------+
 
 
-|function-random-random_int4|
+random int4, each component is 0..32767 (LCG_RAND_MAX)
 
 .. _function-_at_random_c__c_random_float_&i4:
 
@@ -104,7 +134,7 @@ random_float returns float
 +--------+-------------+
 
 
-|function-random-random_float|
+random float 0..1
 
 .. _function-_at_random_c__c_random_float4_&i4:
 
@@ -119,7 +149,7 @@ random_float4 returns float4
 +--------+-------------+
 
 
-|function-random-random_float4|
+random float4, each component is 0..1
 
 ++++++++++++++++++++++
 Specific distributions
@@ -142,7 +172,7 @@ random_unit_vector returns float3
 +--------+-------------+
 
 
-|function-random-random_unit_vector|
+random float3 unit vector (length=1.)
 
 .. _function-_at_random_c__c_random_in_unit_sphere_&i4:
 
@@ -157,7 +187,7 @@ random_in_unit_sphere returns float3
 +--------+-------------+
 
 
-|function-random-random_in_unit_sphere|
+random float3 unit vector (length=1) which happens to be inside a sphere R=1
 
 .. _function-_at_random_c__c_random_in_unit_disk_&i4:
 
@@ -172,44 +202,6 @@ random_in_unit_disk returns float3
 +--------+-------------+
 
 
-|function-random-random_in_unit_disk|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_random_c__c_random_seed2D_&i4_Ci2_Ci:
-
-.. das:function:: random_seed2D(seed: int4&; co: int2 const; cf: int const)
-
-random_seed2D returns float4
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+seed    +int4&        +
-+--------+-------------+
-+co      +int2 const   +
-+--------+-------------+
-+cf      +int const    +
-+--------+-------------+
-
-
-|function-random-random_seed2D|
-
-.. _function-_at_random_c__c_random_big_int_&i4:
-
-.. das:function:: random_big_int(seed: int4&)
-
-random_big_int returns int
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+seed    +int4&        +
-+--------+-------------+
-
-
-|function-random-random_big_int|
+random float3 unit vector (length=1) which happens to be inside a disk R=1, Z=0
 
 

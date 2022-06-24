@@ -42,12 +42,12 @@ def test
     // move on return
     let z <- joinSequences(makeSequence(0,4),makeSequence(5,9))
     assert(length(z)==10)
-    for t in range(9)
-        assert(z[t]==t)
+    for ttq in range(9)
+        assert(z[ttq]==ttq)
     // move on return in block
     let zz <- joinSequences(makeSequenceB({ return <- makeSequence(0,4); }),
         makeSequenceB({ return <- makeSequence(5,9); }))
     assert(length(zz)==10)
-    for t in range(9)
-        assert(zz[t]==t)
+    for ttt in range(9)
+        assert(zz[ttt]==ttt)
     return true

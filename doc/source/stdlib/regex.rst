@@ -24,11 +24,11 @@ Type aliases
 
 .. das:attribute:: CharSet = uint[8]
 
-|typedef-regex-CharSet|
+Bit array which represents an 8-bit character set.
 
 .. _alias-MaybeReNode:
 
-.. das:attribute:: MaybeReNodeis a variant type
+.. das:attribute:: MaybeReNode is a variant type
 
 +-------+---------------------------------------------+
 +value  + :ref:`regex::ReNode <struct-regex-ReNode>` ?+
@@ -37,41 +37,7 @@ Type aliases
 +-------+---------------------------------------------+
 
 
-|typedef-regex-MaybeReNode|
-
-+++++++++
-Constants
-+++++++++
-
-.. _global-regex-log_parse_enabled:
-
-.. das:attribute:: log_parse_enabled = false
-
-|variable-regex-log_parse_enabled|
-
-.. _global-regex-log_match_enabled:
-
-.. das:attribute:: log_match_enabled = false
-
-|variable-regex-log_match_enabled|
-
-.. _global-regex-range_check_enabled:
-
-.. das:attribute:: range_check_enabled = false
-
-|variable-regex-range_check_enabled|
-
-.. _global-regex-meta:
-
-.. das:attribute:: meta = "\\+-*.()[]|^"
-
-|variable-regex-meta|
-
-.. _global-regex-meta_set:
-
-.. das:attribute:: meta_set = "wWsSdD"
-
-|variable-regex-meta_set|
+Single regular expression node or nothing.
 
 ++++++++++++
 Enumerations
@@ -104,7 +70,7 @@ Enumerations
 +--------+-+
 
 
-|enumeration-regex-ReOp|
+Type of regular expression operation.
 
 .. _struct-regex-ReNode:
 
@@ -145,7 +111,7 @@ ReNode fields are
 +-------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 
-|structure-regex-ReNode|
+Single node in regular expression parsing tree.
 
 .. _struct-regex-Regex:
 
@@ -168,28 +134,18 @@ Regex fields are
 +-----------+---------------------------------------------+
 
 
-|structure-regex-Regex|
+Regular expression.
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++++++++++++
+Compilation and validation
+++++++++++++++++++++++++++
 
-.. _function-_at_regex_c__c_re_early_out_[8]Y_ls_CharSet_gr_u_C1_ls_S_ls_ReNode_gr__gr_?:
-
-.. das:function:: re_early_out(cset: CharSet; node: regex::ReNode? const)
-
-re_early_out returns bool
-
-+--------+---------------------------------------------------+
-+argument+argument type                                      +
-+========+===================================================+
-+cset    + :ref:`CharSet <alias-CharSet>`                    +
-+--------+---------------------------------------------------+
-+node    + :ref:`regex::ReNode <struct-regex-ReNode>` ? const+
-+--------+---------------------------------------------------+
-
-
-|function-regex-re_early_out|
+  *  :ref:`is_valid (re:regex::Regex -const) : bool <function-_at_regex_c__c_is_valid_S_ls_Regex_gr_>` 
+  *  :ref:`regex_compile (re:regex::Regex -const;expr:string const) : bool <function-_at_regex_c__c_regex_compile_S_ls_Regex_gr__Cs>` 
+  *  :ref:`regex_compile (expr:string const) : regex::Regex <function-_at_regex_c__c_regex_compile_Cs>` 
+  *  :ref:`regex_compile (re:regex::Regex -const) : regex::Regex <function-_at_regex_c__c_regex_compile_S_ls_Regex_gr_>` 
+  *  :ref:`regex_debug (regex:regex::Regex const) : void <function-_at_regex_c__c_regex_debug_CS_ls_Regex_gr_>` 
+  *  :ref:`debug_set (cset:uint const[8]) : void <function-_at_regex_c__c_debug_set_C[8]Y_ls_CharSet_gr_u>` 
 
 .. _function-_at_regex_c__c_is_valid_S_ls_Regex_gr_:
 
@@ -204,7 +160,7 @@ is_valid returns bool
 +--------+------------------------------------------+
 
 
-|function-regex-is_valid|
+returns `true` if enumeration compiled correctly
 
 .. _function-_at_regex_c__c_regex_compile_S_ls_Regex_gr__Cs:
 
@@ -221,7 +177,8 @@ regex_compile returns bool
 +--------+------------------------------------------+
 
 
-|function-regex-regex_compile|
+Compile regular expression.
+Validity of the compiled expression is checked by `is_valid`.
 
 .. _function-_at_regex_c__c_regex_compile_Cs:
 
@@ -236,7 +193,8 @@ regex_compile returns  :ref:`regex::Regex <struct-regex-Regex>`
 +--------+-------------+
 
 
-|function-regex-regex_compile|
+Compile regular expression.
+Validity of the compiled expression is checked by `is_valid`.
 
 .. _function-_at_regex_c__c_regex_compile_S_ls_Regex_gr_:
 
@@ -251,26 +209,41 @@ regex_compile returns  :ref:`regex::Regex <struct-regex-Regex>`
 +--------+------------------------------------------+
 
 
-|function-regex-regex_compile|
+Compile regular expression.
+Validity of the compiled expression is checked by `is_valid`.
 
-.. _function-_at_regex_c__c_regex_match_S_ls_Regex_gr__Cs_Ci:
+.. _function-_at_regex_c__c_regex_debug_CS_ls_Regex_gr_:
 
-.. das:function:: regex_match(regex: Regex; str: string const; offset: int const)
+.. das:function:: regex_debug(regex: Regex const)
 
-regex_match returns int
-
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+regex   + :ref:`regex::Regex <struct-regex-Regex>` +
-+--------+------------------------------------------+
-+str     +string const                              +
-+--------+------------------------------------------+
-+offset  +int const                                 +
-+--------+------------------------------------------+
++--------+------------------------------------------------+
++argument+argument type                                   +
++========+================================================+
++regex   + :ref:`regex::Regex <struct-regex-Regex>`  const+
++--------+------------------------------------------------+
 
 
-|function-regex-regex_match|
+Prints regular expression and its related information in human readable form.
+
+.. _function-_at_regex_c__c_debug_set_C[8]Y_ls_CharSet_gr_u:
+
+.. das:function:: debug_set(cset: CharSet)
+
++--------+--------------------------------+
++argument+argument type                   +
++========+================================+
++cset    + :ref:`CharSet <alias-CharSet>` +
++--------+--------------------------------+
+
+
+Prints character set in human readable form.
+
+++++++
+Access
+++++++
+
+  *  :ref:`regex_group (regex:regex::Regex const;index:int const;match:string const) : string <function-_at_regex_c__c_regex_group_CS_ls_Regex_gr__Ci_Cs>` 
+  *  :ref:`regex_foreach (regex:regex::Regex -const;str:string const;blk:block\<(at:range const):bool\> const) : void <function-_at_regex_c__c_regex_foreach_S_ls_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cr_gr_1_ls_b_gr__builtin_>` 
 
 .. _function-_at_regex_c__c_regex_group_CS_ls_Regex_gr__Ci_Cs:
 
@@ -289,7 +262,7 @@ regex_group returns string
 +--------+------------------------------------------------+
 
 
-|function-regex-regex_group|
+Returns string for the given group index and match result.
 
 .. _function-_at_regex_c__c_regex_foreach_S_ls_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cr_gr_1_ls_b_gr__builtin_:
 
@@ -306,32 +279,32 @@ regex_group returns string
 +--------+------------------------------------------+
 
 
-|function-regex-regex_foreach|
+Iterates through all matches for the given regular expression in `str`.
 
-.. _function-_at_regex_c__c_regex_debug_CS_ls_Regex_gr_:
++++++
+Match
++++++
 
-.. das:function:: regex_debug(regex: Regex const)
+  *  :ref:`regex_match (regex:regex::Regex -const;str:string const;offset:int const) : int <function-_at_regex_c__c_regex_match_S_ls_Regex_gr__Cs_Ci>` 
 
-+--------+------------------------------------------------+
-+argument+argument type                                   +
-+========+================================================+
-+regex   + :ref:`regex::Regex <struct-regex-Regex>`  const+
-+--------+------------------------------------------------+
+.. _function-_at_regex_c__c_regex_match_S_ls_Regex_gr__Cs_Ci:
 
+.. das:function:: regex_match(regex: Regex; str: string const; offset: int const)
 
-|function-regex-regex_debug|
+regex_match returns int
 
-.. _function-_at_regex_c__c_debug_set_C[8]Y_ls_CharSet_gr_u:
-
-.. das:function:: debug_set(cset: CharSet)
-
-+--------+--------------------------------+
-+argument+argument type                   +
-+========+================================+
-+cset    + :ref:`CharSet <alias-CharSet>` +
-+--------+--------------------------------+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++regex   + :ref:`regex::Regex <struct-regex-Regex>` +
++--------+------------------------------------------+
++str     +string const                              +
++--------+------------------------------------------+
++offset  +int const                                 +
++--------+------------------------------------------+
 
 
-|function-regex-debug_set|
+Returns first match for the regular expression in `str`.
+If `offset` is specified, first that many number of symbols will not be matched.
 
 

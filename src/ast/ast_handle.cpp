@@ -5,7 +5,7 @@
 
 namespace das {
 
-    void setParents ( Module * mod, const char * child, const initializer_list<const char *> & parents ) {
+    void setParents ( Module * mod, const char * child, const std::initializer_list<const char *> & parents ) {
         auto chA = mod->findAnnotation(child);
         DAS_VERIFYF(chA,"missing child annotation");
         DAS_VERIFYF(chA->rtti_isBasicStructureAnnotation(),"expecting basic structure annotation");
@@ -196,45 +196,51 @@ namespace das {
     }
 
     void BasicStructureAnnotation::walk ( DataWalker & walker, void * data ) {
-        if ( !sti ) {
-            auto debugInfo = helpA.debugInfo;
-            sti = debugInfo->template makeNode<StructInfo>();
-            sti->name = debugInfo->allocateName(name);
-            // flags
-            sti->flags = 0;
-            // count fields
-            sti->count = 0;
-            for ( auto & fi : fields ) {
-                auto & var = fi.second;
-                if ( var.offset != -1U ) {
-                    sti->count ++;
+        {
+            lock_guard<recursive_mutex> guard(walkMutex);
+            if ( !sti ) {
+                auto debugInfo = helpA.debugInfo;
+                sti = debugInfo->template makeNode<StructInfo>();
+                sti->name = debugInfo->allocateName(name);
+                // flags
+                sti->flags = 0;
+                // count fields
+                sti->count = 0;
+                for ( auto & fi : fields ) {
+                    auto & var = fi.second;
+                    if ( var.offset != -1U ) {
+                        sti->count ++;
+                    }
                 }
-            }
-            // and allocate
-            sti->size = (uint32_t) getSizeOf();
-            sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
-            int i = 0;
-            for ( const auto & fn : fieldsInOrder ) {
-                auto & var = fields[fn];
-                if ( var.offset != -1U ) {
-                    VarInfo * vi = debugInfo->template makeNode<VarInfo>();
-                    helpA.makeTypeInfo(vi, var.decl);
-                    vi->name = debugInfo->allocateName(fn);
-                    vi->offset = var.offset;
-                    sti->fields[i++] = vi;
+                // and allocate
+                sti->size = (uint32_t) getSizeOf();
+                sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
+                int i = 0;
+                for ( const auto & fn : fieldsInOrder ) {
+                    auto & var = fields[fn];
+                    if ( var.offset != -1U ) {
+                        VarInfo * vi = debugInfo->template makeNode<VarInfo>();
+                        helpA.makeTypeInfo(vi, var.decl);
+                        vi->name = debugInfo->allocateName(fn);
+                        vi->offset = var.offset;
+                        sti->fields[i++] = vi;
+                    }
                 }
             }
         }
         walker.walk_struct((char *)data, sti);
     }
 
-    void BasicStructureAnnotation::from(const char* parentName) {
-        auto pann = (BasicStructureAnnotation*)(this->module->findAnnotation(parentName).get());
-        parents.reserve(pann->parents.size() + 1);
-        parents.push_back(pann);
-        for (auto pp : pann->parents) {
+    void BasicStructureAnnotation::from ( BasicStructureAnnotation * ann ) {
+        parents.reserve(ann->parents.size() + 1);
+        parents.push_back(ann);
+        for (auto pp : ann->parents) {
             parents.push_back(pp);
         }
+    }
+
+    void BasicStructureAnnotation::from ( const char * parentName ) {
+        from((BasicStructureAnnotation*)(this->module->findAnnotation(parentName).get()));
     }
 
     void Program::validateAotCpp ( TextWriter & logs, Context & ) {

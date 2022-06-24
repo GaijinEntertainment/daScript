@@ -8,6 +8,7 @@ module ast_used shared private
 require daslib/ast_boost
 
 struct public OnlyUsedTypes
+    //! Collection of all structure and enumeration types that are used in the AST.
     st : table<Structure?;bool>
     en : table<Enumeration?;bool>
 
@@ -36,6 +37,8 @@ class TypeVisitor : AstVisitor
         self->collect(typ)
 
 def public collect_used_types(vfun:array<Function?>; vvar:array<Variable?>; blk:block<(usedTypes:OnlyUsedTypes):void>)
+    //! Goes through list of functions `vfun` and variables `vvar` and collects list of which enumeration and structure types are used in them.
+    //! Calls `blk` with said list.
     var astVisitor = new TypeVisitor()
     var astVisitorAdapter <- make_visitor(*astVisitor)
     for f in vfun

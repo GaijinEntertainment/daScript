@@ -8,6 +8,7 @@ require daslib/array_boost
 require daslib/contracts
 
 def unique ( var a:array<auto(TT)> )
+    //! Returns array of the elements of a with duplicates removed.
     var pidx = -1
     var b : array<TT-const-&>
     for e,eidx in a,range(length(a))
@@ -17,6 +18,9 @@ def unique ( var a:array<auto(TT)> )
     return <- b
 
 def sort_unique ( var a : array<auto(TT)> )
+    //! Returns array of the elements of a, sorted and with duplicates removed.
+    //! The elements of a are sorted in ascending order.
+    //! The resulted array has only unqiue elements.
     if empty(a)
         return
     sort(a)
@@ -25,6 +29,7 @@ def sort_unique ( var a : array<auto(TT)> )
     a <- b
 
 def reverse ( var a:array<auto> )
+    //! Returns array of the elements of a in reverse order.
     let l = length(a)
     let half = l/2
     let lm1 = l-1
@@ -32,6 +37,7 @@ def reverse ( var a:array<auto> )
         swap(a[i], a[lm1-i])
 
 def combine ( a,b:array<auto(TT)> )
+    //! Returns array of the elements of a and then b.
     var c : array<TT>
     reserve(c, length(a) + length(b))
     for t in a
@@ -41,6 +47,7 @@ def combine ( a,b:array<auto(TT)> )
     return <- c
 
 def lower_bound ( a:array<auto(TT)>; f,l:int; val : TT const-& )
+    //! Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
     assert(f>=0 && f<=l,"lower bound first out of range")
     assert(l>=f && l<=length(a),"lower bound last out of range")
     var count = l - f
@@ -81,6 +88,8 @@ def binary_search ( a:array<auto(TT)>; val : TT const-& )
     return (first!=length(a)) && (!(val<a[first]))
 
 def binary_search ( a:array<auto(TT)>; f, last : int; val : TT const-& )
+    //! Returns true if an val appears within the range [f, last).
+    //! Array a must be sorted.
     let first = lower_bound(a, f, last, val)
     return (first!=last) && (!(val<a[first]))
 

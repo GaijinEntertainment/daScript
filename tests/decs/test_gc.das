@@ -154,13 +154,13 @@ def test_gc_stress( t: T?)
             t |> equal(text, "text_{eid}")
         query <| $ ( var values:array<int2>; var i:int )
             let addi = (random_int(seed) & 511) + 10
-            for t in range(addi)
-                values |> push(int2(i+t,i+t+13))
+            for tt in range(addi)
+                values |> push(int2(i+tt,i+tt+13))
             i += addi
         query <| $ ( var values:array<int2>; var i:int )
             var subi = (random_int(seed) & 63) + 5
             subi = min(length(values)-10, subi)
-            for t in range(subi)
+            for tt in range(subi)
                 values |> pop
             i -= subi
         query <| $ ( values:array<int2>; i:int )

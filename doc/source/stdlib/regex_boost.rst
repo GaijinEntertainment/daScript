@@ -14,4 +14,16 @@ All functions and symbols are in "regex_boost" module, use require to get access
     require daslib/regex_boost
 
 
++++++++++++++
+Reader macros
++++++++++++++
+
+.. _call-macro-regex_boost-regex:
+
+.. das:attribute:: regex
+
+This macro implements embedding of the REGEX object into the AST::
+  var op_regex <- %regex~operator[^a-zA-Z_]%%
+Regex is compiled at the time of parsing, and the resulting object is embedded into the AST.
+
 

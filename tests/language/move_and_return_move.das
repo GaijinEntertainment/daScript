@@ -30,7 +30,7 @@ def test_failed_moves ( t : T? )
         a[0] |> push(1)
         var failed = false
         try
-            for t in a[0]
+            for tt in a[0]
                 b <- a
         recover
             failed = true
@@ -42,7 +42,7 @@ def test_failed_moves ( t : T? )
         a[0] |> push(1)
         var failed = false
         try
-            for t in a[0]
+            for tt in a[0]
                 b <- iliketomoveitmoveit(a)
         recover
             failed = true
@@ -54,7 +54,7 @@ def test_failed_moves ( t : T? )
         a[0] |> push(1)
         var failed = false
         try
-            for t in a[0]
+            for tt in a[0]
                 consume(iliketomoveitmoveit(a))
         recover
             failed = true

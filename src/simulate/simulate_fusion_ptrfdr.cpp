@@ -133,7 +133,7 @@ namespace das {
             DAS_PROFILE_NODE \
             auto prv = (char **) subexpr.compute##COMPUTE(context); \
             if ( !prv || !*prv ) context.throw_error_at(debugInfo,"dereferencing null pointer"); \
-            return v_ldu((const float *) *prv); \
+            return v_ldu((const float *) ((*prv)+offset)); \
         } \
     };
 
@@ -150,7 +150,7 @@ namespace das {
         virtual vec4f eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto prv = (char **) subexpr.compute##COMPUTE(context); \
-            return v_ldu((const float *) *prv); \
+            return v_ldu((const float *) ((*prv)+offset)); \
         } \
     };
 

@@ -7,6 +7,7 @@ module json shared public
 require strings
 
 variant JsValue
+    //! Single JSON element.
     _object : table<string; JsonValue?>
     _array  : array<JsonValue?>
     _string : string
@@ -15,9 +16,11 @@ variant JsValue
     _null   : void?
 
 struct JsonValue
+    //! JSON value, wraps any JSON element.
     value : JsValue
 
 variant Token
+    //! JSON input stream token.
     _string : string
     _number : double
     _bool   : bool
@@ -25,11 +28,12 @@ variant Token
     _symbol : int
     _error  : string
 
-let
-    Token_string = typeinfo(variant_index<_string> type<Token>)
+let private
+    Token_string = typeinfo(variant_index<_string> type<Token>) //! index of the
     Token_symbol = typeinfo(variant_index<_symbol> type<Token>)
 
 def JV ( v : string )
+    //! Creates `JsonValue` out of value.
     return new [[JsonValue value <- [[JsValue _string = v]]]]
 
 def JV ( v : double )
@@ -39,6 +43,7 @@ def JV ( v : bool )
     return new [[JsonValue value <- [[JsValue _bool = v]]]]
 
 def JVNull
+    //! Creates `JsonValue` representing `null`.
     return new [[JsonValue value <- [[JsValue _null = null]]]]
 
 def JV ( var v : table<string;JsonValue?> )
@@ -241,6 +246,8 @@ def private parse_value ( var itv : iterator<Token>; var error : string & ) : Js
         return null
 
 def read_json ( text : string implicit; var error : string& ) : JsonValue?
+    //! reads JSON from the `text` string.
+    //! if `error` is not empty, it contains the parsing error message.
     var lex <- lexer(text)
     let res = parse_value(lex,error)
     delete lex
@@ -308,6 +315,7 @@ def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; de
         panic("unexpected {jsv}")
 
 def write_json ( val : JsonValue? ) : string
+    //! returns JSON (textual) representation of JsonValue as a string.
     let st = build_string() <| $ (var writer)
         write_value(writer, val, 0)
     return st

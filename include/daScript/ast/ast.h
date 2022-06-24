@@ -16,6 +16,10 @@
 #define DAS_ALLOW_ANNOTATION_LOOKUP     1
 #endif
 
+#ifndef DAS_THREAD_SAFE_ANNOTATIONS
+#define DAS_THREAD_SAFE_ANNOTATIONS    1
+#endif
+
 namespace das
 {
     class Function;
@@ -47,6 +51,12 @@ namespace das
 
     struct CallMacro;
     typedef smart_ptr<CallMacro> CallMacroPtr;
+
+    struct ForLoopMacro;
+    typedef smart_ptr<ForLoopMacro> ForLoopMacroPtr;
+
+    struct CaptureMacro;
+    typedef smart_ptr<CaptureMacro> CaptureMacroPtr;
 
     struct AnnotationArgumentList;
 
@@ -172,6 +182,7 @@ namespace das
                     bool            doNotDelete : 1;
                     bool            privateField : 1;
                     bool            sealed : 1;
+                    bool            implemented : 1;
                 };
                 uint32_t            flags = 0;
             };
@@ -257,6 +268,7 @@ namespace das
         LineInfo        at;
         int             index = -1;
         uint32_t        stackTop = 0;
+        uint32_t        extraLocalOffset = 0;   // this is here for fake variables only
         Module *        module = nullptr;
         das_set<Function *> useFunctions;
         das_set<Variable *> useGlobalVariables;
@@ -333,7 +345,7 @@ namespace das
                                const AnnotationArgumentList &, string & ) { return true; }
         virtual SimNode * simulate ( Context *, Function *,
                             const AnnotationArgumentList &, string & ) { return nullptr; }
-        virtual void complete ( Context * ) { }
+        virtual void complete ( Context *, const FunctionPtr & ) { }
         virtual bool simulate ( Context *, SimFunction * ) { return true; }
         virtual bool verifyCall ( ExprCallFunc * /*call*/, const AnnotationArgumentList & /*args*/,
             const AnnotationArgumentList & /*progArgs */, string & /*err*/ ) { return true; }
@@ -345,6 +357,7 @@ namespace das
         virtual bool isGeneric() const { return false; }
         virtual bool isCompatible ( const FunctionPtr &, const vector<TypeDeclPtr> &, const AnnotationDeclaration &, string &  ) const { return true; }
         virtual bool isSpecialized() const { return false; }
+        virtual void appendToMangledName( const FunctionPtr &, const AnnotationDeclaration &, string & /* mangledName */ ) const { }
     };
 
     struct TransformFunctionAnnotation : FunctionAnnotation {
@@ -423,6 +436,7 @@ namespace das
         virtual SimNode * simulateCopy ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateClone ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateRef2Value ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual SimNode * simulateNullCoalescing ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetField ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
         virtual SimNode * simulateGetFieldR2V ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
         virtual SimNode * simulateSafeGetField ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
@@ -447,6 +461,7 @@ namespace das
             const AnnotationArgumentList & args, string & err ) = 0;                    // this one happens after infer. structure is read-only, or at-least infer-safe
         virtual bool patch (const StructurePtr &, ModuleGroup &,
             const AnnotationArgumentList &, string &, bool & /*astChanged*/ ) { return true; } // this one happens after infer. this can restart infer by setting astChange
+        virtual void complete ( Context *, const StructurePtr & ) { }
     };
     typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
 
@@ -910,6 +925,7 @@ namespace das
         static Module * require ( const string & name );
         static Module * requireEx ( const string & name, bool allowPromoted );
         static void Initialize();
+        static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
         static void Shutdown();
         static void Reset(bool debAg);
         static void ClearSharedModules();
@@ -965,6 +981,8 @@ namespace das
         vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
         vector<PassMacroPtr>                        globalLintMacros;   // lint macros which work everywhere
         vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
+        vector<ForLoopMacroPtr>                     forLoopMacros;      // for loop macros (for every for loop)
+        vector<CaptureMacroPtr>                     captureMacros;      // lambda capture macros
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         CommentReaderPtr                            commentReader;      // /* blah */ or // blah
         string  name;
@@ -1064,12 +1082,27 @@ namespace das
 
     struct ExprCallMacro;
     struct CallMacro : ptr_ref_count {
-        CallMacro ( const string na = "" ) : name(na) {}
+        CallMacro ( const string & na = "" ) : name(na) {}
         virtual void preVisit (  Program *, Module *, ExprCallMacro * ) { }
         virtual ExpressionPtr visit (  Program *, Module *, ExprCallMacro * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
+        virtual bool canVisitArguments ( ExprCallMacro * ) { return true; }
         string name;
         Module * module = nullptr;
+    };
+
+    struct ExprFor;
+    struct ForLoopMacro : ptr_ref_count {
+        ForLoopMacro ( const string & na = "" ) : name(na) {}
+        virtual ExpressionPtr visit ( Program *, Module *, ExprFor * ) { return nullptr; }
+        string name;
+    };
+
+    struct CaptureMacro : ptr_ref_count {
+        CaptureMacro ( const string & na = "" ) : name(na) {}
+        virtual ExpressionPtr captureExpression ( Program *, Module *, Expression *, TypeDecl * ) { return nullptr; }
+        virtual void captureFunction ( Program *, Module *, Structure *, Function * ) { }
+        string name;
     };
 
     struct ExprIsVariant;
@@ -1111,6 +1144,7 @@ namespace das
     struct CodeOfPolicies {
         bool        aot = false;                        // enable AOT
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
+        bool        completion = false;                 // this code is being compiled for 'completion' mode
     // memory
         uint32_t    stack = 16*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap
@@ -1154,6 +1188,22 @@ namespace das
         virtual void open ( bool cppStyle, const LineInfo & at ) = 0;
         virtual void accept ( int Ch, const LineInfo & at ) = 0;
         virtual void close ( const LineInfo & at ) = 0;
+        virtual void beforeStructure ( const LineInfo & at ) = 0;
+        virtual void afterStructure ( Structure * st, const LineInfo & at ) = 0;
+        virtual void beforeStructureFields ( const LineInfo & at ) = 0;
+        virtual void afterStructureFields ( const LineInfo & at ) = 0;
+        virtual void afterStructureField ( const char * name, const LineInfo & at ) = 0;
+        virtual void beforeFunction ( const LineInfo & at ) = 0;
+        virtual void afterFunction ( Function * fun, const LineInfo & at ) = 0;
+        virtual void beforeGlobalVariables ( const LineInfo & at ) = 0;
+        virtual void afterGlobalVariable ( const char * name, const LineInfo & at ) = 0;
+        virtual void afterGlobalVariables ( const LineInfo & at ) = 0;
+        virtual void beforeVariant ( const LineInfo & at ) = 0;
+        virtual void afterVariant ( const char * name, const LineInfo & at ) = 0;
+        virtual void beforeEnumeration ( const LineInfo & at ) = 0;
+        virtual void afterEnumeration ( const char * name, const LineInfo & at ) = 0;
+        virtual void beforeAlias ( const LineInfo & at ) = 0;
+        virtual void afterAlias ( const char * name, const LineInfo & at ) = 0;
     };
 
     class Program : public ptr_ref_count {
@@ -1246,6 +1296,7 @@ namespace das
         }
     public:
         string                      thisNamespace;
+        string                      thisModuleName;
         unique_ptr<Module>          thisModule;
         ModuleLibrary               library;
         ModuleGroup *               thisModuleGroup;
@@ -1340,6 +1391,7 @@ namespace das
         bool            g_isInAot = false;
         Module *        modules = nullptr;
         int             das_def_tab_size = 4;
+        bool            g_resolve_annotations = true;
         static DAS_THREAD_LOCAL daScriptEnvironment * bound;
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;
         static void ensure();

@@ -601,6 +601,16 @@ namespace das {
             ss << " ";
             arg->type->getMangledName(ss);
         }
+        for ( auto & ann : annotations ) {
+            if (ann->annotation && ann->annotation->rtti_isFunctionAnnotation() ) {
+                auto fna = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                string mname;
+                fna->appendToMangledName((Function *)this, *ann, mname);
+                if ( !mname.empty() ) {
+                    ss << " %<" << mname << ">";
+                }
+            }
+        }
     }
 
     uint64_t Function::getMangledNameHash() const {
@@ -1218,6 +1228,14 @@ namespace das {
         return cexpr;
     }
 
+    // ExprSetInsert
+
+    ExpressionPtr ExprSetInsert::clone( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprSetInsert>(expr);
+        ExprLooksLikeCall::clone(cexpr);
+        return cexpr;
+    }
+
     // ExprFind
 
     ExpressionPtr ExprFind::clone( const ExpressionPtr & expr ) const {
@@ -1763,6 +1781,22 @@ namespace das {
         return cexpr;
     }
 
+    // ExprTag
+
+    ExpressionPtr ExprTag::visit(Visitor & vis) {
+        vis.preVisit(this);
+        subexpr->visit(vis);
+        return vis.visit(this);
+    }
+
+    ExpressionPtr ExprTag::clone ( const ExpressionPtr & expr ) const {
+        auto cexpr = clonePtr<ExprTag>(expr);
+        Expression::clone(cexpr);
+        cexpr->subexpr = subexpr->clone();
+        cexpr->name = name;
+        return cexpr;
+    }
+
     // ExprOp
 
     ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const {
@@ -2178,6 +2212,7 @@ namespace das {
             cexpr->body = body->clone();
         }
         cexpr->allowIteratorOptimization = allowIteratorOptimization;
+        cexpr->canShadow = canShadow;
         return cexpr;
     }
 
@@ -2240,10 +2275,12 @@ namespace das {
 
     ExpressionPtr ExprCallMacro::visit(Visitor & vis) {
         vis.preVisit(this);
-        for ( auto & arg : arguments ) {
-            vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
-            arg = arg->visit(vis);
-            arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+        if ( !macro || macro->canVisitArguments(this) ) {
+            for ( auto & arg : arguments ) {
+                vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+                arg = arg->visit(vis);
+                arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+            }
         }
         return vis.visit(this);
     }

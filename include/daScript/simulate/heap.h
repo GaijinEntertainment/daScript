@@ -583,6 +583,7 @@ namespace das {
         char * allocateCachedName ( const string & name );
         das_hash_map<uint64_t,TypeInfo *>    lookup;
         das_hash_map<string, char *>         stringLookup;
+        das_hash_map<string, wchar_t *>      stringWideLookup;
         uint64_t                             stringBytes = 0;
     };
 }

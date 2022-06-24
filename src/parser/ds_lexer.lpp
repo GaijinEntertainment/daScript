@@ -45,6 +45,7 @@ void YYTAB() {
     // YYCOLUMN(yyextra->das_yycolumn = (yyextra->das_yycolumn - 1 + yyextra->das_tab_size) & ~(yyextra->das_tab_size-1), "TAB");
 }
 
+int skip_underscode ( char * tok, char * buf, char * bufend );
 void YYNEWLINE(yyscan_t yyscanner);
 void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, DAS_YYLTYPE & li, const char * text );
 
@@ -453,20 +454,26 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>\'\\r\'                         yylval_param->i = 13; return INTEGER;
 <normal>\'\\\\'                         yylval_param->i = '\\'; return INTEGER;
 <normal>\'.\'                           yylval_param->i = int32_t(yytext[1]); return INTEGER;
-<normal>[0-9]+(u|U)(l|L)                {
+<normal>[0-9][0-9\_]*(u|U)(l|L) {
+        char temptext[128];
+        int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         char * endtext = nullptr;
-        yylval_param->ui64 = strtoull(yytext,&endtext,10);
-        return ( endtext!=(yytext+strlen(yytext)-2) ) ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+        yylval_param->ui64 = strtoull(temptext,&endtext,10);
+        return ( endtext!=(temptext+templength-2) ) ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
     }
-<normal>[0-9]+(l|L)                     {
+<normal>[0-9][0-9\_]*(l|L) {
+        char temptext[128];
+        int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         char * endtext = nullptr;
-        yylval_param->i64 = strtoll(yytext,&endtext,10);
-        return ( endtext!=(yytext+strlen(yytext)-1) ) ? LEXER_ERROR : LONG_INTEGER;
+        yylval_param->i64 = strtoll(temptext,&endtext,10);
+        return ( endtext!=(temptext+templength-1) ) ? LEXER_ERROR : LONG_INTEGER;
     }
-<normal>[0-9]+(u|U)                     {
+<normal>[0-9][0-9\_]*(u|U) {
+        char temptext[128];
+        int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         char * endtext = nullptr;
-        uint64_t uint_const = strtoull(yytext,&endtext,10);
-        if ( endtext!=(yytext+strlen(yytext)-1) ) {
+        uint64_t uint_const = strtoull(temptext,&endtext,10);
+        if ( endtext!=(temptext+templength-1) ) {
             return LEXER_ERROR;
         } else {
             if ( uint_const>UINT32_MAX ) {
@@ -476,10 +483,12 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             return UNSIGNED_INTEGER;
         }
     }
-<normal>[0-9]+\.\.                          {
+<normal>[0-9][0-9\_]*\.\. {
+        char temptext[128];
+        int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         char * endtext = nullptr;
-        int64_t int_const = strtoll(yytext,&endtext,10);
-        if ( endtext!=(yytext+strlen(yytext)-2) ) {
+        int64_t int_const = strtoll(temptext,&endtext,10);
+        if ( endtext!=(temptext+templength-2) ) {
             return LEXER_ERROR;
         } else {
             if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
@@ -493,10 +502,12 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             return INTEGER;
         }
     }
-<normal>[0-9]+                          {
+<normal>[0-9][0-9\_]* {
+        char temptext[128];
+        int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         char * endtext = nullptr;
-        int64_t int_const = strtoll(yytext,&endtext,10);
-        if ( endtext!=(yytext+strlen(yytext)) ) {
+        int64_t int_const = strtoll(temptext,&endtext,10);
+        if ( endtext!=(temptext+templength) ) {
             return LEXER_ERROR;
         } else {
             if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
@@ -506,13 +517,21 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             return INTEGER;
         }
     }
-
-<normal>0[xX][0-9a-fA-F]+(u|U)(l|L)     return sscanf(yytext, "%" SCNx64, &yylval_param->ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
-<normal>0[xX][0-9a-fA-F]+(l|L)          return sscanf(yytext, "%" SCNx64, &yylval_param->ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
-
-<normal>0[xX][0-9a-fA-F]+(u|U)          {
+<normal>0[xX][0-9a-fA-F][0-9a-fA-F\_]*(u|U)(l|L) {
+        char temptext[128];
+        skip_underscode(yytext,temptext,temptext+sizeof(temptext));
+        return sscanf(temptext, "%" SCNx64, &yylval_param->ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+    }
+<normal>0[xX][0-9a-fA-F][0-9a-fA-F\_]*(l|L) {
+        char temptext[128];
+        skip_underscode(yytext,temptext,temptext+sizeof(temptext));
+        return sscanf(temptext, "%" SCNx64, &yylval_param->ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+    }
+<normal>0[xX][0-9a-fA-F][0-9a-fA-F\_]*(u|U) {
+        char temptext[128];
+        skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         uint64_t int_const;
-        if ( sscanf(yytext, "%" SCNx64,  &int_const)!=1 ) {
+        if ( sscanf(temptext, "%" SCNx64,  &int_const)!=1 ) {
             return LEXER_ERROR;
         } else {
             if ( int_const>UINT32_MAX ) {
@@ -522,10 +541,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             return UNSIGNED_INTEGER;
         }
     }
-
-<normal>0[xX][0-9a-fA-F]+               {
+<normal>0[xX][0-9a-fA-F][0-9a-fA-F\_]* {
+        char temptext[128];
+        skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         uint64_t int_const;
-        if ( sscanf(yytext, "%" SCNx64,  &int_const)!=1 ) {
+        if ( sscanf(temptext, "%" SCNx64,  &int_const)!=1 ) {
             return LEXER_ERROR;
         } else {
             if ( int_const>UINT32_MAX ) {
@@ -535,7 +555,6 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             return UNSIGNED_INTEGER;
         }
     }
-
 <normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
 <normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
 <normal>[0-9]+(f|F)                                     return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
@@ -647,6 +666,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     }
 }
 <normal>"\<\|"                              return LPIPE;
+<normal>"\$\$"                              return MTAG;
 <normal>"\?\?"                              return QQ;
 <normal>"\?\["                              {
     yyextra->das_nested_square_braces ++;
@@ -830,4 +850,17 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         }
     }
     for ( auto & crd : crdi ) crd->close(tak);
+}
+
+int skip_underscode ( char * tok, char * buf, char * bufend ) {
+    char * out = buf;
+    for ( ;; ) {
+        char ch = *tok ++;
+        if ( ch==0 ) break;
+        if ( ch=='_' ) continue;
+        *out++ = ch;
+        if ( out==bufend ) { out--; break; }
+    }
+    *out = 0;
+    return int(out - buf);
 }

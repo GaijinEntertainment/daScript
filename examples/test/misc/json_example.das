@@ -46,7 +46,7 @@ def test_reader
 def test
     test_reader()
     for jidx in range(1,8)
-        let fname = "C:/Users/Boris/Work/yzg/examples/test/json/{jidx}.json"
+        let fname = "D:/Work/daScript/examples/test/json/{jidx}.json"
         // let fname = "/Users/borisbatkin/Work/yzg/examples/test/json/{jidx}.json"
         fopen(fname, "rb") <| $ ( f )
             fread(f) <| $ ( data )

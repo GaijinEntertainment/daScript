@@ -28,6 +28,11 @@ def private array_helper ( arr : auto implicit =const; a : auto(TT) ) : array<TT
 
 [unsafe_operation]
 def public temp_array ( var arr : auto implicit =const )
+    //! Creates temporary array from the given object.
+    //! Important requirements are:
+    //!     * object memory is linear
+    //!     * each element follows the next one directly, with the stride equal to size of the element
+    //!     * object memory does not change within the lifetime of the returned array
     unsafe
         return <- array_helper ( arr, decltype(arr[0]) )
 
@@ -38,4 +43,5 @@ def public temp_array ( arr : auto implicit =const)
 
 [expect_any_array(v)]
 def empty(v:auto(VecT))
+    //! returns true if 'v' has 0 elements. this also implies that `length(v)` is defined.
     return _::length(v)==0

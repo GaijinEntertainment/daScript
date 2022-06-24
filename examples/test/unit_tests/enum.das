@@ -81,10 +81,10 @@ def test
     assert(foo16.e16==SomeEnum_16 SomeEnum_16_one)
     assert(int(foo16.e16)==1)
     assert(typeinfo(sizeof foo16.e16)==2)
-    for e,t in each_enum(BooHoo boo),[[int 0;1;5]]
-        assert(int(e)==t)
-    for e,t in each_enum(BooHoo8 boo),[[int 1;2;3]]
-        assert(int(e)==t)
-    for e,t in each_enum(BooHoo16 boo),[[int 4;5;6]]
-        assert(int(e)==t)
+    for e,tt in each_enum(BooHoo boo),[[int 0;1;5]]
+        assert(int(e)==tt)
+    for e,tt in each_enum(BooHoo8 boo),[[int 1;2;3]]
+        assert(int(e)==tt)
+    for e,tt in each_enum(BooHoo16 boo),[[int 4;5;6]]
+        assert(int(e)==tt)
     return true

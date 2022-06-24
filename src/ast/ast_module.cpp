@@ -56,28 +56,31 @@ namespace das {
     TypeAnnotation * Module::resolveAnnotation ( const TypeInfo * info ) {
         intptr_t ann = (intptr_t) (info->annotation_or_name);
         if ( ann & 1 ) {
-            // convert module name from w-char to regular char
-            wchar_t * wsname = (wchar_t *) ( ann & ~1 );
-            char cvtbuf[256], *cvt;
-            for (cvt = cvtbuf; *wsname; wsname++, cvt++) {
-                DAS_ASSERT(cvt - cvtbuf < 255);
-                *cvt = (char)*wsname;
-            }
-            *cvt = 0;
-            // end convert
+            DAS_VERIFYF(daScriptEnvironment::bound && daScriptEnvironment::bound->modules,"missing bound environment");
+            // we add ~ at the begining of the name for padding
+            // if name is allocated by the compiler, it does not guarantee that it is aligned
+            // we check if there is a ~ at the begining of the name, and if it is - we skip it
+            // that way we can accept both aligned and unaligned names
+            auto cvtbuf = (char *) ann;
+            if ( cvtbuf[0]=='~' ) cvtbuf++;
             string moduleName, annName;
             splitTypeName(cvtbuf, moduleName, annName);
-            info->annotation_or_name = nullptr;
+            TypeAnnotation * resolve = nullptr;
             for ( auto pm = daScriptEnvironment::bound->modules; pm!=nullptr; pm=pm->next ) {
                 if ( pm->name == moduleName ) {
                     if ( auto annT = pm->findAnnotation(annName) ) {
-                        info->annotation_or_name = (TypeAnnotation *) annT.get();
+                        resolve = (TypeAnnotation *) annT.get();
                     }
                     break;
                 }
             }
+            if ( daScriptEnvironment::bound->g_resolve_annotations ) {
+                info->annotation_or_name = resolve;
+            }
+            return resolve;
+        } else {
+            return info->annotation_or_name;
         }
-        return info->annotation_or_name;
     }
 
     void resetFusionEngine();
@@ -93,6 +96,16 @@ namespace das {
             for ( auto m = daScriptEnvironment::bound->modules; m ; m = m->next ) {
                 all &= m->initDependencies();
             }
+        }
+    }
+
+    void Module::CollectFileInfo(das::vector<FileInfoPtr> &finfos) {
+        DAS_ASSERT(daScriptEnvironment::owned!=nullptr);
+        DAS_ASSERT(daScriptEnvironment::bound!=nullptr);
+        auto m = daScriptEnvironment::bound->modules;
+        while ( m ) {
+            finfos.emplace_back(das::move(m->ownFileInfo));
+            m = m->next;
         }
     }
 
@@ -464,6 +477,8 @@ namespace das {
                     addAnnotation(fna);
                 });
             }
+            captureMacros.insert(captureMacros.end(), ptm->captureMacros.begin(), ptm->captureMacros.end());
+            forLoopMacros.insert(forLoopMacros.end(), ptm->forLoopMacros.begin(), ptm->forLoopMacros.end());
             variantMacros.insert(variantMacros.end(), ptm->variantMacros.begin(), ptm->variantMacros.end());
             macros.insert(macros.end(), ptm->macros.begin(), ptm->macros.end());
             inferMacros.insert(inferMacros.end(), ptm->inferMacros.begin(), ptm->inferMacros.end());

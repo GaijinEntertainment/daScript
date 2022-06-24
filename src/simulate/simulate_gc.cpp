@@ -691,6 +691,19 @@ namespace das
             popRange();
             DataWalker::afterRef(pa, ti);
         }
+        virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
+            DataWalker::beforePtr(pa, ti);
+            if ( ti->firstType ) {
+                if ( auto ptr = *(char**)pa ) {
+                    PtrRange rdata(ptr, ti->firstType->size);
+                    markAndPushRange(rdata);
+                }
+            }
+        }
+        virtual void afterPtr ( char * pa, TypeInfo * ti ) override {
+            if ( ti->firstType && *(char**)pa ) popRange();
+            DataWalker::afterPtr(pa, ti);
+        }
         virtual void beforeStructure ( char * pa, StructInfo * ti ) override {
             DataWalker::beforeStructure(pa, ti);
             visited.emplace_back(make_pair(pa,ti->hash));

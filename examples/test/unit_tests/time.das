@@ -5,7 +5,7 @@ def testClockArg(c:clock):clock
 [export]
 def test
     var a1,a2:clock
-    var dt:float
+    var dt:double
     a1 = get_clock()
     for z in range(3) // nada on my laptop
         var a,b:int[3]
@@ -16,5 +16,5 @@ def test
     let a3 = testClockArg(a2)
     assert(a2 == a3)
     dt = a2 - a1
-    assert(dt <= 1.0)
+    assert(dt <= 1.0lf)
     return true

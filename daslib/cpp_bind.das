@@ -11,7 +11,7 @@ require ast
 require daslib/ast_boost
 require daslib/strings_boost
 
-def log_cpp_class_method ( cpp_file:file; name:string; fntype:TypeDeclPtr )
+def private log_cpp_class_method ( cpp_file:file; name:string; fntype:TypeDeclPtr )
     var cft <- clone_type(fntype.firstType)
     cft.flags |= TypeDeclFlags smartPtrNative
     let rettd = describe_cpp(cft)
@@ -28,7 +28,7 @@ def log_cpp_class_method ( cpp_file:file; name:string; fntype:TypeDeclPtr )
         fwrite(cpp_file, "{argN}")
     fwrite(cpp_file, " )")
 
-def log_cpp_class_method_call ( cpp_file:file; name:string; fntype:TypeDeclPtr )
+def private log_cpp_class_method_call ( cpp_file:file; name:string; fntype:TypeDeclPtr )
     let rettd = describe_cpp(fntype.firstType)
     fwrite(cpp_file, "das_invoke_function<{rettd}>::invoke\n      <")
     for argN,argT,argI in fntype.argNames,fntype.argTypes,range(100500)
@@ -51,6 +51,10 @@ def log_cpp_class_method_call ( cpp_file:file; name:string; fntype:TypeDeclPtr )
         fwrite(cpp_file,".marshal()")
 
 def log_cpp_class_adapter ( cpp_file:file; name:string; cinfo:TypeDeclPtr )
+    //! Generates C++ class adapter for the daScript class.
+    //! Intended use::
+    //!
+    //!     log_cpp_class_adapter(cppFileNameDotInc, "daScriptClassName", typeinfo(ast_typedecl type<daScriptClassName>))
     assert(cinfo.isClass,"can only make adapter out of a class")
     var methods : array<string>
     var types : array<TypeDeclPtr>

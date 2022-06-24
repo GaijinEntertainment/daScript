@@ -27,3 +27,8 @@ temp/vertex.sh
 temp/compute.bin
 temp/compute.sh
 modules/dasSFML/libsfml/
+site/
+doc/sphinx-build/
+doc/source/__pycache__/
+doc/source/_build/doctrees/environment.pickle
+doc/source/_build/

@@ -78,7 +78,7 @@ namespace das {
 
     __forceinline void sincosF ( float a, float & sv, float & cv ) {
         vec4f s,c;
-        v_sincos4(v_splats(a), s, c);
+        v_sincos_x(v_set_x(a), s, c);
         sv = v_extract_x(s);
         cv = v_extract_x(c);
     }
@@ -108,7 +108,7 @@ namespace das {
         float discr = 1.0f - nint*nint*(1.0f - dt*dt);
         if (discr > 0.0f) {
             vec4f nintv = v_splats(nint);
-            vec4f sqrt_discr = v_perm_xxxx(v_sqrt_x(v_splats(discr)));
+            vec4f sqrt_discr = v_perm_xxxx(v_sqrt_x(v_set_x(discr)));
             return v_sub(v_mul(nintv, v_sub(v, v_mul(n, dtv))), v_mul(n, sqrt_discr));
         } else {
             return float3(0.);

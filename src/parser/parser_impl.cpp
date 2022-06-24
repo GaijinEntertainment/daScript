@@ -220,6 +220,9 @@ namespace das {
                         virtfin->at, CompilationError::function_already_declared);
                 }
             }
+            for ( auto & ffd : pStruct->fields ) {
+                ffd.implemented = false;
+            }
             for ( auto pDecl : *list ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
                     if ( !pStruct->isClass && pDecl->isPrivate ) {
@@ -237,8 +240,10 @@ namespace das {
                             pStruct->fields.emplace_back(name_at.name, td, init,
                                 pDecl->annotation ? *pDecl->annotation : AnnotationArgumentList(),
                                 pDecl->init_via_move, name_at.at);
-                            pStruct->fields.back().privateField = pDecl->isPrivate;
-                            pStruct->fields.back().sealed = pDecl->sealed;
+                            auto & ffd = pStruct->fields.back();
+                            ffd.privateField = pDecl->isPrivate;
+                            ffd.sealed = pDecl->sealed;
+                            ffd.implemented = true;
                         }
                     } else {
                         if ( pDecl->sealed || pDecl->override ) {
@@ -251,6 +256,7 @@ namespace das {
                             oldFd->parentType = oldFd->type->isAuto();
                             oldFd->privateField = pDecl->isPrivate;
                             oldFd->sealed = pDecl->sealed;
+                            oldFd->implemented = true;
                         } else {
                             das_yyerror(scanner,"structure field is already declared "+name_at.name
                                 +", use override to replace initial value instead",name_at.at,

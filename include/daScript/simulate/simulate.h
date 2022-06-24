@@ -205,14 +205,16 @@ namespace das
         virtual void onUninstall ( DebugAgent * ) {}
         virtual void onCreateContext ( Context * ) {}
         virtual void onDestroyContext ( Context * ) {}
+        virtual void onSimulateContext ( Context * ) {}
         virtual void onSingleStep ( Context *, const LineInfo & ) {}
         virtual void onInstrument ( Context *, const LineInfo & ) {}
-        virtual void onInstrumentFunction ( Context *, SimFunction *, bool ) {}
+        virtual void onInstrumentFunction ( Context *, SimFunction *, bool, uint64_t ) {}
         virtual void onBreakpoint ( Context *, const LineInfo &, const char *, const char * ) {}
         virtual void onVariable ( Context *, const char *, const char *, TypeInfo *, void * ) {}
         virtual void onTick () {}
         virtual void onCollect ( Context * ) {}
         virtual bool onLog ( int /*level*/, const char * /*text*/ ) { return false; }
+        virtual bool isCppOnlyAgent() const { return false; }
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
 
@@ -237,6 +239,7 @@ namespace das
     int32_t dapiStackDepth ( Context & context );
     void dumpTrackingLeaks();
     void dapiReportContextState ( Context & ctx, const char * category, const char * name, const TypeInfo * info, void * data );
+    void dapiSimulateContext ( Context & ctx );
 
     typedef shared_ptr<Context> ContextPtr;
 
@@ -257,6 +260,8 @@ namespace das
         virtual ~Context();
         void strip();
         void logMemInfo(TextWriter & tw);
+
+        void makeWorkerFor(const Context & ctx);
 
         uint32_t getGlobalSize() const {
             return globalsSize;
@@ -315,6 +320,14 @@ namespace das
 
         __forceinline vec4f eval ( const SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr ) {
             return callWithCopyOnReturn(fnPtr, args, res, 0);
+        }
+
+        template <typename TT>
+        __forceinline void threadlock_context ( TT && subexpr ) {
+            lock_guard<recursive_mutex> guard(contextMutex);
+            lock();
+            subexpr();
+            unlock();
         }
 
         vec4f evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
@@ -584,7 +597,7 @@ namespace das
         void collectStringHeap(LineInfo * at, bool validate);
         void collectHeap(LineInfo * at, bool stringHeap, bool validate);
         void reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly);
-        void instrumentFunction ( SimFunction * , bool isInstrumenting );
+        void instrumentFunction ( SimFunction * , bool isInstrumenting, uint64_t userData );
         void instrumentContextNode ( const Block & blk, bool isInstrumenting, Context * context, LineInfo * line );
         void clearInstruments();
         void runVisitor ( SimVisitor * vis ) const;
@@ -600,7 +613,7 @@ namespace das
         char * intern ( const char * str );
 
         void bpcallback ( const LineInfo & at );
-        void instrumentFunctionCallback ( SimFunction * sim, bool entering );
+        void instrumentFunctionCallback ( SimFunction * sim, bool entering, uint64_t userData );
         void instrumentCallback ( const LineInfo & at );
 
 #define DAS_SINGLE_STEP(context,at,forceStep) \
@@ -656,6 +669,7 @@ namespace das
 #endif
     protected:
         GlobalVariable * globalVariables = nullptr;
+        bool     globalsOwner = true;
         uint32_t sharedSize = 0;
         bool     sharedOwner = true;
         uint32_t globalsSize = 0;
@@ -682,6 +696,8 @@ namespace das
         uint32_t gotoLabel = 0;
         vec4f result;
     public:
+        recursive_mutex contextMutex;
+    public:
 #if DAS_ENABLE_SMART_PTR_TRACKING
         static vector<smart_ptr<ptr_ref_count>> sptrAllocations;
 #endif
@@ -695,7 +711,11 @@ namespace das
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
     bool isInDebugAgentCreation();
     bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
+    void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line );
     Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
+    void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && );
+    void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && );
+    void uninstallCppDebugAgent ( const char * category );
 
     class SharedStackGuard {
     public:

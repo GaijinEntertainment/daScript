@@ -2,16 +2,13 @@
 // options logCpp
 // options log_nodes
 
-module toy_path_tracer
-
 require path_tracer
 
-require math
 require strings
 require stbimage
 require daslib/jobque_boost
-require daslib/tga
 require daslib/random
+require daslib/math_boost
 
 enum Mode
     SingleThread
@@ -47,7 +44,7 @@ def main
                             var rayCount = 0
                             draw(i, width, height, y, y+1, *pbb, rayCount)
                             *ptr += rayCount
-                            status |> notify
+                            status |> notify_and_release
                     status |> join
                     i ++
             var dt = get_time_usec(t0)
@@ -56,13 +53,13 @@ def main
     elif USE_MODE == Mode Threads
         var t0 = ref_time_ticks()
         var totalRays = 0
-        profile(kFrameCount,"ray-trace frame (with THREADS)") <|
+        let hwThreads = get_total_hw_threads()
+        profile(kFrameCount,"ray-trace frame (with {hwThreads} THREADS)") <|
             var pbb : array<float3>?
             var ptr : int?
             unsafe
                 pbb = addr(backbuffer)                  // NOTE: we actually share data here
                 ptr = addr(totalRays)
-            let hwThreads = get_total_hw_threads()
             with_job_status(hwThreads) <| $ ( status )
                 let chunk = (height+hwThreads-1) / hwThreads
                 for c in range(hwThreads)
@@ -73,7 +70,7 @@ def main
                         var rayCount = 0
                         draw(i, width, height, yMin, yMax, *pbb, rayCount)
                         *ptr += rayCount
-                        status |> notify
+                        status |> notify_and_release
                 status |> join
                 i ++
         var dt = get_time_usec(t0)
@@ -97,6 +94,7 @@ def main
     pixels |> reserve(width*height)
     for y in range(height)
         for x in range(width)
-            pixels |> push <| linear_to_SRGB(backbuffer[x + (height-1-y)*width].zyx)
+            let srgb = linear_to_SRGB(float4(backbuffer[x + (height-1-y)*width].xyz,1.0f))
+            pixels |> push <| RGBA_TO_UCOLOR(srgb)
     unsafe
         stbi_write_png( "{get_das_root()}/examples/pathTracer/path_tracer.png", width, height, 4, addr(pixels[0]), width*4  )

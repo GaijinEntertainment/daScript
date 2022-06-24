@@ -153,7 +153,7 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "FieldDeclarationFlags";
         ft->argNames = { "moveSemantics", "parentType", "capturedConstant",
-            "generated", "capturedRef", "doNotDelete", "privateField", "sealed" };
+            "generated", "capturedRef", "doNotDelete", "privateField", "sealed", "implemented" };
         return ft;
     }
 

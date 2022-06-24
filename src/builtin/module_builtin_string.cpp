@@ -231,6 +231,40 @@ namespace das
         return ret;
     }
 
+    uint64_t string_to_uint64 ( const char *str, Context * context ) {
+        const uint32_t strLen = stringLengthSafe(*context, str);
+        if (strLen == 0)
+        {
+            context->throw_error("string-to-uint64 conversion failed. String is not an uint number");
+            return 0;
+        }
+        char *endptr;
+        unsigned long long ret = strtoull(str, &endptr, 10);
+        if (endptr == str)
+        {
+            context->throw_error("string-to-uint64 conversion failed. String is not an uint number");
+            return 0;
+        }
+        return (uint64_t) ret;
+    }
+
+    int64_t string_to_int64 ( const char *str, Context * context ) {
+        const uint32_t strLen = stringLengthSafe(*context, str);
+        if (strLen == 0)
+        {
+            context->throw_error("string-to-int64 conversion failed. String is not an integer number");
+            return 0;
+        }
+        char *endptr;
+        long long ret = strtoll(str, &endptr, 10);
+        if (endptr == str)
+        {
+            context->throw_error("string-to-int64 conversion failed. String is not an integer number");
+            return 0;
+        }
+        return (int64_t) ret;
+    }
+
     float string_to_float ( const char *str, Context * context ) {
         const uint32_t strLen = stringLengthSafe(*context, str);
         if (strLen == 0)
@@ -269,9 +303,13 @@ namespace das
         return str ? float(atof(str)) : 0.0f;
     }
 
+    double fast_to_double ( const char *str ) {
+        return str ? atof(str) : 0.0;
+    }
+
     int32_t fast_to_int ( const char *str, bool hex ) {
         if ( !str ) return 0;
-        uint32_t res;
+        int32_t res = 0;
         if ( hex ) {
             sscanf(str,"%" SCNx32,&res);
         } else {
@@ -282,7 +320,7 @@ namespace das
 
     uint32_t fast_to_uint ( const char *str, bool hex ) {
         if ( !str ) return 0;
-        uint32_t res;
+        uint32_t res = 0;
         if ( hex ) {
             sscanf(str,"%" SCNx32,&res);
         } else {
@@ -293,7 +331,7 @@ namespace das
 
     int64_t fast_to_int64 ( const char *str, bool hex ) {
         if ( !str ) return 0;
-        int64_t res;
+        int64_t res = 0;
         if ( hex ) {
             sscanf(str,"%" SCNx64,&res);
         } else {
@@ -304,7 +342,7 @@ namespace das
 
     uint64_t fast_to_uint64 ( const char *str, bool hex ) {
         if ( !str ) return 0;
-        uint64_t res;
+        uint64_t res = 0;
         if ( hex ) {
             sscanf(str,"%" SCNx64,&res);
         } else {
@@ -728,6 +766,10 @@ namespace das
                 SideEffects::none, "string_to_int")->args({"str","context"});
             addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint",
                 SideEffects::none, "string_to_uint")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(string_to_int64)>(*this, lib, "int64",
+                SideEffects::none, "string_to_int64")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(string_to_uint64)>(*this, lib, "uint64",
+                SideEffects::none, "string_to_uint64")->args({"str","context"});
             addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float",
                 SideEffects::none, "string_to_float")->args({"str","context"});
             addExtern<DAS_BIND_FUN(string_to_double)>(*this, lib, "double",
@@ -746,6 +788,8 @@ namespace das
             toui64->arguments[1]->init = make_smart<ExprConstBool>(false);
             addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float",
                 SideEffects::none, "fast_to_float")->arg("value");
+            addExtern<DAS_BIND_FUN(fast_to_double)>(*this, lib, "to_double",
+                SideEffects::none, "fast_to_double")->arg("value");
             addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
                 SideEffects::none, "builtin_string_escape")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",

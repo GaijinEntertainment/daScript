@@ -9,9 +9,12 @@ require ast
 require daslib/ast_boost
 
 def public isYetAnotherVectorTemplate ( var td:TypeDeclPtr )
+    //! returns true if the given type declaration is a das::vector template bound on C++ side
     return td.isHandle && td.annotation!=null && td.annotation.is_any_vector
 
 class IsAnyType : AstFunctionAnnotation
+    def override appendToMangledName ( func:FunctionPtr; decl:AnnotationDeclaration; var mangledName:das_string ) : void
+        mangledName := "{class_info(self).name}:{describe(decl)}"
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         if args.length != 1
             errors := "expecting at least one argument"
@@ -35,6 +38,7 @@ class IsAnyType : AstFunctionAnnotation
 
 [contract(name="expect_any_array")]
 class IsAnyArrayMacro : IsAnyType
+    //! [expect_any_array(argname)] contract, which only accepts array<T>, T[], or das`vector<T>
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
@@ -44,8 +48,33 @@ class IsAnyArrayMacro : IsAnyType
                         return false
         return true
 
+[contract(name="expect_dim")]
+class IsDimMacro : IsAnyType
+    //! [expect_dim(argname)] contract, which only accepts T[]
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if length(typ.dim)==0
+                        errors := "argument {argv.name} is not an [], it is {describe(typ)}"
+                        return false
+        return true
+
+[contract(name="expect_not_dim")]
+class IsNotDimMacro : IsAnyType
+    //! [expect_not_dim(argname)] contract, which never accepts T[]
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if length(typ.dim)!=0
+                        errors := "argument {argv.name} is [], it is {describe(typ)}"
+                        return false
+        return true
+
 [contract(name="expect_any_enum")]
 class IsAnyEnumMacro : IsAnyType
+    //! [expect_any_enum(argname)] contract, which only accepts enumerations
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
@@ -57,6 +86,7 @@ class IsAnyEnumMacro : IsAnyType
 
 [contract(name="expect_any_vector_type")]
 class IsAnyVectorType : IsAnyType
+    //! [expect_any_vector_type(argname)] contract, which only accepts vector types, i.e. int2, float3, range, etc
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
@@ -68,6 +98,7 @@ class IsAnyVectorType : IsAnyType
 
 [contract(name="expect_any_struct")]
 class IsAnyStructMacro : IsAnyType
+    //! [expect_any_struct(argname)] contract, which only accepts structs (byt not classes)
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
@@ -79,6 +110,7 @@ class IsAnyStructMacro : IsAnyType
 
 [contract(name="expect_any_numeric")]
 class IsAnyNumericMacro : IsAnyType
+    //! [expect_any_numeric(argname)] contract, which only accepts numeric types (int, float, etc)
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
@@ -90,6 +122,8 @@ class IsAnyNumericMacro : IsAnyType
 
 [contract(name="expect_any_workhorse")]
 class IsAnyWorkhorse : IsAnyType
+    //! [expect_any_workhorse(argname)] contract, which only accepts workhorse types (int, float, etc)
+    //! Workhorse types are: bool,int*,uint*,float*,double,range and urange,string,enumeration,and non-smart pointers
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
@@ -101,6 +135,7 @@ class IsAnyWorkhorse : IsAnyType
 
 [contract(name="expect_any_workhorse_raw")]
 class IsAnyWorkhorseNonPtrMacro : IsAnyType
+    //! [expect_any_workhorse_raw(argname)] contract, which only accepts workhorse types which are raw (not pointer or bool)
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
@@ -112,6 +147,7 @@ class IsAnyWorkhorseNonPtrMacro : IsAnyType
 
 [contract(name="expect_any_tuple")]
 class IsAnyTupleNonPtrMacro : IsAnyType
+    //! [expect_any_tuple(argname)] contract, which only accepts tuples
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
@@ -123,6 +159,7 @@ class IsAnyTupleNonPtrMacro : IsAnyType
 
 [contract(name="expect_any_variant")]
 class IsAnyVariantNonPtrMacro : IsAnyType
+    //! [expected_any_variant(argname)] contract, which only accepts variants
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
@@ -134,6 +171,7 @@ class IsAnyVariantNonPtrMacro : IsAnyType
 
 [contract(name="expect_any_function")]
 class IsAnyFunctionNonPtrMacro : IsAnyType
+    //! [expect_any_function(argname)] contract, which only accepts functions
     def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments

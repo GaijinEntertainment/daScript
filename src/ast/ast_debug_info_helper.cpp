@@ -180,8 +180,15 @@ namespace das {
             info->structType = makeStructureDebugInfo(*type->structType);
         } else if ( type->isEnumT() ) {
             info->enumType = type->enumType ? makeEnumDebugInfo(*type->enumType) : nullptr;
-        } else {
+        } else if ( type->annotation ) {
+#if DAS_THREAD_SAFE_ANNOTATIONS
+            auto annName = debugInfo->allocateCachedName("~" + type->annotation->module->name + "::" + type->annotation->name);
+            info->annotation_or_name =  ((TypeAnnotation*)(intptr_t(annName)|1));
+#else
             info->annotation_or_name = type->annotation;
+#endif
+        } else {
+            info->annotation_or_name = nullptr;
         }
         info->flags = 0;
         if (type->lockCheck()) {

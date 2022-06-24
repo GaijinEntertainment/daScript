@@ -14,6 +14,8 @@
 
 #include "daScript/simulate/simulate_visit_op.h"
 
+das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
+
 namespace das
 {
     // common for move and copy
@@ -632,7 +634,8 @@ namespace das
             if ( useCMRES ) {
                 fakeVariable->aliasCMRES = true;
             } else if ( useStackRef ) {
-                fakeVariable->stackTop = stackTop + extraOffset;
+                fakeVariable->stackTop = stackTop;
+                fakeVariable->extraLocalOffset = extraOffset;
                 fakeVariable->type->ref = true;
                 if ( total != 1 ) {
                     fakeVariable->type->dim.push_back(total);
@@ -1032,6 +1035,13 @@ namespace das
     SimNode * ExprNullCoalescing::simulate (Context & context) const {
         if ( type->isRef() ) {
             return context.code->makeNode<SimNode_NullCoalescingRef>(at,subexpr->simulate(context),defaultValue->simulate(context));
+        } else if ( type->isHandle() ) {
+            if ( auto resN = type->annotation->simulateNullCoalescing(context, at, subexpr->simulate(context), defaultValue->simulate(context)) ) {
+                return resN;
+            } else {
+                context.thisProgram->error("internal compilation error, simluateNullCoalescing returned null", "", "", at);
+                return nullptr;
+            }
         } else {
             return context.code->makeValueNode<SimNode_NullCoalescing>(type->baseType,at,subexpr->simulate(context),defaultValue->simulate(context));
         }
@@ -1196,6 +1206,19 @@ namespace das
         if ( arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
             return context.code->makeValueNode<SimNode_TableErase>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
+        } else {
+            DAS_ASSERTF(0, "we should not even be here. erase can only accept tables. infer type should have failed.");
+            context.thisProgram->error("internal compilation error, generating erase for non-table type", "", "", at);
+            return nullptr;
+        }
+    }
+
+    SimNode * ExprSetInsert::simulate (Context & context) const {
+        auto cont = arguments[0]->simulate(context);
+        auto val = arguments[1]->simulate(context);
+        if ( arguments[0]->type->isGoodTableType() ) {
+            DAS_ASSERTF(arguments[0]->type->secondType->getSizeOf()==0,"Expecting value type size to be 0 for set insert");
+            return context.code->makeValueNode<SimNode_TableSetInsert>(arguments[0]->type->firstType->baseType, at, cont, val);
         } else {
             DAS_ASSERTF(0, "we should not even be here. erase can only accept tables. infer type should have failed.");
             context.thisProgram->error("internal compilation error, generating erase for non-table type", "", "", at);
@@ -1921,10 +1944,10 @@ namespace das
             if ( variable->type->ref ) {
                 if ( r2vType->baseType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_GetLocalRefOffR2V>(r2vType->baseType, at,
-                                                    variable->stackTop, extraOffset);
+                                                    variable->stackTop, extraOffset + variable->extraLocalOffset);
                 } else {
                     return context.code->makeNode<SimNode_GetLocalRefOff>(at,
-                                                    variable->stackTop, extraOffset);
+                                                    variable->stackTop, extraOffset + variable->extraLocalOffset);
                 }
             } else if ( variable->aliasCMRES ) {
                 if ( r2vType->baseType!=Type::none ) {
@@ -1997,9 +2020,9 @@ namespace das
             }
         } else if ( local ) {
             if ( r2v ) {
-                return trySimulate(context, 0, type);
+                return trySimulate(context, variable->extraLocalOffset, type);
             } else {
-                return trySimulate(context, 0, make_smart<TypeDecl>(Type::none));
+                return trySimulate(context, variable->extraLocalOffset, make_smart<TypeDecl>(Type::none));
             }
         } else if ( argument) {
             if (variable->type->isRef()) {
@@ -2096,6 +2119,11 @@ namespace das
                                                     subexpr->simulate(context),
                                                     left->simulate(context),
                                                     right->simulate(context));
+    }
+
+    SimNode * ExprTag::simulate (Context & context) const {
+        context.thisProgram->error("internal compilation error, trying to simulate a tag", "", "", at);
+        return nullptr;
     }
 
     SimNode * ExprMove::simulate (Context & context) const {
@@ -2769,7 +2797,7 @@ namespace das
 
     void Program::makeMacroModule ( TextWriter & logs ) {
         isCompilingMacros = true;
-        thisModule->macroContext = make_smart<Context>(getContextStackSize());
+        thisModule->macroContext = get_context(getContextStackSize());
         auto oldAot = policies.aot;
         policies.aot = false;
         simulate(*thisModule->macroContext, logs);
@@ -3013,33 +3041,46 @@ namespace das
             logs << "shared        " << context.getSharedMemorySize() << "\n";
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
         }
-        // debug info
-        if ( options.getBoolOption("log_debug_mem",false) ) {
-            helper.logMemInfo(logs);
-        }
+
         // log CPP
         if (options.getBoolOption("log_cpp")) {
             aotCpp(context,logs);
             registerAotCpp(logs,context);
         }
-        if ( !options.getBoolOption("rtti",policies.rtti) ) {
-            context.thisProgram = nullptr;
-        }
         context.debugger = getDebugger();
         isSimulating = false;
+        context.thisHelper = &helper;   // note - we may need helper for the 'complete'
         for ( int i=0; i!=context.totalFunctions; ++i ) {
             Function *func = indexToFunction[i];
             for (auto &ann : func->annotations) {
-                if (ann->annotation->rtti_isFunctionAnnotation()) {
+                if ( ann->annotation->rtti_isFunctionAnnotation() ) {
                     auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
-                    fann->complete(&context);
+                    fann->complete(&context, func);
                 }
             }
+        }
+        for (auto pm : library.modules) {
+            pm->structures.foreach([&](auto st){
+                for ( auto & ann : st->annotations ) {
+                    if ( ann->annotation->rtti_isStructureAnnotation() ) {
+                        auto sann = static_pointer_cast<StructureAnnotation>(ann->annotation);
+                        sann->complete(&context, st);
+                    }
+                }
+            });
+        }
+        context.thisHelper = nullptr;
+        if ( options.getBoolOption("log_debug_mem",false) ) {
+            helper.logMemInfo(logs);
+        }
+        if ( !options.getBoolOption("rtti",policies.rtti) ) {
+            context.thisProgram = nullptr;
         }
         if ( options.getBoolOption("log_total_compile_time",false) ) {
             auto dt = get_time_usec(time0) / 1000000.;
             logs << "simulate (including init script) took " << dt << "\n";
         }
+        dapiSimulateContext(context);
         return errors.size() == 0;
     }
 

@@ -1,1008 +1,1222 @@
-.. |typedef-ast-CallMacroPtr| replace:: to be documented
+.. |typedef-ast-TypeDeclFlags| replace:: properties of the `TypeDecl` object.
 
-.. |typedef-ast-EnumerationPtr| replace:: to be documented
+.. |typedef-ast-FieldDeclarationFlags| replace:: properties of the `FieldDeclaration` object.
 
-.. |typedef-ast-ExprAscendFlags| replace:: to be documented
+.. |typedef-ast-StructureFlags| replace:: properties of the `Structure` object.
 
-.. |typedef-ast-ExprAtFlags| replace:: to be documented
+.. |typedef-ast-ExprGenFlags| replace:: generation (genFlags) properties of the `Expression` object.
 
-.. |typedef-ast-ExprBlockFlags| replace:: to be documented
+.. |typedef-ast-ExprFlags| replace:: properties of the `Expression` object.
 
-.. |typedef-ast-ExprCastFlags| replace:: to be documented
+.. |typedef-ast-ExprPrintFlags| replace:: printing properties of the `Expression` object.
 
-.. |typedef-ast-ExprFieldDerefFlags| replace:: to be documented
+.. |typedef-ast-FunctionFlags| replace:: properties of the `Function` object.
 
-.. |typedef-ast-ExprFieldFieldFlags| replace:: to be documented
+.. |typedef-ast-MoreFunctionFlags| replace:: additional properties of the `Function` object.
 
-.. |typedef-ast-ExprFlags| replace:: to be documented
+.. |typedef-ast-FunctionSideEffectFlags| replace:: side-effect properties of the `Function` object.
 
-.. |typedef-ast-ExprGenFlags| replace:: to be documented
+.. |typedef-ast-VariableFlags| replace:: properties of the `Variable` object.
 
-.. |typedef-ast-ExprMakeBlockFlags| replace:: to be documented
+.. |typedef-ast-VariableAccessFlags| replace:: access properties of the `Variable` object.
 
-.. |typedef-ast-ExprMakeLocalFlags| replace:: to be documented
+.. |typedef-ast-ExprBlockFlags| replace:: properties of the `ExrpBlock` object.
 
-.. |typedef-ast-ExprMakeStructFlags| replace:: to be documented
+.. |typedef-ast-ExprAtFlags| replace:: properties of the `ExprAt` object.
 
-.. |typedef-ast-ExprPrintFlags| replace:: to be documented
+.. |typedef-ast-ExprMakeLocalFlags| replace:: properties of the `ExprMakeLocal` object (`ExprMakeArray`, `ExprMakeStruct`, 'ExprMakeTuple', 'ExprMakeVariant').
 
-.. |typedef-ast-ExprReturnFlags| replace:: to be documented
+.. |typedef-ast-ExprAscendFlags| replace:: properties of the `ExprAscend` object.
 
-.. |typedef-ast-ExprSwizzleFieldFlags| replace:: to be documented
+.. |typedef-ast-ExprCastFlags| replace:: properties of the `ExprCast` object.
 
-.. |typedef-ast-ExprVarFlags| replace:: to be documented
+.. |typedef-ast-ExprVarFlags| replace:: properties of the `ExprVar` object.
 
-.. |typedef-ast-ExprYieldFlags| replace:: to be documented
+.. |typedef-ast-ExprMakeStructFlags| replace:: properties of the `ExprMakeStruct` object.
 
-.. |typedef-ast-ExpressionPtr| replace:: to be documented
+.. |typedef-ast-MakeFieldDeclFlags| replace:: properties of the `MakeFieldDecl` object.
 
-.. |typedef-ast-FieldDeclarationFlags| replace:: to be documented
+.. |typedef-ast-ExprFieldDerefFlags| replace:: dereferencing properties of the `ExprField` object.
 
-.. |typedef-ast-FunctionAnnotationPtr| replace:: to be documented
+.. |typedef-ast-ExprFieldFieldFlags| replace:: field properties of the `ExprField` object.
 
-.. |typedef-ast-FunctionFlags| replace:: to be documented
+.. |typedef-ast-ExprSwizzleFieldFlags| replace:: properties of the `ExprSwizzle` object.
 
-.. |typedef-ast-FunctionPtr| replace:: to be documented
+.. |typedef-ast-ExprYieldFlags| replace:: properties of the `ExprYield` object.
 
-.. |typedef-ast-FunctionSideEffectFlags| replace:: to be documented
+.. |typedef-ast-ExprReturnFlags| replace:: properties of the `ExprReturn` object.
 
-.. |typedef-ast-MakeFieldDeclFlags| replace:: to be documented
+.. |typedef-ast-ExprMakeBlockFlags| replace:: properties of the `ExprMakeBlock` object.
 
-.. |typedef-ast-MakeFieldDeclPtr| replace:: to be documented
+.. |typedef-ast-ExpressionPtr| replace:: Smart pointer to `Expression` object.
 
-.. |typedef-ast-PassMacroPtr| replace:: to be documented
+.. |typedef-ast-ProgramPtr| replace:: Smart pointer to `Program` object.
 
-.. |typedef-ast-ProgramPtr| replace:: to be documented
+.. |typedef-ast-TypeDeclPtr| replace:: Smart pointer to `TypeDecl` object.
 
-.. |typedef-ast-ReaderMacroPtr| replace:: to be documented
+.. |typedef-ast-VectorTypeDeclPtr| replace:: Smart pointer to das::vector<ExpressionPtr>.
 
-.. |typedef-ast-StructureAnnotationPtr| replace:: to be documented
+.. |typedef-ast-EnumerationPtr| replace:: Smart pointer to `Enumeration` object.
 
-.. |typedef-ast-StructureFlags| replace:: to be documented
+.. |typedef-ast-StructurePtr| replace:: Smart pointer to `Structure` object.
 
-.. |typedef-ast-StructurePtr| replace:: to be documented
+.. |typedef-ast-FunctionPtr| replace:: Smart pointer to `Function` object.
 
-.. |typedef-ast-TypeDeclFlags| replace:: to be documented
+.. |typedef-ast-VariablePtr| replace:: Smart pointer to `Variable` object.
 
-.. |typedef-ast-TypeDeclPtr| replace:: to be documented
+.. |typedef-ast-MakeFieldDeclPtr| replace:: Smart pointer to `MakeFieldDecl` object.
 
-.. |typedef-ast-VariableAccessFlags| replace:: to be documented
+.. |typedef-ast-FunctionAnnotationPtr| replace:: Smart pointer to `FunctionAnnotation` object.
 
-.. |typedef-ast-VariableFlags| replace:: to be documented
+.. |typedef-ast-StructureAnnotationPtr| replace:: Smart pointer to `StructureAnnotation` object.
 
-.. |typedef-ast-VariablePtr| replace:: to be documented
+.. |typedef-ast-EnumerationAnnotationPtr| replace:: Smart pointer to `EnumerationAnnotation` object.
 
-.. |typedef-ast-VariantMacroPtr| replace:: to be documented
+.. |typedef-ast-PassMacroPtr| replace:: Smart pointer to `PassMacro` object.
 
-.. |enumeration-ast-SideEffects| replace:: to be documented
+.. |typedef-ast-VariantMacroPtr| replace:: Smart pointer to `VariantMacro` object.
 
-.. |class-ast-AstCallMacro| replace:: to be documented
+.. |typedef-ast-ReaderMacroPtr| replace:: Smart pointer to `ReaderMacro` object.
 
-.. |method-ast-AstCallMacro.visit| replace:: to be documented
+.. |typedef-ast-CommentReaderPtr| replace:: Smart pointer to `CommentReader` object.
 
-.. |class-ast-AstFunctionAnnotation| replace:: to be documented
+.. |typedef-ast-CallMacroPtr| replace:: Smart pointer to `CallMacro` object.
 
-.. |method-ast-AstFunctionAnnotation.transform| replace:: to be documented
+.. |typedef-ast-TypeInfoMacroPtr| replace:: Smart pointer to `TypeInfoMacro` object.
 
-.. |method-ast-AstFunctionAnnotation.apply| replace:: to be documented
+.. |enumeration-ast-SideEffects| replace:: Enumeration with all possible side effects of expression or function.
 
-.. |method-ast-AstFunctionAnnotation.finish| replace:: to be documented
+.. |enumeration-ast-CaptureMode| replace:: Enumeration with lambda variables capture modes.
 
-.. |class-ast-AstPassMacro| replace:: to be documented
+.. |class-ast-AstFunctionAnnotation| replace:: Annotation macro which is attached to the `Function`.
 
-.. |method-ast-AstPassMacro.apply| replace:: to be documented
+.. |method-ast-AstFunctionAnnotation.transform| replace:: This callback occurs during the `infer` pass of the compilation. If no transformation is needed, the callback should return `null`. `errors` is filled with the transformation errors should they occur. Returned value replaces function call in the ast.
 
-.. |class-ast-AstReaderMacro| replace:: to be documented
+.. |method-ast-AstFunctionAnnotation.verifyCall| replace:: This callback occurs during the `lint` pass of the compilation. If call has lint errors it should return `false` and `errors` is filled with the lint errors.
 
-.. |method-ast-AstReaderMacro.accept| replace:: to be documented
+.. |method-ast-AstFunctionAnnotation.apply| replace:: This callback occurs during the `parse` pass of the compilation on the function itself. If function has application errors it should return `false` and `errors` field.
 
-.. |method-ast-AstReaderMacro.visit| replace:: to be documented
+.. |method-ast-AstFunctionAnnotation.finish| replace:: This callback occurs during the `finalize allocations` pass of the compilation, after the stack is allocated, on the function itself. If function has finalization errors it should return `false` and `errors` field.
 
-.. |class-ast-AstStructureAnnotation| replace:: to be documented
+.. |method-ast-AstFunctionAnnotation.patch| replace:: This callback occurs right after the `infer` pass of the compilation on the function itself. If function has patching errors it should return `false` and `errors` field.
+    If the `astChanged` flag is set, `infer` pass will be repeated. This allows to fix up the function after the `infer` pass with all the type information fully available.
 
-.. |method-ast-AstStructureAnnotation.apply| replace:: to be documented
+.. |method-ast-AstFunctionAnnotation.fixup| replace:: This callback occurs during the `finalize allocations` pass of the compilation, before the stack is allocated, on the function itself. If function has fixup errors it should return `false` and `errors` field.
 
-.. |method-ast-AstStructureAnnotation.finish| replace:: to be documented
+.. |method-ast-AstFunctionAnnotation.lint| replace:: This callback occurs during the `lint` pass of the compilation on the function itself. If function has lint errors it should return `false` and `errors` field.
 
-.. |class-ast-AstVariantMacro| replace:: to be documented
+.. |method-ast-AstFunctionAnnotation.complete| replace:: This callback occurs as the final stage of `Context` simulation.
 
-.. |method-ast-AstVariantMacro.visitExprIsVariant| replace:: to be documented
+.. |method-ast-AstFunctionAnnotation.isCompatible| replace:: This callback occurs during function type matching for both generic and regular functions. If function can accept given argument types it should return `true`, otherwise `errors` is filled with the matching problems.
 
-.. |method-ast-AstVariantMacro.visitExprAsVariant| replace:: to be documented
+.. |method-ast-AstFunctionAnnotation.isSpecialized| replace:: This callback occurs during function type matching. If function requires special type matching (i.e. `isCompatible`` is implemented) it should return `true`.
 
-.. |method-ast-AstVariantMacro.visitExprSafeAsVariant| replace:: to be documented
+.. |class-ast-AstBlockAnnotation| replace:: Annotation macro which is attached to the `ExprBlock`.
 
-.. |class-ast-AstVisitor| replace:: to be documented
+.. |method-ast-AstBlockAnnotation.apply| replace:: This callback occurs during the `parse` pass of the compilation. If block has application errors it should return `false` and `errors` field.
 
-.. |method-ast-AstVisitor.preVisitProgram| replace:: to be documented
+.. |method-ast-AstBlockAnnotation.finish| replace:: This callback occurs during the `finalize allocations` pass of the compilation, after the stack is allocated. If block has finalization errors it should return `false` and `errors` field.
 
-.. |method-ast-AstVisitor.visitProgram| replace:: to be documented
+.. |class-ast-AstStructureAnnotation| replace:: Annotation macro which is attached to the `Structure`.
 
-.. |method-ast-AstVisitor.preVisitProgramBody| replace:: to be documented
+.. |method-ast-AstStructureAnnotation.apply| replace:: This callback occurs during the `parse` pass of the compilation. If structure has application errors it should return `false` and `errors` field.
 
-.. |method-ast-AstVisitor.preVisitTypeDecl| replace:: to be documented
+.. |method-ast-AstStructureAnnotation.finish| replace:: This callback occurs during the `finalize allocations` pass of the compilation, after the stack is allocated. If structure has finalization errors it should return `false` and `errors` field.
 
-.. |method-ast-AstVisitor.visitTypeDecl| replace:: to be documented
+.. |method-ast-AstStructureAnnotation.patch| replace:: This callback occurs right after the `infer` pass of the compilation on the structure itself. If structure has patching errors it should return `false` and `errors` field.
+    If the `astChanged` flag is set, `infer` pass will be repeated. This allows to fix up the function after the `infer` pass with all the type information fully available.
 
-.. |method-ast-AstVisitor.preVisitAlias| replace:: to be documented
+.. |method-ast-AstStructureAnnotation.complete| replace:: This callback occurs as the final stage of `Context` simulation.
 
-.. |method-ast-AstVisitor.visitAlias| replace:: to be documented
+.. |class-ast-AstPassMacro| replace:: This macro is used to implement custom `infer` passes.
 
-.. |method-ast-AstVisitor.preVisitEnumeration| replace:: to be documented
+.. |method-ast-AstPassMacro.apply| replace:: This callback is called after `infer` pass. If macro did any work it returns `true`; `infer` pass is restarted a the memoent when first macro which did any work.
 
-.. |method-ast-AstVisitor.preVisitEnumerationValue| replace:: to be documented
+.. |class-ast-AstVariantMacro| replace:: This macro is used to implement custom `is`, `as` and `?as` expressions.
 
-.. |method-ast-AstVisitor.visitEnumerationValue| replace:: to be documented
+.. |method-ast-AstVariantMacro.visitExprIsVariant| replace:: This callback occurs during the `infer` pass for every `ExprIsVariant` (a `is` b). If no work is necessary it should return `null`, otherwise expression will be replaced by the result.
 
-.. |method-ast-AstVisitor.visitEnumeration| replace:: to be documented
+.. |method-ast-AstVariantMacro.visitExprAsVariant| replace:: This callback occurs during the `infer` pass for every `ExprAsVariant` (a `as` b). If no work is necessary it should return `null`, otherwise expression will be replaced by the result.
 
-.. |method-ast-AstVisitor.preVisitStructure| replace:: to be documented
+.. |method-ast-AstVariantMacro.visitExprSafeAsVariant| replace:: This callback occurs during the `infer` pass for every `ExprSafeIsVariant` (a `?as` b). If no work is necessary it should return `null`, otherwise expression will be replaced by the result.
 
-.. |method-ast-AstVisitor.preVisitStructureField| replace:: to be documented
+.. |class-ast-AstReaderMacro| replace:: This macro is used to implement custom parsing functionality, i.e. anything starting with %NameOfTheMacro~ and ending when the macro says it ends.
 
-.. |method-ast-AstVisitor.visitStructureField| replace:: to be documented
+.. |method-ast-AstReaderMacro.accept| replace:: This callback occurs during the `parse` pass for every character. When the macro is done with the input (i.e. recognizeable input ends) it should return `false`.
+    Typically characters are appended to the `expr.sequence` inside the ExprReader.
 
-.. |method-ast-AstVisitor.visitStructure| replace:: to be documented
+.. |method-ast-AstReaderMacro.visit| replace:: This callback occurs during the `infer` pass for every instance of `ExprReader` for that specific macro. Macro needs to convert `ExprReader` to some meaningful expression.
 
-.. |method-ast-AstVisitor.preVisitFunction| replace:: to be documented
+.. |class-ast-AstCommentReader| replace:: This macro is used to implement custom comment parsing function (such as doxygen-style documentation etc).
 
-.. |method-ast-AstVisitor.visitFunction| replace:: to be documented
+.. |method-ast-AstCommentReader.open| replace:: This callback occurs during the `parse` pass for every // or /* sequence which indicated begining of the comment section.
 
-.. |method-ast-AstVisitor.preVisitFunctionArgument| replace:: to be documented
+.. |method-ast-AstCommentReader.accept| replace:: This callback occurs during the `parse` pass for every character in the comment section.
 
-.. |method-ast-AstVisitor.visitFunctionArgument| replace:: to be documented
+.. |method-ast-AstCommentReader.close| replace:: This callback occurs during the `parse` pass for every new line or \*\/ sequence which indicates end of the comment section.
 
-.. |method-ast-AstVisitor.preVisitFunctionArgumentInit| replace:: to be documented
+.. |method-ast-AstCommentReader.beforeStructure| replace:: This callback occurs during the `parse` pass before the structure body block.
 
-.. |method-ast-AstVisitor.visitFunctionArgumentInit| replace:: to be documented
+.. |method-ast-AstCommentReader.afterStructure| replace:: This callback occurs during the `parse` pass after the structure body block.
 
-.. |method-ast-AstVisitor.preVisitFunctionBody| replace:: to be documented
+.. |method-ast-AstCommentReader.beforeStructureFields| replace:: This callback occurs during the `parse` pass before the first structure field is declared.
 
-.. |method-ast-AstVisitor.visitFunctionBody| replace:: to be documented
+.. |method-ast-AstCommentReader.afterStructureField| replace:: This callback occurs during the `parse` pass after the structure field is declared (after the following comment section, should it have one).
 
-.. |method-ast-AstVisitor.preVisitExpression| replace:: to be documented
+.. |method-ast-AstCommentReader.afterStructureFields| replace:: This callback occurs during the `parse` pass after the last structure field is declared.
 
-.. |method-ast-AstVisitor.visitExpression| replace:: to be documented
+.. |method-ast-AstCommentReader.beforeFunction| replace:: This callback occurs during the `parse` pass before the function body block.
 
-.. |method-ast-AstVisitor.preVisitExprBlock| replace:: to be documented
+.. |method-ast-AstCommentReader.afterFunction| replace:: This callback occurs during the `parse` pass after the function body block.
 
-.. |method-ast-AstVisitor.visitExprBlock| replace:: to be documented
+.. |method-ast-AstCommentReader.beforeVariant| replace:: This callback occurs during the `parse` pass before the variant alias declaration.
 
-.. |method-ast-AstVisitor.preVisitExprBlockArgument| replace:: to be documented
+.. |method-ast-AstCommentReader.afterVariant| replace:: This callback occurs during the `parse` after the variant alias declaration.
 
-.. |method-ast-AstVisitor.visitExprBlockArgument| replace:: to be documented
+.. |method-ast-AstCommentReader.beforeEnumeration| replace:: This callback occurs during the `parse` before the enumeration declaration.
 
-.. |method-ast-AstVisitor.preVisitExprBlockArgumentInit| replace:: to be documented
+.. |method-ast-AstCommentReader.afterEnumeration| replace:: This callback occurs during the `parse` after the enumeration declaration.
 
-.. |method-ast-AstVisitor.visitExprBlockArgumentInit| replace:: to be documented
+.. |method-ast-AstCommentReader.beforeGlobalVariables| replace:: This callback occurs during the `parse` pass before the first global variable declaration but after `let` or `var` keyword.
 
-.. |method-ast-AstVisitor.preVisitExprBlockExpression| replace:: to be documented
+.. |method-ast-AstCommentReader.afterGlobalVariable| replace:: This callback occurs during the `parse` pass after global variable is declaraed (after the following comment section, should it have one).
 
-.. |method-ast-AstVisitor.visitExprBlockExpression| replace:: to be documented
+.. |method-ast-AstCommentReader.afterGlobalVariables| replace:: This callback occurs during the `parse` pass after every global variable in the declaration is declared.
 
-.. |method-ast-AstVisitor.preVisitExprBlockFinal| replace:: to be documented
+.. |class-ast-AstCallMacro| replace:: This macro is used to implement custom call-like expressions ( like `foo(bar,bar2,...)` ).
 
-.. |method-ast-AstVisitor.visitExprBlockFinal| replace:: to be documented
+.. |method-ast-AstCallMacro.preVisit| replace:: This callback occurs during the `infer` pass for every `ExprCallMacro`, before its arguments are inferred.
 
-.. |method-ast-AstVisitor.preVisitExprBlockFinalExpression| replace:: to be documented
+.. |method-ast-AstCallMacro.visit| replace:: This callback occurs during the `infer` pass for every `ExprCallMacro`, after its arguments are inferred. When fully inferred macro is expected to replace `ExprCallMacro` with meaningful expression.
 
-.. |method-ast-AstVisitor.visitExprBlockFinalExpression| replace:: to be documented
+.. |class-ast-AstTypeInfoMacro| replace:: This macro is used to implement type info traits, i.e. `typeinfo(YourTraitHere ...)` expressions.
 
-.. |method-ast-AstVisitor.preVisitExprLet| replace:: to be documented
+.. |method-ast-AstTypeInfoMacro.getAstChange| replace:: This callback occurs during the `infer` pass. If no changes are necessary it should return `null`, otherwise expression will be replaced by the result. `errors` should be filled if trait is malformed.
 
-.. |method-ast-AstVisitor.visitExprLet| replace:: to be documented
+.. |method-ast-AstTypeInfoMacro.getAstType| replace:: This callback occurs during the `infer` pass. It should return type of the typeinfo expression. That way trait can return `Type`, and not `Expression`.
 
-.. |method-ast-AstVisitor.preVisitExprLetVariable| replace:: to be documented
+.. |class-ast-AstEnumerationAnnotation| replace:: Annotation macro which is attached to `Enumeration`.
 
-.. |method-ast-AstVisitor.visitExprLetVariable| replace:: to be documented
+.. |method-ast-AstEnumerationAnnotation.apply| replace:: This callback occurs during the `parse` pass. If any errors occur `errors` should be filled and `false` should be returned.
 
-.. |method-ast-AstVisitor.preVisitExprLetVariableInit| replace:: to be documented
+.. |class-ast-AstVisitor| replace:: This class implements `Visitor` interface for the ast tree.
+    For typical expression two methods are provided: `preVisitExpr` and `visitExpr`.
+    `preVisitExpr` occurs before the subexpressions are visited, and `visitExpr` occurs after the subexpressions are visited.
+    `visitExpr` can return new expression which will replace the original one, or original expression - if no changes are necessary.
+    There are other potential callbacks deppending of the nature of expression, which represent particular sections of the ast tree.
+    Additionally 'preVisitExpression' and `visitExpression` are called before and after expression specific callbacks.
 
-.. |method-ast-AstVisitor.visitExprLetVariableInit| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitProgram| replace:: before entire program, put your initialization there.
 
-.. |method-ast-AstVisitor.preVisitGlobalLet| replace:: to be documented
+.. |method-ast-AstVisitor.visitProgram| replace:: after entire program, put your finalizers there.
 
-.. |method-ast-AstVisitor.visitGlobalLet| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitProgramBody| replace:: after enumerations, structures, and aliases, but before global variables, generics and functions.
 
-.. |method-ast-AstVisitor.preVisitGlobalLetVariable| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitTypeDecl| replace:: before a type declaration anywhere. yor type validation code typically goes here
 
-.. |method-ast-AstVisitor.visitGlobalLetVariable| replace:: to be documented
+.. |method-ast-AstVisitor.visitTypeDecl| replace:: after a type declaration
 
-.. |method-ast-AstVisitor.preVisitGlobalLetVariableInit| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitAlias| replace:: before `TypeDecl`
 
-.. |method-ast-AstVisitor.visitGlobalLetVariableInit| replace:: to be documented
+.. |method-ast-AstVisitor.visitAlias| replace:: after `TypeDecl`
 
-.. |method-ast-AstVisitor.preVisitExprStringBuilder| replace:: to be documented
+.. |method-ast-AstVisitor.canVisitEnumeration| replace:: if true `Enumeration` will be visited
 
-.. |method-ast-AstVisitor.visitExprStringBuilder| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitEnumeration| replace:: before `Enumeration`
 
-.. |method-ast-AstVisitor.preVisitExprStringBuilderElement| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitEnumerationValue| replace:: before every enumeration entry
 
-.. |method-ast-AstVisitor.visitExprStringBuilderElement| replace:: to be documented
+.. |method-ast-AstVisitor.visitEnumerationValue| replace:: after every enumeration entry
 
-.. |method-ast-AstVisitor.preVisitExprNew| replace:: to be documented
+.. |method-ast-AstVisitor.visitEnumeration| replace:: after `Enumeration`
 
-.. |method-ast-AstVisitor.visitExprNew| replace:: to be documented
+.. |method-ast-AstVisitor.canVisitStructure| replace:: if true `Structure` will be visited
 
-.. |method-ast-AstVisitor.preVisitExprNewArgument| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitStructure| replace:: before `Structure`
 
-.. |method-ast-AstVisitor.visitExprNewArgument| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitStructureField| replace:: before every structure field
 
-.. |method-ast-AstVisitor.preVisitExprNamedCall| replace:: to be documented
+.. |method-ast-AstVisitor.visitStructureField| replace:: after every structure field
 
-.. |method-ast-AstVisitor.visitExprNamedCall| replace:: to be documented
+.. |method-ast-AstVisitor.visitStructure| replace:: after `Structure`
 
-.. |method-ast-AstVisitor.preVisitExprNamedCallArgument| replace:: to be documented
+.. |method-ast-AstVisitor.canVisitFunction| replace:: if true `Function` will be visited
 
-.. |method-ast-AstVisitor.visitExprNamedCallArgument| replace:: to be documented
+.. |method-ast-AstVisitor.canVisitFunctionArgumentInit| replace:: if true function argument initialization expressions will be visited
 
-.. |method-ast-AstVisitor.preVisitExprLooksLikeCall| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitFunction| replace:: before `Function`
 
-.. |method-ast-AstVisitor.visitExprLooksLikeCall| replace:: to be documented
+.. |method-ast-AstVisitor.visitFunction| replace:: after `Function`
 
-.. |method-ast-AstVisitor.preVisitExprLooksLikeCallArgument| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitFunctionArgument| replace:: before every argument
 
-.. |method-ast-AstVisitor.visitExprLooksLikeCallArgument| replace:: to be documented
+.. |method-ast-AstVisitor.visitFunctionArgument| replace:: after every argument
 
-.. |method-ast-AstVisitor.preVisitExprCall| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitFunctionArgumentInit| replace:: before every argument initialization expression (should it have one), between 'preVisitFunctionArgument' and `visitFunctionArgument`
 
-.. |method-ast-AstVisitor.visitExprCall| replace:: to be documented
+.. |method-ast-AstVisitor.visitFunctionArgumentInit| replace:: after every argument initialization expression (should it have one), between 'preVisitFunctionArgument' and `visitFunctionArgument`
 
-.. |method-ast-AstVisitor.preVisitExprCallArgument| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitFunctionBody| replace:: before the `Function` body block, between `preVisitFunction` and `visitFunction` (not for abstract functions)
 
-.. |method-ast-AstVisitor.visitExprCallArgument| replace:: to be documented
+.. |method-ast-AstVisitor.visitFunctionBody| replace:: after the `Function` body block, between `preVisitFunction` and `visitFunction` (not for abstract functions)
 
-.. |method-ast-AstVisitor.preVisitExprNullCoalescing| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExpression| replace:: before every `Expression`
 
-.. |method-ast-AstVisitor.visitExprNullCoalescing| replace:: to be documented
+.. |method-ast-AstVisitor.visitExpression| replace:: after every `Expression`
 
-.. |method-ast-AstVisitor.preVisitExprNullCoalescingDefault| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprBlock| replace:: before `ExprBlock`
 
-.. |method-ast-AstVisitor.preVisitExprAt| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprBlock| replace:: after `ExprBlock`
 
-.. |method-ast-AstVisitor.visitExprAt| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprBlockArgument| replace:: before every block argument
 
-.. |method-ast-AstVisitor.preVisitExprAtIndex| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprBlockArgument| replace:: after every block argument
 
-.. |method-ast-AstVisitor.preVisitExprSafeAt| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprBlockArgumentInit| replace:: before every block argument initialization expression (should it have one), between 'preVisitExprBlockArgument' and `visitExprBlockArgument`
 
-.. |method-ast-AstVisitor.visitExprSafeAt| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprBlockArgumentInit| replace:: after every block argument initialization expression (should it have one), between 'preVisitExprBlockArgument' and `visitExprBlockArgument`
 
-.. |method-ast-AstVisitor.preVisitExprSafeAtIndex| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprBlockExpression| replace:: before every block expression
 
-.. |method-ast-AstVisitor.preVisitExprIs| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprBlockExpression| replace:: after every block expression
 
-.. |method-ast-AstVisitor.visitExprIs| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprBlockFinal| replace:: before `finally`` section of the block
 
-.. |method-ast-AstVisitor.preVisitExprIsType| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprBlockFinal| replace:: after `finally`` section of the block
 
-.. |method-ast-AstVisitor.preVisitExprOp2| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprBlockFinalExpression| replace:: before every block expression in the `finally` section, between `preVisitExprBlockFinal` and `visitExprBlockFinal`
 
-.. |method-ast-AstVisitor.visitExprOp2| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprBlockFinalExpression| replace:: after every block expression in the `finally`` section, between `preVisitExprBlockFinal` and `visitExprBlockFinal`
 
-.. |method-ast-AstVisitor.preVisitExprOp2Right| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprLet| replace:: before `ExprLet`
 
-.. |method-ast-AstVisitor.preVisitExprOp3| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprLet| replace:: after `ExprLet`
 
-.. |method-ast-AstVisitor.visitExprOp3| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprLetVariable| replace:: before every variable
 
-.. |method-ast-AstVisitor.preVisitExprOp3Left| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprLetVariable| replace:: after every variable
 
-.. |method-ast-AstVisitor.preVisitExprOp3Right| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprLetVariableInit| replace:: before variable initialization (should it have one), between `preVisitExprLetVariable` and `visitExprLetVariable`
 
-.. |method-ast-AstVisitor.preVisitExprCopy| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprLetVariableInit| replace:: after variable initialization (should it have one), between `preVisitExprLetVariable` and `visitExprLetVariable`
 
-.. |method-ast-AstVisitor.visitExprCopy| replace:: to be documented
+.. |method-ast-AstVisitor.canVisitGlobalVariable| replace:: If true global variable declaration will be visited
 
-.. |method-ast-AstVisitor.preVisitExprCopyRight| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitGlobalLet| replace:: before global variable declaration
 
-.. |method-ast-AstVisitor.preVisitExprMove| replace:: to be documented
+.. |method-ast-AstVisitor.visitGlobalLet| replace:: after global variable declaration
 
-.. |method-ast-AstVisitor.visitExprMove| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitGlobalLetVariable| replace:: before every global variable
 
-.. |method-ast-AstVisitor.preVisitExprMoveRight| replace:: to be documented
+.. |method-ast-AstVisitor.visitGlobalLetVariable| replace:: after every global variable
 
-.. |method-ast-AstVisitor.preVisitExprClone| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitGlobalLetVariableInit| replace:: before global variable initialization (should it have one), between `preVisitGlobalLetVariable` and `visitGlobalLetVariable`
 
-.. |method-ast-AstVisitor.visitExprClone| replace:: to be documented
+.. |method-ast-AstVisitor.visitGlobalLetVariableInit| replace:: after global variable initialization (should it have one), between `preVisitGlobalLetVariable` and `visitGlobalLetVariable`
 
-.. |method-ast-AstVisitor.preVisitExprCloneRight| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprStringBuilder| replace:: before `ExprStringBuilder`
 
-.. |method-ast-AstVisitor.preVisitExprWith| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprStringBuilder| replace:: after `ExprStringBuilder`
 
-.. |method-ast-AstVisitor.visitExprWith| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprStringBuilderElement| replace:: before any element of string builder (string or expression)
 
-.. |method-ast-AstVisitor.preVisitExprWithBody| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprStringBuilderElement| replace:: after any element of string builder
 
-.. |method-ast-AstVisitor.preVisitExprWhile| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprNew| replace:: before `ExprNew`
 
-.. |method-ast-AstVisitor.visitExprWhile| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprNew| replace:: after `ExprNew`
 
-.. |method-ast-AstVisitor.preVisitExprWhileBody| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprNewArgument| replace:: before every argument
 
-.. |method-ast-AstVisitor.preVisitExprTryCatch| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprNewArgument| replace:: after every argument
 
-.. |method-ast-AstVisitor.visitExprTryCatch| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprNamedCall| replace:: before `ExprNamedCall`
 
-.. |method-ast-AstVisitor.preVisitExprTryCatchCatch| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprNamedCall| replace:: after `ExprNamedCall``
 
-.. |method-ast-AstVisitor.preVisitExprIfThenElse| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprNamedCallArgument| replace:: before every argument
 
-.. |method-ast-AstVisitor.visitExprIfThenElse| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprNamedCallArgument| replace:: after every argument
 
-.. |method-ast-AstVisitor.preVisitExprIfThenElseIfBlock| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprLooksLikeCall| replace:: before `ExprLooksLikeCall`
 
-.. |method-ast-AstVisitor.preVisitExprIfThenElseElseBlock| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprLooksLikeCall| replace:: after `ExprLooksLikeCall`
 
-.. |method-ast-AstVisitor.preVisitExprFor| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprLooksLikeCallArgument| replace:: before every argument
 
-.. |method-ast-AstVisitor.visitExprFor| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprLooksLikeCallArgument| replace:: after every argument
 
-.. |method-ast-AstVisitor.preVisitExprForVariable| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprCall| replace:: before `ExprCall`
 
-.. |method-ast-AstVisitor.visitExprForVariable| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprCall| replace:: after `ExprCall`
 
-.. |method-ast-AstVisitor.preVisitExprForSource| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprCallArgument| replace:: before every argument
 
-.. |method-ast-AstVisitor.visitExprForSource| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprCallArgument| replace:: after every argument
 
-.. |method-ast-AstVisitor.preVisitExprForStack| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprNullCoalescing| replace:: before `ExprNullCoalescing`
 
-.. |method-ast-AstVisitor.preVisitExprForBody| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprNullCoalescing| replace:: after `ExprNullCoalescing`
 
-.. |method-ast-AstVisitor.preVisitExprMakeVariant| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprNullCoalescingDefault| replace:: before the default value
 
-.. |method-ast-AstVisitor.visitExprMakeVariant| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprAt| replace:: before `ExprAt`
 
-.. |method-ast-AstVisitor.preVisitExprMakeVariantField| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprAt| replace:: after `ExprAt`
 
-.. |method-ast-AstVisitor.visitExprMakeVariantField| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprAtIndex| replace:: before the index
 
-.. |method-ast-AstVisitor.preVisitExprMakeStruct| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprSafeAt| replace:: before `ExprSafeAt`
 
-.. |method-ast-AstVisitor.visitExprMakeStruct| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprSafeAt| replace:: after `ExprSafeAt`
 
-.. |method-ast-AstVisitor.preVisitExprMakeStructIndex| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprSafeAtIndex| replace:: before the index
 
-.. |method-ast-AstVisitor.visitExprMakeStructIndex| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprIs| replace:: before `ExprIs`
 
-.. |method-ast-AstVisitor.preVisitExprMakeStructField| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprIs| replace:: after `ExprIs`
 
-.. |method-ast-AstVisitor.visitExprMakeStructField| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprIsType| replace:: before the type
 
-.. |method-ast-AstVisitor.preVisitExprMakeArray| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprOp2| replace:: before `ExprOp2`
 
-.. |method-ast-AstVisitor.visitExprMakeArray| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprOp2| replace:: after `ExprOp2`
 
-.. |method-ast-AstVisitor.preVisitExprMakeArrayIndex| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprOp2Right| replace:: before the right operand
 
-.. |method-ast-AstVisitor.visitExprMakeArrayIndex| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprOp3| replace:: before `ExprOp3`
 
-.. |method-ast-AstVisitor.preVisitExprMakeTuple| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprOp3| replace:: after `ExprOp3`
 
-.. |method-ast-AstVisitor.visitExprMakeTuple| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprOp3Left| replace:: before the left option
 
-.. |method-ast-AstVisitor.preVisitExprMakeTupleIndex| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprOp3Right| replace:: before the right option
 
-.. |method-ast-AstVisitor.visitExprMakeTupleIndex| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprCopy| replace:: before `ExprCopy`
 
-.. |method-ast-AstVisitor.preVisitExprArrayComprehension| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprCopy| replace:: after `ExprCopy`
 
-.. |method-ast-AstVisitor.visitExprArrayComprehension| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprCopyRight| replace:: before the right operand
 
-.. |method-ast-AstVisitor.preVisitExprArrayComprehensionSubexpr| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMove| replace:: before `ExprMove`
 
-.. |method-ast-AstVisitor.preVisitExprArrayComprehensionWhere| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMove| replace:: after `ExprMove`
 
-.. |method-ast-AstVisitor.preVisitExprTypeInfo| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMoveRight| replace:: before the right operand
 
-.. |method-ast-AstVisitor.visitExprTypeInfo| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprClone| replace:: before `ExprClone`
 
-.. |method-ast-AstVisitor.preVisitExprPtr2Ref| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprClone| replace:: after `ExprClone`
 
-.. |method-ast-AstVisitor.visitExprPtr2Ref| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprCloneRight| replace:: before the right operand
 
-.. |method-ast-AstVisitor.preVisitExprLabel| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprAssume| replace:: before `ExprAssume`
 
-.. |method-ast-AstVisitor.visitExprLabel| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprAssume| replace:: after `ExprAssume`
 
-.. |method-ast-AstVisitor.preVisitExprGoto| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprWith| replace:: before `ExprWith`
 
-.. |method-ast-AstVisitor.visitExprGoto| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprWith| replace:: after `ExprWith`
 
-.. |method-ast-AstVisitor.preVisitExprRef2Value| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprWithBody| replace:: before the body block
 
-.. |method-ast-AstVisitor.visitExprRef2Value| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprWhile| replace:: before `ExprWhile`
 
-.. |method-ast-AstVisitor.preVisitExprRef2Ptr| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprWhile| replace:: after `ExprWhile`
 
-.. |method-ast-AstVisitor.visitExprRef2Ptr| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprWhileBody| replace:: before the body block
 
-.. |method-ast-AstVisitor.preVisitExprAddr| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprTryCatch| replace:: before `ExprTryCatch`
 
-.. |method-ast-AstVisitor.visitExprAddr| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprTryCatch| replace:: after `ExprTryCatch`
 
-.. |method-ast-AstVisitor.preVisitExprAssert| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprTryCatchCatch| replace:: before the catch (recover) section
 
-.. |method-ast-AstVisitor.visitExprAssert| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprIfThenElse| replace:: before `ExprIfThenElse`
 
-.. |method-ast-AstVisitor.preVisitExprStaticAssert| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprIfThenElse| replace:: after `ExprIfThenElse`
 
-.. |method-ast-AstVisitor.visitExprStaticAssert| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprIfThenElseIfBlock| replace:: before the if block
 
-.. |method-ast-AstVisitor.preVisitExprDebug| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprIfThenElseElseBlock| replace:: before the else block
 
-.. |method-ast-AstVisitor.visitExprDebug| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprFor| replace:: before the `ExprFor`
 
-.. |method-ast-AstVisitor.preVisitExprInvoke| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprFor| replace:: after the `ExprFor`
 
-.. |method-ast-AstVisitor.visitExprInvoke| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprForVariable| replace:: before each variable
 
-.. |method-ast-AstVisitor.preVisitExprErase| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprForVariable| replace:: after each variable
 
-.. |method-ast-AstVisitor.visitExprErase| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprForSource| replace:: before each source
 
-.. |method-ast-AstVisitor.preVisitExprFind| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprForSource| replace:: after each source
 
-.. |method-ast-AstVisitor.visitExprFind| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprForStack| replace:: before the stack is allocated before the body, regardless if it has one
 
-.. |method-ast-AstVisitor.preVisitExprKeyExists| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprForBody| replace:: before the body (should it have one)
 
-.. |method-ast-AstVisitor.visitExprKeyExists| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeVariant| replace:: before `ExprMakeVariant`
 
-.. |method-ast-AstVisitor.preVisitExprAscend| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeVariant| replace:: after `ExprMakeVariant`
 
-.. |method-ast-AstVisitor.visitExprAscend| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeVariantField| replace:: before every field
 
-.. |method-ast-AstVisitor.preVisitExprCast| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeVariantField| replace:: after every field
 
-.. |method-ast-AstVisitor.visitExprCast| replace:: to be documented
+.. |method-ast-AstVisitor.canVisitMakeStructBody| replace:: if true the visitor can visit the body of `ExprMakeStruct`
 
-.. |method-ast-AstVisitor.preVisitExprDelete| replace:: to be documented
+.. |method-ast-AstVisitor.canVisitMakeStructBlock| replace:: if true the visitor can visit the block behind `ExprMakeStruct`
 
-.. |method-ast-AstVisitor.visitExprDelete| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeStruct| replace:: before `ExprMakeStruct`
 
-.. |method-ast-AstVisitor.preVisitExprVar| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeStruct| replace:: after `ExprMakeStruct`
 
-.. |method-ast-AstVisitor.visitExprVar| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeStructIndex| replace:: before each struct in the array of structures
 
-.. |method-ast-AstVisitor.preVisitExprField| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeStructIndex| replace:: after each struct in the array of structures
 
-.. |method-ast-AstVisitor.visitExprField| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeStructField| replace:: before each field of the struct, between `preVisitExprMakeStructIndex` and `visitExprMakeStructIndex`
 
-.. |method-ast-AstVisitor.preVisitExprSafeField| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeStructField| replace:: after each field of the struct, between `preVisitExprMakeStructIndex` and `visitExprMakeStructIndex`
 
-.. |method-ast-AstVisitor.visitExprSafeField| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeArray| replace:: before `ExprMakeArray`
 
-.. |method-ast-AstVisitor.preVisitExprSwizzle| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeArray| replace:: after `ExprMakeArray`
 
-.. |method-ast-AstVisitor.visitExprSwizzle| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeArrayIndex| replace:: before each element of the array
 
-.. |method-ast-AstVisitor.preVisitExprIsVariant| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeArrayIndex| replace:: after each element of the array
 
-.. |method-ast-AstVisitor.visitExprIsVariant| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeTuple| replace:: before `ExprMakeTuple`
 
-.. |method-ast-AstVisitor.preVisitExprAsVariant| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeTuple| replace:: after `ExprMakeTuple`
 
-.. |method-ast-AstVisitor.visitExprAsVariant| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeTupleIndex| replace:: before each field of the tuple
 
-.. |method-ast-AstVisitor.preVisitExprSafeAsVariant| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeTupleIndex| replace:: after each field of the tuple
 
-.. |method-ast-AstVisitor.visitExprSafeAsVariant| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprArrayComprehension| replace:: before `ExprArrayComprehension`
 
-.. |method-ast-AstVisitor.preVisitExprOp1| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprArrayComprehension| replace:: after `ExprArrayComprehension`
 
-.. |method-ast-AstVisitor.visitExprOp1| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprArrayComprehensionSubexpr| replace:: before the subexpression
 
-.. |method-ast-AstVisitor.preVisitExprReturn| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprArrayComprehensionWhere| replace:: before the where clause
 
-.. |method-ast-AstVisitor.visitExprReturn| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprTypeInfo| replace:: before `ExprTypeInfo`
 
-.. |method-ast-AstVisitor.preVisitExprYield| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprTypeInfo| replace:: after `ExprTypeInfo`
 
-.. |method-ast-AstVisitor.visitExprYield| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprPtr2Ref| replace:: before `ExprPtr2Ref`
 
-.. |method-ast-AstVisitor.preVisitExprBreak| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprPtr2Ref| replace:: after `ExprPtr2Ref`
 
-.. |method-ast-AstVisitor.visitExprBreak| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprLabel| replace:: before `ExprLabel`
 
-.. |method-ast-AstVisitor.preVisitExprContinue| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprLabel| replace:: after `ExprLabel`
 
-.. |method-ast-AstVisitor.visitExprContinue| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprGoto| replace:: before `ExprGoto`
 
-.. |method-ast-AstVisitor.preVisitExprMakeBlock| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprGoto| replace:: after `ExprGoto`
 
-.. |method-ast-AstVisitor.visitExprMakeBlock| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprRef2Value| replace:: before `ExprRef2Value`
 
-.. |method-ast-AstVisitor.preVisitExprMakeGenerator| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprRef2Value| replace:: after `ExprRef2Value`
 
-.. |method-ast-AstVisitor.visitExprMakeGenerator| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprRef2Ptr| replace:: before `ExprRef2Ptr`
 
-.. |method-ast-AstVisitor.preVisitExprMemZero| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprRef2Ptr| replace:: after `ExprRef2Ptr`
 
-.. |method-ast-AstVisitor.visitExprMemZero| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprAddr| replace:: before `ExprAddr`
 
-.. |method-ast-AstVisitor.preVisitExprConst| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprAddr| replace:: after `ExprAddr`
 
-.. |method-ast-AstVisitor.visitExprConst| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprAssert| replace:: before `ExprAssert`
 
-.. |method-ast-AstVisitor.preVisitExprConstPtr| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprAssert| replace:: after `ExprAssert`
 
-.. |method-ast-AstVisitor.visitExprConstPtr| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprStaticAssert| replace:: before `ExprStaticAssert`
 
-.. |method-ast-AstVisitor.preVisitExprConstEnumeration| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprStaticAssert| replace:: after `ExprStaticAssert`
 
-.. |method-ast-AstVisitor.visitExprConstEnumeration| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprQuote| replace:: before `ExprQuote`
 
-.. |method-ast-AstVisitor.preVisitExprConstBitfield| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprQuote| replace:: after `ExprQuote`
 
-.. |method-ast-AstVisitor.visitExprConstBitfield| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprDebug| replace:: before `ExprDebug`
 
-.. |method-ast-AstVisitor.preVisitExprConstInt8| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprDebug| replace:: after `ExprDebug`
 
-.. |method-ast-AstVisitor.visitExprConstInt8| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprInvoke| replace:: before `ExprInvoke`
 
-.. |method-ast-AstVisitor.preVisitExprConstInt16| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprInvoke| replace:: after `ExprInvoke`
 
-.. |method-ast-AstVisitor.visitExprConstInt16| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprErase| replace:: before `ExprErase`
 
-.. |method-ast-AstVisitor.preVisitExprConstInt64| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprErase| replace:: after `ExprErase`
 
-.. |method-ast-AstVisitor.visitExprConstInt64| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprFind| replace:: before `ExprFind`
 
-.. |method-ast-AstVisitor.preVisitExprConstInt| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprFind| replace:: after `ExprFind`
 
-.. |method-ast-AstVisitor.visitExprConstInt| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprKeyExists| replace:: before `ExprKeyExists`
 
-.. |method-ast-AstVisitor.preVisitExprConstInt2| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprKeyExists| replace:: after `ExprKeyExists`
 
-.. |method-ast-AstVisitor.visitExprConstInt2| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprAscend| replace:: before `ExprAscend`
 
-.. |method-ast-AstVisitor.preVisitExprConstInt3| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprAscend| replace:: after `ExprAscend`
 
-.. |method-ast-AstVisitor.visitExprConstInt3| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprCast| replace:: before `ExprCast`
 
-.. |method-ast-AstVisitor.preVisitExprConstInt4| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprCast| replace:: after `ExprCast`
 
-.. |method-ast-AstVisitor.visitExprConstInt4| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprDelete| replace:: before `ExprDelete`
 
-.. |method-ast-AstVisitor.preVisitExprConstUInt8| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprDelete| replace:: after `ExprDelete`
 
-.. |method-ast-AstVisitor.visitExprConstUInt8| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprVar| replace:: before `ExprVar`
 
-.. |method-ast-AstVisitor.preVisitExprConstUInt16| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprVar| replace:: after `ExprVar`
 
-.. |method-ast-AstVisitor.visitExprConstUInt16| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprField| replace:: before `ExprField`
 
-.. |method-ast-AstVisitor.preVisitExprConstUInt64| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprField| replace:: after `ExprField`
 
-.. |method-ast-AstVisitor.visitExprConstUInt64| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprSafeField| replace:: before `ExprSafeField`
 
-.. |method-ast-AstVisitor.preVisitExprConstUInt| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprSafeField| replace:: after `ExprSafeField`
 
-.. |method-ast-AstVisitor.visitExprConstUInt| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprSwizzle| replace:: before `ExprSwizzle`
 
-.. |method-ast-AstVisitor.preVisitExprConstUInt2| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprSwizzle| replace:: after `ExprSwizzle`
 
-.. |method-ast-AstVisitor.visitExprConstUInt2| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprIsVariant| replace:: before `ExprIsVariant`
 
-.. |method-ast-AstVisitor.preVisitExprConstUInt3| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprIsVariant| replace:: after `ExprIsVariant`
 
-.. |method-ast-AstVisitor.visitExprConstUInt3| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprAsVariant| replace:: before `ExprAsVariant`
 
-.. |method-ast-AstVisitor.preVisitExprConstUInt4| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprAsVariant| replace:: after `ExprAsVariant`
 
-.. |method-ast-AstVisitor.visitExprConstUInt4| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprSafeAsVariant| replace:: before `ExprSafeAsVariant`
 
-.. |method-ast-AstVisitor.preVisitExprConstRange| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprSafeAsVariant| replace:: after `ExprSafeAsVariant`
 
-.. |method-ast-AstVisitor.visitExprConstRange| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprOp1| replace:: before `ExprOp1`
 
-.. |method-ast-AstVisitor.preVisitExprConstURange| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprOp1| replace:: after `ExprOp1`
 
-.. |method-ast-AstVisitor.visitExprConstURange| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprReturn| replace:: before `ExprReturn`
 
-.. |method-ast-AstVisitor.preVisitExprConstBool| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprReturn| replace:: after `ExprReturn`
 
-.. |method-ast-AstVisitor.visitExprConstBool| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprYield| replace:: before `ExprYield`
 
-.. |method-ast-AstVisitor.preVisitExprConstFloat| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprYield| replace:: after 'ExprYield'
 
-.. |method-ast-AstVisitor.visitExprConstFloat| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprBreak| replace:: before `ExprBreak`
 
-.. |method-ast-AstVisitor.preVisitExprConstFloat2| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprBreak| replace:: after `ExprBreak`
 
-.. |method-ast-AstVisitor.visitExprConstFloat2| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprContinue| replace:: before `ExprContinue`
 
-.. |method-ast-AstVisitor.preVisitExprConstFloat3| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprContinue| replace:: after `ExprContinue`
 
-.. |method-ast-AstVisitor.visitExprConstFloat3| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeBlock| replace:: before `ExprMakeBlock`
 
-.. |method-ast-AstVisitor.preVisitExprConstFloat4| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeBlock| replace:: after `ExprMakeBlock`
 
-.. |method-ast-AstVisitor.visitExprConstFloat4| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMakeGenerator| replace:: before `ExprMakeGenerator`
 
-.. |method-ast-AstVisitor.preVisitExprConstString| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMakeGenerator| replace:: after `ExprMakeGenerator`
 
-.. |method-ast-AstVisitor.visitExprConstString| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprMemZero| replace:: before `ExprMemZero`
 
-.. |method-ast-AstVisitor.preVisitExprConstDouble| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprMemZero| replace:: after `ExprMemZero`
 
-.. |method-ast-AstVisitor.visitExprConstDouble| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConst| replace:: before `ExprConst`
 
-.. |method-ast-AstVisitor.preVisitExprFakeContext| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConst| replace:: after `ExprConst`
 
-.. |method-ast-AstVisitor.visitExprFakeContext| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstPtr| replace:: before `ExprConstPtr`
 
-.. |method-ast-AstVisitor.preVisitExprFakeLineInfo| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstPtr| replace:: after `ExprConstPtr`
 
-.. |method-ast-AstVisitor.visitExprFakeLineInfo| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstEnumeration| replace:: before `ExprConstEnumeration`
 
-.. |method-ast-AstVisitor.preVisitExprReader| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstEnumeration| replace:: after `ExprConstEnumeration`
 
-.. |method-ast-AstVisitor.visitExprReader| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstBitfield| replace:: before `ExprConstBitfield`
 
-.. |method-ast-AstVisitor.preVisitExprUnsafe| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstBitfield| replace:: after `ExprConstBitfield`
 
-.. |method-ast-AstVisitor.visitExprUnsafe| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstInt8| replace:: before `ExprConstInt8`
 
-.. |method-ast-AstVisitor.preVisitExprCallMacro| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstInt8| replace:: after `ExprConstInt8`
 
-.. |method-ast-AstVisitor.visitExprCallMacro| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstInt16| replace:: before `ExprConstInt16`
 
-.. |function-ast-FunctionPtr| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstInt16| replace:: after `ExprConstInt16`
 
-.. |function-ast-add_call_macro| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstInt64| replace:: before `ExprConstInt64`
 
-.. |function-ast-add_dirty_infer_macro| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstInt64| replace:: after `ExprConstInt64`
 
-.. |function-ast-add_function| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstInt| replace:: before `ExprConstInt`
 
-.. |function-ast-add_function_annotation| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstInt| replace:: after `ExprConstInt`
 
-.. |function-ast-add_reader_macro| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstInt2| replace:: before `ExprConstInt2`
 
-.. |function-ast-add_structure_annotation| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstInt2| replace:: after `ExprConstInt2`
 
-.. |function-ast-add_variant_macro| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstInt3| replace:: before `ExprConstInt3`
 
-.. |function-ast-any_array_foreach| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstInt3| replace:: after `ExprConstInt3`
 
-.. |function-ast-any_array_size| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstInt4| replace:: before `ExprConstInt4`
 
-.. |function-ast-any_table_foreach| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstInt4| replace:: after `ExprConstInt4`
 
-.. |function-ast-any_table_size| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstUInt8| replace:: before `ExprConstUInt8`
 
-.. |function-ast-clone_expression| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstUInt8| replace:: after `ExprConstUInt8`
 
-.. |function-ast-clone_type| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstUInt16| replace:: before `ExprConstUInt16`
 
-.. |function-ast-compiling_module| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstUInt16| replace:: after `ExprConstUInt16`
 
-.. |function-ast-compiling_program| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstUInt64| replace:: before `ExprConstUInt64`
 
-.. |function-ast-das_to_string| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstUInt64| replace:: after `ExprConstUInt64`
 
-.. |function-ast-describe_expression| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstUInt| replace:: before `ExprConstUInt`
 
-.. |function-ast-describe_function| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstUInt| replace:: after `ExprConstUInt`
 
-.. |function-ast-describe_typedecl| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstUInt2| replace:: before `ExprConstUInt2`
 
-.. |function-ast-find_bitfield_name| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstUInt2| replace:: after `ExprConstUInt2`
 
-.. |function-ast-find_module| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstUInt3| replace:: before `ExprConstUInt3`
 
-.. |function-ast-for_each_enumeration| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstUInt3| replace:: after `ExprConstUInt3`
 
-.. |function-ast-for_each_field| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstUInt4| replace:: before `ExprConstUInt4`
 
-.. |function-ast-for_each_function| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstUInt4| replace:: after `ExprConstUInt4`
 
-.. |function-ast-for_each_generic| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstRange| replace:: before `ExprConstRange`
 
-.. |function-ast-for_each_global| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstRange| replace:: after `ExprConstRange`
 
-.. |function-ast-for_each_structure| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstURange| replace:: before `ExprConstURange`
 
-.. |function-ast-for_each_typedef| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstURange| replace:: after `ExprConstURange`
 
-.. |function-ast-get_mangled_name| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstBool| replace:: before `ExprConstBool`
 
-.. |function-ast-get_tuple_field_offset| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstBool| replace:: after `ExprConstBool`
 
-.. |function-ast-get_variant_field_offset| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstFloat| replace:: before `ExprConstFloat`
 
-.. |function-ast-is_same_type| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstFloat| replace:: after `ExprConstFloat`
 
-.. |function-ast-macro_error| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstFloat2| replace:: before `ExprConstFloat2`
 
-.. |function-ast-make_call_macro| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstFloat2| replace:: after `ExprConstFloat2`
 
-.. |function-ast-make_function_annotation| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstFloat3| replace:: before `ExprConstFloat3`
 
-.. |function-ast-make_pass_macro| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstFloat3| replace:: after `ExprConstFloat3`
 
-.. |function-ast-make_reader_macro| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstFloat4| replace:: before `ExprConstFloat4`
 
-.. |function-ast-make_structure_annotation| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstFloat4| replace:: after `ExprConstFloat4`
 
-.. |function-ast-make_variant_macro| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstString| replace:: before `ExprConstString`
 
-.. |function-ast-make_visitor| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstString| replace:: after `ExprConstString`
 
-.. |function-ast-this_module| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprConstDouble| replace:: before `ExprConstDouble`
 
-.. |function-ast-this_program| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprConstDouble| replace:: after `ExprConstDouble`
 
-.. |function-ast-visit| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprFakeContext| replace:: before `ExprConstFakeContext`
 
-.. |function-ast-ExpressionPtr| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprFakeContext| replace:: after `ExprConstFakeContext`
 
-.. |function-ast-add_new_call_macro| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprFakeLineInfo| replace:: before `ExprConstFakeLineInfo`
 
-.. |function-ast-add_new_function_annotation| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprFakeLineInfo| replace:: after `ExprConstFakeLineInfo`
 
-.. |function-ast-add_new_reader_macro| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprReader| replace:: before `ExprReader`
 
-.. |function-ast-add_new_structure_annotation| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprReader| replace:: after `ExprReader`
 
-.. |function-ast-add_new_variant_macro| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprUnsafe| replace:: before `ExprUnsafe`
 
-.. |function-ast-describe| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprUnsafe| replace:: after `ExprUnsafe`
 
-.. |structure_annotation-ast-CallMacro| replace:: to be documented
+.. |method-ast-AstVisitor.preVisitExprCallMacro| replace:: before `ExprCallMacro`
 
-.. |structure_annotation-ast-EnumEntry| replace:: to be documented
+.. |method-ast-AstVisitor.visitExprCallMacro| replace:: after `ExprCallMacro`
 
-.. |structure_annotation-ast-Enumeration| replace:: to be documented
+.. |function-ast-make_visitor| replace:: Creates adapter for the `AstVisitor` interface.
 
-.. |structure_annotation-ast-ExprAddr| replace:: to be documented
+.. |function-ast-visit| replace:: Invokes visitor for the given object.
 
-.. |structure_annotation-ast-ExprArrayComprehension| replace:: to be documented
+.. |function-ast-visit_modules| replace:: Invokes visitor for the given list of modules inside the `Program`.
 
-.. |structure_annotation-ast-ExprAsVariant| replace:: to be documented
+.. |function-ast-make_function_annotation| replace:: Creates adapter for the `AstFunctionAnnotation`.
 
-.. |structure_annotation-ast-ExprAscend| replace:: to be documented
+.. |function-ast-make_block_annotation| replace:: Creates adapter for the `AstBlockAnnotation`.
 
-.. |structure_annotation-ast-ExprAssert| replace:: to be documented
+.. |function-ast-add_function_annotation| replace:: Adds function annotation to the given object. Calls `apply` if applicable.
 
-.. |structure_annotation-ast-ExprAt| replace:: to be documented
+.. |function-ast-make_structure_annotation| replace:: Creates adapter for the `AstStructureAnnotation`.
 
-.. |structure_annotation-ast-ExprBlock| replace:: to be documented
+.. |function-ast-add_structure_annotation| replace:: Adds structure annotation to the given object. Calls `apply` if applicable.
 
-.. |structure_annotation-ast-ExprBreak| replace:: to be documented
+.. |function-ast-make_enumeration_annotation| replace:: Creates adapter for the `AstEnumearationAnnotation`.
 
-.. |structure_annotation-ast-ExprCall| replace:: to be documented
+.. |function-ast-add_enumeration_annotation| replace:: Adds enumeration annotation to the given object. Calls `apply` if applicable.
 
-.. |structure_annotation-ast-ExprCallFunc| replace:: to be documented
+.. |function-ast-add_enumeration_entry| replace:: Adds entry to enumeration annotation.
 
-.. |structure_annotation-ast-ExprCallMacro| replace:: to be documented
+.. |function-ast-make_pass_macro| replace:: Creates adapter for the `AstPassMacro`.
 
-.. |structure_annotation-ast-ExprCast| replace:: to be documented
+.. |function-ast-add_infer_macro| replace:: Adds `AstPassMacro` adapter to the `infer`` pass.
 
-.. |structure_annotation-ast-ExprClone| replace:: to be documented
+.. |function-ast-add_dirty_infer_macro| replace:: Adds `AstPassMacro` adapter to the `dirty infer` pass.
 
-.. |structure_annotation-ast-ExprConst| replace:: to be documented
+.. |function-ast-add_lint_macro| replace:: Adds `AstPassMacro` adapter to the `lint` pass.
 
-.. |structure_annotation-ast-ExprConstBitfield| replace:: to be documented
+.. |function-ast-add_global_lint_macro| replace:: Adds `AstPassMacro` adapter to the `global lint` pass.
 
-.. |structure_annotation-ast-ExprConstBool| replace:: to be documented
+.. |function-ast-add_optimization_macro| replace:: Adds `AstPassMacro` adapter to the `optimization` pass.
 
-.. |structure_annotation-ast-ExprConstDouble| replace:: to be documented
+.. |function-ast-make_reader_macro| replace:: Creates adapter for the `AstReaderMacro`.
 
-.. |structure_annotation-ast-ExprConstEnumeration| replace:: to be documented
+.. |function-ast-add_reader_macro| replace:: Adds `AstReaderMacro` adapter to the specific module.
 
-.. |structure_annotation-ast-ExprConstFloat| replace:: to be documented
+.. |function-ast-make_comment_reader| replace:: Creates adapter for the `AstCommentReader`.
 
-.. |structure_annotation-ast-ExprConstFloat2| replace:: to be documented
+.. |function-ast-add_comment_reader| replace:: Adds `AstCommentReader` adapter to the specific module.
 
-.. |structure_annotation-ast-ExprConstFloat3| replace:: to be documented
+.. |function-ast-make_call_macro| replace:: Creates adapter for the `AstCallMacro`.
 
-.. |structure_annotation-ast-ExprConstFloat4| replace:: to be documented
+.. |function-ast-add_call_macro| replace:: Adds `AstCallMacro` adapter to the specific module.
 
-.. |structure_annotation-ast-ExprConstInt| replace:: to be documented
+.. |function-ast-make_typeinfo_macro| replace:: Creates adapter for the `AstTypeInfo` macro.
 
-.. |structure_annotation-ast-ExprConstInt16| replace:: to be documented
+.. |function-ast-add_typeinfo_macro| replace:: Adds `AstTypeInfo` adapter to the specific module.
 
-.. |structure_annotation-ast-ExprConstInt2| replace:: to be documented
+.. |function-ast-make_variant_macro| replace:: Creates adapter for the `AstVariantMacro`.
 
-.. |structure_annotation-ast-ExprConstInt3| replace:: to be documented
+.. |function-ast-add_variant_macro| replace:: Adds `AstVariantMacro` to the specific module.
 
-.. |structure_annotation-ast-ExprConstInt4| replace:: to be documented
+.. |function-ast-this_program| replace:: Program attached to the current context (or null if RTTI is disabled).
 
-.. |structure_annotation-ast-ExprConstInt64| replace:: to be documented
+.. |function-ast-this_module| replace:: Main module attached to the current context (will through if RTTI is disabled).
 
-.. |structure_annotation-ast-ExprConstInt8| replace:: to be documented
+.. |function-ast-find_module_via_rtti| replace:: Find module by name in the `Program`.
 
-.. |structure_annotation-ast-ExprConstPtr| replace:: to be documented
+.. |function-ast-find_module_function_via_rtti| replace:: Find function by name in the `Module`.
 
-.. |structure_annotation-ast-ExprConstRange| replace:: to be documented
+.. |function-ast-compiling_program| replace:: Currently compiling program.
 
-.. |structure_annotation-ast-ExprConstString| replace:: to be documented
+.. |function-ast-compiling_module| replace:: Currently compiling module.
 
-.. |structure_annotation-ast-ExprConstUInt| replace:: to be documented
+.. |function-ast-for_each_function| replace:: Iterates through each function in the given `Module`.
 
-.. |structure_annotation-ast-ExprConstUInt16| replace:: to be documented
+.. |function-ast-for_each_generic| replace:: Iterates through each generic function in the given `Module`.
 
-.. |structure_annotation-ast-ExprConstUInt2| replace:: to be documented
+.. |function-ast-for_each_reader_macro| replace:: Iterates through each reader macro in the given `Module`.
 
-.. |structure_annotation-ast-ExprConstUInt3| replace:: to be documented
+.. |function-ast-for_each_variant_macro| replace:: Iterates through each variant macro in the given `Module`.
 
-.. |structure_annotation-ast-ExprConstUInt4| replace:: to be documented
+.. |function-ast-for_each_typeinfo_macro| replace:: Iterates through each typeinfo macro in the given `Module`.
 
-.. |structure_annotation-ast-ExprConstUInt64| replace:: to be documented
+.. |function-ast-force_at| replace:: Replaces line info in the expression, its subexpressions, and its types.
 
-.. |structure_annotation-ast-ExprConstUInt8| replace:: to be documented
+.. |function-ast-parse_mangled_name| replace:: Parses mangled name and creates corresponding `TypeDecl`.
 
-.. |structure_annotation-ast-ExprConstURange| replace:: to be documented
+.. |function-ast-collect_dependencies| replace:: Collects dependencies of the given function (other functions it calls, global variables it accesses).
 
-.. |structure_annotation-ast-ExprContinue| replace:: to be documented
+.. |function-ast-add_function| replace:: Adds function to a `Module`. Will return false on duplicates.
 
-.. |structure_annotation-ast-ExprCopy| replace:: to be documented
+.. |function-ast-add_generic| replace:: Adds generic function to a `Module`. Will return false on duplicates.
 
-.. |structure_annotation-ast-ExprDebug| replace:: to be documented
+.. |function-ast-add_variable| replace:: Adds variable to a `Module`. Will return false on duplicates.
 
-.. |structure_annotation-ast-ExprDelete| replace:: to be documented
+.. |function-ast-find_variable| replace:: Finds variable in the `Module`.
 
-.. |structure_annotation-ast-ExprErase| replace:: to be documented
+.. |function-ast-add_structure| replace:: Adds structure to a `Module`. Will return false on duplicates.
 
-.. |structure_annotation-ast-ExprFakeContext| replace:: to be documented
+.. |function-ast-clone_structure| replace:: Returns clone of the `Structure`.
 
-.. |structure_annotation-ast-ExprFakeLineInfo| replace:: to be documented
+.. |function-ast-describe_typedecl| replace:: Returns description of the `TypeDecl` which should match corresponding daScript type declaration.
 
-.. |structure_annotation-ast-ExprField| replace:: to be documented
+.. |function-ast-describe_typedecl_cpp| replace:: Returns description of the `TypeDecl` which should match corresponding C++ type declaration.
 
-.. |structure_annotation-ast-ExprFind| replace:: to be documented
+.. |function-ast-describe_expression| replace:: Returns description of the `Expression` which should match corresponding daScript code.
 
-.. |structure_annotation-ast-ExprFor| replace:: to be documented
+.. |function-ast-describe_function| replace:: Returns description of the `Function` which should match corresponding daScript function declaration.
 
-.. |structure_annotation-ast-ExprGoto| replace:: to be documented
+.. |function-ast-find_bitfield_name| replace:: Finds name of the corresponding bitfield value in the specified type.
 
-.. |structure_annotation-ast-ExprIfThenElse| replace:: to be documented
+.. |function-ast-find_enum_value| replace:: Finds name of the corresponding enumeration value in the specified type.
 
-.. |structure_annotation-ast-ExprInvoke| replace:: to be documented
+.. |function-ast-get_mangled_name| replace:: Returns mangled name of the object.
 
-.. |structure_annotation-ast-ExprIs| replace:: to be documented
+.. |function-ast-das_to_string| replace:: Returns description (name) of the corresponding `Type`.
 
-.. |structure_annotation-ast-ExprIsVariant| replace:: to be documented
+.. |function-ast-clone_expression| replace:: Clones `Expression` with subexpressions, including corresponding type.
 
-.. |structure_annotation-ast-ExprKeyExists| replace:: to be documented
+.. |function-ast-clone_function| replace:: Clones `Function` and everything in it.
 
-.. |structure_annotation-ast-ExprLabel| replace:: to be documented
+.. |function-ast-clone_variable| replace:: Clones `Variable` and everything in it.
 
-.. |structure_annotation-ast-ExprLet| replace:: to be documented
+.. |function-ast-is_temp_type| replace:: Returns true if type can be temporary.
 
-.. |structure_annotation-ast-ExprLooksLikeCall| replace:: to be documented
+.. |function-ast-is_same_type| replace:: Compares two types given comparison parameters and returns true if they match.
 
-.. |structure_annotation-ast-ExprMakeArray| replace:: to be documented
+.. |function-ast-clone_type| replace:: Clones `TypeDecl` with subtypes.
 
-.. |structure_annotation-ast-ExprMakeBlock| replace:: to be documented
+.. |function-ast-get_variant_field_offset| replace:: Returns offset of the variant field in bytes.
 
-.. |structure_annotation-ast-ExprMakeGenerator| replace:: to be documented
+.. |function-ast-get_tuple_field_offset| replace:: Returns offset of the tuple field in bytes.
 
-.. |structure_annotation-ast-ExprMakeLocal| replace:: to be documented
+.. |function-ast-any_table_foreach| replace:: Iterates through any table<> type in a typeless fasion (via void?)
 
-.. |structure_annotation-ast-ExprMakeStruct| replace:: to be documented
+.. |function-ast-any_array_foreach| replace:: Iterates through any array<> type in a typeless fasion (via void?)
 
-.. |structure_annotation-ast-ExprMakeTuple| replace:: to be documented
+.. |function-ast-any_array_size| replace:: Returns array size from pointer to array<> object.
 
-.. |structure_annotation-ast-ExprMakeVariant| replace:: to be documented
+.. |function-ast-any_table_size| replace:: Returns table size from pointer to the table<> object.
 
-.. |structure_annotation-ast-ExprMemZero| replace:: to be documented
+.. |function-ast-for_each_typedef| replace:: Iterates through every typedef in the `Module`.
 
-.. |structure_annotation-ast-ExprMove| replace:: to be documented
+.. |function-ast-for_each_enumeration| replace:: Iterates through every enumeration in the `Module`.
 
-.. |structure_annotation-ast-ExprNamedCall| replace:: to be documented
+.. |function-ast-for_each_structure| replace:: Iterates through every structure in the `Module`.
 
-.. |structure_annotation-ast-ExprNew| replace:: to be documented
+.. |function-ast-for_each_global| replace:: Iterates through every global variable in the `Module`.
 
-.. |structure_annotation-ast-ExprNullCoalescing| replace:: to be documented
+.. |function-ast-for_each_call_macro| replace:: Iterates through every CallMacro adapter in the `Module`.
 
-.. |structure_annotation-ast-ExprOp| replace:: to be documented
+.. |function-ast-for_each_field| replace:: Iterates through every field in the `BuiltinStructure` handled type.
 
-.. |structure_annotation-ast-ExprOp1| replace:: to be documented
+.. |function-ast-has_field| replace:: Returns if structure or handled type or pointer to either of those has specific field.
 
-.. |structure_annotation-ast-ExprOp2| replace:: to be documented
+.. |function-ast-is_visible_directly| replace:: Returns true if module is visible directly from the other module.
 
-.. |structure_annotation-ast-ExprOp3| replace:: to be documented
+.. |function-ast-get_ast_context| replace:: Returns `AstContext` for the given expression. It includes current function (if applicable), loops, blocks, scopes, and with sections.
 
-.. |structure_annotation-ast-ExprPtr2Ref| replace:: to be documented
+.. |function-ast-make_clone_structure| replace:: Generates `clone` function for the given structure.
 
-.. |structure_annotation-ast-ExprReader| replace:: to be documented
+.. |function-ast-is_expr_like_call| replace:: Returns true if expression is or inherited from `ExprLooksLikeCall`
 
-.. |structure_annotation-ast-ExprRef2Ptr| replace:: to be documented
+.. |function-ast-is_expr_const| replace:: Returns true if expression is or inherited from `ExprConst`
 
-.. |structure_annotation-ast-ExprRef2Value| replace:: to be documented
+.. |function-ast-make_call| replace:: Creates appropriate call expression for the given call function name in the `Program`.
+    `ExprCallMacro` will be created if appropriate macro is found. Otherwise `ExprCall` will be created.
 
-.. |structure_annotation-ast-ExprReturn| replace:: to be documented
+.. |function-ast-eval_single_expression| replace:: Simulates and evaluates single expression on the separate context.
+    If expression has external references, simulation will likely fail. Global variable access or function calls will produce exceptions.
 
-.. |structure_annotation-ast-ExprSafeAsVariant| replace:: to be documented
+.. |function-ast-macro_error| replace:: Reports error to the currently compiling program to whatever current pass is.
+    Usually called from inside the macro function.
 
-.. |structure_annotation-ast-ExprSafeAt| replace:: to be documented
+.. |function-ast-describe| replace:: Describes object and produces corresponding daScript code as string.
 
-.. |structure_annotation-ast-ExprSafeField| replace:: to be documented
+.. |function-ast-describe_cpp| replace:: Describes `TypeDecl` and produces corresponding C++ code as a string.
 
-.. |structure_annotation-ast-ExprStaticAssert| replace:: to be documented
+.. |function-ast-ExpressionPtr| replace:: Returns ExpressionPtr out of any smart pointer to `Expression`.
 
-.. |structure_annotation-ast-ExprStringBuilder| replace:: to be documented
+.. |function-ast-FunctionPtr| replace:: Returns FunctionPtr out of Function?
 
-.. |structure_annotation-ast-ExprSwizzle| replace:: to be documented
+.. |function-ast-add_new_block_annotation| replace:: Makes adapter to the `AstBlockAnnotation` and adds it to the current module.
 
-.. |structure_annotation-ast-ExprTryCatch| replace:: to be documented
+.. |function-ast-add_new_function_annotation| replace:: Makes adapter to the `AstFunctionAnnotation` and adds it to the current module.
 
-.. |structure_annotation-ast-ExprTypeInfo| replace:: to be documented
+.. |function-ast-add_new_contract_annotation| replace:: Makes adapter to the `AstContractAnnotation` and adds it to the current module.
 
-.. |structure_annotation-ast-ExprUnsafe| replace:: to be documented
+.. |function-ast-add_new_structure_annotation| replace:: Makes adapter to the `AstStructureAnnotation` and adds it to the current module.
 
-.. |structure_annotation-ast-ExprVar| replace:: to be documented
+.. |function-ast-add_new_enumeration_annotation| replace:: Makes adapter to the `AstEnumerationAnnotation` and adds it to the current module.
 
-.. |structure_annotation-ast-ExprWhile| replace:: to be documented
+.. |function-ast-add_new_variant_macro| replace:: Makes adapter to the `AstVariantMacro` and adds it to the current module.
 
-.. |structure_annotation-ast-ExprWith| replace:: to be documented
+.. |function-ast-add_new_reader_macro| replace:: Makes adapter to the `AstReaderMacro` and adds it to the current module.
 
-.. |structure_annotation-ast-ExprYield| replace:: to be documented
+.. |function-ast-add_new_comment_reader| replace:: Makes adapter to the `AstCommentReader` and adds it to the current module.
 
-.. |structure_annotation-ast-Expression| replace:: to be documented
+.. |function-ast-add_new_call_macro| replace:: Makes adapter to the `AstCallMacro` and adds it to the current module.
 
-.. |structure_annotation-ast-FieldDeclaration| replace:: to be documented
+.. |function-ast-add_new_typeinfo_macro| replace:: Makes adapter to the `AstTypeInfoMacro` and adds it to the current module.
 
-.. |structure_annotation-ast-Function| replace:: to be documented
+.. |function-ast-add_new_infer_macro| replace:: Makes adapter to the `AstPassMacro` and adds it to the current module `infer` pass.
 
-.. |structure_annotation-ast-FunctionAnnotation| replace:: to be documented
+.. |function-ast-add_new_dirty_infer_macro| replace:: Makes adapter to the `AstPassMacro` and adds it to the current module `dirty infer` pass.
 
-.. |structure_annotation-ast-InferHistory| replace:: to be documented
+.. |function-ast-add_new_lint_macro| replace:: Makes adapter to the `AstPassMacro` and adds it to the current module `lint` pass.
 
-.. |structure_annotation-ast-MakeFieldDecl| replace:: to be documented
+.. |function-ast-add_new_global_lint_macro| replace:: Makes adapter to the `AstPassMacro` and adds it to the current module `global lint` pass.
 
-.. |any_annotation-ast-MakeStruct| replace:: to be documented
+.. |function-ast-add_new_optimization_macro| replace:: Makes adapter to the `AstPassMacro` and adds it to the current module `optimization` pass.
 
-.. |structure_annotation-ast-ModuleGroup| replace:: to be documented
+.. |function-ast-find_module| replace:: Finds `Module` in the `Program`.
 
-.. |structure_annotation-ast-ModuleLibrary| replace:: to be documented
+.. |function-ast-find_compiling_module| replace:: Finds `Module` in the currently compiling `Program`.
 
-.. |structure_annotation-ast-PassMacro| replace:: to be documented
+.. |structure_annotation-ast-ModuleLibrary| replace:: Object which holds list of `Module` and provides access to them.
 
-.. |structure_annotation-ast-ReaderMacro| replace:: to be documented
+.. |structure_annotation-ast-Expression| replace:: Any expression (base class).
 
-.. |structure_annotation-ast-Structure| replace:: to be documented
+.. |structure_annotation-ast-TypeDecl| replace:: Any type declaration.
 
-.. |structure_annotation-ast-StructureAnnotation| replace:: to be documented
+.. |structure_annotation-ast-Structure| replace:: Structure declaration.
 
-.. |structure_annotation-ast-TypeDecl| replace:: to be documented
+.. |structure_annotation-ast-FieldDeclaration| replace:: Structure field declaration.
 
-.. |structure_annotation-ast-TypeInfoMacro| replace:: to be documented
+.. |structure_annotation-ast-EnumEntry| replace:: Entry in the enumeration.
 
-.. |structure_annotation-ast-Variable| replace:: to be documented
+.. |structure_annotation-ast-Enumeration| replace:: Enumeration declaration.
 
-.. |structure_annotation-ast-VariantMacro| replace:: to be documented
+.. |structure_annotation-ast-Function| replace:: Function declaration.
 
-.. |structure_annotation-ast-VisitorAdapter| replace:: to be documented
+.. |structure_annotation-ast-InferHistory| replace:: Generic function infer history.
+    Contains stack on where the function was first instantiated from (`Function` and `LineInfo` pairs).
 
-.. |any_annotation-ast-dasvector`EnumEntry| replace:: to be documented
+.. |structure_annotation-ast-Variable| replace:: Variable declaration.
 
-.. |any_annotation-ast-dasvector`FieldDeclaration| replace:: to be documented
+.. |structure_annotation-ast-AstContext| replace:: Lexical context for the particular expression.
+    Contains current function, loops, blocks, scopes, and with sections.
 
-.. |any_annotation-ast-dasvector`InferHistory| replace:: to be documented
+.. |structure_annotation-ast-ExprBlock| replace:: Any block expression, including regular blocks and all types of closures.
+    For the closures block arguments are defined. Finally section is defined, if exists.
 
-.. |any_annotation-ast-dasvector`LineInfo| replace:: to be documented
+.. |structure_annotation-ast-ExprLet| replace:: Local variable declaration (`let v = expr;`).
 
-.. |any_annotation-ast-dasvector`das_string| replace:: to be documented
+.. |structure_annotation-ast-ExprStringBuilder| replace:: String builder expression ("blah{blah1}blah2").
 
-.. |any_annotation-ast-dasvector`int| replace:: to be documented
+.. |structure_annotation-ast-MakeFieldDecl| replace:: Part of `ExprMakeStruct`, declares single field (`a = expr` or `a <- expr` etc)
 
-.. |any_annotation-ast-dasvector`pair`uint`uint| replace:: to be documented
+.. |any_annotation-ast-MakeStruct| replace:: Part of `ExprMakeStruct`, happens to be vector of `MakeFieldDecl`.
 
-.. |any_annotation-ast-dasvector`smart_ptr`Expression| replace:: to be documented
+.. |structure_annotation-ast-ExprNamedCall| replace:: Named call (`call([argname1=expr1, argname2=expr2])`).
 
-.. |any_annotation-ast-dasvector`smart_ptr`MakeFieldDecl| replace:: to be documented
+.. |structure_annotation-ast-ExprLooksLikeCall| replace:: Anything which looks like call (`call(expr1,expr2)`).
 
-.. |any_annotation-ast-dasvector`smart_ptr`MakeStruct| replace:: to be documented
+.. |structure_annotation-ast-ExprCallFunc| replace:: Actual function call (`func(expr1,...)`).
 
-.. |any_annotation-ast-dasvector`smart_ptr`TypeDecl| replace:: to be documented
+.. |structure_annotation-ast-ExprNew| replace:: New expression (`new Foo`, `new Bar(expr1..)`, but **NOT** `new [[Foo ...]]`)
 
-.. |any_annotation-ast-dasvector`smart_ptr`Variable| replace:: to be documented
+.. |structure_annotation-ast-ExprCall| replace:: Anything which looks like call (`call(expr1,expr2)`).
 
-.. |any_annotation-ast-dasvector`uint8| replace:: to be documented
+.. |structure_annotation-ast-ExprPtr2Ref| replace:: Pointer dereference (`*expr` or `deref(expr)`).
+
+.. |structure_annotation-ast-ExprNullCoalescing| replace:: Null coalescing (`expr1 ?? expr2`).
+
+.. |structure_annotation-ast-ExprAt| replace:: Index lookup (`expr[expr1]`).
+
+.. |structure_annotation-ast-ExprSafeAt| replace:: Safe index lookup (`expr?[expr1]`).
+
+.. |structure_annotation-ast-ExprIs| replace:: Is expression for variants and such (`expr is Foo`).
+
+.. |structure_annotation-ast-ExprOp| replace:: Compilation time only base class for any operator.
+
+.. |structure_annotation-ast-ExprOp2| replace:: Two operand operator (`expr1 + expr2`)
+
+.. |structure_annotation-ast-ExprOp3| replace:: Three operand operator (`cond ? expr1 : expr2`)
+
+.. |structure_annotation-ast-ExprCopy| replace:: Copy operator (`expr1 = expr2`)
+
+.. |structure_annotation-ast-ExprMove| replace:: Move operator (`expr1 <- expr2`)
+
+.. |structure_annotation-ast-ExprClone| replace:: Clone operator (`expr1 := expr2`)
+
+.. |structure_annotation-ast-ExprWith| replace:: With section (`with expr {your; block; here}`).
+
+.. |structure_annotation-ast-ExprAssume| replace:: Assume expression (`assume name = expr`).
+
+.. |structure_annotation-ast-ExprWhile| replace:: While loop (`while expr {your; block; here;}`)
+
+.. |structure_annotation-ast-ExprTryCatch| replace:: Try-recover expression (`try {your; block; here;} recover {your; recover; here;}`)
+
+.. |structure_annotation-ast-ExprIfThenElse| replace:: If-then-else expression (`if expr1 {your; block; here;} else {your; block; here;}`) including `static_if`'s.
+
+.. |structure_annotation-ast-ExprFor| replace:: For loop (`for expr1 in expr2 {your; block; here;}`)
+
+.. |structure_annotation-ast-ExprMakeLocal| replace:: Any make expression (`ExprMakeBlock`, `ExprMakeTuple`, `ExprMakeVariant`, `ExprMakeStruct`)
+
+.. |structure_annotation-ast-ExprMakeStruct| replace:: Make structure expression (`[[YourStruct v1=expr1elem1, v2=expr2elem1, ...; v1=expr1elem2, ...  ]]`)
+
+.. |structure_annotation-ast-ExprMakeVariant| replace:: Make variant expression (`[YourVariant variantName=expr1]`)
+
+.. |structure_annotation-ast-ExprMakeArray| replace:: Make array expression (`[[auto 1;2;3]]` or `[{auto "foo";"bar"}]` for static and dynamic arrays accordingly).
+
+.. |structure_annotation-ast-ExprMakeTuple| replace:: Make tuple expression (`[[auto f1,f2,f3]]`)
+
+.. |structure_annotation-ast-ExprArrayComprehension| replace:: Array comprehension (`[{for x in 0..3; x}]`, `[[for y in range(100); x*2; where x!=13]]` for arrays or generators accordingly).
+
+.. |structure_annotation-ast-TypeInfoMacro| replace:: Compilation time only structure which holds live information about typeinfo expression for the specific macro.
+
+.. |structure_annotation-ast-ExprTypeInfo| replace:: typeinfo() expression (`typeinfo(dim a)`, `typeinfo(is_ref_type type<int&>)`)
+
+.. |structure_annotation-ast-ExprTypeDecl| replace:: typedecl() expression (`typedecl(1+2)`)
+
+.. |structure_annotation-ast-ExprLabel| replace:: Label (`label 13:`)
+
+.. |structure_annotation-ast-ExprGoto| replace:: Goto expression (`goto label 13`, `goto x`)
+
+.. |structure_annotation-ast-ExprRef2Value| replace:: Compilation time only structure which holds reference to value conversion for the value types, i.e. goes from int& to int and such.
+
+.. |structure_annotation-ast-ExprRef2Ptr| replace:: Addr expresion (`addr(expr)`)
+
+.. |structure_annotation-ast-ExprAddr| replace:: Function address (`@@foobarfunc` or `@@foobarfunc<(int;int):bool>`)
+
+.. |structure_annotation-ast-ExprAssert| replace:: Assert expression (`assert(x<13)` or `assert(x<13, "x is too big")`)
+
+.. |structure_annotation-ast-ExprQuote| replace:: Compilation time expression which holds its subexpressions but does not infer them (`quote() <| x+5`)
+
+.. |structure_annotation-ast-ExprStaticAssert| replace:: Static assert expression (`static_assert(x<13)` or `static_assert(x<13, "x is too big")`)
+
+.. |structure_annotation-ast-ExprDebug| replace:: Debug expression (`debug(x)` or `debug(x,"x=")`)
+
+.. |structure_annotation-ast-ExprInvoke| replace:: Invoke expression (`invoke(fn)` or `invoke(lamb, arg1, arg2, ...)`)
+
+.. |structure_annotation-ast-ExprErase| replace:: Erase expression (`erase(tab,key)`)
+
+.. |structure_annotation-ast-ExprFind| replace:: Find expression (`find(tab,key) <| { your; block; here; }`)
+
+.. |structure_annotation-ast-ExprKeyExists| replace:: Key exists expression (`key_exists(tab,key)`)
+
+.. |structure_annotation-ast-ExprAscend| replace:: New expression for ExprMakeLocal (`new [[Foo fld=val,...]]` or `new [[Foo() fld=...]]`, but **NOT** `new Foo()`)
+
+.. |structure_annotation-ast-ExprCast| replace:: Any cast expression (`cast<int> a`, `upcast<Foo> b` or `reinterpret<Bar?> c`)
+
+.. |structure_annotation-ast-ExprDelete| replace:: Delete expression (`delete blah`)
+
+.. |structure_annotation-ast-ExprVar| replace:: Variable access (`foo`)
+
+.. |structure_annotation-ast-ExprSwizzle| replace:: Vector swizzle operatrion (`vec.xxy` or `vec.y`)
+
+.. |structure_annotation-ast-ExprField| replace:: Field lookup (`foo.bar`)
+
+.. |structure_annotation-ast-ExprSafeField| replace:: Safe field lookup (`foo?.bar`)
+
+.. |structure_annotation-ast-ExprIsVariant| replace:: Is expression (`foo is bar`)
+
+.. |structure_annotation-ast-ExprAsVariant| replace:: As expression (`foo as bar`)
+
+.. |structure_annotation-ast-ExprSafeAsVariant| replace:: Safe as expression (`foo? as bar`)
+
+.. |structure_annotation-ast-ExprOp1| replace:: Single operator expression (`+a` or `-a` or `!a` or `~a`)
+
+.. |structure_annotation-ast-ExprReturn| replace:: Return expression (`return` or `return foo`, or `return <- foo`)
+
+.. |structure_annotation-ast-ExprYield| replace:: Yield expression (`yield foo` or `yeild <- bar`)
+
+.. |structure_annotation-ast-ExprBreak| replace:: Break expression (`break`)
+
+.. |structure_annotation-ast-ExprContinue| replace:: Continue expression (`continue`)
+
+.. |structure_annotation-ast-ExprConst| replace:: Compilation time constant expression base class
+
+.. |structure_annotation-ast-ExprFakeContext| replace:: Compilation time only fake context expression. Will simulate as current evaluation `Context`.
+
+.. |structure_annotation-ast-ExprFakeLineInfo| replace:: Compilation time only fake lineinfo expression. Will simulate as current file and line `LineInfo`.
+
+.. |structure_annotation-ast-ExprConstPtr| replace:: Null (`null`). Technically can be any other pointer, but it is used for nullptr.
+
+.. |structure_annotation-ast-ExprConstInt8| replace:: Holds int8 constant.
+
+.. |structure_annotation-ast-ExprConstInt16| replace:: Holds int16 constant.
+
+.. |structure_annotation-ast-ExprConstInt64| replace:: Holds int64 constant.
+
+.. |structure_annotation-ast-ExprConstInt| replace:: Holds int constant.
+
+.. |structure_annotation-ast-ExprConstInt2| replace:: Holds int2 constant.
+
+.. |structure_annotation-ast-ExprConstInt3| replace:: Holds int3 constant.
+
+.. |structure_annotation-ast-ExprConstInt4| replace:: Holds int4 constant.
+
+.. |structure_annotation-ast-ExprConstUInt8| replace:: Holds uint8 constant.
+
+.. |structure_annotation-ast-ExprConstUInt16| replace:: Holds uint16 constant.
+
+.. |structure_annotation-ast-ExprConstUInt64| replace:: Holds uint64 constant.
+
+.. |structure_annotation-ast-ExprConstUInt| replace:: Holds uint constant.
+
+.. |structure_annotation-ast-ExprConstUInt2| replace:: Holds uint2 constant.
+
+.. |structure_annotation-ast-ExprConstUInt3| replace:: Holds uint3 constant.
+
+.. |structure_annotation-ast-ExprConstUInt4| replace:: Holds uint4 constant.
+
+.. |structure_annotation-ast-ExprConstRange| replace:: Holds range constant.
+
+.. |structure_annotation-ast-ExprConstURange| replace:: Holds urange constant.
+
+.. |structure_annotation-ast-ExprConstFloat| replace:: Holds float constant.
+
+.. |structure_annotation-ast-ExprConstFloat2| replace:: Holds float2 constant.
+
+.. |structure_annotation-ast-ExprConstFloat3| replace:: Holds float3 constant.
+
+.. |structure_annotation-ast-ExprConstFloat4| replace:: Holds float4 constant.
+
+.. |structure_annotation-ast-ExprConstDouble| replace:: Holds double constant.
+
+.. |structure_annotation-ast-ExprConstBool| replace:: Holds bool constant.
+
+.. |structure_annotation-ast-CaptureEntry| replace:: Single entry in lambda capture.
+
+.. |structure_annotation-ast-ExprMakeBlock| replace:: Any closure. Holds block as well as capture information in `CaptureEntry`.
+
+.. |structure_annotation-ast-ExprMakeGenerator| replace:: Generator closure (`generator<int>` or `generator<Foo&>`)
+
+.. |structure_annotation-ast-ExprMemZero| replace:: Memzero (`memzero(expr)`)
+
+.. |structure_annotation-ast-ExprConstEnumeration| replace:: Holds enumeration constant, both type and entry (`Foo bar`).
+
+.. |structure_annotation-ast-ExprConstBitfield| replace:: Holds bitfield constant (`Foo bar`).
+
+.. |structure_annotation-ast-ExprConstString| replace:: Holds string constant.
+
+.. |structure_annotation-ast-ExprUnsafe| replace:: Unsafe expression (`unsafe(addr(x))`)
+
+.. |structure_annotation-ast-VisitorAdapter| replace:: Adapter for the `AstVisitor` interface.
+
+.. |structure_annotation-ast-FunctionAnnotation| replace:: Adapter for the `AstFunctionAnnotation`.
+
+.. |structure_annotation-ast-StructureAnnotation| replace:: Adapter for the `AstStructureAnnotation`.
+
+.. |structure_annotation-ast-EnumerationAnnotation| replace:: Adapater for the `AstEnumearationAnnotation`.
+
+.. |structure_annotation-ast-PassMacro| replace:: Adapter for the `AstPassMacro`.
+
+.. |structure_annotation-ast-ReaderMacro| replace:: Adapter for the `AstReaderMacro`.
+
+.. |structure_annotation-ast-CommentReader| replace:: Adpater for the `AstCommentReader`.
+
+.. |structure_annotation-ast-CallMacro| replace:: Adapter for the `AstCallMacro`.
+
+.. |structure_annotation-ast-VariantMacro| replace:: Adapater for the `AstVariantMacro`.
+
+.. |structure_annotation-ast-ExprReader| replace:: Compilation time only expression which holds temporary information for the `AstReaderMacro`.
+
+.. |structure_annotation-ast-ExprCallMacro| replace:: Compilation time only expression which holds temporary infromation for the `AstCallMacro`.
+
+.. |function_annotation-ast-quote| replace:: Returns ast expression tree of the input, without evaluating or infering it.
+    This is useful for macros which generate code as a shortcut for generating boilerplate code.
+
 

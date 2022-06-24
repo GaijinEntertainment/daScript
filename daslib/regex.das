@@ -7,6 +7,7 @@ module regex shared public
 require strings
 
 enum ReOp
+    //! Type of regular expression operation.
     Char
     Set
     Any
@@ -19,9 +20,10 @@ enum ReOp
     Union
 
 typedef
-    CharSet = uint[8]
+    CharSet = uint[8]   //! Bit array which represents an 8-bit character set.
 
 struct ReNode
+    //! Single node in regular expression parsing tree.
     op      : ReOp
     id      : int
     [[do_not_convert]] fun2 : function< (var regex:Regex; var node:ReNode?; str:uint8?) : uint8? >
@@ -38,6 +40,7 @@ struct ReNode
     [[do_not_convert]] tail : uint8?
 
 struct Regex
+    //! Regular expression.
     root        : ReNode?
     [[do_not_convert]] match : uint8?
     groups      : array<tuple<range;string>>
@@ -45,6 +48,7 @@ struct Regex
     canEarlyOut : bool
 
 variant MaybeReNode
+    //! Single regular expression node or nothing.
     value   : ReNode?
     nothing : void?
 
@@ -52,13 +56,11 @@ variant MaybeReNode
     Parser
 */
 
-let
-    log_parse_enabled = false
-    log_match_enabled = false
-    range_check_enabled = false
+let private log_parse_enabled = false
+let private log_match_enabled = false
+let private range_check_enabled = false
 
-var
-    trace_tab = 0
+var private trace_tab = 0
 
 def private trace(msg:string; offset:int)
     static_if log_parse_enabled
@@ -164,9 +166,8 @@ def private set_meta(var cset:CharSet; che:int)
     else
         set_or_char(cset,che)
 
-let
-    meta = "\\+-*.()[]|^"
-    meta_set = "wWsSdD"
+let private meta = "\\+-*.()[]|^"
+let private meta_set = "wWsSdD"
 
 def private is_meta_character(ch:int) : bool
     return find(meta,ch) != -1
@@ -690,7 +691,7 @@ def private re_match2_group ( var regex:Regex; var node:ReNode?; str:uint8? ) : 
     early out
 */
 
-def re_early_out ( var cset:CharSet; node:ReNode? ) : bool
+def private re_early_out ( var cset:CharSet; node:ReNode? ) : bool
     if node.op==ReOp Char
         set_or_char(cset,character_at(node.text,0))
         return false
@@ -730,9 +731,12 @@ def re_early_out ( var cset:CharSet; node:ReNode? ) : bool
 */
 
 def is_valid(var re:Regex)
+    //! returns `true` if enumeration compiled correctly
     return re.root != null
 
 def regex_compile( var re:Regex; expr:string ) : bool
+    //! Compile regular expression.
+    //! Validity of the compiled expression is checked by `is_valid`.
     re.root = re_parse(expr)
     if re.root != null
         re_assign_next(re)
@@ -755,6 +759,8 @@ def regex_compile ( var re:Regex )
     return <- re
 
 def regex_match ( var regex:Regex; str:string; offset:int=0 ) : int
+    //! Returns first match for the regular expression in `str`.
+    //! If `offset` is specified, first that many number of symbols will not be matched.
     if empty(str)
         return -1
     if log_match_enabled
@@ -767,11 +773,13 @@ def regex_match ( var regex:Regex; str:string; offset:int=0 ) : int
         return int(mptr-regex.match)
 
 def regex_group ( regex:Regex; index:int; match:string )
+    //! Returns string for the given group index and match result.
     let sub_range = regex.groups[index]._0
     return slice(match, sub_range.x, sub_range.y)
 
 [unsafe_deref]
 def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
+    //! Iterates through all matches for the given regular expression in `str`.
     if empty(str)
         return
     unsafe
@@ -810,6 +818,7 @@ def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
 */
 
 def regex_debug ( regex:Regex )
+    //! Prints regular expression and its related information in human readable form.
     debug_re(regex.root,1)
     print("\n")
     if regex.canEarlyOut
@@ -822,6 +831,7 @@ def regex_debug ( regex:Regex )
             print("\t{g._1}\n")
 
 def debug_set(cset:CharSet)
+    //! Prints character set in human readable form.
     for x in range(256)
         if (cset[x>>5] & uint(1<<(x & 31))) != 0u
             if x>=32 && x<=127

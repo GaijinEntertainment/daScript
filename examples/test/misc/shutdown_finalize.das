@@ -24,3 +24,5 @@ def main()
         var x = new Foo()
     print("hello, world\n")
     print("x = {x}\n")
+
+options log

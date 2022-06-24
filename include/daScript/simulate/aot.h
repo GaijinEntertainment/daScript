@@ -857,6 +857,28 @@ namespace das {
         }
     };
 
+    template <typename TK>
+    struct TTable<TK,void> : Table {
+        static_assert(is_workhorse_type<TK>::value,"only supported for `workhorse` types");
+        using THIS_TYPE = TTable<TK, void>;
+        TTable()  {}
+        TTable(TTable & arr) { moveT(arr); }
+        TTable(TTable && arr ) { moveT(arr); }
+        TTable & operator = ( TTable & arr ) { moveT(arr); return *this; }
+        TTable & operator = ( TTable && arr ) { moveT(arr); return *this; }
+        __forceinline void moveT ( Table & arr ) {
+            data = arr.data; arr.data = 0;
+            size = arr.size; arr.size = 0;
+            capacity = arr.capacity; arr.capacity = 0;
+            lock = arr.lock; arr.lock = 0;
+            flags = arr.flags; arr.flags = 0;
+            keys = arr.keys; arr.keys = 0;
+            hashes = arr.hashes; arr.hashes = 0;
+            maxLookups = arr.maxLookups; arr.maxLookups = 0;
+            shift = arr.shift; arr.shift = 0;
+        }
+    };
+
     template <int tupleSize, typename ...TA>
     struct TTuple : Tuple {
         TTuple() {}
@@ -2218,11 +2240,17 @@ namespace das {
         return (TV *) ( index!=-1 ? tab.data + index * sizeof(TV) : nullptr );
     }
 
+    template <typename TT>
+    struct safe_size_of { enum { value=sizeof(TT) }; };
+
+    template <>
+    struct safe_size_of<void> { enum { value=0 }; };
+
     template <typename TK, typename TV, typename TKey>
     __forceinline bool __builtin_table_key_exists ( Context * context, const TTable<TK, TV> & tab, TKey _key ) {
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
-        TableHash<TK> thh(context, sizeof(TV));
+        TableHash<TK> thh(context, safe_size_of<TV>::value);
         return thh.find(tab, key, hfn) != -1;
     }
 
@@ -2231,8 +2259,17 @@ namespace das {
         if ( tab.lock ) context->throw_error("can't erase from locked table");
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
-        TableHash<TK> thh(context,sizeof(TV));
+        TableHash<TK> thh(context,safe_size_of<TV>::value);
         return thh.erase(tab, key, hfn) != -1;
+    }
+
+    template <typename TK, typename TKey>
+    __forceinline void __builtin_table_set_insert ( Context * context, TTable<TK,void> & tab, TKey _key ) {
+        if ( tab.lock ) context->throw_error("can't insert to a locked table");
+        TK key = (TK) _key;
+        auto hfn = hash_function(*context, key);
+        TableHash<TK> thh(context,0);
+        thh.reserve(tab, key, hfn);
     }
 
     template <typename VectorType>
@@ -2654,12 +2691,12 @@ namespace das {
         scblk_array<CompareFn,TT>::srtr(arr,elemSize,elemCount,forward<CompareFn>(cmp),context,lineinfo);
     }
 
-    __forceinline vec4f cvt_float2 ( int2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
-    __forceinline vec4f cvt_float3 ( int3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
-    __forceinline vec4f cvt_float4 ( int4 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
-    __forceinline vec4f cvt_float2 ( uint2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
-    __forceinline vec4f cvt_float3 ( uint3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
-    __forceinline vec4f cvt_float4 ( uint4 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_ifloat2 ( int2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_ifloat3 ( int3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_ifloat4 ( int4 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_ufloat2 ( uint2 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_ufloat3 ( uint3 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
+    __forceinline vec4f cvt_ufloat4 ( uint4 i ) { return v_cvt_vec4f(v_cast_vec4i(vec4f(i))); }
 
     __forceinline vec4f cvt_int2 ( float2 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }
     __forceinline vec4f cvt_int3 ( float3 f ) { return v_cast_vec4f(v_cvt_vec4i(f)); }

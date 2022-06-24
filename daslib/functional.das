@@ -19,6 +19,7 @@ def private filter_any(var src:iterator<auto(TT)>; var blk )
             return false
 
 def filter(var src:iterator<auto(TT)>; blk:lambda<(what:TT -&):bool> )
+    //! iterates over `src` and yields only those elements for which `blk` returns true
     return <- filter_any(src,blk)
 
 // filter with function
@@ -44,6 +45,7 @@ def private map_any(var src:iterator<auto(TT)>; var blk)
 
 // map with lambda
 def map(var src:iterator<auto(TT)>; blk:lambda<(what:TT -&):auto(QQ)>)
+    //! iterates over `src` and yields the result of `blk` for each element
     return <- map_any(src,blk)
 
 // map with function
@@ -66,6 +68,8 @@ def private reduce_any(it:iterator<auto(TT)>;functor)
 
 // reduce with lambda
 def reduce(it:iterator<auto(TT)>;blk:lambda<(left,right:TT -&):TT const -&>)
+    //! iterates over `it` and yields the reduced (combined) result of `blk` for each element
+    //! and previous reduction result
     return reduce_any(it,blk)
 
 // reduce with function
@@ -77,8 +81,9 @@ def reduce(it:iterator<auto(TT)>;blk:block<(left,right:TT -&):TT const -&>)
     return reduce_any(it,blk)
 
 // summ of all elements
-//  same as reduce(it, @(a,b) => a + b)
 def sum(it:iterator<auto(TT)>)
+    //! iterates over `it` and yields the sum of all elements
+    //! same as reduce(it, @(a,b) => a + b)
     var temp : TT -&
     for x in it
         temp += x
@@ -86,6 +91,7 @@ def sum(it:iterator<auto(TT)>)
 
 // any
 def any ( it )
+    //! iterates over `it` and yields true if any element is true
     static_if !typeinfo(is_iterable it)
         concept_assert(false,"can't ANY non-iterable type")
         return false
@@ -97,6 +103,7 @@ def any ( it )
 
 // all
 def all ( it )
+    //! iterates over `it` and yields true if all elements are true
     static_if !typeinfo(is_iterable it)
         concept_assert(false,"can't ALL non-iterable type")
         return false
@@ -107,6 +114,7 @@ def all ( it )
         return true
 
 def cycle(var src:iterator<auto(TT)>)
+    //! endlessly iterates over `src`
     static_if !typeinfo(is_ref_type type<TT>)
         return <- generator<TT -&> [[<-src]] () <| $ ()
             var arr : array<TT -&>
@@ -133,6 +141,7 @@ def cycle(var src:iterator<auto(TT)>)
             __builtin_array_clear_lock(arr)
 
 def islice( var src : iterator<auto(TT)>; start,stop : int )
+    //! iterates over `src` and yields only the elements in the range [start,stop)
     static_if !typeinfo(is_ref_type type<TT>)
         return <- generator<TT -&> [[<-src]] () <| $ ()
             for x,i in src,range(stop)
@@ -149,6 +158,7 @@ def islice( var src : iterator<auto(TT)>; start,stop : int )
 // [[ start; start+step; start+2*step ]]
 [generic]
 def count(var start,step:int) : iterator<int>
+    //! endlessly iterates from `start` and yields `start+step`, `start+2*step`, ...
     return <- each() <| @(var result:int&) : bool
         result = start
         start += step
@@ -156,6 +166,7 @@ def count(var start,step:int) : iterator<int>
 
 // [[ value; value; value; .... count times ]]
 def repeat_ref ( value:auto(TT); var total:int )
+    //! yields `value` by reference `count` times
     return <- generator<TT const &> () <| $ ()
         while total > 0
             yield value
@@ -164,6 +175,7 @@ def repeat_ref ( value:auto(TT); var total:int )
 
 // [[ value; value; value; .... count times ]]
 def repeat(value : auto(TT); var count : int = 0)
+    //! yields `value` `count` times
     return <- generator<TT const-&> () <| $ ()
         if count == 0
             while true
@@ -173,19 +185,23 @@ def repeat(value : auto(TT); var count : int = 0)
         return false
 
 def is_equal(a,b)
+    //! yields true if `a` and `b` are equal
     return a == b
 
 def is_not_equal(a,b)
+    //! yields true if `a` and `b` are not equal
     return a != b
 
 def not(x)
+    //! yeilds !x
     return !x
 
 def echo(var x;extra : string = "\n")
+    //! prints contents of the string to the output, with `extra` string appended
     print("{x}{extra}")
     return <- x
 
-def flatten_one ( var src : iterator<iterator<auto(TT)>> )
+def private flatten_one ( var src : iterator<iterator<auto(TT)>> )
     static_if !typeinfo(is_ref_type type<TT>)
         return <- generator<TT -&> [[<-src]] () <| $ ()
             for i in src
@@ -200,8 +216,21 @@ def flatten_one ( var src : iterator<iterator<auto(TT)>> )
             return false
 
 def flatten ( var it : iterator<auto(TT)> )
+    //! iterates over `it`, than iterates over each element of each element of `it` and yields it
     unsafe
         static_if typeinfo(is_iterator type<TT>)
             return <- flatten_one ( [[for i in it; flatten(i)]] )
         else
             return <- [[for i in it; i]]
+
+def sorted ( var arr:array<auto> )
+    arr |> sort
+    return <- arr
+
+def sorted ( var it:iterator<auto(TT)> )
+    var arr <- to_array(it)
+    sort(arr)
+    return <- generator<TT> [[<-arr]] () <|
+        for x in arr
+            yield x
+        return false

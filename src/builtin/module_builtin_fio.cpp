@@ -63,7 +63,7 @@ namespace das {
         addAnnotation(make_smart<TimeAnnotation>());
         addFunctionBasic<Time>(*this,lib);
         addFunctionOrdered<Time>(*this,lib);
-        addFunction( make_smart<BuiltInFn<Sim_Sub<Time>,float,Time,Time>>("-",lib,"Sub"));
+        addFunction( make_smart<BuiltInFn<Sim_Sub<Time>,double,Time,Time>>("-",lib,"Sub"));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
         // TODO: move to upstream das
         addExtern<DAS_BIND_FUN(ref_time_ticks)>(*this, lib, "ref_time_ticks",
@@ -145,11 +145,6 @@ namespace das {
         virtual bool canMove() const override { return true; }
         virtual bool canCopy() const override { return true; }
         virtual bool isLocal() const override { return true; }
-    };
-
-    struct FileAnnotation : ManagedStructureAnnotation <FILE,false> {
-        FileAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FILE", ml) {
-        }
     };
 
 
@@ -451,7 +446,7 @@ namespace das {
             lib.addBuiltInModule();
             lib.addModule(Module::require("strings"));
             // type
-            addAnnotation(make_smart<FileAnnotation>(lib));
+            addAnnotation(make_smart<DummyTypeAnnotation>("FILE", "FILE", 16, 16));
             addAnnotation(make_smart<FStatAnnotation>(lib));
             // seek constants
             addConstant<int32_t>(*this, "seek_set", SEEK_SET);

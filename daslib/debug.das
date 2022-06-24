@@ -700,9 +700,9 @@ class private DAgent: DapiDebugAgent
         ctx.pauseRequested = true
 
         if withInstruments
-            for ctx in contexts
-                if !ctx.ctx.category.debug_context
-                    *ctx.ctx |> set_single_step(true)
+            for c in contexts
+                if !c.ctx.category.debug_context
+                    *c.ctx |> set_single_step(true)
 
     def reqResume(var exclude: DAContext)
         if withInstruments
@@ -1189,8 +1189,8 @@ class private DAServer: Server
         for ctx in agent.contexts
             ctx |> reset_debug_flags()
             ctx.continueRequested = true
-        for data in values(agent.breakpoints)
-            delete data
+        for it in values(agent.breakpoints)
+            delete it
         agent.breakpoints |> clear()
         // ini.arguments.restart
         disconnected = true
@@ -1681,4 +1681,7 @@ def private wait_debugger(): bool
 
 def private loads_itself(): bool
     let args <- get_command_line_arguments()
-    return length(args) >= 2 && (args[1] |> ends_with("daslib\\debug.das") || args[1] |> ends_with("daslib/debug.das"))
+    for i in range(1, length(args))
+        if args[i] |> ends_with("daslib\\debug.das") || args[i] |> ends_with("daslib/debug.das")
+            return true
+    return false

@@ -258,6 +258,19 @@ namespace das {
                     ss << "\n";
                 }
             }
+            if ( fn->moreFlags ) {
+                ss << "// ";
+                if ( fn->macroFunction ) {
+                    ss << "[macro_function]";
+                }
+                if ( fn->needStringCast ) {
+                    ss << "[need_string_cast]";
+                }
+                if ( fn->aotHashDeppendsOnArguments ) {
+                    ss << "[aot_hash_deppends_on_arguments]";
+                }
+                ss << "\n";
+            }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
             if ( fn->exports ) { ss << "[export]\n"; }
             if ( fn->init ) { ss << "[init]\n"; }
@@ -468,7 +481,7 @@ namespace das {
     // if then else
         virtual void preVisit ( ExprIfThenElse * ifte ) override {
             Visitor::preVisit(ifte);
-            ss << "if ";
+            ss << (ifte->isStatic ? "static_if " : "if ");
         }
         virtual void preVisitIfBlock ( ExprIfThenElse * ifte, Expression * block ) override {
             Visitor::preVisitIfBlock(ifte,block);
@@ -478,9 +491,9 @@ namespace das {
             Visitor::preVisitElseBlock(ifte, block);
             ss << string(tab,'\t');
             if (block && block->rtti_isIfThenElse()) {
-                ss << "else ";
+                ss << (ifte->isStatic ? "static_else " : "else ");
             } else {
-                ss << "else\n";
+                ss << (ifte->isStatic ? "static_else\n" : "else\n");
             }
         }
     // try-catch
@@ -527,6 +540,15 @@ namespace das {
             Visitor::preVisit(wh);
             ss << "with " << wh->alias << " = ";
         }
+    // tag
+        virtual void preVisit ( ExprTag * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "$$" << expr->name << "(";
+        }
+        virtual ExpressionPtr visit ( ExprTag * expr ) override {
+            ss << ")";
+            return Visitor::visit(expr);
+        }
     // while
         virtual void preVisit ( ExprWhile * wh ) override {
             Visitor::preVisit(wh);
@@ -569,6 +591,15 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprNamedCall * c ) override {
             ss << "])";
+            return Visitor::visit(c);
+        }
+    // looks like call
+        virtual void preVisit ( ExprCallMacro * call ) override {
+            Visitor::preVisit(call);
+            ss << call->name << "(";
+        }
+        virtual ExpressionPtr visit ( ExprCallMacro * c ) override {
+            ss << ")";
             return Visitor::visit(c);
         }
     // looks like call

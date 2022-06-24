@@ -224,6 +224,17 @@ namespace das
         };
     };
 
+    struct ExprTag : Expression {
+        ExprTag () { __rtti = "ExprTag"; }
+        ExprTag ( const LineInfo & a, const ExpressionPtr & se, const string & n )
+            : Expression(a), subexpr(se), name(n) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        ExpressionPtr   subexpr;
+        string          name;
+    };
+
     struct ExprField : Expression {
         ExprField () { __rtti = "ExprField"; };
         ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n, bool no_promo=false )
@@ -351,7 +362,7 @@ namespace das
     };
 
     struct ExprCallMacro : ExprLooksLikeCall {
-        ExprCallMacro () { __rtti = "ExprCallMacro"; };
+        ExprCallMacro () { __rtti = "ExprCallMacro"; name="__call_macro__"; };
         ExprCallMacro ( const LineInfo & a, const string & n )
             : ExprLooksLikeCall(a,n) { __rtti = "ExprCallMacro"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -801,6 +812,7 @@ namespace das
         ExpressionPtr           body;
         LineInfo                visibility;
         bool                    allowIteratorOptimization = false;  // if enabled, unused source variables can be removed
+        bool                    canShadow = false;                  // if enabled, local variables can shadow
     };
 
     struct ExprUnsafe : Expression {
@@ -927,7 +939,7 @@ namespace das
     };
 
     struct ExprInvoke : ExprLikeCall<ExprInvoke> {
-        ExprInvoke () { __rtti = "ExprInvoke"; };
+        ExprInvoke () { __rtti = "ExprInvoke"; name = "invoke"; };
         ExprInvoke ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprInvoke>(a,name) { __rtti = "ExprInvoke"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -940,7 +952,7 @@ namespace das
     };
 
     struct ExprAssert : ExprLikeCall<ExprAssert> {
-        ExprAssert ( ) { __rtti = "ExprAssert"; };
+        ExprAssert ( ) { __rtti = "ExprAssert"; name="assert"; };
         ExprAssert ( const LineInfo & a, const string & name, bool isV )
             : ExprLikeCall<ExprAssert>(a,name) { isVerify = isV; __rtti = "ExprAssert"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -949,7 +961,7 @@ namespace das
     };
 
     struct ExprQuote : ExprLikeCall<ExprQuote> {
-        ExprQuote ( ) { __rtti = "ExprQuote"; };
+        ExprQuote ( ) { __rtti = "ExprQuote"; name="quote"; };
         ExprQuote ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprQuote>(a,name) { __rtti = "ExprQuote"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -958,7 +970,7 @@ namespace das
     };
 
     struct ExprStaticAssert : ExprLikeCall<ExprStaticAssert> {
-        ExprStaticAssert () { __rtti = "ExprStaticAssert"; };
+        ExprStaticAssert () { __rtti = "ExprStaticAssert"; name="static_assert"; };
         ExprStaticAssert ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprStaticAssert>(a,name) { __rtti = "ExprStaticAssert"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -966,7 +978,7 @@ namespace das
     };
 
     struct ExprDebug : ExprLikeCall<ExprDebug> {
-        ExprDebug () { __rtti = "ExprDebug"; };
+        ExprDebug () { __rtti = "ExprDebug"; name="debug"; };
         ExprDebug ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprDebug>(a, name) { __rtti = "ExprDebug"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -974,7 +986,7 @@ namespace das
     };
 
     struct ExprMemZero : ExprLikeCall<ExprMemZero> {
-        ExprMemZero () { __rtti = "ExprMemZero"; };
+        ExprMemZero () { __rtti = "ExprMemZero"; name="memzero"; };
         ExprMemZero ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprMemZero>(a, name) { __rtti = "ExprMemZero"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -1021,7 +1033,7 @@ namespace das
     };
 
     struct ExprErase : ExprLikeCall<ExprErase> {
-        ExprErase() { __rtti = "ExprErase"; };
+        ExprErase() { __rtti = "ExprErase"; name="erase"; };
         ExprErase ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprErase>(a, "erase") { __rtti = "ExprErase"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -1029,7 +1041,7 @@ namespace das
     };
 
     struct ExprFind : ExprLikeCall<ExprFind> {
-        ExprFind() { __rtti = "ExprFind"; };
+        ExprFind() { __rtti = "ExprFind"; name="find"; };
         ExprFind ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprFind>(a, "find") { __rtti = "ExprFind"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -1037,9 +1049,17 @@ namespace das
     };
 
     struct ExprKeyExists : ExprLikeCall<ExprKeyExists> {
-        ExprKeyExists() { __rtti = "ExprKeyExists"; };
+        ExprKeyExists() { __rtti = "ExprKeyExists"; name="key_exists"; };
         ExprKeyExists ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprKeyExists>(a, "key_exists") { __rtti = "ExprKeyExists"; }
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+
+    struct ExprSetInsert : ExprLikeCall<ExprSetInsert> {
+        ExprSetInsert() { __rtti = "ExprSetInsert"; name="insert"; };
+        ExprSetInsert ( const LineInfo & a, const string & )
+            : ExprLikeCall<ExprSetInsert>(a, "insert") { __rtti = "ExprSetInsert"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };

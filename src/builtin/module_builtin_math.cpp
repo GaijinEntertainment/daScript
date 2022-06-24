@@ -126,6 +126,7 @@ namespace das {
     MATH_FUN_OP1(Cos)
     MATH_FUN_OP1(Tan)
     MATH_FUN_OP1(ATan)
+    MATH_FUN_OP1(ATan_est)
     MATH_FUN_OP1(ASin)
     MATH_FUN_OP1(ACos)
 
@@ -145,6 +146,7 @@ namespace das {
         mod.addFunction( make_smart<BuiltInFn<Sim_Cos<TT>,        TT,   TT>        >("cos",       lib, "Cos")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Tan<TT>,        TT,   TT>        >("tan",       lib, "Tan")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_ATan<TT>,       TT,   TT>        >("atan",      lib, "ATan")->arg("x") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_ATan_est<TT>,   TT,   TT>        >("atan_est",  lib, "ATan_est")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_ASin<TT>,       TT,   TT>        >("asin",      lib, "ASin")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_ACos<TT>,       TT,   TT>        >("acos",      lib, "ACos")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_ATan2<TT>,      TT,   TT,  TT>   >("atan2",     lib, "ATan2")->args({"y","x"}) );
@@ -428,6 +430,12 @@ namespace das {
         }
     }
 
+    float4x4 float4x4_from_float34 ( const float3x4 & mat ) {
+        mat44f res;
+        v_mat44_make_from_43ca(res, (const float*)&mat);
+        return reinterpret_cast<float4x4&>(res);
+    }
+
     float3x3 float3x3_from_float44 ( const float4x4 & mat ) {
         float3x3 res;
         res.m[0] = vec4f(mat.m[0]);
@@ -492,17 +500,6 @@ namespace das {
         return mat;
     }
 
-    float3x4 float3x4_mul(const float3x4 &a, const float3x4 &b) {
-        //not working yet!
-        mat44f va,vb,vc;
-        v_mat44_make_from_43cu(va, &a.m[0].x);
-        v_mat44_make_from_43cu(vb, &b.m[0].x);
-        v_mat44_mul43(vc, va, vb);
-        alignas(16) float3x4 ret;
-        v_mat_43ca_from_mat44(&ret.m[0].x, vc);
-        return ret;
-    }
-
     float4x4 float4x4_mul(const float4x4 &a, const float4x4 &b) {
         mat44f va,vb,res;
         memcpy(&va,&a,sizeof(float4x4));
@@ -525,15 +522,6 @@ namespace das {
         memcpy ( &res, &src, sizeof(float4x4) );
         v_mat44_transpose(res.col0, res.col1, res.col2, res.col3);
         return reinterpret_cast<float4x4&>(res);
-    }
-
-    float3x4 float3x4_inverse ( const float3x4 & src ) {
-        mat44f mat, invMat;
-        v_mat44_make_from_43cu(mat, &src.m[0].x);
-        v_mat44_inverse43(invMat, mat);
-        alignas(16) float3x4 ret;
-        v_mat_43ca_from_mat44(&ret.m[0].x, invMat);
-        return ret;
     }
 
     float4x4 float4x4_inverse( const float4x4 & src) {
@@ -738,6 +726,8 @@ namespace das {
             addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float3x4>,float3x4 > >("float3x4",lib) );
             addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
             // 4x4
+            addExtern<DAS_BIND_FUN(float4x4_from_float34), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "float4x4",
+                SideEffects::none,"float4x4_from_float34");
             addExtern<DAS_BIND_FUN(float4x4_identity)>(*this, lib, "identity",
                 SideEffects::modifyArgument, "float4x4_identity")->arg("x");
             addExtern<DAS_BIND_FUN(float4x4_identity_m), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "identity4x4",

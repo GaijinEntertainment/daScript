@@ -2553,23 +2553,23 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     struct SimNodeDebug_InstrumentFunction : SimNode {
-        SimNodeDebug_InstrumentFunction ( const LineInfo & at, SimFunction * simF, int64_t mnh, SimNode * se )
-            : SimNode(at), func(simF), fnMnh(mnh), subexpr(se) {}
+        SimNodeDebug_InstrumentFunction ( const LineInfo & at, SimFunction * simF, int64_t mnh, SimNode * se, uint64_t ud )
+            : SimNode(at), func(simF), fnMnh(mnh), subexpr(se), userData(ud) {}
         virtual bool rtti_node_isInstrumentFunction() const override { return true; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            context.instrumentFunctionCallback(func, true);
+            context.instrumentFunctionCallback(func, true, userData);
             auto res = subexpr->eval(context);
-            context.instrumentFunctionCallback(func, false);
+            context.instrumentFunctionCallback(func, false, userData);
             return res;
         }
 #define EVAL_NODE(TYPE,CTYPE) \
         virtual CTYPE eval##TYPE ( Context & context ) override { \
                 DAS_PROFILE_NODE \
-                context.instrumentFunctionCallback(func, true); \
+                context.instrumentFunctionCallback(func, true, userData); \
                 auto res = subexpr->eval##TYPE(context); \
-                context.instrumentFunctionCallback(func, false); \
+                context.instrumentFunctionCallback(func, false, userData); \
                 return res; \
             }
         DAS_EVAL_NODE
@@ -2577,6 +2577,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimFunction *   func;
         uint64_t        fnMnh;
         SimNode *       subexpr;
+        uint64_t        userData;
     };
 
     // IF-THEN-ELSE (also Cond)

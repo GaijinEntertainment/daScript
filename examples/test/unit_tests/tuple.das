@@ -10,7 +10,7 @@ def testFinalizeAndClone
     var x : tuple<int; float; array<int> >
     x._0 = 1
     x._1 = 2.0
-    x._2 <- [{for x in range(10); x}]
+    x._2 <- [{for xx in range(10); xx}]
     var y := x
     assert(y._0==1 && y._1==2.0)
     for t in range(10)

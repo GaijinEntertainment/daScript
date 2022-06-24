@@ -115,6 +115,7 @@ namespace das
         StructureField & addFieldEx(const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT);
         virtual void walk(DataWalker & walker, void * data) override;
         int32_t fieldCount() const { return int32_t(fields.size()); }
+        void from(BasicStructureAnnotation * ann);
         void from(const char* parentName);
         das_map<string,StructureField> fields;
         vector<string>                 fieldsInOrder;
@@ -123,6 +124,7 @@ namespace das
         ModuleLibrary *            mlib = nullptr;
         vector<TypeAnnotation*> parents;
         bool validationNeverFails = false;
+        recursive_mutex walkMutex;
     };
 
     template <typename TT, bool canCopy = isCloneable<TT>::value>
@@ -453,12 +455,15 @@ namespace das
             return nullptr;
         }
         virtual void walk ( DataWalker & walker, void * vec ) override {
-            if ( !ati ) {
-                auto dimType = make_smart<TypeDecl>(*vecType);
-                dimType->ref = 0;
-                dimType->dim.push_back(1);
-                ati = helpA.makeTypeInfo(nullptr, dimType);
-                ati->flags |= TypeInfo::flag_isHandled;
+            {
+                lock_guard<recursive_mutex> guard(walkMutex);
+                if ( !ati ) {
+                    auto dimType = make_smart<TypeDecl>(*vecType);
+                    dimType->ref = 0;
+                    dimType->dim.push_back(1);
+                    ati = helpA.makeTypeInfo(nullptr, dimType);
+                    ati->flags |= TypeInfo::flag_isHandled;
+                }
             }
             auto pVec = (VectorType *)vec;
             auto atit = *ati;
@@ -470,6 +475,7 @@ namespace das
         TypeDeclPtr                vecType;
         DebugInfoHelper            helpA;
         TypeInfo *                 ati = nullptr;
+        recursive_mutex            walkMutex;
     };
 
     template <typename TT>
@@ -602,6 +608,9 @@ namespace das
         virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const override {
             return context.code->makeNode<SimNode_Ref2Value<OT>>(at, l);
         }
+        virtual SimNode * simulateNullCoalescing ( Context & context, const LineInfo & at, SimNode * s, SimNode * dv ) const override {
+            return context.code->makeNode<SimNode_NullCoalescing<OT>>(at,s,dv);
+        }
     };
 
     template <typename TT>
@@ -646,7 +655,7 @@ namespace das
         addExtern<decltype(&das_nequ_val<TT>), das_nequ_val<TT>>(mod, lib, "!=", SideEffects::none, "das_nequ_val");
     }
 
-    void setParents ( Module * mod, const char * child, const initializer_list<const char *> & parents );
+    void setParents ( Module * mod, const char * child, const std::initializer_list<const char *> & parents );
 }
 
 MAKE_TYPE_FACTORY(das_string, das::string);

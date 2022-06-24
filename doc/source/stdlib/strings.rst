@@ -24,67 +24,6 @@ Handled structures
 
 |structure_annotation-strings-StringBuilderWriter|
 
-++++++++++++++++++++++++++
-Internal builtin functions
-++++++++++++++++++++++++++
-
-.. warning:: 
-  This group of functions is hidden. It will not be in the final documentation.
-
-  *  :ref:`builtin_strdup (anything:any const) : void <function-_at_strings_c__c_builtin_strdup_C*>` 
-  *  :ref:`builtin_string_split_by_char (str:string const implicit;delimiter:string const implicit;block:block\<\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_strings_c__c_builtin_string_split_by_char_CIs_CIs_CI_builtin__C_c_C_l>` 
-  *  :ref:`builtin_string_split (str:string const implicit;delimiter:string const implicit;block:block\<\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_strings_c__c_builtin_string_split_CIs_CIs_CI_builtin__C_c_C_l>` 
-
-.. _function-_at_strings_c__c_builtin_strdup_C*:
-
-.. das:function:: builtin_strdup(anything: any const)
-
-.. warning:: 
-  This is unsafe operation.
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+anything+any const    +
-+--------+-------------+
-
-
-|function-strings-builtin_strdup|
-
-.. _function-_at_strings_c__c_builtin_string_split_by_char_CIs_CIs_CI_builtin__C_c_C_l:
-
-.. das:function:: builtin_string_split_by_char(str: string const implicit; delimiter: string const implicit; block: block<> const implicit)
-
-+---------+----------------------+
-+argument +argument type         +
-+=========+======================+
-+str      +string const implicit +
-+---------+----------------------+
-+delimiter+string const implicit +
-+---------+----------------------+
-+block    +block<> const implicit+
-+---------+----------------------+
-
-
-|function-strings-builtin_string_split_by_char|
-
-.. _function-_at_strings_c__c_builtin_string_split_CIs_CIs_CI_builtin__C_c_C_l:
-
-.. das:function:: builtin_string_split(str: string const implicit; delimiter: string const implicit; block: block<> const implicit)
-
-+---------+----------------------+
-+argument +argument type         +
-+=========+======================+
-+str      +string const implicit +
-+---------+----------------------+
-+delimiter+string const implicit +
-+---------+----------------------+
-+block    +block<> const implicit+
-+---------+----------------------+
-
-
-|function-strings-builtin_string_split|
-
 ++++++++++++++++
 Character groups
 ++++++++++++++++
@@ -1071,10 +1010,16 @@ String conversion routines
   *  :ref:`to_char (char:int const;context:__context const) : string <function-_at_strings_c__c_to_char_Ci_C_c>` 
   *  :ref:`int (str:string const implicit;context:__context const) : int <function-_at_strings_c__c_int_CIs_C_c>` 
   *  :ref:`uint (str:string const implicit;context:__context const) : uint <function-_at_strings_c__c_uint_CIs_C_c>` 
+  *  :ref:`int64 (str:string const implicit;context:__context const) : int64 <function-_at_strings_c__c_int64_CIs_C_c>` 
+  *  :ref:`uint64 (str:string const implicit;context:__context const) : uint64 <function-_at_strings_c__c_uint64_CIs_C_c>` 
   *  :ref:`float (str:string const implicit;context:__context const) : float <function-_at_strings_c__c_float_CIs_C_c>` 
   *  :ref:`double (str:string const implicit;context:__context const) : double <function-_at_strings_c__c_double_CIs_C_c>` 
   *  :ref:`to_int (value:string const implicit;hex:bool const) : int <function-_at_strings_c__c_to_int_CIs_Cb>` 
+  *  :ref:`to_uint (value:string const implicit;hex:bool const) : uint <function-_at_strings_c__c_to_uint_CIs_Cb>` 
+  *  :ref:`to_int64 (value:string const implicit;hex:bool const) : int64 <function-_at_strings_c__c_to_int64_CIs_Cb>` 
+  *  :ref:`to_uint64 (value:string const implicit;hex:bool const) : uint64 <function-_at_strings_c__c_to_uint64_CIs_Cb>` 
   *  :ref:`to_float (value:string const implicit) : float <function-_at_strings_c__c_to_float_CIs>` 
+  *  :ref:`to_double (value:string const implicit) : double <function-_at_strings_c__c_to_double_CIs>` 
 
 .. _function-_at_strings_c__c_string_CI1_ls_u8_gr_A_C_c:
 
@@ -1136,6 +1081,36 @@ uint returns uint
 
 |function-strings-uint|
 
+.. _function-_at_strings_c__c_int64_CIs_C_c:
+
+.. das:function:: int64(str: string const implicit)
+
+int64 returns int64
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++str     +string const implicit+
++--------+---------------------+
+
+
+|function-strings-int64|
+
+.. _function-_at_strings_c__c_uint64_CIs_C_c:
+
+.. das:function:: uint64(str: string const implicit)
+
+uint64 returns uint64
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++str     +string const implicit+
++--------+---------------------+
+
+
+|function-strings-uint64|
+
 .. _function-_at_strings_c__c_float_CIs_C_c:
 
 .. das:function:: float(str: string const implicit)
@@ -1183,6 +1158,57 @@ to_int returns int
 
 |function-strings-to_int|
 
+.. _function-_at_strings_c__c_to_uint_CIs_Cb:
+
+.. das:function:: to_uint(value: string const implicit; hex: bool const)
+
+to_uint returns uint
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++value   +string const implicit+
++--------+---------------------+
++hex     +bool const           +
++--------+---------------------+
+
+
+|function-strings-to_uint|
+
+.. _function-_at_strings_c__c_to_int64_CIs_Cb:
+
+.. das:function:: to_int64(value: string const implicit; hex: bool const)
+
+to_int64 returns int64
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++value   +string const implicit+
++--------+---------------------+
++hex     +bool const           +
++--------+---------------------+
+
+
+|function-strings-to_int64|
+
+.. _function-_at_strings_c__c_to_uint64_CIs_Cb:
+
+.. das:function:: to_uint64(value: string const implicit; hex: bool const)
+
+to_uint64 returns uint64
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++value   +string const implicit+
++--------+---------------------+
++hex     +bool const           +
++--------+---------------------+
+
+
+|function-strings-to_uint64|
+
 .. _function-_at_strings_c__c_to_float_CIs:
 
 .. das:function:: to_float(value: string const implicit)
@@ -1197,6 +1223,21 @@ to_float returns float
 
 
 |function-strings-to_float|
+
+.. _function-_at_strings_c__c_to_double_CIs:
+
+.. das:function:: to_double(value: string const implicit)
+
+to_double returns double
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++value   +string const implicit+
++--------+---------------------+
+
+
+|function-strings-to_double|
 
 +++++++++++++++
 String as array
@@ -1276,60 +1317,5 @@ reserve_string_buffer returns string
 
 
 |function-strings-reserve_string_buffer|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_strings_c__c_to_uint_CIs_Cb:
-
-.. das:function:: to_uint(value: string const implicit; hex: bool const)
-
-to_uint returns uint
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
-
-
-|function-strings-to_uint|
-
-.. _function-_at_strings_c__c_to_int64_CIs_Cb:
-
-.. das:function:: to_int64(value: string const implicit; hex: bool const)
-
-to_int64 returns int64
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
-
-
-|function-strings-to_int64|
-
-.. _function-_at_strings_c__c_to_uint64_CIs_Cb:
-
-.. das:function:: to_uint64(value: string const implicit; hex: bool const)
-
-to_uint64 returns uint64
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
-
-
-|function-strings-to_uint64|
 
 

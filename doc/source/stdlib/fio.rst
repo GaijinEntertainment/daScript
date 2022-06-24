@@ -109,30 +109,6 @@ FStat properties are
 
 |structure_annotation-fio-FStat|
 
-++++++++++++++++++++++++++
-Internal builtin functions
-++++++++++++++++++++++++++
-
-.. warning:: 
-  This group of functions is hidden. It will not be in the final documentation.
-
-  *  :ref:`builtin_dir (path:string const implicit;block:block\<\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_builtin_dir_CIs_CI_builtin__C_c_C_l>` 
-
-.. _function-_at_fio_c__c_builtin_dir_CIs_CI_builtin__C_c_C_l:
-
-.. das:function:: builtin_dir(path: string const implicit; block: block<> const implicit)
-
-+--------+----------------------+
-+argument+argument type         +
-+========+======================+
-+path    +string const implicit +
-+--------+----------------------+
-+block   +block<> const implicit+
-+--------+----------------------+
-
-
-|function-fio-builtin_dir|
-
 +++++++++++++++++
 File manipulation
 +++++++++++++++++
@@ -152,6 +128,7 @@ File manipulation
   *  :ref:`fstdin () : fio::FILE const? const <function-_at_fio_c__c_fstdin>` 
   *  :ref:`fstdout () : fio::FILE const? const <function-_at_fio_c__c_fstdout>` 
   *  :ref:`fstderr () : fio::FILE const? const <function-_at_fio_c__c_fstderr>` 
+  *  :ref:`getchar () : int <function-_at_fio_c__c_getchar>` 
   *  :ref:`fload (file:fio::FILE const? const;size:int const;blk:block\<(data:array\<uint8\> const):void\> const) : void <function-_at_fio_c__c_fload_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_Ci_CN_ls_data_gr_0_ls_C1_ls_u8_gr_A_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`fopen (name:string const;mode:string const;blk:block\<(f:fio::FILE const? const):void\> const) : auto <function-_at_fio_c__c_fopen_Cs_Cs_CN_ls_f_gr_0_ls_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`stat (path:string const) : fio::FStat <function-_at_fio_c__c_stat_Cs>` 
@@ -159,6 +136,8 @@ File manipulation
   *  :ref:`fread (f:fio::FILE const? const;blk:block\<(data:string const#):auto\> const) : auto <function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CN_ls_data_gr_0_ls_C_hh_s_gr_1_ls_._gr__builtin_>` 
   *  :ref:`fload (f:fio::FILE const? const;buf:auto(BufType) const -const) : auto <function-_at_fio_c__c_fload_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CY_ls_BufType_gr_.>` 
   *  :ref:`fsave (f:fio::FILE const? const;buf:auto(BufType) const) : auto <function-_at_fio_c__c_fsave_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CY_ls_BufType_gr_.>` 
+  *  :ref:`fread (f:fio::FILE const? const;buf:auto(BufType) const implicit) : auto <function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CIY_ls_BufType_gr_.>` 
+  *  :ref:`fread (f:fio::FILE const? const;buf:array\<auto(BufType)\> const implicit) : auto <function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CI1_ls_Y_ls_BufType_gr_._gr_A>` 
   *  :ref:`fwrite (f:fio::FILE const? const;buf:auto(BufType) const implicit) : auto <function-_at_fio_c__c_fwrite_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CIY_ls_BufType_gr_.>` 
   *  :ref:`fwrite (f:fio::FILE const? const;buf:array\<auto(BufType)\> const implicit) : auto <function-_at_fio_c__c_fwrite_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CI1_ls_Y_ls_BufType_gr_._gr_A>` 
 
@@ -374,6 +353,14 @@ fstderr returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 |function-fio-fstderr|
 
+.. _function-_at_fio_c__c_getchar:
+
+.. das:function:: getchar()
+
+getchar returns int
+
+|function-fio-getchar|
+
 .. _function-_at_fio_c__c_fload_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_Ci_CN_ls_data_gr_0_ls_C1_ls_u8_gr_A_gr_1_ls_v_gr__builtin_:
 
 .. das:function:: fload(file: file; size: int const; blk: block<(data:array<uint8> const):void> const)
@@ -491,6 +478,40 @@ fsave returns auto
 
 |function-fio-fsave|
 
+.. _function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CIY_ls_BufType_gr_.:
+
+.. das:function:: fread(f: file; buf: auto(BufType) const implicit)
+
+fread returns auto
+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++f       + :ref:`file <alias-file>`   +
++--------+----------------------------+
++buf     +auto(BufType) const implicit+
++--------+----------------------------+
+
+
+|function-fio-fread|
+
+.. _function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CI1_ls_Y_ls_BufType_gr_._gr_A:
+
+.. das:function:: fread(f: file; buf: array<auto(BufType)> const implicit)
+
+fread returns auto
+
++--------+-----------------------------------+
++argument+argument type                      +
++========+===================================+
++f       + :ref:`file <alias-file>`          +
++--------+-----------------------------------+
++buf     +array<auto(BufType)> const implicit+
++--------+-----------------------------------+
+
+
+|function-fio-fread|
+
 .. _function-_at_fio_c__c_fwrite_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CIY_ls_BufType_gr_.:
 
 .. das:function:: fwrite(f: file; buf: auto(BufType) const implicit)
@@ -531,6 +552,7 @@ Path manipulation
 
   *  :ref:`dir_name (name:string const implicit;context:__context const;line:__lineInfo const) : string <function-_at_fio_c__c_dir_name_CIs_C_c_C_l>` 
   *  :ref:`base_name (name:string const implicit;context:__context const;line:__lineInfo const) : string <function-_at_fio_c__c_base_name_CIs_C_c_C_l>` 
+  *  :ref:`get_full_file_name (path:string const implicit;context:__context const;at:__lineInfo const) : string <function-_at_fio_c__c_get_full_file_name_CIs_C_c_C_l>` 
 
 .. _function-_at_fio_c__c_dir_name_CIs_C_c_C_l:
 
@@ -561,6 +583,21 @@ base_name returns string
 
 
 |function-fio-base_name|
+
+.. _function-_at_fio_c__c_get_full_file_name_CIs_C_c_C_l:
+
+.. das:function:: get_full_file_name(path: string const implicit)
+
+get_full_file_name returns string
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++path    +string const implicit+
++--------+---------------------+
+
+
+|function-fio-get_full_file_name|
 
 ++++++++++++++++++++++
 Directory manipulation
@@ -601,11 +638,13 @@ dir returns auto
 
 |function-fio-dir|
 
-++++++++++++++++
-OS thread helper
-++++++++++++++++
+++++++++++++++++++++
+OS specific routines
+++++++++++++++++++++
 
   *  :ref:`sleep (msec:uint const) : void <function-_at_fio_c__c_sleep_Cu>` 
+  *  :ref:`exit (exitCode:int const) : void <function-_at_fio_c__c_exit_Ci>` 
+  *  :ref:`popen (command:string const implicit;scope:block\<(fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int <function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at_fio_c__c_sleep_Cu:
 
@@ -619,18 +658,6 @@ OS thread helper
 
 
 |function-fio-sleep|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_fio_c__c_getchar:
-
-.. das:function:: getchar()
-
-getchar returns int
-
-|function-fio-getchar|
 
 .. _function-_at_fio_c__c_exit_Ci:
 
@@ -667,20 +694,5 @@ popen returns int
 
 
 |function-fio-popen|
-
-.. _function-_at_fio_c__c_get_full_file_name_CIs_C_c_C_l:
-
-.. das:function:: get_full_file_name(path: string const implicit)
-
-get_full_file_name returns string
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+path    +string const implicit+
-+--------+---------------------+
-
-
-|function-fio-get_full_file_name|
 
 

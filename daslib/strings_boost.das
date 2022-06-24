@@ -4,6 +4,7 @@ options no_unused_function_arguments = false
 
 module strings_boost shared public
 
+require math
 require strings public
 
 def wide (text:string; width:int)
@@ -62,3 +63,53 @@ def eq ( a:string; b:das_string )
 def eq ( b:das_string; a:string )
     return b==a
 
+
+// https://en.wikipedia.org/wiki/Levenshtein_distance
+def levenshtein_distance(s, t: string): int
+    let sLen = length(s)
+    let tLen = length(t)
+    var d: array<array<int>>
+    d |> resize(sLen + 1)
+    for i in range(sLen + 1)
+        d[i] |> resize(tLen + 1)
+        d[i][0] = i
+    for j in range(tLen + 1)
+        d[0][j] = j
+
+    for i in range(1, sLen + 1)
+        for j in range(1, tLen + 1)
+            let substitutionCost = unsafe(character_uat(s, i - 1)) == unsafe(character_uat(t, j - 1)) ? 0 : 1
+            d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1)
+            d[i][j] = min(d[i][j], d[i - 1][j - 1] + substitutionCost)
+    
+    return d[sLen][tLen]
+finally
+    delete d
+
+// https://en.wikipedia.org/wiki/Levenshtein_distance#Iterative_with_two_matrix_rows
+// https://www.codeproject.com/Articles/13525/Fast-memory-efficient-Levenshtein-algorithm-2
+def levenshtein_distance_fast(s, t: string): int
+    let sLen = length(s)
+    let tLen = length(t)
+    var v0: array<int>
+    v0 |> resize(tLen + 1)
+    var v1: array<int>
+    v1 |> resize(tLen + 1)
+    for i in range(tLen + 1)
+        v0[i] = i
+
+    for i in range(0, sLen)
+        v1[0] = i + 1
+        for j in range(0, tLen)
+            let deletionCost = v0[j + 1] + 1
+            let insertionCost = v1[j] + 1
+            let substitutionCost = v0[j] + (unsafe(character_uat(s, i)) == unsafe(character_uat(t, j)) ? 0 : 1)
+            v1[j + 1] = min(deletionCost, insertionCost)
+            v1[j + 1] = min(v1[j + 1], substitutionCost)
+
+        swap(v0, v1)
+    
+    return v0[tLen]
+finally
+    delete v0
+    delete v1

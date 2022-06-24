@@ -99,6 +99,25 @@ namespace das
     };
 
     template <typename KeyType>
+    struct SimNode_TableSetInsert : SimNode_Table {
+        SimNode_TableSetInsert(const LineInfo & at, SimNode * t, SimNode * k)
+            : SimNode_Table(at,t,k, 0) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            return visitTable(vis,"TableSetInsert");
+        }
+        virtual vec4f eval ( Context & context ) {
+            DAS_PROFILE_NODE
+            Table * tab = (Table *) tabExpr->evalPtr(context);
+            if ( tab->isLocked() ) context.throw_error_at(debugInfo, "can't insert to a locked table");
+            auto key = EvalTT<KeyType>::eval(context,keyExpr);
+            auto hfn = hash_function(context, key);
+            TableHash<KeyType> thh(&context,valueTypeSize);
+            thh.reserve(*tab, key, hfn);
+            return v_zero();
+        }
+    };
+
+    template <typename KeyType>
     struct SimNode_TableFind : SimNode_Table {
         DAS_PTR_NODE;
         SimNode_TableFind(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)

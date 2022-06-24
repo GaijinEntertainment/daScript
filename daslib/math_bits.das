@@ -8,6 +8,7 @@ module math_bits shared public
 //  OpenGL, Vulkan - RH
 
 def int_bits_to_float ( x:int )
+    //! bit representation of x is interpreted as a float
     unsafe
         return reinterpret<float> x
 
@@ -24,6 +25,7 @@ def int_bits_to_float ( x:int4 )
         return reinterpret<float4> x
 
 def uint_bits_to_float ( x:uint )
+    //! bit representation of x is interpreted as a float
     unsafe
         return reinterpret<float> x
 
@@ -40,6 +42,7 @@ def uint_bits_to_float ( x:uint4 )
         return reinterpret<float4> x
 
 def float_bits_to_int ( x:float )
+    //! bit representation of x is interpreted as a int
     unsafe
         return reinterpret<int> x
 
@@ -56,6 +59,7 @@ def float_bits_to_int ( x:float4 )
         return reinterpret<int4> x
 
 def float_bits_to_uint ( x:float )
+    //! bit representation of x is interpreted as a uint
     unsafe
         return reinterpret<uint> x
 

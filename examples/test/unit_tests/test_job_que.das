@@ -16,7 +16,7 @@ def test
                     assert(length(y)==3)
                     for t,c in range(3),y
                         assert(t+x==c)
-                    status |> notify
+                    status |> notify_and_release
             status |> join
         // channels (foreach)
         with_channel(5) <| $ ( channel )
@@ -24,7 +24,7 @@ def test
                 new_job <| @
                     for t in range(3)
                         channel |> push_clone ( [[Work x=x, t=t]] )
-                    channel |> notify                               // at this point we are done with the channel on this job
+                    channel |> notify_and_release                               // at this point we are done with the channel on this job
             var summ = 0
             channel |> for_each <| $ ( w : Work# )
                 summ += w.x * w.t
@@ -37,7 +37,7 @@ def test
                 new_job <| @
                     for t in range(3)
                         channel |> push_clone ( [[Work x=x, t=t]] )
-                    channel |> notify                               // at this point we are done with the channel on this job
+                    channel |> notify_and_release                               // at this point we are done with the channel on this job
             var summ = 0
             for w in each(channel,type<Work>)
                 summ += w.x * w.t
@@ -45,3 +45,4 @@ def test
             assert(channel.isEmpty)
             assert(channel.isReady)
     return true
+

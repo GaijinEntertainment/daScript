@@ -165,5 +165,9 @@ namespace das {
 
     Func builtin_getFunctionByMnh ( uint64_t MNH, Context * context );
     uint64_t builtin_getFunctionMnh ( Func func, Context * context );
+
+    void lockThisContext ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );
+    void lockAnyContext ( Context & ctx, const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );
+    void lockAnyMutex ( recursive_mutex & rm, const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );
 }
 

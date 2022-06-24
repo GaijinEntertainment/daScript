@@ -3,7 +3,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
 
-module rst public
+module rst private
 
 require fio
 require math
@@ -17,9 +17,9 @@ require daslib/regex_boost
 
 let
     log_documentation = true
-    show_hidden_groups = true
+    show_hidden_groups = false
 
-var
+var public
     topic_root = ""
 
 def module_name(mod)
@@ -305,7 +305,7 @@ def document_typedef(doc_file:file;mod:Module?;name:string implicit;value)
         fwrite(doc_file," is a bitfield\n\n")
         document_bitfield(doc_file,value)
     elif value.baseType==Type tVariant
-        fwrite(doc_file,"is a variant type\n\n")
+        fwrite(doc_file," is a variant type\n\n")
         document_variant(doc_file,value)
     else
         var tp = describe(value,false,false,false)
@@ -331,6 +331,8 @@ def document_global_constant(doc_file:file;mod:Module?;value:VariablePtr)
     document_topic(doc_file,topic("variable",mod,string(value.name)))
 
 def private is_global_constant(value:VariablePtr)
+    if value.flags.private_variable
+        return false
     if !value._type.flags.constant
         return false
     if !value._type.isWorkhorseType
@@ -445,11 +447,11 @@ def document_classes(doc_file:file;mod:Module?)
         if w != 0
             fwrite(doc_file,"it defines as follows\n\n")
             for fld in value.fields
-                if !is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType)
-                    fwrite(doc_file,"  {wide(string(fld.name),w)} : {describe_type(fld._type)}\n")
+                if !is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType) && (fld.name!="__rtti")
+                    fwrite(doc_file,"  | {wide(string(fld.name),w)} : {describe_type(fld._type)}\n")
             fwrite(doc_file,"\n")
         for fld in value.fields
-            if is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType)
+            if is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType) && (fld.flags.implemented)
                 document_class_method(doc_file,mod,value,fld)
 
 def document_structure(doc_file:file;mod:Module?;value:StructurePtr)
@@ -571,6 +573,8 @@ def document_annotations(doc_file:file;mod:Module?)
     module_for_each_annotation(mod) <| $(value)
         if !value.isTypeAnnotation || value.isBasicStructureAnnotation
             return
+        if string(value.name) |> starts_with("dasvector`")
+            return
         document_annotation(doc_file,mod,value)
 
 def document_call_macro(doc_file:file;mod:Module?;value:string implicit)
@@ -588,6 +592,54 @@ def document_call_macros(doc_file:file;mod:Module?)
     fwrite(doc_file,make_group("Call macros"))
     for_each_call_macro(mod) <| $(value)
         document_call_macro(doc_file,mod,value)
+
+def document_reader_macro(doc_file:file;mod:Module?;value:string implicit)
+    fwrite(doc_file,make_label(call_macro_label_name(mod,value)))
+    fwrite(doc_file,make_domain("das:attribute"))
+    fwrite(doc_file,"{value}\n\n")
+    document_topic(doc_file,topic("reader_macro",mod,value))
+
+def document_reader_macros(doc_file:file;mod:Module?)
+    var any = false
+    for_each_reader_macro(mod) <| $(value)
+        any = true
+    if !any
+        return
+    fwrite(doc_file,make_group("Reader macros"))
+    for_each_reader_macro(mod) <| $(value)
+        document_reader_macro(doc_file,mod,value)
+
+def document_variant_macro(doc_file:file;mod:Module?;value:string implicit)
+    fwrite(doc_file,make_label(call_macro_label_name(mod,value)))
+    fwrite(doc_file,make_domain("das:attribute"))
+    fwrite(doc_file,"{value}\n\n")
+    document_topic(doc_file,topic("variant_macro",mod,value))
+
+def document_variant_macros(doc_file:file;mod:Module?)
+    var any = false
+    for_each_variant_macro(mod) <| $(value)
+        any = true
+    if !any
+        return
+    fwrite(doc_file,make_group("Variant macros"))
+    for_each_variant_macro(mod) <| $(value)
+        document_variant_macro(doc_file,mod,string(value.name))
+
+def document_typeinfo_macro(doc_file:file;mod:Module?;value:string implicit)
+    fwrite(doc_file,make_label(call_macro_label_name(mod,value)))
+    fwrite(doc_file,make_domain("das:attribute"))
+    fwrite(doc_file,"{value}\n\n")
+    document_topic(doc_file,topic("typeinfo_macro",mod,value))
+
+def document_typeinfo_macros(doc_file:file;mod:Module?)
+    var any = false
+    for_each_typeinfo_macro(mod) <| $(value)
+        any = true
+    if !any
+        return
+    fwrite(doc_file,make_group("Typeinfo macros"))
+    for_each_typeinfo_macro(mod) <| $(value)
+        document_typeinfo_macro(doc_file,mod,string(value.name))
 
 def function_needs_documenting(func:FunctionPtr)
     if func.flags.generated
@@ -700,7 +752,8 @@ def document_functions(doc_file:file;mod:Module?;groups:array<DocGroup>)
             first_function = false
         document_function(doc_file,mod,func)
 
-struct DocGroup
+struct public DocGroup
+    //! Group of functions with shared category.
     name : string
     func : array<Function?>
     hidden : bool
@@ -721,19 +774,22 @@ def append_to_group_by_regex(var group:DocGroup; mod:Module?; var reg:Regex)
             if regex_match(reg,string(func.name)) != -1
                 push(group.func,get_ptr(func))
 
-def group_by_regex(name:string; mod:Module?; var reg:Regex)
+def public group_by_regex(name:string; mod:Module?; var reg:Regex)
+    //! Creates a group of functions with shared category.
+    //! Functions will be added to the group if they match the regular expression.
     var group <- [[DocGroup name=name, hidden=false]]
     append_to_group_by_regex(group,mod,reg)
     return <- group
 
-def hide_group(var group:DocGroup)
+def public hide_group(var group:DocGroup)
+    //! Marks the group as hidden.
     group.hidden = true
     return <- group
 
 def private generate_topic_stub(var tab:table<string;bool>;doc_file:file;topic:string implicit)
     if !tab[topic]
         tab[topic] = true
-        fwrite(doc_file,".. {topic} replace:: to be documented\n\n" )
+        fwrite(doc_file,".. {topic} replace:: to be documented in {topic}.rst\n\n" )
 
 def private generate_substitute_stub(mod:Module?;substname:string)
     var st : FStat
@@ -754,7 +810,7 @@ def private generate_substitute_stub(mod:Module?;substname:string)
                     // classes and methods
                     generate_topic_stub(tab,stub_file,topic("class",mod,string(value.name)))
                     for fld in value.fields
-                        if is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType)
+                        if is_class_method(value,fld._type) && !(fld.flags.generated) && !(fld.flags.parentType) && (fld.flags.implemented)
                             generate_topic_stub(tab,stub_file,topic("method",mod,"{value.name}.{fld.name}"))
                 elif !value.flags.generated
                     // structures
@@ -790,7 +846,10 @@ def private getDetailIncludePath ( fname, substname : string )
         var ipath = join ( [[ for i in range(index,length(snp)); snp[i] ]], "/" )
         return ipath
 
-def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGroup>)
+def public document(name:string;mod:Module?;fname,substname:string;groups:array<DocGroup>)
+    //! Document single module given list of `DocGropus`.
+    //! This will generate RST file with documentation for the module.
+    //! Functions which do not match any `DocGroup` will be placed in the `Uncategorized` group.
     static_if log_documentation
         to_log(LOG_INFO, "Documenting {name} into {fname}\n")
     if mod==null
@@ -814,6 +873,9 @@ def document(name:string;mod:Module?;fname,substname:string;groups:array<DocGrou
     document_structure_annotations(doc_file,mod)
     document_function_annotations(doc_file,mod)
     document_call_macros(doc_file,mod)
+    document_reader_macros(doc_file,mod)
+    document_variant_macros(doc_file,mod)
+    document_typeinfo_macros(doc_file,mod)
     document_annotations(doc_file,mod)
     document_classes(doc_file,mod)
     document_functions(doc_file,mod,groups)

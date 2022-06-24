@@ -362,7 +362,7 @@ namespace das
 
     SimNode * SimNode_ForBase::copyNode ( Context & context, NodeAllocator * code ) {
         SimNode_ForBase * that = (SimNode_ForBase *) SimNode_Block::copyNode(context, code);
-        if ( total ) {
+        if ( totalSources ) {
             auto bytes = code->allocate( totalSources * ( sizeof(SimNode*) + sizeof(uint32_t)*2 ) );
             auto newSources = (SimNode **) (bytes);
             memcpy ( newSources, that->sources, totalSources*sizeof(SimNode *));
@@ -392,7 +392,7 @@ namespace das
 
     SimNode * SimNode_ForWithIteratorBase::copyNode ( Context & context, NodeAllocator * code ) {
         SimNode_ForWithIteratorBase * that = (SimNode_ForWithIteratorBase *) SimNode_Block::copyNode(context, code);
-        if ( total ) {
+        if ( totalSources ) {
             auto bytes = code->allocate( totalSources * ( sizeof(SimNode*) + sizeof(uint32_t) ) );
             auto new_source_iterators = (SimNode **) (bytes);
             memcpy ( new_source_iterators, that->source_iterators, totalSources*sizeof(SimNode *));
@@ -926,6 +926,12 @@ namespace das
         });
     }
 
+    void dapiSimulateContext ( Context & ctx ) {
+        for_each_debug_agent([&]( const DebugAgentPtr & pAgent ){
+            pAgent->onSimulateContext(&ctx);
+        });
+    }
+
     Context::Context(uint32_t stackSize, bool ph) : stack(stackSize) {
         code = make_shared<NodeAllocator>();
         constStringHeap = make_shared<ConstStringAllocator>();
@@ -941,7 +947,7 @@ namespace das
         stringHeap.reset();
         heap.reset();
         stack.strip();
-        if ( globals ) {
+        if ( globals && globalsOwner ) {
             das_aligned_free16(globals);
             globals = nullptr;
         }
@@ -1035,6 +1041,41 @@ namespace das
             << (bytesTotal - bytesUsed) << ")\n";
     }
 
+    void Context::makeWorkerFor(const Context & ctx)
+    {
+        if (code == ctx.code)
+            return;
+
+        code = ctx.code;
+        constStringHeap = ctx.constStringHeap;
+        debugInfo = ctx.debugInfo;
+        thisProgram = ctx.thisProgram;
+        thisHelper = ctx.thisHelper;
+        category.value = ctx.category.value;
+
+        // globals (on condition that all context globals are read-only)
+        globals = ctx.globals;
+        globalsOwner = false;
+        annotationData = ctx.annotationData;
+        globalsSize = ctx.globalsSize;
+        globalInitStackSize = ctx.globalInitStackSize;
+        globalVariables = ctx.globalVariables;
+        totalVariables = ctx.totalVariables;
+
+        // shared
+        sharedSize = ctx.sharedSize;
+        shared = ctx.shared;
+        sharedOwner = false;
+        // functions
+        functions = ctx.functions;
+        totalFunctions = ctx.totalFunctions;
+
+        // mangled name table
+        tabMnLookup = ctx.tabMnLookup;
+        tabGMnLookup = ctx.tabGMnLookup;
+        tabAdLookup = ctx.tabAdLookup;
+    }
+
     uint64_t Context::getSharedMemorySize() const {
         uint64_t mem = 0;
         mem += code ? code->totalAlignedMemoryAllocated() : 0;
@@ -1122,7 +1163,7 @@ namespace das
         // shutdown
         runShutdownScript();
         // and free memory
-        if ( globals ) {
+        if ( globals && globalsOwner ) {
             das_aligned_free16(globals);
         }
         if ( shared && sharedOwner ) {
@@ -1470,6 +1511,58 @@ namespace das
         });
     }
 
+    class CppOnlyDebugAgent : public DebugAgent {
+    public:
+        virtual void onCreateContext ( Context * ctx ) { if ( onCreateContextOp ) onCreateContextOp(ctx); }
+        virtual void onDestroyContext ( Context * ctx ) { if ( onDestroyContextOp ) onDestroyContextOp(ctx); }
+        virtual bool isCppOnlyAgent() const { return true; }
+    public:
+        function<void(Context*)> onCreateContextOp;
+        function<void(Context*)> onDestroyContextOp;
+    };
+
+    template <typename TT>
+    void onCppDebugAgent ( const char * category, TT && lmb ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        CppOnlyDebugAgent * agent = nullptr;
+        if ( it != g_DebugAgents.end() ) {
+            DAS_VERIFY(it->second.debugAgent->isCppOnlyAgent());
+            agent = (CppOnlyDebugAgent *) it->second.debugAgent.get();
+        } else {
+            auto da = make_smart<CppOnlyDebugAgent>();
+            agent = (CppOnlyDebugAgent *) da.get();
+            g_DebugAgents[category] = {
+                da,
+                nullptr
+            };
+        }
+        lmb(agent);
+    }
+
+    void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && lmb ) {
+        onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
+            agent->onCreateContextOp = move(lmb);
+        });
+    }
+
+    void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && lmb ) {
+        onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
+            agent->onDestroyContextOp = move(lmb);
+        });
+
+    }
+
+    void uninstallCppDebugAgent ( const char * category ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        if ( it != g_DebugAgents.end() ) {
+            g_DebugAgents.erase(it);
+        }
+    }
+
+    bool multiline_log = true;
+
     void toLog ( int level, const char * text ) {
         bool any = false;
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
@@ -1490,10 +1583,10 @@ namespace das
                 marker = "";
 
             if ( level>=LogLevel::warning ) {
-                fprintf(stderr,"%s%s\n", marker, text);
+                fprintf(stderr, multiline_log ? "%s%s\n" : "%s%s", marker, text);
                 fflush(stderr);
             } else {
-                fprintf(stdout,"%s%s\n", marker, text);
+                fprintf(stdout, multiline_log ? "%s%s\n" : "%s%s", marker, text);
                 fflush(stdout);
             }
         }
@@ -1524,6 +1617,7 @@ namespace das
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it == g_DebugAgents.end() ) context->throw_error_at(*at, "can't get debug agent '%s'", category);
+        if ( !it->second.debugAgentContext ) context->throw_error_at(*at, "debug agent '%s' is a CPP-only agent", category);
         return *it->second.debugAgentContext;
     }
 
@@ -1532,6 +1626,11 @@ namespace das
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         return it != g_DebugAgents.end();
+    }
+
+    void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        context->invoke(blk, nullptr, nullptr, line);
     }
 }
 
@@ -1934,9 +2033,9 @@ namespace das
         });
     }
 
-    void Context::instrumentFunctionCallback ( SimFunction * sim, bool entering ) {
+    void Context::instrumentFunctionCallback ( SimFunction * sim, bool entering, uint64_t userData ) {
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-            pAgent->onInstrumentFunction(this, sim, entering);
+            pAgent->onInstrumentFunction(this, sim, entering, userData);
         });
     }
 
@@ -1960,5 +2059,5 @@ namespace das
 
 //workaround compiler bug in MSVC 32 bit
 #if defined(_MSC_VER) && !defined(__clang__) && INTPTR_MAX == INT32_MAX
-vec4i VECTORCALL v_splats_ptr(const void * a) {return v_splatsi((int32_t)a);}
+vec4i VECTORCALL v_ldu_ptr(const void * a) {return v_seti_x((int32_t)a);}
 #endif

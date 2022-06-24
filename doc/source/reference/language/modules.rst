@@ -48,6 +48,18 @@ Builtin modules
 
 Builtin modules are the way to expose C++ functionality to daScript (see :ref:`Builtin modules <embedding_modules>`).
 
+--------------
+Shared modules
+--------------
+
+Shared modules are modules that are shared between compilation of multiple contexts.
+Typically module is compiled anew for each context, but when 'shared' keyword is specified, module gets promoted to builtin module::
+
+    module Foo shared
+
+That way only one instance of the module is created per compilation environment.
+Macros in shared modules can't expect the module to be unique, since sharing of the modules can be disabled via code of policies.
+
 --------------------------
 Module function visibility
 --------------------------

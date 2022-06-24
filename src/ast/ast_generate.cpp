@@ -544,7 +544,7 @@ namespace das {
 
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, const safe_var_set & capt,
-                                        const vector<CaptureEntry> & capture, bool needYield ) {
+                                        const vector<CaptureEntry> & capture, bool needYield, Program * thisProgram ) {
         auto lfn = lambdaName + "`function";
         auto pFunc = make_smart<Function>();
         pFunc->lambda = true;
@@ -602,6 +602,12 @@ namespace das {
                 replaceRef2Ptr(pFunc->body, var->name);
             }
         }
+        thisProgram->library.foreach([&](Module * mod){
+            for ( auto & cm : mod->captureMacros ) {
+                cm->captureFunction(thisProgram, thisProgram->thisModule.get(), ls.get(), pFunc.get());
+            }
+            return true;
+        },"*");
         verifyGenerated(pFunc->body);
         return pFunc;
     }
@@ -676,7 +682,8 @@ namespace das {
     }
 
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
-                                            const safe_var_set & capt, const vector<CaptureEntry> & capture, const LineInfo & at ) {
+                                            const safe_var_set & capt, const vector<CaptureEntry> & capture, const LineInfo & at,
+                                            Program * thisProgram ) {
         auto asc = new ExprAscend();
         asc->at = at;
         asc->needTypeInfo = true;
@@ -719,6 +726,16 @@ namespace das {
                 auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, varV, moveS, cloneS);
                 ms->push_back(mV);
             }
+            auto & lexpr = ms->back();
+            thisProgram->library.foreach([&](Module * mod){
+                for ( auto & cm : mod->captureMacros ) {
+                    auto cexpr = cm->captureExpression(thisProgram, thisProgram->thisModule.get(), lexpr->value.get(), cV->type.get());
+                    if ( cexpr != nullptr ) {
+                        lexpr->value = cexpr;
+                    }
+                }
+                return true;
+            },"*");
         }
         makeS->structs.push_back(ms);
         asc->subexpr = makeS;

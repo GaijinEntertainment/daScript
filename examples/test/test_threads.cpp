@@ -13,6 +13,7 @@
 using namespace das;
 
 #include <sstream>
+#include <thread>
 
 bool VerboseTests = false;
 bool AnyNoiseInTests = true;

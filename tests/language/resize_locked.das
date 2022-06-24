@@ -54,8 +54,8 @@ struct Bag
 def test_resize_table ( t : T? )
     t |> run("basic locked table") <| @ ( t : T? )
         var a : table<int; int>
-        for t in range(10)
-            a[t] = t
+        for tt in range(10)
+            a[tt] = tt
         var failed = false
         try
             for x in values(a)
@@ -63,10 +63,10 @@ def test_resize_table ( t : T? )
         recover
             failed = true
         t |> success(failed)
-    t |> run("nested locked table") <| @ ( t : T? )
+    t |> run("nested locked table") <| @ ( t_ : T? )
         var a : table<int; array<int>>
-        for t in range(10)
-            a[t] <- [{for x in range(t+1); x}]
+        for tt in range(10)
+            a[tt] <- [{for x in range(tt+1); x}]
         var failed = false
         try
             for x in a[3]
@@ -74,7 +74,7 @@ def test_resize_table ( t : T? )
                 a[13] <- [{for q in range(3); x}]       // object contains locked elements and can't be resized
         recover
             failed = true
-            t |> success(failed)
+            t_ |> success(failed)
     t |> run("nested complicated table") <| @ ( t : T? )
         var a : table< int; Bag >
         a[10] <- [[Bag

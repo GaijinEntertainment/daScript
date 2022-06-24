@@ -26,9 +26,9 @@ def test_aka_everything ( t : T? )
         var tot = 0
         var same = 0
         for x aka X in range(10)
-            for x in range(10)
+            for x_ in range(10)
                 tot ++
-                if x==X
+                if x_==X
                     same ++
         t |> equal(tot, 100)
         t |> equal(same, 10)

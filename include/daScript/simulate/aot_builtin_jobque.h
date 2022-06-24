@@ -11,7 +11,7 @@ namespace das {
         void *              data = nullptr;
         shared_ptr<Context> from;
         Feature() {}
-        __forceinline Feature ( void * d, Context * c) : data(d), from(c->shared_from_this()) {}
+        __forceinline Feature ( void * d, Context * c) : data(d), from(c ? c->shared_from_this() : nullptr) {}
         __forceinline void clear() {
             data = nullptr;
             from.reset();
@@ -33,8 +33,11 @@ namespace das {
         int size() const;
         bool isReady() const;
         void notify();
+        void notifyAndRelease();
         void wait();
         int append(int size);
+        int addRef() { return mRef++; }
+        int releaseRef() { return --mRef; }
     protected:
         uint32_t            mSleepMs = 1;
         mutable mutex       lock;
@@ -43,6 +46,7 @@ namespace das {
         uint32_t			remaining = 0;
         condition_variable	cond;
         Context *           owner = nullptr;
+        atomic<int>         mRef;
     };
 
     bool is_job_que_shutting_down();
@@ -52,13 +56,19 @@ namespace das {
     int getTotalHwJobs( Context * context, LineInfoArg * at );
     int getTotalHwThreads ();
     void withJobStatus ( int32_t total, const TBlock<void,JobStatus *> & block, Context * context, LineInfoArg * lineInfo );
-    void waitForJob ( JobStatus * status );
-    void notifyJob ( JobStatus * status );
-    void channelPush ( Channel * ch, void * data, Context * ctx );
-    void * channelPop ( Channel * ch );
-    int channelAppend ( Channel * ch, int size );
+    void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at );
+    void jobStatusReleaseRef ( JobStatus * & status, Context * context, LineInfoArg * at );
+    void waitForJob ( JobStatus * status, Context * context, LineInfoArg * at );
+    void notifyJob ( JobStatus * status, Context * context, LineInfoArg * at );
+    void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at );
+    void channelPush ( Channel * ch, void * data, Context * context, LineInfoArg * at );
+    void * channelPop ( Channel * ch, Context * context, LineInfoArg * at );
+    int channelAppend ( Channel * ch, int size, Context * context, LineInfoArg * at );
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
-    void waitForChannel ( Channel * status );
-    void notifyChannel ( Channel * status );
+    void channelAddRef ( Channel * ch, Context * context, LineInfoArg * at );
+    void channelReleaseRef ( Channel * & ch, Context * context, LineInfoArg * at );
+    void waitForChannel ( Channel * status, Context * context, LineInfoArg * at );
+    void notifyChannel ( Channel * status, Context * context, LineInfoArg * at );
+    void notifyAndReleaseChannel ( Channel * & status, Context * context, LineInfoArg * at );
 }

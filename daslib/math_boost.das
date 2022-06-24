@@ -12,24 +12,34 @@ require daslib/math_bits public
 require math public
 
 struct AABR
+    //! axis aligned bounding rectangle
     min, max : float2
 
 struct AABB
+    //! axis aligned bounding box
     min, max : float3
 
 struct Ray
+    //! ray (direction and origin)
     dir, origin : float3
 
 def degrees(f:float)
+    //! convert radians to degrees
     return f*180./PI
 
 def radians(f:float)
+    //! convert degrees to radians
     return f*PI/180.
 
 def RGBA_TO_UCOLOR(x,y,z,w:float)
+    //! conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
     return pack_float_to_byte(float4(x,y,z,w)*255.)
 
+def RGBA_TO_UCOLOR(xyzw:float4)
+    return pack_float_to_byte(xyzw*255.)
+
 def UCOLOR_TO_RGBA(x:uint)
+    //! conversion from ucolor to RGBA. x components are in [0,255] range
     return float4(
         float((x>>16u)&255u)/255.0,
         float((x>> 8u)&255u)/255.0,
@@ -37,12 +47,27 @@ def UCOLOR_TO_RGBA(x:uint)
         float((x>>24u)&255u)/255.0)
 
 def UCOLOR_TO_RGB(x:uint)
+    //! conversion from ucolor to RGB. x components are in [0,255] range. result is float3(x,y,z)
     return float3(
         float((x>>16u)&255u)/255.0,
         float((x>> 8u)&255u)/255.0,
         float((x>> 0u)&255u)/255.0)
 
+def linear_to_SRGB ( x:float )
+    //! convert value from linear space to sRGB curve space
+    if x <= 0.00031308
+        return 12.92 * x
+    else
+        return 1.055*pow(x,(1.0 / 2.4) ) - 0.055
+
+def linear_to_SRGB ( c:float3 )
+    return float3(linear_to_SRGB(c.x),linear_to_SRGB(c.y),linear_to_SRGB(c.z))
+
+def linear_to_SRGB ( c:float4 )
+    return float4(linear_to_SRGB(c.x),linear_to_SRGB(c.y),linear_to_SRGB(c.z),c.w)
+
 def is_intersecting ( a, b : AABR ) // A.LO<=B.HI && A.HI>=B.LO
+    //! returns true if inputs intersect
     return (a.min.x<=b.max.x && a.min.y<=b.max.y &&
         a.max.x>=b.min.x && a.max.y>=b.min.y)
 
@@ -61,6 +86,7 @@ def is_intersecting ( ray:Ray; aabb:AABB; Tmin:float=0.; Tmax:float=FLT_MAX )
 	return tmin < tmax
 
 def look_at_lh ( Eye,At,Up:float3 )
+    //! left-handed (z forward) look at matrix with origin at `Eye` and target at `At`, and up vector `Up`.
     let zaxis = normalize(At - Eye)
     let xaxis = normalize(cross(Up, zaxis))
     let yaxis = cross(zaxis, xaxis)
@@ -74,6 +100,7 @@ def look_at_lh ( Eye,At,Up:float3 )
     return tm
 
 def look_at_rh ( Eye,At,Up:float3 )
+    //! right-handed (z towards viewer) look at matrix with origin at `Eye` and target at `At`, and up vector `Up`.
     let zaxis = normalize(Eye - At)
     let xaxis = normalize(cross(Up, zaxis))
     let yaxis = cross(zaxis, xaxis)
@@ -87,6 +114,7 @@ def look_at_rh ( Eye,At,Up:float3 )
     return tm
 
 def perspective_lh ( fovy,aspect,zn,zf : float )
+    //! left-handed (z forward) perspective matrix
 	let yScale = 1. / tan(fovy/2.)
     let xScale = yScale / aspect
     var Result : float4x4
@@ -99,6 +127,7 @@ def perspective_lh ( fovy,aspect,zn,zf : float )
     return Result
 
 def perspective_rh ( fovy,aspect,zn,zf : float )
+    //! right-handed (z toward viewer) perspective matrix
 	let yScale = 1. / tan(fovy/2.)
     let xScale = yScale / aspect
     var Result : float4x4
@@ -111,6 +140,7 @@ def perspective_rh ( fovy,aspect,zn,zf : float )
     return Result
 
 def perspective_rh_opengl ( fovy,aspect,zn,zf : float )
+    //! right-handed (z toward viewer) opengl (z in [-1..1]) perspective matrix
 	let yScale = 1. / tan(fovy/2.)
     let xScale = yScale / aspect
     var Result : float4x4
@@ -123,6 +153,7 @@ def perspective_rh_opengl ( fovy,aspect,zn,zf : float )
     return Result
 
 def ortho_rh ( left,right,bottom,top,zNear,zFar:float )
+    //! right handed (z towards viwer) orthographic (parallel) projection matrix
     var Result : float4x4
     identity(Result)
     Result[0][0] =  2. / ( right - left )
@@ -134,16 +165,20 @@ def ortho_rh ( left,right,bottom,top,zNear,zFar:float )
     return Result
 
 def plane_dot ( Plane,Vec:float4 )
+    //! dot product of `Plane` and 'Vec'
     return dot(Plane,Vec)
 
 def plane_normalize ( Plane:float4 )
+    //! normalize `Plane', length xyz will be 1.0 (or 0.0 for no plane)
     let len = length(Plane.xyz)
     return len!=0.0 ? Plane / len : float4(0)
 
 def plane_from_point_normal ( p, n : float3 )
+    //! construct plane from point `p` and normal `n`
     return float4(n.x,n.y,n.z,-dot(p,n))
 
 def planar_shadow ( Light, Plane : float4 )
+    //! planar shadow projection matrix, i.e. all light shadows to be projected on a plane
     let P = plane_normalize(Plane)
     let L = Light
     let d = -dot(P, L)

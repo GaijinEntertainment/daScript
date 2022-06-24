@@ -50,3 +50,5 @@ MAKE_EXTERNAL_TYPE_FACTORY(FileAccess,FileAccess)
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context)
 MAKE_EXTERNAL_TYPE_FACTORY(CodeOfPolicies,CodeOfPolicies)
 MAKE_EXTERNAL_TYPE_FACTORY(SimFunction,SimFunction)
+MAKE_EXTERNAL_TYPE_FACTORY(recursive_mutex,das::recursive_mutex)
+
