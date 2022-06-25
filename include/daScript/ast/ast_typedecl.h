@@ -205,6 +205,7 @@ namespace das {
                 bool    smartPtrNative : 1;
                 bool    isExplicit : 1;
                 bool    isNativeDim : 1;
+                bool    isTag: 1;
             };
             uint32_t flags = 0;
         };

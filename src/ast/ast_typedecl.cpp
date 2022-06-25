@@ -288,7 +288,19 @@ namespace das
     string TypeDecl::describe ( DescribeExtra extra, DescribeContracts contracts, DescribeModule dmodule ) const {
         TextWriter stream;
         if ( baseType==Type::alias ) {
-            stream << alias;
+            if ( isTag ) {
+                if ( firstType) {
+                    stream << "$$(";
+                    if ( firstType->dimExpr.size()==1 ) {
+                        stream << *(firstType->dimExpr[0]);
+                    }
+                    stream << ")";
+                } else {
+                    stream << "$$()";
+                }
+            } else {
+                stream << alias;
+            }
         } else if ( baseType==Type::autoinfer ) {
             stream << "auto";
             if ( !alias.empty() ) {

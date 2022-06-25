@@ -2049,6 +2049,15 @@ auto_type_declaration
         $$->alias = *$alias;
         delete $alias;
     }
+    |   MTAG[loc] '(' expr[subexpr] ')' {
+        $$ = new TypeDecl(Type::alias);
+        $$->at = tokAt(scanner,@loc);
+        $$->alias = "``MACRO``TAG``";
+        $$->isTag = true;
+        $$->firstType = new TypeDecl(Type::autoinfer);
+        $$->firstType->at = tokAt(scanner, @subexpr);
+        $$->firstType->dimExpr.push_back($subexpr);
+    }
     ;
 
 bitfield_bits

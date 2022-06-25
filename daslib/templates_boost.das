@@ -16,6 +16,7 @@ struct Template
     var2expr : table<string; smart_ptr<Expression>>
     var2exprList : table<string; array<smart_ptr<Expression>>>
     type2type : table<string; string>
+    type2etype : table<string; TypeDeclPtr>
     blockArgName : table<string; string>
     annArg : table<string; lambda<(var ann: AnnotationDeclaration):void> >
 
@@ -39,6 +40,10 @@ def renameVariable ( var self:Template; name, newName:string )
 def replaceType ( var self:Template; name,newName:string )
     //! Adds a rule to the template to replace a type alias with another type alias.
     self.type2type[name] = newName
+
+def replaceTypeWithTypeDecl ( var self:Template; name:string; var expr : TypeDeclPtr  )
+    //! Adds a rule to the template to replace a type alias with another type alias.
+    self.type2etype[name] <- expr
 
 def replaceAnnotationArgument ( var self:Template; name:string; var cb:lambda<(var ann: AnnotationDeclaration):void> )
     //! Adds a rule to the template to replace an annotation argument with the result of a callback.
@@ -78,10 +83,14 @@ class private TemplateVisitor : AstVisitor
             rexpr.at = expr.at
             return rexpr
         return expr
-    def replaceAlias ( var typ:TypeDeclPtr )
+    def replaceAlias ( var typ:TypeDeclPtr& )
         if typ.baseType==Type alias
             let ta = string(typ.alias)
-            if key_exists(rules.type2type, ta)
+            if key_exists(rules.type2etype, ta)
+                typ := null
+                unsafe
+                    typ <- clone_type(rules.type2etype[ta])
+            elif key_exists(rules.type2type, ta)
                 typ.alias := rules.type2type[ta]
         if typ.firstType != null
             self->replaceAlias(typ.firstType)
@@ -91,7 +100,7 @@ class private TemplateVisitor : AstVisitor
             self->replaceAlias(arg)
     def override visitTypeDecl(var typ:TypeDeclPtr) : TypeDeclPtr
         var tyyp <- clone_type(typ)
-        self->replaceAlias(tyyp)
+        replaceAlias(tyyp)
         return tyyp
     def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>)
         if !blk.blockFlags.isClosure
@@ -266,6 +275,28 @@ class private QRulesVisitor : AstVisitor
     [[do_not_delete]] rblock : ExprBlock?
     def QRulesVisitor ( rb:ExprBlock? )
         rblock = rb
+    def override visitTypeDecl(var typ:TypeDeclPtr) : TypeDeclPtr
+        if (typ.baseType == Type alias) && (typ.flags.isTag)
+            if typ.firstType==null || typ.firstType.dimExpr.length!=1
+                compiling_program() |> macro_error(typ.at,"unsupported type tag")
+                failed = true
+                return typ
+            let new_tag_name = "temp`type`{tag_index++}`{typ.at.line}`{typ.at.column}"
+            var ntyp <- new [[TypeDecl() at=typ.at,
+                baseType = Type alias,
+                alias := new_tag_name
+            ]]
+            rblock.list |> emplace_new <| new [[ExprCall() at=typ.at,
+                name:="replaceTypeWithTypeDecl",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=typ.at, name:="rules"]];
+                    new [[ExprConstString() at=typ.at, value:=new_tag_name]];
+                    clone_expression(typ.firstType.dimExpr[0])
+                }]]]
+            return <- ntyp
+
+        return typ
+
     def override visitExprTag ( expr:smart_ptr<ExprTag> ) : ExpressionPtr
         let new_tag_name = "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
         // print("replacing {new_tag_name} <- {describe(expr.subexpr)}\n")

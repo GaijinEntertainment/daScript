@@ -145,7 +145,7 @@ namespace das {
         ft->argNames = { "ref", "constant", "temporary", "_implicit",
             "removeRef", "removeConstant", "removeDim",
             "removeTemporary", "explicitConst", "aotAlias", "smartPtr",
-            "smartPtrNative", "isExplicit", "isNativeDim" };
+            "smartPtrNative", "isExplicit", "isNativeDim", "isTag" };
         return ft;
     }
 

@@ -370,6 +370,7 @@ namespace das {
                 return nullptr;
             }
             if ( decl->baseType==Type::alias ) {
+                if ( decl->isTag ) return nullptr;  // we can never infer a tag type
                 auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
                 if ( aliases ) {
                     if ( aT && aT->baseType==Type::autoinfer ) {
