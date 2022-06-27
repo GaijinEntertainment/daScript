@@ -33,3 +33,4 @@ class AssertOnceMacro : AstFunctionAnnotation
             if $$i(once_name) && !$$(call.arguments[0])
                 $$i(once_name) = false
                 assert(false, $$(call.arguments[1]))
+

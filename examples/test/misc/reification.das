@@ -27,4 +27,10 @@ def main
         var aaa <- [[auto $$a(aargs)]]
         var a : $$(subtype)
     print(describe(blk))
+    blk := null
+    expr := null
+    delete qqblk
+    delete arguments
+    delete aargs
+    subtype := null
 

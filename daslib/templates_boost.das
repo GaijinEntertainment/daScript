@@ -269,6 +269,10 @@ def public remove_deref ( varname : string; var expr:smart_ptr<Expression> )
         delete astVisitor
     astVisitorAdapter := null
 
+def public add_array_ptr_ref ( var a : array<smart_ptr<auto(TT)>> ) : array<smart_ptr<TT>>
+    var q := a
+    return <- q
+
 class private QRulesVisitor : AstVisitor
     tag_index : int = 0
     failed : bool = false
@@ -291,12 +295,13 @@ class private QRulesVisitor : AstVisitor
                 arguments:=[{ExpressionPtr
                     new [[ExprVar() at=typ.at, name:="rules"]];
                     new [[ExprConstString() at=typ.at, value:=new_tag_name]];
-                    clone_expression(typ.firstType.dimExpr[0])
+                    new [[ExprCall() at=typ.at, name:="add_ptr_ref",
+                        arguments := [{ExpressionPtr[1] clone_expression(typ.firstType.dimExpr[0]) }]
+                    ]]
                 }]]]
             return <- ntyp
 
         return typ
-
     def override visitExprTag ( expr:smart_ptr<ExprTag> ) : ExpressionPtr
         let new_tag_name = "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
         // print("replacing {new_tag_name} <- {describe(expr.subexpr)}\n")
@@ -317,7 +322,9 @@ class private QRulesVisitor : AstVisitor
                 arguments:=[{ExpressionPtr
                     new [[ExprVar() at=expr.at, name:="rules"]];
                     new [[ExprConstString() at=expr.at, value:=new_tag_name]];
-                    clone_expression(expr.subexpr)
+                    new [[ExprCall() at=expr.at, name:="add_ptr_ref",
+                        arguments := [{ExpressionPtr[1] clone_expression(expr.subexpr) }]
+                    ]]
                 }]]]
         elif expr.name=="a"    // arguments
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
@@ -325,7 +332,9 @@ class private QRulesVisitor : AstVisitor
                 arguments:=[{ExpressionPtr
                     new [[ExprVar() at=expr.at, name:="rules"]];
                     new [[ExprConstString() at=expr.at, value:=new_tag_name]];
-                    clone_expression(expr.subexpr)
+                    new [[ExprCall() at=expr.at, name:="add_array_ptr_ref",
+                        arguments := [{ExpressionPtr[1] clone_expression(expr.subexpr) }]
+                    ]]
                 }]]]
         elif expr.name=="b" // expression block
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
@@ -334,7 +343,9 @@ class private QRulesVisitor : AstVisitor
                     new [[ExprVar() at=expr.at, name:="rules"]];
                     new [[ExprConstString() at=expr.at, value:=new_tag_name]];
                     new [[ExprCall() at=expr.at,name:="make_expression_block",
-                        arguments:=[{ExpressionPtr[1] clone_expression(expr.subexpr)}]
+                        arguments := [{ExpressionPtr[1] new [[ExprCall() at=expr.at, name:="add_array_ptr_ref",
+                            arguments := [{ExpressionPtr[1] clone_expression(expr.subexpr) }]
+                        ]] }]
                     ]]
                 }]]]
         elif expr.name=="i" // identificator
