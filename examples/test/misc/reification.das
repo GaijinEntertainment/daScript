@@ -13,19 +13,19 @@ def main
     var expr <- quote(length(bus))
     var qqblk : array<ExpressionPtr>
     for i in range(3)
-        qqblk |> emplace <| qmacro(print("{$$v(i)}\n"))
+        qqblk |> emplace <| qmacro(print("{$v(i)}\n"))
     var arguments <- [{ExpressionPtr quote(a1); quote(a2)}]
     var aargs <- [{ExpressionPtr quote(a1); quote(a2); quote(a3)}]
     var subtype <- typeinfo(ast_typedecl type<int>)
     var blk <- qmacro <|
-        let t = $$i(bus)
-        let q = $$v([[auto a1,car]])
-        let lb = $$(expr)
+        let t = $i(bus)
+        let q = $v([[auto a1,car]])
+        let lb = $e(expr)
         print("{q}{t}{lb}\n")
-        $$b(qqblk)
-        somefunnycall(1,$$a(arguments),2)
-        var aaa <- [[auto $$a(aargs)]]
-        var a : $$(subtype)
+        $b(qqblk)
+        somefunnycall(1,$a(arguments),2)
+        var aaa <- [[auto $a(aargs)]]
+        var a : $t(subtype)
     print(describe(blk))
     blk := null
     expr := null

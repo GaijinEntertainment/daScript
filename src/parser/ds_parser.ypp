@@ -276,7 +276,12 @@
 %token  OROREQU             "||="
 %token  XORXOREQU           "^^="
 %token  DOTDOT              ".."
-%token  MTAG                "$$"
+%token  MTAG_E              "$$"
+%token  MTAG_I              "$i"
+%token  MTAG_V              "$v"
+%token  MTAG_B              "$b"
+%token  MTAG_A              "$a"
+%token  MTAG_T              "$t"
 
 
 %token  BRABRAB             "[["    /* [[ */
@@ -365,6 +370,7 @@
 %type <pEnum>           enum_list
 
 %type <pExpression>     expr
+%type <pExpression>     expr_mtag
 %type <pExpression>     expr_field
 %type <pExpression>     expr_assign
 %type <pExpression>     expr_assign_pipe
@@ -1423,6 +1429,7 @@ expr
     |   DAS_TRUE[loc]                         { $$ = new ExprConstBool(tokAt(scanner,@loc),true); }
     |   DAS_FALSE[loc]                        { $$ = new ExprConstBool(tokAt(scanner,@loc),false); }
     |   expr_field[subexpr]                   { $$ = $subexpr; }
+    |   expr_mtag[subexpr]                    { $$ = $subexpr; }
     |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(scanner,@loc),"!",ExpressionPtr($subexpr)); }
     |   '~'[loc] expr[subexpr]                { $$ = new ExprOp1(tokAt(scanner,@loc),"~",ExpressionPtr($subexpr)); }
     |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokAt(scanner,@loc),"+",ExpressionPtr($subexpr)); }
@@ -1544,8 +1551,14 @@ expr
         $subexpr->userSaidItsSafe = true;
         $$ = $subexpr;
     }
-    |   MTAG '(' expr[subexpr] ')'                   { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,""); }
-    |   MTAG NAME[subname] '(' expr[subexpr] ')'     { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,*$subname); delete $subname; }
+    ;
+
+expr_mtag
+    :   MTAG_E '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"e"); }
+    |   MTAG_I '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"i"); }
+    |   MTAG_V '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"v"); }
+    |   MTAG_B '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"b"); }
+    |   MTAG_A '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"a"); }
     ;
 
 optional_field_annotation
@@ -2049,7 +2062,7 @@ auto_type_declaration
         $$->alias = *$alias;
         delete $alias;
     }
-    |   MTAG[loc] '(' expr[subexpr] ')' {
+    |   MTAG_T[loc] '(' expr[subexpr] ')' {
         $$ = new TypeDecl(Type::alias);
         $$->at = tokAt(scanner,@loc);
         $$->alias = "``MACRO``TAG``";

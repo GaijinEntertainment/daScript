@@ -30,7 +30,7 @@ class AssertOnceMacro : AstFunctionAnnotation
             return [[ExpressionPtr]]
         // if ..
         return <- qmacro_block() <|
-            if $$i(once_name) && !$$(call.arguments[0])
-                $$i(once_name) = false
-                assert(false, $$(call.arguments[1]))
+            if $i(once_name) && !$e(call.arguments[0])
+                $i(once_name) = false
+                assert(false, $e(call.arguments[1]))
 
