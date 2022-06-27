@@ -105,7 +105,7 @@ namespace das
         virtual SimNode * visit ( SimVisitor & vis ) override {
             return visitTable(vis,"TableSetInsert");
         }
-        virtual vec4f eval ( Context & context ) {
+        virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             Table * tab = (Table *) tabExpr->evalPtr(context);
             if ( tab->isLocked() ) context.throw_error_at(debugInfo, "can't insert to a locked table");
