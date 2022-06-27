@@ -660,6 +660,7 @@ namespace das {
         AstExprTagAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprTag> ("ExprTag", ml) {
             addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(value)>("value");
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };

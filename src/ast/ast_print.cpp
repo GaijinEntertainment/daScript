@@ -545,6 +545,10 @@ namespace das {
             Visitor::preVisit(expr);
             ss << "$$" << expr->name << "(";
         }
+        virtual void preVisitTagValue ( ExprTag * expr, Expression * value ) override {
+            Visitor::preVisitTagValue(expr,value);
+            ss << ")(";
+        }
         virtual ExpressionPtr visit ( ExprTag * expr ) override {
             ss << ")";
             return Visitor::visit(expr);

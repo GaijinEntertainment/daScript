@@ -110,6 +110,8 @@ namespace das {
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) { return arg; }
         // NULL COAELESCING
         virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * , Expression * ) {}
+        // TAG
+        virtual void preVisitTagValue ( ExprTag *, Expression * ) {}
         // AT
         virtual void preVisitAtIndex ( ExprAt *, Expression * ) {}
         // SAFE AT

@@ -673,6 +673,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"\$b"                               return MTAG_B;
 <normal>"\$a"                               return MTAG_A;
 <normal>"\$t"                               return MTAG_T;
+<normal>"\$c"                               return MTAG_C;
 <normal>"\?\?"                              return QQ;
 <normal>"\?\["                              {
     yyextra->das_nested_square_braces ++;

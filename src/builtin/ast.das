@@ -392,6 +392,7 @@ class AstVisitor
     def abstract visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
 // tag
     def abstract preVisitExprTag(expr:smart_ptr<ExprTag>) : void
+    def abstract preVisitExprTagValue(expr:smart_ptr<ExprTag>;value:ExpressionPtr): void
     def abstract visitExprTag(expr:smart_ptr<ExprTag>) : ExpressionPtr
 // field
     def abstract preVisitExprField(expr:smart_ptr<ExprField>) : void

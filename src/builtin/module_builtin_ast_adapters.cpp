@@ -228,6 +228,7 @@ namespace das {
         IMPL_ADAPT(ExprDelete);
         IMPL_ADAPT(ExprVar);
         IMPL_ADAPT(ExprTag);
+        FN_PREVISIT(ExprTagValue) = adapt("preVisitExprTagValue",pClass,info);
         IMPL_ADAPT(ExprSwizzle);
         IMPL_ADAPT(ExprField);
         IMPL_ADAPT(ExprSafeField);
@@ -601,6 +602,8 @@ namespace das {
     IMPL_BIND_EXPR(ExprDelete);
     IMPL_BIND_EXPR(ExprVar);
     IMPL_BIND_EXPR(ExprTag);
+    void VisitorAdapter::preVisitTagValue ( ExprTag * expr, Expression * value )
+        { IMPL_PREVISIT2(ExprTagValue,ExprTag,ExpressionPtr,value); }
     IMPL_BIND_EXPR(ExprSwizzle);
     IMPL_BIND_EXPR(ExprField);
     IMPL_BIND_EXPR(ExprSafeField);

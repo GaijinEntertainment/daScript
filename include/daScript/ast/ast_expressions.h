@@ -228,10 +228,13 @@ namespace das
         ExprTag () { __rtti = "ExprTag"; }
         ExprTag ( const LineInfo & a, const ExpressionPtr & se, const string & n )
             : Expression(a), subexpr(se), name(n) {}
+        ExprTag ( const LineInfo & a, const ExpressionPtr & se, const ExpressionPtr & va, const string & n )
+            : Expression(a), subexpr(se), value(va), name(n) {}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         ExpressionPtr   subexpr;
+        ExpressionPtr   value;
         string          name;
     };
 

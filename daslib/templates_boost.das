@@ -13,6 +13,7 @@ struct Template
     //! This structure contains collection of subsitution rules for a template.
     kaboomVar : table<string; tuple<prefix:string;suffix:string> >
     var2name : table<string; string>
+    call2name : table<string; string>
     var2expr : table<string; smart_ptr<Expression>>
     var2exprList : table<string; array<smart_ptr<Expression>>>
     type2type : table<string; string>
@@ -52,6 +53,10 @@ def replaceAnnotationArgument ( var self:Template; name:string; var cb:lambda<(v
 def replaceBlockArgument ( var self:Template; name,newName:string )
     //! Adds a rule to the template to rename a block argument.
     self.blockArgName[name] = newName
+
+def renameCall ( var self:Template; name, newName:string )
+    //! Adds a rule to the template to rename a call.
+    self.call2name[name] = newName
 
 class private TemplateVisitor : AstVisitor
     rules : Template?
@@ -131,8 +136,14 @@ class private TemplateVisitor : AstVisitor
                         arguments |> emplace(na, rai)
                     delete new_args
     def override preVisitExprLooksLikeCall(var expr:smart_ptr<ExprLooksLikeCall>): void
+        let cname = string(expr.name)
+        if rules.call2name |> key_exists(cname)
+            expr.name := rules.call2name[cname]
         preVisitAnythingCall(expr.arguments)
     def override preVisitExprCall(var expr:smart_ptr<ExprCall>): void
+        let cname = string(expr.name)
+        if rules.call2name |> key_exists(cname)
+            expr.name := rules.call2name[cname]
         preVisitAnythingCall(expr.arguments)
     def override preVisitExprMakeArray(var expr:smart_ptr<ExprMakeArray>): void
         preVisitAnythingCall(expr.values)
@@ -303,7 +314,7 @@ class private QRulesVisitor : AstVisitor
 
         return typ
     def override visitExprTag ( expr:smart_ptr<ExprTag> ) : ExpressionPtr
-        let new_tag_name = "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
+        let new_tag_name = expr.name=="c" ? "temp`call`{tag_index++}`{expr.at.line}`{expr.at.column}" : "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
         // print("replacing {new_tag_name} <- {describe(expr.subexpr)}\n")
         // deppending on a tag now?
         if expr.name=="v"   // value
@@ -356,6 +367,24 @@ class private QRulesVisitor : AstVisitor
                     new [[ExprConstString() at=expr.at, value:=new_tag_name]];
                     clone_expression(expr.subexpr)
                 }]]]
+        elif expr.name=="c" // call
+            if expr.value == null
+                compiling_program() |> macro_error(expr.at,"expecting $c(name)(...), got null")
+                failed = true
+            elif !(expr.value is ExprCall)
+                compiling_program() |> macro_error(expr.at,"expecting $c(name)(...), got {expr.value.__rtti}")
+                failed = true
+            else
+                rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+                    name:="renameCall",
+                    arguments:=[{ExpressionPtr
+                        new [[ExprVar() at=expr.at, name:="rules"]];
+                        new [[ExprConstString() at=expr.at, value:=new_tag_name]];
+                        clone_expression(expr.subexpr)
+                    }]]]
+                var ccall <- clone_expression(expr.value)
+                (ccall as ExprCall).name := new_tag_name
+                return ccall
         else
             compiling_program() |> macro_error(expr.at,"unsupported ExprTag {expr.name}")
             failed = true

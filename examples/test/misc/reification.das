@@ -7,6 +7,7 @@ def main
     print("hello, world\n")
     let bus = "bus_variable_name"
     let car = "car_variable_name"
+    let cll = "call_me_maybe"
     var a1 = 1
     var a2 = a1 + 1
     var a3 = a1 + 13
@@ -26,6 +27,7 @@ def main
         somefunnycall(1,$a(arguments),2)
         var aaa <- [[auto $a(aargs)]]
         var a : $t(subtype)
+        $c(cll)(1,2,$a(arguments),3)
     print(describe(blk))
     blk := null
     expr := null
@@ -33,4 +35,3 @@ def main
     delete arguments
     delete aargs
     subtype := null
-

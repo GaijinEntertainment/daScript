@@ -133,6 +133,7 @@ namespace das {
         DECL_VISIT(ExprDelete);
         DECL_VISIT(ExprVar);
         DECL_VISIT(ExprTag);
+        Func FN_PREVISIT(ExprTagValue);
         DECL_VISIT(ExprSwizzle);
         DECL_VISIT(ExprField);
         DECL_VISIT(ExprSafeField);
@@ -360,6 +361,7 @@ namespace das {
         IMPL_BIND_EXPR(ExprDelete);
         IMPL_BIND_EXPR(ExprVar);
         IMPL_BIND_EXPR(ExprTag);
+        virtual void preVisitTagValue ( ExprTag *, Expression * ) override;
         IMPL_BIND_EXPR(ExprSwizzle);
         IMPL_BIND_EXPR(ExprField);
         IMPL_BIND_EXPR(ExprSafeField);
