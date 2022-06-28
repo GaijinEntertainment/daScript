@@ -501,6 +501,11 @@ def mark_token_context(var ctx: FormatterCtx)
                 if ctx |> eq(j, "=")
                     ctx.tokens[j].dontAddSpacesAround = true
 
+    let macroEscapes <- {{ /*ident*/"i"; /*value*/"v"; /*expr*/"e"; /*call*/"c"; /*type*/"t"; /*field*/"f"; /*block*/"b"; /*array*/"a" }}
+    for i in range(1, length(ctx.tokens))
+        if !new_line_before(ctx, i) && ctx |> eq(i - 1, "$") && key_exists(macroEscapes, ctx.tokens[i].str)
+            ctx.tokens[i - 1].dontAddSpacesAround = true
+
 
 def fmt_function_arguments(var ctx: FormatterCtx)
     // function arguments
