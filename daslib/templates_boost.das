@@ -12,8 +12,9 @@ require daslib/algorithm
 struct Template
     //! This structure contains collection of subsitution rules for a template.
     kaboomVar : table<string; tuple<prefix:string;suffix:string> >
-    var2name : table<string; string>
     call2name : table<string; string>
+    field2name : table<string; string>
+    var2name : table<string; string>
     var2expr : table<string; smart_ptr<Expression>>
     var2exprList : table<string; array<smart_ptr<Expression>>>
     type2type : table<string; string>
@@ -37,6 +38,10 @@ def replaceVariableWithList ( var self:Template; name:string; var expr : array<s
 def renameVariable ( var self:Template; name, newName:string )
     //! Adds a rule to the template to rename a variable.
     self.var2name[name] = newName
+
+def renameField ( var self:Template; name, newName:string )
+    //! Adds a rule to the template to rename any field lookup (., ?., as, is, etc)
+    self.field2name[name] = newName
 
 def replaceType ( var self:Template; name,newName:string )
     //! Adds a rule to the template to replace a type alias with another type alias.
@@ -62,7 +67,15 @@ class private TemplateVisitor : AstVisitor
     rules : Template?
     def TemplateVisitor ( r : Template? )
         rules = r
-    def override visitExprField(expr:smart_ptr<ExprField>) : ExpressionPtr
+    def override visitExprSafeField(var expr:smart_ptr<ExprSafeField>) : ExpressionPtr
+        let fname = string(expr.name)
+        if rules.field2name |> key_exists(fname)
+            expr.name := rules.field2name[fname]
+        return expr
+    def override visitExprField(var expr:smart_ptr<ExprField>) : ExpressionPtr
+        let fname = string(expr.name)
+        if rules.field2name |> key_exists(fname)
+            expr.name := rules.field2name[fname]
         var ev = expr.value ?as ExprVar
         if ev == null
             ev = (expr.value ?as ExprRef2Value) ?as ExprVar
@@ -314,7 +327,13 @@ class private QRulesVisitor : AstVisitor
 
         return typ
     def override visitExprTag ( expr:smart_ptr<ExprTag> ) : ExpressionPtr
-        let new_tag_name = expr.name=="c" ? "temp`call`{tag_index++}`{expr.at.line}`{expr.at.column}" : "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
+        var new_tag_name = ""
+        if expr.name=="c"
+            new_tag_name = "temp`call`{tag_index++}`{expr.at.line}`{expr.at.column}"
+        elif expr.name=="f"
+            new_tag_name = "temp`field`{tag_index++}`{expr.at.line}`{expr.at.column}"
+        else
+            new_tag_name = "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
         // print("replacing {new_tag_name} <- {describe(expr.subexpr)}\n")
         // deppending on a tag now?
         if expr.name=="v"   // value
@@ -367,6 +386,20 @@ class private QRulesVisitor : AstVisitor
                     new [[ExprConstString() at=expr.at, value:=new_tag_name]];
                     clone_expression(expr.subexpr)
                 }]]]
+        elif expr.name=="f" // field
+            rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+                name:="renameField",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=expr.at, name:="rules"]];
+                    new [[ExprConstString() at=expr.at, value:=new_tag_name]];
+                    clone_expression(expr.subexpr)
+                }]]]
+            var fexpr <- clone_expression(expr.value)
+            if fexpr is ExprField
+                (fexpr as ExprField).name := new_tag_name
+            elif fexpr is ExprSafeField
+                (fexpr as ExprSafeField).name := new_tag_name
+            return fexpr
         elif expr.name=="c" // call
             if expr.value == null
                 compiling_program() |> macro_error(expr.at,"expecting $c(name)(...), got null")

@@ -8,6 +8,7 @@ def main
     let bus = "bus_variable_name"
     let car = "car_variable_name"
     let cll = "call_me_maybe"
+    let bar = "barbar"
     var a1 = 1
     var a2 = a1 + 1
     var a3 = a1 + 13
@@ -28,6 +29,8 @@ def main
         var aaa <- [[auto $a(aargs)]]
         var a : $t(subtype)
         $c(cll)(1,2,$a(arguments),3)
+        foo.$f(bar) = 13
+        foo?.$f("{bar}`bar") = 14
     print(describe(blk))
     blk := null
     expr := null

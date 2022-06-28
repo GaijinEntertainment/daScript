@@ -283,7 +283,7 @@
 %token  MTAG_A              "$a"
 %token  MTAG_T              "$t"
 %token  MTAG_C              "$c"
-
+%token  MTAG_F              "$f"
 
 %token  BRABRAB             "[["    /* [[ */
 %token  BRACBRB             "[{"    /* [{ */
@@ -1568,6 +1568,14 @@ expr_mtag
             auto ccall = parseFunctionArguments(yyextra->g_Program->makeCall(tokAt(scanner,@cname),tokAt(scanner,@atend),"``MACRO``TAG``CALL``"),$arguments);
             $$ = new ExprTag(tokAt(scanner,@cname),$subexpr,ccall,"c");
         }
+    |   expr[subexpr] '.'[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), "``MACRO``TAG``FIELD``");
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
+    |   expr[subexpr] QDOT[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprSafeField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), "``MACRO``TAG``FIELD``");
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
     ;
 
 optional_field_annotation
