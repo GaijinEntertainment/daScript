@@ -67,6 +67,11 @@ class private TemplateVisitor : AstVisitor
     rules : Template?
     def TemplateVisitor ( r : Template? )
         rules = r
+    def override visitExprIsVariant(var expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
+        let fname = string(expr.name)
+        if rules.field2name |> key_exists(fname)
+            expr.name := rules.field2name[fname]
+        return expr
     def override visitExprAsVariant(var expr:smart_ptr<ExprAsVariant>) : ExpressionPtr
         let fname = string(expr.name)
         if rules.field2name |> key_exists(fname)
@@ -413,6 +418,12 @@ class private QRulesVisitor : AstVisitor
                 (fexpr as ExprAsVariant).name := new_tag_name
             elif fexpr is ExprSafeAsVariant
                 (fexpr as ExprSafeAsVariant).name := new_tag_name
+            elif fexpr is ExprIsVariant
+                (fexpr as ExprIsVariant).name := new_tag_name
+            else
+                compiling_program() |> macro_error(expr.at,"unexpected $f(name)({fexpr.__rtti})")
+                failed = true
+                return expr
             return fexpr
         elif expr.name=="c" // call
             if expr.value == null

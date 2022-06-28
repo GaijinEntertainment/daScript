@@ -1592,6 +1592,10 @@ expr_mtag
         auto cfield = new ExprSafeAsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),"``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
+    |   expr[subexpr] DAS_IS[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprIsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),"``MACRO``TAG``FIELD``");
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
     ;
 
 optional_field_annotation

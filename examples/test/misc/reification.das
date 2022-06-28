@@ -33,6 +33,8 @@ def main
         foo?.$f("{bar}`bar") = 14
         foo.$f(bar).$f(bar) = 15
         foo as $f(bar) = 13
+        if foo is $f(bar)
+            print("hello!\n")
     print(describe(blk))
     blk := null
     expr := null
