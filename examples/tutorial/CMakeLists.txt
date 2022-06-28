@@ -41,7 +41,7 @@ SET(TUTORIAL_02_DASAOT_MAIN_SRC
 ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial02_dasaot.cpp
 ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial02aot.h
 ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial02module.cpp
-${PROJECT_SOURCE_DIR}/utils/daScript/main.cpp
+${DAS_DASCRIPT_MAIN_SRC}
 )
 add_executable(tutorial02_dasAot ${TUTORIAL_02_DASAOT_MAIN_SRC} )
 target_compile_definitions(tutorial02_dasAot PUBLIC MAIN_FUNC_NAME=dascript_dummy_main) # dascript_dummy_main is here to rename main function from daScript
