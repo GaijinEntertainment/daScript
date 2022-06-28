@@ -1576,6 +1576,22 @@ expr_mtag
         auto cfield = new ExprSafeField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), "``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
+    |   expr[subexpr] '.' '.'[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), "``MACRO``TAG``FIELD``", true);
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
+    |   expr[subexpr] '.' QDOT[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprSafeField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), "``MACRO``TAG``FIELD``", true);
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
+    |   expr[subexpr] DAS_AS[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprAsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),"``MACRO``TAG``FIELD``");
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
+    |   expr[subexpr] '?' DAS_AS[loc] MTAG_F[cname] '(' expr[name] ')' {
+        auto cfield = new ExprSafeAsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),"``MACRO``TAG``FIELD``");
+        $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
+    }
     ;
 
 optional_field_annotation

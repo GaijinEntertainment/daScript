@@ -31,6 +31,8 @@ def main
         $c(cll)(1,2,$a(arguments),3)
         foo.$f(bar) = 13
         foo?.$f("{bar}`bar") = 14
+        foo.$f(bar).$f(bar) = 15
+        foo as $f(bar) = 13
     print(describe(blk))
     blk := null
     expr := null
