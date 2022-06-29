@@ -1265,7 +1265,7 @@ namespace das {
     }
 
     ExpressionPtr ExprIs::clone( const ExpressionPtr & expr ) const {
-        auto cexpr = clonePtr<ExprTypeInfo>(expr);
+        auto cexpr = clonePtr<ExprIs>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
