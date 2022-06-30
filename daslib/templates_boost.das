@@ -538,3 +538,6 @@ class QMacro : AstQCallMacro {}
 [call_macro(name="qmacro_block")]
 class QBlockMacro : AstQCallMacro
     override apply_call = "apply_qblock"
+
+def public emplace_new ( var arr:array<ExpressionPtr>; var expr:ExpressionPtr )
+    arr |> emplace(expr)

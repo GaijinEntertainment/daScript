@@ -1641,7 +1641,7 @@ namespace das {
         func->visit(*adapter);
     }
 
-    smart_ptr_raw<Expression> astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    smart_ptr<Expression> astVisitExpression ( smart_ptr<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(*line_info, "adapter is required");
         if (!expr)
