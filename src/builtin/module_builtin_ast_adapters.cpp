@@ -877,7 +877,11 @@ namespace das {
         virtual bool touch ( const StructurePtr & st, ModuleGroup & group,
                             const AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
-                return invoke_apply(context,fnApply,classPtr,st,group,args,errors);
+                bool result = true;
+                runMacroFunction(context, "apply", [&]() {
+                    result = invoke_apply(context,fnApply,classPtr,st,group,args,errors);
+                });
+                return result;
             } else {
                 return true;
             }
@@ -885,7 +889,11 @@ namespace das {
         virtual bool look (const StructurePtr & st, ModuleGroup & group,
             const AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnFinish = get_finish(classPtr) ) {
-                return invoke_finish(context,fnFinish,classPtr,st,group,args,errors);
+                bool result = true;
+                runMacroFunction(context, "finish", [&]() {
+                    result = invoke_finish(context,fnFinish,classPtr,st,group,args,errors);
+                });
+                return result;
             } else {
                 return true;
             }
@@ -893,14 +901,20 @@ namespace das {
         virtual bool patch (const StructurePtr & st, ModuleGroup & group,
             const AnnotationArgumentList & args, string & errors, bool & astChanged ) override {
             if ( auto fnPatch = get_patch(classPtr) ) {
-                return invoke_patch(context,fnPatch,classPtr,st,group,args,errors,astChanged);
+                bool result = true;
+                runMacroFunction(context, "patch", [&]() {
+                    result = invoke_patch(context,fnPatch,classPtr,st,group,args,errors,astChanged);
+                });
+                return result;
             } else {
                 return true;
             }
         }
         virtual void  complete (  Context * ctx, const StructurePtr & stp ) override {
             if ( auto fnComplete = get_complete(classPtr) ) {
-                invoke_complete(context,fnComplete,classPtr,stp,ctx);
+                runMacroFunction(context, "complete", [&]() {
+                    invoke_complete(context,fnComplete,classPtr,stp,ctx);
+                });
             }
         }
     protected:
@@ -921,7 +935,11 @@ namespace das {
         virtual bool touch ( const EnumerationPtr & st, ModuleGroup & group,
                             const AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
-                return invoke_apply(context,fnApply,classPtr,st,group,args,errors);
+                bool result = true;
+                runMacroFunction(context, "apply", [&]() {
+                    result = invoke_apply(context,fnApply,classPtr,st,group,args,errors);
+                });
+                return result;
             } else {
                 return true;
             }
@@ -943,7 +961,11 @@ namespace das {
         }
         virtual bool apply ( Program * prog, Module * mod ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
-                return invoke_apply(context,fnApply,classPtr,prog,mod);
+                bool result = false;
+                runMacroFunction(context, "apply", [&]() {
+                    result = invoke_apply(context,fnApply,classPtr,prog,mod);
+                });
+                return result;
             } else {
                 return false;
             }
@@ -966,21 +988,33 @@ namespace das {
         }
         virtual ExpressionPtr visitIs ( Program * prog, Module * mod, ExprIsVariant * expr ) override {
             if ( auto fnVisitIs = get_visitExprIsVariant(classPtr) ) {
-                return invoke_visitExprIsVariant(context,fnVisitIs,classPtr,prog,mod,expr);
+                ExpressionPtr result;
+                runMacroFunction(context, "visitExprIsVariant", [&]() {
+                    result = invoke_visitExprIsVariant(context,fnVisitIs,classPtr,prog,mod,expr);
+                });
+                return result;
             } else {
                 return nullptr;
             }
         }
         virtual ExpressionPtr visitAs ( Program * prog, Module * mod, ExprAsVariant * expr ) override {
             if ( auto fnVisitAs = get_visitExprAsVariant(classPtr) ) {
-                return invoke_visitExprAsVariant(context,fnVisitAs,classPtr,prog,mod,expr);
+                ExpressionPtr result;
+                runMacroFunction(context, "visitExprAsVariant", [&]() {
+                    result = invoke_visitExprAsVariant(context,fnVisitAs,classPtr,prog,mod,expr);
+                });
+                return result;
             } else {
                 return nullptr;
             }
         }
         virtual ExpressionPtr visitSafeAs ( Program * prog, Module * mod, ExprSafeAsVariant * expr ) override {
             if ( auto fnVisitSafeAs = get_visitExprSafeAsVariant(classPtr) ) {
-                return invoke_visitExprSafeAsVariant(context,fnVisitSafeAs,classPtr,prog,mod,expr);
+                ExpressionPtr result;
+                runMacroFunction(context, "visitExprSafeAsVariant", [&]() {
+                    result = invoke_visitExprSafeAsVariant(context,fnVisitSafeAs,classPtr,prog,mod,expr);
+                });
+                return result;
             } else {
                 return nullptr;
             }
@@ -1003,7 +1037,11 @@ namespace das {
         }
         virtual ExpressionPtr visit ( Program * prog, Module * mod, ExprFor * loop ) override {
             if ( auto fnVisit = get_visitExprFor(classPtr) ) {
-                return invoke_visitExprFor(context,fnVisit,classPtr,prog,mod,loop);
+                ExpressionPtr result;
+                runMacroFunction(context, "visitExprFor", [&]() {
+                    result = invoke_visitExprFor(context,fnVisit,classPtr,prog,mod,loop);
+                });
+                return result;
             } else {
                 return nullptr;
             }
@@ -1026,14 +1064,20 @@ namespace das {
         }
         virtual ExpressionPtr captureExpression ( Program * prog, Module * mod, Expression * expr, TypeDecl * typ ) override {
             if ( auto fnCaptureExpression = get_captureExpression(classPtr) ) {
-                return invoke_captureExpression(context,fnCaptureExpression,classPtr,prog,mod,expr,typ);
+                ExpressionPtr result;
+                runMacroFunction(context, "captureExpression", [&]() {
+                    result = invoke_captureExpression(context,fnCaptureExpression,classPtr,prog,mod,expr,typ);
+                });
+                return result;
             } else {
                 return nullptr;
             }
         }
         virtual void captureFunction ( Program * prog, Module * mod, Structure * lcs, Function * fun ) override {
             if ( auto fnCaptureFunction = get_captureFunction(classPtr) ) {
-                return invoke_captureFunction(context,fnCaptureFunction,classPtr,prog,mod,lcs,fun);
+                runMacroFunction(context, "captureFunction", [&]() {
+                    invoke_captureFunction(context,fnCaptureFunction,classPtr,prog,mod,lcs,fun);
+                });
             }
         }
     protected:
@@ -1054,14 +1098,22 @@ namespace das {
         }
         virtual bool accept ( Program * prog, Module * mod, ExprReader * expr, int Ch, const LineInfo & info ) override {
             if ( auto fnAccept = get_accept(classPtr) ) {
-                return invoke_accept(context,fnAccept,classPtr,prog,mod,expr,Ch,info);
+                bool result = false;
+                runMacroFunction(context, "accept", [&]() {
+                    result = invoke_accept(context,fnAccept,classPtr,prog,mod,expr,Ch,info);
+                });
+                return result;
             } else {
                 return false;
             }
         }
         virtual ExpressionPtr visit (  Program * prog, Module * mod, ExprReader * expr ) override {
             if ( auto fnVisit = get_visit(classPtr) ) {
-                return invoke_visit(context,fnVisit,classPtr,prog,mod,expr);
+                ExpressionPtr result;
+                runMacroFunction(context, "visit", [&]() {
+                    result = invoke_visit(context,fnVisit,classPtr,prog,mod,expr);
+                });
+                return result;
             } else {
                 return nullptr;
             }
@@ -1085,155 +1137,193 @@ namespace das {
         }
         virtual void open ( bool cppStyle, const LineInfo & info ) override {
             if ( auto fnOpen = get_open(classPtr) ) {
-                invoke_open(context,fnOpen,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        cppStyle,info);
+                runMacroFunction(context, "open", [&]() {
+                    invoke_open(context,fnOpen,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            cppStyle,info);
+                });
             }
         }
         virtual void accept ( int Ch, const LineInfo & info ) override {
             if ( auto fnAccept = get_accept(classPtr) ) {
-                invoke_accept(context,fnAccept,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        Ch,info);
+                runMacroFunction(context, "accept", [&]() {
+                    invoke_accept(context,fnAccept,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            Ch,info);
+                });
             }
         }
         virtual void close ( const LineInfo & info ) override {
             if ( auto fnClose = get_close(classPtr) ) {
-                invoke_close(context,fnClose,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "close", [&]() {
+                    invoke_close(context,fnClose,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void beforeStructure ( const LineInfo & info ) override {
             if ( auto fnBeforeStructure = get_beforeStructure(classPtr) ) {
-                invoke_beforeStructure(context,fnBeforeStructure,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "beforeStructure", [&]() {
+                    invoke_beforeStructure(context,fnBeforeStructure,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void afterStructure ( Structure * st, const LineInfo & info ) override {
             if ( auto fnAfterStructure = get_afterStructure(classPtr) ) {
-                invoke_afterStructure(context,fnAfterStructure,classPtr,
-                    st, daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "afterStructure", [&]() {
+                    invoke_afterStructure(context,fnAfterStructure,classPtr,
+                        st, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
 
         }
         virtual void beforeFunction ( const LineInfo & info ) override {
             if ( auto fnBeforeFunction = get_beforeFunction(classPtr) ) {
-                invoke_beforeFunction(context,fnBeforeFunction,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "beforeFunction", [&]() {
+                    invoke_beforeFunction(context,fnBeforeFunction,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void afterFunction ( Function * fn, const LineInfo & info ) override {
             if ( auto fnAfterFunction = get_afterFunction(classPtr) ) {
-                invoke_afterFunction(context,fnAfterFunction,classPtr,
-                    fn, daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "afterFunction", [&]() {
+                    invoke_afterFunction(context,fnAfterFunction,classPtr,
+                        fn, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void beforeStructureFields ( const LineInfo & info ) override {
             if ( auto fnBeforeStructureFields = get_beforeStructureFields(classPtr) ) {
-                invoke_beforeStructureFields(context,fnBeforeStructureFields,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "beforeStructureFields", [&]() {
+                    invoke_beforeStructureFields(context,fnBeforeStructureFields,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void afterStructureField ( const char * name, const LineInfo & info ) override {
             if ( auto fnAfterStructureField = get_afterStructureField(classPtr) ) {
-                invoke_afterStructureField(context,fnAfterStructureField,classPtr,
-                    (char *) name, daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "afterStructureField", [&]() {
+                    invoke_afterStructureField(context,fnAfterStructureField,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void afterStructureFields ( const LineInfo & info ) override {
             if ( auto fnAfterStructureFields = get_afterStructureFields(classPtr) ) {
-                invoke_afterStructureFields(context,fnAfterStructureFields,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "afterStructureFields", [&]() {
+                    invoke_afterStructureFields(context,fnAfterStructureFields,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void beforeGlobalVariables ( const LineInfo & info ) override {
             if ( auto fnGlobalVariables = get_beforeGlobalVariables(classPtr) ) {
-                invoke_beforeGlobalVariables(context,fnGlobalVariables,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "beforeGlobalVariables", [&]() {
+                    invoke_beforeGlobalVariables(context,fnGlobalVariables,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void afterGlobalVariable ( const char * name, const LineInfo & info ) override {
             if ( auto fnGlobalVariable = get_afterGlobalVariable(classPtr) ) {
-                invoke_afterGlobalVariable(context,fnGlobalVariable,classPtr,
-                    (char *) name, daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "afterGlobalVariable", [&]() {
+                    invoke_afterGlobalVariable(context,fnGlobalVariable,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void afterGlobalVariables ( const LineInfo & info ) override {
             if ( auto fnGlobalVariables = get_afterGlobalVariables(classPtr) ) {
-                invoke_afterGlobalVariables(context,fnGlobalVariables,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "afterGlobalVariables", [&]() {
+                    invoke_afterGlobalVariables(context,fnGlobalVariables,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void beforeVariant ( const LineInfo & info ) override {
             if ( auto fnVariant = get_beforeVariant(classPtr) ) {
-                invoke_beforeVariant(context,fnVariant,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "beforeVariant", [&]() {
+                    invoke_beforeVariant(context,fnVariant,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void afterVariant ( const char * name, const LineInfo & info ) override {
             if ( auto fnVariant = get_afterVariant(classPtr) ) {
-                invoke_afterVariant(context,fnVariant,classPtr,
-                    (char *) name, daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "afterVariant", [&]() {
+                    invoke_afterVariant(context,fnVariant,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void beforeEnumeration ( const LineInfo & info ) override {
             if ( auto fnEnum = get_beforeEnumeration(classPtr) ) {
-                invoke_beforeEnumeration(context,fnEnum,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "beforeEnumeration", [&]() {
+                    invoke_beforeEnumeration(context,fnEnum,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void afterEnumeration ( const char * name, const LineInfo & info ) override {
             if ( auto fnEnum = get_afterEnumeration(classPtr) ) {
-                invoke_afterEnumeration(context,fnEnum,classPtr,
-                    (char *) name, daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "afterEnumeration", [&]() {
+                    invoke_afterEnumeration(context,fnEnum,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void beforeAlias ( const LineInfo & info ) override {
             if ( auto fnAlias = get_beforeAlias(classPtr) ) {
-                invoke_beforeAlias(context,fnAlias,classPtr,
-                    daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "beforeAlias", [&]() {
+                    invoke_beforeAlias(context,fnAlias,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
         virtual void afterAlias ( const char * name, const LineInfo & info ) override {
             if ( auto fnAlias = get_afterAlias(classPtr) ) {
-                invoke_afterAlias(context,fnAlias,classPtr,
-                    (char *) name, daScriptEnvironment::bound->g_Program,
-                    daScriptEnvironment::bound->g_Program->thisModule.get(),
-                        info);
+                runMacroFunction(context, "afterAlias", [&]() {
+                    invoke_afterAlias(context,fnAlias,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
             }
         }
     protected:
@@ -1253,19 +1343,29 @@ namespace das {
         }
         virtual void preVisit (  Program * prog, Module * mod, ExprCallMacro * expr ) override {
             if ( auto fnPreVisit = get_preVisit(classPtr) ) {
-                invoke_preVisit(context,fnPreVisit,classPtr,prog,mod,expr);
+                runMacroFunction(context, "preVisit", [&]() {
+                    invoke_preVisit(context,fnPreVisit,classPtr,prog,mod,expr);
+                });
             }
         }
         virtual ExpressionPtr visit (  Program * prog, Module * mod, ExprCallMacro * expr ) override {
             if ( auto fnVisit = get_visit(classPtr) ) {
-                return invoke_visit(context,fnVisit,classPtr,prog,mod,expr);
+                ExpressionPtr result;
+                runMacroFunction(context, "visit", [&]() {
+                    result = invoke_visit(context,fnVisit,classPtr,prog,mod,expr);
+                });
+                return result;
             } else {
                 return nullptr;
             }
         }
         virtual bool canVisitArguments ( ExprCallMacro * expr ) override {
             if ( auto fnCanVisitArguments = get_canVisitArguments(classPtr) ) {
-                return invoke_canVisitArguments(context,fnCanVisitArguments,classPtr,expr);
+                bool result = true;
+                runMacroFunction(context, "canVisitArguments", [&]() {
+                    result = invoke_canVisitArguments(context,fnCanVisitArguments,classPtr,expr);
+                });
+                return result;
             } else {
                 return true;
             }
