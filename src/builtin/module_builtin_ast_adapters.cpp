@@ -1641,12 +1641,12 @@ namespace das {
         func->visit(*adapter);
     }
 
-    void astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    smart_ptr_raw<Expression> astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(*line_info, "adapter is required");
         if (!expr)
             context->throw_error_at(*line_info, "expr is required");
-        expr->visit(*adapter);
+        return expr->visit(*adapter);
     }
 
     void Module_Ast::registerAdapterAnnotations(ModuleLibrary & lib) {

@@ -173,23 +173,27 @@ class private TemplateVisitor : AstVisitor
         if rules.call2name |> key_exists(cname)
             expr.name := rules.call2name[cname]
         preVisitAnythingCall(expr.arguments)
+    def override preVisitExprAddr(var expr:smart_ptr<ExprAddr>): void
+        let cname = string(expr.target)
+        if rules.call2name |> key_exists(cname)
+            expr.target := rules.call2name[cname]
     def override preVisitExprMakeArray(var expr:smart_ptr<ExprMakeArray>): void
         preVisitAnythingCall(expr.values)
 
-
-def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Expression>; forceAt:bool = true )
+def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Expression>; forceAt:bool = true ) : ExpressionPtr
     //! Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
     var prules : Template?
     unsafe
         prules = addr(rules)
     var astVisitor = new TemplateVisitor(prules)
     var astVisitorAdapter <- make_visitor(*astVisitor)
-    expr |> visit(astVisitorAdapter)
+    var res <- expr |> visit(astVisitorAdapter)
     if forceAt
-        expr |> force_at(at)
+        res |> force_at(at)
     unsafe
         delete astVisitor
     astVisitorAdapter := null
+    return res
 
 def unquote_block ( expr:ExpressionPtr ) : smart_ptr<ExprBlock>
     //! Returns the corresponding block subexpression expression form the ExprMakeBlock.
@@ -275,17 +279,19 @@ def make_unique_private_name ( prefix:string; vat:LineInfo )
     //! If it is not, additional measures must be taken to ensure uniqueness of prefix.
     return "{prefix}_{vat.line}_{vat.column}"
 
-def apply_template ( at:LineInfo; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> )
+def apply_template ( at:LineInfo; var expr:smart_ptr<Expression>&; blk:block<(var rules:Template):void> ) : ExpressionPtr
     var rules : Template
     invoke(blk, rules)
-    apply_template(rules, at, expr, true)
+    var res <- apply_template(rules, at, expr, true)
     delete rules
+    return res
 
-def apply_template ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> )
+def apply_template ( var expr:smart_ptr<Expression>&; blk:block<(var rules:Template):void> ) : ExpressionPtr
     var rules : Template
     invoke(blk, rules)
-    apply_template(rules,expr.at, expr, false)
+    var res <- apply_template(rules,expr.at, expr, false)
     delete rules
+    return res
 
 class private RemoveDerefVisitor : AstVisitor
     vname : string
@@ -429,10 +435,7 @@ class private QRulesVisitor : AstVisitor
             if expr.value == null
                 compiling_program() |> macro_error(expr.at,"expecting $c(name)(...), got null")
                 failed = true
-            elif !(expr.value is ExprCall)
-                compiling_program() |> macro_error(expr.at,"expecting $c(name)(...), got {expr.value.__rtti}")
-                failed = true
-            else
+            elif expr.value is ExprCall
                 rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
                     name:="renameCall",
                     arguments:=[{ExpressionPtr
@@ -443,13 +446,27 @@ class private QRulesVisitor : AstVisitor
                 var ccall <- clone_expression(expr.value)
                 (ccall as ExprCall).name := new_tag_name
                 return ccall
+            elif expr.value is ExprAddr
+                rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+                    name:="renameCall",
+                    arguments:=[{ExpressionPtr
+                        new [[ExprVar() at=expr.at, name:="rules"]];
+                        new [[ExprConstString() at=expr.at, value:=new_tag_name]];
+                        clone_expression(expr.subexpr)
+                    }]]]
+                var ccall <- clone_expression(expr.value)
+                (ccall as ExprAddr).target := new_tag_name
+                return ccall
+            else
+                compiling_program() |> macro_error(expr.at,"expecting $c(name)(...), got {expr.value.__rtti}")
+                failed = true
         else
             compiling_program() |> macro_error(expr.at,"unsupported ExprTag {expr.name}")
             failed = true
         return <- new [[ExprVar() at=expr.at, name:=new_tag_name]]
 
 [macro_function]
-def private apply_qrules ( var expr:smart_ptr<Expression> ) : smart_ptr<ExprBlock>
+def private apply_qrules ( var expr:smart_ptr<Expression>& ) : smart_ptr<ExprBlock>
     var eblk <- new [[ExprBlock() at=expr.at,
         returnType <- new [[TypeDecl() at=expr.at, baseType=Type tVoid]],
         arguments := [{VariablePtr[1]
@@ -459,7 +476,8 @@ def private apply_qrules ( var expr:smart_ptr<Expression> ) : smart_ptr<ExprBloc
     ]]
     var astVisitor = new QRulesVisitor(get_ptr(eblk))
     var astVisitorAdapter <- make_visitor(*astVisitor)
-    expr |> visit(astVisitorAdapter)
+    unsafe
+        expr <- expr |> visit(astVisitorAdapter)
     if astVisitor.failed
         eblk := null
     unsafe
@@ -467,18 +485,22 @@ def private apply_qrules ( var expr:smart_ptr<Expression> ) : smart_ptr<ExprBloc
     astVisitorAdapter := null
     return eblk
 
-def public apply_qmacro ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> )
+def public apply_qmacro ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : ExpressionPtr
     //! Implementation details for the expression reificaiton.
-    apply_template(expr, blk)
-    return expr
+    return <- apply_template(expr, blk)
 
-def public apply_qblock ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> )
+def public apply_qblock ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : ExpressionPtr
     //! Implementation details for the expression reificaiton.
-    apply_template(expr, blk)
-    assert(expr is ExprMakeBlock)
-    var qblk <- move_unquote_block(expr)
-    // qblk.flags ^= ExprBlockFlags isClosure
+    var res <- apply_template(expr, blk)
+    assert(res is ExprMakeBlock)
+    var qblk <- move_unquote_block(res)
+    qblk.blockFlags ^= ExprBlockFlags isClosure
     return qblk
+
+def public expression_at ( expr:ExpressionPtr; at:LineInfo ) : ExpressionPtr
+    //! Force expression location, than return it.
+    expr |> force_at(at)
+    return expr
 
 class AstQCallMacro : AstCallMacro
     apply_call = "apply_qmacro"
@@ -489,7 +511,6 @@ class AstQCallMacro : AstCallMacro
         return expr
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if call.arguments.length != 1
-            debug(call.arguments)
             macro_error(prog,call.at,"expecting 1 argument, qmacro(expression)")
             return [[ExpressionPtr]]
         if call.arguments[0] is Expression

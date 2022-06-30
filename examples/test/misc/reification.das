@@ -35,6 +35,7 @@ def main
         foo as $f(bar) = 13
         if foo is $f(bar)
             print("hello!\n")
+        let qq = @@$c(cll)
     print(describe(blk))
     blk := null
     expr := null

@@ -1596,6 +1596,10 @@ expr_mtag
         auto cfield = new ExprIsVariant(tokAt(scanner,@loc),ExpressionPtr($subexpr),"``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
+    |   '@' '@'[loc] MTAG_C[cname] '(' expr[subexpr] ')' {
+        auto ccall = new ExprAddr(tokAt(scanner,@loc),"``MACRO``TAG``ADDR``");
+        $$ = new ExprTag(tokAt(scanner,@cname),$subexpr,ccall,"c");
+    }
     ;
 
 optional_field_annotation
