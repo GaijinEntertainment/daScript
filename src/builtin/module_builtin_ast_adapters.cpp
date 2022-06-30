@@ -1388,16 +1388,24 @@ namespace das {
         }
         virtual ExpressionPtr getAstChange ( const ExpressionPtr & expr, string & err ) override {
             if ( auto fnGetAstChange = get_getAstChange(classPtr) ) {
-                auto tinfo = static_pointer_cast<ExprTypeInfo>(expr);
-                return invoke_getAstChange(context,fnGetAstChange,classPtr,tinfo,err);
+                ExpressionPtr result;
+                runMacroFunction(context, "getAstChange", [&]() {
+                    auto tinfo = static_pointer_cast<ExprTypeInfo>(expr);
+                    result = invoke_getAstChange(context,fnGetAstChange,classPtr,tinfo,err);
+                });
+                return result;
             } else {
                 return nullptr;
             }
         }
         virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr & expr, string & err ) override {
             if ( auto fnGetAstType = get_getAstType(classPtr) ) {
-                auto tinfo = static_pointer_cast<ExprTypeInfo>(expr);
-                return invoke_getAstType(context,fnGetAstType,classPtr,lib,tinfo,err);
+                TypeDeclPtr result;
+                runMacroFunction(context, "getAstType", [&]() {
+                    auto tinfo = static_pointer_cast<ExprTypeInfo>(expr);
+                    result = invoke_getAstType(context,fnGetAstType,classPtr,lib,tinfo,err);
+                });
+                return result;
             } else {
                 return nullptr;
             }
