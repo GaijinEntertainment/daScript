@@ -654,6 +654,19 @@ namespace das {
 
 #include "ast_gen.inc"
 
+    void runMacroFunction ( Context * context, const string & message, const callable<void()> & subexpr ) {
+        if ( !context->runWithCatch(subexpr) ) {
+            DAS_ASSERTF(daScriptEnvironment::bound->g_Program, "calling macros while not compiling a program");
+            daScriptEnvironment::bound->g_Program->error(
+                "macro caused exception during " + message,
+                context->getException(), "",
+                context->exceptionAt,
+                CompilationError::exception_during_macro
+            );
+            daScriptEnvironment::bound->g_Program->macroException = true;
+        }
+    }
+
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false,true> {
         AstVisitorAdapterAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("VisitorAdapter", ml) {
@@ -679,7 +692,11 @@ namespace das {
         virtual bool apply ( ExprBlock * blk, ModuleGroup & group,
                             const AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
-                return invoke_apply(context,fnApply,classPtr,blk,group,args,errors);
+                bool result = true;
+                runMacroFunction(context, "apply", [&]() {
+                    result = invoke_apply(context,fnApply,classPtr,blk,group,args,errors);
+                });
+                return result;
             } else {
                 return true;
             }
@@ -688,7 +705,11 @@ namespace das {
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) override {
             if ( auto fnFinish = get_finish(classPtr) ) {
-                return invoke_finish(context,fnFinish,classPtr,blk,group,args,progArgs,errors);
+                bool result = true;
+                runMacroFunction(context, "finish", [&]() {
+                    result = invoke_finish(context,fnFinish,classPtr,blk,group,args,progArgs,errors);
+                });
+                return result;
             } else {
                 return true;
             }
@@ -706,7 +727,11 @@ namespace das {
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & group,
                             const AnnotationArgumentList & args, string & errors ) override {
             if ( auto fnApply = get_apply(classPtr) ) {
-                return invoke_apply(context,fnApply,classPtr,func,group,args,errors);
+                bool result = true;
+                runMacroFunction(context, "apply", [&]() {
+                    result = invoke_apply(context,fnApply,classPtr,func,group,args,errors);
+                });
+                return result;
             } else {
                 return true;
             }
@@ -715,7 +740,11 @@ namespace das {
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) override {
             if ( auto fnFinish = get_finish(classPtr) ) {
-                return invoke_finish(context,fnFinish,classPtr,func,group,args,progArgs,errors);
+                bool result = true;
+                runMacroFunction(context, "finish", [&]() {
+                    result = invoke_finish(context,fnFinish,classPtr,func,group,args,progArgs,errors);
+                });
+                return result;
             } else {
                 return true;
             }
@@ -724,7 +753,11 @@ namespace das {
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) override {
             if ( auto fnLint = get_lint(classPtr) ) {
-                return invoke_lint(context,fnLint,classPtr,func,group,args,progArgs,errors);
+                bool result = true;
+                runMacroFunction(context, "lint", [&]() {
+                    result = invoke_lint(context,fnLint,classPtr,func,group,args,progArgs,errors);
+                });
+                return result;
             } else {
                 return true;
             }
@@ -733,7 +766,11 @@ namespace das {
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors, bool & astChanged ) override {
             if ( auto fnPatch = get_patch(classPtr) ) {
-                return invoke_patch(context,fnPatch,classPtr,func,group,args,progArgs,errors,astChanged);
+                bool result = true;
+                runMacroFunction(context, "patch", [&]() {
+                    result = invoke_patch(context,fnPatch,classPtr,func,group,args,progArgs,errors,astChanged);
+                });
+                return result;
             } else {
                 return true;
             }
@@ -742,7 +779,11 @@ namespace das {
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) override {
             if ( auto fnFixup = get_fixup(classPtr) ) {
-                return invoke_fixup(context,fnFixup,classPtr,func,group,args,progArgs,errors);
+                bool result = true;
+                runMacroFunction(context, "fixup", [&]() {
+                    result = invoke_fixup(context,fnFixup,classPtr,func,group,args,progArgs,errors);
+                });
+                return result;
             } else {
                 return true;
             }
@@ -760,7 +801,11 @@ namespace das {
         }
         virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) override {
             if ( auto fnTransform = get_transform(classPtr) ) {
-                return invoke_transform(context,fnTransform,classPtr,call,err);
+                ExpressionPtr result;
+                runMacroFunction(context, "transformCall", [&]() {
+                    result = invoke_transform(context,fnTransform,classPtr,call,err);
+                });
+                return result;
             } else {
                 return nullptr;
             }
@@ -768,14 +813,22 @@ namespace das {
         virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args,
                 const AnnotationArgumentList & progArgs, string & err ) override {
             if ( auto fnTransform = get_verifyCall(classPtr) ) {
-                return invoke_verifyCall(context,fnTransform,classPtr,call,args,progArgs,err);
+                bool result = true;
+                runMacroFunction(context, "verifyCall", [&]() {
+                    result = invoke_verifyCall(context,fnTransform,classPtr,call,args,progArgs,err);
+                });
+                return result;
             } else {
                 return true;
             }
         }
         virtual bool isSpecialized () const override {
             if ( auto fnIsSpecialized = get_isSpecialized(classPtr) ) {
-                return invoke_isSpecialized(context,fnIsSpecialized,classPtr);
+                bool result = false;
+                runMacroFunction(context, "isSpecialized", [&]() {
+                    result = invoke_isSpecialized(context,fnIsSpecialized,classPtr);
+                });
+                return result;
             } else {
                 return false;
             }
@@ -783,19 +836,27 @@ namespace das {
         virtual bool isCompatible ( const FunctionPtr & fn, const vector<TypeDeclPtr> & types,
             const AnnotationDeclaration & decl, string & err  ) const override {
             if ( auto fnIsCompatible = get_isCompatible(classPtr) ) {
-                return invoke_isCompatible(context,fnIsCompatible,classPtr,fn,const_cast<vector<TypeDeclPtr> &>(types),decl,err);
+                bool result = true;
+                runMacroFunction(context, "isCompatible", [&]() {
+                    result = invoke_isCompatible(context,fnIsCompatible,classPtr,fn,const_cast<vector<TypeDeclPtr> &>(types),decl,err);
+                });
+                return result;
             } else {
                 return true;
             }
         }
         virtual void  complete (  Context * ctx, const FunctionPtr & fnp ) override {
             if ( auto fnComplete = get_complete(classPtr) ) {
-                invoke_complete(context,fnComplete,classPtr,fnp,ctx);
+                runMacroFunction(context, "complete", [&]() {
+                    invoke_complete(context,fnComplete,classPtr,fnp,ctx);
+                });
             }
         }
         virtual void appendToMangledName( const FunctionPtr & fnp, const AnnotationDeclaration & decl, string & mangledName ) const override {
             if ( auto fnAppend = get_appendToMangledName(classPtr) ) {
-                invoke_appendToMangledName(context,fnAppend,classPtr,fnp,decl,mangledName);
+                runMacroFunction(context, "appendToMangledName", [&]() {
+                    invoke_appendToMangledName(context,fnAppend,classPtr,fnp,decl,mangledName);
+                });
             }
         }
     protected:

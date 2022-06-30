@@ -7433,7 +7433,7 @@ namespace das {
             libGroup.foreach(modMacro, "*");
         } while ( !failed() && anyMacrosDidWork );
     failed_to_infer:;
-        if ( failed() && !anyMacrosFailedToInfer ) inferTypesDirty(logs, true);
+        if ( failed() && !anyMacrosFailedToInfer && !macroException ) inferTypesDirty(logs, true);
     }
 
     void Program::inferTypesDirty(TextWriter & logs, bool verbose) {
@@ -7446,6 +7446,7 @@ namespace das {
             logs << "INITIAL CODE:\n" << *this;
         }
         for ( pass = 0; pass < maxPasses; ++pass ) {
+            if ( macroException ) break;
             failToCompile = false;
             errors.clear();
             InferTypes context(this);

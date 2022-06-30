@@ -44,11 +44,11 @@ def renameField ( var self:Template; name, newName:string )
     self.field2name[name] = newName
 
 def replaceType ( var self:Template; name,newName:string )
-    //! Adds a rule to the template to replace a type alias with another type alias.
+    //! Adds a rule to the template to replace a type alias with another type alias, specified by name.
     self.type2type[name] = newName
 
 def replaceTypeWithTypeDecl ( var self:Template; name:string; var expr : TypeDeclPtr  )
-    //! Adds a rule to the template to replace a type alias with another type alias.
+    //! Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
     self.type2etype[name] <- expr
 
 def replaceAnnotationArgument ( var self:Template; name:string; var cb:lambda<(var ann: AnnotationDeclaration):void> )

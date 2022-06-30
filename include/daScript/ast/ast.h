@@ -1254,7 +1254,7 @@ namespace das
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash ) const;
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
-        bool failed() const { return failToCompile; }
+        bool failed() const { return failToCompile || macroException; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const string & name );
         ExprLooksLikeCall * makeCall ( const LineInfo & at, const LineInfo & atEnd, const string & name );
@@ -1318,6 +1318,7 @@ namespace das
                 bool    needMacroModule : 1;
                 bool    promoteToBuiltin : 1;
                 bool    isDependency : 1;
+                bool    macroException : 1;
             };
             uint32_t    flags = 0;
         };
