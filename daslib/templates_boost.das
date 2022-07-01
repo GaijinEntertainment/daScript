@@ -191,13 +191,13 @@ def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Express
         prules = addr(rules)
     var astVisitor = new TemplateVisitor(prules)
     var astVisitorAdapter <- make_visitor(*astVisitor)
-    var res <- expr |> visit(astVisitorAdapter)
+    expr := expr |> visit(astVisitorAdapter)
     if forceAt
-        res |> force_at(at)
+        expr |> force_at(at)
     unsafe
         delete astVisitor
     astVisitorAdapter := null
-    return res
+    return expr
 
 def unquote_block ( expr:ExpressionPtr ) : smart_ptr<ExprBlock>
     //! Returns the corresponding block subexpression expression form the ExprMakeBlock.
@@ -489,8 +489,7 @@ def private apply_qrules ( var expr:smart_ptr<Expression>& ) : smart_ptr<ExprBlo
     ]]
     var astVisitor = new QRulesVisitor(get_ptr(eblk))
     var astVisitorAdapter <- make_visitor(*astVisitor)
-    unsafe
-        expr <- expr |> visit(astVisitorAdapter)
+    expr := expr |> visit(astVisitorAdapter)
     if astVisitor.failed
         eblk := null
     unsafe
