@@ -1602,6 +1602,19 @@ namespace das {
         func->annotations.push_back(annDecl);
     }
 
+    void addBlockBlockAnnotation ( smart_ptr_raw<ExprBlock> blk, FunctionAnnotationPtr & _ann, Context * context ) {
+        FunctionAnnotationPtr ann = move(_ann);
+        string err;
+        ModuleGroup dummy;
+        if ( !ann->apply(blk.ptr, dummy, AnnotationArgumentList(), err) ) {
+            context->throw_error_ex("annotation %s failed to apply to block %s",
+                ann->name.c_str(), blk->at.describe().c_str());
+        }
+        auto annDecl = make_smart<AnnotationDeclaration>();
+        annDecl->annotation = ann;
+        blk->annotations.push_back(annDecl);
+    }
+
     void addAndApplyFunctionAnnotation ( smart_ptr_raw<Function> func, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context ) {
         string err;
         if (!ann->annotation->rtti_isFunctionAnnotation()) {
@@ -1615,6 +1628,21 @@ namespace das {
                 ann->annotation->name.c_str(), func->name.c_str());
         }
         func->annotations.push_back(ann);
+    }
+
+    void addAndApplyBlockAnnotation ( smart_ptr_raw<ExprBlock> blk, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context ) {
+        string err;
+        if (!ann->annotation->rtti_isFunctionAnnotation()) {
+            context->throw_error_ex("annotation %s failed to apply to block %s, not a FunctionAnnotation",
+                ann->annotation->name.c_str(), blk->at.describe().c_str());
+        }
+        auto fAnn = (FunctionAnnotation*)ann->annotation.get();
+        auto program = daScriptEnvironment::bound->g_Program;
+        if ( !fAnn->apply(blk.ptr, *program->thisModuleGroup, ann->arguments, err) ) {
+            context->throw_error_ex("annotation %s failed to apply to block %s",
+                ann->annotation->name.c_str(), blk->at.describe().c_str());
+        }
+        blk->annotations.push_back(ann);
     }
 
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
@@ -1689,6 +1717,13 @@ namespace das {
         addExtern<DAS_BIND_FUN(addAndApplyFunctionAnnotation)>(*this, lib,  "add_function_annotation",
             SideEffects::modifyExternal, "addAndApplyFunctionAnnotation")
                 ->args({"function","annotation","context"});
+        // block annotation
+        addExtern<DAS_BIND_FUN(addBlockBlockAnnotation)>(*this, lib,  "add_block_annotation",
+            SideEffects::modifyExternal, "addBlockBlockAnnotation")
+                ->args({"block","annotation","context"});
+        addExtern<DAS_BIND_FUN(addAndApplyBlockAnnotation)>(*this, lib,  "add_block_annotation",
+            SideEffects::modifyExternal, "addAndApplyBlockAnnotation")
+                ->args({"block","annotation","context"});
         // structure annotation
         addAnnotation(make_smart<AstStructureAnnotationAnnotation>(lib));
         addExtern<DAS_BIND_FUN(makeStructureAnnotation)>(*this, lib,  "make_structure_annotation",
