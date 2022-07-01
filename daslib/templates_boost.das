@@ -39,6 +39,10 @@ def renameVariable ( var self:Template; name, newName:string )
     //! Adds a rule to the template to rename a variable.
     self.var2name[name] = newName
 
+def renameVariable ( var self:Template; name:string; newName:das_string )
+    //! Adds a rule to the template to rename a variable.
+    self.var2name[name] = string(newName)
+
 def renameField ( var self:Template; name, newName:string )
     //! Adds a rule to the template to rename any field lookup (., ?., as, is, etc)
     self.field2name[name] = newName
@@ -407,6 +411,15 @@ class private QRulesVisitor : AstVisitor
                     new [[ExprConstString() at=expr.at, value:=new_tag_name]];
                     clone_expression(expr.subexpr)
                 }]]]
+            if expr.value != null
+                if expr.value is ExprLet
+                    (expr.value as ExprLet).variables[0].name := new_tag_name
+                    return clone_expression(expr.value)
+                else
+                    compiling_program() |> macro_error(expr.at,"unexpected $i(name)({expr.value.__rtti})")
+                    failed = true
+                    return expr
+
         elif expr.name=="f" // field
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
                 name:="renameField",
@@ -497,6 +510,16 @@ def public apply_qblock ( var expr:smart_ptr<Expression>; blk:block<(var rules:T
     qblk.blockFlags ^= ExprBlockFlags isClosure
     return qblk
 
+def public apply_qblock_expr ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : ExpressionPtr
+    //! Implementation details for the expression reificaiton.
+    var res <- apply_template(expr, blk)
+    assert(res is ExprMakeBlock)
+    var qblk <- move_unquote_block(res)
+    assert(qblk.list.length == 1)
+    var resExpr := qblk.list[0]
+    qblk := null
+    return resExpr
+
 def public expression_at ( expr:ExpressionPtr; at:LineInfo ) : ExpressionPtr
     //! Force expression location, than return it.
     expr |> force_at(at)
@@ -538,6 +561,10 @@ class QMacro : AstQCallMacro {}
 [call_macro(name="qmacro_block")]
 class QBlockMacro : AstQCallMacro
     override apply_call = "apply_qblock"
+
+[call_macro(name="qmacro_expr")]
+class QBlockExprMacro : AstQCallMacro
+    override apply_call = "apply_qblock_expr"
 
 def public emplace_new ( var arr:array<ExpressionPtr>; var expr:ExpressionPtr )
     arr |> emplace(expr)

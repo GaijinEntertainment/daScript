@@ -666,8 +666,14 @@ namespace das {
                 }
             }
         }
-        delete decl;
-        return pLet;
+        if ( auto pTagExpr = decl->pNameList->front().tag ) {
+            auto pTag = new ExprTag(declAt, pTagExpr, ExpressionPtr(pLet), "i");
+            delete decl;
+            return pTag;
+        } else {
+            delete decl;
+            return pLet;
+        }
     }
 
     Function * ast_functionDeclarationHeader ( yyscan_t scanner, string * name, vector<VariableDeclaration*> * list,

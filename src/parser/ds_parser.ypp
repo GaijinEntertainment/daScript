@@ -310,6 +310,7 @@
 %type <s>               enum_name
 %type <pNameList>       bitfield_bits
 %type <pNameWithPosList>variable_name_with_pos_list
+%type <pNameWithPosList>let_variable_name_with_pos_list
 %type <type>            basic_type_declaration
 %type <type>            enum_basic_type_declaration
 %type <pTypeDecl>       type_declaration
@@ -1791,21 +1792,59 @@ optional_ref
     |   '&' { $$ = true; }
     ;
 
+let_variable_name_with_pos_list
+    :   NAME[name]  {
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        auto pSL = new vector<VariableNameAndPosition>();
+        pSL->push_back(VariableNameAndPosition{*$name,"",tokAt(scanner,@name)});
+        $$ = pSL;
+        delete $name;
+    }
+    |   MTAG_I '(' expr[subexpr] ')' {
+        auto pSL = new vector<VariableNameAndPosition>();
+        pSL->push_back(VariableNameAndPosition{"``MACRO``TAG``","",tokAt(scanner,@subexpr),ExpressionPtr($subexpr)});
+        $$ = pSL;
+    }
+    |   NAME[name] DAS_AKA NAME[akaname] {
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        das_checkName(scanner,*$akaname,tokAt(scanner,@akaname));
+        auto pSL = new vector<VariableNameAndPosition>();
+        pSL->push_back(VariableNameAndPosition{*$name,*$akaname,tokAt(scanner,@name)});
+        $$ = pSL;
+        delete $name;
+        delete $akaname;
+    }
+    |   let_variable_name_with_pos_list[list] ',' NAME[name] {
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        $list->push_back(VariableNameAndPosition{*$name,"",tokAt(scanner,@name)});
+        $$ = $list;
+        delete $name;
+    }
+    |   let_variable_name_with_pos_list[list] ',' NAME[name] DAS_AKA NAME[akaname] {
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        das_checkName(scanner,*$akaname,tokAt(scanner,@akaname));
+        $list->push_back(VariableNameAndPosition{*$name,*$akaname,tokAt(scanner,@name)});
+        $$ = $list;
+        delete $name;
+        delete $akaname;
+    }
+    ;
+
 let_variable_declaration    /* let x; is prohibited. this one can't have uninitialized variable which has no type */
-    :   variable_name_with_pos_list[list] ':' type_declaration[typeDecl] ';' {
+    :   let_variable_name_with_pos_list[list] ':' type_declaration[typeDecl] ';' {
         $$ = new VariableDeclaration($list,$typeDecl,nullptr);
     }
-    |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+    |   let_variable_name_with_pos_list[list] ':' type_declaration[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
         $$ = new VariableDeclaration($list,$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl] copy_or_move_or_clone[com] expr_pipe[init] {
+    |   let_variable_name_with_pos_list[list] ':' type_declaration[typeDecl] copy_or_move_or_clone[com] expr_pipe[init] {
         $$ = new VariableDeclaration($list,$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+    |   let_variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
@@ -1813,7 +1852,7 @@ let_variable_declaration    /* let x; is prohibited. this one can't have uniniti
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr_pipe[init] {
+    |   let_variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
