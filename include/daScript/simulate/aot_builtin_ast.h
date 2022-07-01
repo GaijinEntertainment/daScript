@@ -495,6 +495,8 @@ namespace das {
     void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr & _newM, Context * context );
     void addFunctionFunctionAnnotation(smart_ptr_raw<Function> func, FunctionAnnotationPtr & ann, Context* context);
     void addAndApplyFunctionAnnotation ( smart_ptr_raw<Function> func, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context );
+    void addBlockBlockAnnotation ( smart_ptr_raw<ExprBlock> block, FunctionAnnotationPtr & _ann, Context * context );
+    void addAndApplyBlockAnnotation ( smart_ptr_raw<ExprBlock> blk, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context );
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value ?value->clone() : nullptr; }
     __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value ? value->clone() : nullptr; }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }

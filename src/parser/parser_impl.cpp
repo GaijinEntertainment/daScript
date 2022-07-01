@@ -632,6 +632,9 @@ namespace das {
                 }
             }
             swap ( closure->annotations, *annL );
+            for ( const auto & pA : *annL ) {
+                closure->annotations.push_back(pA);
+            }
             delete annL;
         }
         return mkb;

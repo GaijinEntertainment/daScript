@@ -603,7 +603,7 @@ def find_annotation ( mod_name,ann_name:string ) : Annotation const?
                 ann = addr(value)
     return ann
 
-def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
+def append_annotation ( mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
     var decl <- new [[AnnotationDeclaration()]]
@@ -622,7 +622,20 @@ def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:arr
             decl.arguments |> add_annotation_argument(argName, arg as tString)
         else
             panic("Invalid rtti value")
+    return <- decl
+
+def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
+    var ann = find_annotation(mod_name, ann_name)
+    assert(ann!=null)
+    var decl <- append_annotation(mod_name, ann_name, args)
     add_function_annotation(func, decl)
+    decl := null
+
+def append_annotation ( var blk:smart_ptr<ExprBlock>; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
+    var ann = find_annotation(mod_name, ann_name)
+    assert(ann!=null)
+    var decl <- append_annotation(mod_name, ann_name, args)
+    add_block_annotation(blk, decl)
     decl := null
 
 def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:string; val:bool )
