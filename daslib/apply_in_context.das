@@ -141,17 +141,13 @@ class AppendCondAnnotation : AstFunctionAnnotation
           genFlags = ExprGenFlags alwaysSafe
         ]]
       else
-        pinvoke.arguments |> emplace_new <| new [[ExprVar() at=at, name:=arg.name]]
+        pinvoke.arguments |> emplace_new <| qmacro($i(arg.name))
     if !func.result.isVoid
-      var resAddr <- new [[ExprRef2Ptr() at=at,
-        subexpr<-new [[ExprVar() at=at, name:=resName]],
-        genFlags = ExprGenFlags alwaysSafe
-      ]]
-      pinvoke.arguments |> emplace_new <| resAddr
+      pinvoke.arguments |> emplace_new <| qmacro(unsafe(addr($i(resName))))
 
     funcBlock.list |> emplace(pinvoke)
 
     if !func.result.isVoid
-      funcBlock.list |> emplace_new() <| new [[ExprReturn() at=at, subexpr<-new [[ExprVar() at=at, name:=resName]] ]]
+      funcBlock.list |> emplace_new() <| qmacro_expr(${return $i(resName);}) // new [[ExprReturn() at=at, subexpr<-new [[ExprVar() at=at, name:=resName]] ]]
 
     return true

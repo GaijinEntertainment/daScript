@@ -489,7 +489,9 @@ def private apply_qrules ( var expr:smart_ptr<Expression>& ) : smart_ptr<ExprBlo
     ]]
     var astVisitor = new QRulesVisitor(get_ptr(eblk))
     var astVisitorAdapter <- make_visitor(*astVisitor)
+    // print("EXPR BEFORE USE COUNT = {smart_ptr_use_count(expr)}\n")
     expr := expr |> visit(astVisitorAdapter)
+    // print("EXPR USE COUNT = {smart_ptr_use_count(expr)}\n")
     if astVisitor.failed
         eblk := null
     unsafe

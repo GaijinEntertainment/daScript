@@ -1646,7 +1646,12 @@ namespace das {
             context->throw_error_at(*line_info, "adapter is required");
         if (!expr)
             context->throw_error_at(*line_info, "expr is required");
-        return expr->visit(*adapter);
+        smart_ptr<Expression> res = expr->visit(*adapter);
+        if ( res.get()!=expr.get() ) {
+            DAS_VERIFYF(res->use_count()==1,"visitor returns new value, refcount must be 1 or else there will be a leak");
+            res->addRef();
+        }
+        return res;
     }
 
     void Module_Ast::registerAdapterAnnotations(ModuleLibrary & lib) {
