@@ -33,7 +33,7 @@ extern "C" int get_time_usec ( int64_t reft ) {
     return (int)(((t0-reft)*1000000) / freq.QuadPart);
 }
 
-#elif __linux__
+#elif __linux__ || defined(_EMSCRIPTEN_VER)
 
 #include <time.h>
 

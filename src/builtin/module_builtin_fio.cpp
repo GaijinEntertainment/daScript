@@ -400,6 +400,8 @@ namespace das {
         if ( path ) {
 #if defined(_MSC_VER)
             return _mkdir(path) == 0;
+#elif defined(_EMSCRIPTEN_VER)
+            return mkdir(path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
 #else
             return mkdir(path, ACCESSPERMS) == 0;
 #endif
