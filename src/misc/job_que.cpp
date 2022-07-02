@@ -217,8 +217,22 @@ namespace das {
         }
     }
 
+    JobStatus::~JobStatus() {
+        DAS_ASSERT(mRef==0);
+    }
+
     void JobStatus::Notify() {
         lock_guard<mutex> guard(mCompleteMutex);
+        DAS_ASSERTF(mRemaining != 0, "Nothing to notify!");
+        --mRemaining;
+        if ( mRemaining==0 ) {
+            mCond.notify_all();
+        }
+    }
+
+    void JobStatus::NotifyAndRelease() {
+        lock_guard<mutex> guard(mCompleteMutex);
+        mRef--;
         DAS_ASSERTF(mRemaining != 0, "Nothing to notify!");
         --mRemaining;
         if ( mRemaining==0 ) {

@@ -109,6 +109,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 tw << "#pragma warning(disable:4623)   // default constructor was implicitly defined as deleted\n";
                 tw << "#pragma warning(disable:4946)   // reinterpret_cast used between related classes\n";
                 tw << "#pragma warning(disable:4269)   // 'const' automatic data initialized with compiler generated default constructor produces unreliable results\n";
+                tw << "#pragma warning(disable:4555)   // result of expression not used\n";
                 tw << "#endif\n";
                 tw << "#if defined(__GNUC__) && !defined(__clang__)\n";
                 tw << "#pragma GCC diagnostic push\n";
@@ -136,9 +137,10 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 program->aotCpp(*pctx, tw);
                 daScriptEnvironment::bound->g_Program.reset();
                 // list STUFF
-                tw << "\tstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
+                tw << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
                 program->registerAotCpp(tw, *pctx, false);
-                tw << "\t};\n";
+                tw << "\tresolveTypeInfoAnnotations();\n";
+                tw << "};\n";
                 tw << "\n";
                 tw << "AotListBase impl(registerAotFunctions);\n";
                 // validation stuff
@@ -238,12 +240,13 @@ int das_aot_main ( int argc, char * argv[] ) {
     return compiled ? 0 : -1;
 }
 
-void compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode, const char * introFile = nullptr ) {
+bool compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode, bool dryRun, const char * introFile = nullptr ) {
     auto access = get_file_access(nullptr);
     if ( introFile ) {
         auto fileInfo = make_unique<TextFileInfo>(introFile, uint32_t(strlen(introFile)), false);
         access->setFileInfo("____intro____", move(fileInfo));
     }
+    bool success = false;
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
     policies.debugger = debuggerRequired;
@@ -269,10 +272,12 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                 for ( auto & err : program->errors ) {
                     tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
                 }
+            } else if ( program->thisModule->isModule ) {
+                tout<< "WARNING: program is setup as both module, and endpoint.\n";
+            } else if ( dryRun ) {
+                success = true;
+                tout << "dry run: " << fn << "\n";
             } else {
-                if ( program->thisModule->isModule ) {
-                    tout<< "WARNING: program is setup as both module, and endpoint.\n";
-                }
                 auto fnVec = pctx->findFunctions(mainFnName.c_str());
                 das::vector<SimFunction *> fnMVec;
                 for ( auto fnAS : fnVec ) {
@@ -288,6 +293,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
                         tout << "\t" << fnAS->mangledName << "\n";
                     }
                 } else {
+                    success = true;
                     auto fnTest = fnMVec.back();
                     pctx->restart();
                     pctx->eval(fnTest, nullptr);
@@ -295,6 +301,7 @@ void compile_and_run ( const string & fn, const string & mainFnName, bool output
             }
         }
     }
+    return success;
 }
 
 void replace( string& str, const string& from, const string& to ) {
@@ -309,6 +316,7 @@ void print_help() {
         << "daScript scriptName1 {scriptName2} .. {-main mainFnName} {-log} {-pause} -- {script arguments}\n"
         << "    -log        output program code\n"
         << "    -pause      pause after errors and pause again before exiting program\n"
+        << "    -dry-run    compile and simulate script without execution\n"
         << "daScript -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
         << "    -p          paranoid validation of CPP AOT\n"
         << "    -q          supress all output\n"
@@ -334,6 +342,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     bool scriptArgs = false;
     bool outputProgramCode = false;
     bool pauseAfterDone = false;
+    bool dryRun = false;
     for ( int i=1; i < argc; ++i ) {
         if ( argv[i][0]=='-' ) {
             string cmd(argv[i]+1);
@@ -355,6 +364,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 setDasRoot(argv[i+1]);
             } else if ( cmd=="log" ) {
                 outputProgramCode = true;
+            } else if ( cmd=="dry-run" ) {
+                dryRun = true;
             } else if ( cmd=="args" ) {
                 break;
             } else if ( cmd=="pause" ) {
@@ -402,13 +413,17 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();
+    daScriptEnvironment::bound->g_isInAot = true;
     // compile and run
+    int failedFiles = 0;
     for ( auto & fn : files ) {
         replace(fn, "_dasroot_", getDasRoot());
-        compile_and_run(fn, mainName, outputProgramCode);
+        if (!compile_and_run(fn, mainName, outputProgramCode, dryRun)) {
+            failedFiles++;
+        }
     }
     // and done
     if ( pauseAfterDone ) getchar();
     Module::Shutdown();
-    return 0;
+    return failedFiles;
 }

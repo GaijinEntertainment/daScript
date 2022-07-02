@@ -125,12 +125,15 @@ namespace das {
         DECL_VISIT(ExprDebug);
         DECL_VISIT(ExprInvoke);
         DECL_VISIT(ExprErase);
+        DECL_VISIT(ExprSetInsert);
         DECL_VISIT(ExprFind);
         DECL_VISIT(ExprKeyExists);
         DECL_VISIT(ExprAscend);
         DECL_VISIT(ExprCast);
         DECL_VISIT(ExprDelete);
         DECL_VISIT(ExprVar);
+        DECL_VISIT(ExprTag);
+        Func FN_PREVISIT(ExprTagValue);
         DECL_VISIT(ExprSwizzle);
         DECL_VISIT(ExprField);
         DECL_VISIT(ExprSafeField);
@@ -350,12 +353,15 @@ namespace das {
         IMPL_BIND_EXPR(ExprDebug);
         IMPL_BIND_EXPR(ExprInvoke);
         IMPL_BIND_EXPR(ExprErase);
+        IMPL_BIND_EXPR(ExprSetInsert);
         IMPL_BIND_EXPR(ExprFind);
         IMPL_BIND_EXPR(ExprKeyExists);
         IMPL_BIND_EXPR(ExprAscend);
         IMPL_BIND_EXPR(ExprCast);
         IMPL_BIND_EXPR(ExprDelete);
         IMPL_BIND_EXPR(ExprVar);
+        IMPL_BIND_EXPR(ExprTag);
+        virtual void preVisitTagValue ( ExprTag *, Expression * ) override;
         IMPL_BIND_EXPR(ExprSwizzle);
         IMPL_BIND_EXPR(ExprField);
         IMPL_BIND_EXPR(ExprSafeField);
@@ -448,7 +454,7 @@ namespace das {
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
     void astVisitModulesInOrder ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
     void astVisitFunction ( smart_ptr_raw<Function> func, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
-    void astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
+    smart_ptr_raw<Expression> astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
     PassMacroPtr makePassMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     smart_ptr<VisitorAdapter> makeVisitor ( const void * pClass, const StructInfo * info, Context * context );
     void addModuleInferMacro ( Module * module, PassMacroPtr & _newM, Context * );
@@ -458,6 +464,10 @@ namespace das {
     void addModuleOptimizationMacro ( Module * module, PassMacroPtr & _newM, Context * );
     VariantMacroPtr makeVariantMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleVariantMacro ( Module * module, VariantMacroPtr & newM, Context * context );
+    ForLoopMacroPtr makeForLoopMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
+    void addModuleForLoopMacro ( Module * module, ForLoopMacroPtr & _newM, Context * );
+    CaptureMacroPtr makeCaptureMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
+    void addModuleCaptureMacro ( Module * module, CaptureMacroPtr & _newM, Context * );
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & ann, Context * context );
     FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
     StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
@@ -471,7 +481,9 @@ namespace das {
     bool addModuleGeneric ( Module * module, FunctionPtr & func, Context * context );
     bool addModuleVariable ( Module * module, VariablePtr & var, Context * );
     VariablePtr findModuleVariable ( Module * module, const char * name );
-    bool addModuleStructure ( Module * module, StructurePtr & stru, Context * );
+    bool removeModuleStructure ( Module * module, StructurePtr & _stru );
+    bool addModuleStructure ( Module * module, StructurePtr & stru );
+    bool addModuleAlias ( Module * module, TypeDeclPtr & _ptr );
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
     void addModuleReaderMacro ( Module * module, ReaderMacroPtr & newM, Context * context );
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
@@ -483,6 +495,8 @@ namespace das {
     void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr & _newM, Context * context );
     void addFunctionFunctionAnnotation(smart_ptr_raw<Function> func, FunctionAnnotationPtr & ann, Context* context);
     void addAndApplyFunctionAnnotation ( smart_ptr_raw<Function> func, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context );
+    void addBlockBlockAnnotation ( smart_ptr_raw<ExprBlock> block, FunctionAnnotationPtr & _ann, Context * context );
+    void addAndApplyBlockAnnotation ( smart_ptr_raw<ExprBlock> blk, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context );
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value ?value->clone() : nullptr; }
     __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value ? value->clone() : nullptr; }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return make_smart<TypeDecl>(*value); }
@@ -511,6 +525,7 @@ namespace das {
     void for_each_reader_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );
     void for_each_variant_macro ( Module * mod, const TBlock<void,VariantMacroPtr> & block, Context * context, LineInfoArg * at );
     void for_each_typeinfo_macro ( Module * mod, const TBlock<void,TypeInfoMacroPtr> & block, Context * context, LineInfoArg * at );
+    void for_each_for_loop_macro ( Module * mod, const TBlock<void,ForLoopMacroPtr> & block, Context * context, LineInfoArg * at );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {

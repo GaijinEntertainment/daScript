@@ -110,6 +110,8 @@ namespace das {
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) { return arg; }
         // NULL COAELESCING
         virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * , Expression * ) {}
+        // TAG
+        virtual void preVisitTagValue ( ExprTag *, Expression * ) {}
         // AT
         virtual void preVisitAtIndex ( ExprAt *, Expression * ) {}
         // SAFE AT
@@ -185,6 +187,7 @@ namespace das {
         VISIT_EXPR(ExprDebug)
         VISIT_EXPR(ExprInvoke)
         VISIT_EXPR(ExprErase)
+        VISIT_EXPR(ExprSetInsert)
         VISIT_EXPR(ExprFind)
         VISIT_EXPR(ExprKeyExists)
         VISIT_EXPR(ExprAscend)
@@ -261,6 +264,7 @@ namespace das {
         VISIT_EXPR(ExprArrayComprehension)
         VISIT_EXPR(ExprMemZero)
         VISIT_EXPR(ExprTypeDecl)
+        VISIT_EXPR(ExprTag)
 #undef VISIT_EXPR
     };
 #if defined(_MSC_VER)

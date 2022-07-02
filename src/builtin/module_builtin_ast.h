@@ -15,6 +15,8 @@ MAKE_EXTERNAL_TYPE_FACTORY(StructureAnnotation,das::StructureAnnotation)
 MAKE_EXTERNAL_TYPE_FACTORY(EnumerationAnnotation,das::EnumerationAnnotation)
 MAKE_EXTERNAL_TYPE_FACTORY(PassMacro,das::PassMacro)
 MAKE_EXTERNAL_TYPE_FACTORY(VariantMacro,das::VariantMacro)
+MAKE_EXTERNAL_TYPE_FACTORY(ForLoopMacro,das::ForLoopMacro)
+MAKE_EXTERNAL_TYPE_FACTORY(CaptureMacro,das::CaptureMacro)
 MAKE_EXTERNAL_TYPE_FACTORY(ReaderMacro,das::ReaderMacro)
 MAKE_EXTERNAL_TYPE_FACTORY(CommentReader,das::CommentReader)
 MAKE_EXTERNAL_TYPE_FACTORY(CallMacro,das::CallMacro)
@@ -68,12 +70,14 @@ MAKE_EXTERNAL_TYPE_FACTORY(ExprQuote,das::ExprQuote);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprDebug,das::ExprDebug);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprInvoke,das::ExprInvoke);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprErase,das::ExprErase);
+MAKE_EXTERNAL_TYPE_FACTORY(ExprSetInsert,das::ExprSetInsert);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprFind,das::ExprFind);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprKeyExists,das::ExprKeyExists);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprAscend,das::ExprAscend);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprCast,das::ExprCast);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprDelete,das::ExprDelete);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprVar,das::ExprVar);
+MAKE_EXTERNAL_TYPE_FACTORY(ExprTag,das::ExprTag);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprSwizzle,das::ExprSwizzle);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprField,das::ExprField);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprSafeField,das::ExprSafeField);

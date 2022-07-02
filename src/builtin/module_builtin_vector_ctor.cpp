@@ -239,21 +239,21 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         // float2
         ADD_VEC_CTOR_1(float2,"v_splats");
         ADD_VEC_CTOR_2(float2,"float2");
-        addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float2, int2>>("float2",lib,"cvt_float2",false) );
-        addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float2,uint2>>("float2",lib,"cvt_float2",false) );
+        addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float2, int2>>("float2",lib,"cvt_ifloat2",false) );
+        addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float2,uint2>>("float2",lib,"cvt_ufloat2",false) );
 
         // float3
         ADD_VEC_CTOR_1(float3,"v_splats");
         ADD_VEC_CTOR_3(float3,"float3");
-        addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float3, int3>>("float3",lib,"cvt_float3",false) );
-        addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float3,uint3>>("float3",lib,"cvt_float3",false) );
+        addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float3, int3>>("float3",lib,"cvt_ifloat3",false) );
+        addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float3,uint3>>("float3",lib,"cvt_ufloat3",false) );
         addExtern<DAS_BIND_FUN(float3_from_xy_z)> (*this, lib, "float3", SideEffects::none, "float3_from_xy_z");
         addExtern<DAS_BIND_FUN(float3_from_x_yz)> (*this, lib, "float3", SideEffects::none, "float3_from_x_yz");
         // float4
         ADD_VEC_CTOR_1(float4,"v_splats");
         ADD_VEC_CTOR_4(float4,"float4");
-        addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float4, int4>>("float4",lib,"cvt_float4",false) );
-        addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float4,uint4>>("float4",lib,"cvt_float4",false) );
+        addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float4, int4>>("float4",lib,"cvt_ifloat4",false) );
+        addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float4,uint4>>("float4",lib,"cvt_ufloat4",false) );
 
         addExtern<DAS_BIND_FUN(float4_from_xyz_w)>  (*this, lib, "float4", SideEffects::none, "float4_from_xyz_w");
         addExtern<DAS_BIND_FUN(float4_from_x_yzw)>  (*this, lib, "float4", SideEffects::none, "float4_from_x_yzw");

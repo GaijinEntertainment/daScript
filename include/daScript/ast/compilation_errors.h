@@ -78,6 +78,7 @@ namespace das
 
     ,   cant_initialize                         =   30401       //  block type declaration, default values
     ,   cant_be_null                            =   30402       //  expression can't be null
+    ,   exception_during_macro                  =   30403       //  exception during macro
 
     ,   cant_dereference                        =   30501
     ,   cant_index                              =   30502       //  wtf[a]
@@ -124,6 +125,7 @@ namespace das
 
     ,   unsupported_read_macro                  =   33100       // #what ""
     ,   unsupported_call_macro                  =   33101       // apply failed etc
+    ,   unbound_macro_tag                       =   33102       // macro tag in the regular code
 
     ,   typeinfo_reference                      =   39901       //  typeinfo(sizeof type int&)
     ,   typeinfo_auto                           =   39902       //  typeinfo(typename type auto)

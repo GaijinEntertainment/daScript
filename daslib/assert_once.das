@@ -29,13 +29,8 @@ class AssertOnceMacro : AstFunctionAnnotation
             errors := "can't add global variable {once_name}"
             return [[ExpressionPtr]]
         // if ..
-        var qblock <- quote() <|
-            if __assert_once_I && !expr
-                __assert_once_I = false
-                assert(false, message)
-        // rename
-        apply_template(call.at, qblock) <| $ ( rules )
-            rules |> renameVariable("__assert_once_I") <| once_name
-            rules |> replaceVariable("expr") <| clone_expression(call.arguments[0])
-            rules |> replaceVariable("message") <| clone_expression(call.arguments[1])
-        return move_unquote_block(qblock)
+        return <- qmacro_block() <|
+            if $i(once_name) && !$e(call.arguments[0])
+                $i(once_name) = false
+                assert(false, $e(call.arguments[1]))
+

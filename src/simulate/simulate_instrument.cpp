@@ -75,15 +75,15 @@ namespace das {
         instrument.isInstrumenting = false;
         instrument.anyLine = true;
         runVisitor(&instrument);
-        instrumentFunction(0u, false);
+        instrumentFunction(0u, false, 0ul);
     }
 
-    void Context::instrumentFunction ( SimFunction * FNPTR, bool isInstrumenting ) {
+    void Context::instrumentFunction ( SimFunction * FNPTR, bool isInstrumenting, uint64_t userData ) {
         auto instFn = [&](SimFunction * fun, uint64_t fnMnh) {
             if ( !fun->code ) return;
             if ( isInstrumenting ) {
                 if ( !fun->code->rtti_node_isInstrumentFunction() ) {
-                    fun->code = code->makeNode<SimNodeDebug_InstrumentFunction>(fun->code->debugInfo, fun, fnMnh, fun->code);
+                    fun->code = code->makeNode<SimNodeDebug_InstrumentFunction>(fun->code->debugInfo, fun, fnMnh, fun->code, userData);
                 }
             } else {
                 if ( fun->code->rtti_node_isInstrumentFunction() ) {
@@ -101,7 +101,7 @@ namespace das {
         }
     }
 #else
-    void Context::instrumentFunction ( SimFunction *, bool ) {}
+    void Context::instrumentFunction ( SimFunction *, bool, uint64_t ) {}
     void Context::instrumentContextNode ( const Block & blk, bool, Context * context, LineInfo * line ) {}
     void Context::clearInstruments() {}
 #endif

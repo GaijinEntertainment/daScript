@@ -305,7 +305,7 @@ namespace das {
             }
         }
         __forceinline char * allocate ( uint32_t s ) {
-            if ( offset + s > size ) return nullptr;
+            if ( uint64_t(offset) + s > size ) return nullptr;
             char * res = data + offset;
             offset += s;
             return res;

@@ -255,6 +255,7 @@ namespace das
         __forceinline bool isImplicit() const { return flags & flag_isImplicit; }
         __forceinline bool isSmartPtr() const { return flags & flag_isSmartPtr; }
         TypeAnnotation * getAnnotation() const;
+        void resolveAnnotation() const;
     };
 
     struct VarInfo : TypeInfo {

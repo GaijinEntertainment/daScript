@@ -124,6 +124,7 @@ namespace das
         ModuleLibrary *            mlib = nullptr;
         vector<TypeAnnotation*> parents;
         bool validationNeverFails = false;
+        recursive_mutex walkMutex;
     };
 
     template <typename TT, bool canCopy = isCloneable<TT>::value>
@@ -454,12 +455,15 @@ namespace das
             return nullptr;
         }
         virtual void walk ( DataWalker & walker, void * vec ) override {
-            if ( !ati ) {
-                auto dimType = make_smart<TypeDecl>(*vecType);
-                dimType->ref = 0;
-                dimType->dim.push_back(1);
-                ati = helpA.makeTypeInfo(nullptr, dimType);
-                ati->flags |= TypeInfo::flag_isHandled;
+            {
+                lock_guard<recursive_mutex> guard(walkMutex);
+                if ( !ati ) {
+                    auto dimType = make_smart<TypeDecl>(*vecType);
+                    dimType->ref = 0;
+                    dimType->dim.push_back(1);
+                    ati = helpA.makeTypeInfo(nullptr, dimType);
+                    ati->flags |= TypeInfo::flag_isHandled;
+                }
             }
             auto pVec = (VectorType *)vec;
             auto atit = *ati;
@@ -471,6 +475,7 @@ namespace das
         TypeDeclPtr                vecType;
         DebugInfoHelper            helpA;
         TypeInfo *                 ati = nullptr;
+        recursive_mutex            walkMutex;
     };
 
     template <typename TT>
@@ -602,6 +607,9 @@ namespace das
         }
         virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const override {
             return context.code->makeNode<SimNode_Ref2Value<OT>>(at, l);
+        }
+        virtual SimNode * simulateNullCoalescing ( Context & context, const LineInfo & at, SimNode * s, SimNode * dv ) const override {
+            return context.code->makeNode<SimNode_NullCoalescing<OT>>(at,s,dv);
         }
     };
 

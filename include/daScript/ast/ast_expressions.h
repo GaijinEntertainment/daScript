@@ -224,6 +224,20 @@ namespace das
         };
     };
 
+    struct ExprTag : Expression {
+        ExprTag () { __rtti = "ExprTag"; }
+        ExprTag ( const LineInfo & a, const ExpressionPtr & se, const string & n )
+            : Expression(a), subexpr(se), name(n) {}
+        ExprTag ( const LineInfo & a, const ExpressionPtr & se, const ExpressionPtr & va, const string & n )
+            : Expression(a), subexpr(se), value(va), name(n) {}
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+        virtual ExpressionPtr visit(Visitor & vis) override;
+        ExpressionPtr   subexpr;
+        ExpressionPtr   value;
+        string          name;
+    };
+
     struct ExprField : Expression {
         ExprField () { __rtti = "ExprField"; };
         ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n, bool no_promo=false )
@@ -1041,6 +1055,14 @@ namespace das
         ExprKeyExists() { __rtti = "ExprKeyExists"; name="key_exists"; };
         ExprKeyExists ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprKeyExists>(a, "key_exists") { __rtti = "ExprKeyExists"; }
+        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual SimNode * simulate (Context & context) const override;
+    };
+
+    struct ExprSetInsert : ExprLikeCall<ExprSetInsert> {
+        ExprSetInsert() { __rtti = "ExprSetInsert"; name="insert"; };
+        ExprSetInsert ( const LineInfo & a, const string & )
+            : ExprLikeCall<ExprSetInsert>(a, "insert") { __rtti = "ExprSetInsert"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };

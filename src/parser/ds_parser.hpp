@@ -80,6 +80,11 @@ extern int das_yydebug;
     LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
     LineInfo tokRangeAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
 
+    struct TypePair {
+        TypeDecl * firstType;
+        TypeDecl * secondType;
+    };
+
 
 /* Token kinds.  */
 #ifndef DAS_YYTOKENTYPE
@@ -227,30 +232,38 @@ extern int das_yydebug;
     OROREQU = 392,                 /* "||="  */
     XORXOREQU = 393,               /* "^^="  */
     DOTDOT = 394,                  /* ".."  */
-    BRABRAB = 395,                 /* "[["  */
-    BRACBRB = 396,                 /* "[{"  */
-    CBRCBRB = 397,                 /* "{{"  */
-    INTEGER = 398,                 /* "integer constant"  */
-    LONG_INTEGER = 399,            /* "long integer constant"  */
-    UNSIGNED_INTEGER = 400,        /* "unsigned integer constant"  */
-    UNSIGNED_LONG_INTEGER = 401,   /* "unsigned long integer constant"  */
-    FLOAT = 402,                   /* "floating point constant"  */
-    DOUBLE = 403,                  /* "double constant"  */
-    NAME = 404,                    /* "name"  */
-    BEGIN_STRING = 405,            /* "start of the string"  */
-    STRING_CHARACTER = 406,        /* STRING_CHARACTER  */
-    STRING_CHARACTER_ESC = 407,    /* STRING_CHARACTER_ESC  */
-    END_STRING = 408,              /* "end of the string"  */
-    BEGIN_STRING_EXPR = 409,       /* "{"  */
-    END_STRING_EXPR = 410,         /* "}"  */
-    END_OF_READ = 411,             /* "end of failed eader macro"  */
-    UNARY_MINUS = 412,             /* UNARY_MINUS  */
-    UNARY_PLUS = 413,              /* UNARY_PLUS  */
-    PRE_INC = 414,                 /* PRE_INC  */
-    PRE_DEC = 415,                 /* PRE_DEC  */
-    POST_INC = 416,                /* POST_INC  */
-    POST_DEC = 417,                /* POST_DEC  */
-    DEREF = 418                    /* DEREF  */
+    MTAG_E = 395,                  /* "$$"  */
+    MTAG_I = 396,                  /* "$i"  */
+    MTAG_V = 397,                  /* "$v"  */
+    MTAG_B = 398,                  /* "$b"  */
+    MTAG_A = 399,                  /* "$a"  */
+    MTAG_T = 400,                  /* "$t"  */
+    MTAG_C = 401,                  /* "$c"  */
+    MTAG_F = 402,                  /* "$f"  */
+    BRABRAB = 403,                 /* "[["  */
+    BRACBRB = 404,                 /* "[{"  */
+    CBRCBRB = 405,                 /* "{{"  */
+    INTEGER = 406,                 /* "integer constant"  */
+    LONG_INTEGER = 407,            /* "long integer constant"  */
+    UNSIGNED_INTEGER = 408,        /* "unsigned integer constant"  */
+    UNSIGNED_LONG_INTEGER = 409,   /* "unsigned long integer constant"  */
+    FLOAT = 410,                   /* "floating point constant"  */
+    DOUBLE = 411,                  /* "double constant"  */
+    NAME = 412,                    /* "name"  */
+    BEGIN_STRING = 413,            /* "start of the string"  */
+    STRING_CHARACTER = 414,        /* STRING_CHARACTER  */
+    STRING_CHARACTER_ESC = 415,    /* STRING_CHARACTER_ESC  */
+    END_STRING = 416,              /* "end of the string"  */
+    BEGIN_STRING_EXPR = 417,       /* "{"  */
+    END_STRING_EXPR = 418,         /* "}"  */
+    END_OF_READ = 419,             /* "end of failed eader macro"  */
+    UNARY_MINUS = 420,             /* UNARY_MINUS  */
+    UNARY_PLUS = 421,              /* UNARY_PLUS  */
+    PRE_INC = 422,                 /* PRE_INC  */
+    PRE_DEC = 423,                 /* PRE_DEC  */
+    POST_INC = 424,                /* POST_INC  */
+    POST_DEC = 425,                /* POST_DEC  */
+    DEREF = 426                    /* DEREF  */
   };
   typedef enum das_yytokentype das_yytoken_kind_t;
 #endif
@@ -286,6 +299,7 @@ union DAS_YYSTYPE
     Function *                      pFuncDecl;
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
+    TypePair                        aTypePair;
 
 
 };

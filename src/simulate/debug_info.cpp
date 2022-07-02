@@ -59,6 +59,11 @@ namespace das
         return Module::resolveAnnotation(this);
     }
 
+    void TypeInfo::resolveAnnotation() const {
+        if ( daScriptEnvironment::bound->modules ) Module::resolveAnnotation(this);
+    }
+
+
     string das_to_string ( Type t ) {
         return g_typeTable.find(t);
     }

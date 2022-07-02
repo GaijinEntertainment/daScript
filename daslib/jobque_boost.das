@@ -94,7 +94,7 @@ def push ( channel:Channel?; data : auto? )
     _builtin_channel_push(channel, data)
 
 [template (tinfo)]
-def each ( channel:Channel?; tinfo : auto(TT) )
+def each ( var channel:Channel?; tinfo : auto(TT) )
     //! this iterator is used to iterate over the channel in order it was pushed.
     //! iterator stops once channel is depleted (internal entry counter is 0)
     //! iteration can happen on multiple threads or jobs at the same time.
@@ -103,8 +103,72 @@ def each ( channel:Channel?; tinfo : auto(TT) )
             while true
                 let void_data = _builtin_channel_pop(channel)
                 if void_data==null
-                    return false
+                    break
                 unsafe
                     yield * reinterpret<TT?#> void_data
+            channel |> release
             return false
+
+def public capture_jobque_channel ( ch:Channel? ) : Channel?
+    ch |> add_ref
+    return ch
+
+def public capture_jobque_job_statuc ( js:JobStatus? ) : JobStatus?
+    js |> add_ref
+    return js
+
+def public release_capture_jobque_channel ( ch:Channel? )
+    if ch != null
+        panic("Channel has not been released. missing channel|>release or channel|>notify_and_release")
+
+def public release_capture_jobque_job_status ( js:JobStatus? )
+    if js != null
+        panic("JobStatus has not been released. missing status|>release or status|>notify_and_release")
+
+[macro_function]
+def private isPtrToJQ ( typ:TypeDeclPtr; jqt:string ) : bool
+    if !typ.isPointer
+        return false
+    if typ.firstType==null
+        return false
+    if !typ.firstType.isHandle
+        return false
+    if typ.firstType.annotation._module.name!="jobque"
+        return false
+    if typ.firstType.annotation.name!=jqt
+        return false
+    return true
+
+[capture_macro(name=channel_and_status_capture_macro)]
+class ChannelAndStatusCapture : AstCaptureMacro
+    def override captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; typ:TypeDeclPtr ) : ExpressionPtr
+        if typ |> isPtrToJQ("Channel")
+            var pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_channel"]]
+            pCall.arguments |> emplace_new <| clone_expression(expr)
+            return pCall
+        elif typ |> isPtrToJQ("JobStatus")
+            var pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_job_statuc"]]
+            pCall.arguments |> emplace_new <| clone_expression(expr)
+            return pCall
+        return [[ExpressionPtr]]
+    def override captureFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
+        if fun.flags._generator // generator gets finally section called every single time. nothing we can do
+            return
+        for fld in lcs.fields
+            if fld._type |> isPtrToJQ("Channel")
+                var pCall <- new [[ExprCall() at=fld.at, name:="jobque_boost::release_capture_jobque_channel"]]
+                pCall.arguments |> emplace_new <| new [[ExprField() at=fld.at,
+                    value <- new [[ExprVar() at=fld.at, name:="__this"]],
+                    name := fld.name,
+                    derefFlags = ExprFieldDerefFlags ignoreCaptureConst
+                ]]
+                (fun.body as ExprBlock).finalList |> emplace(pCall)
+            elif fld._type |> isPtrToJQ("JobStatus")
+                var pCall <- new [[ExprCall() at=fld.at, name:="jobque_boost::release_capture_jobque_job_status"]]
+                pCall.arguments |> emplace_new <| new [[ExprField() at=fld.at,
+                    value <- new [[ExprVar() at=fld.at, name:="__this"]],
+                    name := fld.name,
+                    derefFlags = ExprFieldDerefFlags ignoreCaptureConst
+                ]]
+                (fun.body as ExprBlock).finalList |> emplace(pCall)
 

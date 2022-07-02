@@ -152,7 +152,13 @@ namespace das
             uint32_t newCapacity = das::max(uint32_t(minCapacity), tab.capacity*2);
         repeatIt:;
             Table newTab;
-            uint32_t memSize = newCapacity * (valueTypeSize + sizeof(KeyType) + sizeof(uint64_t));
+            uint64_t memSize64 = uint64_t(newCapacity) * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + uint64_t(sizeof(uint64_t)));
+            if ( memSize64>=0xffffffff ) {
+                context->throw_error_ex("can't grow table, out of index space [capacity=%i]", newCapacity);
+                return false;
+
+            }
+            uint32_t memSize = uint32_t(memSize64);
             newTab.data = (char *) context->heap->allocate(memSize);
             context->heap->mark_comment(newTab.data, "table");
             if ( !newTab.data ) {
@@ -167,7 +173,7 @@ namespace das
             newTab.flags = tab.flags;
             newTab.maxLookups = computeMaxLookups(newCapacity);
             newTab.shift = computeShift(newCapacity);
-            memset(newTab.data, 0, newCapacity*valueTypeSize);
+            if ( valueTypeSize ) memset(newTab.data, 0, newCapacity*valueTypeSize);
             auto pHashes = newTab.hashes;
             memset(pHashes, 0, newCapacity * sizeof(uint64_t));
             if ( tab.size ) {

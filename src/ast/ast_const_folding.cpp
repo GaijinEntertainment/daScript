@@ -818,12 +818,6 @@ namespace das {
     protected:
         // ExprCall
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
-            bool allNoSideEffects = true;
-            for ( auto & arg : expr->arguments ) {
-                if ( arg->type->baseType!=Type::fakeContext && arg->type->baseType!=Type::fakeLineInfo ) {
-                    allNoSideEffects &= arg->noSideEffects;
-                }
-            }
             if ( expr->func->result->isFoldable() && (expr->func->sideEffectFlags==0) && !expr->func->builtIn ) {
                 auto allConst = true;
                 for ( auto & arg : expr->arguments ) {

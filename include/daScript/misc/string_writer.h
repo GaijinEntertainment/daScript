@@ -40,6 +40,8 @@ namespace das {
 
     class VectorAllocationPolicy {
     public:
+        virtual ~VectorAllocationPolicy() {}
+
         string str() const {            // todo: replace via stringview
             return string(data.data(), data.size());
         }

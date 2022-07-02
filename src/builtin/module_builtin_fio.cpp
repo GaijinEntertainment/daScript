@@ -147,11 +147,6 @@ namespace das {
         virtual bool isLocal() const override { return true; }
     };
 
-    struct FileAnnotation : ManagedStructureAnnotation <FILE,false> {
-        FileAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FILE", ml) {
-        }
-    };
-
 
     void builtin_fprint ( const FILE * f, const char * text, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(*at, "can't fprint NULL");
@@ -453,7 +448,7 @@ namespace das {
             lib.addBuiltInModule();
             lib.addModule(Module::require("strings"));
             // type
-            addAnnotation(make_smart<FileAnnotation>(lib));
+            addAnnotation(make_smart<DummyTypeAnnotation>("FILE", "FILE", 16, 16));
             addAnnotation(make_smart<FStatAnnotation>(lib));
             // seek constants
             addConstant<int32_t>(*this, "seek_set", SEEK_SET);

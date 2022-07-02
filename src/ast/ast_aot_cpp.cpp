@@ -481,6 +481,14 @@ namespace das {
                 ss << " };\n";
             }
             ss << "\n";
+            ss << "static void resolveTypeInfoAnnotations()\n{\n";
+            for ( auto & ti : tmn2t ) {
+                auto tinfo = ti.second;
+                if ( tinfo->type==Type::tHandle ) {
+                    ss << "\t" << typeInfoName(ti.second) << ".resolveAnnotation();\n";
+                };
+            }
+            ss << "}\n\n";
             return ss.str();
         }
         string enumInfoName ( EnumInfo * info ) const {
@@ -534,7 +542,7 @@ namespace das {
             ss << " };\n";
         }
         void describeCppStructInfo ( TextWriter & ss, StructInfo * info ) const {
-            ss << "\"" << info->name << "\", " << "\"" << info->module_name << "\", " << info->flags << ", ";
+            ss << "(char*)\"" << info->name << "\", " << "(char*)\"" << info->module_name << "\", " << info->flags << ", ";
             if ( info->fields ) {
                 ss << structInfoName(info) << "_fields, ";
             } else {
@@ -583,7 +591,7 @@ namespace das {
         void describeCppEnumInfoValues ( TextWriter & ss, EnumInfo * einfo ) const {
             for ( uint32_t v=0; v!=einfo->count; ++v ) {
                 auto val = einfo->fields[v];
-                ss << "EnumValueInfo " << enumInfoName(einfo) << "_value_" << v << " = { \""
+                ss << "EnumValueInfo " << enumInfoName(einfo) << "_value_" << v << " = { (char*)\""
                 << val->name << "\", " << val->value << " };\n";
             }
             ss << "EnumValueInfo * " << enumInfoName(einfo) << "_values [] = { ";
@@ -594,7 +602,7 @@ namespace das {
             ss << " };\n";
         }
         void describeCppEnumInfo ( TextWriter & ss, EnumInfo * info ) const {
-            ss  << "\"" << info->name << "\", " << "\"" << info->module_name << "\", " << enumInfoName(info) << "_values, "
+            ss  << "(char*)\"" << info->name << "\", " << "(char*)\"" << info->module_name << "\", " << enumInfoName(info) << "_values, "
                 << info->count << ", 0x" << HEX << info->hash << DEC << "ul";
         }
         void describeCppTypeInfo ( TextWriter & ss, TypeInfo * info, const string & suffix = "" ) const {
@@ -2796,6 +2804,8 @@ namespace das {
                 }
             } else if (call->name == "erase") {
                 ss << "__builtin_table_erase(__context__,";
+            } else if (call->name == "insert") {
+                ss << "__builtin_table_set_insert(__context__,";
             } else if (call->name == "find") {
                 ss << "__builtin_table_find(__context__,";
             } else if (call->name == "key_exists") {

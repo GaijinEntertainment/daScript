@@ -30,14 +30,21 @@ NO_ASAN_INLINE vec4f v_ldu(const float *m);
 NO_ASAN_INLINE vec4i v_ldui(const int *m);
 //! load one 32 bit element, zero others
 NO_ASAN_INLINE vec4f v_ldu_x(const float *m);
+//! load 3x32 bit elements fast by one 4x32 bit load, but safe for thread sanitizer
+NO_ASAN_INLINE vec3f v_ldu_p3(const float *m);
+//! load 3x32 bit elements safe, use it only when v_ldu_p3 can cause memory access crashes
+NO_ASAN_INLINE vec3f v_ldu_p3_safe(const float *m);
 //! load unaligned memory and unpacks vector from 4 signed short ints
 VECMATH_FINLINE vec4i VECTORCALL v_ldush(const signed short *m);
 //! load unaligned memory and unpacks vector from 4 unsigned short ints
 VECMATH_FINLINE vec4i VECTORCALL v_lduush(const unsigned short *m);
 
 //! load 64 bit from unaligned memory into .xy (.zw=0)
-VECMATH_FINLINE vec4i VECTORCALL v_ldu_half_w(const void *m);
+VECMATH_FINLINE vec4i VECTORCALL v_ldui_half(const void *m);
 VECMATH_FINLINE vec4f VECTORCALL v_ldu_half(const void *m);
+
+//! fetch the cache line that contains address m
+VECMATH_FINLINE void v_prefetch(const void *m);
 
 //! .xyzw = a.x
 VECMATH_FINLINE vec4f VECTORCALL v_splat_x(vec4f a);
@@ -57,6 +64,10 @@ VECMATH_FINLINE vec4f VECTORCALL v_splats(float a);
 VECMATH_FINLINE vec4i VECTORCALL v_splatsi(int a);
 VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a);
 
+//! .xyzw = {a 0 0 0}
+VECMATH_FINLINE vec4f VECTORCALL v_set_x(float a);
+VECMATH_FINLINE vec4i VECTORCALL v_seti_x(int a);
+
 //! .xyzw = {x y z w}
 VECMATH_FINLINE vec4f VECTORCALL v_make_vec4f(float x, float y, float z, float w);
 VECMATH_FINLINE vec4i VECTORCALL v_make_vec4i(int x, int y, int z, int w);
@@ -69,11 +80,11 @@ VECMATH_FINLINE void VECTORCALL v_stu(void *m, vec4f v);
 VECMATH_FINLINE void VECTORCALL v_stu_half(void *m, vec4f v);
 
 //! store vector to  16-byte aligned memory
-VECMATH_FINLINE void VECTORCALL v_st_w(void *m, vec4i v);
+VECMATH_FINLINE void VECTORCALL v_sti(void *m, vec4i v);
 //! store vector to unaligned memory
-VECMATH_FINLINE void VECTORCALL v_stu_w(void *m, vec4i v);
+VECMATH_FINLINE void VECTORCALL v_stui(void *m, vec4i v);
 //! store low 64 bits of vector (.xy) to unaligned memory
-VECMATH_FINLINE void VECTORCALL v_stu_w_half(void *m, vec4i v);
+VECMATH_FINLINE void VECTORCALL v_stui_half(void *m, vec4i v);
 
 //! merge high words: .xyzw = {a.x, b.x, a.y, b.y}
 VECMATH_FINLINE vec4f VECTORCALL v_merge_hw(vec4f a, vec4f b);
@@ -86,7 +97,7 @@ VECMATH_FINLINE int VECTORCALL v_signmask(vec4f a);
 //! component-wise comparison: for C={xyzw}  .C = a.C==b.C ? 0xFFFFFFFF : 0
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_eq(vec4f a, vec4f b);
 //! component-wise integer comparison: for C={xyzw}  .C = a.C==b.C ? 0xFFFFFFFF : 0
-VECMATH_FINLINE vec4f VECTORCALL v_cmp_eq_w(vec4f a, vec4f b);
+VECMATH_FINLINE vec4f VECTORCALL v_cmp_eqi(vec4f a, vec4f b);
 VECMATH_FINLINE vec4i VECTORCALL v_cmp_eqi(vec4i a, vec4i b);
 //! component-wise comparison: for C={xyzw}  .C = a.C>=b.C ? 0xFFFFFFFF : 0
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_ge(vec4f a, vec4f b);
@@ -216,6 +227,18 @@ VECMATH_FINLINE vec4i VECTORCALL v_slli(vec4i v, int bits);
 VECMATH_FINLINE vec4i VECTORCALL v_srli(vec4i v, int bits);
 //! shift right (signed integer). bits is immediate value
 VECMATH_FINLINE vec4i VECTORCALL v_srai(vec4i v, int bits);
+//! shift left (unsigned integer). bits is variative value
+VECMATH_FINLINE vec4i VECTORCALL v_slli_n(vec4i v, int bits);
+//! shift right (unsigned integer). bits is variative value
+VECMATH_FINLINE vec4i VECTORCALL v_srli_n(vec4i v, int bits);
+//! shift right (signed integer). bits is variative value
+VECMATH_FINLINE vec4i VECTORCALL v_srai_n(vec4i v, int bits);
+//! shift left (unsigned integer). bits is variative 64-bit value
+VECMATH_FINLINE vec4i VECTORCALL v_slli_n(vec4i v, vec4i bits);
+//! shift left (unsigned integer). bits is variative 64-bit value
+VECMATH_FINLINE vec4i VECTORCALL v_srli_n(vec4i v, vec4i bits);
+//! shift right (signed integer). bits is variative 64-bit value
+VECMATH_FINLINE vec4i VECTORCALL v_srai_n(vec4i v, vec4i bits);
 
 //! shift left (unsigned integer)
 VECMATH_FINLINE vec4i VECTORCALL v_sll(vec4i v, int bits);
@@ -308,13 +331,6 @@ VECMATH_FINLINE vec4i VECTORCALL v_packus(vec4i a);
 VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a, vec4i b);
 //! pack 16x 16-bit ints into 16x unsigned 8-bit ints
 VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a);
-
-//! compute sine and cosine for all components: for C={xyzw}  s.C = sin(a.C); c.C = cos(a.C);
-VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f a, vec4f& s, vec4f& c);
-
-//! compute sine and cosine for .x: s.xyzw = sin(a.x); c.xyzw = cos(a.x);
-//! for portability, set a.yzw=a.x on ALTIVEC targets (they redirect to v_sincos4)
-VECMATH_FINLINE void VECTORCALL v_sincos_x(vec4f a, vec4f& s, vec4f& c);
 
 
 //
@@ -731,24 +747,37 @@ VECMATH_FINLINE quat4f VECTORCALL v_quat_qslerp(float t, quat4f a, quat4f b);
 VECMATH_FINLINE quat4f VECTORCALL v_quat_qsquad(float t,
   const quat4f &q0, const quat4f &q1, const quat4f &q2, const quat4f &q3);
 
-//arctan
+//
+// Trigonometry
+//
 
-//approximate atan |error| is < 0.00045
-VECMATH_INLINE vec4f VECTORCALL v_atan_est(vec4f x);  // any x
-// fast atan version. |error| is < 0.000007
-VECMATH_INLINE vec4f VECTORCALL v_atan(vec4f x);  // any x
+//! compute sine and cosine for all components: for C={xyzw}  s.C = sin(a.C); c.C = cos(a.C);
+VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f a, vec4f& s, vec4f& c);
 
-// fast asin/acos. Uses atan, so it is not precise
-VECMATH_INLINE vec4f VECTORCALL v_asin(vec4f a);
-VECMATH_INLINE vec4f VECTORCALL v_acos(vec4f a);
-VECMATH_INLINE vec4f VECTORCALL v_asin_x(vec4f a);
-VECMATH_INLINE vec4f VECTORCALL v_acos_x(vec4f a);
+//! compute sine and cosine for .x: s.x = sin(a.x); c.x = cos(a.x);
+VECMATH_FINLINE void VECTORCALL v_sincos_x(vec4f a, vec4f& s, vec4f& c);
 
-// fast atan2 version. |error| is < 0.000007
-VECMATH_INLINE vec4f VECTORCALL v_atan2(vec4f y, vec4f x);
+//! compute sine, cosine, tangent or arc for all components
+VECMATH_FINLINE vec4f VECTORCALL v_sin(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_cos(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_tan(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_asin(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_acos(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_atan(vec4f a);
 
-// fast approx atan version. |error| is < 0.0004
-// ~50% faster then v_atan2
+//! compute sine, cosine, tangent or arc for .x component
+VECMATH_FINLINE vec4f VECTORCALL v_sin_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_cos_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_tan_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_asin_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_acos_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_atan_x(vec4f a);
+
+// compute approximate atan |error| is < 0.00045
+VECMATH_FINLINE vec4f VECTORCALL v_atan_est(vec4f x);  // any x
+
+// compute approximate atan2 |error| is < 0.0004
+// ~40% faster then v_atan2
 // NOTE: does not handle any of the following inputs:
 // (+0, +0), (+0, -0), (-0, +0), (-0, -0)
 VECMATH_INLINE vec4f VECTORCALL v_atan2_est(vec4f y, vec4f x);
@@ -845,5 +874,6 @@ VECMATH_FINLINE int VECTORCALL v_test_vec_x_le_0(vec3f v);
 #endif
 
 #include "dag_vecMath_common.h"
+#include "dag_vecMath_trig.h"
 
 #endif

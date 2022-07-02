@@ -65,18 +65,13 @@ class AppendCondAnnotation : AstFunctionAnnotation
     ctxFn.flags |= FunctionFlags exports
     ctxFn.result <- new [[TypeDecl() baseType=Type tVoid, at=at]]
 
-    var ctxQblock <- quote() <|
-      unsafe
-        verify(has_debug_agent_context(CONTEXT_NAME),"debug agent is not installed")
-        verify(addr(get_debug_agent_context(CONTEXT_NAME)) == addr(this_context()),"agent context mismatch")
-
-    apply_template(at, ctxQblock) <| $ ( rules )
-      rules |> replaceVariable("CONTEXT_NAME") <| new [[ExprConstString() at = at, value := contextName]]
     unsafe
-      ctxFn.body <- move_unquote_block(ctxQblock)
+      ctxFn.body <- qmacro_block() <|
+        unsafe
+          verify(has_debug_agent_context($v(contextName)),"debug agent is not installed")
+          verify(addr(get_debug_agent_context($v(contextName))) == addr(this_context()),"agent context mismatch")
 
     var ctxFnBlock = ctxFn.body as ExprBlock
-    ctxFnBlock.blockFlags ^= ExprBlockFlags isClosure
 
     var callInCtx <- new [[ExprCall() at=at, name:=ctxCloneFnName]]
 
@@ -87,9 +82,8 @@ class AppendCondAnnotation : AstFunctionAnnotation
     if !func.result.isVoid
       var resType <- new [[TypeDecl() baseType=Type tPointer, firstType<-clone_type(func.result)]]
       ctxFn.arguments |> emplace_new <| new [[Variable() at=at, _type<-resType, name:=resName]]
-      var ctxExprDeref <- new [[ExprPtr2Ref() at=at, subexpr <- new [[ExprVar() at=at, name:=resName]] ]]
-      var ctxMovOp <- new [[ExprCopy() at=at, left<-ctxExprDeref, right<-callInCtx]]
-      ctxFnBlock.list |> emplace(ctxMovOp)
+      ctxFnBlock.list |> emplace_new <| qmacro_expr(${*$i(resName) = $e(callInCtx);})
+
     else
       ctxFnBlock.list |> emplace(callInCtx)
 
@@ -103,55 +97,32 @@ class AppendCondAnnotation : AstFunctionAnnotation
     compiling_module() |> add_function(fn)
 
     func.body := null
-
-    var qblock <- quote() <|
-      unsafe
-        verify(has_debug_agent_context(CONTEXT_NAME),"debug agent is not installed")
-        verify(addr(get_debug_agent_context(CONTEXT_NAME)) != addr(this_context()),"agent context mismatch")
-
-    apply_template(at, qblock) <| $ ( rules2 )
-      rules2 |> replaceVariable("CONTEXT_NAME") <| new [[ExprConstString() at = at, value := contextName]]
-
     unsafe
-      func.body <- move_unquote_block(qblock)
-
-    var funcBlock: ExprBlock?
-    unsafe
-      funcBlock = reinterpret<ExprBlock?> func.body
-    funcBlock.blockFlags ^= ExprBlockFlags isClosure
+      func.body <- qmacro_block() <|
+        unsafe
+          verify(has_debug_agent_context($v(contextName)),"debug agent is not installed")
+          verify(addr(get_debug_agent_context($v(contextName))) != addr(this_context()),"agent context mismatch")
+    var funcBlock = func.body as ExprBlock
 
     if !func.result.isVoid
-      var vlet <- new [[ExprLet() at=at, atInit=at ]]
-      vlet.variables |> emplace_new() <| new [[Variable() at = at,
-        name := resName,
-        _type <- clone_type(func.result)
-      ]]
-      funcBlock.list |> emplace(vlet)
+      funcBlock.list |> emplace_new <| qmacro_expr(${let $i(resName) : $t(func.result);})
 
     var pinvoke <- new [[ExprCall() at=at, name:="invoke_in_context"]]
     pinvoke.genFlags |= ExprGenFlags alwaysSafe
-    var getCtx <- new [[ExprCall() at=at, name:="get_debug_agent_context"]]
-    getCtx.arguments |> emplace_new <| new [[ExprConstString() at=at, value:=contextName]]
-    pinvoke.arguments |> emplace(getCtx)
-    pinvoke.arguments |> emplace_new <| new [[ExprAddr() at=at, target:=ctxFnName]]
+    pinvoke.arguments |> emplace_new <| qmacro(get_debug_agent_context($v(contextName)))
+    pinvoke.arguments |> emplace_new <| qmacro(@@$c(ctxFnName))
     for arg in func.arguments
       if arg._type.isRef && !arg._type.isRefType
-        pinvoke.arguments |> emplace_new <| new [[ExprRef2Ptr() at=at,
-          subexpr <- new [[ExprVar() at=at, name:=arg.name]],
-          genFlags = ExprGenFlags alwaysSafe
-        ]]
+        pinvoke.arguments |> emplace_new <| qmacro(unsafe(addr($i(arg.name))))
       else
-        pinvoke.arguments |> emplace_new <| new [[ExprVar() at=at, name:=arg.name]]
+        pinvoke.arguments |> emplace_new <| qmacro($i(arg.name))
     if !func.result.isVoid
-      var resAddr <- new [[ExprRef2Ptr() at=at,
-        subexpr<-new [[ExprVar() at=at, name:=resName]],
-        genFlags = ExprGenFlags alwaysSafe
-      ]]
-      pinvoke.arguments |> emplace_new <| resAddr
+      pinvoke.arguments |> emplace_new <| qmacro(unsafe(addr($i(resName))))
 
     funcBlock.list |> emplace(pinvoke)
 
     if !func.result.isVoid
-      funcBlock.list |> emplace_new() <| new [[ExprReturn() at=at, subexpr<-new [[ExprVar() at=at, name:=resName]] ]]
+      funcBlock.list |> emplace_new() <| qmacro_expr(${return $i(resName);})
 
     return true
+

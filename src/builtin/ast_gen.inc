@@ -11,9 +11,10 @@ protected:
     __fn_complete = 7,
     __fn_isCompatible = 8,
     __fn_isSpecialized = 9,
+    __fn_appendToMangledName = 10,
   };
 protected:
-  int _das_class_method_offset[10];
+  int _das_class_method_offset[11];
 public:
   AstFunctionAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_transform] = adapt_field_offset("transform",info);
@@ -26,6 +27,7 @@ public:
       _das_class_method_offset[__fn_complete] = adapt_field_offset("complete",info);
       _das_class_method_offset[__fn_isCompatible] = adapt_field_offset("isCompatible",info);
       _das_class_method_offset[__fn_isSpecialized] = adapt_field_offset("isSpecialized",info);
+      _das_class_method_offset[__fn_appendToMangledName] = adapt_field_offset("appendToMangledName",info);
   }
   __forceinline Func get_transform ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_transform]);
@@ -116,6 +118,15 @@ public:
       <void *>
         (__context__,nullptr,__funcCall__,
           self);
+  }
+  __forceinline Func get_appendToMangledName ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_appendToMangledName]);
+  }
+  __forceinline void invoke_appendToMangledName ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> const  func, AnnotationDeclaration const  & decl, das::string & mangledName ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Function> const ,AnnotationDeclaration const  &,das::string &>
+        (__context__,nullptr,__funcCall__,
+          self,func,decl,mangledName);
   }
 };
 
@@ -292,6 +303,61 @@ public:
       <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprSafeAsVariant> const >
         (__context__,nullptr,__funcCall__,
           self,prog,mod,expr).marshal();
+  }
+};
+
+class AstForLoopMacro_Adapter {
+protected:
+  enum {
+    __fn_visitExprFor = 0,
+  };
+protected:
+  int _das_class_method_offset[1];
+public:
+  AstForLoopMacro_Adapter ( const StructInfo * info ) {
+      _das_class_method_offset[__fn_visitExprFor] = adapt_field_offset("visitExprFor",info);
+  }
+  __forceinline Func get_visitExprFor ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprFor]);
+  }
+  __forceinline smart_ptr<Expression> invoke_visitExprFor ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<ExprFor> const  expr ) const {
+    return das_invoke_function<smart_ptr_raw<Expression>>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprFor> const >
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,expr).marshal();
+  }
+};
+
+class AstCaptureMacro_Adapter {
+protected:
+  enum {
+    __fn_captureExpression = 0,
+    __fn_captureFunction = 1,
+  };
+protected:
+  int _das_class_method_offset[2];
+public:
+  AstCaptureMacro_Adapter ( const StructInfo * info ) {
+      _das_class_method_offset[__fn_captureExpression] = adapt_field_offset("captureExpression",info);
+      _das_class_method_offset[__fn_captureFunction] = adapt_field_offset("captureFunction",info);
+  }
+  __forceinline Func get_captureExpression ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_captureExpression]);
+  }
+  __forceinline smart_ptr<Expression> invoke_captureExpression ( Context * __context__, Func __funcCall__, void * self, Program * const  prog, Module * const  mod, smart_ptr_raw<Expression> const  expr, smart_ptr_raw<TypeDecl> const  etype ) const {
+    return das_invoke_function<smart_ptr_raw<Expression>>::invoke
+      <void *,Program * const ,Module * const ,smart_ptr_raw<Expression> const ,smart_ptr_raw<TypeDecl> const >
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,expr,etype).marshal();
+  }
+  __forceinline Func get_captureFunction ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_captureFunction]);
+  }
+  __forceinline void invoke_captureFunction ( Context * __context__, Func __funcCall__, void * self, Program * const  prog, Module * const  mod, Structure * lcs, smart_ptr_raw<Function> fun ) const {
+    das_invoke_function<void>::invoke
+      <void *,Program * const ,Module * const ,Structure *,smart_ptr_raw<Function>>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,lcs,fun);
   }
 };
 
@@ -553,13 +619,15 @@ protected:
   enum {
     __fn_preVisit = 0,
     __fn_visit = 1,
+    __fn_canVisitArguments = 2,
   };
 protected:
-  int _das_class_method_offset[2];
+  int _das_class_method_offset[3];
 public:
   AstCallMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_preVisit] = adapt_field_offset("preVisit",info);
       _das_class_method_offset[__fn_visit] = adapt_field_offset("visit",info);
+      _das_class_method_offset[__fn_canVisitArguments] = adapt_field_offset("canVisitArguments",info);
   }
   __forceinline Func get_preVisit ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_preVisit]);
@@ -578,6 +646,15 @@ public:
       <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprCallMacro> const >
         (__context__,nullptr,__funcCall__,
           self,prog,mod,expr).marshal();
+  }
+  __forceinline Func get_canVisitArguments ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitArguments]);
+  }
+  __forceinline bool invoke_canVisitArguments ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<ExprCallMacro> const  expr ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<ExprCallMacro> const >
+        (__context__,nullptr,__funcCall__,
+          self,expr);
   }
 };
 

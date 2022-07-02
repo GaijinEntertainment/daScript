@@ -16,9 +16,10 @@ namespace das {
     };
 
     struct VariableNameAndPosition {
-        string      name;
-        string      aka;
-        LineInfo    at;
+        string          name;
+        string          aka;
+        LineInfo        at;
+        ExpressionPtr   tag;
     };
 
     struct VariableDeclaration {
@@ -31,8 +32,8 @@ namespace das {
             if ( annotation ) delete annotation;
         }
         vector<VariableNameAndPosition>   *pNameList;
-        TypeDecl                *pTypeDecl;
-        Expression              *pInit;
+        TypeDecl                *pTypeDecl = nullptr;
+        Expression              *pInit = nullptr;
         bool                    init_via_move = false;
         bool                    init_via_clone = false;
         bool                    override = false;

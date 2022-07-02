@@ -34,6 +34,8 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(StructureAnnotation,StructureAnnotation)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(EnumerationAnnotation,EnumerationAnnotation)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(PassMacro,PassMacro)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(VariantMacro,VariantMacro)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(ForLoopMacro,ForLoopMacro)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(CaptureMacro,CaptureMacro)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ReaderMacro,ReaderMacro)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(CommentReader,CommentReader)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(CallMacro,CallMacro)
@@ -88,12 +90,14 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprQuote,ExprQuote);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprDebug,ExprDebug);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprInvoke,ExprInvoke);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprErase,ExprErase);
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprSetInsert,ExprSetInsert);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprFind,ExprFind);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprKeyExists,ExprKeyExists);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprAscend,ExprAscend);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprCast,ExprCast);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprDelete,ExprDelete);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprVar,ExprVar);
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprTag,ExprTag);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprSwizzle,ExprSwizzle);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprField,ExprField);
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(ExprSafeField,ExprSafeField);
@@ -596,6 +600,12 @@ namespace das {
         }
     };
 
+    struct AstExprSetInsertAnnotation : AstExprLikeCallAnnotation<ExprSetInsert> {
+        AstExprSetInsertAnnotation(ModuleLibrary & ml)
+            :  AstExprLikeCallAnnotation<ExprSetInsert> ("ExprSetInsert", ml) {
+        }
+    };
+
     struct AstExprFindAnnotation : AstExprLikeCallAnnotation<ExprFind> {
         AstExprFindAnnotation(ModuleLibrary & ml)
             :  AstExprLikeCallAnnotation<ExprFind> ("ExprFind", ml) {
@@ -643,6 +653,15 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(pBlock)>("pBlock");
             addField<DAS_BIND_MANAGED_FIELD(argumentIndex)>("argumentIndex");
             addFieldEx ( "varFlags", "varFlags", offsetof(ExprVar, varFlags), makeExprVarFlags() );
+        }
+    };
+
+    struct AstExprTagAnnotation : AstExpressionAnnotation<ExprTag> {
+        AstExprTagAnnotation(ModuleLibrary & ml)
+            :  AstExpressionAnnotation<ExprTag> ("ExprTag", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(value)>("value");
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };
 
@@ -1042,7 +1061,7 @@ namespace das {
         }
         void init () {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(aka)>("_aka");
+            addField<DAS_BIND_MANAGED_FIELD(aka)>("_aka","aka");
             addField<DAS_BIND_MANAGED_FIELD(type)>("_type","type");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(source)>("source");
@@ -1247,12 +1266,14 @@ namespace das {
         addExpressionAnnotation(make_smart<AstExprDebugAnnotation>(lib))->from("ExprLooksLikeCall");
         addExpressionAnnotation(make_smart<AstExprInvokeAnnotation>(lib))->from("ExprLooksLikeCall");
         addExpressionAnnotation(make_smart<AstExprEraseAnnotation>(lib))->from("ExprLooksLikeCall");
+        addExpressionAnnotation(make_smart<AstExprSetInsertAnnotation>(lib))->from("ExprLooksLikeCall");
         addExpressionAnnotation(make_smart<AstExprFindAnnotation>(lib))->from("ExprLooksLikeCall");
         addExpressionAnnotation(make_smart<AstExprKeyExistsAnnotation>(lib))->from("ExprLooksLikeCall");
         addExpressionAnnotation(make_smart<AstExprAscendAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprCastAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprDeleteAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprVarAnnotation>(lib))->from("Expression");
+        addExpressionAnnotation(make_smart<AstExprTagAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprSwizzleAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprFieldAnnotation<ExprField>>("ExprField",lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprSafeFieldAnnotation>(lib))->from("ExprField");

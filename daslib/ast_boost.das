@@ -10,6 +10,18 @@ require ast public
 require strings
 require daslib/strings_boost
 
+def clone ( var args : dasvector`smart_ptr`Variable; var nargs:array<VariablePtr> )
+    args |> clear
+    for narg in nargs
+        args |> emplace(narg)
+    delete nargs
+
+def clone ( var args : dasvector`smart_ptr`Expression; var nargs:array<ExpressionPtr> )
+    args |> clear
+    for narg in nargs
+        args |> emplace(narg)
+    delete nargs
+
 def isVectorType ( typ:Type )
     return (
         typ==Type tInt2   || typ==Type tInt3   || typ==Type tInt4   ||
@@ -292,6 +304,12 @@ class SetupCommentReader : SetupAnyAnnotation
 class SetupVariantMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_variant_macro"
 
+class SetupForLoopMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_for_loop_macro"
+
+class SetupCaptureMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_capture_macro"
+
 class SetupCallMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_call_macro"
 
@@ -558,11 +576,21 @@ def private walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
     else
         return walk_and_convert_basic(data,info,at)
 
-def convert_to_expression ( var value : auto&; at:LineInfo )
+def convert_to_expression ( var value : auto& = const; at:LineInfo )
 	let info <- typeinfo(ast_typedecl value)
     unsafe
 	    let pval = addr(value)
 	    return walk_and_convert(reinterpret<uint8?> pval, info, at)
+
+def convert_to_expression ( value : auto = const; at:LineInfo )
+	let info <- typeinfo(ast_typedecl value)
+    unsafe
+	    let pval = addr(value)
+	    return walk_and_convert(reinterpret<uint8?> pval, info, at)
+
+
+def convert_to_expression ( value : auto )
+    return convert_to_expression(value,[[LineInfo]])
 
 def find_annotation ( mod_name,ann_name:string ) : Annotation const?
     var mod = find_compiling_module(mod_name)
@@ -575,7 +603,7 @@ def find_annotation ( mod_name,ann_name:string ) : Annotation const?
                 ann = addr(value)
     return ann
 
-def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
+def append_annotation ( mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
     var decl <- new [[AnnotationDeclaration()]]
@@ -594,7 +622,20 @@ def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:arr
             decl.arguments |> add_annotation_argument(argName, arg as tString)
         else
             panic("Invalid rtti value")
+    return <- decl
+
+def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
+    var ann = find_annotation(mod_name, ann_name)
+    assert(ann!=null)
+    var decl <- append_annotation(mod_name, ann_name, args)
     add_function_annotation(func, decl)
+    decl := null
+
+def append_annotation ( var blk:smart_ptr<ExprBlock>; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
+    var ann = find_annotation(mod_name, ann_name)
+    assert(ann!=null)
+    var decl <- append_annotation(mod_name, ann_name, args)
+    add_block_annotation(blk, decl)
     decl := null
 
 def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:string; val:bool )
@@ -655,6 +696,8 @@ def private setup
         add_new_structure_annotation("call_macro",new SetupCallMacro())
         add_new_structure_annotation("typeinfo_macro",new SetupTypeInfoMacro())
         add_new_structure_annotation("variant_macro",new SetupVariantMacro())
+        add_new_structure_annotation("for_loop_macro",new SetupForLoopMacro())
+        add_new_structure_annotation("capture_macro",new SetupCaptureMacro())
         add_new_structure_annotation("tag_structure",new TagStructureAnnotation())
         add_new_structure_annotation("tag_function_macro",new TagFunctionMacro())
         add_new_structure_annotation("infer_macro",new SetupInferMacro())

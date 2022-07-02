@@ -155,21 +155,20 @@ namespace  das {
         static __forceinline vec4f Abs   ( vec4f a, Context &, LineInfo * ) { return v_cast_vec4f(v_absi(v_cast_vec4i(a))); }
 
         static __forceinline vec4f Sign  ( vec4f a, Context &, LineInfo * ) {
-            vec4i zero = v_splatsi(0);
-            vec4i positive = v_andi(v_splatsi(1), v_cmp_gti(v_cast_vec4i(a), zero));
-            vec4i negative = v_andi(v_splatsi(-1), v_cmp_lti(v_cast_vec4i(a), zero));
+            vec4i positive = v_andi(v_splatsi(1), v_cmp_gti(v_cast_vec4i(a), v_zeroi()));
+            vec4i negative = v_andi(v_splatsi(-1), v_cmp_lti(v_cast_vec4i(a), v_zeroi()));
             return v_cast_vec4f(v_ori(positive, negative));
         }
     };
 
     struct SimPolicy_MathFloat {
         static __forceinline float Sign     ( float a, Context &, LineInfo * )          { return a == 0.0f ? 0.0f : (a > 0.0f) ? 1.0f : -1.0f; }
-        static __forceinline float Abs      ( float a, Context &, LineInfo * )          { return v_extract_x(v_abs(v_splats(a))); }
-        static __forceinline float Floor    ( float a, Context &, LineInfo * )          { return v_extract_x(v_floor(v_splats(a))); }
-        static __forceinline float Ceil     ( float a, Context &, LineInfo * )          { return v_extract_x(v_ceil(v_splats(a))); }
-        static __forceinline float Sqrt     ( float a, Context &, LineInfo * )          { return v_extract_x(v_sqrt_x(v_splats(a))); }
-        static __forceinline float RSqrt    ( float a, Context &, LineInfo * )          { return v_extract_x(v_rsqrt_x(v_splats(a))); }
-        static __forceinline float RSqrtEst ( float a, Context &, LineInfo * )          { return v_extract_x(v_rsqrt_fast_x(v_splats(a))); }
+        static __forceinline float Abs      ( float a, Context &, LineInfo * )          { return v_extract_x(v_abs(v_set_x(a))); }
+        static __forceinline float Floor    ( float a, Context &, LineInfo * )          { return v_extract_x(v_floor(v_set_x(a))); }
+        static __forceinline float Ceil     ( float a, Context &, LineInfo * )          { return v_extract_x(v_ceil(v_set_x(a))); }
+        static __forceinline float Sqrt     ( float a, Context &, LineInfo * )          { return v_extract_x(v_sqrt_x(v_set_x(a))); }
+        static __forceinline float RSqrt    ( float a, Context &, LineInfo * )          { return v_extract_x(v_rsqrt_x(v_set_x(a))); }
+        static __forceinline float RSqrtEst ( float a, Context &, LineInfo * )          { return v_extract_x(v_rsqrt_fast_x(v_set_x(a))); }
         static __forceinline float Min      ( float a, float b, Context &, LineInfo * ) { return a < b ? a : b; }
         static __forceinline float Max      ( float a, float b, Context &, LineInfo * ) { return a > b ? a : b; }
         static __forceinline float Sat      ( float a, Context &, LineInfo * )          { return a < 0 ? 0 : (a > 1 ? 1 : a); }
@@ -177,27 +176,28 @@ namespace  das {
         static __forceinline float Lerp     ( float a, float b, float t, Context &, LineInfo * ) { return (b-a)*t +a; }
         static __forceinline float Clamp    ( float t, float a, float b, Context &, LineInfo * ) { return t>a ? (t<b ? t : b) : a; }
 
-        static __forceinline int Trunci ( float a, Context &, LineInfo * )          { return v_extract_xi(v_cvt_vec4i(v_splats(a))); }
-        static __forceinline int Roundi ( float a, Context &, LineInfo * )          { return v_extract_xi(v_cvt_roundi(v_splats(a))); }
-        static __forceinline int Floori ( float a, Context &, LineInfo * )          { return v_extract_xi(v_cvt_floori(v_splats(a))); }
-        static __forceinline int Ceili  ( float a, Context &, LineInfo * )          { return v_extract_xi(v_cvt_ceili(v_splats(a))); }
+        static __forceinline int Trunci ( float a, Context &, LineInfo * )          { return v_extract_xi(v_cvt_vec4i(v_set_x(a))); }
+        static __forceinline int Roundi ( float a, Context &, LineInfo * )          { return v_extract_xi(v_cvt_roundi(v_set_x(a))); }
+        static __forceinline int Floori ( float a, Context &, LineInfo * )          { return v_extract_xi(v_cvt_floori(v_set_x(a))); }
+        static __forceinline int Ceili  ( float a, Context &, LineInfo * )          { return v_extract_xi(v_cvt_ceili(v_set_x(a))); }
 
-        static __forceinline float Exp   ( float a, Context &, LineInfo * )          { return v_extract_x(v_exp(v_splats(a))); }
-        static __forceinline float Log   ( float a, Context &, LineInfo * )          { return v_extract_x(v_log(v_splats(a))); }
-        static __forceinline float Exp2  ( float a, Context &, LineInfo * )          { return v_extract_x(v_exp2(v_splats(a))); }
-        static __forceinline float Log2  ( float a, Context &, LineInfo * )          { return v_extract_x(v_log2_est_p5(v_splats(a))); }
-        static __forceinline float Pow   ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_pow(v_splats(a), v_splats(b))); }
-        static __forceinline float Rcp   ( float a, Context &, LineInfo * )          { return v_extract_x(v_rcp_x(v_splats(a))); }
-        static __forceinline float RcpEst( float a, Context &, LineInfo * )          { return v_extract_x(v_rcp_est_x(v_splats(a))); }
+        static __forceinline float Exp   ( float a, Context &, LineInfo * )          { return v_extract_x(v_exp(v_set_x(a))); }
+        static __forceinline float Log   ( float a, Context &, LineInfo * )          { return v_extract_x(v_log(v_set_x(a))); }
+        static __forceinline float Exp2  ( float a, Context &, LineInfo * )          { return v_extract_x(v_exp2(v_set_x(a))); }
+        static __forceinline float Log2  ( float a, Context &, LineInfo * )          { return v_extract_x(v_log2_est_p5(v_set_x(a))); }
+        static __forceinline float Pow   ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_pow(v_set_x(a), v_set_x(b))); }
+        static __forceinline float Rcp   ( float a, Context &, LineInfo * )          { return v_extract_x(v_rcp_x(v_set_x(a))); }
+        static __forceinline float RcpEst( float a, Context &, LineInfo * )          { return v_extract_x(v_rcp_est_x(v_set_x(a))); }
 
-        static __forceinline float Sin   ( float a, Context &, LineInfo * )          { vec4f s,c; v_sincos4(v_splats(a), s, c);return v_extract_x(s); }
-        static __forceinline float Cos   ( float a, Context &, LineInfo * )          { vec4f s,c; v_sincos4(v_splats(a), s, c);return v_extract_x(c); }
-        static __forceinline float Tan   ( float a, Context &, LineInfo * )          { vec4f s,c; v_sincos4(v_splats(a), s, c);return v_extract_x(v_div_x(s,c)); }
-        static __forceinline float ATan   ( float a, Context &, LineInfo * )         { return v_extract_x(v_atan(v_splats(a))); }
-        static __forceinline float ASin   ( float a, Context &, LineInfo * )         { return v_extract_x(v_asin_x(v_splats(a))); }
-        static __forceinline float ACos   ( float a, Context &, LineInfo * )         { return v_extract_x(v_acos_x(v_splats(a))); }
-        static __forceinline float ATan2 ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_atan2(v_splats(a), v_splats(b))); }
-        static __forceinline float ATan2_est ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_atan2_est(v_splats(a), v_splats(b))); }
+        static __forceinline float Sin   ( float a, Context &, LineInfo * )          { return v_extract_x(v_sin_x(v_set_x(a))); }
+        static __forceinline float Cos   ( float a, Context &, LineInfo * )          { return v_extract_x(v_cos_x(v_set_x(a))); }
+        static __forceinline float Tan   ( float a, Context &, LineInfo * )          { return v_extract_x(v_tan_x(v_set_x(a))); }
+        static __forceinline float ATan   ( float a, Context &, LineInfo * )         { return v_extract_x(v_atan_x(v_set_x(a))); }
+        static __forceinline float ATan_est ( float a, Context &, LineInfo * )       { return v_extract_x(v_atan_est_x(v_set_x(a))); }
+        static __forceinline float ASin   ( float a, Context &, LineInfo * )         { return v_extract_x(v_asin_x(v_set_x(a))); }
+        static __forceinline float ACos   ( float a, Context &, LineInfo * )         { return v_extract_x(v_acos_x(v_set_x(a))); }
+        static __forceinline float ATan2 ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_atan2_x(v_set_x(a), v_set_x(b))); }
+        static __forceinline float ATan2_est ( float a, float b, Context &, LineInfo * ) { return v_extract_x(v_atan2_est_x(v_set_x(a), v_set_x(b))); }
     };
 
     struct SimPolicy_F2IVec {
@@ -235,10 +235,11 @@ namespace  das {
         static __forceinline vec4f Rcp   ( vec4f a, Context &, LineInfo * )          { return v_rcp(a); }
         static __forceinline vec4f RcpEst( vec4f a, Context &, LineInfo * )          { return v_rcp_est(a); }
 
-        static __forceinline vec4f Sin ( vec4f a, Context &, LineInfo * ) { vec4f s,c; v_sincos4(a, s, c);return s; }
-        static __forceinline vec4f Cos ( vec4f a, Context &, LineInfo * ) { vec4f s,c; v_sincos4(a, s, c);return c; }
-        static __forceinline vec4f Tan ( vec4f a, Context &, LineInfo * ) { vec4f s,c; v_sincos4(a, s, c);return v_div(s,c); }
+        static __forceinline vec4f Sin ( vec4f a, Context &, LineInfo * ) { return v_sin(a); }
+        static __forceinline vec4f Cos ( vec4f a, Context &, LineInfo * ) { return v_cos(a); }
+        static __forceinline vec4f Tan ( vec4f a, Context &, LineInfo * ) { return v_tan(a); }
         static __forceinline vec4f ATan( vec4f a, Context &, LineInfo * ) { return v_atan(a); }
+        static __forceinline vec4f ATan_est( vec4f a, Context &, LineInfo * ) { return v_atan_est(a); }
         static __forceinline vec4f ASin( vec4f a, Context &, LineInfo * ) { return v_asin(a); }
         static __forceinline vec4f ACos( vec4f a, Context &, LineInfo * ) { return v_acos(a); }
         static __forceinline vec4f ATan2 ( vec4f a, vec4f b, Context &, LineInfo * ) { return v_atan2(a, b); }
@@ -261,7 +262,7 @@ namespace  das {
         static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return setAligned((const int32_t*)x); }
         static __forceinline vec4f setXY ( const float *__restrict x ) { return v_ldu_half(x); }
         static __forceinline vec4f setXY ( const double *__restrict X ) { float x[2] = {float(X[0]),float(X[1])}; return v_ldu_half(x); }
-        static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cvt_vec4f(v_ldu_half_w(x)); }
+        static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cvt_vec4f(v_ldui_half(x)); }
         static __forceinline vec4f setXY ( const uint32_t *__restrict x ) { return setXY((const int32_t*)x); }
         static __forceinline vec4f splats ( float x ) { return v_splats(x); }
         static __forceinline vec4f splats ( int32_t  x ) { return v_splats((float)x); }
@@ -354,7 +355,7 @@ namespace  das {
         static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return setAligned((const int32_t*)x); }
         static __forceinline vec4f setXY ( const float *__restrict x ) { return v_cast_vec4f(v_cvt_vec4i(v_ldu_half(x))); }
         static __forceinline vec4f setXY ( const double *__restrict X ) { float x[2] = {float(X[0]),float(X[1])}; return v_cast_vec4f(v_cvt_vec4i(v_ldu_half(x))); }
-        static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cast_vec4f(v_ldu_half_w(x)); }
+        static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cast_vec4f(v_ldui_half(x)); }
         static __forceinline vec4f setXY ( const uint32_t *__restrict x ) { return setXY((const int32_t*)x); }
         static __forceinline vec4f splats ( float x ) { return v_cast_vec4f(v_splatsi((int)x)); }
         static __forceinline vec4f splats ( int32_t  x ) { return v_cast_vec4f(v_splatsi(x)); }

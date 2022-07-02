@@ -56,6 +56,7 @@ namespace das {
     TypeAnnotation * Module::resolveAnnotation ( const TypeInfo * info ) {
         intptr_t ann = (intptr_t) (info->annotation_or_name);
         if ( ann & 1 ) {
+            DAS_VERIFYF(daScriptEnvironment::bound && daScriptEnvironment::bound->modules,"missing bound environment");
             // we add ~ at the begining of the name for padding
             // if name is allocated by the compiler, it does not guarantee that it is aligned
             // we check if there is a ~ at the begining of the name, and if it is - we skip it
@@ -476,6 +477,8 @@ namespace das {
                     addAnnotation(fna);
                 });
             }
+            captureMacros.insert(captureMacros.end(), ptm->captureMacros.begin(), ptm->captureMacros.end());
+            forLoopMacros.insert(forLoopMacros.end(), ptm->forLoopMacros.begin(), ptm->forLoopMacros.end());
             variantMacros.insert(variantMacros.end(), ptm->variantMacros.begin(), ptm->variantMacros.end());
             macros.insert(macros.end(), ptm->macros.begin(), ptm->macros.end());
             inferMacros.insert(inferMacros.end(), ptm->inferMacros.begin(), ptm->inferMacros.end());

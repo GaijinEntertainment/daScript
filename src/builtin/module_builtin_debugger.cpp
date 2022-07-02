@@ -75,6 +75,13 @@ namespace debugapi {
                 context->unlock();
             }
         }
+        virtual void onSimulateContext ( Context * ctx ) override {
+            if ( auto fnOnSimulateContext = get_onSimulateContext(classPtr)) {
+                context->lock();
+                invoke_onSimulateContext(context,fnOnSimulateContext,classPtr,*ctx);
+                context->unlock();
+            }
+        }
         virtual void onSingleStep ( Context * ctx, const LineInfo & at ) override {
             if ( auto fnOnSingleStep = get_onSingleStep(classPtr) ) {
                 context->lock();
@@ -90,11 +97,11 @@ namespace debugapi {
                 context->unlock();
             }
         }
-        virtual void onInstrumentFunction ( Context * ctx, SimFunction * sim, bool entering ) override {
+        virtual void onInstrumentFunction ( Context * ctx, SimFunction * sim, bool entering, uint64_t userData ) override {
             if ( ctx==context ) return;  // do not step into the same context
             if ( auto fnOnInstrumentFunction = get_onInstrumentFunction(classPtr) ) {
                 context->lock();
-                invoke_onInstrumentFunction(context,fnOnInstrumentFunction,classPtr,*ctx,sim,entering);
+                invoke_onInstrumentFunction(context,fnOnInstrumentFunction,classPtr,*ctx,sim,entering,userData);
                 context->unlock();
             }
         }
@@ -731,22 +738,32 @@ namespace debugapi {
         if ( !invCtx ) context.throw_error_at(call->debugInfo, "pinvoke with null context");
         auto fn = cast<const char *>::to(args[1]);
         if ( !fn ) context.throw_error_at(call->debugInfo, "can't pinvoke empty string");
-        auto simFn = invCtx->findFunction(fn);
-        if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find %s function", fn);
-        invCtx->lock();
-        vec4f res;
-        invCtx->exception = nullptr;
-        invCtx->runWithCatch([&](){
-            if ( !invCtx->ownStack ) {
-                StackAllocator sharedStack(8*1024);
-                SharedStackGuard guard(*invCtx, sharedStack);
-                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-            } else {
-                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        vec4f res = v_zero();
+        LineInfo exAt;
+        string exText;
+        invCtx->threadlock_context([&](){
+            auto simFn = invCtx->findFunction(fn);
+            if ( !simFn ) {
+                exAt = call->debugInfo;
+                exText = string("pinvoke can't find ") + fn + " function";
+                return;
+            }
+            invCtx->exception = nullptr;
+            invCtx->runWithCatch([&](){
+                if ( !invCtx->ownStack ) {
+                    StackAllocator sharedStack(8*1024);
+                    SharedStackGuard guard(*invCtx, sharedStack);
+                    res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+                } else {
+                    res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+                }
+            });
+            if ( invCtx->exception ) {
+                exAt = invCtx->exceptionAt;
+                exText = invCtx->exception;
             }
         });
-        invCtx->unlock();
-        if ( invCtx->exception ) context.throw_error_at(invCtx->exceptionAt, invCtx->exception);
+        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
         return res;
     }
 
@@ -757,20 +774,26 @@ namespace debugapi {
         if ( !fn.PTR ) context.throw_error_at(call->debugInfo, "pnvoke can't invoke null function");
         auto simFn = fn.PTR;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void *)simFn);
-        invCtx->lock();
-        vec4f res;
-        invCtx->exception = nullptr;
-        invCtx->runWithCatch([&](){
-            if ( !invCtx->ownStack ) {
-                StackAllocator sharedStack(8*1024);
-                SharedStackGuard guard(*invCtx, sharedStack);
-                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-            } else {
-                res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+        vec4f res = v_zero();
+        LineInfo exAt;
+        string exText;
+        invCtx->threadlock_context([&](){
+            invCtx->exception = nullptr;
+            invCtx->runWithCatch([&](){
+                if ( !invCtx->ownStack ) {
+                    StackAllocator sharedStack(8*1024);
+                    SharedStackGuard guard(*invCtx, sharedStack);
+                    res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+                } else {
+                    res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
+                }
+            });
+            if ( invCtx->exception ) {
+                exAt = invCtx->exceptionAt;
+                exText = invCtx->exception;
             }
         });
-        invCtx->unlock();
-        if ( invCtx->exception ) context.throw_error_at(invCtx->exceptionAt, invCtx->exception);
+        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
         return res;
     }
 
@@ -782,20 +805,26 @@ namespace debugapi {
         if (!fnMnh) context.throw_error_at(call->debugInfo, "invoke null lambda");
         SimFunction * simFn = *fnMnh;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void*)simFn);
-        invCtx->lock();
-        vec4f res;
-        invCtx->exception = nullptr;
-        invCtx->runWithCatch([&](){
-            if ( !invCtx->ownStack ) {
-                StackAllocator sharedStack(8*1024);
-                SharedStackGuard guard(*invCtx, sharedStack);
-                res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
-            } else {
-                res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
+        vec4f res = v_zero();
+        LineInfo exAt;
+        string exText;
+        invCtx->threadlock_context([&](){
+            invCtx->exception = nullptr;
+            invCtx->runWithCatch([&](){
+                if ( !invCtx->ownStack ) {
+                    StackAllocator sharedStack(8*1024);
+                    SharedStackGuard guard(*invCtx, sharedStack);
+                    res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
+                } else {
+                    res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
+                }
+            });
+            if ( invCtx->exception ) {
+                exAt = invCtx->exceptionAt;
+                exText = invCtx->exception;
             }
         });
-        invCtx->unlock();
-        if ( invCtx->exception ) context.throw_error_at(invCtx->exceptionAt, invCtx->exception);
+        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
         return res;
     }
 
@@ -811,13 +840,22 @@ namespace debugapi {
         ctx.instrumentContextNode(blk, isInstrumenting, context, line);
     }
 
-    void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, Context * context, LineInfoArg * arg ) {
+    void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, uint64_t userData, Context * context, LineInfoArg * arg ) {
         if ( !fn ) context->throw_error_at(*arg, "expecting function");
-        ctx.instrumentFunction(fn.PTR, isInstrumenting);
+        ctx.instrumentFunction(fn.PTR, isInstrumenting, userData);
     }
 
     void instrument_all_functions ( Context & ctx ) {
-        ctx.instrumentFunction(0, true);
+        ctx.instrumentFunction(0, true, 0ul);
+    }
+
+    void instrument_all_functions_ex ( Context & ctx, const TBlock<uint64_t,Func,const SimFunction *> & blk, Context * context, LineInfoArg * arg ) {
+        for ( int fni=0; fni!=ctx.getTotalFunctions(); ++fni ) {
+            Func fn;
+            fn.PTR = ctx.getFunction(fni);
+            uint64_t userData = das_invoke<uint64_t>::invoke(context,arg,blk,fn,fn.PTR);
+            ctx.instrumentFunction(fn.PTR, true, userData);
+        }
     }
 
     void clear_instruments ( Context & ctx ) {
@@ -916,10 +954,13 @@ namespace debugapi {
                     ->args({"context","isInstrumenting","block","context","line"});
             addExtern<DAS_BIND_FUN(instrument_function)>(*this, lib,  "instrument_function",
                 SideEffects::modifyExternal, "instrument_function")
-                    ->args({"context","function","isInstrumenting","context","line"});;
+                    ->args({"context","function","isInstrumenting","userData","context","line"});;
             addExtern<DAS_BIND_FUN(instrument_all_functions)>(*this, lib,  "instrument_all_functions",
                 SideEffects::modifyExternal, "instrument_all_functions")
                     ->arg("context");
+            addExtern<DAS_BIND_FUN(instrument_all_functions_ex)>(*this, lib,  "instrument_all_functions",
+                SideEffects::modifyExternal|SideEffects::invoke, "instrument_all_functions_ex")
+                    ->args({"ctx","block","context","line"});
             addExtern<DAS_BIND_FUN(clear_instruments)>(*this, lib,  "clear_instruments",
                 SideEffects::modifyExternal, "clear_instruments")
                     ->arg("context");

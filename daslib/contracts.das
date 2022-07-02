@@ -13,6 +13,8 @@ def public isYetAnotherVectorTemplate ( var td:TypeDeclPtr )
     return td.isHandle && td.annotation!=null && td.annotation.is_any_vector
 
 class IsAnyType : AstFunctionAnnotation
+    def override appendToMangledName ( func:FunctionPtr; decl:AnnotationDeclaration; var mangledName:das_string ) : void
+        mangledName := "{class_info(self).name}:{describe(decl)}"
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         if args.length != 1
             errors := "expecting at least one argument"

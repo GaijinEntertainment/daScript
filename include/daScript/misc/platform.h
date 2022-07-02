@@ -13,6 +13,7 @@
 #pragma warning(disable:4316)    // '__m128': object allocated on the heap may not be aligned 16
 #pragma warning(disable:4714)    // marked as __forceinline not inlined
 #pragma warning(disable:4180)    // qualifier applied to function type has no meaning; ignored
+#pragma warning(disable:4305)    // truncation from 'double' to 'float'
 #endif
 
 #ifdef __clang__

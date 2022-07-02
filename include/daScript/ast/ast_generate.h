@@ -181,7 +181,7 @@ namespace das {
      */
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, const safe_var_set & capt,
-                                        const vector<CaptureEntry> & capture, bool needYield );
+                                        const vector<CaptureEntry> & capture, bool needYield, Program * thisProgram );
 
     /*
         local function, i.e.
@@ -205,7 +205,8 @@ namespace das {
             _ba1=ba1; ba2=ba2; ... ]]
      */
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
-                                            const safe_var_set & capt, const vector<CaptureEntry> & capture, const LineInfo & at );
+                                            const safe_var_set & capt, const vector<CaptureEntry> & capture, const LineInfo & at,
+                                            Program * thisProgram );
 
     /*
          array comprehension [{ for x in src; x_expr; where x_expr }]

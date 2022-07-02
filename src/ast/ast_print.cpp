@@ -481,7 +481,7 @@ namespace das {
     // if then else
         virtual void preVisit ( ExprIfThenElse * ifte ) override {
             Visitor::preVisit(ifte);
-            ss << "if ";
+            ss << (ifte->isStatic ? "static_if " : "if ");
         }
         virtual void preVisitIfBlock ( ExprIfThenElse * ifte, Expression * block ) override {
             Visitor::preVisitIfBlock(ifte,block);
@@ -491,9 +491,9 @@ namespace das {
             Visitor::preVisitElseBlock(ifte, block);
             ss << string(tab,'\t');
             if (block && block->rtti_isIfThenElse()) {
-                ss << "else ";
+                ss << (ifte->isStatic ? "static_else " : "else ");
             } else {
-                ss << "else\n";
+                ss << (ifte->isStatic ? "static_else\n" : "else\n");
             }
         }
     // try-catch
@@ -539,6 +539,19 @@ namespace das {
         virtual void preVisit ( ExprAssume * wh ) override {
             Visitor::preVisit(wh);
             ss << "with " << wh->alias << " = ";
+        }
+    // tag
+        virtual void preVisit ( ExprTag * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "$$" << expr->name << "(";
+        }
+        virtual void preVisitTagValue ( ExprTag * expr, Expression * value ) override {
+            Visitor::preVisitTagValue(expr,value);
+            ss << ")(";
+        }
+        virtual ExpressionPtr visit ( ExprTag * expr ) override {
+            ss << ")";
+            return Visitor::visit(expr);
         }
     // while
         virtual void preVisit ( ExprWhile * wh ) override {

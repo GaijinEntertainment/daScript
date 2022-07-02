@@ -632,6 +632,9 @@ namespace das {
                 }
             }
             swap ( closure->annotations, *annL );
+            for ( const auto & pA : *annL ) {
+                closure->annotations.push_back(pA);
+            }
             delete annL;
         }
         return mkb;
@@ -666,8 +669,14 @@ namespace das {
                 }
             }
         }
-        delete decl;
-        return pLet;
+        if ( auto pTagExpr = decl->pNameList->front().tag ) {
+            auto pTag = new ExprTag(declAt, pTagExpr, ExpressionPtr(pLet), "i");
+            delete decl;
+            return pTag;
+        } else {
+            delete decl;
+            return pLet;
+        }
     }
 
     Function * ast_functionDeclarationHeader ( yyscan_t scanner, string * name, vector<VariableDeclaration*> * list,

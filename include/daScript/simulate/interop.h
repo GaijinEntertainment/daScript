@@ -136,11 +136,19 @@ namespace das
         }
     };
 
-    template <typename CType, bool Pointer, bool IsEnum, typename ...Args> // void
-    struct ImplCallStaticFunctionImpl<CType,Pointer,IsEnum,void,Args...> {
-        static __forceinline CType call ( void (*fn)(Args...), Context & ctx, SimNode ** args ) {
+    // note: this is here because SimNode_At and such can call evalInt, while index is UInt
+    //  this is going to be allowed for now, since the fix will result either in duplicating SimNode_AtU or a cast node
+    template <typename ...Args>
+    struct ImplCallStaticFunctionImpl<int32_t, false, false, uint32_t, Args...> {   // int <- uint
+        static __forceinline int32_t call ( uint32_t (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return CallStaticFunction<uint32_t,Args...>(fn,ctx,args);;
+        }
+    };
+
+    template <bool Pointer, bool IsEnum, typename ...Args> // void
+    struct ImplCallStaticFunctionImpl<void,Pointer,IsEnum,void,Args...> {
+        static __forceinline void call ( void (*fn)(Args...), Context & ctx, SimNode ** args ) {
             CallStaticFunction<void,Args...>(fn,ctx,args);
-            return CType();
         }
     };
 
@@ -193,15 +201,26 @@ namespace das
         }
     };
 
+#if DAS_SLOW_CALL_INTEROP
+    template <typename FuncT>
+#else
     template <typename FuncT, FuncT fn>
+#endif
     struct SimNode_ExtFuncCall : SimNode_ExtFuncCallBase {
         enum { IS_CMRES = false };
+#if DAS_SLOW_CALL_INTEROP
+        FuncT  fn;
+        SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName, FuncT fnp )
+            : SimNode_ExtFuncCallBase(at,fnName), fn(fnp) { }
+#else
         SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName )
             : SimNode_ExtFuncCallBase(at,fnName) { }
+#endif
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return ImplCallStaticFunction<FuncT>::call(*fn, context, arguments);
         }
+#if !(DAS_SLOW_CALL_INTEROP)
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override { \
                 DAS_PROFILE_NODE \
@@ -209,13 +228,24 @@ namespace das
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE
+#endif
     };
 
+#if DAS_SLOW_CALL_INTEROP
+    template <typename FuncT>
+#else
     template <typename FuncT, FuncT fn>
+#endif
     struct SimNode_ExtFuncCallAndCopyOrMove : SimNode_ExtFuncCallBase {
         enum { IS_CMRES = true };
+#if DAS_SLOW_CALL_INTEROP
+        FuncT  fn;
+        SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at, const char * fnName, FuncT fnp )
+            : SimNode_ExtFuncCallBase(at,fnName), fn(fnp) { }
+#else
         SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at, const char * fnName )
             : SimNode_ExtFuncCallBase(at,fnName) { }
+#endif
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             void * cmres = cmresEval->evalPtr(context);
@@ -228,20 +258,6 @@ namespace das
     template <typename R, typename ...Args>
     struct result_of_func_ptr<R (*)(Args...)> {
         using type = R;
-    };
-
-    template <typename FuncT, FuncT fn>
-    struct SimNode_ExtFuncCallCtor : SimNode_ExtFuncCallBase {
-        enum { IS_CMRES = true };
-        SimNode_ExtFuncCallCtor ( const LineInfo & at, const char * fnName )
-            : SimNode_ExtFuncCallBase(at,fnName) { }
-        virtual vec4f eval ( Context & context ) override {
-            DAS_PROFILE_NODE
-            void * cmres = cmresEval->evalPtr(context);
-            using CtorType = typename result_of_func_ptr<FuncT>::type;
-            new (cmres) CtorType();
-            return cast<void *>::from(cmres);
-        }
     };
 
     template <typename CType, typename ...Args>
@@ -291,12 +307,22 @@ namespace das
         }
     };
 
+#if DAS_SLOW_CALL_INTEROP
+    template <typename FuncT>
+#else
     template <typename FuncT, FuncT fn>
+#endif
     struct SimNode_ExtFuncCallRef : SimNode_ExtFuncCallBase {
         DAS_PTR_NODE;
         enum { IS_CMRES = false };
+#if DAS_SLOW_CALL_INTEROP
+        FuncT  fn;
+        SimNode_ExtFuncCallRef ( const LineInfo & at, const char * fnName, FuncT fnp )
+            : SimNode_ExtFuncCallBase(at,fnName), fn(fnp) { }
+#else
         SimNode_ExtFuncCallRef ( const LineInfo & at, const char * fnName )
             : SimNode_ExtFuncCallBase(at,fnName) { }
+#endif
         __forceinline char * compute(Context & context) {
             DAS_PROFILE_NODE
             return ImplCallStaticFunctionRef<FuncT>::call(*fn, context, arguments);

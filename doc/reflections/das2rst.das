@@ -46,6 +46,7 @@ require daslib/enum_trait
 require daslib/cpp_bind
 require daslib/decs
 require daslib/decs_boost
+require daslib/utf8_utils
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -516,6 +517,13 @@ def document_module_decs_boost(root:string)
     }]
     document("Boost package for DECS",mod,"{root}/decs_boost.rst","{root}/detail/decs_boost.rst",groups)
 
+def document_module_utf8_utils(root:string)
+    var mod = find_module("utf8_utils")
+    var groups <- [{DocGroup
+        group_by_regex("stub", mod, %regex~(stub)$%%)
+    }]
+    document("UTF-8 utilities",mod,"{root}/utf8_utils.rst","{root}/detail/utf8_utils.rst",groups)
+
 
 [export]
 def main
@@ -578,3 +586,4 @@ def main
     document_module_templates(root)
     document_module_unroll(root)
     document_module_uriparser_boost(root)
+    document_module_utf8_utils(root)

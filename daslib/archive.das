@@ -87,13 +87,13 @@ def public write_raw ( var arch:Archive; var value : auto(TT)& )
     assert(!arch.reading)
     arch.stream->write(unsafe(addr(value)), typeinfo(sizeof value))
 
-[expect_any_enum(value), template(dummy=false)]
-def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&?????? = null )
+[expect_any_enum(value)]
+def public serialize ( var arch:Archive; var value : auto(TT)& )
     //! Serializes structured data, based on the `value` type.
     arch |> serialize_raw(value)
 
-[expect_any_function(value), template(dummy=false)]
-def public serialize ( var arch:Archive; var value:auto(TT)&; dummy:TT-&????? = null )
+[expect_any_function(value)]
+def public serialize ( var arch:Archive; var value:auto(TT)& )
     if arch.reading
         var mnh : uint64
         arch |> read_raw(mnh)
@@ -104,8 +104,8 @@ def public serialize ( var arch:Archive; var value:auto(TT)&; dummy:TT-&????? = 
         var mnh = get_function_mangled_name_hash(value)
         arch |> write_raw(mnh)
 
-[expect_any_workhorse_raw(value), template(dummy=false)]
-def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&???? = null )
+[expect_any_workhorse_raw(value)]
+def public serialize ( var arch:Archive; var value : auto(TT)& )
     arch |> serialize_raw(value)
 
 def public serialize ( var arch:Archive; var value : float3x3 )
@@ -117,22 +117,22 @@ def public serialize ( var arch:Archive; var value : float3x4 )
 def public serialize ( var arch:Archive; var value : float4x4 )
     arch |> serialize_raw(value)
 
-[expect_any_struct(value), template(dummy=false)]
-def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&? = null )
+[expect_any_struct(value)]
+def public serialize ( var arch:Archive; var value : auto(TT)& )
     if arch.reading
         delete value
     apply(value) <| $ ( name:string; field )
         arch |> _::serialize(field)
 
-[expect_any_tuple(value), template(dummy=false)]
-def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&?? = null )
+[expect_any_tuple(value)]
+def public serialize ( var arch:Archive; var value : auto(TT)& )
     if arch.reading
         delete value
     apply(value) <| $ ( name:string; field )
         arch |> _::serialize(field)
 
-[expect_any_variant(value), template(dummy=false)]
-def public serialize ( var arch:Archive; var value : auto(TT)&; dummy:TT-&??? = null )
+[expect_any_variant(value)]
+def public serialize ( var arch:Archive; var value : auto(TT)& )
     if arch.reading
         delete value
         var index : int
