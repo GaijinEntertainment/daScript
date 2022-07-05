@@ -191,7 +191,10 @@ def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Express
         prules = addr(rules)
     var astVisitor = new TemplateVisitor(prules)
     var astVisitorAdapter <- make_visitor(*astVisitor)
-    expr := expr |> visit(astVisitorAdapter)
+    var newExpr <- expr |> visit(astVisitorAdapter)
+    if newExpr != expr
+        expr := null
+    expr <- newExpr
     if forceAt
         expr |> force_at(at)
     unsafe
@@ -490,7 +493,10 @@ def private apply_qrules ( var expr:smart_ptr<Expression>& ) : smart_ptr<ExprBlo
     var astVisitor = new QRulesVisitor(get_ptr(eblk))
     var astVisitorAdapter <- make_visitor(*astVisitor)
     // print("EXPR BEFORE USE COUNT = {smart_ptr_use_count(expr)}\n")
-    expr := expr |> visit(astVisitorAdapter)
+    var newExpr <- expr |> visit(astVisitorAdapter)
+    if newExpr != expr
+        expr := null
+    expr <- newExpr
     // print("EXPR USE COUNT = {smart_ptr_use_count(expr)}\n")
     if astVisitor.failed
         eblk := null
