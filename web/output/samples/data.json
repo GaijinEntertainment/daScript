@@ -1,0 +1,40 @@
+{
+
+  "examples" : [
+    {
+      "name" : "Hello world",
+      "files" : ["examples/hello.das"]
+    },
+    {
+      "name" : "Loops",
+      "files" : ["examples/loop.das"]
+    },
+    {
+      "name" : "Functions",
+      "files" : ["examples/func.das"]
+    }
+  ],
+
+  "tests" : [
+    {
+      "name" : "Print",
+      "files" : ["tests/print.das"],
+      "correct_output" : ["4","","Hello world"]
+    },
+    {
+      "name" : "Simple Math",
+      "files" : ["tests/math_simple.das"],
+      "correct_output" : ["-5","27","30603303"]
+    },
+    {
+      "name" : "Math",
+      "files" : ["tests/math.das"],
+      "correct_output" : []
+    },
+    {
+      "name" : "Random Sequence",
+      "files" : ["tests/random_sequence.das"],
+      "correct_output" : [["\"dictionary\",", null, "20"]]
+    }
+  ]
+}
