@@ -86,6 +86,7 @@ class AppendCondAnnotation : AstFunctionAnnotation
 
     else
       ctxFnBlock.list |> emplace(callInCtx)
+    callInCtx := null
 
     compiling_module() |> add_function(ctxFn)
 
