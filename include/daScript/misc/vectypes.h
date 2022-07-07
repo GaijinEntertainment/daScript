@@ -41,12 +41,16 @@ namespace das
     __forceinline vec4f vec_loadu_half(const int *v) {return v_cast_vec4f(v_ldui_half(v));}
     __forceinline vec4f vec_loadu_half(const unsigned int *v) {return vec_loadu_half((const int *)v);}
 
+#ifndef DAS_PRINT_VEC_SEPARATROR
+#define DAS_PRINT_VEC_SEPARATROR ","
+#endif
+
     template <typename TT>
     struct vec2 {
         TT   x, y;
         template <typename AP>
         __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const vec2<TT> & vec) {
-            stream << vec.x << "," << vec.y;
+            stream << vec.x << DAS_PRINT_VEC_SEPARATROR << vec.y;
             return stream;
         }
         __forceinline bool operator == ( const vec2<TT> & vec ) const {
@@ -68,7 +72,7 @@ namespace das
         TT   x, y, z;
         template <typename AP>
         __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const vec3<TT> & vec) {
-            stream << vec.x << "," << vec.y << "," << vec.z;
+            stream << vec.x << DAS_PRINT_VEC_SEPARATROR << vec.y << DAS_PRINT_VEC_SEPARATROR << vec.z;
             return stream;
         }
         __forceinline bool operator == ( const vec3<TT> & vec ) const {
@@ -91,7 +95,7 @@ namespace das
         TT  x, y, z, w;
         template <typename AP>
         __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const vec4<TT> & vec) {
-            stream << vec.x << "," << vec.y << "," << vec.z << "," << vec.w;
+            stream << vec.x << DAS_PRINT_VEC_SEPARATROR << vec.y << DAS_PRINT_VEC_SEPARATROR << vec.z << DAS_PRINT_VEC_SEPARATROR << vec.w;
             return stream;
         }
         __forceinline bool operator == ( const vec4<TT> & vec ) const {
