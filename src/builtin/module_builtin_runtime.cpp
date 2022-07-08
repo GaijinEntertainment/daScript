@@ -1291,7 +1291,6 @@ namespace das
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
             SideEffects::modifyExternal, "toLog");
-
         // log levels
         addConstant<int>(*this, "LOG_CRITICAL", LogLevel::critical);
         addConstant<int>(*this, "LOG_ERROR",    LogLevel::error);
@@ -1299,5 +1298,7 @@ namespace das
         addConstant<int>(*this, "LOG_INFO",     LogLevel::info);
         addConstant<int>(*this, "LOG_DEBUG",    LogLevel::debug);
         addConstant<int>(*this, "LOG_TRACE",    LogLevel::trace);
+        // separators
+        addConstant(*this, "VEC_SEP",   DAS_PRINT_VEC_SEPARATROR);
     }
 }

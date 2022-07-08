@@ -33,7 +33,7 @@ def test_4x4
     t[1] = float4(5,6,7,8)
     t[2] = float4(9,10,11,12)
     t[3] = float4(13,14,15,16)
-    assert("{t}"=="[[ 1,2,3,4; 5,6,7,8; 9,10,11,12; 13,14,15,16]]")
+    assert("{t}"=="[[ 1{VEC_SEP}2{VEC_SEP}3{VEC_SEP}4; 5{VEC_SEP}6{VEC_SEP}7{VEC_SEP}8; 9{VEC_SEP}10{VEC_SEP}11{VEC_SEP}12; 13{VEC_SEP}14{VEC_SEP}15{VEC_SEP}16]]")
     verifySequence(t)
     for y in range(4)
         for x in range(4)
@@ -44,7 +44,7 @@ def test_4x4
     t.z = float4(9,10,11,12)
     t.w = float4(13,14,15,16)
     verifySequence(t)
-    assert("{t}"=="[[ 1,2,3,4; 5,6,7,8; 9,10,11,12; 13,14,15,16]]")
+    assert("{t}"=="[[ 1{VEC_SEP}2{VEC_SEP}3{VEC_SEP}4; 5{VEC_SEP}6{VEC_SEP}7{VEC_SEP}8; 9{VEC_SEP}10{VEC_SEP}11{VEC_SEP}12; 13{VEC_SEP}14{VEC_SEP}15{VEC_SEP}16]]")
     identity(t)
     verifyIdentity(t)
     var ops = false
@@ -101,4 +101,3 @@ def test
     test_any(float4x4())
     test_any(float3x4())
     return true
-

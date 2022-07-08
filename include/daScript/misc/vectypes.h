@@ -41,10 +41,6 @@ namespace das
     __forceinline vec4f vec_loadu_half(const int *v) {return v_cast_vec4f(v_ldui_half(v));}
     __forceinline vec4f vec_loadu_half(const unsigned int *v) {return vec_loadu_half((const int *)v);}
 
-#ifndef DAS_PRINT_VEC_SEPARATROR
-#define DAS_PRINT_VEC_SEPARATROR ","
-#endif
-
     template <typename TT>
     struct vec2 {
         TT   x, y;

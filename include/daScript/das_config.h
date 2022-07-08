@@ -96,6 +96,9 @@ using das_safe_set = std::set<K,C>;
   #endif
 #endif
 
+#ifndef DAS_PRINT_VEC_SEPARATROR
+#define DAS_PRINT_VEC_SEPARATROR ","
+#endif
 
 
 
