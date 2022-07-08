@@ -35,7 +35,7 @@ VECMATH_FINLINE vec4i VECTORCALL v_splat_wi(vec4i a) { return vdupq_lane_s32(vge
 
 VECMATH_FINLINE vec4f VECTORCALL v_splats(float a) { return vmovq_n_f32(a); }
 VECMATH_FINLINE vec4i VECTORCALL v_splatsi(int a) {return vmovq_n_s32(a);}
-VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a) {return vreinterpretq_s32_s64(vmovq_n_s64(a));}
+VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a) {return vdupq_n_s64(a);}
 VECMATH_FINLINE vec4f VECTORCALL v_set_x(float a) { return vsetq_lane_f32(a, v_zero(), 0); } // set x, zero others
 VECMATH_FINLINE vec4i VECTORCALL v_seti_x(int a) { return vsetq_lane_s32(a, v_zero(), 0); } // set x, zero others
 VECMATH_FINLINE vec4f VECTORCALL v_make_vec4f(float x, float y, float z, float w) { return (vec4f){x, y, z, w}; }

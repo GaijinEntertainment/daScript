@@ -42,7 +42,8 @@ VECMATH_FINLINE vec4i VECTORCALL v_clampi(vec4i t, vec4i min_val, vec4i max_val)
 
 VECMATH_FINLINE vec4f VECTORCALL v_safediv(vec4f a, vec4f b)
 {
-  return v_sel(b, v_div(a, b), v_cmp_gt(a, V_C_EPS_VAL));
+  vec4f isDiv0 = v_and(v_cmp_gt(b, v_neg(V_C_VERY_SMALL_VAL)), v_cmp_lt(b, V_C_VERY_SMALL_VAL));
+  return v_andnot(isDiv0, v_div(a, b));
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_mod(vec4f a, vec4f aDiv)
@@ -775,6 +776,26 @@ VECMATH_FINLINE quat4f VECTORCALL v_quat_mul_quat(quat4f q1, quat4f q2)
   return v_perm_xyzd(qv, qw);
 }
 
+//! Decomposes 'q' into a rotational component around 'dir' = twist; and a perpendicular component = swing
+//! q = swing * twist
+//! dir is assumed to be normalized
+VECMATH_FINLINE void VECTORCALL v_quat_decompose_swing_twist(quat4f q, vec3f dir, quat4f& swing, quat4f& twist)
+{
+  // http://www.euclideanspace.com/maths/geometry/rotations/for/decomposition/
+  vec3f p = v_mul(v_dot3(q, dir), dir);
+  twist = v_norm4_safe(v_perm_xyzW(p, q));
+  swing = v_quat_mul_quat(q, v_quat_conjugate(twist));
+}
+
+//! Decomposes 'q' into a rotational component around 'dir' = twist; and a perpendicular component = swing
+//! q = twist * swing
+//! dir is assumed to be normalized
+VECMATH_FINLINE void VECTORCALL v_quat_decompose_twist_swing(quat4f q, vec3f dir, quat4f& twist, quat4f& swing)
+{
+  vec3f p = v_mul(v_dot3(q, dir), dir);
+  twist = v_norm4_safe(v_perm_xyzW(p, q));
+  swing = v_quat_mul_quat(v_quat_conjugate(twist), q);
+}
 
 //! make 3x3 rotation matrix from quaternion
 VECMATH_FINLINE void VECTORCALL v_mat33_from_quat(mat33f &dest, quat4f rot)
@@ -860,7 +881,7 @@ VECMATH_FINLINE void VECTORCALL v_mat44_compose(mat44f &dest, vec4f pos, quat4f 
 }
 
 //! decompose 3x3 matrix to rotation/scale
-VECMATH_FINLINE void VECTORCALL v_mat33_decompose(mat33f_cref &tm, quat4f &rot, vec4f &scl)
+VECMATH_FINLINE void VECTORCALL v_mat33_decompose(mat33f_cref tm, quat4f &rot, vec4f &scl)
 {
   scl = v_perm_ayzw(
     v_perm_wxyz(v_perm_ayzw(v_length3_sq(tm.col2), v_length3_sq(tm.col1))),
@@ -877,7 +898,7 @@ VECMATH_FINLINE void VECTORCALL v_mat33_decompose(mat33f_cref &tm, quat4f &rot, 
 }
 
 //! decompose 4x4 matrix to position/rotation/scale
-VECMATH_FINLINE void VECTORCALL v_mat4_decompose(mat44f_cref &tm, vec3f &pos, quat4f &rot, vec4f &scl)
+VECMATH_FINLINE void VECTORCALL v_mat4_decompose(mat44f_cref tm, vec3f &pos, quat4f &rot, vec4f &scl)
 {
   pos = tm.col3;
 
@@ -995,16 +1016,16 @@ VECMATH_FINLINE vec3f VECTORCALL three_plane_intersection(plane3f p0, plane3f p1
 {
   vec4f n1_n2 = v_cross3(p1, p2), n2_n0 = v_cross3(p2, p0), n0_n1 = v_cross3(p0, p1);
   vec4f cosTheta = v_dot3(p0, n1_n2);
-  vec4f zero = v_zero();
-  invalid = v_cmp_eq(cosTheta, zero);
+  invalid = v_cmp_lt(v_abs(cosTheta), V_C_VERY_SMALL_VAL);
   vec4f secTheta = v_rcp(cosTheta);
 
   vec4f intersectPt;
-  intersectPt = v_nmsub(n1_n2, v_splat_w(p0), zero);
+  intersectPt = v_nmsub(n1_n2, v_splat_w(p0), v_zero());
   intersectPt = v_nmsub(n2_n0, v_splat_w(p1), intersectPt);
   intersectPt = v_nmsub(n0_n1, v_splat_w(p2), intersectPt);
   return v_mul(intersectPt, secTheta);
 }
+
 VECMATH_FINLINE void VECTORCALL v_unsafe_two_plane_intersection(plane3f p1, plane3f p2, vec3f &point, vec3f &dir)
 {
   dir = v_cross3(p1, p2);//p3_normal
@@ -1022,16 +1043,16 @@ VECMATH_FINLINE vec3f VECTORCALL v_unsafe_ray_intersect_plane(vec3f point, vec3f
   return v_madd(t, dir, point);
 }
 
-VECMATH_FINLINE vec3f VECTORCALL closest_point_in_segment(vec3f A, vec3f B, vec3f P)
+VECMATH_FINLINE vec3f VECTORCALL closest_point_on_segment(vec3f point, vec3f a, vec3f b)
 {
-  vec3f AP = v_sub(P, A);
-  vec3f AB = v_sub(B, A);
-  vec3f AB2 = v_length3_sq(AB);
-  vec3f t = v_div(v_dot3(AP, AB), AB2);
+  vec3f apoint = v_sub(point, a);
+  vec3f ab = v_sub(b, a);
+  vec3f ab2 = v_length3_sq(ab);
+  vec3f t = v_div(v_dot3(apoint, ab), ab2);
   //clamp segment
   t = v_max(t, v_zero());
   t = v_min(t, V_C_ONE);
-  return v_madd(AB, t, A);
+  return v_madd(ab, t, a);
 }
 
 VECMATH_FINLINE void VECTORCALL vis_transform_points_4(vec4f* dest, vec4f x, vec4f y, vec4f z, mat44f_cref mat)
@@ -1767,7 +1788,8 @@ VECMATH_INLINE int VECTORCALL v_test_segment_box_intersection_dir(vec3f start, v
 {
   // avoid using pair of v_div (due to compiler may change them uncontrollably to v_mul(a, v_rcp(b))
   // and thus get NaN instead of expected +inf and -inf)
-  vec3f rcp_dir = v_sel(v_rcp(dir), V_C_MAX_VAL, v_cmp_eq(dir, v_zero()));
+  vec4f isVerySmall = v_cmp_lt(v_abs(dir), V_C_VERY_SMALL_VAL);
+  vec3f rcp_dir = v_sel(v_rcp(dir), V_C_MAX_VAL, isVerySmall);
   vec3f l1 = v_mul(v_sub(box.bmin, start), rcp_dir);
   vec3f l2 = v_mul(v_sub(box.bmax, start), rcp_dir);
   vec3f lmin = v_min(l1, l2), lmax = v_max(l1, l2);
@@ -1852,6 +1874,14 @@ VECMATH_FINLINE void VECTORCALL v_mat_43cu_from_mat44(float * __restrict m43, co
   v_stu_p3(m43 + 3, tm.col1);
   v_stu_p3(m43 + 6, tm.col2);
   v_stu_p3(m43 + 9, tm.col3);
+}
+
+VECMATH_FINLINE void VECTORCALL v_mat_44cu_from_mat44(float* __restrict m44, const mat44f& tm)
+{
+  v_stu(m44 + 0,  tm.col0);
+  v_stu(m44 + 4,  tm.col1);
+  v_stu(m44 + 8,  tm.col2);
+  v_stu(m44 + 12, tm.col3);
 }
 
 //mat44f from unaligned TMatrix
@@ -1942,7 +1972,13 @@ VECMATH_INLINE vec4f VECTORCALL v_exp2_est_p2(vec4f x)
 
 VECMATH_INLINE vec4f VECTORCALL v_exp2(vec4f x)
 {
-  EXP_DEF_PART
+  vec4i ipart;
+  vec4f fpart, expipart, expfpart;
+  x = v_min(x, v_splats( 129.00000f));
+  x = v_max(x, v_splats(-126.99999f));
+  ipart = v_cvt_roundi(v_sub(x, V_C_HALF_MINUS_EPS));
+  fpart = v_sub(x, v_cvt_vec4f(ipart));
+  expipart = v_cast_vec4f(v_slli(v_addi(ipart, v_splatsi(127)), 23));
   expfpart = POLY5(fpart, 9.9999994e-1f, 6.9315308e-1f, 2.4015361e-1f, 5.5826318e-2f, 8.9893397e-3f, 1.8775767e-3f);
   return v_sel(v_mul(expipart, expfpart), expipart, v_cmp_eq(fpart, v_zero()));//ensure that exp2(int) = 2^int
 }
@@ -2085,17 +2121,6 @@ VECMATH_FINLINE vec3f VECTORCALL closest_point_on_line(vec3f point, vec3f a, vec
   return v_madd(dir, t, a);//pt is point on line
 }
 
-//returns point on segment which is closes to point
-VECMATH_FINLINE vec3f VECTORCALL closest_point_on_seg(vec3f point, vec3f a, vec3f b)
-{
-  vec3f dir = v_sub(b, a);
-  vec4f dirN = v_length3(dir);
-  dir = v_mul(dir, v_splat_x(v_rcp_x(dirN)));
-  vec3f t = v_dot3(v_sub(point, a), dir);// t param along line
-  t = v_min(v_max(t, v_zero()), dirN);//clamp param
-  return v_madd(dir, t, a);
-};
-
 VECMATH_FINLINE vec4f VECTORCALL distance_to_line_x(vec3f point, vec3f a, vec3f dir)
 {
   vec3f pa = v_sub(point, a);
@@ -2105,7 +2130,7 @@ VECMATH_FINLINE vec4f VECTORCALL distance_to_line_x(vec3f point, vec3f a, vec3f 
 
 VECMATH_FINLINE vec4f VECTORCALL distance_to_seg_x(vec3f point, vec3f a, vec3f b)
 {
-  vec3f pt = closest_point_on_seg(point, a, b);
+  vec3f pt = closest_point_on_segment(point, a, b);
   return v_length3_x(v_sub(point, pt));
 };
 
