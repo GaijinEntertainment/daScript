@@ -114,7 +114,7 @@ namespace  das {
     struct SimPolicy_Int : SimPolicy_Bin<int32_t>, SimPolicy_MathTT<int32_t> {};
     struct SimPolicy_UInt : SimPolicy_Bin<uint32_t>, SimPolicy_MathTT<uint32_t> {};
     struct SimPolicy_Int64 : SimPolicy_Bin<int64_t>, SimPolicy_MathTT<int64_t> {};
-    struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t>, SimPolicy_MathTT<int64_t> {};
+    struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t>, SimPolicy_MathTT<uint64_t> {};
 
     struct SimPolicy_Float : SimPolicy_Type<float> {
         static __forceinline float Mod ( float a, float b, Context & context, LineInfo * at ) {
