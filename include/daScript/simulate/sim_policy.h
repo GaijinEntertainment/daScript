@@ -105,7 +105,7 @@ namespace  das {
     struct SimPolicy_MathTT {
         static __forceinline TT Min   ( TT a, TT b, Context &, LineInfo * ) { return a < b ? a : b; }
         static __forceinline TT Max   ( TT a, TT b, Context &, LineInfo * ) { return a > b ? a : b; }
-        static __forceinline TT Sat   ( TT a, Context &, LineInfo * )    { return a < 0 ? 0  : (a > 1 ? 1 : a);}
+        static __forceinline TT Sat   ( TT a, Context &, LineInfo * )    { return a > 0 ? (a < 1 ? a : 1) : 0; }
         static __forceinline TT Clamp ( TT t, TT a, TT b, Context &, LineInfo * ) { return t>a ? (t<b ? t : b) : a; }
         static __forceinline TT Sign  ( TT a, Context &, LineInfo * )    { return a == 0 ? 0 : (a > 0 ? 1 : -1); }
         static __forceinline TT Abs   ( TT a, Context &, LineInfo * )    { return a >= 0 ? a : -a; }
@@ -171,7 +171,7 @@ namespace  das {
         static __forceinline float RSqrtEst ( float a, Context &, LineInfo * )          { return v_extract_x(v_rsqrt_fast_x(v_set_x(a))); }
         static __forceinline float Min      ( float a, float b, Context &, LineInfo * ) { return a < b ? a : b; }
         static __forceinline float Max      ( float a, float b, Context &, LineInfo * ) { return a > b ? a : b; }
-        static __forceinline float Sat      ( float a, Context &, LineInfo * )          { return a < 0 ? 0 : (a > 1 ? 1 : a); }
+        static __forceinline float Sat      ( float a, Context &, LineInfo * )          { return a > 0 ? (a < 1 ? a : 1) : 0; }
         static __forceinline float Mad      ( float a, float b, float c, Context &, LineInfo * ) { return a*b + c; }
         static __forceinline float Lerp     ( float a, float b, float t, Context &, LineInfo * ) { return (b-a)*t +a; }
         static __forceinline float Clamp    ( float t, float a, float b, Context &, LineInfo * ) { return t>a ? (t<b ? t : b) : a; }
