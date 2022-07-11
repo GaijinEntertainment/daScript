@@ -1347,8 +1347,13 @@ namespace das {
                     error("enumeration value " + name + " has to be signed or unsigned integer of any size", "", "",
                           value->at, CompilationError::invalid_enumeration);
                 } else if ( !value->rtti_isConstant() ) {
-                    error("enumeration value " + name + " must be constant", "", "",
-                          value->at, CompilationError::invalid_enumeration);
+                    if ( auto fenum = getConstExpr(value) ) {
+                        reportAstChanged();
+                        return fenum;
+                    } else {
+                        error("enumeration value " + name + " must be integer constant, and not an expression", "", "",
+                            value->at, CompilationError::invalid_enumeration);
+                    }
                 } else if (value->type->baseType != enu->baseType) {
                     reportAstChanged();
                     int64_t thisInt = getConstExprIntOrUInt(value);
