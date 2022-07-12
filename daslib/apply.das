@@ -8,6 +8,7 @@ module apply shared private
 require ast
 require daslib/ast_boost
 require daslib/defer
+require daslib/templates_boost
 
 /*
     def apply`Foo(self:Foo;arg_field1:block<(name:string,value:field1-type):void>;arg_field2:...)
@@ -20,12 +21,10 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     assert(stype.baseType==Type tStructure)
     assert(stype.dim.length==0)
     var fn <- new [[Function() at=at, atDecl=at, name:=fnname]]                     // def apply`foo : void
-    fn.flags |= FunctionFlags generated
-    fn.flags |= FunctionFlags privateFunction
+    fn.flags |= FunctionFlags generated | FunctionFlags privateFunction
     fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
     var selfT <- clone_type(stype)
-    selfT.flags |= TypeDeclFlags isExplicit
-    selfT.flags |= TypeDeclFlags explicitConst
+    selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
     emplace_new(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
     var blk <- new [[ExprBlock() at=at]]
     for fld in stype.structType.fields
@@ -41,15 +40,7 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         argT.flags = TypeDeclFlags constant
         var argF <- new [[Variable() name:="__arg_{fld.name}",at=at,_type <- argT]]   // arg_field1:block...
         emplace(fn.arguments,argF)
-        var cfield <- new [[ExprInvoke() at=at]]                                    // invoke()
-        var argb <- new [[ExprVar() at=at, name:="__arg_{fld.name}"]]                 // arg_field1
-        emplace(cfield.arguments,argb)
-        var argn <- new [[ExprConstString() at=at, value:=fld.name]]                // "name"
-        emplace(cfield.arguments,argn)
-        var argvar <- new [[ExprVar() at=at, name:="__self"]]                       // self
-        var argfld <- new [[ExprField() at=at, name:=fld.name, value <- argvar]]    // self.name
-        emplace(cfield.arguments,argfld)
-        emplace(blk.list, cfield)
+        blk.list |> emplace_new <|  qmacro(invoke($i("__arg_{fld.name}"),$v(string(fld.name)),__self.$f(fld.name)))
     fn.body <- blk
     compiling_module() |> add_function(fn)
 
@@ -64,12 +55,10 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     assert(stype.baseType==Type tTuple)
     assert(stype.dim.length==0)
     var fn <- new [[Function() at=at, atDecl=at, name:=fnname]]                     // def apply`foo : void
-    fn.flags |= FunctionFlags generated
-    fn.flags |= FunctionFlags privateFunction
+    fn.flags |= FunctionFlags generated | FunctionFlags privateFunction
     fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
     var selfT <- clone_type(stype)
-    selfT.flags |= TypeDeclFlags isExplicit
-    selfT.flags |= TypeDeclFlags explicitConst
+    selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
     emplace_new(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
     var blk <- new [[ExprBlock() at=at]]
     for flda,fldi in stype.argTypes,range(100500)
@@ -86,15 +75,7 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
         var argF <- new [[Variable() name:="__arg_{fldname}",at=at,_type <- argT]]   // arg_field1:block...
         emplace(fn.arguments,argF)
-        var cfield <- new [[ExprInvoke() at=at]]                                    // invoke()
-        var argb <- new [[ExprVar() at=at, name:="__arg_{fldname}"]]                 // arg_field1
-        emplace(cfield.arguments,argb)
-        var argn <- new [[ExprConstString() at=at, value:=fldname]]                // "name"
-        emplace(cfield.arguments,argn)
-        var argvar <- new [[ExprVar() at=at, name:="__self"]]                       // self
-        var argfld <- new [[ExprField() at=at, name:=fldname, value <- argvar]]    // self.name
-        emplace(cfield.arguments,argfld)
-        emplace(blk.list, cfield)
+        blk.list |> emplace_new <|  qmacro(invoke($i("__arg_{fldname}"),$v(fldname),__self.$f(fldname)))
     fn.body <- blk
     compiling_module() |> add_function(fn)
 
@@ -113,12 +94,10 @@ def generateApplyVisitVariant ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     assert(stype.baseType==Type tVariant)
     assert(stype.dim.length==0)
     var fn <- new [[Function() at=at, atDecl=at, name:=fnname]]                     // def apply`foo : void
-    fn.flags |= FunctionFlags generated
-    fn.flags |= FunctionFlags privateFunction
+    fn.flags |= FunctionFlags generated | FunctionFlags privateFunction
     fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
     var selfT <- clone_type(stype)
-    selfT.flags |= TypeDeclFlags isExplicit
-    selfT.flags |= TypeDeclFlags explicitConst
+    selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
     emplace_new(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
     var blk <- new [[ExprBlock() at=at]]
     for flda,fldi in stype.argTypes,range(100500)
@@ -135,30 +114,11 @@ def generateApplyVisitVariant ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
         var argF <- new [[Variable() name:="__arg_{fldname}",at=at,_type <- argT]]   // arg_field1:block...
         emplace(fn.arguments,argF)
-        var cfield <- new [[ExprInvoke() at=at]]                                    // invoke()
-        var argb <- new [[ExprVar() at=at, name:="__arg_{fldname}"]]                 // arg_field1
-        emplace(cfield.arguments,argb)
-        var argn <- new [[ExprConstString() at=at, value:=fldname]]                     // "name"
-        emplace(cfield.arguments,argn)
-        var argvar <- new [[ExprVar() at=at, name:="__self"]]                           // self
-        var argfld <- new [[ExprAsVariant() at=at, name:=fldname, value <- argvar]]    // self as name
-        emplace(cfield.arguments,argfld)
-        // variant_index(self)==fld
-        var vvidx <- new [[ExprCall() at=at, name:="variant_index"]]
-        vvidx.arguments |> emplace_new <| new [[ExprVar() at=at, name:="__self"]]
-        var vcond <- new [[ExprOp2() at=at, op:="==",
-            left <- vvidx,
-            right <- new [[ExprConstInt() at=at, value=fldi]]
-        ]]
-        // invoke(); return
-        var vblk <- new [[ExprBlock() at=at]]
-        vblk.list |> emplace(cfield)
-        vblk.list |> emplace_new <| new [[ExprReturn() at=at]]
-        // if
-        blk.list |> emplace_new <| new [[ExprIfThenElse() at=at,
-            cond <- vcond,
-            if_true <- vblk
-        ]]
+        var vexpr <- qmacro_block <|
+            if variant_index(__self)==$v(fldi)
+                invoke($i("__arg_{fldname}"),$v(fldname),__self as $f(fldname))
+                return
+        blk.list |> emplace(vexpr)
     fn.body <- blk
     compiling_module() |> add_function(fn)
 
