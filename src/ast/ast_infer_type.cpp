@@ -3345,7 +3345,7 @@ namespace das {
                 error("can't delete constant expression " + describeType(expr->subexpr->type), "", "",
                       expr->at, CompilationError::bad_delete);
             } else if ( expr->subexpr->type->isPointer() ) {
-                if ( !safeExpression(expr) ) {
+                if ( !safeExpression(expr) && !(expr->subexpr->type->smartPtr || expr->subexpr->type->smartPtrNative) ) {
                     error("delete of pointer requires unsafe",  "", "",
                         expr->at, CompilationError::unsafe);
                 } else if ( expr->subexpr->type->firstType && expr->subexpr->type->firstType->isHandle() &&

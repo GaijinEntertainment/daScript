@@ -20,13 +20,14 @@ require daslib/templates_boost
 def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     assert(stype.baseType==Type tStructure)
     assert(stype.dim.length==0)
-    var fn <- new [[Function() at=at, atDecl=at, name:=fnname]]                     // def apply`foo : void
-    fn.flags |= FunctionFlags generated | FunctionFlags privateFunction
-    fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
-    var selfT <- clone_type(stype)
+    var selfT <- clone_type(stype); defer_delete(selfT)
     selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
-    emplace_new(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
-    var blk <- new [[ExprBlock() at=at]]
+    var blkList : array<ExpressionPtr>; defer_delete(blkList)
+    for fld in stype.structType.fields
+        blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fld.name}"),$v(string(fld.name)),_`_self.$f(fld.name)))
+    var fn <- qmacro_function(fnname) <| $ ( _`_self:$t(selfT) )
+        $b(blkList)
+    fn.flags |= FunctionFlags privateFunction
     for fld in stype.structType.fields
         var argT <- new [[TypeDecl() baseType=Type tBlock, at=at]]                         // block<(name:string;x:field1type)>
         emplace_new(argT.argTypes, new [[TypeDecl() baseType=Type tString, at=at]])
@@ -40,8 +41,6 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         argT.flags = TypeDeclFlags constant
         var argF <- new [[Variable() name:="__arg_{fld.name}",at=at,_type <- argT]]   // arg_field1:block...
         emplace(fn.arguments,argF)
-        blk.list |> emplace_new <|  qmacro(invoke($i("__arg_{fld.name}"),$v(string(fld.name)),__self.$f(fld.name)))
-    fn.body <- blk
     compiling_module() |> add_function(fn)
 
 /*
@@ -54,13 +53,15 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
 def generateApplyVisitTuple ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     assert(stype.baseType==Type tTuple)
     assert(stype.dim.length==0)
-    var fn <- new [[Function() at=at, atDecl=at, name:=fnname]]                     // def apply`foo : void
-    fn.flags |= FunctionFlags generated | FunctionFlags privateFunction
-    fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
-    var selfT <- clone_type(stype)
+    var selfT <- clone_type(stype); defer_delete(selfT)
     selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
-    emplace_new(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
-    var blk <- new [[ExprBlock() at=at]]
+    var blkList : array<ExpressionPtr>; defer_delete(blkList)
+    for flda,fldi in stype.argTypes,range(100500)
+        let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
+        blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fldname}"),$v(fldname),_`_self.$f(fldname)))
+    var fn <- qmacro_function(fnname) <| $ ( _`_self:$t(selfT) )
+        $b(blkList)
+    fn.flags |= FunctionFlags privateFunction
     for flda,fldi in stype.argTypes,range(100500)
         var argT <- new [[TypeDecl() baseType=Type tBlock, at=at]]                         // block<(name:string;x:field1type)>
         emplace_new(argT.argTypes, new [[TypeDecl() baseType=Type tString, at=at]])
@@ -75,8 +76,6 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
         var argF <- new [[Variable() name:="__arg_{fldname}",at=at,_type <- argT]]   // arg_field1:block...
         emplace(fn.arguments,argF)
-        blk.list |> emplace_new <|  qmacro(invoke($i("__arg_{fldname}"),$v(fldname),__self.$f(fldname)))
-    fn.body <- blk
     compiling_module() |> add_function(fn)
 
 /*
@@ -93,13 +92,19 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
 def generateApplyVisitVariant ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     assert(stype.baseType==Type tVariant)
     assert(stype.dim.length==0)
-    var fn <- new [[Function() at=at, atDecl=at, name:=fnname]]                     // def apply`foo : void
-    fn.flags |= FunctionFlags generated | FunctionFlags privateFunction
-    fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
-    var selfT <- clone_type(stype)
+    var selfT <- clone_type(stype); defer_delete(selfT)
     selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
-    emplace_new(fn.arguments, new [[Variable() name:="__self",at=at, _type <- selfT]])   // self:Foo
-    var blk <- new [[ExprBlock() at=at]]
+    var blkList : array<ExpressionPtr>; defer_delete(blkList)
+    for flda,fldi in stype.argTypes,range(100500)
+        let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
+        var vexpr <- qmacro_block <|
+            if variant_index(_`_self)==$v(fldi)
+                invoke($i("__arg_{fldname}"),$v(fldname),_`_self as $f(fldname))
+                return
+        blkList |> emplace(vexpr)
+    var fn <- qmacro_function(fnname) <| $ ( _`_self:$t(selfT) )
+        $b(blkList)
+    fn.flags |= FunctionFlags privateFunction
     for flda,fldi in stype.argTypes,range(100500)
         var argT <- new [[TypeDecl() baseType=Type tBlock, at=at]]                         // block<(name:string;x:field1type)>
         emplace_new(argT.argTypes, new [[TypeDecl() baseType=Type tString, at=at]])
@@ -114,14 +119,7 @@ def generateApplyVisitVariant ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
         var argF <- new [[Variable() name:="__arg_{fldname}",at=at,_type <- argT]]   // arg_field1:block...
         emplace(fn.arguments,argF)
-        var vexpr <- qmacro_block <|
-            if variant_index(__self)==$v(fldi)
-                invoke($i("__arg_{fldname}"),$v(fldname),__self as $f(fldname))
-                return
-        blk.list |> emplace(vexpr)
-    fn.body <- blk
     compiling_module() |> add_function(fn)
-
 
 [call_macro(name="apply")]  // apply(value, block)
 class ApplyMacro : AstCallMacro
@@ -141,8 +139,7 @@ class ApplyMacro : AstCallMacro
             return [[ExpressionPtr]]
         if expr.arguments[0]._type!=null    // need value inferred
             var argT := expr.arguments[0]._type
-            defer <|
-                argT := null
+            defer_delete(argT)
             if argT.dim.length != 0
                 macro_error(prog,expr.at,"can't apply to dim")
                 return [[ExpressionPtr]]

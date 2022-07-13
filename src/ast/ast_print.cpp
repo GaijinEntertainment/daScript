@@ -1139,6 +1139,15 @@ namespace das {
             ss << (expr->generatorSyntax ? "]]" : "}]");
             return Visitor::visit(expr);
         }
+    // quote
+        virtual void preVisit ( ExprQuote * expr ) override {
+            Visitor::preVisit(expr);
+            ss << "quote(";
+        }
+        virtual ExpressionPtr visit ( ExprQuote * expr ) override {
+            ss << ")";
+            return Visitor::visit(expr);
+        }
     protected:
         TextWriter          ss;
         int                 lastNewLine = -1;

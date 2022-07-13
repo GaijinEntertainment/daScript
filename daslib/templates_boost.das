@@ -547,9 +547,6 @@ class AstQCallMacro : AstCallMacro
         if call.arguments.length != 1
             macro_error(prog,call.at,"expecting 1 argument, qmacro(expression)")
             return [[ExpressionPtr]]
-        if call.arguments[0] is Expression
-            macro_error(prog,call.at,"expecting expression, qmacro(expression)")
-            return [[ExpressionPtr]]
         var qclone <- clone_expression(call.arguments[0])
         var qblk <- apply_qrules(qclone)
         if qblk==null
@@ -579,3 +576,44 @@ class QBlockExprMacro : AstQCallMacro
 
 def public emplace_new ( var arr:array<ExpressionPtr>; var expr:ExpressionPtr )
     arr |> emplace(expr)
+
+def public apply_qmacro_function ( fname:string; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : FunctionPtr
+    var func <- new [[Function() at=expr.at, atDecl=expr.at, name:=fname]]
+    func.flags |= FunctionFlags generated
+    var res <- apply_template(expr, blk)
+    assert(res is ExprMakeBlock)
+    var qblk <- move_unquote_block(res)
+    for arg in qblk.arguments
+        func.arguments |> emplace_new <| clone_variable(arg)
+    func.result := qblk.returnType
+    qblk.arguments |> clear
+    qblk.blockFlags ^= ExprBlockFlags isClosure
+    func.body <- qblk
+    return <- func
+
+[call_macro(name="qmacro_function")]
+class AstQFunctionMacro : AstCallMacro
+    //! This macro will implement expression reification for the function
+    def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+        if call.arguments.length != 2
+            macro_error(prog,call.at,"expecting 2 arguments, qmacro_function(name,expression)")
+            return [[ExpressionPtr]]
+        if !(call.arguments[0]._type.isString)
+            macro_error(prog,call.at,"expecting function name, qmacro_function(NAME,expression)")
+            return [[ExpressionPtr]]
+        var qclone <- clone_expression(call.arguments[1])
+        var qblk <- apply_qrules(qclone)
+        if qblk==null
+            return [[ExpressionPtr]]
+        return <- new [[ExprCall() at=call.at,
+            name:="apply_qmacro_function",
+            arguments := [{ExpressionPtr
+                clone_expression(call.arguments[0]);
+                new [[ExprQuote()
+                    at=call.at,
+                    arguments := [{ExpressionPtr
+                        qclone}]
+                ]];
+                new [[ExprMakeBlock() _block<-qblk, at=call.at]]
+            }]
+        ]]

@@ -2,9 +2,13 @@ require daslib/templates_boost
 require daslib/ast_boost
 require daslib/strings
 
-[export]
-def main
-    print("hello, world\n")
+def test_fun
+    var argT <- clone_type <| typeinfo(ast_typedecl type<int???>)
+    var fun <- qmacro_function("add") <| $ ( a:$t(argT); b:float )
+        return $i("a") + b
+    print("\nFUNCTION REIFICATION IS:\n{describe(fun)}\n")
+
+def test_regular
     let bus = "bus_variable_name"
     let car = "car_variable_name"
     let cll = "call_me_maybe"
@@ -44,3 +48,8 @@ def main
     delete arguments
     delete aargs
     subtype := null
+
+[export]
+def main
+    test_regular()
+    test_fun()
