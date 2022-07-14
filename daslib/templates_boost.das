@@ -195,10 +195,7 @@ def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Express
         prules = addr(rules)
     var astVisitor = new TemplateVisitor(prules)
     var astVisitorAdapter <- make_visitor(*astVisitor)
-    var newExpr <- expr |> visit(astVisitorAdapter)
-    if newExpr != expr
-        expr := null
-    expr <- newExpr
+    visit_expression(expr, astVisitorAdapter)
     if forceAt
         expr |> force_at(at)
     unsafe
@@ -335,6 +332,11 @@ class private QRulesVisitor : AstVisitor
     [[do_not_delete]] rblock : ExprBlock?
     def QRulesVisitor ( rb:ExprBlock? )
         rblock = rb
+    def visitTD ( var typ:TypeDeclPtr& ) : void
+        var newTyp <- visitTypeDecl(typ)
+        if newTyp != typ
+            typ := null
+        typ <- newTyp
     def override visitTypeDecl(var typ:TypeDeclPtr) : TypeDeclPtr
         if (typ.baseType == Type alias) && (typ.flags.isTag)
             if typ.firstType==null || typ.firstType.dimExpr.length!=1
@@ -356,7 +358,12 @@ class private QRulesVisitor : AstVisitor
                     ]]
                 }]]]
             return <- ntyp
-
+        if typ.firstType != null
+            visitTD(typ.firstType)
+        if typ.secondType != null
+            visitTD(typ.secondType)
+        for arg in typ.argTypes
+            visitTD(arg)
         return typ
     def override visitExprTag ( expr:smart_ptr<ExprTag> ) : ExpressionPtr
         var new_tag_name = ""
@@ -497,10 +504,7 @@ def private apply_qrules ( var expr:smart_ptr<Expression>& ) : smart_ptr<ExprBlo
     var astVisitor = new QRulesVisitor(get_ptr(eblk))
     var astVisitorAdapter <- make_visitor(*astVisitor)
     // print("EXPR BEFORE USE COUNT = {smart_ptr_use_count(expr)}\n")
-    var newExpr <- expr |> visit(astVisitorAdapter)
-    if newExpr != expr
-        expr := null
-    expr <- newExpr
+    visit_expression(expr, astVisitorAdapter)
     // print("EXPR USE COUNT = {smart_ptr_use_count(expr)}\n")
     if astVisitor.failed
         eblk := null
@@ -530,6 +534,14 @@ def public apply_qblock_expr ( var expr:smart_ptr<Expression>; blk:block<(var ru
     var resExpr := qblk.list[0]
     qblk := null
     return resExpr
+
+def public apply_qtype ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : TypeDeclPtr
+    //! Implementation details for the expression reificaiton.
+    var res <- apply_template(expr, blk)
+    assert(res is ExprTypeDecl)
+    var qtype <- clone_type((res as ExprTypeDecl).typeexpr)
+    delete res
+    return qtype
 
 def public expression_at ( expr:ExpressionPtr; at:LineInfo ) : ExpressionPtr
     //! Force expression location, than return it.
@@ -573,6 +585,10 @@ class QBlockMacro : AstQCallMacro
 [call_macro(name="qmacro_expr")]
 class QBlockExprMacro : AstQCallMacro
     override apply_call = "apply_qblock_expr"
+
+[call_macro(name="qmacro_type")]
+class QTypeMacro : AstQCallMacro
+    override apply_call = "apply_qtype"
 
 def public emplace_new ( var arr:array<ExpressionPtr>; var expr:ExpressionPtr )
     arr |> emplace(expr)

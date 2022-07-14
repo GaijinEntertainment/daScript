@@ -1,6 +1,12 @@
 require daslib/templates_boost
 require daslib/ast_boost
 require daslib/strings
+require daslib/defer
+
+def test_type
+    var argT <- clone_type <| typeinfo(ast_typedecl type<int>); defer_delete(argT)
+    var resT <- qmacro_type(type<$t(argT)???>)
+    print("\nTYPE IS:\n{describe(resT)}\n")
 
 def test_fun
     var argT <- clone_type <| typeinfo(ast_typedecl type<int???>)
@@ -53,3 +59,4 @@ def test_regular
 def main
     test_regular()
     test_fun()
+    test_type()

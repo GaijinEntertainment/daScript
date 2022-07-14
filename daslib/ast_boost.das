@@ -588,7 +588,6 @@ def convert_to_expression ( value : auto = const; at:LineInfo )
 	    let pval = addr(value)
 	    return walk_and_convert(reinterpret<uint8?> pval, info, at)
 
-
 def convert_to_expression ( value : auto )
     return convert_to_expression(value,[[LineInfo]])
 
@@ -673,6 +672,12 @@ def get_for_source_index(expr:smart_ptr<ExprFor>; source:ExpressionPtr)
         if s==source
             return t
     return -1
+
+def visit_expression ( var expr:ExpressionPtr&; var adapter:smart_ptr<VisitorAdapter> )
+    var newExpr <- expr |> visit(adapter)
+    if newExpr != expr
+        expr := null
+    expr <- newExpr
 
 [macro_function]
 def make_static_assert_false ( text : string; at:LineInfo )

@@ -69,7 +69,7 @@ class AppendCondAnnotation : AstFunctionAnnotation
       ctxFn.arguments |> emplace_new <| clone_variable(arg)
       callInCtxArguments |> emplace_new <| new [[ExprVar() at=at, name:=arg.name]]
     if !func.result.isVoid
-      var resType <- new [[TypeDecl() baseType=Type tPointer, firstType<-clone_type(func.result)]]
+      var resType <- qmacro_type(type<$t(func.result)?>)
       ctxFn.arguments |> emplace_new <| new [[Variable() at=at, _type<-resType, name:=resName]]
       ctxFnBlockList |> emplace_new <| qmacro_expr(${*$i(resName) = $c(ctxCloneFnName)($a(callInCtxArguments));})
     else
