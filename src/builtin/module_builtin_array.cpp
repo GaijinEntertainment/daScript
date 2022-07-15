@@ -41,6 +41,15 @@ namespace das {
         array_resize(*context, pArray, pArray.size-1, stride, false);
     }
 
+    void builtin_array_erase_range ( Array & pArray, int index, int count, int stride, Context * context ) {
+        if ( index < 0 || count < 0 || uint32_t(index + count) > pArray.size ) {
+            context->throw_error_ex("erasing array range is invalid: index=%i count=%i size=%u", index, count, pArray.size);
+            return;
+        }
+        memmove ( pArray.data+index*stride, pArray.data+(index+count)*stride, (pArray.size-index-count)*stride );
+        array_resize(*context, pArray, pArray.size-count, stride, false);
+    }
+
     void builtin_array_clear ( Array & pArray, Context * context ) {
         array_clear(*context, pArray);
     }
@@ -93,6 +102,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(builtin_array_erase)>(*this, lib, "__builtin_array_erase",
             SideEffects::modifyArgument, "builtin_array_erase")
                 ->args({"array","index","stride","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_erase_range)>(*this, lib, "__builtin_array_erase_range",
+            SideEffects::modifyArgument, "builtin_array_erase_range")
+                ->args({"array","index","count","stride","context"});
         addExtern<DAS_BIND_FUN(builtin_array_lock)>(*this, lib, "__builtin_array_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_array_lock")
                 ->args({"array","context"});

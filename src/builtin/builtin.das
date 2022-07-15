@@ -212,6 +212,11 @@ def erase(var Arr:array<auto(numT)>;at:int)
         _builtin_verify_locks(Arr)
     __builtin_array_erase(Arr,at,typeinfo(sizeof Arr[0]))
 
+def erase(var Arr:array<auto(numT)>;at:int;count:int)
+    static_if typeinfo(need_lock_check type<numT>)
+        _builtin_verify_locks(Arr)
+    __builtin_array_erase_range(Arr,at,count,typeinfo(sizeof Arr[0]))
+
 [unused_argument(a)]
 def length(a:auto[]):int
     return typeinfo(dim a)

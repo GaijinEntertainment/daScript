@@ -2380,6 +2380,15 @@ namespace das {
     }
 
     template <typename TT>
+    __forceinline void das_vector_erase_range ( TT & vec, int32_t index, int32_t count, Context * context ) {
+        if ( index < 0 || count < 0 || uint32_t(index + count) > uint32_t(vec.size()) ) {
+            context->throw_error_ex(
+                "erasing vector range is invalid: index=%i count=%i size=%i", index, count, int32_t(vec.size()));
+        }
+        vec.erase(vec.begin() + index, vec.begin() + index + count);
+    }
+
+    template <typename TT>
     void peek_das_string_T(const string & str, TT && block, Context *, LineInfoArg *) {
         block((char *)str.c_str());
     }
