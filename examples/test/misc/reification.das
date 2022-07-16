@@ -4,18 +4,18 @@ require daslib/strings
 require daslib/defer
 
 def test_var
-    var tt <- typeinfo(ast_typedecl type<float>); defer_delete(tt)
+    var tt <- typeinfo(ast_typedecl type<float>)
     var vvar <- qmacro_variable("foo",type<$t(tt)?>); defer_delete(vvar)
     print("\nVARIABLE IS:\n{describe(vvar)}\n")
 
 
 def test_type
-    var argT <- clone_type <| typeinfo(ast_typedecl type<int>); defer_delete(argT)
+    var argT <- typeinfo(ast_typedecl type<int>)
     var resT <- qmacro_type(type<$t(argT)???>); defer_delete(resT)
     print("\nTYPE IS:\n{describe(resT)}\n")
 
 def test_fun
-    var argT <- clone_type <| typeinfo(ast_typedecl type<int???>)
+    var argT <- typeinfo(ast_typedecl type<int???>)
     var fun <- qmacro_function("add") <| $ ( a:$t(argT); b:float )
         return $i("a") + b
     print("\nFUNCTION REIFICATION IS:\n{describe(fun)}\n")
@@ -35,7 +35,7 @@ def test_regular
         qqblk |> emplace <| qmacro(print("{$v(i)}\n"))
     var arguments <- [{ExpressionPtr quote(a1); quote(a2)}]; defer_delete(arguments)
     var aargs <- [{ExpressionPtr quote(a1); quote(a2); quote(a3)}]; defer_delete(aargs)
-    var subtype <- typeinfo(ast_typedecl type<int>); defer_delete(subtype)
+    var subtype <- typeinfo(ast_typedecl type<int>)
     var blk <- qmacro <|
         let t = $i(bus)
         let q = $v([[auto a1,car]])
