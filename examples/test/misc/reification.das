@@ -6,7 +6,7 @@ require daslib/defer
 def test_fun_arg
     var foo <- [{ArgumentTemplate
         name="v1", _type<-qmacro_type(type<int>);
-        name="v2", _type<-qmacro_type(type<float>), init<-qmacro(1)
+        name="v2", _type<-qmacro_type(type<float>), init<-qmacro(1.2)
     }]; defer_delete(foo)
     var fun <- qmacro_function("add") <| $ ( a: int; $a(foo); b : int )
         return a + b
