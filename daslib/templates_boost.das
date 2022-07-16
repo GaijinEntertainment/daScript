@@ -9,11 +9,6 @@ require ast
 require daslib/ast_boost
 require daslib/algorithm
 
-struct ArgumentTemplate
-    name : string
-    _type : TypeDeclPtr
-    init : ExpressionPtr
-
 struct Template
     //! This structure contains collection of subsitution rules for a template.
     kaboomVar : table<string; tuple<prefix:string;suffix:string> >
@@ -26,7 +21,7 @@ struct Template
     type2etype : table<string; TypeDeclPtr>
     blockArgName : table<string; string>
     annArg : table<string; lambda<(var ann: AnnotationDeclaration):void> >
-    blkArg : table<string; array<ArgumentTemplate>>
+    blkArg : table<string; array<VariablePtr>>
 
 def kaboomVarField ( var self:Template; name,prefix,suffix:string )
     //! Adds a rule to to the template to replace a variable field access with a prefix and suffix.
@@ -37,7 +32,7 @@ def replaceVariable ( var self:Template; name:string; expr : smart_ptr<ast::Expr
     //! Adds a rule to the template to replace a variable with an expression.
     self.var2expr[name] := expr
 
-def replaceArgumentWithList ( var self:Template; name:string; blka:array<ArgumentTemplate> )
+def replaceArgumentWithList ( var self:Template; name:string; blka:array<VariablePtr> )
     self.blkArg[name] := blka
 
 def replaceVariableWithList ( var self:Template; name:string; expr : array<ExpressionPtr> )

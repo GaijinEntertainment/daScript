@@ -23,7 +23,7 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     var selfT <- clone_type(stype); defer_delete(selfT)
     selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
     var blkList : array<ExpressionPtr>; defer_delete(blkList)
-    var func_args : array<ArgumentTemplate>; defer_delete(func_args)
+    var func_args : array<VariablePtr>; defer_delete(func_args)
     for fld in stype.structType.fields
         blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fld.name}"),$v(string(fld.name)),_`_self.$f(fld.name)))
         var argT <- new [[TypeDecl() baseType=Type tBlock, at=at]]                         // block<(name:string;x:field1type)>
@@ -36,7 +36,7 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         emplace(argT.argTypes, fldT)
         argT.firstType <- new [[TypeDecl() baseType=Type tVoid,at=at]]
         argT.flags = TypeDeclFlags constant
-        func_args |> emplace <| [[ArgumentTemplate name = "__arg_{fld.name}", _type <- argT]]
+        func_args |> emplace <| new [[Variable() name := "__arg_{fld.name}", _type <- argT]]
     var fn <- qmacro_function(fnname) <| $ ( _`_self:$t(selfT); $a(func_args) )
         $b(blkList)
     fn.flags |= FunctionFlags privateFunction
@@ -55,7 +55,7 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     var selfT <- clone_type(stype); defer_delete(selfT)
     selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
     var blkList : array<ExpressionPtr>; defer_delete(blkList)
-    var func_args : array<ArgumentTemplate>; defer_delete(func_args)
+    var func_args : array<VariablePtr>; defer_delete(func_args)
     for flda,fldi in stype.argTypes,range(100500)
         let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
         blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fldname}"),$v(fldname),_`_self.$f(fldname)))
@@ -69,7 +69,7 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         emplace(argT.argTypes, fldT)
         argT.firstType <- new [[TypeDecl() baseType=Type tVoid,at=at]]
         argT.flags = TypeDeclFlags constant
-        func_args |> emplace <| [[ArgumentTemplate name = "__arg_{fldname}", _type <- argT]]
+        func_args |> emplace <| new [[Variable() name := "__arg_{fldname}", _type <- argT]]
     var fn <- qmacro_function(fnname) <| $ ( _`_self:$t(selfT); $a(func_args) )
         $b(blkList)
     fn.flags |= FunctionFlags privateFunction
@@ -92,7 +92,7 @@ def generateApplyVisitVariant ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     var selfT <- clone_type(stype); defer_delete(selfT)
     selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
     var blkList : array<ExpressionPtr>; defer_delete(blkList)
-    var func_args : array<ArgumentTemplate>; defer_delete(func_args)
+    var func_args : array<VariablePtr>; defer_delete(func_args)
     for flda,fldi in stype.argTypes,range(100500)
         let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
         var vexpr <- qmacro_block <|
@@ -110,7 +110,7 @@ def generateApplyVisitVariant ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
         emplace(argT.argTypes, fldT)
         argT.firstType <- new [[TypeDecl() baseType=Type tVoid,at=at]]
         argT.flags = TypeDeclFlags constant
-        func_args |> emplace <| [[ArgumentTemplate name = "__arg_{fldname}", _type <- argT]]
+        func_args |> emplace <| new [[Variable() name:="__arg_{fldname}", _type <- argT]]
     var fn <- qmacro_function(fnname) <| $ ( _`_self:$t(selfT); $a(func_args) )
         $b(blkList)
     fn.flags |= FunctionFlags privateFunction
