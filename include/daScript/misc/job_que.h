@@ -43,7 +43,7 @@ namespace das {
         mutex				mCompleteMutex;
         uint32_t			mRemaining = 0;
         condition_variable	mCond;
-        atomic<int>         mRef;
+        atomic<int>         mRef = 0;
     };
 
     class JobQue {
@@ -93,14 +93,14 @@ namespace das {
     protected:
         condition_variable mCond;
         int mSleepMs;
-        atomic<bool>	mShutdown;
-        atomic<int>		mThreadCount;
+        atomic<bool>	mShutdown = false;
+        atomic<int>		mThreadCount = 0;
         static thread::id mTheMainThread;
         mutex mFifoMutex;
     protected:
         deque<JobEntry>	mFifo;
         vector<ThreadEntry>		mThreads;
-        atomic<int> mJobsRunning;
+        atomic<int> mJobsRunning = 0;
     protected:
         mutex mEvalMainThreadMutex;
         vector<Job> mEvalMainThread;

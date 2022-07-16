@@ -253,8 +253,8 @@ namespace das {
         vec4f args[1];
         args[0] = cast<JobStatus *>::from(&status);
         context->invoke(block,args,nullptr,lineInfo);
-        if ( status.releaseRef() ) {
-            context->throw_error_at(*lineInfo, "job status beeing deleted while being used");
+        if ( int ref = status.releaseRef() ) {
+            context->throw_error_at(*lineInfo, "job status beeing deleted while being used (ref %i)", ref);
         }
     }
 
