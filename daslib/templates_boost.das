@@ -550,6 +550,7 @@ def public expression_at ( expr:ExpressionPtr; at:LineInfo ) : ExpressionPtr
 
 class AstQCallMacro : AstCallMacro
     apply_call = "apply_qmacro"
+    macro_call = "qmacro"
     //! This macro will implement expression reification
     def override canVisitArguments ( call:smart_ptr<ExprCallMacro> ) : bool
         return false    // nop, this one is just like quote
@@ -557,7 +558,7 @@ class AstQCallMacro : AstCallMacro
         return expr
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if call.arguments.length != 1
-            macro_error(prog,call.at,"expecting 1 argument, qmacro(expression)")
+            macro_error(prog,call.at,"expecting 1 argument, {macro_call}(expression)")
             return [[ExpressionPtr]]
         var qclone <- clone_expression(call.arguments[0])
         var qblk <- apply_qrules(qclone)
@@ -581,14 +582,17 @@ class QMacro : AstQCallMacro {}
 [call_macro(name="qmacro_block")]
 class QBlockMacro : AstQCallMacro
     override apply_call = "apply_qblock"
+    override macro_call = "qmacro_block"
 
 [call_macro(name="qmacro_expr")]
 class QBlockExprMacro : AstQCallMacro
     override apply_call = "apply_qblock_expr"
+    override macro_call = "qmacro_expr"
 
 [call_macro(name="qmacro_type")]
 class QTypeMacro : AstQCallMacro
     override apply_call = "apply_qtype"
+    override macro_call = "qmacro_type"
 
 def public emplace_new ( var arr:array<ExpressionPtr>; var expr:ExpressionPtr )
     arr |> emplace(expr)
@@ -607,22 +611,33 @@ def public apply_qmacro_function ( fname:string; var expr:smart_ptr<Expression>;
     func.body <- qblk
     return <- func
 
-[call_macro(name="qmacro_function")]
-class AstQFunctionMacro : AstCallMacro
-    //! This macro will implement expression reification for the function
+def public apply_qmacro_variable ( vname:string; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : VariablePtr
+    var vvar <- new [[Variable() at=expr.at, name:=vname]]
+    vvar.flags |= VariableFlags generated
+    var res <- apply_template(expr, blk)
+    assert(res is ExprTypeDecl)
+    unsafe
+        vvar._type <- clone_type((res as ExprTypeDecl).typeexpr)
+    delete res
+    return <- vvar
+
+class AstQNamedMacro : AstCallMacro
+    apply_call = "apply_qmacro_function"
+    macro_call = "qmacro_function"
+    //! This macro will implement expression reification for the named expressions (function, variable, etc.)
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if call.arguments.length != 2
-            macro_error(prog,call.at,"expecting 2 arguments, qmacro_function(name,expression)")
+            macro_error(prog,call.at,"expecting 2 arguments, {macro_call}(name,expression)")
             return [[ExpressionPtr]]
         if !(call.arguments[0]._type.isString)
-            macro_error(prog,call.at,"expecting function name, qmacro_function(NAME,expression)")
+            macro_error(prog,call.at,"expecting function name, {macro_call}(NAME,expression)")
             return [[ExpressionPtr]]
         var qclone <- clone_expression(call.arguments[1])
         var qblk <- apply_qrules(qclone)
         if qblk==null
             return [[ExpressionPtr]]
         return <- new [[ExprCall() at=call.at,
-            name:="apply_qmacro_function",
+            name:=apply_call,
             arguments := [{ExpressionPtr
                 clone_expression(call.arguments[0]);
                 new [[ExprQuote()
@@ -633,3 +648,11 @@ class AstQFunctionMacro : AstCallMacro
                 new [[ExprMakeBlock() _block<-qblk, at=call.at]]
             }]
         ]]
+
+[call_macro(name="qmacro_function")]
+class AstQFunctionMacro : AstQNamedMacro {}
+
+[call_macro(name="qmacro_variable")]
+class AstQVariableMacro : AstQNamedMacro
+    override apply_call = "apply_qmacro_variable"
+    override macro_call = "qmacro_variable"

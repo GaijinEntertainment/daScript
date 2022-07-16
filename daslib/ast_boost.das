@@ -42,6 +42,9 @@ def describe(ann:AnnotationDeclaration)
 def describe(list:AnnotationList)
     return join([{ for arg in list; describe(*arg) }], ",")
 
+def describe(vvar:VariablePtr)
+    return "{vvar.name}:{describe(vvar._type)}"
+
 def describe_bitfield(bf;merger:string = "")
     static_if typeinfo(is_bitfield bf)
         let bftd <- typeinfo(ast_typedecl bf)

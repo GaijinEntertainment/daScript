@@ -3,9 +3,15 @@ require daslib/ast_boost
 require daslib/strings
 require daslib/defer
 
+def test_var
+    var tt <- typeinfo(ast_typedecl type<float>); defer_delete(tt)
+    var vvar <- qmacro_variable("foo",type<$t(tt)?>); defer_delete(vvar)
+    print("\nVARIABLE IS:\n{describe(vvar)}\n")
+
+
 def test_type
     var argT <- clone_type <| typeinfo(ast_typedecl type<int>); defer_delete(argT)
-    var resT <- qmacro_type(type<$t(argT)???>)
+    var resT <- qmacro_type(type<$t(argT)???>); defer_delete(resT)
     print("\nTYPE IS:\n{describe(resT)}\n")
 
 def test_fun
@@ -13,6 +19,7 @@ def test_fun
     var fun <- qmacro_function("add") <| $ ( a:$t(argT); b:float )
         return $i("a") + b
     print("\nFUNCTION REIFICATION IS:\n{describe(fun)}\n")
+    delete fun
 
 def test_regular
     let bus = "bus_variable_name"
@@ -22,13 +29,13 @@ def test_regular
     var a1 = 1
     var a2 = a1 + 1
     var a3 = a1 + 13
-    var expr <- quote(length(bus))
-    var qqblk : array<ExpressionPtr>
+    var expr <- quote(length(bus)); defer_delete(expr)
+    var qqblk : array<ExpressionPtr>; defer_delete(qqblk)
     for i in range(3)
         qqblk |> emplace <| qmacro(print("{$v(i)}\n"))
-    var arguments <- [{ExpressionPtr quote(a1); quote(a2)}]
-    var aargs <- [{ExpressionPtr quote(a1); quote(a2); quote(a3)}]
-    var subtype <- typeinfo(ast_typedecl type<int>)
+    var arguments <- [{ExpressionPtr quote(a1); quote(a2)}]; defer_delete(arguments)
+    var aargs <- [{ExpressionPtr quote(a1); quote(a2); quote(a3)}]; defer_delete(aargs)
+    var subtype <- typeinfo(ast_typedecl type<int>); defer_delete(subtype)
     var blk <- qmacro <|
         let t = $i(bus)
         let q = $v([[auto a1,car]])
@@ -48,15 +55,11 @@ def test_regular
         let qq = @@$c(cll)
         let $i(bus) = "busbus"
     print(describe(blk))
-    blk := null
-    expr := null
-    delete qqblk
-    delete arguments
-    delete aargs
-    subtype := null
+    delete blk
 
 [export]
 def main
     test_regular()
     test_fun()
     test_type()
+    test_var()

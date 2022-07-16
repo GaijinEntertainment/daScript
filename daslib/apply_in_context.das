@@ -67,10 +67,9 @@ class AppendCondAnnotation : AstFunctionAnnotation
     var callInCtxArguments : array<ExpressionPtr>
     for arg in func.arguments
       ctxFn.arguments |> emplace_new <| clone_variable(arg)
-      callInCtxArguments |> emplace_new <| new [[ExprVar() at=at, name:=arg.name]]
+      callInCtxArguments |> emplace_new <| qmacro($i(arg.name))
     if !func.result.isVoid
-      var resType <- qmacro_type(type<$t(func.result)?>)
-      ctxFn.arguments |> emplace_new <| new [[Variable() at=at, _type<-resType, name:=resName]]
+      ctxFn.arguments |> emplace_new <| qmacro_variable(resName,type<$t(func.result)?>)
       ctxFnBlockList |> emplace_new <| qmacro_expr(${*$i(resName) = $c(ctxCloneFnName)($a(callInCtxArguments));})
     else
       ctxFnBlockList |> emplace_new <| qmacro($c(ctxCloneFnName)($a(callInCtxArguments)))
