@@ -1703,6 +1703,13 @@ function_argument_declaration
             $decl->pTypeDecl->removeConstant = true;
             $decl->annotation = $ann;
         }
+    |   MTAG_A '(' expr[subexpr] ')' {
+            auto na = new vector<VariableNameAndPosition>();
+            na->push_back(VariableNameAndPosition{"``MACRO``TAG``","",tokAt(scanner,@subexpr)});
+            auto decl = new VariableDeclaration(na, new TypeDecl(Type::none), $subexpr);
+            decl->pTypeDecl->isTag = true;
+            $$ = decl;
+        }
     ;
 
 function_argument_list

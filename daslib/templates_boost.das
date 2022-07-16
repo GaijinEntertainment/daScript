@@ -9,6 +9,11 @@ require ast
 require daslib/ast_boost
 require daslib/algorithm
 
+struct ArgumentTemplate
+    name : string
+    _type : TypeDeclPtr
+    init : ExpressionPtr
+
 struct Template
     //! This structure contains collection of subsitution rules for a template.
     kaboomVar : table<string; tuple<prefix:string;suffix:string> >
@@ -21,19 +26,23 @@ struct Template
     type2etype : table<string; TypeDeclPtr>
     blockArgName : table<string; string>
     annArg : table<string; lambda<(var ann: AnnotationDeclaration):void> >
+    blkArg : table<string; array<ArgumentTemplate>>
 
 def kaboomVarField ( var self:Template; name,prefix,suffix:string )
     //! Adds a rule to to the template to replace a variable field access with a prefix and suffix.
     //! I.e. foo.bar into prefix + bar + suffix
     self.kaboomVar[name] = [[auto prefix,suffix]]
 
-def replaceVariable ( var self:Template; name:string; var expr : smart_ptr<ast::Expression> )
+def replaceVariable ( var self:Template; name:string; expr : smart_ptr<ast::Expression> )
     //! Adds a rule to the template to replace a variable with an expression.
-    self.var2expr[name] <- expr
+    self.var2expr[name] := expr
 
-def replaceVariableWithList ( var self:Template; name:string; var expr : array<smart_ptr<ast::Expression>> )
+def replaceArgumentWithList ( var self:Template; name:string; blka:array<ArgumentTemplate> )
+    self.blkArg[name] := blka
+
+def replaceVariableWithList ( var self:Template; name:string; expr : array<ExpressionPtr> )
     //! Adds a rule to the template to replace a variable with an expression list.
-    self.var2exprList[name] <- expr
+    self.var2exprList[name] := expr
 
 def renameVariable ( var self:Template; name, newName:string )
     //! Adds a rule to the template to rename a variable.
@@ -153,6 +162,25 @@ class private TemplateVisitor : AstVisitor
         for ann in blk.annotations
             rules.annArg |> find_if_exists("{ann.annotation.name}") <| $(cb)
                 (*cb) |> invoke(*ann)
+        let nargs = blk.arguments.length
+        for ai in range(nargs)
+            let rai = nargs - ai - 1
+            assume arg = blk.arguments[rai]
+            let vname = string(arg.name)
+            if key_exists(rules.blkArg, vname)
+                var new_args <- [{for a in rules.blkArg[vname];
+                    new [[Variable()
+                        at=arg.at,
+                        name:=a.name,
+                        _type <- clone_type(a._type),
+                        init <- clone_expression(a.init)
+                    ]]
+                }]
+                new_args |> reverse
+                blk.arguments |> erase(rai)
+                for na in new_args
+                    blk.arguments |> emplace(na, rai)
+                delete new_args
     def preVisitAnythingCall(var arguments:dasvector`smart_ptr`Expression) : void
         if length(rules.var2exprList)==0
             return
@@ -225,7 +253,8 @@ def make_expression_block ( var exprs:array<ExpressionPtr> ) : smart_ptr<ExprBlo
     //! Create ExprBlock and move all expressions from expr to the list of the block.
     var blk <- new [[ExprBlock()]]
     for e in exprs
-        blk.list |> emplace(e)
+        var ce := e
+        blk.list |> emplace(ce)
     delete exprs
     return blk
 
@@ -365,6 +394,21 @@ class private QRulesVisitor : AstVisitor
         for arg in typ.argTypes
             visitTD(arg)
         return typ
+    def override preVisitExprBlockArgument(blk:smart_ptr<ExprBlock>;var arg:VariablePtr;lastArg:bool): void
+        if arg._type.flags.isTag && arg._type.baseType==Type none
+            if arg.init==null
+                compiling_program() |> macro_error(arg.at,"argument '{arg.name}' of block must have initializer")
+                failed = true
+                return
+            let new_tag_name = "temp`var`{tag_index++}`{arg.at.line}`{arg.at.column}"
+            rblock.list |> emplace_new <| new [[ExprCall() at=arg.at,
+                name:="replaceArgumentWithList",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=arg.at, name:="rules"]];
+                    new [[ExprConstString() at=arg.at, value:=new_tag_name]];
+                    clone_expression(arg.init)
+                }]]]
+            arg.name := new_tag_name
     def override visitExprTag ( expr:smart_ptr<ExprTag> ) : ExpressionPtr
         var new_tag_name = ""
         if expr.name=="c"
@@ -401,9 +445,7 @@ class private QRulesVisitor : AstVisitor
                 arguments:=[{ExpressionPtr
                     new [[ExprVar() at=expr.at, name:="rules"]];
                     new [[ExprConstString() at=expr.at, value:=new_tag_name]];
-                    new [[ExprCall() at=expr.at, name:="add_array_ptr_ref",
-                        arguments := [{ExpressionPtr[1] clone_expression(expr.subexpr) }]
-                    ]]
+                    clone_expression(expr.subexpr)
                 }]]]
         elif expr.name=="b" // expression block
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
@@ -411,11 +453,7 @@ class private QRulesVisitor : AstVisitor
                 arguments:=[{ExpressionPtr
                     new [[ExprVar() at=expr.at, name:="rules"]];
                     new [[ExprConstString() at=expr.at, value:=new_tag_name]];
-                    new [[ExprCall() at=expr.at,name:="make_expression_block",
-                        arguments := [{ExpressionPtr[1] new [[ExprCall() at=expr.at, name:="add_array_ptr_ref",
-                            arguments := [{ExpressionPtr[1] clone_expression(expr.subexpr) }]
-                        ]] }]
-                    ]]
+                    new [[ExprCall() at=expr.at,name:="make_expression_block", arguments := [{ExpressionPtr[1] clone_expression(expr.subexpr) }] ]]
                 }]]]
         elif expr.name=="i" // identificator
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,

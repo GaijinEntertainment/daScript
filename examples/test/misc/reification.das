@@ -3,11 +3,20 @@ require daslib/ast_boost
 require daslib/strings
 require daslib/defer
 
+def test_fun_arg
+    var foo <- [{ArgumentTemplate
+        name="v1", _type<-qmacro_type(type<int>);
+        name="v2", _type<-qmacro_type(type<float>), init<-qmacro(1)
+    }]; defer_delete(foo)
+    var fun <- qmacro_function("add") <| $ ( a: int; $a(foo); b : int )
+        return a + b
+    print("\nFUNCTION ARGUMENTS ARE:\n{describe(fun)}\n")
+    delete fun
+
 def test_var
     var tt <- typeinfo(ast_typedecl type<float>)
     var vvar <- qmacro_variable("foo",type<$t(tt)?>); defer_delete(vvar)
     print("\nVARIABLE IS:\n{describe(vvar)}\n")
-
 
 def test_type
     var argT <- typeinfo(ast_typedecl type<int>)
@@ -63,3 +72,5 @@ def main
     test_fun()
     test_type()
     test_var()
+    test_fun_arg()
+
