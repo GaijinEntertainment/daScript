@@ -41,7 +41,7 @@ def test_regular
     var expr <- quote(length(bus)); defer_delete(expr)
     var qqblk : array<ExpressionPtr>; defer_delete(qqblk)
     for i in range(3)
-        qqblk |> emplace <| qmacro(print("{$v(i)}\n"))
+        qqblk |> emplace_new <| qmacro(print("{$v(i)}\n"))
     var arguments <- [{ExpressionPtr quote(a1); quote(a2)}]; defer_delete(arguments)
     var aargs <- [{ExpressionPtr quote(a1); quote(a2); quote(a3)}]; defer_delete(aargs)
     var subtype <- typeinfo(ast_typedecl type<int>)

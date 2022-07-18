@@ -133,8 +133,7 @@ class ApplyMacro : AstCallMacro
             macro_error(prog,expr.at,"expecting apply(value, block)")
             return [[ExpressionPtr]]
         if expr.arguments[0]._type!=null    // need value inferred
-            var argT := expr.arguments[0]._type
-            defer_delete(argT)
+            var argT := expr.arguments[0]._type; defer_delete(argT)
             if argT.dim.length != 0
                 macro_error(prog,expr.at,"can't apply to dim")
                 return [[ExpressionPtr]]
