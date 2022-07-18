@@ -46,7 +46,7 @@ namespace das {
         uint32_t			remaining = 0;
         condition_variable	cond;
         Context *           owner = nullptr;
-        atomic<int>         mRef = 0;
+        atomic<int>         mRef{0};
     };
 
     bool is_job_que_shutting_down();
