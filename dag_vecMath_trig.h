@@ -8,9 +8,9 @@
 
 #include <vecmath/dag_vecMath.h>
 
-#define _MINUS_DP1         -0.78515625
-#define _MINUS_DP2         -2.4187564849853515625e-4
-#define _MINUS_DP3         -3.77489497744594108e-8
+#define _MINUS_DP1         -0.78515625f
+#define _MINUS_DP2         -2.4187564849853515625e-4f
+#define _MINUS_DP3         -3.77489497744594108e-8f
 
 #define _SINCOS_CC0        -0.0013602249f
 #define _SINCOS_CC1         0.0416566950f

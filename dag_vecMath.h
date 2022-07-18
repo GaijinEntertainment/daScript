@@ -62,6 +62,7 @@ VECMATH_FINLINE vec4i VECTORCALL v_splat_wi(vec4i a);
 //! .xyzw = a
 VECMATH_FINLINE vec4f VECTORCALL v_splats(float a);
 VECMATH_FINLINE vec4i VECTORCALL v_splatsi(int a);
+//! .xyzw = {a64 a64}
 VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a);
 
 //! .xyzw = {a 0 0 0}
@@ -504,9 +505,9 @@ VECMATH_FINLINE void VECTORCALL v_mat44_compose(mat44f &dest, vec4f pos, quat4f 
 VECMATH_FINLINE void VECTORCALL v_mat33_compose(mat33f &dest, quat4f rot, vec4f scale);
 
 //! decompose 3x3 matrix to rotation/scale
-VECMATH_FINLINE void VECTORCALL v_mat33_decompose(mat33f_cref &tm, quat4f &rot, vec4f &scl);
+VECMATH_FINLINE void VECTORCALL v_mat33_decompose(mat33f_cref tm, quat4f &rot, vec4f &scl);
 //! decompose 4x4 matrix to position/rotation/scale (assuming ordinary matrix 4x3)
-VECMATH_FINLINE void VECTORCALL v_mat4_decompose(mat44f_cref &tm, vec3f &pos, quat4f &rot, vec4f &scl);
+VECMATH_FINLINE void VECTORCALL v_mat4_decompose(mat44f_cref tm, vec3f &pos, quat4f &rot, vec4f &scl);
 
 //! m1+m2
 VECMATH_FINLINE void VECTORCALL v_mat44_add(mat44f &dest, mat44f_cref m1, mat44f_cref m2);
@@ -657,7 +658,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_max_dist_sq_to_bbox_x(vec4f bmin, vec4f bmax,
 //returns point on infinite line which is closes to point
 VECMATH_FINLINE vec3f VECTORCALL closest_point_on_line(vec3f point, vec3f a, vec3f dir);
 //returns point on segment which is closes to point
-VECMATH_FINLINE vec3f VECTORCALL closest_point_on_seg(vec3f point, vec3f a, vec3f b);
+VECMATH_FINLINE vec3f VECTORCALL closest_point_on_segment(vec3f point, vec3f a, vec3f b);
 //distance to line in x component
 VECMATH_FINLINE vec4f VECTORCALL distance_to_line_x(vec3f point, vec3f a, vec3f dir);
 //distance to segment in x component
@@ -757,7 +758,7 @@ VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f a, vec4f& s, vec4f& c);
 //! compute sine and cosine for .x: s.x = sin(a.x); c.x = cos(a.x);
 VECMATH_FINLINE void VECTORCALL v_sincos_x(vec4f a, vec4f& s, vec4f& c);
 
-//! compute sine, cosine, tangent or arc* for all components
+//! compute sine, cosine, tangent or arc for all components
 VECMATH_FINLINE vec4f VECTORCALL v_sin(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_cos(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_tan(vec4f a);
@@ -765,7 +766,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_asin(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_acos(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_atan(vec4f a);
 
-//! compute sine, cosine, tangent or arc* for .x component
+//! compute sine, cosine, tangent or arc for .x component
 VECMATH_FINLINE vec4f VECTORCALL v_sin_x(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_cos_x(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_tan_x(vec4f a);
