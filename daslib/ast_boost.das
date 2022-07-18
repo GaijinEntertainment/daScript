@@ -591,7 +591,10 @@ def convert_to_expression ( value : auto = const; at:LineInfo )
 	    let pval = addr(value)
 	    return walk_and_convert(reinterpret<uint8?> pval, info, at)
 
-def convert_to_expression ( value : auto )
+def convert_to_expression ( var value : auto = const )
+    return convert_to_expression(value,[[LineInfo]])
+
+def convert_to_expression ( value : auto = const )
     return convert_to_expression(value,[[LineInfo]])
 
 def find_annotation ( mod_name,ann_name:string ) : Annotation const?

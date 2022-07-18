@@ -7,12 +7,11 @@ options multiple_contexts
 module decs_boost shared private
 
 require daslib/decs public
-
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/strings_boost
 require daslib/ast_block_to_loop
-
+require daslib/defer
 require daslib/decs_state
 
 /*
@@ -41,47 +40,18 @@ class DecsTemplate : AstStructureAnnotation
             return false
         let ppref = decs_prefix(args)
         let prefix = (ppref is yes) ? (ppref as yes) : "{st.name}_"
-        var fnApply <- new [[Function() at=st.at, atDecl=st.at, name:="apply_decs_template"]]
-        fnApply.flags |= FunctionFlags generated
-        fnApply.result <- new [[TypeDecl() baseType=Type tVoid, at=st.at]]
-        fnApply.arguments |> emplace_new <| new [[Variable() at=st.at,
-            name := "cmp",
-            _type <- clone_type() <| typeinfo(ast_typedecl type<ComponentMap>)
-        ]]
-        fnApply.arguments |> emplace_new <| new [[Variable() at=st.at,
-            name := "src",
-            _type <- new [[TypeDecl() at=st.at,
-                baseType=Type tStructure,
-                structType = get_ptr(st)
-            ]]
-        ]]
-        var fnErase <- new [[Function() at=st.at, atDecl=st.at, name:="remove_decs_template`{st.name}"]]
-        fnErase.flags |= FunctionFlags generated
-        fnErase.result <- new [[TypeDecl() baseType=Type tVoid, at=st.at]]
-        fnErase.arguments |> emplace_new <| new [[Variable() at=st.at,
-            name := "cmp",
-            _type <- clone_type() <| typeinfo(ast_typedecl type<ComponentMap>)
-        ]]
-
-        var blkApply <- new [[ExprBlock() at=st.at]]
-        var blkErase <- new [[ExprBlock() at=st.at]]
+        var blkApply : array<ExpressionPtr>; defer_delete(blkApply)
+        var blkErase : array<ExpressionPtr>; defer_delete(blkErase)
         for fld in st.fields
-            var cset <- new [[ExprCall() at=fld.at, name:="decs::set"]]
-            cset.arguments |> emplace_new <| new [[ExprVar() at=fld.at, name:="cmp"]]
-            cset.arguments |> emplace_new <| new [[ExprConstString() at=fld.at, value:="{prefix}{fld.name}"]]
-            cset.arguments |> emplace_new <| new [[ExprField() at=fld.at,
-                    value <- new [[ExprVar() at=fld.at, name:="src"]],
-                    name := fld.name
-                ]]
-            blkApply.list |> emplace(cset)
-            var cremove <- new [[ExprCall() at=fld.at, name:="decs::remove"]]
-            cremove.arguments |> emplace_new <| new [[ExprVar() at=fld.at, name:="cmp"]]
-            cremove.arguments |> emplace_new <| new [[ExprConstString() at=fld.at, value:="{prefix}{fld.name}"]]
-            blkErase.list |> emplace(cremove)
-        fnApply.body <- blkApply
-        fnErase.body <- blkErase
+            blkApply |> emplace_new <| qmacro(decs::set(cmp,$v("{prefix}{fld.name}"),src.$f(fld.name)))
+            blkErase |> emplace_new <| qmacro(decs::remove(cmp,$v("{prefix}{fld.name}")))
+        var _typeSt <- new [[TypeDecl() at=st.at, baseType=Type tStructure, structType = get_ptr(st)]]
+        var fnApply <- qmacro_function("apply_decs_template") <| $ ( var cmp:ComponentMap; var src:$t(_typeSt) ) : void
+            $b(blkApply)
         if !(compiling_module() |> add_function(fnApply))
             panic("failed to add apply_decs_template, can't add function {fnApply.name}")
+        var fnErase <- qmacro_function("remove_decs_template`{st.name}") <| $ ( var cmp:ComponentMap; var src:$t(_typeSt) ) : void
+            $b(blkErase)
         if !(compiling_module() |> add_function(fnErase))
             panic("failed to add remove_decs_template, can't add function {fnErase.name}")
         return true
@@ -114,7 +84,7 @@ def private is_decs_template ( v:VariablePtr )
     return p
 
 [macro_function]
-def build_req_from_args ( qblk:ExprBlock? )
+def build_req_from_args ( qblk:ExprBlock? ) : EcsRequest
     var req : EcsRequest
     for a in qblk.arguments
         if a.init==null
@@ -177,27 +147,20 @@ def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a;
     else
         qloop.iteratorsAka[qli] := ""
     qloop.iteratorsAt |> push(a.at)
-    var ftype <- clone_type(a._type)
-    ftype.flags &= ~ TypeDeclFlags constant
-    ftype.flags &= ~ TypeDeclFlags ref
     var getter = getter_name(a,const_parent,can_be_optional)
     if empty(getter)
         return false
-    var cget <- new [[ExprCall() name:=getter, at=a.at]]
-    cget.arguments |> emplace_new <| new [[ExprVar() at=a.at, name:=arch_name]]
-    cget.arguments |> emplace_new <| new [[ExprConstString() at=a.at, value:="{prefix}{a.name}"]]
     if getter=="get_default_ro"
-        cget.arguments |> emplace_new <| clone_expression(a.init)
+        qloop.sources |> emplace_new <| qmacro($c(getter)($i(arch_name),$v("{prefix}{a.name}"),$e(a.init)))
     else
-        cget.arguments |> emplace_new <| new [[ExprTypeDecl() at=a.at, typeexpr<-ftype]]
-    qloop.sources |> emplace(cget)
+        var ftype <- clone_type(a._type); defer_delete(ftype)
+        ftype.flags &= ~ TypeDeclFlags constant
+        ftype.flags &= ~ TypeDeclFlags ref
+        qloop.sources |> emplace_new <| qmacro($c(getter)($i(arch_name),$v("{prefix}{a.name}"),type<$t(ftype)>))
     return true
 
 [macro_function]
 def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlock>; a; prefix, suffix:string; const_parent : bool = false; can_be_optional : bool = true )
-    var ftype <- clone_type(a._type)
-    ftype.flags &= ~ TypeDeclFlags constant
-    ftype.flags &= ~ TypeDeclFlags ref
     var getter = getter_name(a,const_parent,can_be_optional)
     if empty(getter)
         return false
@@ -206,14 +169,10 @@ def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlo
         unsafe
             iget <- clone_expression(a.init)
     else
-        var cget <- new [[ExprCall() name:=getter, at=a.at]]
-        cget.arguments |> emplace_new <| new [[ExprVar() at=a.at, name:=arch_name]]
-        cget.arguments |> emplace_new <| new [[ExprConstString() at=a.at, value:="{prefix}{a.name}"]]
-        cget.arguments |> emplace_new <| new [[ExprTypeDecl() at=a.at, typeexpr<-ftype]]
-        iget <- new [[ExprAt() at=a.at,
-                subexpr <- cget,
-                index <- new [[ExprVar() at=a.at, name:="entity_index"]]
-            ]]
+        var ftype <- clone_type(a._type); defer_delete(ftype)
+        ftype.flags &= ~ TypeDeclFlags constant
+        ftype.flags &= ~ TypeDeclFlags ref
+        iget := qmacro($c(getter)($i(arch_name),$v("{prefix}{a.name}"),type<$t(ftype)>)[entity_index])
     var vlet <- new [[ExprLet() at=a.at, atInit=a.at]]
     vlet.genFlags |= ExprGenFlags alwaysSafe
     var vtype <- clone_type(a._type)
@@ -332,38 +291,9 @@ class DecsQueryMacro : AstCallMacro
         if !vreq.ok
             macro_error(compiling_program(),expr.at,"incorrect query, {vreq.error}")
             return [[ExpressionPtr]]
-        var qblock : ExpressionPtr
-        unsafe
-            if qt==DecsQueryType eid_query
-                qblock <- quote() <|
-                    for_eid_archetype (tag_eid, tag_req, tag_erq) <| $ ( tag_arch, entity_index )
-                        tag_loop
-            elif qt==DecsQueryType find_query
-                qblock <- quote() <|
-                    for_each_archetype_find (tag_req, tag_erq) <| $ ( tag_arch )
-                        tag_loop
-                        return false
-            elif qt==DecsQueryType query
-                qblock <- quote() <|
-                    for_each_archetype (tag_req, tag_erq) <| $ ( tag_arch )
-                        tag_loop
-            else
-                macro_error(compiling_program(),expr.at,"internal error. unsupported query type")
-                return [[ExpressionPtr]]
-        qblock |> force_at(expr.at)
         // @@ => [[EcsQuery ...]]
-        var erq_blk <- new [[ExprBlock() at=expr.at,
-            returnType <- new [[TypeDecl() at=expr.at, baseType=Type autoinfer]],
-            blockFlags = ExprBlockFlags isClosure
-        ]]
-        erq_blk.list |> emplace_new <| new [[ExprReturn() at=expr.at,
-            subexpr <- convert_to_expression(req, expr.at),
-            returnFlags = ExprReturnFlags moveSemantics
-        ]]
-        var erq_fun <- new [[ExprMakeBlock() at=expr.at,
-            mmFlags=ExprMakeBlockFlags isLocalFunction,
-            _block <- erq_blk
-        ]]
+        var erq_fun <- qmacro <| @@
+            return <- $v(req)
         var kaboom : array<tuple<string;string;string>>
         var qtop : ExpressionPtr
         if qt==DecsQueryType eid_query
@@ -417,6 +347,25 @@ class DecsQueryMacro : AstCallMacro
             apply_template(qtop) <| $ ( rules )
                 for kb in kaboom
                     rules |> replaceVariable(kb._0) <| make_static_assert_false("decs_template variables can only be accessed by fields", expr.at)
+        var qblock : ExpressionPtr
+        unsafe
+            if qt==DecsQueryType eid_query
+                qblock <- quote() <|
+                    for_eid_archetype (tag_eid, tag_req, tag_erq) <| $ ( tag_arch, entity_index )
+                        tag_loop
+            elif qt==DecsQueryType find_query
+                qblock <- quote() <|
+                    for_each_archetype_find (tag_req, tag_erq) <| $ ( tag_arch )
+                        tag_loop
+                        return false
+            elif qt==DecsQueryType query
+                qblock <- quote() <|
+                    for_each_archetype (tag_req, tag_erq) <| $ ( tag_arch )
+                        tag_loop
+            else
+                macro_error(compiling_program(),expr.at,"internal error. unsupported query type")
+                return [[ExpressionPtr]]
+        qblock |> force_at(expr.at)
         apply_template(qblock) <| $ ( rules )
             if qt==DecsQueryType eid_query
                 rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
@@ -473,12 +422,9 @@ class DecsEcsMacro : AstFunctionAnnotation
         var blk <- setup_call_list(passFuncName, func.at, false, true)
         if length(blk.list)==0
             var reg <- setup_call_list("register`decs`passes", func.at, true, true)
-            var regc <- new [[ExprCall() at=func.at, name:="decs::register_decs_stage_call"]]
-            regc.arguments |> emplace_new <| new [[ExprConstString() at=func.at, value:=passName]]
-            regc.arguments |> emplace_new <| new [[ExprAddr() at=func.at, target:=passFuncName]]
-            reg.list |> emplace(regc)
+            reg.list |> emplace_new <| qmacro(decs::register_decs_stage_call($v(passName),@@$c(passFuncName)))
         func.flags |= FunctionFlags privateFunction
-        blk.list |> emplace_new <| new [[ExprCall() at=func.at, name:="_::{func.name}"]]
+        blk.list |> emplace_new <| qmacro($c("_::{func.name}")())
         var fblk <- new [[ExprBlock() at=func.body.at]]                 // new function block
         var cqq <- make_call(func.at,"query")
         var cquery = cqq as ExprCallMacro

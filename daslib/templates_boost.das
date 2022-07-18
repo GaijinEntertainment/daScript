@@ -28,9 +28,9 @@ def kaboomVarField ( var self:Template; name,prefix,suffix:string )
     //! I.e. foo.bar into prefix + bar + suffix
     self.kaboomVar[name] = [[auto prefix,suffix]]
 
-def replaceVariable ( var self:Template; name:string; expr : smart_ptr<ast::Expression> )
+def replaceVariable ( var self:Template; name:string; var expr : smart_ptr<ast::Expression> )
     //! Adds a rule to the template to replace a variable with an expression.
-    self.var2expr[name] := expr
+    self.var2expr[name] <- expr
 
 def replaceArgumentWithList ( var self:Template; name:string; blka:array<VariablePtr> )
     self.blkArg[name] := blka
