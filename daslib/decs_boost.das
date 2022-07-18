@@ -45,12 +45,11 @@ class DecsTemplate : AstStructureAnnotation
         for fld in st.fields
             blkApply |> emplace_new <| qmacro(decs::set(cmp,$v("{prefix}{fld.name}"),src.$f(fld.name)))
             blkErase |> emplace_new <| qmacro(decs::remove(cmp,$v("{prefix}{fld.name}")))
-        var _typeSt <- new [[TypeDecl() at=st.at, baseType=Type tStructure, structType = get_ptr(st)]]
-        var fnApply <- qmacro_function("apply_decs_template") <| $ ( var cmp:ComponentMap; var src:$t(_typeSt) ) : void
+        var fnApply <- qmacro_function("apply_decs_template") <| $ ( var cmp:ComponentMap; var src:$t(st) ) : void
             $b(blkApply)
         if !(compiling_module() |> add_function(fnApply))
             panic("failed to add apply_decs_template, can't add function {fnApply.name}")
-        var fnErase <- qmacro_function("remove_decs_template`{st.name}") <| $ ( var cmp:ComponentMap; var src:$t(_typeSt) ) : void
+        var fnErase <- qmacro_function("remove_decs_template`{st.name}") <| $ ( var cmp:ComponentMap; var src:$t(st) ) : void
             $b(blkErase)
         if !(compiling_module() |> add_function(fnErase))
             panic("failed to add remove_decs_template, can't add function {fnErase.name}")
