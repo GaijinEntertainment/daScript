@@ -39,6 +39,13 @@ def replaceVariableWithList ( var self:Template; name:string; expr : array<Expre
     //! Adds a rule to the template to replace a variable with an expression list.
     self.var2exprList[name] := expr
 
+def replaceVariableWithList ( var self:Template; name:string; expr : dasvector`smart_ptr`Expression )
+    //! Adds a rule to the template to replace a variable with an expression list.
+    var vec : array<ExpressionPtr>
+    for e in expr
+        vec |> push_clone(e)
+    self.var2exprList[name] <- vec
+
 def renameVariable ( var self:Template; name, newName:string )
     //! Adds a rule to the template to rename a variable.
     self.var2name[name] = newName
@@ -78,6 +85,10 @@ def replaceBlockArgument ( var self:Template; name,newName:string )
 def renameCall ( var self:Template; name, newName:string )
     //! Adds a rule to the template to rename a call.
     self.call2name[name] = newName
+
+def renameCall ( var self:Template; name:string; newName:das_string )
+    //! Adds a rule to the template to rename a call.
+    self.call2name[name] = string(newName)
 
 class private TemplateVisitor : AstVisitor
     rules : Template?

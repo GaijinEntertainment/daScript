@@ -9,6 +9,7 @@ require ast
 require rtti
 require daslib/ast_boost
 require daslib/templates_boost
+require daslib/defer
 
 [call_macro(name="if_not_null")]
 class ApplyMacro : AstCallMacro
@@ -30,44 +31,20 @@ class ApplyMacro : AstCallMacro
         if !(expr.arguments[1] is ExprCall)
             macro_error(prog,expr.at,"2nd argument must be call(), expecting ptr |> if_not_null() <| call()")
             return [[ExpressionPtr]]
-        if expr.arguments[0]._type!=null    // need value inferred
-            if !expr.arguments[0]._type.isPointer
+        assume PTR = expr.arguments[0]
+        if PTR._type!=null    // need value inferred
+            if !PTR._type.isPointer
                 macro_error(prog,expr.at,"first argument must be pointer , expecting ptr |> if_not_null() <| call()")
                 return [[ExpressionPtr]]
             let ifnn_name = "__ifnn_ptr_{if_not_null_index++}"
-            // var vptr = ptr
-            var vlet <- new [[ExprLet() at=expr.at,atInit=expr.at]]
-            vlet.variables |> emplace_new() <| new [[Variable() at=expr.at,
-                    name := ifnn_name,
-                    _type <- new [[TypeDecl() baseType=Type autoinfer, at=expr.at]],
-                    init <- clone_expression(expr.arguments[0])
-                ]]
-            if !expr.arguments[0]._type.flags.constant
-                vlet.variables[0]._type.flags |= TypeDeclFlags removeConstant
-            // { somecall(ptr,...) }
-            var eblk <- new [[ExprBlock() at=expr.at]]
             var fcall = expr.arguments[1] as ExprCall
-            // note: this can be clone+push(ecall.arguments,arg,1) but we are not bining 'push at' yet
-            var ecall <- new [[ExprCall() at=fcall.at, name:=fcall.name]]
-            ecall.arguments |> emplace_new() <| new [[ExprPtr2Ref() at=expr.at,
-                    subexpr <- new [[ExprVar() at=expr.at,name:=ifnn_name]]
-                ]]
-            for arg in fcall.arguments
-                ecall.arguments |> emplace_new() <| clone_expression(arg)
-            eblk.list |> emplace(ecall)
-            // if ptr != null
-            var eifnn <- new [[ExprIfThenElse() at=expr.at,
-                cond <- new [[ExprOp2() at=expr.at,
-                    op := "!=",
-                    left <- new [[ExprVar() at=expr.at,name:=ifnn_name]],
-                    right <- new [[ExprConstPtr() at=expr.at]]
-                ]],
-                if_true <- eblk
-            ]]
-            // tblk
-            var tblk <- new [[ExprBlock() at=expr.at]]
-            tblk.list |> emplace(vlet)
-            tblk.list |> emplace(eifnn)
+            var vtype <- clone_type(PTR._type); defer_delete(vtype)
+            if !PTR._type.flags.constant
+                vtype.flags |= TypeDeclFlags removeConstant
+            var tblk <- qmacro_block <|
+                let $i(ifnn_name) : $t(vtype) = $e(PTR)
+                if $i(ifnn_name)!=null
+                    $c(fcall.name)(*$i(ifnn_name),$a(fcall.arguments))
             return tblk
         return [[ExpressionPtr]]
 
