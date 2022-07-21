@@ -21,6 +21,56 @@ this macro handles `new_job` and `new_thread` calls.
 the call is replaced with `new_job_invoke` and `new_thread_invoke` accordingly.
 a cloning infastructure is generated for the lambda, which is invoked in the new context.
 
++++++++
+Classes
++++++++
+
+.. _struct-jobque_boost-ChannelAndStatusCapture:
+
+.. das:attribute:: ChannelAndStatusCapture : AstCaptureMacro
+
+|class-jobque_boost-ChannelAndStatusCapture|
+
+.. das:function:: ChannelAndStatusCapture.captureExpression(self: AstCaptureMacro; prog: rtti::Program? const; mod: rtti::Module? const; expr: ExpressionPtr; etype: TypeDeclPtr)
+
+captureExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++self    + :ref:`ast::AstCaptureMacro <struct-ast-AstCaptureMacro>` +
++--------+----------------------------------------------------------+
++prog    + :ref:`rtti::Program <handle-rtti-Program>` ? const       +
++--------+----------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const         +
++--------+----------------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`               +
++--------+----------------------------------------------------------+
++etype   + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`                   +
++--------+----------------------------------------------------------+
+
+
+|method-jobque_boost-ChannelAndStatusCapture.captureExpression|
+
+.. das:function:: ChannelAndStatusCapture.captureFunction(self: AstCaptureMacro; prog: rtti::Program? const; mod: rtti::Module? const; lcs: ast::Structure?; fun: FunctionPtr)
+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++self    + :ref:`ast::AstCaptureMacro <struct-ast-AstCaptureMacro>` +
++--------+----------------------------------------------------------+
++prog    + :ref:`rtti::Program <handle-rtti-Program>` ? const       +
++--------+----------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const         +
++--------+----------------------------------------------------------+
++lcs     + :ref:`ast::Structure <handle-ast-Structure>` ?           +
++--------+----------------------------------------------------------+
++fun     + :ref:`FunctionPtr <alias-FunctionPtr>`                   +
++--------+----------------------------------------------------------+
+
+
+|method-jobque_boost-ChannelAndStatusCapture.captureFunction|
+
 +++++++++++
 Invocations
 +++++++++++
@@ -67,7 +117,7 @@ Iteration
 +++++++++
 
   *  :ref:`for_each (channel:jobque::Channel? const;blk:block\<(res:auto(TT) const#):void\> const) : auto <function-_at_jobque_boost_c__c_for_each_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`each (channel:jobque::Channel? const;tinfo:auto(TT) const) : auto <function-_at_jobque_boost_c__c_each_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CY_ls_TT_gr_.>` 
+  *  :ref:`each (channel:jobque::Channel? -const;tinfo:auto(TT) const) : auto <function-_at_jobque_boost_c__c_each_1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CY_ls_TT_gr_.>` 
 
 .. _function-_at_jobque_boost_c__c_for_each_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
 
@@ -88,19 +138,19 @@ reads input from the channel (in order it was pushed) and invokes the block on e
 stops once channel is depleted (internal entry counter is 0)
 this can happen on multiple threads or jobs at the same time.
 
-.. _function-_at_jobque_boost_c__c_each_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CY_ls_TT_gr_.:
+.. _function-_at_jobque_boost_c__c_each_1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CY_ls_TT_gr_.:
 
-.. das:function:: each(channel: jobque::Channel? const; tinfo: auto(TT) const)
+.. das:function:: each(channel: jobque::Channel?; tinfo: auto(TT) const)
 
 each returns auto
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+tinfo   +auto(TT) const                                         +
-+--------+-------------------------------------------------------+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++channel + :ref:`jobque::Channel <handle-jobque-Channel>` ?+
++--------+-------------------------------------------------+
++tinfo   +auto(TT) const                                   +
++--------+-------------------------------------------------+
 
 
 this iterator is used to iterate over the channel in order it was pushed.
@@ -147,5 +197,65 @@ push returns auto
 
 
 pushes value to the channel (at the end)
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_jobque_boost_c__c_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?:
+
+.. das:function:: capture_jobque_channel(ch: jobque::Channel? const)
+
+capture_jobque_channel returns  :ref:`jobque::Channel <handle-jobque-Channel>` ?
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
++--------+-------------------------------------------------------+
+
+
+|function-jobque_boost-capture_jobque_channel|
+
+.. _function-_at_jobque_boost_c__c_capture_jobque_job_statuc_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?:
+
+.. das:function:: capture_jobque_job_statuc(js: jobque::JobStatus? const)
+
+capture_jobque_job_statuc returns  :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?
+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++js      + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ? const+
++--------+-----------------------------------------------------------+
+
+
+|function-jobque_boost-capture_jobque_job_statuc|
+
+.. _function-_at_jobque_boost_c__c_release_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?:
+
+.. das:function:: release_capture_jobque_channel(ch: jobque::Channel? const)
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
++--------+-------------------------------------------------------+
+
+
+|function-jobque_boost-release_capture_jobque_channel|
+
+.. _function-_at_jobque_boost_c__c_release_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?:
+
+.. das:function:: release_capture_jobque_job_status(js: jobque::JobStatus? const)
+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++js      + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ? const+
++--------+-----------------------------------------------------------+
+
+
+|function-jobque_boost-release_capture_jobque_job_status|
 
 

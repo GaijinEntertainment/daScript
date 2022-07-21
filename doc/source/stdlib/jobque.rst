@@ -47,13 +47,13 @@ JobStatus properties are
 Channel and JobStatus
 +++++++++++++++++++++
 
-  *  :ref:`append (channel:jobque::Channel? const implicit;size:int const) : int <function-_at_jobque_c__c_append_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_Ci>` 
-  *  :ref:`join (channel:jobque::Channel? const implicit) : void <function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?>` 
-  *  :ref:`notify (channel:jobque::Channel? const implicit) : void <function-_at_jobque_c__c_notify_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?>` 
-  *  :ref:`join (job:jobque::JobStatus? const implicit) : void <function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?>` 
-  *  :ref:`notify (job:jobque::JobStatus? const implicit) : void <function-_at_jobque_c__c_notify_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?>` 
+  *  :ref:`append (channel:jobque::Channel? const implicit;size:int const;context:__context const;line:__lineInfo const) : int <function-_at_jobque_c__c_append_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_Ci_C_c_C_l>` 
+  *  :ref:`join (channel:jobque::Channel? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_C_c_C_l>` 
+  *  :ref:`notify (channel:jobque::Channel? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_notify_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_C_c_C_l>` 
+  *  :ref:`join (job:jobque::JobStatus? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?_C_c_C_l>` 
+  *  :ref:`notify (job:jobque::JobStatus? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_notify_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?_C_c_C_l>` 
 
-.. _function-_at_jobque_c__c_append_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_Ci:
+.. _function-_at_jobque_c__c_append_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_Ci_C_c_C_l:
 
 .. das:function:: append(channel: jobque::Channel? const implicit; size: int const)
 
@@ -70,7 +70,7 @@ append returns int
 
 |function-jobque-append|
 
-.. _function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?:
+.. _function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_C_c_C_l:
 
 .. das:function:: join(channel: jobque::Channel? const implicit)
 
@@ -83,7 +83,7 @@ append returns int
 
 |function-jobque-join|
 
-.. _function-_at_jobque_c__c_notify_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?:
+.. _function-_at_jobque_c__c_notify_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_C_c_C_l:
 
 .. das:function:: notify(channel: jobque::Channel? const implicit)
 
@@ -96,7 +96,7 @@ append returns int
 
 |function-jobque-notify|
 
-.. _function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?:
+.. _function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?_C_c_C_l:
 
 .. das:function:: join(job: jobque::JobStatus? const implicit)
 
@@ -109,7 +109,7 @@ append returns int
 
 |function-jobque-join|
 
-.. _function-_at_jobque_c__c_notify_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?:
+.. _function-_at_jobque_c__c_notify_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?_C_c_C_l:
 
 .. das:function:: notify(job: jobque::JobStatus? const implicit)
 
@@ -259,5 +259,87 @@ Construction
 
 
 |function-jobque-with_job_que|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_jobque_c__c_add_ref_CI1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_C_c_C_l:
+
+.. das:function:: add_ref(channel: jobque::Channel? const implicit)
+
++--------+----------------------------------------------------------------+
++argument+argument type                                                   +
++========+================================================================+
++channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const implicit+
++--------+----------------------------------------------------------------+
+
+
+|function-jobque-add_ref|
+
+.. _function-_at_jobque_c__c_release_&I1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_C_c_C_l:
+
+.. das:function:: release(channel: jobque::Channel?& implicit)
+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++channel + :ref:`jobque::Channel <handle-jobque-Channel>` ?& implicit+
++--------+-----------------------------------------------------------+
+
+
+|function-jobque-release|
+
+.. _function-_at_jobque_c__c_notify_and_release_&I1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_C_c_C_l:
+
+.. das:function:: notify_and_release(channel: jobque::Channel?& implicit)
+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++channel + :ref:`jobque::Channel <handle-jobque-Channel>` ?& implicit+
++--------+-----------------------------------------------------------+
+
+
+|function-jobque-notify_and_release|
+
+.. _function-_at_jobque_c__c_add_ref_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?_C_c_C_l:
+
+.. das:function:: add_ref(status: jobque::JobStatus? const implicit)
+
++--------+--------------------------------------------------------------------+
++argument+argument type                                                       +
++========+====================================================================+
++status  + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ? const implicit+
++--------+--------------------------------------------------------------------+
+
+
+|function-jobque-add_ref|
+
+.. _function-_at_jobque_c__c_release_&I1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?_C_c_C_l:
+
+.. das:function:: release(status: jobque::JobStatus?& implicit)
+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++status  + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?& implicit+
++--------+---------------------------------------------------------------+
+
+
+|function-jobque-release|
+
+.. _function-_at_jobque_c__c_notify_and_release_&I1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?_C_c_C_l:
+
+.. das:function:: notify_and_release(job: jobque::JobStatus?& implicit)
+
++--------+---------------------------------------------------------------+
++argument+argument type                                                  +
++========+===============================================================+
++job     + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?& implicit+
++--------+---------------------------------------------------------------+
+
+
+|function-jobque-notify_and_release|
 
 

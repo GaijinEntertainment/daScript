@@ -377,4 +377,38 @@ is_not_equal returns auto
 
 yields true if `a` and `b` are not equal
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_functional_c__c_sorted_1_ls_._gr_A:
+
+.. das:function:: sorted(arr: array<auto>)
+
+sorted returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++arr     +array<auto>  +
++--------+-------------+
+
+
+iterates over input and returns it sorted version
+
+.. _function-_at_functional_c__c_sorted_1_ls_Y_ls_TT_gr_._gr_G:
+
+.. das:function:: sorted(it: iterator<auto(TT)>)
+
+sorted returns auto
+
++--------+------------------+
++argument+argument type     +
++========+==================+
++it      +iterator<auto(TT)>+
++--------+------------------+
+
+
+iterates over input and returns it sorted version
+
 

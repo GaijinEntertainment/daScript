@@ -185,3 +185,11 @@
 .. |function-rtti-type_info| replace:: Returns `TypeInfo` object for the local variable.
 
 .. |typeinfo_macro-rtti-rtti_typeinfo| replace:: Generates `TypeInfo` for the given expression or type.
+
+.. |any_annotation-rtti-recursive_mutex| replace:: Holds system-specific recursive mutex object (typically std::recursive_mutex).
+
+.. |function-rtti-lock_this_context| replace:: Makes recursive critical section of the current `Context` object.
+
+.. |function-rtti-lock_context| replace:: Makes recursive critical section of the given `Context` object.
+
+.. |function-rtti-lock_mutex| replace:: Makes recursive critical section of the given recursive_mutex object.

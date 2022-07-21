@@ -111,6 +111,8 @@
 
 .. |method-ast-AstFunctionAnnotation.isSpecialized| replace:: This callback occurs during function type matching. If function requires special type matching (i.e. `isCompatible`` is implemented) it should return `true`.
 
+.. |method-ast-AstFunctionAnnotation.appendToMangledName| replace:: This call occurs when the function mangled name is requested. This is the way for the macro to ensure function is unique, even though type signature may be identical.
+
 .. |class-ast-AstBlockAnnotation| replace:: Annotation macro which is attached to the `ExprBlock`.
 
 .. |method-ast-AstBlockAnnotation.apply| replace:: This callback occurs during the `parse` pass of the compilation. If block has application errors it should return `false` and `errors` field.
@@ -183,11 +185,27 @@
 
 .. |method-ast-AstCommentReader.afterGlobalVariables| replace:: This callback occurs during the `parse` pass after every global variable in the declaration is declared.
 
+.. |method-ast-AstCommentReader.beforeAlias| replace:: This callback occurs during the `parse` pass before the type alias declaration.
+
+.. |method-ast-AstCommentReader.afterAlias| replace:: This callback occurs during the `parse` pass after the type alias declaration.
+
+.. |class-ast-AstForLoopMacro| replace:: This macro is used to implement custom for-loop handlers. It is similar to visitExprFor callback of the AstVisitor.
+
+.. |method-ast-AstForLoopMacro.visitExprFor| replace:: This callback occurs during the `infer` pass for every `ExprFor`. If no work is necessary it should return `null`, otherwise expression will be replaced by the result.
+
+.. |class-ast-AstCaptureMacro| replace:: This macro is used to implement custom lambda capturing functionality.
+
+.. |method-ast-AstCaptureMacro.captureExpression| replace:: This callback occurs during the 'infer' pass for every time a lambda expression (or generator) is captured for every captured expression.
+
+.. |method-ast-AstCaptureMacro.captureFunction| replace:: This callback occurs during the 'infer' pass for every time a lambda expression (or generator) is captured, for every generated lambda (or generator) function.
+
 .. |class-ast-AstCallMacro| replace:: This macro is used to implement custom call-like expressions ( like `foo(bar,bar2,...)` ).
 
 .. |method-ast-AstCallMacro.preVisit| replace:: This callback occurs during the `infer` pass for every `ExprCallMacro`, before its arguments are inferred.
 
 .. |method-ast-AstCallMacro.visit| replace:: This callback occurs during the `infer` pass for every `ExprCallMacro`, after its arguments are inferred. When fully inferred macro is expected to replace `ExprCallMacro` with meaningful expression.
+
+.. |method-ast-AstCallMacro.canVisitArguments| replace:: This callback occurs during the `infer` pass before the arguments of the call macro are visited. If callback returns true, the arguments are visited, otherwise the call macro is not visited (and acts like a query expression).
 
 .. |class-ast-AstTypeInfoMacro| replace:: This macro is used to implement type info traits, i.e. `typeinfo(YourTraitHere ...)` expressions.
 
@@ -764,6 +782,16 @@
 
 .. |method-ast-AstVisitor.visitExprCallMacro| replace:: after `ExprCallMacro`
 
+.. |method-ast-AstVisitor.preVisitExprSetInsert| replace:: before `ExprSetInsert`
+
+.. |method-ast-AstVisitor.visitExprSetInsert| replace:: after `ExprSetInsert`
+
+.. |method-ast-AstVisitor.preVisitExprTag| replace:: before `ExprTag`
+
+.. |method-ast-AstVisitor.preVisitExprTagValue| replace:: before the value portion of `ExprTag`
+
+.. |method-ast-AstVisitor.visitExprTag| replace:: after `ExprTag`
+
 .. |function-ast-make_visitor| replace:: Creates adapter for the `AstVisitor` interface.
 
 .. |function-ast-visit| replace:: Invokes visitor for the given object.
@@ -818,6 +846,18 @@
 
 .. |function-ast-add_variant_macro| replace:: Adds `AstVariantMacro` to the specific module.
 
+.. |function-ast-make_for_loop_macro| replace:: Creates adapter for the `AstForLoopMacro`.
+
+.. |function-ast-add_for_loop_macro| replace:: Adds `AstForLoopMacro` to the specific module.
+
+.. |function-ast-add_new_for_loop_macro| replace:: Makes adapter to the `AstForLoopMacro` and adds it to the current module.
+
+.. |function-ast-make_capture_macro| replace:: Creates adapter for the `AstCaptureMacro`.
+
+.. |function-ast-add_capture_macro| replace:: Adds `AstCaptureMacro` to the specific module.
+
+.. |function-ast-add_new_capture_macro| replace:: Makes adapter to the `AstCaptureMacro` and adds it to the current module.
+
 .. |function-ast-this_program| replace:: Program attached to the current context (or null if RTTI is disabled).
 
 .. |function-ast-this_module| replace:: Main module attached to the current context (will through if RTTI is disabled).
@@ -839,6 +879,8 @@
 .. |function-ast-for_each_variant_macro| replace:: Iterates through each variant macro in the given `Module`.
 
 .. |function-ast-for_each_typeinfo_macro| replace:: Iterates through each typeinfo macro in the given `Module`.
+
+.. |function-ast-for_each_for_loop_macro| replace:: Iterates through each for loop macro in the given `Module`.
 
 .. |function-ast-force_at| replace:: Replaces line info in the expression, its subexpressions, and its types.
 
@@ -1206,11 +1248,11 @@
 
 .. |structure_annotation-ast-ReaderMacro| replace:: Adapter for the `AstReaderMacro`.
 
-.. |structure_annotation-ast-CommentReader| replace:: Adpater for the `AstCommentReader`.
+.. |structure_annotation-ast-CommentReader| replace:: Adapter for the `AstCommentReader`.
 
 .. |structure_annotation-ast-CallMacro| replace:: Adapter for the `AstCallMacro`.
 
-.. |structure_annotation-ast-VariantMacro| replace:: Adapater for the `AstVariantMacro`.
+.. |structure_annotation-ast-VariantMacro| replace:: Adapter for the `AstVariantMacro`.
 
 .. |structure_annotation-ast-ExprReader| replace:: Compilation time only expression which holds temporary information for the `AstReaderMacro`.
 
@@ -1219,4 +1261,25 @@
 .. |function_annotation-ast-quote| replace:: Returns ast expression tree of the input, without evaluating or infering it.
     This is useful for macros which generate code as a shortcut for generating boilerplate code.
 
+.. |typeinfo_macro-ast-ast_typedecl| replace:: Returns TypeDeclPtr of the type specified via type<> or subexpression type, for example typeinfo(ast_typedecl type<int?>)
+
+.. |typeinfo_macro-ast-ast_function| replace:: Returns FunctionPtr to the function specified by subexrepssion, for example typeinfo(ast_function @@foo)
+
+.. |function-ast-add_block_annotation| replace:: Adds annotation declaration to the block.
+
+.. |function-ast-add_alias| replace:: Adds type alias to the specified module.
+
+.. |function-ast-remove_structure| replace:: Removes structure declaration from the specified module.
+
+.. |typedef-ast-ForLoopMacroPtr| replace:: Smart pointer to 'ForLoopMacro'.
+
+.. |structure_annotation-ast-ForLoopMacro| replace:: Adapter for the 'AstForLoopMacro'.
+
+.. |typedef-ast-CaptureMacroPtr| replace:: Smart pointer to 'CaptureMacro'.
+
+.. |structure_annotation-ast-ExprSetInsert| replace:: Set insert expression, i.e. tab |> insert(key).
+
+.. |structure_annotation-ast-ExprTag| replace:: Compilation time only tag expression, used for reification. For example $c(....).
+
+.. |structure_annotation-ast-CaptureMacro| replace:: Adapter for the `AstCaptureMacro`.
 

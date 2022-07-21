@@ -73,12 +73,6 @@ df_header fields are
 Handled structures
 ++++++++++++++++++
 
-.. _handle-fio-FILE:
-
-.. das:attribute:: FILE
-
-|structure_annotation-fio-FILE|
-
 .. _handle-fio-FStat:
 
 .. das:attribute:: FStat
@@ -108,6 +102,16 @@ FStat properties are
 
 
 |structure_annotation-fio-FStat|
+
++++++++++++++
+Handled types
++++++++++++++
+
+.. _handle-fio-FILE:
+
+.. das:attribute:: FILE
+
+|any_annotation-fio-FILE|
 
 +++++++++++++++++
 File manipulation

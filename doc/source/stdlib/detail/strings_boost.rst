@@ -10,4 +10,6 @@
 
 .. |function-strings_boost-eq| replace:: Compares das_string and string. True if equal.
 
+.. |function-strings_boost-levenshtein_distance| replace:: Returns Levenshtein distance between two strings.
 
+.. |function-strings_boost-levenshtein_distance_fast| replace:: Returns Levenshtein distance between two strings, fast implementation.

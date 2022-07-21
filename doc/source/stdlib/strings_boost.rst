@@ -18,75 +18,75 @@ All functions and symbols are in "strings_boost" module, use require to get acce
 Split and join
 ++++++++++++++
 
-  *  :ref:`split (text:string const;delim:string const) : array\<string\> <function-_at_strings_boost_c__c_split_Cs_Cs>` 
-  *  :ref:`split_by_chars (text:string const;delim:string const) : array\<string\> <function-_at_strings_boost_c__c_split_by_chars_Cs_Cs>` 
-  *  :ref:`join (it:auto const;separator:string const) : auto <function-_at_strings_boost_c__c_join_C._Cs>` 
-  *  :ref:`split (text:string const;delim:string const;blk:block\<(arg:array\<string\> const#):auto\> const) : auto <function-_at_strings_boost_c__c_split_Cs_Cs_CN_ls_arg_gr_0_ls_C_hh_1_ls_s_gr_A_gr_1_ls_._gr__builtin_>` 
-  *  :ref:`split_by_chars (text:string const;delim:string const;blk:block\<(arg:array\<string\> const#):auto\> const) : auto <function-_at_strings_boost_c__c_split_by_chars_Cs_Cs_CN_ls_arg_gr_0_ls_C_hh_1_ls_s_gr_A_gr_1_ls_._gr__builtin_>` 
+  *  :ref:`split (text:string const implicit;delim:string const implicit) : array\<string\> <function-_at_strings_boost_c__c_split_CIs_CIs>` 
+  *  :ref:`split_by_chars (text:string const implicit;delim:string const implicit) : array\<string\> <function-_at_strings_boost_c__c_split_by_chars_CIs_CIs>` 
+  *  :ref:`join (it:auto const;separator:string const implicit) : auto <function-_at_strings_boost_c__c_join_C._CIs>` 
+  *  :ref:`split (text:string const implicit;delim:string const implicit;blk:block\<(arg:array\<string\> const#):auto\> const) : auto <function-_at_strings_boost_c__c_split_CIs_CIs_CN_ls_arg_gr_0_ls_C_hh_1_ls_s_gr_A_gr_1_ls_._gr__builtin_>` 
+  *  :ref:`split_by_chars (text:string const implicit;delim:string const implicit;blk:block\<(arg:array\<string\> const#):auto\> const) : auto <function-_at_strings_boost_c__c_split_by_chars_CIs_CIs_CN_ls_arg_gr_0_ls_C_hh_1_ls_s_gr_A_gr_1_ls_._gr__builtin_>` 
 
-.. _function-_at_strings_boost_c__c_split_Cs_Cs:
+.. _function-_at_strings_boost_c__c_split_CIs_CIs:
 
-.. das:function:: split(text: string const; delim: string const)
+.. das:function:: split(text: string const implicit; delim: string const implicit)
 
 split returns array<string>
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+text    +string const +
-+--------+-------------+
-+delim   +string const +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++text    +string const implicit+
++--------+---------------------+
++delim   +string const implicit+
++--------+---------------------+
 
 
 |function-strings_boost-split|
 
-.. _function-_at_strings_boost_c__c_split_by_chars_Cs_Cs:
+.. _function-_at_strings_boost_c__c_split_by_chars_CIs_CIs:
 
-.. das:function:: split_by_chars(text: string const; delim: string const)
+.. das:function:: split_by_chars(text: string const implicit; delim: string const implicit)
 
 split_by_chars returns array<string>
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+text    +string const +
-+--------+-------------+
-+delim   +string const +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++text    +string const implicit+
++--------+---------------------+
++delim   +string const implicit+
++--------+---------------------+
 
 
 |function-strings_boost-split_by_chars|
 
-.. _function-_at_strings_boost_c__c_join_C._Cs:
+.. _function-_at_strings_boost_c__c_join_C._CIs:
 
-.. das:function:: join(it: auto const; separator: string const)
+.. das:function:: join(it: auto const; separator: string const implicit)
 
 join returns auto
 
-+---------+-------------+
-+argument +argument type+
-+=========+=============+
-+it       +auto const   +
-+---------+-------------+
-+separator+string const +
-+---------+-------------+
++---------+---------------------+
++argument +argument type        +
++=========+=====================+
++it       +auto const           +
++---------+---------------------+
++separator+string const implicit+
++---------+---------------------+
 
 
 |function-strings_boost-join|
 
-.. _function-_at_strings_boost_c__c_split_Cs_Cs_CN_ls_arg_gr_0_ls_C_hh_1_ls_s_gr_A_gr_1_ls_._gr__builtin_:
+.. _function-_at_strings_boost_c__c_split_CIs_CIs_CN_ls_arg_gr_0_ls_C_hh_1_ls_s_gr_A_gr_1_ls_._gr__builtin_:
 
-.. das:function:: split(text: string const; delim: string const; blk: block<(arg:array<string> const#):auto> const)
+.. das:function:: split(text: string const implicit; delim: string const implicit; blk: block<(arg:array<string> const#):auto> const)
 
 split returns auto
 
 +--------+--------------------------------------------+
 +argument+argument type                               +
 +========+============================================+
-+text    +string const                                +
++text    +string const implicit                       +
 +--------+--------------------------------------------+
-+delim   +string const                                +
++delim   +string const implicit                       +
 +--------+--------------------------------------------+
 +blk     +block<(arg:array<string> const#):auto> const+
 +--------+--------------------------------------------+
@@ -94,18 +94,18 @@ split returns auto
 
 |function-strings_boost-split|
 
-.. _function-_at_strings_boost_c__c_split_by_chars_Cs_Cs_CN_ls_arg_gr_0_ls_C_hh_1_ls_s_gr_A_gr_1_ls_._gr__builtin_:
+.. _function-_at_strings_boost_c__c_split_by_chars_CIs_CIs_CN_ls_arg_gr_0_ls_C_hh_1_ls_s_gr_A_gr_1_ls_._gr__builtin_:
 
-.. das:function:: split_by_chars(text: string const; delim: string const; blk: block<(arg:array<string> const#):auto> const)
+.. das:function:: split_by_chars(text: string const implicit; delim: string const implicit; blk: block<(arg:array<string> const#):auto> const)
 
 split_by_chars returns auto
 
 +--------+--------------------------------------------+
 +argument+argument type                               +
 +========+============================================+
-+text    +string const                                +
++text    +string const implicit                       +
 +--------+--------------------------------------------+
-+delim   +string const                                +
++delim   +string const implicit                       +
 +--------+--------------------------------------------+
 +blk     +block<(arg:array<string> const#):auto> const+
 +--------+--------------------------------------------+
@@ -117,21 +117,21 @@ split_by_chars returns auto
 Formatting
 ++++++++++
 
-  *  :ref:`wide (text:string const;width:int const) : string <function-_at_strings_boost_c__c_wide_Cs_Ci>` 
+  *  :ref:`wide (text:string const implicit;width:int const) : string <function-_at_strings_boost_c__c_wide_CIs_Ci>` 
 
-.. _function-_at_strings_boost_c__c_wide_Cs_Ci:
+.. _function-_at_strings_boost_c__c_wide_CIs_Ci:
 
-.. das:function:: wide(text: string const; width: int const)
+.. das:function:: wide(text: string const implicit; width: int const)
 
 wide returns string
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+text    +string const +
-+--------+-------------+
-+width   +int const    +
-+--------+-------------+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++text    +string const implicit+
++--------+---------------------+
++width   +int const            +
++--------+---------------------+
 
 
 |function-strings_boost-wide|
@@ -140,39 +140,39 @@ wide returns string
 Queries and comparisons
 +++++++++++++++++++++++
 
-  *  :ref:`is_character_at (foo:array\<uint8\> const#;idx:int const;ch:int const) : auto <function-_at_strings_boost_c__c_is_character_at_C_hh_1_ls_u8_gr_A_Ci_Ci>` 
-  *  :ref:`eq (a:string const;b:$::das_string const) : auto <function-_at_strings_boost_c__c_eq_Cs_CH_ls__builtin__c__c_das_string_gr_>` 
-  *  :ref:`eq (b:$::das_string const;a:string const) : auto <function-_at_strings_boost_c__c_eq_CH_ls__builtin__c__c_das_string_gr__Cs>` 
+  *  :ref:`is_character_at (foo:array\<uint8\> const implicit;idx:int const;ch:int const) : auto <function-_at_strings_boost_c__c_is_character_at_CI1_ls_u8_gr_A_Ci_Ci>` 
+  *  :ref:`eq (a:string const implicit;b:$::das_string const) : auto <function-_at_strings_boost_c__c_eq_CIs_CH_ls__builtin__c__c_das_string_gr_>` 
+  *  :ref:`eq (b:$::das_string const;a:string const implicit) : auto <function-_at_strings_boost_c__c_eq_CH_ls__builtin__c__c_das_string_gr__CIs>` 
 
-.. _function-_at_strings_boost_c__c_is_character_at_C_hh_1_ls_u8_gr_A_Ci_Ci:
+.. _function-_at_strings_boost_c__c_is_character_at_CI1_ls_u8_gr_A_Ci_Ci:
 
-.. das:function:: is_character_at(foo: array<uint8> const#; idx: int const; ch: int const)
+.. das:function:: is_character_at(foo: array<uint8> const implicit; idx: int const; ch: int const)
 
 is_character_at returns auto
 
-+--------+-------------------+
-+argument+argument type      +
-+========+===================+
-+foo     +array<uint8> const#+
-+--------+-------------------+
-+idx     +int const          +
-+--------+-------------------+
-+ch      +int const          +
-+--------+-------------------+
++--------+---------------------------+
++argument+argument type              +
++========+===========================+
++foo     +array<uint8> const implicit+
++--------+---------------------------+
++idx     +int const                  +
++--------+---------------------------+
++ch      +int const                  +
++--------+---------------------------+
 
 
 |function-strings_boost-is_character_at|
 
-.. _function-_at_strings_boost_c__c_eq_Cs_CH_ls__builtin__c__c_das_string_gr_:
+.. _function-_at_strings_boost_c__c_eq_CIs_CH_ls__builtin__c__c_das_string_gr_:
 
-.. das:function:: eq(a: string const; b: das_string const)
+.. das:function:: eq(a: string const implicit; b: das_string const)
 
 eq returns auto
 
 +--------+--------------------------------------------------------------+
 +argument+argument type                                                 +
 +========+==============================================================+
-+a       +string const                                                  +
++a       +string const implicit                                         +
 +--------+--------------------------------------------------------------+
 +b       + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
 +--------+--------------------------------------------------------------+
@@ -180,9 +180,9 @@ eq returns auto
 
 |function-strings_boost-eq|
 
-.. _function-_at_strings_boost_c__c_eq_CH_ls__builtin__c__c_das_string_gr__Cs:
+.. _function-_at_strings_boost_c__c_eq_CH_ls__builtin__c__c_das_string_gr__CIs:
 
-.. das:function:: eq(b: das_string const; a: string const)
+.. das:function:: eq(b: das_string const; a: string const implicit)
 
 eq returns auto
 
@@ -191,10 +191,48 @@ eq returns auto
 +========+==============================================================+
 +b       + :ref:`builtin::das_string <handle-builtin-das_string>`  const+
 +--------+--------------------------------------------------------------+
-+a       +string const                                                  +
++a       +string const implicit                                         +
 +--------+--------------------------------------------------------------+
 
 
 |function-strings_boost-eq|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_strings_boost_c__c_levenshtein_distance_CIs_CIs:
+
+.. das:function:: levenshtein_distance(s: string const implicit; t: string const implicit)
+
+levenshtein_distance returns int
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++s       +string const implicit+
++--------+---------------------+
++t       +string const implicit+
++--------+---------------------+
+
+
+|function-strings_boost-levenshtein_distance|
+
+.. _function-_at_strings_boost_c__c_levenshtein_distance_fast_CIs_CIs:
+
+.. das:function:: levenshtein_distance_fast(s: string const implicit; t: string const implicit)
+
+levenshtein_distance_fast returns int
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++s       +string const implicit+
++--------+---------------------+
++t       +string const implicit+
++--------+---------------------+
+
+
+|function-strings_boost-levenshtein_distance_fast|
 
 

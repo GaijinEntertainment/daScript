@@ -69,9 +69,9 @@ Important requirements are:
 Empty check
 +++++++++++
 
-  *  :ref:`empty (v:auto(VecT) const) : auto <function-_at_array_boost_c__c_empty_CY_ls_VecT_gr_.>` 
+  *  :ref:`empty (v:auto(VecT) const) : auto <function-_at_array_boost_c__c_empty_CY_ls_VecT_gr_._%_ls_IsAnyArrayMacro_c_expect_any_array(v_eq_true)_gr_>` 
 
-.. _function-_at_array_boost_c__c_empty_CY_ls_VecT_gr_.:
+.. _function-_at_array_boost_c__c_empty_CY_ls_VecT_gr_._%_ls_IsAnyArrayMacro_c_expect_any_array(v_eq_true)_gr_:
 
 .. das:function:: empty(v: auto(VecT) const)
 

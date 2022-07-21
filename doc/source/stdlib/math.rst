@@ -4680,4 +4680,68 @@ unpack_byte_to_float returns float4
 
 |function-math-unpack_byte_to_float|
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_math_c__c_atan_est_Cf:
+
+.. das:function:: atan_est(x: float const)
+
+atan_est returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-atan_est|
+
+.. _function-_at_math_c__c_atan_est_Cf2:
+
+.. das:function:: atan_est(x: float2 const)
+
+atan_est returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-atan_est|
+
+.. _function-_at_math_c__c_atan_est_Cf3:
+
+.. das:function:: atan_est(x: float3 const)
+
+atan_est returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-atan_est|
+
+.. _function-_at_math_c__c_atan_est_Cf4:
+
+.. das:function:: atan_est(x: float4 const)
+
+atan_est returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-atan_est|
+
 

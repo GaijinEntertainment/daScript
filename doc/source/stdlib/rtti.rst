@@ -610,6 +610,8 @@ Context fields are
 +--------------------------+--------------------------------------------------------------+
 +alwaysStackWalkOnException+bool                                                          +
 +--------------------------+--------------------------------------------------------------+
++contextMutex              + :ref:`rtti::recursive_mutex <handle-rtti-recursive_mutex>`   +
++--------------------------+--------------------------------------------------------------+
 +last_exception            +string const                                                  +
 +--------------------------+--------------------------------------------------------------+
 +name                      + :ref:`builtin::das_string <handle-builtin-das_string>`       +
@@ -1176,6 +1178,8 @@ CodeOfPolicies fields are
 +------------------------------+----+
 +no_global_variables           +bool+
 +------------------------------+----+
++completion                    +bool+
++------------------------------+----+
 +string_heap_size_hint         +uint+
 +------------------------------+----+
 +no_unsafe                     +bool+
@@ -1206,6 +1210,12 @@ Typeinfo macros
 Handled types
 +++++++++++++
 
+.. _handle-rtti-recursive_mutex:
+
+.. das:attribute:: recursive_mutex
+
+|any_annotation-rtti-recursive_mutex|
+
 .. _handle-rtti-AnnotationArguments:
 
 .. das:attribute:: AnnotationArguments
@@ -1230,6 +1240,7 @@ Initialization and finalization
 
   *  :ref:`LineInfo () : rtti::LineInfo <function-_at_rtti_c__c_LineInfo>` 
   *  :ref:`LineInfo (arg0:rtti::FileInfo? const implicit;arg1:int const;arg2:int const;arg3:int const;arg4:int const) : rtti::LineInfo <function-_at_rtti_c__c_LineInfo_CI1_ls_H_ls_rtti_c__c_FileInfo_gr__gr_?_Ci_Ci_Ci_Ci>` 
+  *  :ref:`using (arg0:block\<(rtti::recursive_mutex# explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_recursive_mutex_gr__gr_1_ls_v_gr__builtin_>` 
   *  :ref:`CodeOfPolicies () : rtti::CodeOfPolicies <function-_at_rtti_c__c_CodeOfPolicies>` 
   *  :ref:`using (arg0:block\<(rtti::CodeOfPolicies# explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_CodeOfPolicies_gr__gr_1_ls_v_gr__builtin_>` 
   *  :ref:`using (arg0:block\<(rtti::ModuleGroup# explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_ModuleGroup_gr__gr_1_ls_v_gr__builtin_>` 
@@ -1265,6 +1276,19 @@ LineInfo returns  :ref:`rtti::LineInfo <handle-rtti-LineInfo>`
 
 
 |function-rtti-LineInfo|
+
+.. _function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_recursive_mutex_gr__gr_1_ls_v_gr__builtin_:
+
+.. das:function:: using(arg0: block<(rtti::recursive_mutex# explicit):void> const implicit)
+
++--------+------------------------------------------------------------------------------------------+
++argument+argument type                                                                             +
++========+==========================================================================================+
++arg0    +block<( :ref:`rtti::recursive_mutex <handle-rtti-recursive_mutex>` #):void> const implicit+
++--------+------------------------------------------------------------------------------------------+
+
+
+|function-rtti-using|
 
 .. _function-_at_rtti_c__c_CodeOfPolicies:
 
@@ -2359,5 +2383,52 @@ get_function_mangled_name_hash returns uint64
 
 
 |function-rtti-get_function_mangled_name_hash|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_rtti_c__c_lock_this_context_CI1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: lock_this_context(block: block<void> const implicit)
+
++--------+----------------------+
++argument+argument type         +
++========+======================+
++block   +block<> const implicit+
++--------+----------------------+
+
+
+|function-rtti-lock_this_context|
+
+.. _function-_at_rtti_c__c_lock_context_IH_ls_rtti_c__c_Context_gr__CI1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: lock_context(lock_context: Context implicit; block: block<void> const implicit)
+
++------------+-----------------------------------------------------+
++argument    +argument type                                        +
++============+=====================================================+
++lock_context+ :ref:`rtti::Context <handle-rtti-Context>`  implicit+
++------------+-----------------------------------------------------+
++block       +block<> const implicit                               +
++------------+-----------------------------------------------------+
+
+
+|function-rtti-lock_context|
+
+.. _function-_at_rtti_c__c_lock_mutex_IH_ls_rtti_c__c_recursive_mutex_gr__CI1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: lock_mutex(mutex: recursive_mutex implicit; block: block<void> const implicit)
+
++--------+---------------------------------------------------------------------+
++argument+argument type                                                        +
++========+=====================================================================+
++mutex   + :ref:`rtti::recursive_mutex <handle-rtti-recursive_mutex>`  implicit+
++--------+---------------------------------------------------------------------+
++block   +block<> const implicit                                               +
++--------+---------------------------------------------------------------------+
+
+
+|function-rtti-lock_mutex|
 
 

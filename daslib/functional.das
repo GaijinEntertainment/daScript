@@ -224,10 +224,12 @@ def flatten ( var it : iterator<auto(TT)> )
             return <- [[for i in it; i]]
 
 def sorted ( var arr:array<auto> )
+    //! iterates over input and returns it sorted version
     arr |> sort
     return <- arr
 
 def sorted ( var it:iterator<auto(TT)> )
+    //! iterates over input and returns it sorted version
     var arr <- to_array(it)
     sort(arr)
     return <- generator<TT> [[<-arr]] () <|

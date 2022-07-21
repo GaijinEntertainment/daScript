@@ -168,3 +168,4 @@
 
 .. |function-math-orthonormal_inverse| replace:: Fast `inverse` for the orthonormal matrix.
 
+.. |function-math-atan_est| replace:: Fast estimation for the `atan`.

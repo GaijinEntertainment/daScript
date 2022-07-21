@@ -317,3 +317,15 @@
 .. |reader_macro-builtin-_esc| replace:: returns raw string input, without regards for escape sequences. For example %_esc\\n\\r%_esc will return 4 character string '\\','n','\\','r'
 
 .. |typeinfo_macro-builtin-rtti_classinfo| replace:: Generates TypeInfo for the class initialization.
+
+.. |variable-builtin-VEC_SEP| replace:: Read-only string constant which is used to separate elements of vectors. By default its ","
+
+.. |function_annotation-builtin-__builtin_table_set_insert| replace:: part of internal implementation for `insert` of the sets (tables with keys only).
+
+.. |function-builtin-is_in_completion| replace:: returns true if compiler is currently generating completion, i.e. lexical representation of the program for the text editor's text completion system.
+
+.. |function-builtin-insert| replace:: inserts key into the set (table with no values) `Tab`
+
+.. |function-builtin-add_ptr_ref| replace:: increases reference count of the smart pointer.
+
+

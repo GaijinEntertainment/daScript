@@ -24,6 +24,10 @@
 .. |method-ast_boost-SetupAnyAnnotation.setup_call| replace:: Implements macro registration name setup.
     Internally this adds name parameter to the annotation registration function call (which is overridable member `name`).
 
+.. |class-ast_boost-SetupForLoopMacro| replace:: [for_loop_macro] implementation.
+
+.. |class-ast_boost-SetupCaptureMacro| replace:: [capture_macro] implementation.
+
 .. |class-ast_boost-SetupFunctionAnnotatoin| replace:: [function_macro] implementation.
 
 .. |class-ast_boost-SetupBlockAnnotatoin| replace:: [block_macro] implementation.
@@ -118,6 +122,10 @@
 .. |function_annotation-ast_boost-tag_function| replace:: TagFunctionAnnotation function annotation.
 
 .. |variant_macro-ast_boost-better_rtti_in_expr| replace:: This macro is used to implement `is type`, `as type` and `?as type` runtime checks for the `Expression` class and its subclasses.
+
+.. |function-ast_boost-clone| replace:: Clones between array types.
+
+.. |function-ast_boost-visit_expression| replace:: Visits expression, returns new expression with correct reference count (or old expression with unmodified reference count).
 
 
 

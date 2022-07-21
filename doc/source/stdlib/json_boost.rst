@@ -55,7 +55,7 @@ Value conversion
   *  :ref:`JV (val:uint const) : json::JsonValue? <function-_at_json_boost_c__c_JV_Cu>` 
   *  :ref:`JV (val:int64 const) : json::JsonValue? <function-_at_json_boost_c__c_JV_Ci64>` 
   *  :ref:`JV (val:uint64 const) : json::JsonValue? <function-_at_json_boost_c__c_JV_Cu64>` 
-  *  :ref:`from_JV (v:json::JsonValue? const;ent:auto(EnumT) const;defV:EnumT const) : EnumT <function-_at_json_boost_c__c_from_JV_C1_ls_S_ls_JsonValue_gr__gr_?_CY_ls_EnumT_gr_._CY_ls_EnumT_gr_L>` 
+  *  :ref:`from_JV (v:json::JsonValue? const;ent:auto(EnumT) const;defV:EnumT const) : EnumT <function-_at_json_boost_c__c_from_JV_C1_ls_S_ls_JsonValue_gr__gr_?_CY_ls_EnumT_gr_._CY_ls_EnumT_gr_L_%_ls_IsAnyEnumMacro_c_expect_any_enum(ent_eq_true)_gr_>` 
   *  :ref:`from_JV (v:json::JsonValue? -const;ent:string const;defV:string const) : auto <function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Cs_Cs>` 
   *  :ref:`from_JV (v:json::JsonValue? -const;ent:bool const;defV:bool const) : auto <function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Cb_Cb>` 
   *  :ref:`from_JV (v:json::JsonValue? -const;ent:float const;defV:float const) : auto <function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Cf_Cf>` 
@@ -69,8 +69,8 @@ Value conversion
   *  :ref:`from_JV (v:json::JsonValue? -const;ent:int16 const;defV:int16 const) : auto <function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Ci16_Ci16>` 
   *  :ref:`from_JV (v:json::JsonValue? -const;ent:uint16 const;defV:uint16 const) : auto <function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Cu16_Cu16>` 
   *  :ref:`from_JV (v:json::JsonValue? -const;ent:bitfield const;defV:bitfield const) : auto <function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_Ct_Ct>` 
-  *  :ref:`JV (v:auto(VecT) const) : auto <function-_at_json_boost_c__c_JV_CY_ls_VecT_gr_.>` 
-  *  :ref:`from_JV (v:json::JsonValue? -const;ent:auto(VecT) const;defV:VecT const) : auto <function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_CY_ls_VecT_gr_._CY_ls_VecT_gr_L>` 
+  *  :ref:`JV (v:auto(VecT) const) : auto <function-_at_json_boost_c__c_JV_CY_ls_VecT_gr_._%_ls_IsAnyVectorType_c_expect_any_vector_type(v_eq_true)_gr_>` 
+  *  :ref:`from_JV (v:json::JsonValue? -const;ent:auto(VecT) const;defV:VecT const) : auto <function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_CY_ls_VecT_gr_._CY_ls_VecT_gr_L_%_ls_IsAnyVectorType_c_expect_any_vector_type(ent_eq_true)_gr_>` 
   *  :ref:`from_JV (v:json::JsonValue? -const;anything:table\<auto(KT);auto(VT)\> const) : auto <function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_C1_ls_Y_ls_KT_gr_._gr_2_ls_Y_ls_VT_gr_._gr_T>` 
   *  :ref:`from_JV (v:json::JsonValue? -const;anything:auto(TT) const) : auto <function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_CY_ls_TT_gr_.>` 
   *  :ref:`JV (value:auto const) : json::JsonValue? <function-_at_json_boost_c__c_JV_C.>` 
@@ -234,7 +234,7 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 Creates `JsonValue` out of value.
 
-.. _function-_at_json_boost_c__c_from_JV_C1_ls_S_ls_JsonValue_gr__gr_?_CY_ls_EnumT_gr_._CY_ls_EnumT_gr_L:
+.. _function-_at_json_boost_c__c_from_JV_C1_ls_S_ls_JsonValue_gr__gr_?_CY_ls_EnumT_gr_._CY_ls_EnumT_gr_L_%_ls_IsAnyEnumMacro_c_expect_any_enum(ent_eq_true)_gr_:
 
 .. das:function:: from_JV(v: json::JsonValue? const; ent: auto(EnumT) const; defV: EnumT const)
 
@@ -500,7 +500,7 @@ from_JV returns auto
 
 Parse a JSON value and return the corresponding native value.
 
-.. _function-_at_json_boost_c__c_JV_CY_ls_VecT_gr_.:
+.. _function-_at_json_boost_c__c_JV_CY_ls_VecT_gr_._%_ls_IsAnyVectorType_c_expect_any_vector_type(v_eq_true)_gr_:
 
 .. das:function:: JV(v: auto(VecT) const)
 
@@ -515,7 +515,7 @@ JV returns auto
 
 Creates `JsonValue` out of value.
 
-.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_CY_ls_VecT_gr_._CY_ls_VecT_gr_L:
+.. _function-_at_json_boost_c__c_from_JV_1_ls_S_ls_JsonValue_gr__gr_?_CY_ls_VecT_gr_._CY_ls_VecT_gr_L_%_ls_IsAnyVectorType_c_expect_any_vector_type(ent_eq_true)_gr_:
 
 .. das:function:: from_JV(v: json::JsonValue?; ent: auto(VecT) const; defV: VecT const)
 

@@ -1,5 +1,7 @@
 .. |typedef-fio-file| replace:: alias for the `FILE const?`; its there since most file functions expect exactly this type
 
+.. |any_annotation-fio-FILE| replace:: Holds system specific `FILE` type.
+
 .. |structure-fio-df_header| replace:: obsolete. header for the `fsave` and `fload` which internally use `binary_save` and `binary_load`.
 
 .. |function-fio-base_name| replace:: equivalent to linux `basename`. Splits path and returns the string up to, but not including, the final '/'.
