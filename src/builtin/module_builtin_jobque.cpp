@@ -194,11 +194,11 @@ namespace das {
         }, 0, JobPriority::Default);
     }
 
-    atomic<bool>    g_jobQueShutdown;
+    atomic<int32_t> g_jobQueAvailable{0};
     atomic<int32_t> g_jobQueTotalThreads;
 
     bool is_job_que_shutting_down () {
-        return g_jobQueShutdown;
+        return g_jobQueAvailable == 0;
     }
 
     void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
@@ -287,7 +287,7 @@ namespace das {
     public:
         Module_JobQue() : Module("jobque") {
             DAS_PROFILE_SECTION("Module_JobQue");
-            g_jobQueShutdown = false;
+            g_jobQueAvailable++;
             g_jobQueTotalThreads = 0;
             // libs
             ModuleLibrary lib;
@@ -368,12 +368,14 @@ namespace das {
             return ModuleAotType::cpp;
         }
         virtual ~Module_JobQue() {
-            g_jobQueShutdown = true;
-            while ( g_jobQueTotalThreads ) {
-                builtin_sleep(0);
+            g_jobQueAvailable--;
+            if ( g_jobQueAvailable == 0 ) {
+                while ( g_jobQueTotalThreads ) {
+                    builtin_sleep(0);
+                }
+                lock_guard<mutex> guard(g_jobQueMutex);
+                g_jobQue.reset();
             }
-            lock_guard<mutex> guard(g_jobQueMutex);
-            g_jobQue.reset();
         }
     protected:
 
