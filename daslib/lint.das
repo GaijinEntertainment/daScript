@@ -60,26 +60,42 @@ class LintVisitor : AstVisitor
         if expr.name |> eq <| "panic" && expr.func._module.name |> eq <| "$"
             exprForTerminator |> pop()
             exprForTerminator |> push(intptr(get_ptr(expr)))
+    def override preVisitExprForVariable(expr:smart_ptr<ExprFor>;v:VariablePtr;last:bool) : void
+        validate_var(v, false)
+
+    def validate_var(v: VariablePtr; can_make_const : bool)
+        let name = string(v.name)
+        if name |> starts_with("__")  // system variables
+            return
+        if name |> starts_with("_")
+            if name |> ends_with("_") // _foo_ - ignore too
+                return
+            if v.access_flags.access_ref || v.access_flags.access_pass || v.access_flags.access_get || v.init != null
+                self->lint_error("variable '{v.name}' is used and should be named without underscode prefix", v.at)
+                return
+            return
+        if v.isAccessUnused
+            self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
+            return
+        if !v.access_flags.access_ref && !v.access_flags.access_pass && v.init != null && v.init |> is_expr_const()
+            self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
+            return
+        if !v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && (v.init == null || v.init.flags.noSideEffects)
+            self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
+            return
+        if !v.access_flags.access_get && !v.access_flags.access_ref && (v.init == null || v.init.flags.noSideEffects)
+            self->lint_error("variable {v.name}: {describe(v._type)} was written, but never read", v.at)
+            return
+        if can_make_const && v._type.baseType != Type tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !v.access_flags.access_ref// && !v._type.flags.smartPtr
+            self->lint_error("variable {v.name}: {describe(v._type)} can be made const", v.at)
+            return
+        if can_make_const && v._type.baseType == Type tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !(v.access_flags.access_ref || v.access_flags.access_pass)
+            self->lint_error("variable {v.name}: {describe(v._type)} can be made const", v.at)
+            return
+
     def override preVisitExprLet(expr:smart_ptr<ExprLet>) : void
         for v in expr.variables
-            if v.isAccessUnused
-                self->lint_error("unused variable", v.at)
-                continue
-            if !v.access_flags.access_ref && !v.access_flags.access_pass && v.init != null && v.init |> is_expr_const()
-                self->lint_error("unused variable", v.at)
-                continue
-            if !v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && (v.init == null || v.init.flags.noSideEffects)
-                self->lint_error("unused variable", v.at)
-                continue
-            if !v.access_flags.access_get && !v.access_flags.access_ref && (v.init == null || v.init.flags.noSideEffects)
-                self->lint_error("variable was written, but never read", v.at)
-                continue
-            if v._type.baseType != Type tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !v.access_flags.access_ref// && !v._type.flags.smartPtr
-                self->lint_error("variable {v.name}: {describe(v._type)} {describe(v.at)} can be made const", v.at)
-                continue
-            if v._type.baseType == Type tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !(v.access_flags.access_ref || v.access_flags.access_pass)
-                self->lint_error("variable {v.name}: {describe(v._type)} {describe(v.at)} can be made const", v.at)
-                continue
+            validate_var(v, true)
 
 def public paranoid ( prog:ProgramPtr; compile_time_errors : bool )
     var astVisitor = new [[LintVisitor() compile_time_errors=compile_time_errors]]
