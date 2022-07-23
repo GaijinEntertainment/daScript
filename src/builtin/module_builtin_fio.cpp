@@ -25,6 +25,9 @@ MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. So
     #define MAP_PRIVATE 0x02        /* Changes are private.  */
     void* mmap(void* start, size_t length, int prot, int flags, int fd, off_t offset);
     int munmap(void* start, size_t length);
+    static int getchar_wrapper(void) { return getchar(); } // workaround for non-std callconv (fastcall, vectorcall...)
+#else
+#define getchar_wrapper getchar
 #endif
 
 namespace das {
@@ -525,7 +528,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_sleep)>(*this, lib, "sleep",
                 SideEffects::modifyExternal, "builtin_sleep")
                     ->arg("msec");
-            addExtern<DAS_BIND_FUN(getchar)>(*this, lib, "getchar",
+            addExtern<DAS_BIND_FUN(getchar_wrapper)>(*this, lib, "getchar",
                 SideEffects::modifyExternal, "getchar");
             addExtern<DAS_BIND_FUN(builtin_exit)>(*this, lib, "exit",
                 SideEffects::modifyExternal, "builtin_exit")
