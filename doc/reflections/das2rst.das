@@ -294,7 +294,8 @@ def document_module_jobque_boost(root:string)
     var groups <- [{DocGroup
         group_by_regex("Invocations", mod, %regex~(new_job|new_thread)$%%);
         group_by_regex("Iteration", mod, %regex~(for_each|each)$%%);
-        group_by_regex("Passing data", mod, %regex~(push|push_clone)$%%)
+        group_by_regex("Passing data", mod, %regex~(push|push_clone)$%%);
+        group_by_regex("Internal capture details", mod, %regex~(capture_jobque_channel|capture_jobque_job_status|release_capture_jobque_channel|release_capture_jobque_job_status)$%%)
     }]
     document("Boost package for jobs and threads",mod,"{root}/jobque_boost.rst","{root}/detail/jobque_boost.rst",groups)
 

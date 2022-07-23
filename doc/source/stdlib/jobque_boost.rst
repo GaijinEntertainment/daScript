@@ -7,7 +7,12 @@ Boost package for jobs and threads
 
 .. include:: detail/jobque_boost.rst
 
-|module-jobque_boost|
+The JOBQUE boost module implements collection of helper macros and functions to accompany :ref:`JOBQUE <stdlib_jobque>`.
+
+All functions and symbols are in "jobque_boost" module, use require to get access to it. ::
+
+    require daslib/jobque_boost
+
 
 ++++++++++++++++++++
 Function annotations
@@ -29,7 +34,8 @@ Classes
 
 .. das:attribute:: ChannelAndStatusCapture : AstCaptureMacro
 
-|class-jobque_boost-ChannelAndStatusCapture|
+This macro implements capturing of the `jobque::Channel` and `jobque::JobStatus` types.
+When captured reference counts are increased. When lambda is destroyed, reference counts are decreased.
 
 .. das:function:: ChannelAndStatusCapture.captureExpression(self: AstCaptureMacro; prog: rtti::Program? const; mod: rtti::Module? const; expr: ExpressionPtr; etype: TypeDeclPtr)
 
@@ -50,7 +56,7 @@ captureExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 +--------+----------------------------------------------------------+
 
 
-|method-jobque_boost-ChannelAndStatusCapture.captureExpression|
+Implementation details for the capture macro.
 
 .. das:function:: ChannelAndStatusCapture.captureFunction(self: AstCaptureMacro; prog: rtti::Program? const; mod: rtti::Module? const; lcs: ast::Structure?; fun: FunctionPtr)
 
@@ -69,7 +75,7 @@ captureExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 +--------+----------------------------------------------------------+
 
 
-|method-jobque_boost-ChannelAndStatusCapture.captureFunction|
+Implementation details for the capture macro.
 
 +++++++++++
 Invocations
@@ -198,9 +204,14 @@ push returns auto
 
 pushes value to the channel (at the end)
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++++++++++
+Internal capture details
+++++++++++++++++++++++++
+
+  *  :ref:`capture_jobque_channel (ch:jobque::Channel? const) : jobque::Channel? <function-_at_jobque_boost_c__c_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?>` 
+  *  :ref:`capture_jobque_job_status (js:jobque::JobStatus? const) : jobque::JobStatus? <function-_at_jobque_boost_c__c_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?>` 
+  *  :ref:`release_capture_jobque_channel (ch:jobque::Channel? const) : void <function-_at_jobque_boost_c__c_release_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?>` 
+  *  :ref:`release_capture_jobque_job_status (js:jobque::JobStatus? const) : void <function-_at_jobque_boost_c__c_release_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?>` 
 
 .. _function-_at_jobque_boost_c__c_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?:
 
@@ -215,13 +226,13 @@ capture_jobque_channel returns  :ref:`jobque::Channel <handle-jobque-Channel>` ?
 +--------+-------------------------------------------------------+
 
 
-|function-jobque_boost-capture_jobque_channel|
+this function is used to capture a channel that is used by the jobque.
 
-.. _function-_at_jobque_boost_c__c_capture_jobque_job_statuc_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?:
+.. _function-_at_jobque_boost_c__c_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?:
 
-.. das:function:: capture_jobque_job_statuc(js: jobque::JobStatus? const)
+.. das:function:: capture_jobque_job_status(js: jobque::JobStatus? const)
 
-capture_jobque_job_statuc returns  :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?
+capture_jobque_job_status returns  :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -230,7 +241,7 @@ capture_jobque_job_statuc returns  :ref:`jobque::JobStatus <handle-jobque-JobSta
 +--------+-----------------------------------------------------------+
 
 
-|function-jobque_boost-capture_jobque_job_statuc|
+this function is used to capture a job status that is used by the jobque.
 
 .. _function-_at_jobque_boost_c__c_release_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?:
 
@@ -243,7 +254,7 @@ capture_jobque_job_statuc returns  :ref:`jobque::JobStatus <handle-jobque-JobSta
 +--------+-------------------------------------------------------+
 
 
-|function-jobque_boost-release_capture_jobque_channel|
+this function is used to release a channel that is used by the jobque.
 
 .. _function-_at_jobque_boost_c__c_release_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?:
 
@@ -256,6 +267,6 @@ capture_jobque_job_statuc returns  :ref:`jobque::JobStatus <handle-jobque-JobSta
 +--------+-----------------------------------------------------------+
 
 
-|function-jobque_boost-release_capture_jobque_job_status|
+this function is used to release a job status that is used by the jobque.
 
 

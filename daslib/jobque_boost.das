@@ -105,18 +105,22 @@ def each ( var channel:Channel?; tinfo : auto(TT) )
             return false
 
 def public capture_jobque_channel ( ch:Channel? ) : Channel?
+    //! this function is used to capture a channel that is used by the jobque.
     ch |> add_ref
     return ch
 
-def public capture_jobque_job_statuc ( js:JobStatus? ) : JobStatus?
+def public capture_jobque_job_status ( js:JobStatus? ) : JobStatus?
+    //! this function is used to capture a job status that is used by the jobque.
     js |> add_ref
     return js
 
 def public release_capture_jobque_channel ( ch:Channel? )
+    //! this function is used to release a channel that is used by the jobque.
     if ch != null
         panic("Channel has not been released. missing channel|>release or channel|>notify_and_release")
 
 def public release_capture_jobque_job_status ( js:JobStatus? )
+    //! this function is used to release a job status that is used by the jobque.
     if js != null
         panic("JobStatus has not been released. missing status|>release or status|>notify_and_release")
 
@@ -136,17 +140,21 @@ def private isPtrToJQ ( typ:TypeDeclPtr; jqt:string ) : bool
 
 [capture_macro(name=channel_and_status_capture_macro)]
 class ChannelAndStatusCapture : AstCaptureMacro
+    //! This macro implements capturing of the `jobque::Channel` and `jobque::JobStatus` types.
+    //! When captured reference counts are increased. When lambda is destroyed, reference counts are decreased.
     def override captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; typ:TypeDeclPtr ) : ExpressionPtr
+        //! Implementation details for the capture macro.
         if typ |> isPtrToJQ("Channel")
             var pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_channel"]]
             pCall.arguments |> emplace_new <| clone_expression(expr)
             return pCall
         elif typ |> isPtrToJQ("JobStatus")
-            var pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_job_statuc"]]
+            var pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_job_status"]]
             pCall.arguments |> emplace_new <| clone_expression(expr)
             return pCall
         return [[ExpressionPtr]]
     def override captureFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
+        //! Implementation details for the capture macro.
         if fun.flags._generator // generator gets finally section called every single time. nothing we can do
             return
         for fld in lcs.fields

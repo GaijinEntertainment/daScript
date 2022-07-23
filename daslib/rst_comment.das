@@ -168,6 +168,11 @@ class RstComment : AstCommentReader
                     write_to_detail("reader_macro-{prog.thisModuleName}-{ann_name}", structure_comment)
                     is_annotation = true
                     break
+                elif ann.annotation.name=="capture_macro"
+                    let ann_name = get_macro_name(st,"capture_macro")
+                    write_to_detail("capture_macro-{prog.thisModuleName}-{ann_name}", structure_comment)
+                    is_annotation = true
+                    break
                 else
                     to_log(LOG_WARNING, "WARNING: unsupported structure-annotation = {ann.annotation.name} in {st.name}\n")
         // to_log(LOG_WARNING, "WARNING: unsupported structure-annotation = {ann.annotation.name} in {st.name}\n")
