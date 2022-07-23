@@ -354,11 +354,9 @@ namespace das {
     private:
         unsigned int ref_count = 0;
     };
-}
 
-namespace std {
-    template <typename TT>
-    struct hash<das::smart_ptr<TT>> {
+    struct smart_ptr_hash {
+        template<typename TT>
         std::size_t operator() ( const das::smart_ptr<TT> & k ) const {
             return hash<void *>()(k.get());
         }
