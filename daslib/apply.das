@@ -9,6 +9,7 @@ require ast
 require daslib/ast_boost
 require daslib/defer
 require daslib/templates_boost
+require daslib/macro_boost
 
 /*
     def apply`Foo(self:Foo;arg_field1:block<(name:string,value:field1-type):void>;arg_field2:...)
@@ -129,22 +130,13 @@ class ApplyMacro : AstCallMacro
     //!
     //! Would print x = 1.0 y = 2.0
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        if expr.arguments.length != 2
-            macro_error(prog,expr.at,"expecting apply(value, block)")
-            return [[ExpressionPtr]]
+        macro_verify(expr.arguments.length==2,prog,expr.at,"expecting apply(value, block)")
         if expr.arguments[0]._type!=null    // need value inferred
             var argT := expr.arguments[0]._type; defer_delete(argT)
-            if argT.dim.length != 0
-                macro_error(prog,expr.at,"can't apply to dim")
-                return [[ExpressionPtr]]
-            if argT.baseType==Type tStructure || argT.baseType==Type tTuple || argT.baseType==Type tVariant
-                pass
-            else
-                macro_error(prog,expr.at,"can only apply to {describe(expr.arguments[0]._type)}")
-                return [[ExpressionPtr]]
-            if !(expr.arguments[1] is ExprMakeBlock)
-                macro_error(prog,expr.at,"expecting make block, i.e. $(..)")
-                return [[ExpressionPtr]]
+            macro_verify(argT.dim.length==0,prog,expr.at,"can't apply to dim")
+            macro_verify(argT.baseType==Type tStructure || argT.baseType==Type tTuple || argT.baseType==Type tVariant,
+                prog,expr.at,"can only apply to {describe(expr.arguments[0]._type)}")
+            macro_verify(expr.arguments[1] is ExprMakeBlock,prog,expr.at,"expecting make block, i.e. $(..)")
             var callName : string
             var nfields : int
             if argT.baseType == Type tStructure
@@ -160,7 +152,8 @@ class ApplyMacro : AstCallMacro
                 nfields = length(argT.argTypes)
                 generateApplyVisitVariant(expr.arguments[0]._type,callName,expr.at)
             else
-                panic("internal error. usupported apply")
+                macro_error(prog,expr.at,"internal error. can't apply to {describe(argT)}")
+                return [[ExpressionPtr]]
             // make a call
             var call <- new [[ExprCall() name:="_::" + callName, at=expr.at]]
             emplace_new(call.arguments,clone_expression(expr.arguments[0]))

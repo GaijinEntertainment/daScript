@@ -13,6 +13,7 @@ require daslib/strings_boost
 require daslib/ast_block_to_loop
 require daslib/defer
 require daslib/decs_state
+require daslib/macro_boost
 
 /*
 from:
@@ -263,33 +264,23 @@ class DecsQueryMacro : AstCallMacro
                     arg._type.flags |= TypeDeclFlags ref
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         let totalArgs = length(expr.arguments)
-        if totalArgs!=1 && totalArgs!=2
-            macro_error(prog,expr.at,"expecting query($(block_with_arguments)) or query(eid,$(block_with_arguments))")
-            return [[ExpressionPtr]]
+        macro_verify(totalArgs==1 || totalArgs==2,prog,expr.at,"expecting query($(block_with_arguments)) or query(eid,$(block_with_arguments))")
         let qt = totalArgs==2 ? DecsQueryType eid_query : DecsQueryType query
         let block_arg_index = totalArgs-1
         return self->implement(expr, block_arg_index, qt)
     def implement ( var expr:smart_ptr<ExprCallMacro>; block_arg_index:int; qt:DecsQueryType ) : ExpressionPtr
         for arg in expr.arguments
-            if arg._type.isAutoOrAlias
-                macro_error(compiling_program(),expr.at,"argument types are not fully inferred")
-                return [[ExpressionPtr]]
-        if !(expr.arguments[block_arg_index] is ExprMakeBlock)
-            macro_error(compiling_program(),expr.at,"expecting $(block_with_arguments)")
-            return [[ExpressionPtr]]
+            macro_verify(!arg._type.isAutoOrAlias,compiling_program(),expr.at,"argument types are not fully inferred")
+        macro_verify(expr.arguments[block_arg_index] is ExprMakeBlock,compiling_program(),expr.at,"expecting $(block_with_arguments)")
         let mblk = expr.arguments[block_arg_index] as ExprMakeBlock
         let qblk = mblk._block as ExprBlock
-        if length(qblk.arguments)==0
-            macro_error(compiling_program(),expr.at,"expecting query($(block_with_arguments)), arguments are missing")
-            return [[ExpressionPtr]]
+        macro_verify(length(qblk.arguments)!=0,compiling_program(),expr.at,"expecting query($(block_with_arguments)), arguments are missing")
         let prefix = "__{expr.at.line}_desc"
         let arch_name = "{prefix}_arch"
         var req <- build_req_from_args(qblk)
         req.at = EcsRequestPos(expr.at)
-        let vreq = verify_request(req)
-        if !vreq.ok
-            macro_error(compiling_program(),expr.at,"incorrect query, {vreq.error}")
-            return [[ExpressionPtr]]
+        var vreq = verify_request(req)
+        macro_verify(vreq.ok,compiling_program(),expr.at,"incorrect query, {vreq.error}")
         // @@ => [[EcsQuery ...]]
         var erq_fun <- qmacro <| @@
             return <- $v(req)
@@ -396,9 +387,7 @@ class DecsFindQueryMacro : DecsQueryMacro
     //! In the example above the find_query will return `true` once the first intesection is found.
     //! Note: if return is missing, or end of find_query block is reached - its assumed that find_query did not find anything, and will return false.
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        if length(expr.arguments)!=1
-            macro_error(prog,expr.at,"expecting find_query($(block_with_arguments))")
-            return [[ExpressionPtr]]
+        macro_verify(length(expr.arguments)==1,prog,expr.at,"expecting find_query($(block_with_arguments))")
         return self->implement(expr, 0, DecsQueryType find_query)
 
 [function_macro(name="decs")]

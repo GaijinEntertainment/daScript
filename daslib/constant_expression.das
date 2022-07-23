@@ -9,6 +9,7 @@ require daslib/ast_boost
 require daslib/algorithm
 require daslib/strings_boost
 require daslib/templates_boost
+require daslib/macro_boost
 
 [macro_function]
 def public isConstantExpression ( expr:ExpressionPtr ) : bool
@@ -20,26 +21,19 @@ def public isConstantExpression ( expr:ExpressionPtr ) : bool
 [function_macro(name="constant_expression")]
 class ConstantExpressionMacro : AstFunctionAnnotation
     def override transform ( var expr : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
-        if expr.func==null
-            compiling_program() |> macro_error(expr.at,"expecting inferred function")
-            return [[ExpressionPtr]]
+        macro_verify(expr.func!=null,compiling_program(),expr.at,"expecting inferred function")
         var argi : array<int>
         var anni = -1
         for ann,idd in expr.func.annotations,range(100500)
             if ann.annotation.name=="constant_expression"
                 anni = idd
                 for arg in ann.arguments
-                    if arg.basicType==Type tBool
-                        for farg,fidx in expr.func.arguments,range(100500)
-                            if farg.name==arg.name
-                                if !isConstantExpression(expr.arguments[fidx])
-                                    if arg.bValue
-                                        compiling_program() |> macro_error(expr.at,"function {expr.func.name} argument {arg.name} is not a compilation time constant")
-                                    return [[ExpressionPtr]]
-                                argi |> push(fidx)
-                    else
-                        compiling_program() |> macro_error(expr.at,"unsupported argument type {arg.basicType}")
-                        return [[ExpressionPtr]]
+                    macro_verify(arg.basicType==Type tBool, compiling_program(), expr.at,"unsupported argument type {arg.basicType}")
+                    for farg,fidx in expr.func.arguments,range(100500)
+                        if farg.name==arg.name
+                            if !isConstantExpression(expr.arguments[fidx])
+                                macro_verify(!arg.bValue, compiling_program(), expr.at,"function {expr.func.name} argument {arg.name} is not a compilation time constant")
+                            argi |> push(fidx)
                 break
         argi |> sort_unique
         argi |> reverse

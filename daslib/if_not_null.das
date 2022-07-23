@@ -10,6 +10,7 @@ require rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/defer
+require daslib/macro_boost
 
 [call_macro(name="if_not_null")]
 class ApplyMacro : AstCallMacro
@@ -25,17 +26,11 @@ class ApplyMacro : AstCallMacro
     //!
     if_not_null_index : int = 0
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        if expr.arguments.length !=2
-            macro_error(prog,expr.at,"expecting 2 arguments, expecting ptr |> if_not_null() <| call()")
-            return [[ExpressionPtr]]
-        if !(expr.arguments[1] is ExprCall)
-            macro_error(prog,expr.at,"2nd argument must be call(), expecting ptr |> if_not_null() <| call()")
-            return [[ExpressionPtr]]
+        macro_verify(expr.arguments.length==2,prog,expr.at,"expecting 2 arguments, expecting ptr |> if_not_null() <| call()")
+        macro_verify(expr.arguments[1] is ExprCall,prog,expr.at,"2nd argument must be call(), expecting ptr |> if_not_null() <| call()")
         assume PTR = expr.arguments[0]
         if PTR._type!=null    // need value inferred
-            if !PTR._type.isPointer
-                macro_error(prog,expr.at,"first argument must be pointer , expecting ptr |> if_not_null() <| call()")
-                return [[ExpressionPtr]]
+            macro_verify(PTR._type.isPointer,prog,expr.at,"first argument must be pointer , expecting ptr |> if_not_null() <| call()")
             let ifnn_name = "__ifnn_ptr_{if_not_null_index++}"
             var fcall = expr.arguments[1] as ExprCall
             var vtype <- clone_type(PTR._type); defer_delete(vtype)

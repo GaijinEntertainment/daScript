@@ -29,8 +29,11 @@ class AssertOnceMacro : AstFunctionAnnotation
             errors := "can't add global variable {once_name}"
             return [[ExpressionPtr]]
         // if ..
-        return <- qmacro_block() <|
+        var qb <- qmacro_block() <|
             if $i(once_name) && !$e(call.arguments[0])
                 $i(once_name) = false
                 assert(false, $e(call.arguments[1]))
+        qb |> force_at(call.at)
+        return qb
+
 
