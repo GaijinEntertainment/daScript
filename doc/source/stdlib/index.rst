@@ -55,6 +55,7 @@ THE SOFTWARE.
    instance_function.rst
    templates.rst
    templates_boost.rst
+   macro_boost.rst
    is_local.rst
    safe_addr.rst
    static_let.rst

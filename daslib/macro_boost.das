@@ -8,13 +8,13 @@ module macro_boost shared private
 require daslib/ast_boost
 require daslib/templates_boost
 
-[tag_function(asset_once_tag)]
+[tag_function(macro_verify_tag)]
 def public macro_verify ( expr:bool; prog:ProgramPtr; at:LineInfo; message:string )
     //! Same as verify, only the check will produce macro error, followed by return [[ExpressionPtr]]
     pass
 
-[tag_function_macro(tag="asset_once_tag")]
-class AssertOnceMacro : AstFunctionAnnotation
+[tag_function_macro(tag="macro_verify_tag")]
+class MacroVerifyMacro : AstFunctionAnnotation
     //! This macro convert macro_verify(expr,message,prog,at) to the following code::
     //!    if !expr
     //!        macro_error(prog,at,message)

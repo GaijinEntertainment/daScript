@@ -525,6 +525,13 @@ def document_module_utf8_utils(root:string)
     }]
     document("UTF-8 utilities",mod,"{root}/utf8_utils.rst","{root}/detail/utf8_utils.rst",groups)
 
+def document_module_macro_boost(root:string)
+    var mod = find_module("macro_boost")
+    var groups <- [{DocGroup
+        group_by_regex("Implementation details", mod, %regex~(macro_verify)$%%)
+    }]
+    document("Boost package for the miscelanious macro manipulations",mod,"{root}/macro_boost.rst","{root}/detail/macro_boost.rst",groups)
+
 
 [export]
 def main
@@ -573,6 +580,7 @@ def main
     // document_module_lint(root)                   // todo: document?
     // document_module_live(root)
     document_module_lpipe(root)
+    document_module_macro_boost(root)
     document_module_math_bits(root)
     document_module_math_boost(root)
     document_module_random(root)
