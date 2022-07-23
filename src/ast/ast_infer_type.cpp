@@ -27,9 +27,9 @@ namespace das {
                 }
             }
         }
-        das_hash_set<VariablePtr>   scope;
-        safe_var_set                capt;
-        bool                        fail = false;
+        das_hash_set<VariablePtr, smart_ptr_hash> scope;
+        safe_var_set                              capt;
+        bool                                      fail = false;
     };
 
 // type inference
