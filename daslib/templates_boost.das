@@ -33,6 +33,7 @@ def replaceVariable ( var self:Template; name:string; var expr : smart_ptr<ast::
     self.var2expr[name] <- expr
 
 def replaceArgumentWithList ( var self:Template; name:string; blka:array<VariablePtr> )
+    //! Adds a rule to the template to replace a block argument with a list of variables.
     self.blkArg[name] := blka
 
 def replaceVariableWithList ( var self:Template; name:string; expr : array<ExpressionPtr> )
@@ -362,6 +363,7 @@ def public remove_deref ( varname : string; var expr:smart_ptr<Expression> )
     astVisitorAdapter := null
 
 def public add_array_ptr_ref ( var a : array<smart_ptr<auto(TT)>> ) : array<smart_ptr<TT>>
+    //! Implementation details for the reification. This adds any array to the rules.
     var q := a
     return <- q
 
@@ -551,9 +553,7 @@ def private apply_qrules ( var expr:smart_ptr<Expression>& ) : smart_ptr<ExprBlo
     ]]
     var astVisitor = new QRulesVisitor(get_ptr(eblk))
     var astVisitorAdapter <- make_visitor(*astVisitor)
-    // print("EXPR BEFORE USE COUNT = {smart_ptr_use_count(expr)}\n")
     visit_expression(expr, astVisitorAdapter)
-    // print("EXPR USE COUNT = {smart_ptr_use_count(expr)}\n")
     if astVisitor.failed
         eblk := null
     unsafe
@@ -562,11 +562,11 @@ def private apply_qrules ( var expr:smart_ptr<Expression>& ) : smart_ptr<ExprBlo
     return eblk
 
 def public apply_qmacro ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : ExpressionPtr
-    //! Implementation details for the expression reificaiton.
+    //! Implementation details for the expression reificaiton. This is a generat expression reification.
     return <- apply_template(expr, blk)
 
 def public apply_qblock ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : ExpressionPtr
-    //! Implementation details for the expression reificaiton.
+    //! Implementation details for the expression reificaiton. This is a block reification.
     var res <- apply_template(expr, blk)
     assert(res is ExprMakeBlock)
     var qblk <- move_unquote_block(res)
@@ -574,7 +574,7 @@ def public apply_qblock ( var expr:smart_ptr<Expression>; blk:block<(var rules:T
     return qblk
 
 def public apply_qblock_expr ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : ExpressionPtr
-    //! Implementation details for the expression reificaiton.
+    //! Implementation details for the expression reificaiton. This is a frist line of the block as expression reification.
     var res <- apply_template(expr, blk)
     assert(res is ExprMakeBlock)
     var qblk <- move_unquote_block(res)
@@ -584,7 +584,7 @@ def public apply_qblock_expr ( var expr:smart_ptr<Expression>; blk:block<(var ru
     return resExpr
 
 def public apply_qtype ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : TypeDeclPtr
-    //! Implementation details for the expression reificaiton.
+    //! Implementation details for the expression reificaiton. This is a type declaration reification.
     var res <- apply_template(expr, blk)
     assert(res is ExprTypeDecl)
     var qtype <- clone_type((res as ExprTypeDecl).typeexpr)
@@ -596,10 +596,10 @@ def public expression_at ( expr:ExpressionPtr; at:LineInfo ) : ExpressionPtr
     expr |> force_at(at)
     return expr
 
-class AstQCallMacro : AstCallMacro
+class private  AstQCallMacro : AstCallMacro
+    //! This macro will implement expression reification
     apply_call = "apply_qmacro"
     macro_call = "qmacro"
-    //! This macro will implement expression reification
     def override canVisitArguments ( call:smart_ptr<ExprCallMacro> ) : bool
         return false    // nop, this one is just like quote
     def wrap_call ( var expr:ExpressionPtr ) : ExpressionPtr
@@ -625,30 +625,33 @@ class AstQCallMacro : AstCallMacro
         return wrap_call(acall)
 
 [call_macro(name="qmacro")]
-class QMacro : AstQCallMacro {}
+class private QMacro : AstQCallMacro {}
 
 [call_macro(name="qmacro_block")]
-class QBlockMacro : AstQCallMacro
+class private QBlockMacro : AstQCallMacro
     override apply_call = "apply_qblock"
     override macro_call = "qmacro_block"
 
 [call_macro(name="qmacro_expr")]
-class QBlockExprMacro : AstQCallMacro
+class private QBlockExprMacro : AstQCallMacro
     override apply_call = "apply_qblock_expr"
     override macro_call = "qmacro_expr"
 
 [call_macro(name="qmacro_type")]
-class QTypeMacro : AstQCallMacro
+class private QTypeMacro : AstQCallMacro
     override apply_call = "apply_qtype"
     override macro_call = "qmacro_type"
 
 def public emplace_new ( var arr:array<ExpressionPtr>; var expr:ExpressionPtr )
+    //! Unifies emplace and emplace_new for the array<ExpressionPtr>
     arr |> emplace(expr)
 
 def public emplace_new ( var arr:array<VariablePtr>; var expr:VariablePtr )
+    //! Unifies emplace and emplace_new for the array<VariablePtr>
     arr |> emplace(expr)
 
 def public apply_qmacro_function ( fname:string; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : FunctionPtr
+    //! Implementation details for reification. This is a function generation reification.
     var func <- new [[Function() at=expr.at, atDecl=expr.at, name:=fname]]
     func.flags |= FunctionFlags generated
     var res <- apply_template(expr, blk)
@@ -663,6 +666,7 @@ def public apply_qmacro_function ( fname:string; var expr:smart_ptr<Expression>;
     return <- func
 
 def public apply_qmacro_variable ( vname:string; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : VariablePtr
+    //! Implementation details for reification. This is a variable generation reification.
     var vvar <- new [[Variable() at=expr.at, name:=vname]]
     vvar.flags |= VariableFlags generated
     var res <- apply_template(expr, blk)
@@ -672,7 +676,7 @@ def public apply_qmacro_variable ( vname:string; var expr:smart_ptr<Expression>;
     delete res
     return <- vvar
 
-class AstQNamedMacro : AstCallMacro
+class private AstQNamedMacro : AstCallMacro
     apply_call = "apply_qmacro_function"
     macro_call = "qmacro_function"
     //! This macro will implement expression reification for the named expressions (function, variable, etc.)
@@ -701,9 +705,9 @@ class AstQNamedMacro : AstCallMacro
         ]]
 
 [call_macro(name="qmacro_function")]
-class AstQFunctionMacro : AstQNamedMacro {}
+class private AstQFunctionMacro : AstQNamedMacro {}
 
 [call_macro(name="qmacro_variable")]
-class AstQVariableMacro : AstQNamedMacro
+class private AstQVariableMacro : AstQNamedMacro
     override apply_call = "apply_qmacro_variable"
     override macro_call = "qmacro_variable"

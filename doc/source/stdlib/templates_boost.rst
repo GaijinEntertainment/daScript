@@ -57,197 +57,33 @@ Call macros
 
 .. das:attribute:: qmacro_expr
 
-|function_annotation-templates_boost-qmacro_expr|
-
+This macro implements `qmacro_expr` expression reification. Expected input is a block expression (ExprMakeBlock over ExprBlock). It applies reification rules to the expression, and returns first expression in the block.
 .. _call-macro-templates_boost-qmacro_variable:
 
 .. das:attribute:: qmacro_variable
 
-|function_annotation-templates_boost-qmacro_variable|
-
+This macro implements `qmacro_variable` expression reification. Expected input is are variable name and type expression (type<...>). Result is a new VariablePtr with the matching name and type.
 .. _call-macro-templates_boost-qmacro_function:
 
 .. das:attribute:: qmacro_function
 
-|function_annotation-templates_boost-qmacro_function|
-
+This macro implements `qmacro_function` expression reification. Expected input is a block expression (ExprMakeBlock over ExprBlock). It applies reification rules to the expression, and returns a FunctionPtr. New function matches block signature, as well as the block body.
 .. _call-macro-templates_boost-qmacro:
 
 .. das:attribute:: qmacro
 
-This macro will implement expression substitution macro
+This macro implements `qmacro` expression reification. It applies reification rules to the expression, and returns direct result of the substitution.
 
 .. _call-macro-templates_boost-qmacro_block:
 
 .. das:attribute:: qmacro_block
 
-|function_annotation-templates_boost-qmacro_block|
-
+This macro implements `qmacro_block` expression reification. Expected input is a block expression (ExprMakeBlock over ExprBlock). It applies reification rules to the expression, and returns unquoted `ExprBlock`.
 .. _call-macro-templates_boost-qmacro_type:
 
 .. das:attribute:: qmacro_type
 
-|function_annotation-templates_boost-qmacro_type|
-
-+++++++
-Classes
-+++++++
-
-.. _struct-templates_boost-AstQCallMacro:
-
-.. das:attribute:: AstQCallMacro : AstCallMacro
-
-This macro will implement expression reification
-
-it defines as follows
-
-  | apply_call : string const
-  | macro_call : string const
-
-.. das:function:: AstQCallMacro.visit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
-
-visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-+--------+-----------------------------------------------------------------------+
-+argument+argument type                                                          +
-+========+=======================================================================+
-+self    + :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
-+--------+-----------------------------------------------------------------------+
-+prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+--------+-----------------------------------------------------------------------+
-+mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+--------+-----------------------------------------------------------------------+
-+expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
-+--------+-----------------------------------------------------------------------+
-
-
-|method-templates_boost-AstQCallMacro.visit|
-
-.. das:function:: AstQCallMacro.canVisitArguments(self: AstCallMacro; expr: smart_ptr<ast::ExprCallMacro> const)
-
-canVisitArguments returns bool
-
-+--------+-----------------------------------------------------------------------+
-+argument+argument type                                                          +
-+========+=======================================================================+
-+self    + :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
-+--------+-----------------------------------------------------------------------+
-+expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
-+--------+-----------------------------------------------------------------------+
-
-
-|method-templates_boost-AstQCallMacro.canVisitArguments|
-
-.. das:function:: AstQCallMacro.wrap_call(self: AstQCallMacro; expr: ExpressionPtr)
-
-wrap_call returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-+--------+------------------------------------------------------------------------------+
-+argument+argument type                                                                 +
-+========+==============================================================================+
-+self    + :ref:`templates_boost::AstQCallMacro <struct-templates_boost-AstQCallMacro>` +
-+--------+------------------------------------------------------------------------------+
-+expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                   +
-+--------+------------------------------------------------------------------------------+
-
-
-|method-templates_boost-AstQCallMacro.wrap_call|
-
-.. _struct-templates_boost-QMacro:
-
-.. das:attribute:: QMacro : AstQCallMacro
-
-|class-templates_boost-QMacro|
-
-it defines as follows
-
-  | apply_call : string const
-  | macro_call : string const
-
-.. _struct-templates_boost-QBlockMacro:
-
-.. das:attribute:: QBlockMacro : AstQCallMacro
-
-|class-templates_boost-QBlockMacro|
-
-it defines as follows
-
-  | apply_call : string const
-  | macro_call : string const
-
-.. _struct-templates_boost-QBlockExprMacro:
-
-.. das:attribute:: QBlockExprMacro : AstQCallMacro
-
-|class-templates_boost-QBlockExprMacro|
-
-it defines as follows
-
-  | apply_call : string const
-  | macro_call : string const
-
-.. _struct-templates_boost-QTypeMacro:
-
-.. das:attribute:: QTypeMacro : AstQCallMacro
-
-|class-templates_boost-QTypeMacro|
-
-it defines as follows
-
-  | apply_call : string const
-  | macro_call : string const
-
-.. _struct-templates_boost-AstQNamedMacro:
-
-.. das:attribute:: AstQNamedMacro : AstCallMacro
-
-This macro will implement expression reification for the named expressions (function, variable, etc.)
-
-it defines as follows
-
-  | apply_call : string const
-  | macro_call : string const
-
-.. das:function:: AstQNamedMacro.visit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
-
-visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-+--------+-----------------------------------------------------------------------+
-+argument+argument type                                                          +
-+========+=======================================================================+
-+self    + :ref:`ast::AstCallMacro <struct-ast-AstCallMacro>`                    +
-+--------+-----------------------------------------------------------------------+
-+prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                                  +
-+--------+-----------------------------------------------------------------------+
-+mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const                      +
-+--------+-----------------------------------------------------------------------+
-+expr    +smart_ptr< :ref:`ast::ExprCallMacro <handle-ast-ExprCallMacro>` > const+
-+--------+-----------------------------------------------------------------------+
-
-
-|method-templates_boost-AstQNamedMacro.visit|
-
-.. _struct-templates_boost-AstQFunctionMacro:
-
-.. das:attribute:: AstQFunctionMacro : AstQNamedMacro
-
-|class-templates_boost-AstQFunctionMacro|
-
-it defines as follows
-
-  | apply_call : string const
-  | macro_call : string const
-
-.. _struct-templates_boost-AstQVariableMacro:
-
-.. das:attribute:: AstQVariableMacro : AstQNamedMacro
-
-|class-templates_boost-AstQVariableMacro|
-
-it defines as follows
-
-  | apply_call : string const
-  | macro_call : string const
+This macro implements `qmacro_type` expression reification. Expected input is a type expression (type<...>). Result is TypeDeclPtr of a new type matching subtype of the type expression.
 
 ++++++++++++++
 Template rules
@@ -705,7 +541,7 @@ Uncategorized
 +--------+--------------------------------------------------------------------+
 
 
-|function-templates_boost-replaceArgumentWithList|
+Adds a rule to the template to replace a block argument with a list of variables.
 
 .. _function-_at_templates_boost_c__c_replaceVariableWithList_S_ls_Template_gr__Cs_C1_ls_Y_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_gr_A:
 
@@ -873,7 +709,7 @@ apply_qmacro returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 +--------+----------------------------------------------------------------------------------------------+
 
 
-Implementation details for the expression reificaiton.
+Implementation details for the expression reificaiton. This is a generat expression reification.
 
 .. _function-_at_templates_boost_c__c_apply_qblock_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
@@ -890,7 +726,7 @@ apply_qblock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 +--------+----------------------------------------------------------------------------------------------+
 
 
-Implementation details for the expression reificaiton.
+Implementation details for the expression reificaiton. This is a block reification.
 
 .. _function-_at_templates_boost_c__c_apply_qblock_expr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
@@ -907,7 +743,7 @@ apply_qblock_expr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 +--------+----------------------------------------------------------------------------------------------+
 
 
-Implementation details for the expression reificaiton.
+Implementation details for the expression reificaiton. This is a frist line of the block as expression reification.
 
 .. _function-_at_templates_boost_c__c_apply_qtype_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
@@ -924,7 +760,7 @@ apply_qtype returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 +--------+----------------------------------------------------------------------------------------------+
 
 
-Implementation details for the expression reificaiton.
+Implementation details for the expression reificaiton. This is a type declaration reification.
 
 .. _function-_at_templates_boost_c__c_expression_at_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CH_ls_rtti_c__c_LineInfo_gr_:
 
@@ -956,7 +792,7 @@ Force expression location, than return it.
 +--------+---------------------------------------------------+
 
 
-|function-templates_boost-emplace_new|
+Unifies emplace and emplace_new for the array<VariablePtr>
 
 .. _function-_at_templates_boost_c__c_emplace_new_1_ls_Y_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M_gr_A_Y_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M:
 
@@ -971,7 +807,7 @@ Force expression location, than return it.
 +--------+-----------------------------------------------+
 
 
-|function-templates_boost-emplace_new|
+Unifies emplace and emplace_new for the array<VariablePtr>
 
 .. _function-_at_templates_boost_c__c_apply_qmacro_function_Cs_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
@@ -990,7 +826,7 @@ apply_qmacro_function returns  :ref:`FunctionPtr <alias-FunctionPtr>`
 +--------+----------------------------------------------------------------------------------------------+
 
 
-|function-templates_boost-apply_qmacro_function|
+Implementation details for reification. This is a function generation reification.
 
 .. _function-_at_templates_boost_c__c_apply_qmacro_variable_Cs_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
@@ -1009,7 +845,7 @@ apply_qmacro_variable returns  :ref:`VariablePtr <alias-VariablePtr>`
 +--------+----------------------------------------------------------------------------------------------+
 
 
-|function-templates_boost-apply_qmacro_variable|
+Implementation details for reification. This is a variable generation reification.
 
 .. _function-_at_templates_boost_c__c_add_array_ptr_ref_1_ls_1_ls_Y_ls_TT_gr_._gr_?M_gr_A:
 
@@ -1024,6 +860,6 @@ add_array_ptr_ref returns array<smart_ptr<TT>>
 +--------+--------------------------+
 
 
-|function-templates_boost-add_array_ptr_ref|
+Implementation details for the reification. This adds any array to the rules.
 
 

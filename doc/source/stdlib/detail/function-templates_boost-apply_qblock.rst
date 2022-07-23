@@ -1,1 +1,1 @@
-Implementation details for the expression reificaiton.
+Implementation details for the expression reificaiton. This is a block reification.
