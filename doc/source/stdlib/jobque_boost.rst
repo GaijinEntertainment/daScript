@@ -26,57 +26,6 @@ this macro handles `new_job` and `new_thread` calls.
 the call is replaced with `new_job_invoke` and `new_thread_invoke` accordingly.
 a cloning infastructure is generated for the lambda, which is invoked in the new context.
 
-+++++++
-Classes
-+++++++
-
-.. _struct-jobque_boost-ChannelAndStatusCapture:
-
-.. das:attribute:: ChannelAndStatusCapture : AstCaptureMacro
-
-This macro implements capturing of the `jobque::Channel` and `jobque::JobStatus` types.
-When captured reference counts are increased. When lambda is destroyed, reference counts are decreased.
-
-.. das:function:: ChannelAndStatusCapture.captureExpression(self: AstCaptureMacro; prog: rtti::Program? const; mod: rtti::Module? const; expr: ExpressionPtr; etype: TypeDeclPtr)
-
-captureExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+self    + :ref:`ast::AstCaptureMacro <struct-ast-AstCaptureMacro>` +
-+--------+----------------------------------------------------------+
-+prog    + :ref:`rtti::Program <handle-rtti-Program>` ? const       +
-+--------+----------------------------------------------------------+
-+mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const         +
-+--------+----------------------------------------------------------+
-+expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`               +
-+--------+----------------------------------------------------------+
-+etype   + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`                   +
-+--------+----------------------------------------------------------+
-
-
-Implementation details for the capture macro.
-
-.. das:function:: ChannelAndStatusCapture.captureFunction(self: AstCaptureMacro; prog: rtti::Program? const; mod: rtti::Module? const; lcs: ast::Structure?; fun: FunctionPtr)
-
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+self    + :ref:`ast::AstCaptureMacro <struct-ast-AstCaptureMacro>` +
-+--------+----------------------------------------------------------+
-+prog    + :ref:`rtti::Program <handle-rtti-Program>` ? const       +
-+--------+----------------------------------------------------------+
-+mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const         +
-+--------+----------------------------------------------------------+
-+lcs     + :ref:`ast::Structure <handle-ast-Structure>` ?           +
-+--------+----------------------------------------------------------+
-+fun     + :ref:`FunctionPtr <alias-FunctionPtr>`                   +
-+--------+----------------------------------------------------------+
-
-
-Implementation details for the capture macro.
-
 +++++++++++
 Invocations
 +++++++++++

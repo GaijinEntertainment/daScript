@@ -139,7 +139,7 @@ def private isPtrToJQ ( typ:TypeDeclPtr; jqt:string ) : bool
     return true
 
 [capture_macro(name=channel_and_status_capture_macro)]
-class ChannelAndStatusCapture : AstCaptureMacro
+class private ChannelAndStatusCapture : AstCaptureMacro
     //! This macro implements capturing of the `jobque::Channel` and `jobque::JobStatus` types.
     //! When captured reference counts are increased. When lambda is destroyed, reference counts are decreased.
     def override captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; typ:TypeDeclPtr ) : ExpressionPtr
