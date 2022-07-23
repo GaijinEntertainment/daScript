@@ -157,7 +157,7 @@ class ApplyMacro : AstCallMacro
             // make a call
             var call <- new [[ExprCall() name:="_::" + callName, at=expr.at]]
             emplace_new(call.arguments,clone_expression(expr.arguments[0]))
-            for i in range(nfields)
+            for _ in range(nfields)
                 emplace_new(call.arguments,clone_expression(expr.arguments[1]))
             return <- call
         return [[ExpressionPtr]]
