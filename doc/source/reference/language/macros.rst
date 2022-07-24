@@ -102,14 +102,22 @@ There is additionally ``[function_macro]`` annotation which accomplishes the sam
 ``AstFunctionAnnotation`` allows several different manipulations::
 
     class AstFunctionAnnotation
-        def abstract transform ( var call : smart_ptr<ExprCall>; var errors : das_string ) : ExpressionPtr
+        def abstract transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
+        def abstract verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract finish ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors : das_string ) : bool
+        def abstract patch ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
+        def abstract fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract lint ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract complete ( var func:FunctionPtr; var ctx:smart_ptr<Context> ) : void
+        def abstract isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         def abstract isSpecialized : bool
+        def abstract appendToMangledName ( func:FunctionPtr; decl:AnnotationDeclaration; var mangledName:das_string ) : void
 
 ``transform`` allows changing call to the function and is applied at infer pass.
 Transform is the best way to replace or modify function call with other semantics.
+
+``verifyCall`` is called durng the `lint` phase on each call to the function and is used to check if call is valid.
 
 ``apply`` is applied to function itself before the infer pass.
 Apply is typically where global function body modifications or instancing occurs.
@@ -119,11 +127,22 @@ It's only called to non-generic functions or instances of the generic functions.
 ``finish`` is typically used to register functions, notify C++ code, etc.
 Function is fully defined and inferred, and can no longer be modified.
 
+``patch`` is called after the infer pass. If patch sets astChanged to true, the infer pass will be repeated.
+
+``fixup`` is called after the infer pass. It's used to fixup function body.
+
+``lint`` is called during the `lint` phase on the function itself and is used to verify if function is valid.
+
+``complete`` is called during the `simulate` portion of context creation. At this point Context is available.
+
 ``isSpecialized`` must return true, if the particular function matching is governed by contracts.
 In that case ``isCompatible`` will be called, and result taken into account.
 
 ``isCompatible`` returns true, if specialized function is compatible with arguments.
 If function is not compatible, errors field must be specified.
+
+``appendToMangledName`` is called to append mangled name to the function.
+That way multiple functions with the same type signature can exist and be differentiated between.
 
 Lets review the following example from `ast_boost` of how ``macro`` annotation is implemented::
 
@@ -184,6 +203,10 @@ There is additionally ``[structure_macro]`` annotation which accomplishes the sa
 
 ``finish`` is invoked after the successful infer pass. Its typically used to register structures, perform RTTI operations etc.
 Structure is fully inferred and defined and can no longer be modified afterwards.
+
+``patch`` is invoked after the infer pass. If patch sets astChanged to true, the infer pass will be repeated.
+
+``complete`` is invoked during the `simulate` portion of context creation. At this point Context is available.
 
 Example of such annotation is `SetupAnyAnnotation` from :ref:`daslib/ast_boost <stdlib_ast_boost>`.
 
@@ -299,8 +322,10 @@ It occurs during the infer pass.
 ``add_new_call_macro`` adds call macro to a module.
 ``[call_macro]`` annotation automates the same thing::
 
-    class AstCallMacro
-        def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+        class AstCallMacro
+            def abstract preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void
+            def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+            def abstract canVisitArguments ( expr:smart_ptr<ExprCallMacro> ) : bool
 
 ``apply`` from the :ref:`daslib/apply <stdlib_apply>` is an example of such macro::
 
@@ -310,6 +335,12 @@ It occurs during the infer pass.
             ...
 
 Note how name is provided in the ``[call_macro]`` annotation.
+
+``preVisit`` is called before the arguments are visited.
+
+``visit`` is called after the arguments are visited.
+
+``canVisitArguments`` is called to determine if the macro can visit the arguments.
 
 ------------
 AstPassMacro
