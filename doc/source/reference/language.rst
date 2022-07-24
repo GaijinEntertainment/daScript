@@ -33,5 +33,6 @@
    language/string_builder.rst
    language/generic_programming.rst
    language/macros.rst
+   language/reification.rst
 
 
