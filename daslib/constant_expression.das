@@ -32,7 +32,9 @@ class ConstantExpressionMacro : AstFunctionAnnotation
                     for farg,fidx in expr.func.arguments,range(100500)
                         if farg.name==arg.name
                             if !isConstantExpression(expr.arguments[fidx])
-                                macro_verify(!arg.bValue, compiling_program(), expr.at,"function {expr.func.name} argument {arg.name} is not a compilation time constant")
+                                if arg.bValue
+                                    compiling_program() |> macro_error(expr.at,"function {expr.func.name} argument {arg.name} is not a compilation time constant")
+                                return [[ExpressionPtr]]
                             argi |> push(fidx)
                 break
         argi |> sort_unique

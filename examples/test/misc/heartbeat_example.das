@@ -9,11 +9,16 @@ def foo
     while q < 3
         print("q = {q}\n")
         q ++
+    while true
+        print(".\n")
 
 [export]
 def main
+    var count = 0
     set_heartbeat <| @
-        print(".\n")
+        count ++
+        if count == 1000
+            breakpoint()
     foo()
 
 options log
