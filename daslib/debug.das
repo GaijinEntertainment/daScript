@@ -877,7 +877,7 @@ class private DAgent: DapiDebugAgent
         walkerAdapter |> walk_stack(ctx, at)
         if length(ctxData.stack) > 0
             for i in range(1, length(ctxData.stack))
-                let j = length(ctxData.stack) - 1
+                let j = length(ctxData.stack) - i
                 let q = j - 1
                 ctxData.stack[j].path = ctxData.stack[q].path
                 ctxData.stack[j].line = ctxData.stack[q].line
