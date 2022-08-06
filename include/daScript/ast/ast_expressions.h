@@ -810,6 +810,7 @@ namespace das
         vector<string>          iterators;
         vector<string>          iteratorsAka;
         vector<LineInfo>        iteratorsAt;
+        vector<ExpressionPtr>   iteratorsTags;
         vector<VariablePtr>     iteratorVariables;
         vector<ExpressionPtr>   sources;
         ExpressionPtr           body;

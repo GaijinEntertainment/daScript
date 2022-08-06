@@ -2208,6 +2208,8 @@ namespace das {
         cexpr->iterators = iterators;
         cexpr->iteratorsAka = iteratorsAka;
         cexpr->iteratorsAt = iteratorsAt;
+        for ( auto tag : iteratorsTags )
+            cexpr->iteratorsTags.push_back(tag ? tag->clone() : nullptr);
         cexpr->visibility = visibility;
         for ( auto & src : sources )
             cexpr->sources.push_back(src->clone());

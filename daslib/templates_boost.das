@@ -163,6 +163,11 @@ class private TemplateVisitor : AstVisitor
         var tyyp <- clone_type(typ)
         replaceAlias(tyyp)
         return tyyp
+    def override preVisitExprFor ( var expr:smart_ptr<ExprFor> ) : void
+        for it in expr.iterators
+            let itn = string(it)
+            if key_exists(rules.var2name,itn)
+                it := rules.var2name[itn]
     def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>)
         if !blk.blockFlags.isClosure
             return
@@ -421,6 +426,19 @@ class private QRulesVisitor : AstVisitor
                     clone_expression(arg.init)
                 }]]]
             arg.name := new_tag_name
+    def override preVisitExprFor ( var expr : smart_ptr<ExprFor> ) : void
+        for itn,tag in expr.iterators,expr.iteratorsTags
+            if tag != null
+                let new_tag_name = "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
+                rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+                    name:="renameVariable",
+                    arguments:=[{ExpressionPtr
+                        new [[ExprVar() at=expr.at, name:="rules"]];
+                        new [[ExprConstString() at=expr.at, value:=new_tag_name]];
+                        clone_expression(tag)
+                    }]]]
+                itn := new_tag_name
+                tag := null
     def override visitExprTag ( expr:smart_ptr<ExprTag> ) : ExpressionPtr
         var new_tag_name = ""
         if expr.name=="c"

@@ -141,6 +141,7 @@ namespace das {
                     CompilationError::invalid_aka);
             }
             pFor->iteratorsAt.push_back(np.at);
+            pFor->iteratorsTags.push_back(np.tag);
         }
         delete iters;
         pFor->sources = sequenceToList(srcs);
@@ -750,6 +751,7 @@ namespace das {
             pFor->iterators.push_back(np.name);
             pFor->iteratorsAka.push_back(np.aka);
             pFor->iteratorsAt.push_back(np.at);
+            pFor->iteratorsTags.push_back(np.tag);
         }
         delete iters;
         pFor->sources = sequenceToList(srcs);

@@ -30,6 +30,14 @@ def test_fun
     print("\nFUNCTION REIFICATION IS:\n{describe(fun)}\n")
     delete fun
 
+def test_for
+    var bus = "BUS"
+    var blk <- qmacro_block <|
+        for $i(bus) in foobar
+            print("{$i(bus)}\n")
+    print("\nFOR REIFICATION IS:\n{describe(blk)}\n")
+    delete blk
+
 def test_regular
     let bus = "bus_variable_name"
     let car = "car_variable_name"
@@ -73,4 +81,5 @@ def main
     test_type()
     test_var()
     test_fun_arg()
+    test_for()
 

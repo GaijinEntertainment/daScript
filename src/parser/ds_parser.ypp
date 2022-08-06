@@ -2064,6 +2064,11 @@ variable_name_with_pos_list
         $$ = pSL;
         delete $name;
     }
+    |   MTAG_I '(' expr[subexpr] ')' {
+        auto pSL = new vector<VariableNameAndPosition>();
+        pSL->push_back(VariableNameAndPosition{"``MACRO``TAG``","",tokAt(scanner,@subexpr),$subexpr});
+        $$ = pSL;
+    }
     |   NAME[name] DAS_AKA NAME[akaname] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         das_checkName(scanner,*$akaname,tokAt(scanner,@akaname));

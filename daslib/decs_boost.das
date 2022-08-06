@@ -147,6 +147,7 @@ def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a;
     else
         qloop.iteratorsAka[qli] := ""
     qloop.iteratorsAt |> push(a.at)
+    qloop.iteratorsTags |> resize ( qli + 1 )
     var getter = getter_name(a,const_parent,can_be_optional)
     if empty(getter)
         return false

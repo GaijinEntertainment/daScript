@@ -230,6 +230,7 @@ class SoaForLoop : AstForLoopMacro
             new_for.iterators |> erase(soa_index)
             new_for.iteratorsAt |> erase(soa_index)
             new_for.iteratorsAka |> erase(soa_index)
+            new_for.iteratorsTags |> erase(soa_index)
             var names <- collect_and_replace_iterator_fields(it_prefix,new_for.body)
             if names |> length == 0
                 names |> push<| string(expr.sources[soa_index]._type.structType.fields[0].name)
@@ -240,6 +241,7 @@ class SoaForLoop : AstForLoopMacro
                 new_for.iteratorsAka |> resize(si+1)
                 new_for.iteratorsAka[si] := ""
                 new_for.iteratorsAt |> push(expr.iteratorsAt[soa_index])
+                new_for.iteratorsTags |> push(clone_expression(expr.iteratorsTags[soa_index]))
                 var nsrc <- new [[ExprField() at=expr.sources[soa_index].at,
                     value <- clone_expression(expr.sources[soa_index]),
                     name := itn,
