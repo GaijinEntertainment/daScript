@@ -4273,7 +4273,7 @@ namespace das {
             }
             auto valT = expr->value->type->isPointer() ? expr->value->type->firstType : expr->value->type;
             if ( !valT || !valT->isGoodVariantType() ) {
-                error(" ?as " + expr->name + " only allowed for variants or pointers to variants", "", "",
+                error(" ?as " + expr->name + " only allowed for variants or pointers to variants and not " + expr->value->type->describe(), "", "",
                     expr->at, CompilationError::invalid_type);
                 return Visitor::visit(expr);
 
