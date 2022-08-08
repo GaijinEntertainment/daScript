@@ -13,6 +13,8 @@ def main
     print("before i = {i}\n")
     i = 6                           // this would trigger breakpoint
     print("after i = {i}\n")        // debugger will stop right here
+    i = 8                           // this would trigger breakpoint
+    print("after i = {i}\n")        // debugger will stop right here again
     print("and we are done\n")
     unsafe  // clear breakpoint
         clear_hw_breakpoint(bp)

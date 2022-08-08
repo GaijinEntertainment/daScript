@@ -643,13 +643,13 @@ namespace debugapi {
             Prologue * pp = (Prologue *) sp;
             Block * block = nullptr;
             FuncInfo * info = nullptr;
-            char * SP = sp;
+            // char * SP = sp;
             if ( pp->info ) {
                 intptr_t iblock = intptr_t(pp->block);
                 if ( iblock & 1 ) {
                     block = (Block *) (iblock & ~1);
                     info = block->info;
-                    SP = context.stack.bottom() + block->stackOffset;
+                    // SP = context.stack.bottom() + block->stackOffset;
                 } else {
                     info = pp->info;
                 }
