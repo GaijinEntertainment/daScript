@@ -1231,7 +1231,7 @@ class private DAServer: Server
                     for v in vars
                         if v.name == ini.name
                             found = true
-                            var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address}", description="{v.name} ({v.address})", canPersist=kind == GLOBAL_VARS ]]
+                            var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address}", description="{v.name} ({v.address})" ]]
                             defer_delete(res)
                             self->sendSuccessResponse(seq, command, JV(res))
                             break
@@ -1240,7 +1240,7 @@ class private DAServer: Server
                         for v in state.vars
                             if v.name == ini.name
                                 found = true
-                                var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address}", description="{v.name} ({v.address})", canPersist=kind == GLOBAL_VARS ]]
+                                var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address}", description="{v.name} ({v.address})" ]]
                                 defer_delete(res)
                                 self->sendSuccessResponse(seq, command, JV(res))
                                 break
@@ -1248,7 +1248,7 @@ class private DAServer: Server
                     line |> find_child_var() <| $(v; uid)
                         if v.name == ini.name
                             found = true
-                            var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address}", description="{v.name} ({v.address})", canPersist=kind == GLOBAL_VARS ]]
+                            var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address}", description="{v.name} ({v.address})" ]]
                             defer_delete(res)
                             self->sendSuccessResponse(seq, command, JV(res))
                         return found
@@ -1268,18 +1268,20 @@ class private DAServer: Server
         agent.hwBreakpoints |> clear()
 
         for b in ini.breakpoints
-            var parts <- b.dataId |> split(",")
-            let ctxHex = to_uint64(parts[0], true)
-            let hex = to_uint64(parts[1], true)
             var setId = -1
-            unsafe
-                var ctxPtr = reinterpret<Context?> ctxHex
-                let ptr = reinterpret<void?> hex
-                setId = set_hw_breakpoint(*ctxPtr, ptr, 4, true)
-            if setId != -1
-                agent.hwBreakpoints |> push(setId)
+            var hex = 0ul
+            if b.enabled
+                var parts <- b.dataId |> split(",")
+                let ctxHex = to_uint64(parts[0], true)
+                hex = to_uint64(parts[1], true)
+                unsafe
+                    var ctxPtr = reinterpret<Context?> ctxHex
+                    let ptr = reinterpret<void?> hex
+                    setId = set_hw_breakpoint(*ctxPtr, ptr, 4, true)
+                if setId != -1
+                    agent.hwBreakpoints |> push(setId)
+                delete parts
             res.breakpoints |> emplace([[Breakpoint verified=setId != -1, id=double(hex) ]])
-            delete parts
 
         self->sendSuccessResponse(seq, command, JV(res))
 

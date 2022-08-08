@@ -69,7 +69,7 @@ def DataBreakpoint(data: JsonValue?)
                             condition=jos(data, "condition"),
                             hitCondition=jos(data, "hitCondition"),
                             description=jos(data, "description"),
-                            enabled=job(data, "enabled")
+                            enabled=job(data, "enabled", true)
             ]]
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_DataBreakpointInfo
@@ -87,7 +87,6 @@ struct DataBreakpointInfoResponse
     dataId: string
     description: string
     //accessTypes: DataBreakpointAccessType[];
-    canPersist: bool
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
 struct SetBreakpointsArguments
