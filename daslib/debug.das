@@ -753,6 +753,9 @@ class private DAgent: DapiDebugAgent
         if !withInstruments
             return <- res
 
+        for resBr in res.breakpoints
+            resBr.message = "{path}: instrumentation wasn't initined"
+
         for ctx in contexts
             if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick
                 continue
@@ -761,14 +764,20 @@ class private DAgent: DapiDebugAgent
                 if ati.fileInfo == null
                     return false
                 let file = string(ati.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
+                let currentPath = compare_path(file, path)
+                if currentPath
+                    for resBr in res.breakpoints
+                        if !resBr.verified
+                            resBr.message = "{path}: instumentation is inited, but this line is without instructions"
                 for fileBr, brs in keys(breakpoints), values(breakpoints)
                     if compare_path(fileBr, file)
                         for br in brs
                             if br.line == ati.line
-                                // print("set br at {file}: {br.line}\n")
-                                if file == fileBr
+                                if currentPath
                                     for resBr in res.breakpoints
                                         resBr.verified ||= uint(resBr.line) == br.line
+                                        if resBr.verified
+                                            resBr.message = ""
                                 return true
                         break
                 return false
