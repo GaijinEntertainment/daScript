@@ -559,7 +559,7 @@ class private DAStackWalker: DapiStackWalker
         if  stackLen > 0
             var frame & = unsafe(ctx.stack[stackLen-1])
             let ti = type_info(vinfo)
-            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(unsafe(reinterpret<void?>arg)), size=ti.size]]
+            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=ti.isRef ? intptr(unsafe(reinterpret<void?>arg)) : 0ul, size=ti.size]]
             if ti != null
                 dataWalker->startWalk(frame, variable) <| $
                     dataWalkerAdapter |> walk_data(arg, *ti)
@@ -753,6 +753,9 @@ class private DAgent: DapiDebugAgent
         if !withInstruments
             return <- res
 
+        for resBr in res.breakpoints
+            resBr.message = "{path}: instrumentation wasn't initined"
+
         for ctx in contexts
             if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick
                 continue
@@ -761,14 +764,20 @@ class private DAgent: DapiDebugAgent
                 if ati.fileInfo == null
                     return false
                 let file = string(ati.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
+                let currentPath = compare_path(file, path)
+                if currentPath
+                    for resBr in res.breakpoints
+                        if !resBr.verified
+                            resBr.message = "{path}: instumentation is inited, but this line is without instructions"
                 for fileBr, brs in keys(breakpoints), values(breakpoints)
                     if compare_path(fileBr, file)
                         for br in brs
                             if br.line == ati.line
-                                // print("set br at {file}: {br.line}\n")
-                                if file == fileBr
+                                if currentPath
                                     for resBr in res.breakpoints
                                         resBr.verified ||= uint(resBr.line) == br.line
+                                        if resBr.verified
+                                            resBr.message = ""
                                 return true
                         break
                 return false
@@ -1239,6 +1248,7 @@ class private DAServer: Server
         let ctxAndFrame = uint64(ini.variablesReference) / MAX_VARIABLES
         let ctxId = uint64(ctxAndFrame) / MAX_STACK
         var found = false
+        var valid = false
         agent->getContextData(ctxId) <| $(var ctxData: DAContext)
             let frameId = int(ctxAndFrame % MAX_STACK)
             if frameId >= 0 && frameId < length(ctxData.stack)
@@ -1249,29 +1259,35 @@ class private DAServer: Server
                     vars |> find_child_var() <| $(v)
                         if v.name == ini.name
                             found = true
-                            var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
-                            defer_delete(res)
-                            self->sendSuccessResponse(seq, command, JV(res))
+                            valid = v.address != 0ul
+                            if valid
+                                var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
+                                defer_delete(res)
+                                self->sendSuccessResponse(seq, command, JV(res))
                         return found
                 elif kind >= STATE_VARS && kind <= BLOCKS_POOL
                     for state in line.state
                         for v in state.vars
                             if v.name == ini.name
                                 found = true
-                                var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
-                                defer_delete(res)
-                                self->sendSuccessResponse(seq, command, JV(res))
+                                valid = v.address != 0ul
+                                if valid    
+                                    var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
+                                    defer_delete(res)
+                                    self->sendSuccessResponse(seq, command, JV(res))
                                 break
                 else
                     line |> find_child_var(kind) <| $(v)
                         v |> find_child_var() <| $(vr)
                             if vr.name == ini.name
                                 found = true
-                                var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{vr.address},{int(vr.size)}", description="{v.name}.{vr.name} ({vr.address}:{min(8, int(vr.size))})" ]]
-                                defer_delete(res)
-                                self->sendSuccessResponse(seq, command, JV(res))
+                                valid = vr.address != 0ul
+                                if valid
+                                    var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{vr.address},{int(vr.size)}", description="{v.name}.{vr.name} ({vr.address}:{min(8, int(vr.size))})" ]]
+                                    defer_delete(res)
+                                    self->sendSuccessResponse(seq, command, JV(res))
                             return found
-        if !found
+        if !found || !valid
             self->sendSuccessResponse(seq, command, JVNull())
 
     def reqSetDataBreakpoints(seq: double; command: string; data: JsonValue?)
@@ -1297,7 +1313,7 @@ class private DAServer: Server
                 unsafe
                     var ctxPtr = reinterpret<Context?> ctxHex
                     let ptr = reinterpret<void?> hex
-                    setId = set_hw_breakpoint(*ctxPtr, ptr, min(8, size), true)
+                    setId = set_hw_breakpoint(*ctxPtr, ptr, clamp(size, 1, 8), true)
                 if setId != -1
                     agent.hwBreakpoints |> push(setId)
                 delete parts
