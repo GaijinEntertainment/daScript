@@ -623,7 +623,7 @@ namespace das
             if ( singleStepMode ) {
                 if ( hwBpIndex!=-1 ) {
                     char reason[128];
-                    sprintf_s(reason, sizeof(reason), "hardware breakpoint 0x%p", hwBpAddress);
+                    snprintf(reason, sizeof(reason), "hardware breakpoint 0x%p", hwBpAddress);
                     breakPoint(at, "exception",reason);
                     hwBpIndex = -1;
                 } else if ( forceStep || singleStepAt==nullptr || (singleStepAt->fileInfo!=at.fileInfo || singleStepAt->line!=at.line) ) {
