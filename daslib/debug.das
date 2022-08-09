@@ -1313,7 +1313,7 @@ class private DAServer: Server
                 unsafe
                     var ctxPtr = reinterpret<Context?> ctxHex
                     let ptr = reinterpret<void?> hex
-                    setId = set_hw_breakpoint(*ctxPtr, ptr, min(8, size), true)
+                    setId = set_hw_breakpoint(*ctxPtr, ptr, clamp(size, 1, 8), true)
                 if setId != -1
                     agent.hwBreakpoints |> push(setId)
                 delete parts
