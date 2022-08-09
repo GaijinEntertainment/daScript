@@ -394,6 +394,23 @@ def find_child_var(val: DAVariable; id: uint64; cb: block<(res:DAVariable): void
                 return true
     return false
 
+def find_child_var(val: array<DAVariable>; cb: block<(res:DAVariable): bool>)
+    for v in val
+        if v |> find_child_var(cb)
+            return true
+    return false
+
+
+def find_child_var(val: DAVariable; cb: block<(res:DAVariable): bool>)
+    if cb |> invoke(val)
+        return true
+    if val.children != null
+        for c in *val.children
+            if c |> find_child_var(cb)
+                return true
+    return false
+
+
 
 struct private DAStackFrame
     name: string
@@ -1229,13 +1246,13 @@ class private DAServer: Server
                 let line & = unsafe(ctxData.stack[frameId])
                 if kind == LOCAL_VARS || kind == ARGUMENT_VARS || kind == GLOBAL_VARS
                     let vars & = unsafe(kind == LOCAL_VARS ? line.variables : kind == ARGUMENT_VARS ? line.arguments : line.globals)
-                    for v in vars
+                    vars |> find_child_var() <| $(v)
                         if v.name == ini.name
                             found = true
                             var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
                             defer_delete(res)
                             self->sendSuccessResponse(seq, command, JV(res))
-                            break
+                        return found
                 elif kind >= STATE_VARS && kind <= BLOCKS_POOL
                     for state in line.state
                         for v in state.vars
@@ -1246,13 +1263,14 @@ class private DAServer: Server
                                 self->sendSuccessResponse(seq, command, JV(res))
                                 break
                 else
-                    line |> find_child_var() <| $(v; uid)
-                        if v.name == ini.name
-                            found = true
-                            var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
-                            defer_delete(res)
-                            self->sendSuccessResponse(seq, command, JV(res))
-                        return found
+                    line |> find_child_var(kind) <| $(v)
+                        v |> find_child_var() <| $(vr)
+                            if vr.name == ini.name
+                                found = true
+                                var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{vr.address},{int(vr.size)}", description="{v.name}.{vr.name} ({vr.address}:{min(8, int(vr.size))})" ]]
+                                defer_delete(res)
+                                self->sendSuccessResponse(seq, command, JV(res))
+                            return found
         if !found
             self->sendSuccessResponse(seq, command, JVNull())
 
