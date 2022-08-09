@@ -889,8 +889,8 @@ namespace debugapi {
         switch ( size ) {
         case 1: sz = HwBpSize::HwBp_1; break;
         case 2: sz = HwBpSize::HwBp_2; break;
-        case 4: sz = HwBpSize::HwBp_4; break;
-        case 8: sz = HwBpSize::HwBp_8; break;
+        case 3: case 4: sz = HwBpSize::HwBp_4; break;
+        case 5: case 6: case 7: case 8: sz = HwBpSize::HwBp_8; break;
         default:    return -1;
         }
         if ( !hw_bp_handler_set ) hwSetBreakpointHandler(hw_bp_handler);
