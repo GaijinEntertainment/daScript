@@ -650,6 +650,16 @@ namespace das {
         }
     };
 
+    template <>
+    struct das_index<char * const * const> {
+        static __forceinline char * & at ( char * const * const value, int32_t index, Context * ) {
+            return (char * &)(value[index]);
+        }
+        static __forceinline char * & at ( const char **const value, int32_t index, Context * ) {
+            return (char * &)(value[index]);
+        }
+    };
+
     template <typename TT, int size>
     struct TDim {
         using THIS_TYPE = TDim<TT, size>;
