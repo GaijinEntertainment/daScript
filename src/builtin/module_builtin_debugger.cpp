@@ -836,6 +836,13 @@ namespace debugapi {
         return cast<void *>::from(ctx->getVariable(vidx));
     }
 
+    vec4f get_global_variable_by_index ( Context & context, SimNode_CallBase * node, vec4f * args ) {
+        auto ctx = cast<Context *>::to(args[0]);
+        if ( ctx==nullptr ) context.throw_error_at(node->debugInfo, "expecting context pointer");
+        auto vidx = cast<int32_t>::to(args[1]);
+        return cast<void *>::from(ctx->getVariable(vidx));
+    }
+
     void instrument_context ( Context & ctx, bool isInstrumenting, const TBlock<bool,LineInfo> & blk, Context * context, LineInfoArg * line ) {
         ctx.instrumentContextNode(blk, isInstrumenting, context, line);
     }
@@ -988,6 +995,9 @@ namespace debugapi {
             addInterop<get_global_variable,void *,vec4f,const char *>(*this,lib,"get_context_global_variable",
                 SideEffects::accessExternal,"get_global_variable")
                     ->args({"context","name"})->unsafeOperation = true;
+            addInterop<get_global_variable_by_index,void *,vec4f,int32_t>(*this,lib,"get_context_global_variable",
+                SideEffects::accessExternal,"get_global_variable")
+                    ->args({"context","index"})->unsafeOperation = true;
             // has function
             addExtern<DAS_BIND_FUN(has_function)>(*this, lib,  "has_function",
                 SideEffects::none, "has_function")
