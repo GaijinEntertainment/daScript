@@ -217,7 +217,7 @@ namespace das
         TypeInfo *                  firstType;              // map  from, or array
         TypeInfo *                  secondType;             // map  to
         TypeInfo **                 argTypes;
-        char **                     argNames;
+        const char **               argNames;
         uint32_t *                  dim;
         uint64_t                    hash;
         Type                        type;
@@ -227,7 +227,7 @@ namespace das
         uint32_t                    dimSize;
         TypeInfo() = default;
         TypeInfo (  Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name,
-                    TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, char ** _argNames, uint32_t _argCount,
+                    TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, const char ** _argNames, uint32_t _argCount,
                     uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size, uint64_t _hash ) {
             type               = _type;
             if ( _structType )    { structType = _structType; DAS_ASSERT(!_enumType && !_annotation_or_name); }
@@ -263,18 +263,18 @@ namespace das
             vec4f                   value;
             char *                  sValue;
         };
-        char *                      name;
+        const char *                name;
         void *                      annotation_arguments = nullptr;
         uint32_t                    offset;
         VarInfo() = default;
         VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name,
-                TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, char ** _argNames, uint32_t _argCount,
+                TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, const char ** _argNames, uint32_t _argCount,
                 uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size,
                 uint64_t _hash, const char * _name, uint32_t _offset ) :
             TypeInfo(_type,_structType,_enumType,_annotation_or_name,
                     _firstType,_secondType,_argTypes,_argNames,_argCount,
                      _dimSize,_dim,_flags,_size,_hash) {
-                name               = (char *) _name;
+                name               = _name;
                 offset             = _offset;
                 value = v_zero();
         }
@@ -288,8 +288,8 @@ namespace das
         ,   flag_stringHeapGC = (1<<3)
         ,   flag_lockCheck =    (1<<4)
         };
-        char *      name;
-        char *      module_name;
+        const char* name;
+        const char* module_name;
         VarInfo **  fields;
         void *      annotation_list;
         uint64_t    hash;
@@ -299,7 +299,7 @@ namespace das
         uint32_t    size;
         StructInfo() = default;
         StructInfo(
-            char * _name, char * _module_name, uint32_t _flags, VarInfo ** _fields, uint32_t _count,
+            const char * _name, const char * _module_name, uint32_t _flags, VarInfo ** _fields, uint32_t _count,
             uint32_t _size, uint64_t _init_mnh, void * _annotation_list, uint64_t _hash ) {
                 name =            _name;
                 module_name =     _module_name;
@@ -314,13 +314,13 @@ namespace das
     };
 
     struct EnumValueInfo {
-        char *      name;
-        int64_t     value;
+        const char * name;
+        int64_t      value;
     };
 
     struct EnumInfo {
-        char *              name;
-        char *              module_name;
+        const char *        name;
+        const char *        module_name;
         EnumValueInfo **    fields;
         uint32_t            count;
         uint64_t            hash;
@@ -328,7 +328,7 @@ namespace das
 
     struct LocalVariableInfo : TypeInfo {
         LineInfo        visibility;
-        char *          name;
+        const char *    name;
         uint32_t        stackTop;
         union {
             struct {
@@ -345,8 +345,8 @@ namespace das
         ,   flag_private = (1<<2)
         ,   flag_shutdown = (1<<3)
         };
-        char *                  name;
-        char *                  cppName;
+        const char *            name;
+        const char *            cppName;
         VarInfo **              fields;
         TypeInfo *              result;
         LocalVariableInfo **    locals;
@@ -356,7 +356,7 @@ namespace das
         uint32_t                stackSize;
         uint32_t                localCount;
         FuncInfo() = default;
-        FuncInfo( char * _name, char * _cppName, VarInfo ** _fields, uint32_t _count, uint32_t _stackSize,
+        FuncInfo( const char * _name, const char * _cppName, VarInfo ** _fields, uint32_t _count, uint32_t _stackSize,
                 TypeInfo * _result, LocalVariableInfo ** _locals, uint32_t _localCount, uint64_t _hash, uint32_t _flags ) {
             name =       _name;
             cppName =    _cppName;
