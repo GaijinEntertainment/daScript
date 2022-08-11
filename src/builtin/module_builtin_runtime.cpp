@@ -900,6 +900,10 @@ namespace das
     char * to_das_string(const string & str, Context * ctx) {
         return ctx->stringHeap->allocateString(str);
     }
+    
+    char * pass_string(char * str) {
+        return str;
+    }
 
     void set_das_string(string & str, const char * bs) {
         str = bs ? bs : "";
@@ -1250,6 +1254,9 @@ namespace das
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string",
             SideEffects::none, "to_das_string")
                 ->args({"source","context"});
+        addExtern<DAS_BIND_FUN(pass_string)>(*this, lib, "string",
+            SideEffects::none, "pass_string")
+                ->args({"source"});
         addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_das_string")
                 ->args({"target","src"});

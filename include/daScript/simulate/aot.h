@@ -650,6 +650,16 @@ namespace das {
         }
     };
 
+    template <>
+    struct das_index<char * const * const> {
+        static __forceinline char * & at ( char * const * const value, int32_t index, Context * ) {
+            return (char * &)(value[index]);
+        }
+        static __forceinline char * & at ( const char **const value, int32_t index, Context * ) {
+            return (char * &)(value[index]);
+        }
+    };
+
     template <typename TT, int size>
     struct TDim {
         using THIS_TYPE = TDim<TT, size>;
@@ -2405,6 +2415,7 @@ namespace das {
     };
 
     char * to_das_string(const string & str, Context * ctx);
+    char * pass_string( char * str );
     void set_das_string(string & str, const char * bs);
     void set_string_das(char * & bs, const string & str, Context * ctx);
 

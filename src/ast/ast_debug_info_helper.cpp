@@ -250,7 +250,7 @@ namespace das {
         if ( type->baseType==Type::tVariant || type->baseType==Type::tBitfield ) {
             info->argCount = uint32_t(type->argNames.size());
             if ( info->argCount ) {
-                info->argNames = (char **) debugInfo->allocate(sizeof(char *) * info->argCount );
+                info->argNames = (const char **) debugInfo->allocate(sizeof(char *) * info->argCount );
                 for ( uint32_t i=0; i!=info->argCount; ++i ) {
                     info->argNames[i] = debugInfo->allocateCachedName(type->argNames[i]);
                 }

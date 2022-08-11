@@ -5787,7 +5787,7 @@ namespace das {
             if ( var->type->ref && !var->init )
                 error("local reference has to be initialized", "", "",
                       var->at, CompilationError::invalid_variable_type);
-            if ( var->type->ref && var->init && !(var->init->alwaysSafe || isLocalOrGlobal(var->init)) && !safeExpression(expr) ) {
+            if ( var->type->ref && var->init && !(var->init->alwaysSafe || isLocalOrGlobal(var->init)) && !safeExpression(expr) && !(var->init->type && var->init->type->temporary) ) {
                 if ( program->policies.local_ref_is_unsafe ) {
                     error("local reference to non-local expression is unsafe", "", "",
                         var->at, CompilationError::unsafe);

@@ -622,7 +622,9 @@ namespace das
         __forceinline void singleStep ( const LineInfo & at, bool forceStep ) {
             if ( singleStepMode ) {
                 if ( hwBpIndex!=-1 ) {
-                    breakPoint(at, "exception","hardware breakpoint");
+                    char reason[128];
+                    snprintf(reason, sizeof(reason), "hardware breakpoint 0x%p", hwBpAddress);
+                    breakPoint(at, "exception",reason);
                     hwBpIndex = -1;
                 } else if ( forceStep || singleStepAt==nullptr || (singleStepAt->fileInfo!=at.fileInfo || singleStepAt->line!=at.line) ) {
                     singleStepAt = &at;
