@@ -135,6 +135,7 @@
     #include <limits.h>
     #include <signal.h>
     #include <dlfcn.h>
+    #include <inttypes.h>
     namespace das {
 
         /*
@@ -158,7 +159,7 @@
 
             #define ARM64_NUM_WP    16
 
-            static uint64_t g_HwBpSingleStepAddr = 0;
+            static uint64_t g_HwBpAddress = 0;
             static int      g_HwBpMask = 0;
 
             __forceinline int fls(int x) {
@@ -223,20 +224,19 @@
             uint64_t min_dist = -1ul, dist;
             int closest_match = 0;
             ucontext_t * ucontext = (ucontext_t *) ptr;
-            if ( g_HwBpSingleStepAddr ) {   // if we are in single step mode
-                if ( g_HwBpSingleStepAddr!=ucontext->uc_mcontext->__ss.__pc ) { // and we are no longer on original instr
-                    // drop single step mode
-                    g_HwBpSingleStepAddr = 0;
-                    dr.__mdscr_el1 &= ~1ul;
-                    // re-enable breakpoints
-                    for ( int i=0; i!=ARM64_NUM_WP; ++i ) {
-                        if ( g_HwBpMask & (1<<i) ) {
-                            dr.__wcr[i] |= 1;
-                        }
+            if ( g_HwBpAddress ) {   // if we are in single step mode
+                // drop hw bp mode mode
+                g_HwBpAddress = 0;
+                auto hw_bp_index = 0;
+                dr.__bcr[hw_bp_index] = 0;
+                // re-enable breakpoints
+                for ( int i=0; i!=ARM64_NUM_WP; ++i ) {
+                    if ( g_HwBpMask & (1<<i) ) {
+                        dr.__wcr[i] |= 1;
                     }
-                    // and done
-                    thread_set_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, dr_count);
                 }
+                // and done
+                thread_set_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, dr_count);
             } else {
                 // find which breakpoint caused it
                 uint64_t addr = ucontext->uc_mcontext->__es.__far;
@@ -256,9 +256,6 @@
                 }
                 // call handler of that breakpoint
                 g_HwBpHandler(closest_match, (void*)addr);
-                // save address of this instruction, go to single step mode
-                g_HwBpSingleStepAddr = ucontext->uc_mcontext->__ss.__pc;
-                dr.__mdscr_el1 |= 1;
                 // save hw breakpoints in the mask, disable all hw breakpoints
                 g_HwBpMask = 0;
                 for ( int i=0; i!=ARM64_NUM_WP; ++i ) {
@@ -266,6 +263,16 @@
                         g_HwBpMask |= 1<<i;
                         dr.__wcr[i] &= ~1ul;
                     }
+                }
+                // set hw breakpoint on next instruction
+                uint32_t control_value = (0xfu << 5) | 7;
+                g_HwBpAddress = ( ucontext->uc_mcontext->__ss.__pc + 4 ) & ~0x3ul;
+                auto hw_bp_index = 0;
+                if ( dr.__bcr[hw_bp_index] & 0x1ul ) {
+                    DAS_VERIFYF(false, "hw bp already set");
+                } else {
+                    dr.__bcr[hw_bp_index] = control_value;
+                    dr.__bvr[hw_bp_index] = g_HwBpAddress;
                 }
                 // and done
                 thread_set_state(mythread, ARM_DEBUG_STATE64, (thread_state_t) &dr, dr_count);
@@ -285,6 +292,10 @@
                 act.sa_sigaction = sigTrapHandler;
                 act.sa_flags = SA_SIGINFO|SA_ONSTACK;
                 if ( sigaction(SIGTRAP, &act, 0)!=0 ) {
+                    g_isHandlerSet = false;
+                    return -1;
+                }
+                if ( sigaction(SIGINT, &act, 0)!=0 ) {
                     g_isHandlerSet = false;
                     return -1;
                 }
