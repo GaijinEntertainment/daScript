@@ -3,7 +3,6 @@ struct Foo
 
 var foo : Foo
 
-
 def getFoo : Foo &
     unsafe
         return foo
@@ -14,7 +13,7 @@ def getFooT : Foo &#
 
 [export]
 def main
-    var v1 & = getFooT()
+    var v1 & = getFooT()    // NOT UNSAFE ANYMORE, v1 is Foo#&
     v1.a = 13
     print("v1.a = {v1.a}\n")
     unsafe
