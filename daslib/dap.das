@@ -78,7 +78,7 @@ struct DataBreakpointInfoArguments
     name: string
 
 def DataBreakpointInfoArguments(data: JsonValue?)
-    return [[DataBreakpointInfoArguments 
+    return [[DataBreakpointInfoArguments
                 variablesReference=jon(data, "variablesReference"),
                 name=jos(data, "name")
             ]]

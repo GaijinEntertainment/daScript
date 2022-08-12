@@ -1271,7 +1271,7 @@ class private DAServer: Server
                             if v.name == ini.name
                                 found = true
                                 valid = v.address != 0ul
-                                if valid    
+                                if valid
                                     var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
                                     defer_delete(res)
                                     self->sendSuccessResponse(seq, command, JV(res))
