@@ -92,7 +92,7 @@ def renameCall ( var self:Template; name:string; newName:das_string )
     self.call2name[name] = string(newName)
 
 class private TemplateVisitor : AstVisitor
-    rules : Template?
+    [[do_not_delete]] rules : Template?
     def TemplateVisitor ( r : Template? )
         rules = r
     def override visitExprIsVariant(var expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
