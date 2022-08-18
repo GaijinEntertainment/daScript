@@ -13,6 +13,7 @@
 using namespace das;
 
 bool g_reportCompilationFailErrors = false;
+bool g_collectSharedModules = true;
 
 TextPrinter tout;
 
@@ -223,6 +224,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
             const char * atDas = strstr(c_file.name,".das");
             if ( atDas && strcmp(atDas,".das")==0 && c_file.name[0]!='_' ) {
                 ok = test_fn(path + "/" + c_file.name, useAot) && ok;
+                if ( g_collectSharedModules ) Module::CollectSharedModules();
             }
         } while (_findnext(hFile, &c_file) == 0);
     }

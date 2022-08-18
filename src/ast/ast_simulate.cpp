@@ -2799,9 +2799,12 @@ namespace das
         isCompilingMacros = true;
         thisModule->macroContext = get_context(getContextStackSize());
         auto oldAot = policies.aot;
+        auto oldHeap = policies.persistent_heap;
         policies.aot = false;
+        policies.persistent_heap |= thisModule->builtIn;    // if its builtin - we need persistent heap
         simulate(*thisModule->macroContext, logs);
         policies.aot = oldAot;
+        policies.persistent_heap = oldHeap;
         isCompilingMacros = false;
     }
 

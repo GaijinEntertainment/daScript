@@ -226,6 +226,13 @@ namespace das {
         }
     }
 
+    void Module::CollectSharedModules() {
+        Module::foreach([&](Module * mod){
+            if ( mod->macroContext ) mod->macroContext->collectHeap(nullptr, true, false);   // validate?
+            return true;
+        });
+    }
+
     void Module::ClearSharedModules() {
         vector<Module *> kmp;
         Module::foreach([&](Module * mod){
