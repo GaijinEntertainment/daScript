@@ -26,10 +26,10 @@ to:
 */
 
 [block_macro(name="REQUIRE")]
-class DecsReq : AstFunctionAnnotation /*! This annotation provides list of required components for entity. */ {}
+class DecsReq : AstBlockAnnotation /*! This annotation provides list of required components for entity. */ {}
 
 [block_macro(name="REQUIRE_NOT")]
-class DecsReqN : AstFunctionAnnotation /*! This annotation provides list of components, which are required to not be part of the entity. */ {}
+class DecsReqN : AstBlockAnnotation /*! This annotation provides list of components, which are required to not be part of the entity. */ {}
 
 [structure_macro(name="decs_template")]
 class DecsTemplate : AstStructureAnnotation

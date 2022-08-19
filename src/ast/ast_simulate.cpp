@@ -2801,7 +2801,7 @@ namespace das
         auto oldAot = policies.aot;
         auto oldHeap = policies.persistent_heap;
         policies.aot = false;
-        policies.persistent_heap |= thisModule->builtIn;    // if its builtin - we need persistent heap
+        policies.persistent_heap = true;
         simulate(*thisModule->macroContext, logs);
         policies.aot = oldAot;
         policies.persistent_heap = oldHeap;

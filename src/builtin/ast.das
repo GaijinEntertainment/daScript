@@ -533,36 +533,48 @@ class AstVisitor
     def abstract preVisitExprCallMacro(expr:smart_ptr<ExprCallMacro>) : void
     def abstract visitExprCallMacro(expr:smart_ptr<ExprCallMacro>) : ExpressionPtr
 
+var private gc_root_AstFunctionAnnotation : array<AstFunctionAnnotation?>
+
 [macro_function]
 def make_function_annotation ( name : string; someClassPtr ) : FunctionAnnotationPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstFunctionAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_function_annotation(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
         return [[FunctionAnnotationPtr]]
 
+var private gc_root_AstBlockAnnotation : array<AstBlockAnnotation?>
+
 [macro_function]
 def make_block_annotation ( name : string; someClassPtr ) : FunctionAnnotationPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstBlockAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_block_annotation(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
         return [[FunctionAnnotationPtr]]
 
+var private gc_root_AstStructureAnnotation : array<AstStructureAnnotation?>
+
 [macro_function]
 def make_structure_annotation ( name : string; someClassPtr ) : StructureAnnotationPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstStructureAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_structure_annotation(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
         return [[StructureAnnotationPtr]]
 
+var private gc_root_AstEnumerationAnnotation : array<AstEnumerationAnnotation?>
+
 [macro_function]
 def make_enumeration_annotation ( name : string; someClassPtr ) : EnumerationAnnotationPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstEnumerationAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_enumeration_annotation(name, someClassPtr, classInfo)
     else
@@ -579,72 +591,96 @@ def make_visitor ( someClass ) : smart_ptr<VisitorAdapter>
         concept_assert(false,"can't make visitor of non-class")
         return [[smart_ptr<VisitorAdpater>]]
 
+var private gc_root_AstReaderMacro : array<AstReaderMacro?>
+
 [macro_function]
 def make_reader_macro ( name : string; someClassPtr ) : ReaderMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstReaderMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_reader_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
         return [[ReaderMacroPtr]]
 
+var private gc_root_AstCommentReader : array<AstCommentReader?>
+
 [macro_function]
 def make_comment_reader ( name : string; someClassPtr ) : CommentReaderPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstCommentReader |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_comment_reader(someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
         return [[ReaderMacroPtr]]
 
+var private gc_root_AstCallMacro : array<AstCallMacro?>
+
 [macro_function]
 def make_call_macro ( name : string; someClassPtr ) : CallMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstCallMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_call_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
         return [[CallMacroPtr]]
 
+var private gc_root_AstTypeInfoMacro : array<AstTypeInfoMacro?>
+
 [macro_function]
 def make_typeinfo_macro ( name : string; someClassPtr ) : TypeInfoMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstTypeInfoMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_typeinfo_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
         return [[TypeInfoMacroPtr]]
 
+var private gc_root_AstPassMacro : array<AstPassMacro?>
+
 [macro_function]
 def make_pass_macro ( name : string; someClassPtr ) : PassMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstPassMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_pass_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
         return [[PassMacroPtr]]
 
+var private gc_root_AstVariantMacro : array<AstVariantMacro?>
+
 [macro_function]
 def make_variant_macro ( name : string; someClassPtr ) : VariantMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstVariantMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_variant_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
         return [[VariantMacroPtr]]
 
+var private gc_root_AstForLoopMacro : array<AstForLoopMacro?>
+
 [macro_function]
 def make_for_loop_macro ( name : string; someClassPtr ) : ForLoopMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstForLoopMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_for_loop_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
         return [[ForLoopMacroPtr]]
 
+var private gc_root_AstCaptureMacro : array<AstCaptureMacro?>
+
 [macro_function]
 def make_capture_macro ( name : string; someClassPtr ) : CaptureMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstCaptureMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
         return make_capture_macro(name, someClassPtr, classInfo)
     else
