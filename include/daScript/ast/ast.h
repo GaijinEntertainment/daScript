@@ -1060,6 +1060,7 @@ namespace das
         virtual ~ModuleGroup();
         ModuleGroupUserData * getUserData ( const string & dataName ) const;
         bool setUserData ( ModuleGroupUserData * data );
+        void collectMacroContexts();
     protected:
         das_map<string,ModuleGroupUserDataPtr>  userData;
     };
@@ -1155,6 +1156,8 @@ namespace das
         uint32_t    string_heap_size_hint = 65536;
         bool        solid_context = false;              // all access to varable and function lookup to be context-dependent (via index)
                                                         // this is slightly faster, but prohibits AOT or patches
+        bool        macro_context_persistent_heap = true;   // if true, then persistent heap is used for macro context
+        bool        macro_context_collect = false;          // GC collect macro context after major passes
     // rtti
         bool rtti = false;                              // create extended RTTI
     // language

@@ -605,6 +605,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(heap_size_hint)>("heap_size_hint");
             addField<DAS_BIND_MANAGED_FIELD(string_heap_size_hint)>("string_heap_size_hint");
             addField<DAS_BIND_MANAGED_FIELD(solid_context)>("solid_context");
+            addField<DAS_BIND_MANAGED_FIELD(macro_context_persistent_heap)>("macro_context_persistent_heap");
+            addField<DAS_BIND_MANAGED_FIELD(macro_context_collect)>("macro_context_collect");
         // rtti
             addField<DAS_BIND_MANAGED_FIELD(rtti)>("rtti");
         // language

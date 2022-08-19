@@ -856,6 +856,13 @@ namespace das {
         reset();
     }
 
+    void ModuleGroup::collectMacroContexts() {
+        foreach([&](Module * pm) -> bool {
+            if ( pm->macroContext ) pm->macroContext->collectHeap(nullptr, true, false);   // validate?
+            return true;
+        }, "*");
+    }
+
     ModuleGroupUserData * ModuleGroup::getUserData ( const string & dataName ) const {
         auto it = userData.find(dataName);
         return it != userData.end() ? it->second.get() : nullptr;

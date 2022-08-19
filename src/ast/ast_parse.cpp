@@ -349,6 +349,7 @@ namespace das {
             }
             auto timeI = ref_time_ticks();
             restartInfer: program->inferTypes(logs, libGroup);
+            if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             totInfer += get_time_usec(timeI);
             if ( !program->failed() ) {
                 if ( program->patchAnnotations() ) {
@@ -357,6 +358,7 @@ namespace das {
             }
             if ( !program->failed() ) {
                 program->lint(libGroup);
+                if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
                 program->foldUnsafe();
                 auto timeO = ref_time_ticks();
                 if (program->getOptimize()) {
@@ -364,6 +366,7 @@ namespace das {
                 } else {
                     program->buildAccessFlags(logs);
                 }
+                if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
                 totOpt += get_time_usec(timeO);
                 if (!program->failed())
                     program->verifyAndFoldContracts();
@@ -381,6 +384,7 @@ namespace das {
                     program->allocateStack(logs);
                 if (!program->failed())
                     program->finalizeAnnotations();
+                if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             }
             if (!program->failed()) {
                 if (program->options.getBoolOption("log")) {
@@ -407,6 +411,7 @@ namespace das {
                     totM += get_time_usec(timeM);
                 }
             }
+            if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             if ( program->options.getBoolOption("log_compile_time",false) ) {
                 auto dt = get_time_usec(time0) / 1000000.;
                 logs << "compiler took " << dt << ", " << fileName << "\n";
