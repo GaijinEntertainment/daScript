@@ -106,7 +106,8 @@ namespace das {
 
     void runFunctionAnnotations ( yyscan_t scanner, Function * func, AnnotationList * annL, const LineInfo & at ) {
         if ( annL ) {
-            for ( const auto & pA : *annL ) {
+            for ( auto itA = annL->begin(); itA!=annL->end();  ) {
+                auto pA = *itA;
                 if ( pA->annotation ) {
                     if ( pA->annotation->rtti_isFunctionAnnotation() ) {
                         auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
@@ -115,9 +116,11 @@ namespace das {
                             das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to apply to a function " + func->name + "\n" + err, at,
                                 CompilationError::invalid_annotation);
                         }
+                        itA ++;
                     } else {
-                        das_yyerror(scanner,"functions are only allowed function macros",
+                        das_yyerror(scanner, pA->getMangledName() + " is not a function macro, functions are only allowed function macros",
                             at, CompilationError::invalid_annotation);
+                        itA = annL->erase(itA);
                     }
                 }
             }
