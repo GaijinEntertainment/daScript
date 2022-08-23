@@ -47,13 +47,17 @@ var private re_positive_int <- %regex~[1-9][0-9]*%%
 var private re_int <- %regex~\-?[1-9][0-9]*%%
 var re_number <- %regex~(zero|one|two|three|four|five|six|seven|eight|nine|ten)%%
 
+var private g_rnd : iterator<uint> <- each_random_uint()
+
+def public set_fake_rnd_source ( var rnd : iterator<uint> )
+    delete g_rnd
+    g_rnd <- rnd
+
 def public fake ( var count:int; var re:Regex; blk : block<(tmp:string):void> )
     var reg <- re_gen_compile(re)
-    var rnd <- each_random_uint()
     for c in range(count)
-        let str = re_gen(re,reg,rnd)
+        let str = re_gen(re,reg,g_rnd)
         invoke(blk,str)
-    delete rnd
     delete reg
 
 def public fake_number ( var count:int; blk : block<(tmp:string):void> )
@@ -66,22 +70,18 @@ def public fake_int ( var count:int; blk : block<(tmp:string):void> )
     fake ( count, re_int, blk )
 
 def public fake_month ( var count:int; blk : block<(tmp:string):void> )
-    var rnd <- each_random_uint()
     for i in range(count)
         var month = 0u
-        next(rnd,month)
+        next(g_rnd,month)
         month = month % 12u
         invoke(blk, g_months[month].name)
-    delete rnd
 
 def public fake_day ( var count:int; blk : block<(tmp:string):void> )
-    var rnd <- each_random_uint()
     for i in range(count)
         var day = 0u
-        next(rnd,day)
+        next(g_rnd,day)
         day = day % 7u
         invoke(blk, g_days[day])
-    delete rnd
 
 def public is_leap_year ( year:uint )
     return (year % 4u == 0u) && ( year % 100u != 0u || year % 400u == 0u )
@@ -108,14 +108,13 @@ def public week_day ( year, month, day : int )
     return dayOfWeek
 
 def public fake_date ( var count:int; blk : block<(tmp:string):void> )
-    var rnd <- each_random_uint()
     for i in range(count)
         var month = 0u
         var day = 0u
         var year = 0u
-        next(rnd,month)
-        next(rnd,year)
-        next(rnd,day)
+        next(g_rnd,month)
+        next(g_rnd,year)
+        next(g_rnd,day)
         month = month % 12u
         year = g_min_year + (year % g_total_years)
         var max_days = uint(g_months[month].days)
@@ -124,4 +123,3 @@ def public fake_date ( var count:int; blk : block<(tmp:string):void> )
         day = 1u + (day % max_days)
         let dow = week_day(year,month,day)
         invoke(blk, "{g_days[dow]}, {g_months[month].name} {int(day)}, {int(year)}")
-    delete rnd
