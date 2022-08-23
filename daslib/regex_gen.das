@@ -67,8 +67,11 @@ def private re_gen2_char ( var node:ReNode?; var rnd:ReGenRandom; var str:String
 def private re_gen2_union ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
     if log_gen_enabled
         print("gen union\n")
-    for sub in node.all
-        invoke(re_get_gen_func(sub),sub,rnd,str)
+    var nidx = 0u
+    next(rnd,nidx)
+    nidx = nidx % uint(length(node.all))
+    var sub = node.all[nidx]
+    invoke(re_get_gen_func(sub),sub,rnd,str)
 
 def private re_gen2_set ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
     if log_gen_enabled
