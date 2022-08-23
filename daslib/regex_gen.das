@@ -8,7 +8,7 @@ require daslib/regex public
 
 require strings
 
-var private log_gen_enabled = false
+let private log_gen_enabled = false
 
 typedef
     ReGenRandom = iterator<uint>
@@ -19,30 +19,11 @@ var private g_re_gen_current : ReGenTab?
 var private g_re_gen_rep_limit = 8u
 
 def private rnd_set_character ( cset:uint[8]; var rnd:ReGenRandom ) : int
-    // TODO: there is a lot faster way to count number of set bits
-    //  there is also das_clz for getting first set bit
-    //  finally this may just belong to C++, maybe?
-    var total = 0u
-    for t in range(8)
-        let bits = cset[t]
-        if bits != 0u
-            for b in urange(32)
-                if (bits & (1u << b)) != 0u
-                    total ++
+    let total = set_total(cset)
     var idx = 0u
     next(rnd,idx)
     idx = idx % total
-    var index = 0u
-    for t in range(8)
-        let bits = cset[t]
-        if bits != 0u
-            for b in urange(32)
-                if (bits & (1u << b)) != 0u
-                    if index == idx
-                        return t*32 + int(b)
-                    index ++
-    assert(false,"we should not be here. mismatch generated character")
-    return 0
+    return set_element(int(idx), cset)
 
 def private re_get_gen_func ( node:ReNode? ) : ReGenFun
     assert(g_re_gen_current!=null, "not in a re_gen_current")

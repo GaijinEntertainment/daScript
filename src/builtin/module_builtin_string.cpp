@@ -823,6 +823,10 @@ namespace das
             // bitset helpers
             addExtern<DAS_BIND_FUN(is_char_in_set)>(*this, lib, "is_char_in_set",
                 SideEffects::none,"is_char_in_set")->args({"Character","Charset"});
+            addExtern<DAS_BIND_FUN(char_set_total)>(*this, lib, "set_total",
+                SideEffects::none,"char_set_total")->arg("Charset");
+            addExtern<DAS_BIND_FUN(char_set_element)>(*this, lib, "set_element",
+                SideEffects::none,"char_set_element")->args({"Character","Charset"});
             // string buffer
             addExtern<DAS_BIND_FUN(builtin_reserve_string_buffer)>(*this, lib, "reserve_string_buffer",
                 SideEffects::none,"builtin_reserve_string_buffer")->args({"str","length","context"});

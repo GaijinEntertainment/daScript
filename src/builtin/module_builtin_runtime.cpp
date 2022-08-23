@@ -900,7 +900,7 @@ namespace das
     char * to_das_string(const string & str, Context * ctx) {
         return ctx->stringHeap->allocateString(str);
     }
-    
+
     char * pass_string(char * str) {
         return str;
     }
@@ -1307,5 +1307,7 @@ namespace das
         addConstant<int>(*this, "LOG_TRACE",    LogLevel::trace);
         // separators
         addConstant(*this, "VEC_SEP",   DAS_PRINT_VEC_SEPARATROR);
+        // clz
+        addExtern<DAS_BIND_FUN(uint32_clz)>(*this, lib, "clz", SideEffects::none, "uint32_clz")->arg("bits");
     }
 }
