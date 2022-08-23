@@ -417,7 +417,7 @@ def private re_parse ( expr:string ) : ReNode?
         return null
     return ore as value
 
-def private visit_top_down ( var node:ReNode?; blk : block<(var n:ReNode?):void> )
+def public visit_top_down ( var node:ReNode?; blk : block<(var n:ReNode?):void> )
     invoke(blk,node)
     for x in node.all
         visit_top_down(x, blk)

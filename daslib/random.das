@@ -31,6 +31,12 @@ def random_big_int ( var seed:int4& )
     let i12 = (seed.xy>>16) & int2(LCG_RAND_MAX)
     return i12.x + i12.y*32768
 
+def random_uint ( var seed:int4& )
+    //! random integer 0..32768*32768-1 (LCG_RAND_MAX_BIG)
+    seed = int4(214013)*seed+int4(2531011)
+    let i123 = (seed.xyz>>16) & int3(LCG_RAND_MAX)
+    return uint(i123.x) ^ (uint(i123.y)<<15u) ^ (uint(i123.z)<<30u)
+
 def random_int4 ( var seed:int4& )
     //! random int4, each component is 0..32767 (LCG_RAND_MAX)
     seed = int4(214013)*seed+int4(2531011)
@@ -72,3 +78,10 @@ def random_in_unit_disk ( var seed:int4& )
         if length_sq(p) <= 1.0
             return p
     return float3(0.)
+
+def each_random_uint(rnd_seed:int=13)
+    return <- generator<uint>() <|
+        var seed = random_seed(rnd_seed)
+        while true
+            yield random_uint(seed)
+        return false
