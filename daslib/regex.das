@@ -21,12 +21,14 @@ enum ReOp
 
 typedef
     CharSet = uint[8]   //! Bit array which represents an 8-bit character set.
+    ReGenRandom = iterator<uint>
 
 struct ReNode
     //! Single node in regular expression parsing tree.
     op      : ReOp
     id      : int
     [[do_not_convert]] fun2 : function< (var regex:Regex; var node:ReNode?; str:uint8?) : uint8? >
+    [[do_not_convert]] gen2 : function< ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void >
     at      : range
     text    : string
     textLen : int
@@ -59,8 +61,10 @@ variant MaybeReNode
 let private log_parse_enabled = false
 let private log_match_enabled = false
 let private range_check_enabled = false
+let private log_gen_enabled = false
 
 var private trace_tab = 0
+var private re_gen_rep_limit = 8u
 
 def private trace(msg:string; offset:int)
     static_if log_parse_enabled
@@ -460,16 +464,22 @@ def private re_assign_match_functions ( var re:Regex )
                 node.fun2 = @@re_match2_single_char
             else
                 node.fun2 = @@re_match2_char
+            node.gen2 = @@re_gen2_char
         elif node.op==ReOp Union
             node.fun2 = @@re_match2_union
+            node.gen2 = @@re_gen2_union
         elif node.op==ReOp Set
             node.fun2 = @@re_match2_set
+            node.gen2 = @@re_gen2_set
         elif node.op==ReOp Any
             node.fun2 = @@re_match2_any
+            node.gen2 = @@re_gen2_any
         elif node.op==ReOp Eos
             node.fun2 = @@re_match2_eos
+            node.gen2 = @@re_gen2_eos
         elif node.op==ReOp Concat
             node.fun2 = @@re_match2_concat
+            node.gen2 = @@re_gen2_concat
         elif node.op==ReOp Plus
             if node.subexpr.op==ReOp Set
                 node.cset = node.subexpr.cset
@@ -477,12 +487,16 @@ def private re_assign_match_functions ( var re:Regex )
             else
                 node.fun2 = @@re_match2_plus
             node.fun2 = @@re_match2_plus
+            node.gen2 = @@re_gen2_plus
         elif node.op==ReOp Star
             node.fun2 = @@re_match2_star
+            node.gen2 = @@re_gen2_star
         elif node.op==ReOp Question
             node.fun2 = @@re_match2_question
+            node.gen2 = @@re_gen2_question
         elif node.op==ReOp Group
             node.fun2 = @@re_match2_group
+            node.gen2 = @@re_gen2_group
         else
             panic("unsupported {node.op}")
 
@@ -892,3 +906,120 @@ def private debug_re ( node: ReNode?; tab:int )
         print("{repeat("\t",tab-1)})")
     else
         panic("unsupported op")
+
+
+
+def private rnd_set_character ( cset:uint[8]; var rnd:ReGenRandom ) : int
+    let total = set_total(cset)
+    var idx = 0u
+    next(rnd,idx)
+    idx = idx % total
+    return set_element(int(idx), cset)
+
+def private re_gen2_fail ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("gen fail\n")
+    assert(false, "not running generated regex")
+
+def private re_gen2_char ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("gen char `{node.text}`\n")
+    str |> write(node.text)
+    var node2 = node.next
+    if node2!=null
+        invoke(node2.gen2,node2,rnd,str)
+
+def private re_gen2_union ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("gen union\n")
+    var nidx = 0u
+    next(rnd,nidx)
+    nidx = nidx % uint(length(node.all))
+    var sub = node.all[nidx]
+    invoke(sub.gen2,sub,rnd,str)
+
+def private re_gen2_set ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("gen set {node.cset}\n")
+    str |> write_char(rnd_set_character(node.cset,rnd))
+    var node2 = node.next
+    if node2!=null
+        invoke(node2.gen2,node2,rnd,str)
+
+def private re_gen2_any ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("gen any\n")
+    var ch : uint
+    next(rnd, ch)
+    str |> write_char( int((ch%255u)+1u) )
+    var node2 = node.next
+    if node2!=null
+        invoke(node2.gen2,node2,rnd,str)
+
+def private re_gen2_concat ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("gen concat\n")
+    var left = node.left
+    invoke(left.gen2,left,rnd,str)
+
+def private re_gen2_eos ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("gen eos\n")
+    var node2 = node.next
+    if node2!=null
+        invoke(node2.gen2,node2,rnd,str)
+
+def private re_gen2_question ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("gen question\n")
+    var a = 0u
+    next(rnd,a)
+    if (a & 1u) != 0u               // zero or one?
+        var nsub = node.subexpr
+        if nsub!=null
+            invoke(nsub.gen2,nsub,rnd,str)
+    var node2 = node.next
+    if node2!=null
+        invoke(node2.gen2,node2,rnd,str)
+
+def private re_gen2_plus ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("gen plus\n")
+    var cnt = 0u
+    next(rnd,cnt)
+    cnt = (cnt % re_gen_rep_limit) + 1u
+    var nsub = node.subexpr
+    if nsub!=null
+        for i in urange(cnt)
+            invoke(nsub.gen2,nsub,rnd,str)
+    var node2 = node.next
+    if node2!=null
+        invoke(node2.gen2,node2,rnd,str)
+
+def private re_gen2_star ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("gen star\n")
+    var cnt = 0u
+    next(rnd,cnt)
+    cnt = cnt % re_gen_rep_limit
+    var nsub = node.subexpr
+    if nsub!=null
+        for i in urange(cnt)
+            invoke(nsub.gen2,nsub,rnd,str)
+    var node2 = node.next
+    if node2!=null
+        invoke(node2.gen2,node2,rnd,str)
+
+def private re_gen2_group ( var node:ReNode?; var rnd:ReGenRandom; var str:StringBuilderWriter ) : void
+    if log_gen_enabled
+        print("match2 group\n")
+    var nsub = node.subexpr
+    if nsub!=null
+        invoke(nsub.gen2,nsub,rnd,str)
+    var node2 = node.next
+    if node2!=null
+        invoke(node2.gen2,node2,rnd,str)
+
+def public re_gen ( var re:Regex; var rnd:ReGenRandom ) : string
+    return build_string <| $ ( writer )
+        invoke(re.root.gen2,re.root,rnd,writer)

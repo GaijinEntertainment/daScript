@@ -6,7 +6,6 @@ module faker shared private
 
 // TODO: add control for the RNG source
 
-require daslib/regex_gen
 require daslib/regex_boost
 require daslib/random
 require daslib/static_let
@@ -54,11 +53,8 @@ def public set_fake_rnd_source ( var rnd : iterator<uint> )
     g_rnd <- rnd
 
 def public fake ( var count:int; var re:Regex; blk : block<(tmp:string):void> )
-    var reg <- re_gen_compile(re)
     for c in range(count)
-        let str = re_gen(re,reg,g_rnd)
-        invoke(blk,str)
-    delete reg
+        invoke(blk,re_gen(re,g_rnd))
 
 def public fake_number ( var count:int; blk : block<(tmp:string):void> )
     fake ( count, re_number, blk )
