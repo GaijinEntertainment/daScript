@@ -2759,6 +2759,7 @@ namespace das {
     STR_DSTR_OP(  gt,>);
 
     __forceinline uint32_t uint32_clz ( uint32_t x ) { return das_clz(x); }
+    __forceinline uint32_t uint32_ctz ( uint32_t x ) { return das_ctz(x); }
 
     __forceinline uint32_t char_set_total ( const TDim<uint32_t,8> & bitset ) {
         uint32_t total = 0;
@@ -2773,7 +2774,7 @@ namespace das {
         for ( auto t=0; t!=8; ++t ) {
             auto bits = bitset[t];
             while ( bits ) {
-                auto bit = 31 - das_clz(bits);
+                auto bit = 31-das_ctz(bits);
                 if ( index==idx ) return t*32+bit;
                 bits ^= 1<<bit; index ++;
             }

@@ -1309,5 +1309,6 @@ namespace das
         addConstant(*this, "VEC_SEP",   DAS_PRINT_VEC_SEPARATROR);
         // clz
         addExtern<DAS_BIND_FUN(uint32_clz)>(*this, lib, "clz", SideEffects::none, "uint32_clz")->arg("bits");
+        addExtern<DAS_BIND_FUN(uint32_ctz)>(*this, lib, "ctz", SideEffects::none, "uint32_ctz")->arg("bits");
     }
 }

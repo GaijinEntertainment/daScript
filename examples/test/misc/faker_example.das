@@ -1,21 +1,21 @@
 require daslib/faker
+require daslib/fuzzer
 
 require daslib/regex_boost
 require daslib/random
 
 [export]
 def main
-    // for y in range(1980,2025)
-    //    print("{y} is a leap year? {is_leap_year(uint(y))}\n")
-    fake_number(10) <| $ ( str )
-        print("number {str}\n")
-    fake_date(10) <| $ ( str )
-        print("month {str}\n")
-    fake_month(10) <| $ ( str )
-        print("month {str}\n")
-    fake_day(10) <| $ ( str )
-        print("day {str}\n")
-    fake_positive_int(10) <| $ ( str )
-        print("positive int {str}\n")
-    fake_int(10) <| $ ( str )
-        print("int {str}\n")
+    var fake <- Faker() // note - we can specify different RNG source
+    fuzz(10) <|
+        print("number {fake |> number}\n")
+    fuzz(10) <|
+        print("month {fake |> month}\n")
+    fuzz(10) <|
+        print("day {fake |> day}\n")
+    fuzz(10) <|
+        print("date {fake |> date}\n")
+    fuzz(10) <|
+        print("positive int {fake |> positive_int}\n")
+    fuzz(10) <|
+        print("int {fake |> any_int}\n")

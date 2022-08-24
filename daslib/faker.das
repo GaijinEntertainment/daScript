@@ -39,45 +39,49 @@ var private g_days <- [[string
     "Saturday"
 ]]
 
-var private g_min_year = 1980u                  //! minimal faker's year
-var private g_total_years = (2022u-1980u)       //! faker year's range
+struct public Faker
+    min_year : uint = 1980u                     //! minimal faker's year
+    total_years : uint = (2022u-1980u)          //! faker year's range
+    rnd : iterator<uint> <- each_random_uint()  //! fakers random number generator
+
+def public Faker ( var rng : iterator<uint> )
+    return <- [[ Faker() rnd<-rng ]]
 
 var private re_positive_int <- %regex~[1-9][0-9]*%%
 var private re_int <- %regex~\-?[1-9][0-9]*%%
 var re_number <- %regex~(zero|one|two|three|four|five|six|seven|eight|nine|ten)%%
 
-var private g_rnd : iterator<uint> <- each_random_uint()
+def public any_set ( var faker:Faker )
+    var ch : uint[8]
+    for c in ch
+        next(faker.rnd, c)
+    return ch
 
-def public set_fake_rnd_source ( var rnd : iterator<uint> )
-    delete g_rnd
-    g_rnd <- rnd
+def public any_char ( var faker:Faker )
+    var ch = 0u
+    next(faker.rnd,ch)
+    return int((ch % 255u)+1u)
 
-def public fake ( var count:int; var re:Regex; blk : block<(tmp:string):void> )
-    for c in range(count)
-        invoke(blk,re_gen(re,g_rnd))
+def public number ( var faker:Faker )
+    return re_gen(re_number,faker.rnd)
 
-def public fake_number ( var count:int; blk : block<(tmp:string):void> )
-    fake ( count, re_number, blk )
+def public positive_int ( var faker:Faker )
+    return re_gen(re_positive_int,faker.rnd)
 
-def public fake_positive_int ( var count:int; blk : block<(tmp:string):void> )
-    fake ( count, re_positive_int, blk )
+def public any_int ( var faker:Faker )
+    return re_gen(re_int,faker.rnd)
 
-def public fake_int ( var count:int; blk : block<(tmp:string):void> )
-    fake ( count, re_int, blk )
+def public month ( var faker:Faker )
+    var month = 0u
+    next(faker.rnd,month)
+    month = month % 12u
+    return g_months[month].name
 
-def public fake_month ( var count:int; blk : block<(tmp:string):void> )
-    for i in range(count)
-        var month = 0u
-        next(g_rnd,month)
-        month = month % 12u
-        invoke(blk, g_months[month].name)
-
-def public fake_day ( var count:int; blk : block<(tmp:string):void> )
-    for i in range(count)
-        var day = 0u
-        next(g_rnd,day)
-        day = day % 7u
-        invoke(blk, g_days[day])
+def public day ( var faker:Faker )
+    var day = 0u
+    next(faker.rnd,day)
+    day = day % 7u
+    return g_days[day]
 
 def public is_leap_year ( year:uint )
     return (year % 4u == 0u) && ( year % 100u != 0u || year % 400u == 0u )
@@ -103,19 +107,18 @@ def public week_day ( year, month, day : int )
     dayOfWeek %= 7
     return dayOfWeek
 
-def public fake_date ( var count:int; blk : block<(tmp:string):void> )
-    for i in range(count)
-        var month = 0u
-        var day = 0u
-        var year = 0u
-        next(g_rnd,month)
-        next(g_rnd,year)
-        next(g_rnd,day)
-        month = month % 12u
-        year = g_min_year + (year % g_total_years)
-        var max_days = uint(g_months[month].days)
-        if ( is_leap_year(year) && month == 1u )
-            max_days = 29u
-        day = 1u + (day % max_days)
-        let dow = week_day(year,month,day)
-        invoke(blk, "{g_days[dow]}, {g_months[month].name} {int(day)}, {int(year)}")
+def public date ( var faker:Faker )
+    var month = 0u
+    var day = 0u
+    var year = 0u
+    next(faker.rnd,month)
+    next(faker.rnd,year)
+    next(faker.rnd,day)
+    month = month % 12u
+    year = faker.min_year + (year % faker.total_years)
+    var max_days = uint(g_months[month].days)
+    if ( is_leap_year(year) && month == 1u )
+        max_days = 29u
+    day = 1u + (day % max_days)
+    let dow = week_day(year,month,day)
+    return "{g_days[dow]}, {g_months[month].name} {int(day)}, {int(year)}"

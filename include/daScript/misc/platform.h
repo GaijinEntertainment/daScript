@@ -112,8 +112,14 @@
         _BitScanReverse(&r, x);
         return uint32_t(31 - r);
     }
+    __forceinline uint32_t das_ctz(uint32_t x) {
+        unsigned long r = 0;
+        _BitScanForward(&r, x);
+        return uint32_t(31 - r);
+    }
 #else
     #define das_clz __builtin_clz
+    #define das_ctz __builtin_ctz
 #endif
 
 #ifdef _MSC_VER
