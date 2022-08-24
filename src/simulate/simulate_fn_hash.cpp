@@ -207,16 +207,17 @@ namespace das {
             tvar.push_back(fn.first);
         }
         Array afun, avar;
-        memset(&afun, 0, sizeof(afun));
         if ( tfun.size() ) {
             afun.data = (char *) tfun.data();
             afun.capacity = afun.size = uint32_t(tfun.size());
             afun.lock = 1;
+            afun.flags = 0;
         }
         if ( tvar.size() ) {
             avar.data = (char *) tvar.data();
             avar.capacity = avar.size = uint32_t(tvar.size());
             avar.lock = 1;
+            avar.flags = 0;
         }
         vec4f args[2];
         args[0] = cast<Array &>::from(afun);

@@ -198,6 +198,7 @@ namespace das {
         arr.data = (char *) data;
         arr.capacity = arr.size = uint32_t(st.st_size);
         arr.lock = 1;
+        arr.flags = 0;
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
         context->invoke(blk, args, nullptr, at);
@@ -297,6 +298,7 @@ namespace das {
             arr.size = rlen;
             arr.capacity = rlen;
             arr.lock = 1;
+            arr.flags = 0;
             bargs[0] = cast<das::Array*>::from(&arr);
             context.invoke(*block, bargs, nullptr, &node->debugInfo);
         }
