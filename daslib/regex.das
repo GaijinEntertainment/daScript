@@ -66,6 +66,9 @@ let private log_gen_enabled = false
 var private trace_tab = 0
 var private re_gen_rep_limit = 8u
 
+def public re_gen_get_rep_limit
+    return re_gen_rep_limit
+
 def private trace(msg:string; offset:int)
     static_if log_parse_enabled
         print("{repeat(" ",trace_tab)}{offset}: {msg}\n")

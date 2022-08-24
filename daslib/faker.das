@@ -9,6 +9,8 @@ module faker shared private
 require daslib/regex_boost
 require daslib/random
 require daslib/static_let
+require daslib/strings
+require daslib/defer
 
 struct MonthNameAndDay
     name: string
@@ -43,33 +45,50 @@ struct public Faker
     min_year : uint = 1980u                     //! minimal faker's year
     total_years : uint = (2022u-1980u)          //! faker year's range
     rnd : iterator<uint> <- each_random_uint()  //! fakers random number generator
+    max_long_string : uint = 4096u              //! maximal length of generated string
 
 def public Faker ( var rng : iterator<uint> )
     return <- [[ Faker() rnd<-rng ]]
 
 var private re_positive_int <- %regex~[1-9][0-9]*%%
 var private re_int <- %regex~\-?[1-9][0-9]*%%
+var private re_string <- %regex~.*%%
 var re_number <- %regex~(zero|one|two|three|four|five|six|seven|eight|nine|ten)%%
+
+def public long_string ( var faker:Faker )
+    var len = 0u
+    faker.rnd |> next(len)
+    len %= faker.max_long_string
+    var arr : array<uint8>; defer_delete(arr)
+    arr |> reserve(int(len))
+    for t in urange(len)
+        var Ch = 0u
+        faker.rnd |> next(Ch)
+        arr |> push(uint8(Ch))
+    return string(arr)
+
+def public any_string ( var faker:Faker )
+    return re_gen(re_string,faker.rnd)
 
 def public random_int ( var faker:Faker )
     var i = 0u
-    next(faker.rnd,i)
+    faker.rnd |> next(i)
     return int(i)
 
 def public random_uint ( var faker:Faker )
     var i = 0u
-    next(faker.rnd,i)
+    faker.rnd |> next(i)
     return i
 
 def public any_set ( var faker:Faker )
     var ch : uint[8]
     for c in ch
-        next(faker.rnd, c)
+        faker.rnd |> next( c)
     return ch
 
 def public any_char ( var faker:Faker )
     var ch = 0u
-    next(faker.rnd,ch)
+    faker.rnd |> next(ch)
     return int((ch % 255u)+1u)
 
 def public number ( var faker:Faker )
@@ -83,13 +102,13 @@ def public any_int ( var faker:Faker )
 
 def public month ( var faker:Faker )
     var month = 0u
-    next(faker.rnd,month)
+    faker.rnd |> next(month)
     month = month % 12u
     return g_months[month].name
 
 def public day ( var faker:Faker )
     var day = 0u
-    next(faker.rnd,day)
+    faker.rnd |> next(day)
     day = day % 7u
     return g_days[day]
 
@@ -121,9 +140,9 @@ def public date ( var faker:Faker )
     var month = 0u
     var day = 0u
     var year = 0u
-    next(faker.rnd,month)
-    next(faker.rnd,year)
-    next(faker.rnd,day)
+    faker.rnd |> next(month)
+    faker.rnd |> next(year)
+    faker.rnd |> next(day)
     month = month % 12u
     year = faker.min_year + (year % faker.total_years)
     var max_days = uint(g_months[month].days)
