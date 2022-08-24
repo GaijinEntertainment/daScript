@@ -826,7 +826,7 @@ namespace das
                 SideEffects::none, "is_number")->arg("Character");
             // bitset helpers
             addExtern<DAS_BIND_FUN(is_char_in_set)>(*this, lib, "is_char_in_set",
-                SideEffects::none,"is_char_in_set")->args({"Character","Charset"});
+                SideEffects::none,"is_char_in_set")->args({"Character","Charset","Context","At"});
             addExtern<DAS_BIND_FUN(char_set_total)>(*this, lib, "set_total",
                 SideEffects::none,"char_set_total")->arg("Charset");
             addExtern<DAS_BIND_FUN(char_set_element)>(*this, lib, "set_element",

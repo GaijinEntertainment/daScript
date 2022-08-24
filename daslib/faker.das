@@ -51,6 +51,16 @@ var private re_positive_int <- %regex~[1-9][0-9]*%%
 var private re_int <- %regex~\-?[1-9][0-9]*%%
 var re_number <- %regex~(zero|one|two|three|four|five|six|seven|eight|nine|ten)%%
 
+def public random_int ( var faker:Faker )
+    var i = 0u
+    next(faker.rnd,i)
+    return int(i)
+
+def public random_uint ( var faker:Faker )
+    var i = 0u
+    next(faker.rnd,i)
+    return i
+
 def public any_set ( var faker:Faker )
     var ch : uint[8]
     for c in ch

@@ -34,5 +34,23 @@ def test_charset ( t:T? )
                         let EChar = set_element(elem, ch)
                         t |> equal(Char, EChar)
                         elem ++
-
+    t |> run("fuzz set_element") <| @@ ( t : T? )
+        var fake <- Faker()
+        var count = 0
+        fuzz(1000) <|
+            let ch = fake |> any_set
+            let total = int(set_total(ch))
+            let idx = fake |> random_int
+            let elem = set_element(idx, ch)
+            t |> success(elem==-1 || (elem>=0 && elem<total))
+            count ++
+        t |> equal(count, 1000)
+    t |> run("fuzz is_char_in_charset") <| @@ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            let ch = fake |> any_set
+            let total = int(set_total(ch))
+            let idx = fake |> random_int
+            let icics = is_char_in_set(idx, ch)
+            t |> success(icics==true || icics==false)
 
