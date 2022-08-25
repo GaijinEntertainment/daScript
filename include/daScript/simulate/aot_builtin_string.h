@@ -73,14 +73,14 @@ namespace das {
     template <typename TT>
     __forceinline char * format ( const char * fmt, TT value, Context * context ) {
         char buf[256];
-        snprintf(buf, 256, fmt, value);
+        snprintf(buf, 256, fmt ? fmt : "", value);
         return context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
     }
 
     template <typename TT>
     void format_and_write ( StringBuilderWriter & writer, const char * fmt, TT value  ) {
         char buf[256];
-        snprintf(buf, 256, fmt, value);
+        snprintf(buf, 256, fmt ? fmt : "", value);
         writer.writeStr(buf, strlen(buf));
     }
 
