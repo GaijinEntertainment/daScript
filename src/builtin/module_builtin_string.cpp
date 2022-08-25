@@ -112,7 +112,7 @@ namespace das
     }
 
     char* builtin_string_chop(const char* str, int start, int length, Context* context) {
-        if ( !str ) return nullptr;
+        if ( !str || length<=0 ) return nullptr;
         return context->stringHeap->allocateString(str + start, length);
     }
 
@@ -396,7 +396,7 @@ namespace das
 
     char * string_repeat ( const char * str, int count, Context * context ) {
         uint32_t len = stringLengthSafe ( *context, str );
-        if ( !len ) return nullptr;
+        if ( !len || count<=0 ) return nullptr;
         char * res = context->stringHeap->allocateString(nullptr, len * count);
         for ( char * s = res; count; count--, s+=len ) {
             memcpy ( s, str, len );

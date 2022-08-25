@@ -51,6 +51,5 @@ def test_charset ( t:T? )
             let ch = fake |> any_set
             let total = int(set_total(ch))
             let idx = fake |> random_int
-            let icics = is_char_in_set(idx, ch)
-            t |> success(icics==true || icics==false)
+            t |> accept(is_char_in_set(idx, ch))
 

@@ -27,8 +27,7 @@ def test_properties ( t:T? )
         let limit = re_gen_get_rep_limit()
         fuzz <|
             let str = fake |> any_string
-            let e = str |> empty
-            t |> success(e==false || e==true)
+            t |> accept(str |> empty)
 
     t |> run("starts_with") <| @@ ( t : T? )
         t |> success(starts_with("123","12"))
@@ -38,8 +37,7 @@ def test_properties ( t:T? )
         fuzz <|
             let str = fake |> any_string
             let cmp = fake |> any_string
-            let sw = starts_with(str,cmp)
-            t |> success(sw==true || sw==false)
+            t |> accept(starts_with(str,cmp))
 
     t |> run("ends_with") <| @@ ( t : T? )
         t |> success(ends_with("123","23"))
@@ -49,6 +47,5 @@ def test_properties ( t:T? )
         fuzz <|
             let str = fake |> any_string
             let cmp = fake |> any_string
-            let sw = ends_with(str,cmp)
-            t |> success(sw==true || sw==false)
+            t |> accept(ends_with(str,cmp))
 

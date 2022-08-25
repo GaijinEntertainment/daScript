@@ -14,15 +14,23 @@ def test_traits ( t:T? )
         t |> success(!is_white_space('#'))
         t |> success(is_number('3'))
         t |> success(!is_number('A'))
-    t |> run("traits fuzz") <| @@ ( t : T? )
+    t |> run("traits fuzz is_alpha") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz <|
             let Ch = fake |> any_char
-            let ia = is_alpha(Ch)
-            t |> success(ia==true || ia==false)
-            let inl = is_new_line(Ch)
-            t |> success(inl==true || inl==false)
-            let iws = is_white_space(Ch)
-            t |> success(iws==true || iws==false)
-            let inn = is_number(Ch)
-            t |> success(inn==true || inn==false)
+            t |> accept(is_alpha(Ch))
+    t |> run("traits fuzz is_new_line") <| @@ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            let Ch = fake |> any_char
+            t |> accept(is_new_line(Ch))
+    t |> run("traits fuzz is_white_space") <| @@ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            let Ch = fake |> any_char
+            t |> accept(is_white_space(Ch))
+    t |> run("traits fuzz is_number") <| @@ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            let Ch = fake |> any_char
+            t |> accept(is_number(Ch))

@@ -75,6 +75,9 @@ def equal(t: T?; a; b; msg = ""): bool
     t->errorAt("\tgot: {b}", get_line_info(1))
     return false
 
+[sideeffects]
+def accept(t: T?; value)
+    pass
 
 def strictEqual(t: T?; a; b; msg = ""): bool
     if a == b
