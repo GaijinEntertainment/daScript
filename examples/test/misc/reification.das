@@ -71,6 +71,8 @@ def test_regular
             print("hello!\n")
         let qq = @@$c(cll)
         let $i(bus) = "busbus"
+        invoke <| $ ( $i(bus) : bool )
+            pass
     print(describe(blk))
     delete blk
 

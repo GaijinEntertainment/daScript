@@ -197,6 +197,8 @@ class private TemplateVisitor : AstVisitor
                 for na in new_args
                     blk.arguments |> emplace(na, rai)
                 delete new_args
+            elif key_exists(rules.var2name, vname)
+                arg.name := rules.var2name[vname]
     def preVisitAnythingCall(var arguments:dasvector`smart_ptr`Expression) : void
         if length(rules.var2exprList)==0
             return
@@ -412,7 +414,23 @@ class private QRulesVisitor : AstVisitor
             visitTD(arg)
         return typ
     def override preVisitExprBlockArgument(blk:smart_ptr<ExprBlock>;var arg:VariablePtr;lastArg:bool): void
-        if arg._type.flags.isTag && arg._type.baseType==Type none
+        if arg.flags.tag
+            if arg.source==null
+                compiling_program() |> macro_error(arg.at,"argument '{arg.name}' of block must have tag source")
+                failed = true
+                return
+            let new_tag_name = "temp`var`{tag_index++}`{arg.at.line}`{arg.at.column}"
+            rblock.list |> emplace_new <| new [[ExprCall() at=arg.at,
+                name:="renameVariable",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=arg.at, name:="rules"]];
+                    new [[ExprConstString() at=arg.at, value:=new_tag_name]];
+                    clone_expression(arg.source)
+                }]]]
+            arg.name := new_tag_name
+            arg.flags ^= VariableFlags tag
+            arg.source := null
+        elif arg._type.flags.isTag && arg._type.baseType==Type none
             if arg.init==null
                 compiling_program() |> macro_error(arg.at,"argument '{arg.name}' of block must have initializer")
                 failed = true

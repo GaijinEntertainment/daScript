@@ -601,6 +601,10 @@ namespace das {
                             if ( pDecl->annotation ) {
                                 pVar->annotation = *pDecl->annotation;
                             }
+                            if ( auto pTagExpr = name_at.tag ) {
+                                pVar->tag = true;
+                                pVar->source = pTagExpr;
+                            }
                             closure->arguments.push_back(pVar);
                         } else {
                             das_yyerror(scanner,"block argument is already declared " + name_at.name,
