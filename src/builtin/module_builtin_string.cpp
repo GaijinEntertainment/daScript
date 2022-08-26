@@ -93,6 +93,8 @@ namespace das
     }
 
     int builtin_string_find1 ( const char *str, const char *substr, int start, Context * context ) {
+        if (!str || !substr)
+            return -1;
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return -1;
@@ -101,7 +103,7 @@ namespace das
     }
 
     int builtin_string_find2 (const char *str, const char *substr) {
-        if (!str)
+        if (!str || !substr)
             return -1;
         const char *ret = strstr(str, substr);
         return ret ? int(ret-str) : -1;
