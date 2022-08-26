@@ -50,9 +50,12 @@ struct public Faker
 def public Faker ( var rng : iterator<uint> )
     return <- [[ Faker() rnd<-rng ]]
 
-var private re_positive_int <- %regex~[1-9][0-9]*%%
-var private re_int <- %regex~\-?[1-9][0-9]*%%
+var private re_positive_int <- %regex~[0-9][0-9]*%%
+var private re_int <- %regex~[\+\-]?[0-9][0-9]*%%
+var private re_uint <- %regex~[0-9][0-9]*%%
+var private re_hex <- %regex~[0-9a-zA-Z][0-9a-zA-Z]*%%
 var private re_string <- %regex~.*%%
+var private re_float <- %regex~[\+\-]?[0-9][0-9]*(\.[0-9]*)?%%
 var re_number <- %regex~(zero|one|two|three|four|five|six|seven|eight|nine|ten)%%
 
 def public long_string ( var faker:Faker )
@@ -99,6 +102,15 @@ def public positive_int ( var faker:Faker )
 
 def public any_int ( var faker:Faker )
     return re_gen(re_int,faker.rnd)
+
+def public any_hex ( var faker:Faker )
+    return re_gen(re_hex,faker.rnd)
+
+def public any_float ( var faker:Faker )
+    return re_gen(re_float,faker.rnd)
+
+def public any_uint ( var faker:Faker )
+    return re_gen(re_uint,faker.rnd)
 
 def public month ( var faker:Faker )
     var month = 0u
