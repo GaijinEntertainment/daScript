@@ -30,13 +30,9 @@ def test_float_and_double ( t:T? )
     fake_numeric(abs)
     fake_numeric(sign)
 
-    // TODO:
-    //  add missing functions
-    // fake_numeric(ceil)
-    // fake_numeric(floor)
-    // fake_numeric(saturate)
-    // fake_numeric(sinh)
-    // fake_numeric(cosh)
+    fake_float(ceil)
+    fake_float(floor)
+    fake_float(saturate)
 
     t |> run("fuzz is_finit") <| @@ ( t : T? )
         var fake <- Faker()
