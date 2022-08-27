@@ -63,6 +63,7 @@ def test_float_and_double ( t:T? )
 
 [test]
 def test_float_only ( t:T? )
+    fake_float(atan_est)
     fake_float2(atan2_est)
     fake_float(rcp_est)
     fake_float(rsqrt)
@@ -114,6 +115,12 @@ def test_float234 ( t:T? )
     fake_float_234(inv_length)
     fake_float_234(length_sq)
     fake_float_234(inv_length_sq)
+
+[test]
+def test_lerp_mad_clamp ( t:T? )
+    fake_float3(lerp)
+    fake_float3(mad)
+    fake_numeric3(clamp)
 
 
 

@@ -11,6 +11,7 @@ require daslib/random
 require daslib/static_let
 require daslib/strings
 require daslib/defer
+require math
 
 struct MonthNameAndDay
     name: string
@@ -96,6 +97,29 @@ def public random_float3 ( var faker:Faker )
 
 def public random_float4 ( var faker:Faker )
     return float4(faker |> random_float, faker |> random_float, faker |> random_float, faker |> random_float)
+
+def public random_float3x3 ( var faker:Faker )
+    var m : float3x3
+    m[0] = faker |> random_float3
+    m[1] = faker |> random_float3
+    m[2] = faker |> random_float3
+    return m
+
+def public random_float3x4 ( var faker:Faker )
+    var m : float3x4
+    m[0] = faker |> random_float3
+    m[1] = faker |> random_float3
+    m[2] = faker |> random_float3
+    m[3] = faker |> random_float3
+    return m
+
+def public random_float4x4 ( var faker:Faker )
+    var m : float4x4
+    m[0] = faker |> random_float4
+    m[1] = faker |> random_float4
+    m[2] = faker |> random_float4
+    m[3] = faker |> random_float4
+    return m
 
 variant BitRepresentation64
     ui2 : uint[2]
