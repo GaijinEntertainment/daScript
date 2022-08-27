@@ -214,6 +214,7 @@ namespace das
         virtual void onTick () {}
         virtual void onCollect ( Context * ) {}
         virtual bool onLog ( int /*level*/, const char * /*text*/ ) { return false; }
+        virtual void onBreakpointsReset ( const char * /*file*/, int /*breakpointsNum*/ ) {}
         virtual bool isCppOnlyAgent() const { return false; }
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
@@ -707,6 +708,7 @@ namespace das
 
     void tickDebugAgent ( );
     void collectDebugAgentState ( Context & ctx );
+    void onBreakpointsReset ( const char * file, int breakpointsNum );
     void tickSpecificDebugAgent ( const char * name );
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
     void shutdownDebugAgent();

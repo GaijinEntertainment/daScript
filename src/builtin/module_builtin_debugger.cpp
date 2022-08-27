@@ -143,6 +143,13 @@ namespace debugapi {
                 return false;
             }
         }
+        virtual void onBreakpointsReset ( const char * file, int breakpointsNum ) override {
+            if ( auto fnOnBreakpointsReset = get_onBreakpointsReset(classPtr) ) {
+                context->lock();
+                invoke_onBreakpointsReset(context,fnOnBreakpointsReset,classPtr,(char *)file, breakpointsNum);
+                context->unlock();
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;
@@ -932,6 +939,9 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(collectDebugAgentState)>(*this, lib,  "collect_debug_agent_state",
                 SideEffects::modifyExternal, "collectDebugAgentState")
                     ->arg("context");
+            addExtern<DAS_BIND_FUN(onBreakpointsReset)>(*this, lib,  "on_breakpoints_reset",
+                SideEffects::modifyExternal, "onBreakpointsReset")
+                ->args({"file", "breakpointsNum"});
             addExtern<DAS_BIND_FUN(installDebugAgent)>(*this, lib,  "install_debug_agent",
                 SideEffects::modifyExternal, "installDebugAgent")
                     ->args({"agent","category","line","context"});

@@ -17,6 +17,7 @@ class DapiDebugAgent
     def abstract onInstrumentFunction ( var ctx:Context; fn:SimFunction?; entering:bool; userData:uint64 ) : void
     def abstract onBreakpoint ( var ctx:Context; at:LineInfo; reason,text:string ) : void
     def abstract onVariable ( var ctx:Context; category,name:string; info:TypeInfo; data:void? ) : void
+    def abstract onBreakpointsReset ( file:string; breakpointsNum:int ) : void
     def abstract onTick : void
     def abstract onCollect ( var ctx:Context ) : void
     def abstract onLog ( level:int; text:string# ) : bool

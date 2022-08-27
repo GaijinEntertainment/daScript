@@ -1511,6 +1511,12 @@ namespace das
         });
     }
 
+    void onBreakpointsReset ( const char * file, int breakpointsNum ) {
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onBreakpointsReset( file, breakpointsNum );
+        });
+    }
+
     class CppOnlyDebugAgent : public DebugAgent {
     public:
         virtual void onCreateContext ( Context * ctx ) { if ( onCreateContextOp ) onCreateContextOp(ctx); }
