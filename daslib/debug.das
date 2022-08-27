@@ -654,6 +654,8 @@ class private DAgent: DapiDebugAgent
 
     hwBreakpoints: array<int>
 
+    dirtyContext : bool = false
+
     def initAgent(var ctx: Context)
         waitConnection = wait_debugger()
         withInstruments = use_instruments()
@@ -736,6 +738,8 @@ class private DAgent: DapiDebugAgent
         var res: SetBreakpointsResponse
         if key_exists(breakpoints, path)
             delete breakpoints[path]
+        on_breakpoints_reset(path, length(ini.breakpoints))
+
         breakpoints |> erase(path)
         if length(ini.breakpoints) >= 0
             var breaks <- [[array<DABreakpoint>]]
@@ -956,6 +960,8 @@ class private DAgent: DapiDebugAgent
                     delete server
                 self->startServer()
 
+        self->invalidateBreakpoints()
+
         var alloc = string_heap_bytes_allocated()
         if alloc > strLimit
             // string_heap_report()
@@ -976,10 +982,33 @@ class private DAgent: DapiDebugAgent
                 if logStrMemory
                     to_log(LOG_DEBUG, "dap: DOWN string heap limit: {bytes_hr(strLimit)}\n")
 
+    def invalidateBreakpoints() : void
+        if !dirtyContext
+            return
+        dirtyContext = false
+        for ctx in contexts
+            if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick
+                continue
+            *ctx.ctx |> clear_instruments()
+            *ctx.ctx |> instrument_node(true) <| $(ati)
+                if ati.fileInfo == null
+                    return false
+                let file = string(ati.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
+                for fileBr, brs in keys(breakpoints), values(breakpoints)
+                    if compare_path(fileBr, file)
+                        for br in brs
+                            if br.line == ati.line
+                                print("dap: reset breakpoint {file}:{int(br.line)}")
+                                return true
+                        break
+                return false
+
     def override onCreateContext(var ctx: Context): void
         // unsafe
         //     print("dap: context created {intptr(addr(ctx))} `{ctx.name}`")
         self->addContext(ctx)
+        if length(breakpoints) > 0
+            dirtyContext = true
 
     def override onDestroyContext(var ctx: Context): void
         // unsafe
