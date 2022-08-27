@@ -444,7 +444,7 @@ namespace das {
                         break;
                     }
                 }
-                if ( !hasDebugger ) {
+                if ( !hasDebugger && !policies.debug_module.empty() ) {
                     getPrerequisits(policies.debug_module, access, req, missing, circular, notAllowed,
                         dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules);
                     auto finfo = access->getFileInfo(policies.debug_module);
