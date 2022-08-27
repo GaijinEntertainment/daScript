@@ -56,6 +56,7 @@ var private re_int <- %regex~[\+\-]?[0-9][0-9]*%%
 var private re_uint <- %regex~[0-9][0-9]*%%
 var private re_hex <- %regex~[0-9a-zA-Z][0-9a-zA-Z]*%%
 var private re_string <- %regex~.*%%
+var private re_file_name <- %regex~[0-9a-zA-Z_\.]+%%
 var private re_float <- %regex~[\+\-]?[0-9][0-9]*(\.[0-9]*)?%%
 var re_number <- %regex~(zero|one|two|three|four|five|six|seven|eight|nine|ten)%%
 
@@ -73,6 +74,9 @@ def public long_string ( var faker:Faker )
 
 def public any_string ( var faker:Faker )
     return re_gen(re_string,faker.rnd)
+
+def public any_file_name ( var faker:Faker )
+    return re_gen(re_file_name,faker.rnd)
 
 def public random_int ( var faker:Faker )
     var i = 0u
@@ -120,6 +124,7 @@ def public random_float4x4 ( var faker:Faker )
     m[2] = faker |> random_float4
     m[3] = faker |> random_float4
     return m
+
 
 variant BitRepresentation64
     ui2 : uint[2]

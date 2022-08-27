@@ -23,3 +23,15 @@ def public fuzz ( fuzz_count:int; blk : block )
             invoke(blk)
         recover
             pass
+
+def public fuzz_debug ( blk : block )
+    //! run block however many times
+    //! ignore panic, so that we can see that runtime crashes
+    for i in range(total_fuzz_count)
+        invoke(blk)
+
+def public fuzz_debug ( fuzz_count:int; blk : block )
+    //! run block however many times
+    //! ignore panic, so that we can see that runtime crashes
+    for i in range(fuzz_count)
+        invoke(blk)
