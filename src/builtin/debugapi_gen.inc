@@ -781,12 +781,13 @@ protected:
     __fn_onInstrumentFunction = 7,
     __fn_onBreakpoint = 8,
     __fn_onVariable = 9,
-    __fn_onTick = 10,
-    __fn_onCollect = 11,
-    __fn_onLog = 12,
+    __fn_onBreakpointsReset = 10,
+    __fn_onTick = 11,
+    __fn_onCollect = 12,
+    __fn_onLog = 13,
   };
 protected:
-  int _das_class_method_offset[13];
+  int _das_class_method_offset[14];
 public:
   DapiDebugAgent_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_onInstall] = adapt_field_offset("onInstall",info);
@@ -799,6 +800,7 @@ public:
       _das_class_method_offset[__fn_onInstrumentFunction] = adapt_field_offset("onInstrumentFunction",info);
       _das_class_method_offset[__fn_onBreakpoint] = adapt_field_offset("onBreakpoint",info);
       _das_class_method_offset[__fn_onVariable] = adapt_field_offset("onVariable",info);
+      _das_class_method_offset[__fn_onBreakpointsReset] = adapt_field_offset("onBreakpointsReset",info);
       _das_class_method_offset[__fn_onTick] = adapt_field_offset("onTick",info);
       _das_class_method_offset[__fn_onCollect] = adapt_field_offset("onCollect",info);
       _das_class_method_offset[__fn_onLog] = adapt_field_offset("onLog",info);
@@ -892,6 +894,15 @@ public:
       <void *,Context &,char * const ,char * const ,TypeInfo const  &,void * const >
         (__context__,nullptr,__funcCall__,
           self,ctx,category,name,info,data);
+  }
+  __forceinline Func get_onBreakpointsReset ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onBreakpointsReset]);
+  }
+  __forceinline void invoke_onBreakpointsReset ( Context * __context__, Func __funcCall__, void * self, char * const  file, int32_t breakpointsNum ) const {
+    das_invoke_function<void>::invoke
+      <void *,char * const ,int32_t>
+        (__context__,nullptr,__funcCall__,
+          self,file,breakpointsNum);
   }
   __forceinline Func get_onTick ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onTick]);
