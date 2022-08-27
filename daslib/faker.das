@@ -83,6 +83,28 @@ def public random_uint ( var faker:Faker )
     faker.rnd |> next(i)
     return i
 
+def public random_float ( var faker:Faker )
+    var i = 0u
+    faker.rnd |> next(i)
+    return unsafe(reinterpret<float> i)
+
+def public random_float2 ( var faker:Faker )
+    return float2(faker |> random_float, faker |> random_float)
+
+def public random_float3 ( var faker:Faker )
+    return float3(faker |> random_float, faker |> random_float, faker |> random_float)
+
+def public random_float4 ( var faker:Faker )
+    return float4(faker |> random_float, faker |> random_float, faker |> random_float, faker |> random_float)
+
+variant BitRepresentation64
+    ui2 : uint[2]
+    d   : double
+
+def public random_double ( var faker:Faker )
+    var b = [[ BitRepresentation64 ui2=[[uint[2] faker |> random_uint; faker |> random_uint]] ]]
+    return unsafe(b.d)
+
 def public any_set ( var faker:Faker )
     var ch : uint[8]
     for c in ch
