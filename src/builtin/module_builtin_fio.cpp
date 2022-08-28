@@ -425,11 +425,11 @@ namespace das {
             return -1;
         }
 #ifdef _MSC_VER
-        FILE * f = cmd ? _popen(cmd, "rt") : nullptr;
+        FILE * f = _popen(cmd, "rt");
 #elif defined(__linux__)
-        FILE * f = cmd ? popen(cmd, "r") : nullptr;
+        FILE * f = popen(cmd, "r");
 #else
-        FILE * f = cmd ? popen(cmd, "r+") : nullptr;
+        FILE * f = popen(cmd, "r+");
 #endif
         vec4f args[1];
         args[0] = cast<FILE *>::from(f);
