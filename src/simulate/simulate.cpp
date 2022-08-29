@@ -944,9 +944,6 @@ namespace das
         debugInfo = make_shared<DebugInfoAllocator>();
         ownStack = (stackSize != 0);
         persistent = ph;
-        for_each_debug_agent([&]( const DebugAgentPtr & pAgent ){
-            pAgent->onCreateContext(this);
-        });
     }
 
     void Context::strip() {
@@ -1143,9 +1140,7 @@ namespace das
         tabGMnLookup = ctx.tabGMnLookup;
         tabAdLookup = ctx.tabAdLookup;
         // register
-        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-            pAgent->onCreateContext(this);
-        });
+        announceCreation();
         // now, make it good to go
         restart();
         if ( stack.size() > globalInitStackSize ) {
@@ -1253,6 +1248,12 @@ namespace das
         // we need small repro of this happening. disabling the assert until i find one
         // DAS_ASSERTF(rel.newCode->depth()<=1,"after code relocation all code should be on one page");
         code = rel.newCode;
+    }
+
+    void Context::announceCreation() {
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onCreateContext(this);
+        });
     }
 
     char * Context::intern(const char * str) {

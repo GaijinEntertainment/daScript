@@ -3074,6 +3074,8 @@ namespace das
             });
         }
         context.thisHelper = nullptr;
+        // dispatch about new inited context
+        context.announceCreation();
         if ( options.getBoolOption("log_debug_mem",false) ) {
             helper.logMemInfo(logs);
         }

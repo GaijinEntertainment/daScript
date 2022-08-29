@@ -595,6 +595,7 @@ namespace das
         }
 
         void relocateCode( bool pwh = false );
+        void announceCreation();
         void collectStringHeap(LineInfo * at, bool validate);
         void collectHeap(LineInfo * at, bool stringHeap, bool validate);
         void reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly);
