@@ -905,6 +905,12 @@ namespace das
     static DAS_THREAD_LOCAL bool g_isInDebugAgentCreation = false;
 
     template <typename TT>
+    void on_debug_agent_mutex ( const TT & lmbd ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lmbd ();
+    }
+
+    template <typename TT>
     void for_each_debug_agent ( const TT & lmbd ) {
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         for ( auto & it : g_DebugAgents ) {
@@ -1154,11 +1160,13 @@ namespace das
     }
 
     Context::~Context() {
-        // unregister
-        category.value |= uint32_t(ContextCategory::dead);
-        // register
-        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-            pAgent->onDestroyContext(this);
+        on_debug_agent_mutex([&](){
+            // unregister
+            category.value |= uint32_t(ContextCategory::dead);
+            // register
+            for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+                pAgent->onDestroyContext(this);
+            });
         });
         // shutdown
         runShutdownScript();
