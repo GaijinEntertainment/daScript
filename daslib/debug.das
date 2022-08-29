@@ -724,13 +724,13 @@ class private DAgent: DapiDebugAgent
 
         if withInstruments
             for c in contexts
-                if !c.ctx.category.debug_context
+                if !c.ctx.category.debug_context && c.ctx.category.macro_context
                     *c.ctx |> set_single_step(true)
 
     def reqResume(var exclude: DAContext)
         if withInstruments
             for ctx in contexts
-                if ctx.id != exclude.id && !ctx.ctx.category.debug_context
+                if ctx.id != exclude.id && !ctx.ctx.category.debug_context && !ctx.ctx.category.macro_context
                     *ctx.ctx |> set_single_step(false)
 
     def onBreakpointsChanged(ini: SetBreakpointsArguments): SetBreakpointsResponse
@@ -761,7 +761,7 @@ class private DAgent: DapiDebugAgent
             resBr.message = "{path}: instrumentation wasn't initined"
 
         for ctx in contexts
-            if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick
+            if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick || ctx.ctx.category.macro_context
                 continue
             *ctx.ctx |> clear_instruments()
             *ctx.ctx |> instrument_node(true) <| $(ati)
@@ -987,7 +987,7 @@ class private DAgent: DapiDebugAgent
             return
         dirtyContext = false
         for ctx in contexts
-            if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick
+            if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick || ctx.ctx.category.macro_context
                 continue
             *ctx.ctx |> clear_instruments()
             *ctx.ctx |> instrument_node(true) <| $(ati)
