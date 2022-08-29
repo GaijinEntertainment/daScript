@@ -2798,6 +2798,7 @@ namespace das
     void Program::makeMacroModule ( TextWriter & logs ) {
         isCompilingMacros = true;
         thisModule->macroContext = get_context(getContextStackSize());
+        thisModule->macroContext->category = uint32_t(das::ContextCategory::macro_context);
         auto oldAot = policies.aot;
         auto oldHeap = policies.persistent_heap;
         policies.aot = false;
@@ -2859,6 +2860,7 @@ namespace das
                         context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
                     }
                     gvar.mangledNameHash = pvar->getMangledNameHash();
+                    gvar.init = nullptr;
                 });
             }
         }
@@ -3073,6 +3075,8 @@ namespace das
             });
         }
         context.thisHelper = nullptr;
+        // dispatch about new inited context
+        context.announceCreation();
         if ( options.getBoolOption("log_debug_mem",false) ) {
             helper.logMemInfo(logs);
         }
