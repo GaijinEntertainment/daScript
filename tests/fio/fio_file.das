@@ -36,7 +36,7 @@ def test_fopen ( t:T? )
     t |> run("fuzz fread") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz(TOTAL_FUZZ_FILES) <|
-            let fname = fake |> any_file_name           // note: this should be any_string, but we are getting strange strange file names (unicode?), and one does not delete
+            let fname = fake |> any_file_name
             var stat : FStat
             if !stat(fname,stat) && !stat.is_valid
                 fopen(fname,"wb") <| $ ( f )
@@ -48,7 +48,7 @@ def test_fopen ( t:T? )
     t |> run("fuzz fmap") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz(TOTAL_FUZZ_FILES) <|
-            let fname = fake |> any_file_name           // note: this should be any_string, but we are getting strange strange file names (unicode?), and one does not delete
+            let fname = fake |> any_file_name
             var stat : FStat
             if !stat(fname,stat) && !stat.is_valid
                 fopen(fname,"wb") <| $ ( f )

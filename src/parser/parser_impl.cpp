@@ -122,6 +122,8 @@ namespace das {
                             at, CompilationError::invalid_annotation);
                         itA = annL->erase(itA);
                     }
+                } else {
+                    itA = annL->erase(itA);
                 }
             }
             swap ( func->annotations, *annL );
