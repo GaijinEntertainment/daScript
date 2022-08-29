@@ -2798,6 +2798,7 @@ namespace das
     void Program::makeMacroModule ( TextWriter & logs ) {
         isCompilingMacros = true;
         thisModule->macroContext = get_context(getContextStackSize());
+        thisModule->macroContext->category = uint32_t(das::ContextCategory::macro_context);
         auto oldAot = policies.aot;
         auto oldHeap = policies.persistent_heap;
         policies.aot = false;

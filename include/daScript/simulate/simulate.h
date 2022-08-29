@@ -51,6 +51,7 @@ namespace das
     ,   opengl =            (1<<4)
     ,   debugger_tick =     (1<<5)
     ,   debugger_attached = (1<<6)
+    ,   macro_context     = (1<<7)
     };
 
     struct GlobalVariable {
