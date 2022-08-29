@@ -244,7 +244,6 @@ namespace das {
         for ( auto km : kmp ) {
             delete km;
         }
-        clearGlobalAotLibrary();
     }
 
     bool Module::addAlias ( const TypeDeclPtr & at, bool canFail ) {
