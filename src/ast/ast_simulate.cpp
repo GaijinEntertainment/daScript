@@ -2859,6 +2859,7 @@ namespace das
                         context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;
                     }
                     gvar.mangledNameHash = pvar->getMangledNameHash();
+                    gvar.init = nullptr;
                 });
             }
         }
