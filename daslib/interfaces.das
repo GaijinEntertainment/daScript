@@ -8,6 +8,7 @@ module interfaces shared private
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/defer
+require daslib/generic_return
 require strings
 require ast
 
@@ -119,14 +120,8 @@ class ImplementsMacro : AstStructureAnnotation
                                 fcall_args |> emplace <| new [[ExprVar() at = fld.at, name := n]]
                                 fmethod_args |> emplace <| new [[Variable() name:=n, _type<-clone_type(t)]]
 
-                        var fmethod : FunctionPtr
-                        unsafe
-                            if cm._type.firstType.isVoid
-                                fmethod <- qmacro_method(fmethod_name,get_ptr(cls)) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
-                                    invoke ( self._self.$f(fld.name), *self._self, $a(fcall_args) ) // TODO: return_or_call
-                            else
-                                fmethod <- qmacro_method(fmethod_name,get_ptr(cls)) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
-                                    return invoke ( self._self.$f(fld.name), *self._self, $a(fcall_args) ) // TODO: return_or_call
+                        var fmethod <- qmacro_method(fmethod_name,get_ptr(cls)) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
+                            generic_return ( invoke ( self._self.$f(fld.name), *self._self, $a(fcall_args) ) )
                         add_function(st._module, fmethod)
                         break
                 if !found

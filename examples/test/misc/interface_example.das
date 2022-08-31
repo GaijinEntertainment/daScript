@@ -2,7 +2,7 @@ require daslib/interfaces
 
 [interface]
 class ITick
-    def abstract beforeTick : void
+    def abstract beforeTick : bool
     def abstract tick ( dt:float ) : void
     def abstract afterTick : void
 
@@ -18,6 +18,7 @@ class Foo
         print("tick {dt}\n")
     def ITick`beforeTick
         print("beforeTick\n")
+        return true
     def ITick`afterTick
         print("afterTick\n")
     def ILogger`log ( message : string )
