@@ -57,6 +57,11 @@ def FunctionPtr ( fun : Function? ) : FunctionPtr
     unsafe
         return reinterpret<FunctionPtr> fun
 
+[generic]
+def StructurePtr ( stru : Structure? ) : StructurePtr
+    unsafe
+        return reinterpret<StructurePtr> stru
+
 [macro_interface]
 class AstFunctionAnnotation
     def abstract transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr

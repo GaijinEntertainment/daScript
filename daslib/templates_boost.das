@@ -747,3 +747,29 @@ class private AstQFunctionMacro : AstQNamedMacro {}
 class private AstQVariableMacro : AstQNamedMacro
     override apply_call = "apply_qmacro_variable"
     override macro_call = "qmacro_variable"
+
+def public add_structure_field ( var cls:StructurePtr; name:string; var t:TypeDeclPtr; var init:ExpressionPtr )
+    let fi = length(cls.fields)
+    cls.fields |> resize(fi+1)
+    cls.fields[fi].name := name
+    cls.fields[fi]._type <- t
+    cls.fields[fi].init <- init
+    return fi
+
+def public make_class ( name:string; mod:Module? )
+    var st <- new [[Structure() name:=name, flags = bitfield(1)]]
+    make_class_rtti(get_ptr(st))
+    var virt_fin <- make_class_finalize(get_ptr(st))
+    add_function(mod, virt_fin)
+    return <- st
+
+def public make_class ( name:string; baseClass:Structure?; mod:Module? )
+    var st <- clone_structure(baseClass)
+    st.name := name
+    st.parent = baseClass
+    make_class_rtti(get_ptr(st))
+    var virt_fin <- make_class_finalize(get_ptr(st))
+    add_function(mod, virt_fin)
+    return <- st
+
+

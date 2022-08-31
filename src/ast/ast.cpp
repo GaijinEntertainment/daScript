@@ -1549,6 +1549,11 @@ namespace das {
             arg = vis.visitBlockArgument(this, arg, arg==arguments.back());
             if ( arg ) ++it; else it = arguments.erase(it);
         }
+        if ( returnType ) {
+            vis.preVisit(returnType.get());
+            returnType = returnType->visit(vis);
+            returnType = vis.visit(returnType.get());
+        }
         if ( finallyBeforeBody ) {
             visitFinally(vis);
         }

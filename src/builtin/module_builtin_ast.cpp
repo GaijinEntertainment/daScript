@@ -377,6 +377,14 @@ namespace das {
         return false;
     }
 
+    Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at ) {
+        if ( !name ) return nullptr;
+        if ( !prog ) context->throw_error_at(*at, "expecting program");
+        auto st = prog->findStructure(name);
+        if ( st.size()!=1 ) return nullptr;
+        return st.back().get();
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -584,7 +592,23 @@ namespace das {
         // errors
         addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
             SideEffects::modifyArgumentAndExternal, "ast_error")
-                ->args({"porogram","at","message","context","line"});;
+                ->args({"porogram","at","message","context","line"});
+        // class
+        addExtern<DAS_BIND_FUN(makeClassRtti)>(*this, lib,  "make_class_rtti",
+            SideEffects::modifyArgumentAndExternal, "makeClassRtti")
+                ->args({"class"});
+        addExtern<DAS_BIND_FUN(makeClassFinalize)>(*this, lib,  "make_class_finalize",
+            SideEffects::modifyArgumentAndExternal, "makeClassFinalize")
+                ->args({"class"});
+        addExtern<DAS_BIND_FUN(makeClassConstructor)>(*this, lib,  "make_class_constructor",
+            SideEffects::modifyArgumentAndExternal, "makeClassConstructor")
+                ->args({"baseClass","method"});
+        addExtern<DAS_BIND_FUN(modifyToClassMember)>(*this, lib,  "modify_to_class_member",
+            SideEffects::modifyArgumentAndExternal, "modifyToClassMember")
+                ->args({"func","baseClass","isExplicit","isConstant"});
+        addExtern<DAS_BIND_FUN(find_unique_structure)>(*this, lib,  "find_unique_structure",
+            SideEffects::accessExternal, "find_unique_structure")
+                ->args({"program","name","context","at"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {

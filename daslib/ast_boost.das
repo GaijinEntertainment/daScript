@@ -10,6 +10,19 @@ require ast public
 require strings
 require daslib/strings_boost
 
+def clone ( var args : dasvector`das_string; var nargs:array<string> )
+    let tot = length(nargs)
+    args |> resize ( tot )
+    for i in range(tot)
+        args[i] := nargs[i]
+    delete nargs
+
+def clone ( var args : dasvector`smart_ptr`TypeDecl; var nargs:array<TypeDeclPtr> )
+    args |> clear
+    for narg in nargs
+        args |> emplace(narg)
+    delete nargs
+
 def clone ( var args : dasvector`smart_ptr`Variable; var nargs:array<VariablePtr> )
     args |> clear
     for narg in nargs
