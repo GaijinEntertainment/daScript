@@ -60,33 +60,22 @@ class ImplementsMacro : AstStructureAnnotation
             return false
         cls.annotations |> erase(iface_index)
 
-        var iface_ptr <- new [[TypeDecl() baseType=Type tPointer, at = st.at,
-                firstType <- new [[TypeDecl() baseType=Type alias, alias:=iface_name, at = st.at]]
-            ]]
-        defer_delete(iface_ptr)
+        var iface_ptr <- qmacro_type(type<$t(StructurePtr(parent))?>); defer_delete(iface_ptr)
 
         // add {st}::_interface_{Foo} : Foo?
         st |> add_structure_field ( iface_var_name, clone_type(iface_ptr), [[ExpressionPtr]]);
 
         // add function {st}::get_{Foo} : Foo?
-        var fn_get_i <- qmacro_function(iface_get_name_func) <| $ ( var self: $t(st) ) : $t(iface_ptr)
+        var fn_get_i <- qmacro_method(iface_get_name_func,get_ptr(st)) <| $ ( var self: $t(st) ) : $t(iface_ptr)
             if self.$f(iface_var_name) == null
                 self.$f(iface_var_name) = new $t(cls)(unsafe(addr(self)))
             return self.$f(iface_var_name)
-        fn_get_i.flags |= FunctionFlags isClassMethod
-        fn_get_i.classParent = get_ptr(st)
         add_function(st._module, fn_get_i)
 
-        var st_ptr <- new [[TypeDecl() baseType=Type tPointer, at = st.at,
-                firstType <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st), at = st.at]]
-            ]]
-        defer_delete(st_ptr)
+        var st_ptr <- qmacro_type(type<$t(st)?>); defer_delete(st_ptr)
 
         // add {cls}::_self : {ST}?
-        let fi = cls |> add_structure_field ( "_self",
-            clone_type(st_ptr),
-            [[ExpressionPtr]]
-        );
+        let fi = cls |> add_structure_field ( "_self", clone_type(st_ptr), [[ExpressionPtr]]);
         cls.fields[fi].annotation |> add_annotation_argument("do_not_delete",true)
         cls.fields[fi].flags |= FieldDeclarationFlags doNotDelete
 
@@ -101,11 +90,7 @@ class ImplementsMacro : AstStructureAnnotation
         // add get_{Foo} : Foo?
         st |> add_structure_field (
             iface_get_name,
-            new [[TypeDecl() baseType=Type tFunction, at = st.at,
-                argTypes := [{TypeDeclPtr new [[TypeDecl() baseType=Type tStructure, at = st.at, structType = get_ptr(st)]]}],
-                argNames := [{string "self"}],
-                firstType <- clone_type(iface_ptr)
-            ]],
+            qmacro_type(type<function<(self:$t(st)):$t(iface_ptr)>>),
             new [[ExprAddr() at = st.at, target := iface_get_name_func]]
         );
 
@@ -118,9 +103,6 @@ class ImplementsMacro : AstStructureAnnotation
                 for cm in cls.fields
                     if cm.name == method_name
                         found = true
-                        if !(fld.init is ExprAddr)
-                            errors := "method {method_name} is not a method implementation"
-                            return false
 
                         let fmethod_name = "{iface_class_name}`{method_name}"
 
@@ -140,15 +122,12 @@ class ImplementsMacro : AstStructureAnnotation
                         var fmethod : FunctionPtr
                         unsafe
                             if cm._type.firstType.isVoid
-                                fmethod <- qmacro_function(fmethod_name) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
+                                fmethod <- qmacro_method(fmethod_name,get_ptr(cls)) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
                                     invoke ( self._self.$f(fld.name), *self._self, $a(fcall_args) ) // TODO: return_or_call
                             else
-                                fmethod <- qmacro_function(fmethod_name) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
+                                fmethod <- qmacro_method(fmethod_name,get_ptr(cls)) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
                                     return invoke ( self._self.$f(fld.name), *self._self, $a(fcall_args) ) // TODO: return_or_call
-                        fmethod.flags |= FunctionFlags isClassMethod
-                        fmethod.classParent = get_ptr(cls)
                         add_function(st._module, fmethod)
-
                         break
                 if !found
                     errors := "unknown interface method {method_name} in {iface_class_name}"

@@ -701,6 +701,13 @@ def public apply_qmacro_function ( fname:string; var expr:smart_ptr<Expression>;
     func.body <- qblk
     return <- func
 
+def public apply_qmacro_method ( fname:string; parent:Structure?; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : FunctionPtr
+    //! Implementation details for reification. This is a class method function generation reification.
+    var func <- apply_qmacro_function(fname,expr,blk)
+    func.flags |= FunctionFlags isClassMethod
+    func.classParent = parent
+    return <- func
+
 def public apply_qmacro_variable ( vname:string; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : VariablePtr
     //! Implementation details for reification. This is a variable generation reification.
     var vvar <- new [[Variable() at=expr.at, name:=vname]]
@@ -747,6 +754,38 @@ class private AstQFunctionMacro : AstQNamedMacro {}
 class private AstQVariableMacro : AstQNamedMacro
     override apply_call = "apply_qmacro_variable"
     override macro_call = "qmacro_variable"
+
+class private AstQNamedClassMacro : AstCallMacro
+    apply_call = "apply_qmacro_method"
+    macro_call = "qmacro_method"
+    //! This macro will implement expression reification for the named expressions (function, variable, etc.)
+    def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+        if call.arguments.length != 3
+            macro_error(prog,call.at,"expecting 3 arguments, {macro_call}(name,class,expression)")
+            return [[ExpressionPtr]]
+        if !(call.arguments[0]._type.isString)
+            macro_error(prog,call.at,"expecting function name, {macro_call}(NAME,class,expression)")
+            return [[ExpressionPtr]]
+        var qclone <- clone_expression(call.arguments[2])
+        var qblk <- apply_qrules(qclone)
+        if qblk==null
+            return [[ExpressionPtr]]
+        return <- new [[ExprCall() at=call.at,
+            name:=apply_call,
+            arguments := [{ExpressionPtr
+                clone_expression(call.arguments[0]);
+                clone_expression(call.arguments[1]);
+                new [[ExprQuote()
+                    at=call.at,
+                    arguments := [{ExpressionPtr
+                        qclone}]
+                ]];
+                new [[ExprMakeBlock() _block<-qblk, at=call.at]]
+            }]
+        ]]
+
+[call_macro(name="qmacro_method")]
+class private AstQMethodMacro : AstQNamedClassMacro {}
 
 def public add_structure_field ( var cls:StructurePtr; name:string; var t:TypeDeclPtr; var init:ExpressionPtr )
     let fi = length(cls.fields)
