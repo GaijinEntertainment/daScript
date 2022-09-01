@@ -933,6 +933,30 @@ function_name
     |   DAS_OPERATOR DAS_IS { $$ = new string("`is"); }
     |   DAS_OPERATOR DAS_AS { $$ = new string("`as"); }
     |   DAS_OPERATOR '?' DAS_AS { $$ = new string("?as"); }
+    |   DAS_TBOOL    { $$ = new string("bool"); }
+    |   DAS_TSTRING  { $$ = new string("string"); }
+    |   DAS_TINT     { $$ = new string("int"); }
+    |   DAS_TINT2    { $$ = new string("int2"); }
+    |   DAS_TINT3    { $$ = new string("int3"); }
+    |   DAS_TINT4    { $$ = new string("int4"); }
+    |   DAS_TUINT    { $$ = new string("uint"); }
+    |   DAS_TUINT2   { $$ = new string("uint2"); }
+    |   DAS_TUINT3   { $$ = new string("uint3"); }
+    |   DAS_TUINT4   { $$ = new string("uint4"); }
+    |   DAS_TFLOAT   { $$ = new string("float"); }
+    |   DAS_TFLOAT2  { $$ = new string("float2"); }
+    |   DAS_TFLOAT3  { $$ = new string("float3"); }
+    |   DAS_TFLOAT4  { $$ = new string("float4"); }
+    |   DAS_TRANGE   { $$ = new string("range"); }
+    |   DAS_TURANGE  { $$ = new string("urange"); }
+    |   DAS_TINT64   { $$ = new string("int64"); }
+    |   DAS_TUINT64  { $$ = new string("uint64"); }
+    |   DAS_TDOUBLE  { $$ = new string("double"); }
+    |   DAS_TINT8    { $$ = new string("int8"); }
+    |   DAS_TUINT8   { $$ = new string("uint8"); }
+    |   DAS_TINT16   { $$ = new string("int16"); }
+    |   DAS_TUINT16  { $$ = new string("uint16"); }
+
     ;
 
 global_function_declaration
