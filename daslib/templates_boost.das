@@ -129,6 +129,11 @@ class private TemplateVisitor : AstVisitor
                 let nv <- new [[ExprVar() at=expr.at, name:="{ps.prefix}{expr.name}{ps.suffix}"]]
                 return nv
         return expr
+    def override visitExprAddr( var expr:smart_ptr<ExprAddr> ) : ExpressionPtr
+        let vn = string(expr.target)
+        if key_exists(rules.var2name,vn)
+            expr.target := rules.var2name[vn]
+        return expr
     def override visitExprLet( var expr:smart_ptr<ExprLet> ) : ExpressionPtr
         for v in expr.variables
             let vn = string(v.name)
@@ -515,11 +520,13 @@ class private QRulesVisitor : AstVisitor
                 if expr.value is ExprLet
                     (expr.value as ExprLet).variables[0].name := new_tag_name
                     return clone_expression(expr.value)
+                elif expr.value is ExprAddr
+                    (expr.value as ExprAddr).target := new_tag_name
+                    return clone_expression(expr.value)
                 else
                     compiling_program() |> macro_error(expr.at,"unexpected $i(name)({expr.value.__rtti})")
                     failed = true
                     return expr
-
         elif expr.name=="f" // field
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
                 name:="renameField",

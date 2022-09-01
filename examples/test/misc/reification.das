@@ -3,6 +3,11 @@ require daslib/ast_boost
 require daslib/strings
 require daslib/defer
 
+def test_addr
+    let foobar = "FOO_BAR"
+    var aaddr <- qmacro(@@ $i(foobar)); defer_delete(aaddr)
+    print("\nADDR IS:\n{describe(aaddr)}\n")
+
 def test_fun_arg
     var foo <- [{VariablePtr
         new [[Variable() name:="v1", _type<-qmacro_type(type<int>)]];
@@ -78,6 +83,7 @@ def test_regular
 
 [export]
 def main
+    test_addr()
     test_regular()
     test_fun()
     test_type()

@@ -14,6 +14,7 @@ require ast
 
 [structure_macro(name="interface")]
 class InterfaceMacro : AstStructureAnnotation
+    //! implements 'interface' macro, which verifies if class is an interface (no own variables)
     def override finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         for fld in st.fields
             if fld.name=="__rtti"
@@ -25,9 +26,8 @@ class InterfaceMacro : AstStructureAnnotation
 
 [structure_macro(name="implements")]
 class ImplementsMacro : AstStructureAnnotation
-
+    //! implements 'implements' macro, adds get_{Interface} method as well as interface bindings and implementations
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-
         if length(args)!=1
             errors := "implements macro takes exactly one argument"
             return false
@@ -39,17 +39,17 @@ class ImplementsMacro : AstStructureAnnotation
         else
             errors := "expecting [implements(InteraceName)] or [implements(name=InteraceName)]"
             return false
-
+        // base interface class
         var parent <- compiling_program() |> find_unique_structure(iface_name)
         if parent == null
             errors := "{iface_name} not found"
             return false
-
+        // all names
         let iface_var_name = "_interface_{iface_name}"
         let iface_class_name = "_implementation_{st.name}_{iface_name}"
         let iface_get_name = "get_{iface_name}"
         let iface_get_name_func = "{st.name}`{iface_get_name}"
-
+        // make class for the interface, remove 'interface' annotation
         var cls <- make_class(iface_class_name, parent, st._module)
         var iface_index = -1
         for ann,ii in cls.annotations,range(100500)
@@ -60,26 +60,20 @@ class ImplementsMacro : AstStructureAnnotation
             errors := "can only implement interfaces, {iface_name} is not an [interface]"
             return false
         cls.annotations |> erase(iface_index)
-
-        var iface_ptr <- qmacro_type(type<$t(StructurePtr(parent))?>); defer_delete(iface_ptr)
-
         // add {st}::_interface_{Foo} : Foo?
+        var iface_ptr <- qmacro_type(type<$t(StructurePtr(parent))?>); defer_delete(iface_ptr)
         st |> add_structure_field ( iface_var_name, clone_type(iface_ptr), [[ExpressionPtr]]);
-
         // add function {st}::get_{Foo} : Foo?
         var fn_get_i <- qmacro_method(iface_get_name_func,get_ptr(st)) <| $ ( var self: $t(st) ) : $t(iface_ptr)
             if self.$f(iface_var_name) == null
                 self.$f(iface_var_name) = new $t(cls)(unsafe(addr(self)))
             return self.$f(iface_var_name)
         add_function(st._module, fn_get_i)
-
-        var st_ptr <- qmacro_type(type<$t(st)?>); defer_delete(st_ptr)
-
         // add {cls}::_self : {ST}?
+        var st_ptr <- qmacro_type(type<$t(st)?>); defer_delete(st_ptr)
         let fi = cls |> add_structure_field ( "_self", clone_type(st_ptr), [[ExpressionPtr]]);
         cls.fields[fi].annotation |> add_annotation_argument("do_not_delete",true)
         cls.fields[fi].flags |= FieldDeclarationFlags doNotDelete
-
         // add {cls} ( var s : {ST}? )
         var ctor <- qmacro_function("{iface_class_name}`{iface_class_name}") <| $ ( s : $t(st_ptr) )
             _self = s
@@ -87,14 +81,12 @@ class ImplementsMacro : AstStructureAnnotation
         modify_to_class_member(get_ptr(ctor), get_ptr(cls), false, false)
         add_function(st._module, ctor)
         add_function(st._module, ctor_fun)
-
         // add get_{Foo} : Foo?
         st |> add_structure_field (
             iface_get_name,
             qmacro_type(type<function<(self:$t(st)):$t(iface_ptr)>>),
-            new [[ExprAddr() at = st.at, target := iface_get_name_func]]
+            qmacro(@@$i(iface_get_name_func))
         );
-
         // now, for the methods
         let skipl = length(iface_name) + 1
         for fld in st.fields
@@ -104,22 +96,16 @@ class ImplementsMacro : AstStructureAnnotation
                 for cm in cls.fields
                     if cm.name == method_name
                         found = true
-
                         let fmethod_name = "{iface_class_name}`{method_name}"
-
                         cm.init := null
-                        cm.init <- new [[ExprCast() at = fld.at,
-                            castType <- clone_type(cm._type),
-                            subexpr <- new [[ExprAddr() at = fld.at, target := fmethod_name]]
-                        ]]
-
+                        unsafe
+                            cm.init <- qmacro(cast<$t(cm._type)>(@@$i(fmethod_name)))
                         var fmethod_args : array<VariablePtr>; defer_delete(fmethod_args)
                         var fcall_args : array<ExpressionPtr>; defer_delete(fcall_args)
                         for n,t in cm._type.argNames,cm._type.argTypes
                             if n != "self"
-                                fcall_args |> emplace <| new [[ExprVar() at = fld.at, name := n]]
+                                fcall_args |> emplace <| qmacro($i(n))
                                 fmethod_args |> emplace <| new [[Variable() name:=n, _type<-clone_type(t)]]
-
                         var fmethod <- qmacro_method(fmethod_name,get_ptr(cls)) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
                             generic_return ( invoke ( self._self.$f(fld.name), *self._self, $a(fcall_args) ) )
                         add_function(st._module, fmethod)
@@ -127,8 +113,6 @@ class ImplementsMacro : AstStructureAnnotation
                 if !found
                     errors := "unknown interface method {method_name} in {iface_class_name}"
                     return false
-
         add_structure(st._module, cls)
-
         return true
 

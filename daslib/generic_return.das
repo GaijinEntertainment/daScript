@@ -24,7 +24,13 @@ class GenericReturn : AstCallMacro
             return qmacro_block <|
                 $e(ret_expr)
                 return
-        else
+        elif ret_expr._type.canCopy
             return qmacro_block <|
                 return $e(ret_expr)
+        elif ret_expr._type.canMove
+            return qmacro_block <|
+                return <- $e(ret_expr)
+        else
+            macro_error(prog,expr.at,"generic_return for the type {describe(ret_expr._type)}, which can't be copied or moved")
+            return [[ExpressionPtr]]
 
