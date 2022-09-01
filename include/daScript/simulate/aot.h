@@ -2431,6 +2431,30 @@ namespace das {
     __forceinline uint32_t enum8_to_uint  ( EnumStub8 stub )  { return uint32_t(stub.value); }
     __forceinline uint32_t enum16_to_uint ( EnumStub16 stub ) { return uint32_t(stub.value); }
 
+    __forceinline int8_t enum_to_int8   ( EnumStub stub )   { return int8_t(stub.value); }
+    __forceinline int8_t enum8_to_int8  ( EnumStub8 stub )  { return int8_t(stub.value); }
+    __forceinline int8_t enum16_to_int8 ( EnumStub16 stub ) { return int8_t(stub.value); }
+
+    __forceinline uint8_t enum_to_uint8   ( EnumStub stub )   { return uint8_t(stub.value); }
+    __forceinline uint8_t enum8_to_uint8  ( EnumStub8 stub )  { return uint8_t(stub.value); }
+    __forceinline uint8_t enum16_to_uint8 ( EnumStub16 stub ) { return uint8_t(stub.value); }
+
+    __forceinline int16_t enum_to_int16   ( EnumStub stub )   { return int16_t(stub.value); }
+    __forceinline int16_t enum8_to_int16  ( EnumStub8 stub )  { return int16_t(stub.value); }
+    __forceinline int16_t enum16_to_int16 ( EnumStub16 stub ) { return int16_t(stub.value); }
+
+    __forceinline uint16_t enum_to_uint16   ( EnumStub stub )   { return uint16_t(stub.value); }
+    __forceinline uint16_t enum8_to_uint16  ( EnumStub8 stub )  { return uint16_t(stub.value); }
+    __forceinline uint16_t enum16_to_uint16 ( EnumStub16 stub ) { return uint16_t(stub.value); }
+
+    __forceinline int64_t enum_to_int64   ( EnumStub stub )   { return int64_t(stub.value); }
+    __forceinline int64_t enum8_to_int64  ( EnumStub8 stub )  { return int64_t(stub.value); }
+    __forceinline int64_t enum16_to_int64 ( EnumStub16 stub ) { return int64_t(stub.value); }
+
+    __forceinline uint64_t enum_to_uint64   ( EnumStub stub )   { return uint64_t(stub.value); }
+    __forceinline uint64_t enum8_to_uint64  ( EnumStub8 stub )  { return uint64_t(stub.value); }
+    __forceinline uint64_t enum16_to_uint64 ( EnumStub16 stub ) { return uint64_t(stub.value); }
+
 
     template <typename CType>
     struct das_using {
