@@ -1344,7 +1344,7 @@ namespace das {
                     error("enumeration value " + name + " can't be inferred yet",  "", "",
                         value->at);
                 } else if ( !value->type || !value->type->isInteger() ) {
-                    error("enumeration value " + name + " has to be signed or unsigned integer of any size", "", "",
+                    error("enumeration value " + name + " has to be signed or unsigned integer of any size, and not " + value->type->describe(), "", "",
                           value->at, CompilationError::invalid_enumeration);
                 } else if ( !value->rtti_isConstant() ) {
                     if ( auto fenum = getConstExpr(value) ) {
@@ -5385,7 +5385,8 @@ namespace das {
                     if ( !enumv.second ) return nullptr;                        // not found???
                     if ( !enumv.first || !enumv.first->type ) return nullptr;   // not resolved
                     if ( !enumv.first->rtti_isConstant() ) return nullptr;      // not a constant
-                    if ( enumc->baseType != enumv.first->type->baseType ) return nullptr;   // not a constant of the same type
+                    // TODO: do we need to check if const is of the same size?
+                    // if ( enumc->baseType != enumv.first->type->baseType ) return nullptr;   // not a constant of the same type
                 }
                 return expr;
             }
