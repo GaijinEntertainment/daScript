@@ -308,14 +308,15 @@ namespace das {
     Enumeration * ast_addEmptyEnum ( yyscan_t scanner, string * name, const LineInfo & atName ) {
         das_checkName(scanner,*name,atName);
         auto pEnum = make_smart<Enumeration>(*name);
-        auto res = pEnum.get();
+        delete name;
         pEnum->at = atName;
         if ( !yyextra->g_Program->addEnumeration(pEnum) ) {
-            das_yyerror(scanner,"enumeration is already defined "+*name, atName,
+            das_yyerror(scanner,"enumeration is already defined "+pEnum->name, atName,
                 CompilationError::enumeration_already_declared);
+            return pEnum.orphan();
+        } else {
+            return pEnum.get();
         }
-        delete name;
-        return res;
     }
 
     void ast_enumDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & atannL, bool pubE, Enumeration * pEnum, Enumeration * pE, Type ebt ) {

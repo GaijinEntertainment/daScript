@@ -128,7 +128,7 @@
 %destructor { delete $$; } <fa>
 %destructor { delete $$; } <faList>
 %destructor { delete $$; } <pMakeStruct>
-%destructor { delete $$; } <pEnum>
+%destructor { if ( $$->use_count()==1 ) delete $$; } <pEnum>
 %destructor { delete $$; } <pCapt>
 %destructor { delete $$; } <pCaptList>
 %destructor { delete $$.firstType; $$.secondType; } <aTypePair>

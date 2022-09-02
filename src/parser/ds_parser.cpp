@@ -4686,11 +4686,11 @@ yydestruct (const char *yymsg,
         break;
 
     case YYSYMBOL_enum_list: /* enum_list  */
-            { delete ((*yyvaluep).pEnum); }
+            { if ( ((*yyvaluep).pEnum)->use_count()==1 ) delete ((*yyvaluep).pEnum); }
         break;
 
     case YYSYMBOL_enum_name: /* enum_name  */
-            { delete ((*yyvaluep).pEnum); }
+            { if ( ((*yyvaluep).pEnum)->use_count()==1 ) delete ((*yyvaluep).pEnum); }
         break;
 
     case YYSYMBOL_optional_structure_parent: /* optional_structure_parent  */
