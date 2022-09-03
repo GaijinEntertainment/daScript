@@ -708,11 +708,11 @@ def public apply_qmacro_function ( fname:string; var expr:smart_ptr<Expression>;
     func.body <- qblk
     return <- func
 
-def public apply_qmacro_method ( fname:string; parent:Structure?; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : FunctionPtr
+def public apply_qmacro_method ( fname:string; parent:StructurePtr; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : FunctionPtr
     //! Implementation details for reification. This is a class method function generation reification.
     var func <- apply_qmacro_function(fname,expr,blk)
     func.flags |= FunctionFlags isClassMethod
-    func.classParent = parent
+    func.classParent = get_ptr(parent)
     return <- func
 
 def public apply_qmacro_variable ( vname:string; var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : VariablePtr
@@ -804,18 +804,35 @@ def public add_structure_field ( var cls:StructurePtr; name:string; var t:TypeDe
 
 def public make_class ( name:string; mod:Module? )
     var st <- new [[Structure() name:=name, flags = bitfield(1)]]
-    make_class_rtti(get_ptr(st))
-    var virt_fin <- make_class_finalize(get_ptr(st))
+    unsafe(builtin_ast_make_class_rtti(get_ptr(st)))
+    var virt_fin <- unsafe(builtin_ast_make_class_finalize(get_ptr(st)))
     add_function(mod, virt_fin)
     return <- st
 
+def public make_class ( name:string; baseClass:StructurePtr; mod:Module? )
+    return make_class(name, get_ptr(baseClass), mod)
+
 def public make_class ( name:string; baseClass:Structure?; mod:Module? )
+    if mod == null
+        panic("expecting module")
     var st <- clone_structure(baseClass)
     st.name := name
     st.parent = baseClass
-    make_class_rtti(get_ptr(st))
-    var virt_fin <- make_class_finalize(get_ptr(st))
+    unsafe(builtin_ast_make_class_rtti(get_ptr(st)))
+    var virt_fin <- unsafe(builtin_ast_make_class_finalize(get_ptr(st)))
     add_function(mod, virt_fin)
     return <- st
 
+def public make_class_constructor ( cls:StructurePtr; ctor:FunctionPtr )
+    if cls==null
+        panic("expecting class")
+    if ctor==null
+        panic("expecting constructor function")
+    return <- unsafe(builtin_ast_make_class_constructor(get_ptr(cls), get_ptr(ctor)))
 
+def public modify_to_class_member ( cls:StructurePtr; fun:FunctionPtr; isExplicit:bool; Constant:bool )
+    if cls==null
+        panic("expecting class")
+    if fun==null
+        panic("expecting function")
+    unsafe(builtin_ast_modify_to_class_member(get_ptr(fun), get_ptr(cls), isExplicit, Constant))

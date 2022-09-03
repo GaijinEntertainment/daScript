@@ -33,7 +33,8 @@ namespace das {
         return field ? *(Func*)field : Func(0);
     }
 
-    bool addModuleFunction ( Module * module, FunctionPtr & _func, Context * ) {
+    bool addModuleFunction ( Module * module, FunctionPtr & _func, Context * context, LineInfoArg * lineInfo ) {
+        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
         FunctionPtr func = move(_func);
         return module->addFunction(func, true);
     }
@@ -82,12 +83,14 @@ namespace das {
         }
     }
 
-    bool addModuleGeneric ( Module * module, FunctionPtr & _func, Context * ) {
+    bool addModuleGeneric ( Module * module, FunctionPtr & _func, Context * context, LineInfoArg * lineInfo ) {
+        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
         FunctionPtr func = move(_func);
         return module->addGeneric(func, true);
     }
 
-    bool addModuleVariable ( Module * module, VariablePtr & _var, Context * ) {
+    bool addModuleVariable ( Module * module, VariablePtr & _var, Context * context, LineInfoArg * lineInfo ) {
+        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
         VariablePtr var = move(_var);
         return module->addVariable(move(var), true);
     }
@@ -439,13 +442,13 @@ namespace das {
                 ->args({"function","block","context","line"});;
         addExtern<DAS_BIND_FUN(addModuleFunction)>(*this, lib, "add_function",
             SideEffects::modifyExternal, "addModuleFunction")
-                ->args({"module","function","context"});
+                ->args({"module","function","context","line"});
         addExtern<DAS_BIND_FUN(addModuleGeneric)>(*this, lib, "add_generic",
             SideEffects::modifyExternal, "addModuleGeneric")
-                ->args({"module","function","context"});
+                ->args({"module","function","context","line"});
         addExtern<DAS_BIND_FUN(addModuleVariable)>(*this, lib, "add_variable",
             SideEffects::modifyExternal, "addModuleVariable")
-                ->args({"module","variable","context"});
+                ->args({"module","variable","context","line"});
         addExtern<DAS_BIND_FUN(findModuleVariable)>(*this, lib, "find_variable",
             SideEffects::modifyExternal, "findModuleVariable")
                 ->args({"module","variable"});
@@ -594,18 +597,18 @@ namespace das {
             SideEffects::modifyArgumentAndExternal, "ast_error")
                 ->args({"porogram","at","message","context","line"});
         // class
-        addExtern<DAS_BIND_FUN(makeClassRtti)>(*this, lib,  "make_class_rtti",
+        addExtern<DAS_BIND_FUN(makeClassRtti)>(*this, lib,  "builtin_ast_make_class_rtti",
             SideEffects::modifyArgumentAndExternal, "makeClassRtti")
-                ->args({"class"});
-        addExtern<DAS_BIND_FUN(makeClassFinalize)>(*this, lib,  "make_class_finalize",
+                ->args({"class"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(makeClassFinalize)>(*this, lib,  "builtin_ast_make_class_finalize",
             SideEffects::modifyArgumentAndExternal, "makeClassFinalize")
-                ->args({"class"});
-        addExtern<DAS_BIND_FUN(makeClassConstructor)>(*this, lib,  "make_class_constructor",
+                ->args({"class"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(makeClassConstructor)>(*this, lib,  "builtin_ast_make_class_constructor",
             SideEffects::modifyArgumentAndExternal, "makeClassConstructor")
-                ->args({"baseClass","method"});
-        addExtern<DAS_BIND_FUN(modifyToClassMember)>(*this, lib,  "modify_to_class_member",
+                ->args({"baseClass","method"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(modifyToClassMember)>(*this, lib,  "builtin_ast_modify_to_class_member",
             SideEffects::modifyArgumentAndExternal, "modifyToClassMember")
-                ->args({"func","baseClass","isExplicit","isConstant"});
+                ->args({"func","baseClass","isExplicit","isConstant"})->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(find_unique_structure)>(*this, lib,  "find_unique_structure",
             SideEffects::accessExternal, "find_unique_structure")
                 ->args({"program","name","context","at"});

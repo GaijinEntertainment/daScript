@@ -477,9 +477,9 @@ namespace das {
     int addEnumerationEntry ( smart_ptr<Enumeration> enu, const char* name );
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
     void forEachGenericFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
-    bool addModuleFunction ( Module * module, FunctionPtr & func, Context * context );
-    bool addModuleGeneric ( Module * module, FunctionPtr & func, Context * context );
-    bool addModuleVariable ( Module * module, VariablePtr & var, Context * );
+    bool addModuleFunction ( Module * module, FunctionPtr & func, Context * context, LineInfoArg * lineInfo );
+    bool addModuleGeneric ( Module * module, FunctionPtr & func, Context * context, LineInfoArg * lineInfo );
+    bool addModuleVariable ( Module * module, VariablePtr & var, Context * context, LineInfoArg * lineInfo );
     VariablePtr findModuleVariable ( Module * module, const char * name );
     bool removeModuleStructure ( Module * module, StructurePtr & _stru );
     bool addModuleStructure ( Module * module, StructurePtr & stru );

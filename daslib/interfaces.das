@@ -64,7 +64,7 @@ class ImplementsMacro : AstStructureAnnotation
         var iface_ptr <- qmacro_type(type<$t(StructurePtr(parent))?>); defer_delete(iface_ptr)
         st |> add_structure_field ( iface_var_name, clone_type(iface_ptr), [[ExpressionPtr]]);
         // add function {st}::get_{Foo} : Foo?
-        var fn_get_i <- qmacro_method(iface_get_name_func,get_ptr(st)) <| $ ( var self: $t(st) ) : $t(iface_ptr)
+        var fn_get_i <- qmacro_method(iface_get_name_func,st) <| $ ( var self: $t(st) ) : $t(iface_ptr)
             if self.$f(iface_var_name) == null
                 self.$f(iface_var_name) = new $t(cls)(unsafe(addr(self)))
             return self.$f(iface_var_name)
@@ -77,8 +77,8 @@ class ImplementsMacro : AstStructureAnnotation
         // add {cls} ( var s : {ST}? )
         var ctor <- qmacro_function("{iface_class_name}`{iface_class_name}") <| $ ( s : $t(st_ptr) )
             _self = s
-        var ctor_fun <- make_class_constructor(get_ptr(cls), get_ptr(ctor))
-        modify_to_class_member(get_ptr(ctor), get_ptr(cls), false, false)
+        var ctor_fun <- make_class_constructor(cls, ctor)
+        modify_to_class_member(cls, ctor, false, false)
         add_function(st._module, ctor)
         add_function(st._module, ctor_fun)
         // add get_{Foo} : Foo?
@@ -106,7 +106,7 @@ class ImplementsMacro : AstStructureAnnotation
                             if n != "self"
                                 fcall_args |> emplace <| qmacro($i(n))
                                 fmethod_args |> emplace <| new [[Variable() name:=n, _type<-clone_type(t)]]
-                        var fmethod <- qmacro_method(fmethod_name,get_ptr(cls)) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
+                        var fmethod <- qmacro_method(fmethod_name,cls) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
                             generic_return ( invoke ( self._self.$f(fld.name), *self._self, $a(fcall_args) ) )
                         add_function(st._module, fmethod)
                         break
