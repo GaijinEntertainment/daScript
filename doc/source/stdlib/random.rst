@@ -38,6 +38,7 @@ Seed and basic generators
   *  :ref:`random_seed2D (seed:int4& -const;co:int2 const;cf:int const) : float4 <function-_at_random_c__c_random_seed2D_&i4_Ci2_Ci>` 
   *  :ref:`random_int (seed:int4& -const) : int <function-_at_random_c__c_random_int_&i4>` 
   *  :ref:`random_big_int (seed:int4& -const) : int <function-_at_random_c__c_random_big_int_&i4>` 
+  *  :ref:`random_uint (seed:int4& -const) : uint <function-_at_random_c__c_random_uint_&i4>` 
   *  :ref:`random_int4 (seed:int4& -const) : int4 <function-_at_random_c__c_random_int4_&i4>` 
   *  :ref:`random_float (seed:int4& -const) : float <function-_at_random_c__c_random_float_&i4>` 
   *  :ref:`random_float4 (seed:int4& -const) : float4 <function-_at_random_c__c_random_float4_&i4>` 
@@ -106,6 +107,21 @@ random_big_int returns int
 
 random integer 0..32768*32768-1 (LCG_RAND_MAX_BIG)
 
+.. _function-_at_random_c__c_random_uint_&i4:
+
+.. das:function:: random_uint(seed: int4&)
+
+random_uint returns uint
+
++--------+-------------+
++argument+argument type+
++========+=============+
++seed    +int4&        +
++--------+-------------+
+
+
+random integer 0..32768*32768-1 (LCG_RAND_MAX_BIG)
+
 .. _function-_at_random_c__c_random_int4_&i4:
 
 .. das:function:: random_int4(seed: int4&)
@@ -150,6 +166,27 @@ random_float4 returns float4
 
 
 random float4, each component is 0..1
+
+++++++++++++++++
+Random iterators
+++++++++++++++++
+
+  *  :ref:`each_random_uint (rnd_seed:int const) : iterator\<uint\> <function-_at_random_c__c_each_random_uint_Ci>` 
+
+.. _function-_at_random_c__c_each_random_uint_Ci:
+
+.. das:function:: each_random_uint(rnd_seed: int const)
+
+each_random_uint returns iterator<uint>
+
++--------+-------------+
++argument+argument type+
++========+=============+
++rnd_seed+int const    +
++--------+-------------+
+
+
+|function-random-each_random_uint|
 
 ++++++++++++++++++++++
 Specific distributions

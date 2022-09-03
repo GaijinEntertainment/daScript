@@ -1163,6 +1163,36 @@ setup_tag_annotation returns auto
 Uncategorized
 +++++++++++++
 
+.. _function-_at_ast_boost_c__c_clone_H_ls__builtin__c__c_dasvector_rq_das_string_gr__1_ls_s_gr_A:
+
+.. das:function:: clone(args: dasvector`das_string; nargs: array<string>)
+
++--------+----------------------------------------------------------------------------+
++argument+argument type                                                               +
++========+============================================================================+
++args    + :ref:`builtin::dasvector`das_string <handle-builtin-dasvector`das_string>` +
++--------+----------------------------------------------------------------------------+
++nargs   +array<string>                                                               +
++--------+----------------------------------------------------------------------------+
+
+
+|function-ast_boost-clone|
+
+.. _function-_at_ast_boost_c__c_clone_H_ls__builtin__c__c_dasvector_rq_smart_ptr_rq_TypeDecl_gr__1_ls_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_gr_A:
+
+.. das:function:: clone(args: dasvector`smart_ptr`TypeDecl; nargs: array<smart_ptr<ast::TypeDecl>>)
+
++--------+--------------------------------------------------------------------------------------------+
++argument+argument type                                                                               +
++========+============================================================================================+
++args    + :ref:`builtin::dasvector`smart_ptr`TypeDecl <handle-builtin-dasvector`smart_ptr`TypeDecl>` +
++--------+--------------------------------------------------------------------------------------------+
++nargs   +array< :ref:`TypeDeclPtr <alias-TypeDeclPtr>` >                                             +
++--------+--------------------------------------------------------------------------------------------+
+
+
+|function-ast_boost-clone|
+
 .. _function-_at_ast_boost_c__c_clone_H_ls__builtin__c__c_dasvector_rq_smart_ptr_rq_Variable_gr__1_ls_Y_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M_gr_A:
 
 .. das:function:: clone(args: dasvector`smart_ptr`Variable; nargs: array<smart_ptr<ast::Variable>>)

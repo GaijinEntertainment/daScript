@@ -102,7 +102,7 @@ def document_module_fio(root:string)
     var mod = get_module("fio")
     var groups <- [{DocGroup
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%));
-        group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar)%%);
+        group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar|remove)%%);
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name)$%%);
         group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir)$%%);
         group_by_regex("OS specific routines", mod, %regex~(sleep|exit|popen)$%%)
@@ -112,7 +112,8 @@ def document_module_fio(root:string)
 def document_module_random(root:string)
     var mod = get_module("random")
     var groups <- [{DocGroup
-        group_by_regex("Seed and basic generators", mod, %regex~(random_seed|random_seed2D|random_float|random_float4|random_int|random_big_int|random_int4)$%%);
+        group_by_regex("Seed and basic generators", mod, %regex~(random_seed|random_seed2D|random_float|random_float4|random_int|random_big_int|random_int4|random_uint)$%%);
+        group_by_regex("Random iterators", mod, %regex~(each_random_.*)$%%);
         group_by_regex("Specific distributions", mod, %regex~(random_unit_vector|random_in_unit_disk|random_in_unit_sphere)$%%)
     }]
     document("Random generator library",mod,"{root}/random.rst","{root}/detail/random.rst",groups)
@@ -169,10 +170,11 @@ def document_module_ast(root:string)
         group_by_regex("Mangled name", mod, %regex~(parse_mangled_name|get_mangled_name)%%);
         group_by_regex("Size and offset", mod, %regex~.*_(size|offset)%%);
         group_by_regex("Properties", mod, %regex~(is|has)_.*%%);
-        group_by_regex("Pointer conversion", mod, %regex~(ExpressionPtr|FunctionPtr)%%);
+        group_by_regex("Pointer conversion", mod, %regex~(ExpressionPtr|FunctionPtr|StructurePtr)%%);
         group_by_regex("Evaluations", mod, %regex~(eval_single_expression)%%);
         group_by_regex("Error reporting", mod, %regex~(macro_error)%%);
-        group_by_regex("Location and context", mod, %regex~(force_at|collect_dependencies|get_ast_context)%%)
+        group_by_regex("Location and context", mod, %regex~(force_at|collect_dependencies|get_ast_context)%%);
+        hide_group(group_by_regex("Internal ast infrastructure", mod, %regex~(builtin_ast_.*)%%))
     }]
     document("AST manipulation library",mod,"{root}/ast.rst","{root}/detail/ast.rst",groups)
 
@@ -192,6 +194,7 @@ def document_module_strings(root:string)
     var mod = find_module("strings")
     var groups <- [{DocGroup
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%));
+        group_by_regex("Character set", mod, %regex~(set_total|set_element|is_char_in_set)$%%);
         group_by_regex("Character groups", mod, %regex~is.+%%);
         group_by_regex("Character by index", mod, %regex~(character_at|character_uat)$%%);
         group_by_regex("String properties", mod, %regex~(empty|ends_with|length|starts_with)$%%);
@@ -244,9 +247,10 @@ def document_module_json_boost(root:string)
 def document_module_regex(root:string)
     var mod = find_module("regex")
     var groups <- [{DocGroup
-        group_by_regex("Compilation and validation", mod, %regex~(regex_compile|is_valid|regex_debug|debug_set)$%%);
+        group_by_regex("Compilation and validation", mod, %regex~(regex_compile|is_valid|regex_debug|debug_set|visit_top_down)$%%);
         group_by_regex("Access", mod, %regex~(regex_group|regex_foreach)$%%);
-        group_by_regex("Match", mod, %regex~(regex_match)$%%)
+        group_by_regex("Match", mod, %regex~(regex_match)$%%);
+        group_by_regex("Generation", mod, %regex~(re_gen.*)$%%)
     }]
     document("Regular expression library",mod,"{root}/regex.rst","{root}/detail/regex.rst",groups)
 

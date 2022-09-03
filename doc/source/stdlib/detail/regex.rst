@@ -2,6 +2,8 @@
 
 .. |typedef-regex-MaybeReNode| replace:: to be documented in |typedef-regex-MaybeReNode|.rst
 
+.. |typedef-regex-ReGenRandom| replace:: random generator input for the regular expression generation
+
 .. |enumeration-regex-ReOp| replace:: to be documented in |enumeration-regex-ReOp|.rst
 
 .. |structure-regex-ReNode| replace:: to be documented in |structure-regex-ReNode|.rst
@@ -34,3 +36,8 @@
 
 .. |variable-regex-meta_set| replace:: to be documented in |variable-regex-meta_set|.rst
 
+.. |function-regex-re_gen_get_rep_limit| replace:: repetition limit for the '+' and '*' operations of the regex generation
+
+.. |function-regex-visit_top_down| replace:: visits parsed regular expression tree, parents first
+
+.. |function-regex-re_gen| replace:: generates random string which would match regular expression

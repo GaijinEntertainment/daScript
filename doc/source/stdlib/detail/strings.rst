@@ -114,7 +114,9 @@
 
 .. |function-strings-reserve_string_buffer| replace:: Allocate copy of the string data on the heap.
 
+.. |function-strings-set_total| replace:: Total number of elements in the character set.
 
+.. |function-strings-set_element| replace:: Gen character set element by element index (not character index).
 
 
 

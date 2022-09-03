@@ -1,1 +1,1 @@
-This macro will implement expression reification
+This macro implements expression reification

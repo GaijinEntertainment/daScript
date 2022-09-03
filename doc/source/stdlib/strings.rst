@@ -24,6 +24,63 @@ Handled structures
 
 |structure_annotation-strings-StringBuilderWriter|
 
++++++++++++++
+Character set
++++++++++++++
+
+  *  :ref:`is_char_in_set (Character:int const;Charset:uint const[8] implicit;Context:__context const;At:__lineInfo const) : bool <function-_at_strings_c__c_is_char_in_set_Ci_CI[8]u_C_c_C_l>` 
+  *  :ref:`set_total (Charset:uint const[8] implicit) : uint <function-_at_strings_c__c_set_total_CI[8]u>` 
+  *  :ref:`set_element (Character:int const;Charset:uint const[8] implicit) : int <function-_at_strings_c__c_set_element_Ci_CI[8]u>` 
+
+.. _function-_at_strings_c__c_is_char_in_set_Ci_CI[8]u_C_c_C_l:
+
+.. das:function:: is_char_in_set(Character: int const; Charset: uint const[8] implicit)
+
+is_char_in_set returns bool
+
++---------+----------------------+
++argument +argument type         +
++=========+======================+
++Character+int const             +
++---------+----------------------+
++Charset  +uint const[8] implicit+
++---------+----------------------+
+
+
+|function-strings-is_char_in_set|
+
+.. _function-_at_strings_c__c_set_total_CI[8]u:
+
+.. das:function:: set_total(Charset: uint const[8] implicit)
+
+set_total returns uint
+
++--------+----------------------+
++argument+argument type         +
++========+======================+
++Charset +uint const[8] implicit+
++--------+----------------------+
+
+
+|function-strings-set_total|
+
+.. _function-_at_strings_c__c_set_element_Ci_CI[8]u:
+
+.. das:function:: set_element(Character: int const; Charset: uint const[8] implicit)
+
+set_element returns int
+
++---------+----------------------+
++argument +argument type         +
++=========+======================+
++Character+int const             +
++---------+----------------------+
++Charset  +uint const[8] implicit+
++---------+----------------------+
+
+
+|function-strings-set_element|
+
 ++++++++++++++++
 Character groups
 ++++++++++++++++
@@ -32,7 +89,6 @@ Character groups
   *  :ref:`is_new_line (Character:int const) : bool <function-_at_strings_c__c_is_new_line_Ci>` 
   *  :ref:`is_white_space (Character:int const) : bool <function-_at_strings_c__c_is_white_space_Ci>` 
   *  :ref:`is_number (Character:int const) : bool <function-_at_strings_c__c_is_number_Ci>` 
-  *  :ref:`is_char_in_set (Character:int const;Charset:uint const[8] implicit) : bool <function-_at_strings_c__c_is_char_in_set_Ci_CI[8]u>` 
 
 .. _function-_at_strings_c__c_is_alpha_Ci:
 
@@ -93,23 +149,6 @@ is_number returns bool
 
 
 |function-strings-is_number|
-
-.. _function-_at_strings_c__c_is_char_in_set_Ci_CI[8]u:
-
-.. das:function:: is_char_in_set(Character: int const; Charset: uint const[8] implicit)
-
-is_char_in_set returns bool
-
-+---------+----------------------+
-+argument +argument type         +
-+=========+======================+
-+Character+int const             +
-+---------+----------------------+
-+Charset  +uint const[8] implicit+
-+---------+----------------------+
-
-
-|function-strings-is_char_in_set|
 
 ++++++++++++++++++
 Character by index

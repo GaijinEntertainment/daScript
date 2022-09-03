@@ -69,3 +69,5 @@
 .. |variable-fio-seek_cur| replace:: constant for `fseek` which sets the file pointer to the current position of the file plus the offset.
 
 .. |variable-fio-seek_end| replace:: constant for `fseek` which sets the file pointer to the end of the file plus the offset.
+
+.. |function-fio-remove| replace:: deletes file specified by name

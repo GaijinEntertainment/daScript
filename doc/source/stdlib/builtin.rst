@@ -2861,6 +2861,36 @@ is_in_completion returns bool
 
 |function-builtin-is_in_completion|
 
+.. _function-_at__builtin__c__c_clz_Cu:
+
+.. das:function:: clz(bits: uint const)
+
+clz returns uint
+
++--------+-------------+
++argument+argument type+
++========+=============+
++bits    +uint const   +
++--------+-------------+
+
+
+|function-builtin-clz|
+
+.. _function-_at__builtin__c__c_ctz_Cu:
+
+.. das:function:: ctz(bits: uint const)
+
+ctz returns uint
+
++--------+-------------+
++argument+argument type+
++========+=============+
++bits    +uint const   +
++--------+-------------+
+
+
+|function-builtin-ctz|
+
 .. _function-_at__builtin__c__c__move_with_lockcheck_&Y_ls_valA_gr_._&Y_ls_valB_gr_.:
 
 .. das:function:: _move_with_lockcheck(a: auto(valA)&; b: auto(valB)&)

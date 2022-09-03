@@ -50,6 +50,8 @@
 
 .. |typedef-ast-ExpressionPtr| replace:: Smart pointer to `Expression` object.
 
+.. |typedef-ast-StructurePtr| replace:: Smart pointer to `Structure` object.
+
 .. |typedef-ast-ProgramPtr| replace:: Smart pointer to `Program` object.
 
 .. |typedef-ast-TypeDeclPtr| replace:: Smart pointer to `TypeDecl` object.
@@ -57,8 +59,6 @@
 .. |typedef-ast-VectorTypeDeclPtr| replace:: Smart pointer to das::vector<ExpressionPtr>.
 
 .. |typedef-ast-EnumerationPtr| replace:: Smart pointer to `Enumeration` object.
-
-.. |typedef-ast-StructurePtr| replace:: Smart pointer to `Structure` object.
 
 .. |typedef-ast-FunctionPtr| replace:: Smart pointer to `Function` object.
 
@@ -979,6 +979,8 @@
 
 .. |function-ast-ExpressionPtr| replace:: Returns ExpressionPtr out of any smart pointer to `Expression`.
 
+.. |function-ast-StructurePtr| replace:: Returns StructurePtr out of any smart pointer to `Structure`.
+
 .. |function-ast-FunctionPtr| replace:: Returns FunctionPtr out of Function?
 
 .. |function-ast-add_new_block_annotation| replace:: Makes adapter to the `AstBlockAnnotation` and adds it to the current module.
@@ -1258,6 +1260,8 @@
 
 .. |structure_annotation-ast-ExprCallMacro| replace:: Compilation time only expression which holds temporary infromation for the `AstCallMacro`.
 
+.. |structure_annotation-ast-ExprSetInsert| replace:: insert(tab, at) for the table<keyType; void> aka table<keyType>
+
 .. |function_annotation-ast-quote| replace:: Returns ast expression tree of the input, without evaluating or infering it.
     This is useful for macros which generate code as a shortcut for generating boilerplate code.
 
@@ -1270,6 +1274,8 @@
 .. |function-ast-add_alias| replace:: Adds type alias to the specified module.
 
 .. |function-ast-remove_structure| replace:: Removes structure declaration from the specified module.
+
+.. |function-ast-find_unique_structure| replace:: Find structure in the program with the specified name. If its unique - return it, otherwise null.
 
 .. |typedef-ast-ForLoopMacroPtr| replace:: Smart pointer to 'ForLoopMacro'.
 

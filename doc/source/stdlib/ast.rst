@@ -314,6 +314,8 @@ Type aliases
 +----------------+---+-----+
 +private_variable+10 +1024 +
 +----------------+---+-----+
++tag             +11 +2048 +
++----------------+---+-----+
 
 
 |typedef-ast-VariableFlags|
@@ -1141,7 +1143,7 @@ Function fields are
 +---------------+--------------------------------------------------------------------------------------------+
 +hash           +uint64                                                                                      +
 +---------------+--------------------------------------------------------------------------------------------+
-+classParent    + :ref:`rtti::Module <handle-rtti-Module>` ?                                                 +
++classParent    + :ref:`ast::Structure <handle-ast-Structure>` ?                                             +
 +---------------+--------------------------------------------------------------------------------------------+
 +flags          + :ref:`FunctionFlags <alias-FunctionFlags>`                                                 +
 +---------------+--------------------------------------------------------------------------------------------+
@@ -1970,6 +1972,8 @@ ExprFor fields are
 +allowIteratorOptimization+bool                                                                                            +
 +-------------------------+------------------------------------------------------------------------------------------------+
 +canShadow                +bool                                                                                            +
++-------------------------+------------------------------------------------------------------------------------------------+
++iteratorsTags            + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
 +-------------------------+------------------------------------------------------------------------------------------------+
 +at                       + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                                                   +
 +-------------------------+------------------------------------------------------------------------------------------------+
@@ -10850,9 +10854,9 @@ Adding objects to objects
 +++++++++++++++++++++++++
 
   *  :ref:`add_enumeration_entry (enum:smart_ptr\<ast::Enumeration\> const implicit;name:string const implicit) : int <function-_at_ast_c__c_add_enumeration_entry_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_CIs>` 
-  *  :ref:`add_function (module:rtti::Module? const implicit;function:smart_ptr\<ast::Function\>& implicit;context:__context const) : bool <function-_at_ast_c__c_add_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c>` 
-  *  :ref:`add_generic (module:rtti::Module? const implicit;function:smart_ptr\<ast::Function\>& implicit;context:__context const) : bool <function-_at_ast_c__c_add_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c>` 
-  *  :ref:`add_variable (module:rtti::Module? const implicit;variable:smart_ptr\<ast::Variable\>& implicit;context:__context const) : bool <function-_at_ast_c__c_add_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_C_c>` 
+  *  :ref:`add_function (module:rtti::Module? const implicit;function:smart_ptr\<ast::Function\>& implicit;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c_C_l>` 
+  *  :ref:`add_generic (module:rtti::Module? const implicit;function:smart_ptr\<ast::Function\>& implicit;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c_C_l>` 
+  *  :ref:`add_variable (module:rtti::Module? const implicit;variable:smart_ptr\<ast::Variable\>& implicit;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_C_c_C_l>` 
   *  :ref:`add_structure (module:rtti::Module? const implicit;structure:smart_ptr\<ast::Structure\>& implicit) : bool <function-_at_ast_c__c_add_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Structure_gr__gr_?W>` 
   *  :ref:`add_alias (module:rtti::Module? const implicit;structure:smart_ptr\<ast::TypeDecl\>& implicit) : bool <function-_at_ast_c__c_add_alias_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W>` 
 
@@ -10873,7 +10877,7 @@ add_enumeration_entry returns int
 
 |function-ast-add_enumeration_entry|
 
-.. _function-_at_ast_c__c_add_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_function(module: rtti::Module? const implicit; function: smart_ptr<ast::Function>& implicit)
 
@@ -10890,7 +10894,7 @@ add_function returns bool
 
 |function-ast-add_function|
 
-.. _function-_at_ast_c__c_add_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_generic(module: rtti::Module? const implicit; function: smart_ptr<ast::Function>& implicit)
 
@@ -10907,7 +10911,7 @@ add_generic returns bool
 
 |function-ast-add_generic|
 
-.. _function-_at_ast_c__c_add_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_variable(module: rtti::Module? const implicit; variable: smart_ptr<ast::Variable>& implicit)
 
@@ -11185,6 +11189,7 @@ Searching
   *  :ref:`find_variable (module:rtti::Module? const implicit;variable:string const implicit) : smart_ptr\<ast::Variable\> <function-_at_ast_c__c_find_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs>` 
   *  :ref:`find_bitfield_name (bit:smart_ptr\<ast::TypeDecl\> const implicit;value:bitfield const;context:__context const) : string <function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ct_C_c>` 
   *  :ref:`find_enum_value (enum:smart_ptr\<ast::Enumeration\> const implicit;value:string const implicit) : int64 <function-_at_ast_c__c_find_enum_value_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_CIs>` 
+  *  :ref:`find_unique_structure (program:smart_ptr\<rtti::Program\> const implicit;name:string const implicit;context:__context const;at:__lineInfo const) : ast::Structure? <function-_at_ast_c__c_find_unique_structure_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CIs_C_c_C_l>` 
   *  :ref:`find_module (prog:smart_ptr\<rtti::Program\> const;name:string const) : rtti::Module? <function-_at_ast_c__c_find_module_C1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_Cs>` 
   *  :ref:`find_module (name:string const) : rtti::Module? <function-_at_ast_c__c_find_module_Cs>` 
   *  :ref:`find_compiling_module (name:string const) : rtti::Module? <function-_at_ast_c__c_find_compiling_module_Cs>` 
@@ -11273,6 +11278,23 @@ find_enum_value returns int64
 
 
 |function-ast-find_enum_value|
+
+.. _function-_at_ast_c__c_find_unique_structure_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CIs_C_c_C_l:
+
+.. das:function:: find_unique_structure(program: smart_ptr<rtti::Program> const implicit; name: string const implicit)
+
+find_unique_structure returns  :ref:`ast::Structure <handle-ast-Structure>` ?
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++program +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit+
++--------+----------------------------------------------------------------------+
++name    +string const implicit                                                 +
++--------+----------------------------------------------------------------------+
+
+
+|function-ast-find_unique_structure|
 
 .. _function-_at_ast_c__c_find_module_C1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_Cs:
 
@@ -11914,6 +11936,7 @@ Pointer conversion
 
   *  :ref:`ExpressionPtr (expr:smart_ptr\<auto(TT)\> const) : smart_ptr\<ast::Expression\> <function-_at_ast_c__c_ExpressionPtr_C1_ls_Y_ls_TT_gr_._gr_?M>` 
   *  :ref:`FunctionPtr (fun:ast::Function? const) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_FunctionPtr_C1_ls_H_ls_ast_c__c_Function_gr__gr_?>` 
+  *  :ref:`StructurePtr (stru:ast::Structure? const) : smart_ptr\<ast::Structure\> <function-_at_ast_c__c_StructurePtr_C1_ls_H_ls_ast_c__c_Structure_gr__gr_?>` 
 
 .. _function-_at_ast_c__c_ExpressionPtr_C1_ls_Y_ls_TT_gr_._gr_?M:
 
@@ -11944,6 +11967,21 @@ FunctionPtr returns  :ref:`FunctionPtr <alias-FunctionPtr>`
 
 
 |function-ast-FunctionPtr|
+
+.. _function-_at_ast_c__c_StructurePtr_C1_ls_H_ls_ast_c__c_Structure_gr__gr_?:
+
+.. das:function:: StructurePtr(stru: ast::Structure? const)
+
+StructurePtr returns  :ref:`StructurePtr <alias-StructurePtr>` 
+
++--------+-----------------------------------------------------+
++argument+argument type                                        +
++========+=====================================================+
++stru    + :ref:`ast::Structure <handle-ast-Structure>` ? const+
++--------+-----------------------------------------------------+
+
+
+|function-ast-StructurePtr|
 
 +++++++++++
 Evaluations

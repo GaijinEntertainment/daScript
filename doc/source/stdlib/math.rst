@@ -2314,9 +2314,13 @@ atan2 returns double
 float* only
 +++++++++++
 
+  *  :ref:`atan_est (x:float const) : float <function-_at_math_c__c_atan_est_Cf>` 
   *  :ref:`atan2_est (y:float const;x:float const) : float <function-_at_math_c__c_atan2_est_Cf_Cf>` 
+  *  :ref:`atan_est (x:float2 const) : float2 <function-_at_math_c__c_atan_est_Cf2>` 
   *  :ref:`atan2_est (y:float2 const;x:float2 const) : float2 <function-_at_math_c__c_atan2_est_Cf2_Cf2>` 
+  *  :ref:`atan_est (x:float3 const) : float3 <function-_at_math_c__c_atan_est_Cf3>` 
   *  :ref:`atan2_est (y:float3 const;x:float3 const) : float3 <function-_at_math_c__c_atan2_est_Cf3_Cf3>` 
+  *  :ref:`atan_est (x:float4 const) : float4 <function-_at_math_c__c_atan_est_Cf4>` 
   *  :ref:`atan2_est (y:float4 const;x:float4 const) : float4 <function-_at_math_c__c_atan2_est_Cf4_Cf4>` 
   *  :ref:`rcp_est (x:float const) : float <function-_at_math_c__c_rcp_est_Cf>` 
   *  :ref:`rcp_est (x:float2 const) : float2 <function-_at_math_c__c_rcp_est_Cf2>` 
@@ -2351,6 +2355,21 @@ float* only
   *  :ref:`roundi (x:float4 const) : int4 <function-_at_math_c__c_roundi_Cf4>` 
   *  :ref:`trunci (x:float4 const) : int4 <function-_at_math_c__c_trunci_Cf4>` 
 
+.. _function-_at_math_c__c_atan_est_Cf:
+
+.. das:function:: atan_est(x: float const)
+
+atan_est returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-atan_est|
+
 .. _function-_at_math_c__c_atan2_est_Cf_Cf:
 
 .. das:function:: atan2_est(y: float const; x: float const)
@@ -2367,6 +2386,21 @@ atan2_est returns float
 
 
 |function-math-atan2_est|
+
+.. _function-_at_math_c__c_atan_est_Cf2:
+
+.. das:function:: atan_est(x: float2 const)
+
+atan_est returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-atan_est|
 
 .. _function-_at_math_c__c_atan2_est_Cf2_Cf2:
 
@@ -2385,6 +2419,21 @@ atan2_est returns float2
 
 |function-math-atan2_est|
 
+.. _function-_at_math_c__c_atan_est_Cf3:
+
+.. das:function:: atan_est(x: float3 const)
+
+atan_est returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-atan_est|
+
 .. _function-_at_math_c__c_atan2_est_Cf3_Cf3:
 
 .. das:function:: atan2_est(y: float3 const; x: float3 const)
@@ -2401,6 +2450,21 @@ atan2_est returns float3
 
 
 |function-math-atan2_est|
+
+.. _function-_at_math_c__c_atan_est_Cf4:
+
+.. das:function:: atan_est(x: float4 const)
+
+atan_est returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-atan_est|
 
 .. _function-_at_math_c__c_atan2_est_Cf4_Cf4:
 
@@ -4679,69 +4743,5 @@ unpack_byte_to_float returns float4
 
 
 |function-math-unpack_byte_to_float|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_math_c__c_atan_est_Cf:
-
-.. das:function:: atan_est(x: float const)
-
-atan_est returns float
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float const  +
-+--------+-------------+
-
-
-|function-math-atan_est|
-
-.. _function-_at_math_c__c_atan_est_Cf2:
-
-.. das:function:: atan_est(x: float2 const)
-
-atan_est returns float2
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float2 const +
-+--------+-------------+
-
-
-|function-math-atan_est|
-
-.. _function-_at_math_c__c_atan_est_Cf3:
-
-.. das:function:: atan_est(x: float3 const)
-
-atan_est returns float3
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float3 const +
-+--------+-------------+
-
-
-|function-math-atan_est|
-
-.. _function-_at_math_c__c_atan_est_Cf4:
-
-.. das:function:: atan_est(x: float4 const)
-
-atan_est returns float4
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float4 const +
-+--------+-------------+
-
-
-|function-math-atan_est|
 
 

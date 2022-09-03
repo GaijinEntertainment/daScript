@@ -640,7 +640,7 @@ def public expression_at ( expr:ExpressionPtr; at:LineInfo ) : ExpressionPtr
     return expr
 
 class private  AstQCallMacro : AstCallMacro
-    //! This macro will implement expression reification
+    //! This macro implements expression reification
     apply_call = "apply_qmacro"
     macro_call = "qmacro"
     def override canVisitArguments ( call:smart_ptr<ExprCallMacro> ) : bool
@@ -727,9 +727,9 @@ def public apply_qmacro_variable ( vname:string; var expr:smart_ptr<Expression>;
     return <- vvar
 
 class private AstQNamedMacro : AstCallMacro
+    //! This macro implements expression reification for the named expressions (function, variable, etc.)
     apply_call = "apply_qmacro_function"
     macro_call = "qmacro_function"
-    //! This macro will implement expression reification for the named expressions (function, variable, etc.)
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if call.arguments.length != 2
             macro_error(prog,call.at,"expecting 2 arguments, {macro_call}(name,expression)")
@@ -765,7 +765,7 @@ class private AstQVariableMacro : AstQNamedMacro
 class private AstQNamedClassMacro : AstCallMacro
     apply_call = "apply_qmacro_method"
     macro_call = "qmacro_method"
-    //! This macro will implement expression reification for the named expressions (function, variable, etc.)
+    //! This macro implements expression reification for the named expressions (function, variable, etc.)
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if call.arguments.length != 3
             macro_error(prog,call.at,"expecting 3 arguments, {macro_call}(name,class,expression)")
@@ -792,9 +792,12 @@ class private AstQNamedClassMacro : AstCallMacro
         ]]
 
 [call_macro(name="qmacro_method")]
-class private AstQMethodMacro : AstQNamedClassMacro {}
+class private AstQMethodMacro : AstQNamedClassMacro
+    //! This macro implements expression reification for class methods.
+    override apply_call = "apply_qmacro_method"
 
 def public add_structure_field ( var cls:StructurePtr; name:string; var t:TypeDeclPtr; var init:ExpressionPtr )
+    //! Adds a field to the structure.
     let fi = length(cls.fields)
     cls.fields |> resize(fi+1)
     cls.fields[fi].name := name
@@ -803,6 +806,7 @@ def public add_structure_field ( var cls:StructurePtr; name:string; var t:TypeDe
     return fi
 
 def public make_class ( name:string; mod:Module? )
+    //! Creates a class structure. Adds __rtti, __finalize fields.
     var st <- new [[Structure() name:=name, flags = bitfield(1)]]
     unsafe(builtin_ast_make_class_rtti(get_ptr(st)))
     var virt_fin <- unsafe(builtin_ast_make_class_finalize(get_ptr(st)))
@@ -824,6 +828,7 @@ def public make_class ( name:string; baseClass:Structure?; mod:Module? )
     return <- st
 
 def public make_class_constructor ( cls:StructurePtr; ctor:FunctionPtr )
+    //! Adds a class constructor from a constructor function.
     if cls==null
         panic("expecting class")
     if ctor==null
@@ -831,6 +836,7 @@ def public make_class_constructor ( cls:StructurePtr; ctor:FunctionPtr )
     return <- unsafe(builtin_ast_make_class_constructor(get_ptr(cls), get_ptr(ctor)))
 
 def public modify_to_class_member ( cls:StructurePtr; fun:FunctionPtr; isExplicit:bool; Constant:bool )
+    //! Modifies function to be a member of a particular class.
     if cls==null
         panic("expecting class")
     if fun==null

@@ -22,3 +22,4 @@
 
 .. |variable-random-LCG_RAND_MAX_BIG| replace:: to be documented in |variable-random-LCG_RAND_MAX_BIG|.rst
 
+.. |function-random-each_random_uint| replace:: endless iterator of random uints

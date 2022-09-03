@@ -328,4 +328,7 @@
 
 .. |function-builtin-add_ptr_ref| replace:: increases reference count of the smart pointer.
 
+.. |function-builtin-clz| replace:: count leading zeros
+
+.. |function-builtin-ctz| replace:: count trailing zeros
 
