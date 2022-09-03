@@ -467,9 +467,9 @@ def document_module_ast_used(root:string)
 def document_module_constexpr(root:string)
     var mod = find_module("constexpr")
     var groups <- [{DocGroup
-        group_by_regex("stub", mod, %regex~(stub)$%%)
+        group_by_regex("Macro helpers", mod, %regex~(isConstantExpression)$%%)
     }]
-    document("Constant expression checker",mod,"{root}/constexpr.rst","{root}/detail/constexpr.rst",groups)
+    document("Constant expression checker and substitution",mod,"{root}/constexpr.rst","{root}/detail/constexpr.rst",groups)
 
 def document_module_uriparser_boost(root:string)
     var mod = find_module("uriparser_boost")

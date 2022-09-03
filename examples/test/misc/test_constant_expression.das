@@ -1,4 +1,4 @@
-require daslib/constant_expression
+require daslib/constexpr
 
 [constant_expression(constString)]
 def take_const_arg(boo:bool;constString:string)
