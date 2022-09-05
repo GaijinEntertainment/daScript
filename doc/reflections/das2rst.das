@@ -47,6 +47,7 @@ require daslib/cpp_bind
 require daslib/decs
 require daslib/decs_boost
 require daslib/utf8_utils
+require daslib/coroutines
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -536,6 +537,13 @@ def document_module_macro_boost(root:string)
     }]
     document("Boost package for the miscelanious macro manipulations",mod,"{root}/macro_boost.rst","{root}/detail/macro_boost.rst",groups)
 
+def document_module_coroutines(root:string)
+    var mod = find_module("coroutines")
+    var groups <- [{DocGroup
+        group_by_regex("Top level coroutine evaluation", mod, %regex~(cr_run|cr_run_all)$%%)
+    }]
+    document("Coroutines and additional generator support",mod,"{root}/coroutines.rst","{root}/detail/coroutines.rst",groups)
+
 
 [export]
 def main
@@ -561,6 +569,7 @@ def main
     document_module_ast_block_to_loop(root)
     document_module_ast_boost(root)
     document_module_ast_used(root)
+    document_module_coroutines(root)
     document_module_constexpr(root)
     document_module_contracts(root)
     document_module_cpp_bind(root)
