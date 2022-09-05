@@ -38,6 +38,9 @@ namespace das {
         // WHOLE PROGRAM
         virtual void preVisitProgram ( Program * prog ) {}
         virtual void visitProgram ( Program * prog ) {}
+        // EACH MODULE
+        virtual void preVisitModule ( Module * mod ) {}
+        virtual void visitModule ( Module * mod ) {}
         // TYPE
         virtual void preVisit ( TypeDecl * td ) {}
         virtual TypeDeclPtr visit ( TypeDecl * td ) { return td; }

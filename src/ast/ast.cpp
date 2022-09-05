@@ -2906,6 +2906,7 @@ namespace das {
     }
 
     void Program::visitModule(Visitor & vis, Module * thatModule, bool visitGenerics) {
+        vis.preVisitModule(thatModule);
         // enumerations
         thatModule->enumerations.foreach([&](auto & penum){
             if ( vis.canVisitEnumeration(penum.get()) ) {
@@ -2990,6 +2991,7 @@ namespace das {
                 }
             }
         });
+        vis.visitModule(thatModule);
     }
 
     bool Program::getOptimize() const {

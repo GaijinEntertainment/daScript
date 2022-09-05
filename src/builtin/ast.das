@@ -155,6 +155,9 @@ class AstVisitor
     def abstract preVisitProgram(prog:ProgramPtr) : void
     def abstract visitProgram(porg:ProgramPtr) : void
     def abstract preVisitProgramBody(prog:ProgramPtr;mod:Module?) : void
+// module
+    def abstract preVisitModule(mod:Module?) : void
+    def abstract visitModule(mod:Module?) : void
 // type
     def abstract preVisitTypeDecl(typ:TypeDeclPtr) : void
     def abstract visitTypeDecl(typ:TypeDeclPtr) : TypeDeclPtr

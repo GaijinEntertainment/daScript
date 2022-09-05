@@ -107,6 +107,16 @@ namespace das {
                 }
             }
         }
+        bool isValidModuleName(const string & str) const {
+            return !isCppKeyword(str);
+        }
+        virtual void preVisitModule ( Module * mod ) override {
+            Visitor::preVisitModule(mod);
+            if ( !mod->name.empty() && !isValidModuleName(mod->name) ) {
+                program->error("invalid module name " + mod->name, "", "",
+                    LineInfo(), CompilationError::invalid_name );
+            }
+        }
         bool isValidEnumName(const string & str) const {
             return !isCppKeyword(str);
         }

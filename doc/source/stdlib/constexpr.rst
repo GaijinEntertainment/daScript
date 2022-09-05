@@ -1,5 +1,5 @@
 
-.. _stdlib_constexpr:
+.. _stdlib_constant_expression:
 
 ============================================
 Constant expression checker and substitution
@@ -7,17 +7,17 @@ Constant expression checker and substitution
 
 .. include:: detail/constexpr.rst
 
-The constexpr module implements `constant expression` function argument check.
+The constant_expression module implements `constant expression` function argument check, as well as argument substitution.
 
 All functions and symbols are in "constexpr" module, use require to get access to it. ::
 
-    require daslib/constexpr
+    require daslib/constant_expression
 
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
 
-.. _handle-constexpr-constexpr:
+.. _handle-constant_expression-constexpr:
 
 .. das:attribute:: constexpr
 
@@ -32,7 +32,7 @@ This macro implements a constexpr function argument checker. Given list of argum
         foo("blah", 1)
         foo("ouch", BOO)    // comilation error: `a is not a constexpr, BOO`
 
-.. _handle-constexpr-constant_expression:
+.. _handle-constant_expression-constant_expression:
 
 .. das:attribute:: constant_expression
 
@@ -51,9 +51,9 @@ For example::
 Macro helpers
 +++++++++++++
 
-  *  :ref:`isConstantExpression (expr:smart_ptr\<ast::Expression\> const) : bool <function-_at_constexpr_c__c_isConstantExpression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
+  *  :ref:`isConstantExpression (expr:smart_ptr\<ast::Expression\> const) : bool <function-_at_constant_expression_c__c_isConstantExpression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
 
-.. _function-_at_constexpr_c__c_isConstantExpression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
+.. _function-_at_constant_expression_c__c_isConstantExpression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
 
 .. das:function:: isConstantExpression(expr: ExpressionPtr)
 

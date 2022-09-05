@@ -39,7 +39,7 @@ require daslib/unroll
 require daslib/assert_once
 require daslib/ast_block_to_loop
 require daslib/ast_used
-require daslib/constexpr
+require daslib/constant_expression
 require daslib/uriparser_boost
 require daslib/sort_boost
 require daslib/enum_trait
@@ -465,7 +465,7 @@ def document_module_ast_used(root:string)
     document("AST type ussage collection",mod,"{root}/ast_used.rst","{root}/detail/ast_used.rst",groups)
 
 def document_module_constexpr(root:string)
-    var mod = find_module("constexpr")
+    var mod = find_module("constant_expression")
     var groups <- [{DocGroup
         group_by_regex("Macro helpers", mod, %regex~(isConstantExpression)$%%)
     }]

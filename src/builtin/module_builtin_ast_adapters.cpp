@@ -121,6 +121,7 @@ namespace das {
         // adapt
         IMPL_ADAPT(Program);
         FN_PREVISIT(ProgramBody) = adapt("preVisitProgramBody",pClass,info);
+        IMPL_ADAPT(Module);
         IMPL_ADAPT(TypeDecl);
         IMPL_ADAPT(Expression);
         IMPL_ADAPT(Alias);
@@ -283,6 +284,11 @@ namespace das {
         { IMPL_VISIT_VOID(Program); }
     void VisitorAdapter::preVisitProgramBody ( Program * expr, Module * mod )
         { IMPL_PREVISIT2(ProgramBody,Program,Module *,mod); }
+// module
+    void VisitorAdapter::preVisitModule ( Module * expr )
+        { IMPL_PREVISIT(Module); }
+    void VisitorAdapter::visitModule ( Module * expr )
+        { IMPL_VISIT_VOID(Module); }
 // type
     void VisitorAdapter::preVisit ( TypeDecl * expr )
         { IMPL_PREVISIT(TypeDecl); }

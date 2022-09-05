@@ -5462,6 +5462,32 @@ it defines as follows
 
 |method-ast-AstVisitor.preVisitProgramBody|
 
+.. das:function:: AstVisitor.preVisitModule(self: AstVisitor; mod: rtti::Module? const)
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`  +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
+
+
+|method-ast-AstVisitor.preVisitModule|
+
+.. das:function:: AstVisitor.visitModule(self: AstVisitor; mod: rtti::Module? const)
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`  +
++--------+-------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const+
++--------+-------------------------------------------------+
+
+
+|method-ast-AstVisitor.visitModule|
+
 .. das:function:: AstVisitor.preVisitTypeDecl(self: AstVisitor; typ: TypeDeclPtr)
 
 +--------+------------------------------------------------+

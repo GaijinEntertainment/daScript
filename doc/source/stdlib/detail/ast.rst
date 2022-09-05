@@ -228,6 +228,10 @@
 
 .. |method-ast-AstVisitor.visitProgram| replace:: after entire program, put your finalizers there.
 
+.. |method-ast-AstVisitor.preVisitModule| replace:: before each module
+
+.. |method-ast-AstVisitor.visitModule| replace:: after each module
+
 .. |method-ast-AstVisitor.preVisitProgramBody| replace:: after enumerations, structures, and aliases, but before global variables, generics and functions.
 
 .. |method-ast-AstVisitor.preVisitTypeDecl| replace:: before a type declaration anywhere. yor type validation code typically goes here

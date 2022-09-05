@@ -1,6 +1,6 @@
 options log
 
-require daslib/constexpr
+require daslib/constant_expression
 
 [constexpr (a)]
 def foo ( t:string; a : int )

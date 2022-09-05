@@ -25,6 +25,7 @@ namespace das {
     protected:
         DECL_VISIT(Program);
         Func FN_PREVISIT(ProgramBody);
+        DECL_VISIT(Module);
         DECL_VISIT(TypeDecl);
         DECL_VISIT(Expression);
         DECL_VISIT(Alias);
@@ -185,6 +186,9 @@ namespace das {
         virtual void preVisitProgram ( Program * expr ) override;
         virtual void visitProgram ( Program * expr ) override;
         virtual void preVisitProgramBody ( Program * expr, Module * mod ) override;
+    // module
+        virtual void preVisitModule ( Module * mod ) override;
+        virtual void visitModule ( Module * mod ) override;
     // type
         virtual void preVisit ( TypeDecl * expr ) override;
         virtual TypeDeclPtr visit ( TypeDecl * expr ) override;

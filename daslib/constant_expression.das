@@ -3,7 +3,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
 
-module constexpr shared private
+module constant_expression shared private
 
 require ast
 require daslib/ast_boost
