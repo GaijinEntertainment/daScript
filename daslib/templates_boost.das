@@ -379,6 +379,15 @@ def public add_array_ptr_ref ( var a : array<smart_ptr<auto(TT)>> ) : array<smar
     var q := a
     return <- q
 
+def public add_type_ptr_ref ( var a : TypeDeclPtr ) : TypeDeclPtr
+    //! Implementation details for the reification. This adds any array to the rules.
+    var q := a
+    return <- q
+
+def public add_type_ptr_ref ( var a : StructurePtr ) : StructurePtr
+    //! Implementation details for the reification. This adds any array to the rules.
+    return a // notice,
+
 class private QRulesVisitor : AstVisitor
     tag_index : int = 0
     failed : bool = false
@@ -406,7 +415,7 @@ class private QRulesVisitor : AstVisitor
                 arguments:=[{ExpressionPtr
                     new [[ExprVar() at=typ.at, name:="rules"]];
                     new [[ExprConstString() at=typ.at, value:=new_tag_name]];
-                    new [[ExprCall() at=typ.at, name:="add_ptr_ref",
+                    new [[ExprCall() at=typ.at, name:="add_type_ptr_ref",
                         arguments := [{ExpressionPtr[1] clone_expression(typ.firstType.dimExpr[0]) }]
                     ]]
                 }]]]
