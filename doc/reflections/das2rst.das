@@ -51,6 +51,7 @@ require daslib/coroutines
 require daslib/interfaces
 require daslib/export_constructor
 require daslib/faker
+require daslib/fuzzer
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -571,6 +572,13 @@ def document_module_faker(root:string)
     }]
     document("Faker",mod,"{root}/faker.rst","{root}/detail/faker.rst",groups)
 
+def document_module_fuzzer(root:string)
+    var mod = find_module("fuzzer")
+    var groups <- [{DocGroup
+        group_by_regex("Fuzzer tests", mod, %regex~fuzz.*$%%)
+    }]
+    document("Fuzzer",mod,"{root}/fuzzer.rst","{root}/detail/fuzzer.rst",groups)
+
 [export]
 def main
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -611,7 +619,7 @@ def main
     document_module_export_constructor(root)
     document_module_faker(root)
     document_module_functional(root)
-    //  document_module_fuzzer(root)         // TODO: document?
+    document_module_fuzzer(root)
     document_module_if_not_null(root)
     document_module_instance_function(root)
     document_module_interfaces(root)

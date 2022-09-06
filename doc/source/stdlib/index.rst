@@ -76,6 +76,7 @@ THE SOFTWARE.
    interfaces.rst
    export_constructor.rst
    faker.rst
+   fuzzer.rst
 
 
 
