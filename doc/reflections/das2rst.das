@@ -49,6 +49,8 @@ require daslib/decs_boost
 require daslib/utf8_utils
 require daslib/coroutines
 require daslib/interfaces
+require daslib/export_constructor
+require daslib/faker
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -552,6 +554,23 @@ def document_module_interfaces(root:string)
     }]
     document("Interfaces",mod,"{root}/interfaces.rst","{root}/detail/interfaces.rst",groups)
 
+def document_module_export_constructor(root:string)
+    var mod = find_module("export_constructor")
+    var groups <- [{DocGroup
+        group_by_regex("Top level coroutine evaluation", mod, %regex~(cr_run|cr_run_all)$%%)
+    }]
+    document("Export constructor",mod,"{root}/export_constructor.rst","{root}/detail/export_constructor.rst",groups)
+
+def document_module_faker(root:string)
+    var mod = find_module("faker")
+    var groups <- [{DocGroup
+        group_by_regex("Constructor", mod, %regex~(Faker)$%%);
+        group_by_regex("Random values", mod, %regex~random_.*$%%);
+        group_by_regex("Random strings", mod, %regex~(any_.*|long_string|number|positive_int)$%%);
+        group_by_regex("Date and time", mod, %regex~(month|day|date|is_leap_year|week_day)%%)
+    }]
+    document("Faker",mod,"{root}/faker.rst","{root}/detail/faker.rst",groups)
+
 [export]
 def main
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -576,10 +595,9 @@ def main
     document_module_ast_block_to_loop(root)
     document_module_ast_boost(root)
     document_module_ast_used(root)
-    document_module_coroutines(root)
     document_module_constexpr(root)
     document_module_contracts(root)
-    document_module_interfaces(root)
+    document_module_coroutines(root)
     document_module_cpp_bind(root)
     // document_module_cpp_gen(root)                // NOTE - do not document. its obsolete. use cbind_boost instead
     // document_module_dap(root)                    // todo: ask to document
@@ -590,9 +608,13 @@ def main
     document_module_decs(root)                       // DECS
     document_module_defer(root)
     document_module_enum_trait(root)
+    document_module_export_constructor(root)
+    document_module_faker(root)
     document_module_functional(root)
+    //  document_module_fuzzer(root)         // TODO: document?
     document_module_if_not_null(root)
     document_module_instance_function(root)
+    document_module_interfaces(root)
     document_module_is_local(root)
     document_module_jobque_boost(root)
     document_module_json_boost(root)

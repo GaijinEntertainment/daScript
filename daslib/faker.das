@@ -43,6 +43,7 @@ var private g_days <- [[string
 ]]
 
 struct public Faker
+    //! Instance of the faker with all the settings inside.
     min_year : uint = 1980u                     //! minimal faker's year
     total_years : uint = (2022u-1980u)          //! faker year's range
     rnd : iterator<uint> <- each_random_uint()  //! fakers random number generator
@@ -61,6 +62,7 @@ var private re_float <- %regex~[\+\-]?[0-9][0-9]*(\.[0-9]*)?%%
 var re_number <- %regex~(zero|one|two|three|four|five|six|seven|eight|nine|ten)%%
 
 def public long_string ( var faker:Faker )
+    //! Generates a long string of random characters. The string is anywhere between 0 and faker.max_long_string characters long.
     var len = 0u
     faker.rnd |> next(len)
     len %= faker.max_long_string
@@ -73,36 +75,45 @@ def public long_string ( var faker:Faker )
     return string(arr)
 
 def public any_string ( var faker:Faker )
+    //! Generates a string of random characters. The string is anywhere between 0 and regex::re_gen_get_rep_limit() characters long.
     return re_gen(re_string,faker.rnd)
 
 def public any_file_name ( var faker:Faker )
+    //! Generates random file name.
     return re_gen(re_file_name,faker.rnd)
 
 def public random_int ( var faker:Faker )
+    //! Generates random integer.
     var i = 0u
     faker.rnd |> next(i)
     return int(i)
 
 def public random_uint ( var faker:Faker )
+    //! Generates random unsigned integer.
     var i = 0u
     faker.rnd |> next(i)
     return i
 
 def public random_float ( var faker:Faker )
+    //! Generates random float.
     var i = 0u
     faker.rnd |> next(i)
     return unsafe(reinterpret<float> i)
 
 def public random_float2 ( var faker:Faker )
+    //! Generates random float2.
     return float2(faker |> random_float, faker |> random_float)
 
 def public random_float3 ( var faker:Faker )
+    //! Generates random float3.
     return float3(faker |> random_float, faker |> random_float, faker |> random_float)
 
 def public random_float4 ( var faker:Faker )
+    //! Generates random float4.
     return float4(faker |> random_float, faker |> random_float, faker |> random_float, faker |> random_float)
 
 def public random_float3x3 ( var faker:Faker )
+    //! Generates random float3x3.
     var m : float3x3
     m[0] = faker |> random_float3
     m[1] = faker |> random_float3
@@ -110,6 +121,7 @@ def public random_float3x3 ( var faker:Faker )
     return m
 
 def public random_float3x4 ( var faker:Faker )
+    //! Generates random float3x4.
     var m : float3x4
     m[0] = faker |> random_float3
     m[1] = faker |> random_float3
@@ -118,6 +130,7 @@ def public random_float3x4 ( var faker:Faker )
     return m
 
 def public random_float4x4 ( var faker:Faker )
+    //! Generates random float4x4.
     var m : float4x4
     m[0] = faker |> random_float4
     m[1] = faker |> random_float4
@@ -125,63 +138,76 @@ def public random_float4x4 ( var faker:Faker )
     m[3] = faker |> random_float4
     return m
 
-
-variant BitRepresentation64
+variant BitRepresentation64 //! 64-bit representation of a float
     ui2 : uint[2]
     d   : double
 
 def public random_double ( var faker:Faker )
+    //! Generates random double.
     var b = [[ BitRepresentation64 ui2=[[uint[2] faker |> random_uint; faker |> random_uint]] ]]
     return unsafe(b.d)
 
 def public any_set ( var faker:Faker )
+    //! Generates random set (uint[8])
     var ch : uint[8]
     for c in ch
         faker.rnd |> next( c)
     return ch
 
 def public any_char ( var faker:Faker )
+    //! Generates random char. (1 to 255 range)
     var ch = 0u
     faker.rnd |> next(ch)
     return int((ch % 255u)+1u)
 
 def public number ( var faker:Faker )
+    //! Generates random number string.
     return re_gen(re_number,faker.rnd)
 
 def public positive_int ( var faker:Faker )
+    //! Generates random positive integer string.
     return re_gen(re_positive_int,faker.rnd)
 
 def public any_int ( var faker:Faker )
+    //! Generates random integer string.
     return re_gen(re_int,faker.rnd)
 
 def public any_hex ( var faker:Faker )
+    //! Generates random integer hex string.
     return re_gen(re_hex,faker.rnd)
 
 def public any_float ( var faker:Faker )
+    //! Generates random float string.
     return re_gen(re_float,faker.rnd)
 
 def public any_uint ( var faker:Faker )
+    //! Generates random unsigned integer string.
     return re_gen(re_uint,faker.rnd)
 
 def public month ( var faker:Faker )
+    //! Generates random month string.
     var month = 0u
     faker.rnd |> next(month)
     month = month % 12u
     return g_months[month].name
 
 def public day ( var faker:Faker )
+    //! Generates random day string.
     var day = 0u
     faker.rnd |> next(day)
     day = day % 7u
     return g_days[day]
 
 def public is_leap_year ( year:uint )
+    //! Returns true if year is leap year.
     return (year % 4u == 0u) && ( year % 100u != 0u || year % 400u == 0u )
 
 def public week_day ( year, month, day : uint )
+    //! Returns week day for given date.
     return week_day(int(year),int(month),int(day))
 
 def public week_day ( year, month, day : int )
+    //! Returns week day for given date.
     static_let <|
         let offset <- [{auto 0; 31; 59; 90; 120; 151; 181; 212; 243; 273; 304; 334}]
     var afterFeb = 1
@@ -200,6 +226,7 @@ def public week_day ( year, month, day : int )
     return dayOfWeek
 
 def public date ( var faker:Faker )
+    //! Generates random date string.
     var month = 0u
     var day = 0u
     var year = 0u

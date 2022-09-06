@@ -700,6 +700,36 @@ make_expression_block returns smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBl
 
 Create ExprBlock and move all expressions from expr to the list of the block.
 
+.. _function-_at_templates_boost_c__c_add_type_ptr_ref_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M:
+
+.. das:function:: add_type_ptr_ref(a: TypeDeclPtr)
+
+add_type_ptr_ref returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++a       + :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
++--------+----------------------------------------+
+
+
+Implementation details for the reification. This adds any array to the rules.
+
+.. _function-_at_templates_boost_c__c_add_type_ptr_ref_Y_ls_StructurePtr_gr_1_ls_H_ls_ast_c__c_Structure_gr__gr_?M:
+
+.. das:function:: add_type_ptr_ref(a: StructurePtr)
+
+add_type_ptr_ref returns  :ref:`StructurePtr <alias-StructurePtr>` 
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++a       + :ref:`StructurePtr <alias-StructurePtr>` +
++--------+------------------------------------------+
+
+
+Implementation details for the reification. This adds any array to the rules.
+
 .. _function-_at_templates_boost_c__c_apply_qmacro_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
 .. das:function:: apply_qmacro(expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)

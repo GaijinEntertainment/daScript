@@ -74,6 +74,8 @@ THE SOFTWARE.
    decs_boost.rst
    coroutines.rst
    interfaces.rst
+   export_constructor.rst
+   faker.rst
 
 
 
