@@ -148,9 +148,14 @@ class RstComment : AstCommentReader
         if structure_comment != ""
             for ann in st.annotations
                 if (ann.annotation.name=="function_macro" || ann.annotation.name=="call_macro" || ann.annotation.name=="contract"
-                    || ann.annotation.name=="block_macro" || ann.annotation.name=="tag_function_macro" || ann.annotation.name=="structure_macro")
+                    || ann.annotation.name=="block_macro" || ann.annotation.name=="tag_function_macro")
                     let ann_name = get_macro_name(st,string(ann.annotation.name))
                     write_to_detail("function_annotation-{prog.thisModuleName}-{ann_name}", structure_comment)
+                    is_annotation = true
+                    break
+                if ann.annotation.name=="structure_macro"
+                    let ann_name = get_macro_name(st,string(ann.annotation.name))
+                    write_to_detail("structure_macro-{prog.thisModuleName}-{ann_name}", structure_comment)
                     is_annotation = true
                     break
                 elif ann.annotation.name=="variant_macro"

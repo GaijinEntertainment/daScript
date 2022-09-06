@@ -40,6 +40,124 @@ Variant macros
 
 |variant_macro-ast_boost-better_rtti_in_expr|
 
+++++++++++++++++
+Structure macros
+++++++++++++++++
+
+.. _handle-ast_boost-function_macro:
+
+.. das:attribute:: function_macro
+
+|structure_macro-ast_boost-function_macro|
+
+.. _handle-ast_boost-block_macro:
+
+.. das:attribute:: block_macro
+
+|structure_macro-ast_boost-block_macro|
+
+.. _handle-ast_boost-structure_macro:
+
+.. das:attribute:: structure_macro
+
+|structure_macro-ast_boost-structure_macro|
+
+.. _handle-ast_boost-enumeration_macro:
+
+.. das:attribute:: enumeration_macro
+
+|structure_macro-ast_boost-enumeration_macro|
+
+.. _handle-ast_boost-contract:
+
+.. das:attribute:: contract
+
+|structure_macro-ast_boost-contract|
+
+.. _handle-ast_boost-reader_macro:
+
+.. das:attribute:: reader_macro
+
+|structure_macro-ast_boost-reader_macro|
+
+.. _handle-ast_boost-comment_reader:
+
+.. das:attribute:: comment_reader
+
+|structure_macro-ast_boost-comment_reader|
+
+.. _handle-ast_boost-call_macro:
+
+.. das:attribute:: call_macro
+
+|structure_macro-ast_boost-call_macro|
+
+.. _handle-ast_boost-typeinfo_macro:
+
+.. das:attribute:: typeinfo_macro
+
+|structure_macro-ast_boost-typeinfo_macro|
+
+.. _handle-ast_boost-variant_macro:
+
+.. das:attribute:: variant_macro
+
+|structure_macro-ast_boost-variant_macro|
+
+.. _handle-ast_boost-for_loop_macro:
+
+.. das:attribute:: for_loop_macro
+
+|structure_macro-ast_boost-for_loop_macro|
+
+.. _handle-ast_boost-capture_macro:
+
+.. das:attribute:: capture_macro
+
+|structure_macro-ast_boost-capture_macro|
+
+.. _handle-ast_boost-tag_structure:
+
+.. das:attribute:: tag_structure
+
+|structure_macro-ast_boost-tag_structure|
+
+.. _handle-ast_boost-tag_function_macro:
+
+.. das:attribute:: tag_function_macro
+
+|structure_macro-ast_boost-tag_function_macro|
+
+.. _handle-ast_boost-infer_macro:
+
+.. das:attribute:: infer_macro
+
+|structure_macro-ast_boost-infer_macro|
+
+.. _handle-ast_boost-dirty_infer_macro:
+
+.. das:attribute:: dirty_infer_macro
+
+|structure_macro-ast_boost-dirty_infer_macro|
+
+.. _handle-ast_boost-optimization_macro:
+
+.. das:attribute:: optimization_macro
+
+|structure_macro-ast_boost-optimization_macro|
+
+.. _handle-ast_boost-lint_macro:
+
+.. das:attribute:: lint_macro
+
+|structure_macro-ast_boost-lint_macro|
+
+.. _handle-ast_boost-global_lint_macro:
+
+.. das:attribute:: global_lint_macro
+
+|structure_macro-ast_boost-global_lint_macro|
+
 +++++++
 Classes
 +++++++

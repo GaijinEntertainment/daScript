@@ -134,4 +134,15 @@ For example::
 In the example above the find_query will return `true` once the first intesection is found.
 Note: if return is missing, or end of find_query block is reached - its assumed that find_query did not find anything, and will return false.
 
+++++++++++++++++
+Structure macros
+++++++++++++++++
+
+.. _handle-decs_boost-decs_template:
+
+.. das:attribute:: decs_template
+
+This macro creates a template for the given structure.
+`apply_decs_template` and `remove_decs_template` functions are generated for the structure type.
+
 

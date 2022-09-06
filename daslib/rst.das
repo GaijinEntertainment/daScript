@@ -577,6 +577,26 @@ def document_annotations(doc_file:file;mod:Module?)
             return
         document_annotation(doc_file,mod,value)
 
+def document_structure_macro(doc_file:file;mod:Module?;value)
+    fwrite(doc_file,make_label(handle_label_name(value)))
+    fwrite(doc_file,make_domain("das:attribute"))
+    fwrite(doc_file,"{value.name}\n\n")
+    document_topic(doc_file,topic("structure_macro",mod,string(value.name)))
+
+def document_structure_macros(doc_file:file;mod:Module?)
+    var any = false
+    module_for_each_annotation(mod) <| $(value)
+        if value.isTypeAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation
+            return
+        any = true
+    if !any
+        return
+    fwrite(doc_file,make_group("Structure macros"))
+    module_for_each_annotation(mod) <| $(value)
+        if value.isTypeAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation
+            return
+        document_structure_macro(doc_file,mod,value)
+
 def document_call_macro(doc_file:file;mod:Module?;value:string implicit)
     fwrite(doc_file,make_label(call_macro_label_name(mod,value)))
     fwrite(doc_file,make_domain("das:attribute"))
@@ -877,6 +897,7 @@ def public document(name:string;mod:Module?;fname,substname:string;groups:array<
     document_variant_macros(doc_file,mod)
     document_typeinfo_macros(doc_file,mod)
     document_annotations(doc_file,mod)
+    document_structure_macros(doc_file,mod)
     document_classes(doc_file,mod)
     document_functions(doc_file,mod,groups)
     fwrite(doc_file,"\n")

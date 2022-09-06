@@ -127,5 +127,40 @@
 
 .. |function-ast_boost-visit_expression| replace:: Visits expression, returns new expression with correct reference count (or old expression with unmodified reference count).
 
+.. |structure_macro-ast_boost-function_macro| replace:: Turns AstFunctionAnnotation into a macro with the specified `name`.
 
+.. |structure_macro-ast_boost-block_macro| replace:: Turns AstBlockAnnotation into a macro with the specified `name`.
 
+.. |structure_macro-ast_boost-structure_macro| replace:: Turns AstStructureAnnotation into a macro with the specified `name`.
+
+.. |structure_macro-ast_boost-enumeration_macro| replace:: Turns AstEnumerationAnnotation into a macro with the specified `name`.
+
+.. |structure_macro-ast_boost-contract| replace:: Turns AstFunctionAnnotation into a contract macro with the specified `name`.
+
+.. |structure_macro-ast_boost-reader_macro| replace:: Turns AstReaderMacro into a macro with the specified `name`.
+
+.. |structure_macro-ast_boost-comment_reader| replace:: Turns AstCommentReader into a macro with the specified `name`.
+
+.. |structure_macro-ast_boost-call_macro| replace:: Turns AstCallMacro into a macro with the specified `name`.
+
+.. |structure_macro-ast_boost-typeinfo_macro| replace:: Turns AstTypeInfoMacro into a macro with the specified `name`.
+
+.. |structure_macro-ast_boost-variant_macro| replace:: Turns AstVariantMacro into a macro with the specified `name`.
+
+.. |structure_macro-ast_boost-for_loop_macro| replace:: Turns AstForLoopMacro into a macro with the specified `name`.
+
+.. |structure_macro-ast_boost-capture_macro| replace:: Turns AstCaptureMacro into a macro with the specified `name`.
+
+.. |structure_macro-ast_boost-tag_structure| replace:: This macro implements [tag_structure] annotation, which allows to add tag (name) to a specific structure.
+
+.. |structure_macro-ast_boost-tag_function_macro| replace:: This macro implements [tag_function_macro] annotation, which allows to add an AstFunctionAnnotation to any function with a specific [tag_function(name)] tag.
+
+.. |structure_macro-ast_boost-infer_macro| replace:: Turns AstPassMacro into a macro with the specified 'name', which is called during the `infer` pass.
+
+.. |structure_macro-ast_boost-dirty_infer_macro| replace:: Turns AstPassMacro into a macro with the specified 'name', which is called during the `dirty infer` pass.
+
+.. |structure_macro-ast_boost-optimization_macro| replace:: Turns AstPassMacro into a macro with the specified 'name', which is called during the `optimization` pass.
+
+.. |structure_macro-ast_boost-lint_macro| replace:: Turns AstPassMacro into a macro with the specified 'name', which is called during the `lint` pass.
+
+.. |structure_macro-ast_boost-global_lint_macro| replace:: Turns AstPassMacro into a macro with the specified 'name', which is called during the `global lint` pass.

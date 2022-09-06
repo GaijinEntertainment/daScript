@@ -73,6 +73,7 @@ THE SOFTWARE.
    decs.rst
    decs_boost.rst
    coroutines.rst
+   interfaces.rst
 
 
 

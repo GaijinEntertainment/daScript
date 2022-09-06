@@ -26,7 +26,7 @@ class InterfaceMacro : AstStructureAnnotation
 
 [structure_macro(name="implements")]
 class ImplementsMacro : AstStructureAnnotation
-    //! implements 'implements' macro, adds get_{Interface} method as well as interface bindings and implementations
+    //! implements 'implements' macro, adds get`{Interface} method as well as interface bindings and implementation.
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         if length(args)!=1
             errors := "implements macro takes exactly one argument"
@@ -47,10 +47,11 @@ class ImplementsMacro : AstStructureAnnotation
         // all names
         let iface_var_name = "_interface_{iface_name}"
         let iface_class_name = "_implementation_{st.name}_{iface_name}"
-        let iface_get_name = "get_{iface_name}"
+        let iface_get_name = "get`{iface_name}"
         let iface_get_name_func = "{st.name}`{iface_get_name}"
         // make class for the interface, remove 'interface' annotation
         var cls <- make_class(iface_class_name, parent, st._module)
+        cls.flags |= StructureFlags privateStructure
         var iface_index = -1
         for ann,ii in cls.annotations,range(100500)
             if ann.annotation.name == "interface"
@@ -63,7 +64,7 @@ class ImplementsMacro : AstStructureAnnotation
         // add {st}::_interface_{Foo} : Foo?
         var iface_ptr <- qmacro_type(type<$t(StructurePtr(parent))?>); defer_delete(iface_ptr)
         st |> add_structure_field ( iface_var_name, clone_type(iface_ptr), [[ExpressionPtr]]);
-        // add function {st}::get_{Foo} : Foo?
+        // add function {st}::get`{Foo} : Foo?
         var fn_get_i <- qmacro_method(iface_get_name_func,st) <| $ ( var self: $t(st) ) : $t(iface_ptr)
             if self.$f(iface_var_name) == null
                 self.$f(iface_var_name) = new $t(cls)(unsafe(addr(self)))
@@ -73,7 +74,7 @@ class ImplementsMacro : AstStructureAnnotation
         var st_ptr <- qmacro_type(type<$t(st)?>); defer_delete(st_ptr)
         let fi = cls |> add_structure_field ( "_self", clone_type(st_ptr), [[ExpressionPtr]]);
         cls.fields[fi].annotation |> add_annotation_argument("do_not_delete",true)
-        cls.fields[fi].flags |= FieldDeclarationFlags doNotDelete
+        cls.fields[fi].flags |= FieldDeclarationFlags doNotDelete | FieldDeclarationFlags privateField
         // add {cls} ( var s : {ST}? )
         var ctor <- qmacro_function("{iface_class_name}`{iface_class_name}") <| $ ( s : $t(st_ptr) )
             _self = s
@@ -81,12 +82,12 @@ class ImplementsMacro : AstStructureAnnotation
         modify_to_class_member(cls, ctor, false, false)
         add_function(st._module, ctor)
         add_function(st._module, ctor_fun)
-        // add get_{Foo} : Foo?
+        // add get`{Foo} : Foo?
         st |> add_structure_field (
             iface_get_name,
             qmacro_type(type<function<(self:$t(st)):$t(iface_ptr)>>),
             qmacro(@@$i(iface_get_name_func))
-        );
+        )
         // now, for the methods
         let skipl = length(iface_name) + 1
         for fld in st.fields

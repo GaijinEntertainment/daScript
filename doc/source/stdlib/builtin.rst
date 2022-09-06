@@ -367,6 +367,34 @@ Handled types
 
 |any_annotation-builtin-clock|
 
+++++++++++++++++
+Structure macros
+++++++++++++++++
+
+.. _handle-builtin-comment:
+
+.. das:attribute:: comment
+
+|structure_macro-builtin-comment|
+
+.. _handle-builtin-macro_interface:
+
+.. das:attribute:: macro_interface
+
+|structure_macro-builtin-macro_interface|
+
+.. _handle-builtin-cpp_layout:
+
+.. das:attribute:: cpp_layout
+
+|structure_macro-builtin-cpp_layout|
+
+.. _handle-builtin-persistent:
+
+.. das:attribute:: persistent
+
+|structure_macro-builtin-persistent|
+
 ++++++++++
 Containers
 ++++++++++

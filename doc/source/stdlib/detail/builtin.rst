@@ -332,3 +332,10 @@
 
 .. |function-builtin-ctz| replace:: count trailing zeros
 
+.. |structure_macro-builtin-comment| replace:: [comment] macro, which does absolutely nothing but holds arguments.
+
+.. |structure_macro-builtin-macro_interface| replace:: [macro_interface] specifies that class and its inherited children are used as a macro interfaces, and would not be exported by default.
+
+.. |structure_macro-builtin-cpp_layout| replace:: [cpp_layout] specifies that structure uses C++ memory layout rules, as oppose to native daScript memory layout rules.
+
+.. |structure_macro-builtin-persistent| replace:: [persistent] annotation specifies that structure is allocated (via new) on the C++ heap, as oppose to daScript context heap.

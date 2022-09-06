@@ -48,6 +48,7 @@ require daslib/decs
 require daslib/decs_boost
 require daslib/utf8_utils
 require daslib/coroutines
+require daslib/interfaces
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -544,6 +545,12 @@ def document_module_coroutines(root:string)
     }]
     document("Coroutines and additional generator support",mod,"{root}/coroutines.rst","{root}/detail/coroutines.rst",groups)
 
+def document_module_interfaces(root:string)
+    var mod = find_module("interfaces")
+    var groups <- [{DocGroup
+        group_by_regex("Top level coroutine evaluation", mod, %regex~(cr_run|cr_run_all)$%%)
+    }]
+    document("Interfaces",mod,"{root}/interfaces.rst","{root}/detail/interfaces.rst",groups)
 
 [export]
 def main
@@ -572,6 +579,7 @@ def main
     document_module_coroutines(root)
     document_module_constexpr(root)
     document_module_contracts(root)
+    document_module_interfaces(root)
     document_module_cpp_bind(root)
     // document_module_cpp_gen(root)                // NOTE - do not document. its obsolete. use cbind_boost instead
     // document_module_dap(root)                    // todo: ask to document

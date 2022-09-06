@@ -24,17 +24,13 @@ class Foo
     def ILogger`log ( message : string )
         print("log {message}\n")
 
-
 [export]
 def main
-    print("hello, world\n")
     var f = new Foo()
-
-    f->get_ITick()->beforeTick()
-    f->get_ITick()->tick(1.0)
-    f->get_ITick()->afterTick()
-    f->get_ILogger()->log("hello")
-
+    f->get`ITick()->beforeTick()
+    f->get`ITick()->tick(1.0)
+    f->get`ITick()->afterTick()
+    f->get`ILogger()->log("hello")
     unsafe
         delete f
 
