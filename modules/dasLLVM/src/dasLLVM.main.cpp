@@ -10,9 +10,17 @@
 
 namespace das {
 
+
+LLVMDisasmContextRef das_LLVMCreateDisasm (const char *TripleName, void *DisInfo, int TagType) {
+    return LLVMCreateDisasm(TripleName,DisInfo,TagType,nullptr,nullptr);
+}
+
 void Module_dasLLVM::initMain() {
 	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeCore >(*this,lib,"LLVMInitializeCore",SideEffects::worstDefault,"LLVMInitializeCore")
 		->args({"R"});
+    // disasm
+	addExtern<DAS_BIND_FUN(das_LLVMCreateDisasm) >(*this,lib,"LLVMCreateDisasm",SideEffects::worstDefault,"das_LLVMCreateDisasm")
+		->args({"TripleName","DisInfo","TagType"});
 }
 
 ModuleAotType Module_dasLLVM::aotRequire ( TextWriter & tw ) const {
