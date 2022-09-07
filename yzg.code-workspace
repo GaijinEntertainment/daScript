@@ -93,7 +93,8 @@
 			"typeinfo": "cpp",
 			"valarray": "cpp",
 			"variant": "cpp",
-			"xfacet": "cpp"
+			"xfacet": "cpp",
+			"*.def": "cpp"
 		},
 		"dascript.experimental": true,
 		"dascript.hovers.verbose": true,
