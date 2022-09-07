@@ -126,6 +126,13 @@ def clang_getCursorLocationDescription ( var c:CXCursor )
     var fname = clang_getFileName(file)
     return "{string(fname)}:{int(line)}:{int(column)}"
 
+def clang_getCursorLocationFileName ( var c:CXCursor )
+    var file : CXFile
+    var line, column, offset : uint
+    clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
+    var fname = clang_getFileName(file)
+    return "{string(fname)}"
+
 def clang_isForwardDeclaration ( var cursor:CXCursor )
     var definition = clang_getCursorDefinition(cursor)
     if clang_equalCursors(definition, clang_getNullCursor())!=0u
@@ -620,7 +627,8 @@ let DEFAULT_CLANG_ARGUMENTS <- [{string
 }]
 
 class CppGenBind : AnyGenBind
-    include_parse_file = true
+    include_parse_file = true   // need to add #include <PREFIX_FILE_NAME> to the generated file
+    include_local_parse_file = false    // if false, #include <PREFIX_FILE_NAME> will be added to the generated file, otherwise #include "PREFIX_FILE_NAME"
     generate_lsp : bool = false
     override define_const_style_das = false
     enum_decl_file : FILE const?
@@ -826,6 +834,7 @@ class CppGenBind : AnyGenBind
         let dashing_name = namespace_name(struct_name,"_")
         let st = build_string() <| $ ( var writer:StringBuilderWriter )
             swrite |> push(unsafe(addr(writer)))
+            writer |> write("// from {clang_getCursorLocationDescription(c)}\n")
             writer |> write("struct {dashing_name}_GeneratedAnnotation : ManagedStructureAnnotation<{struct_namespace_name}> \{\n")
             if isLocalType(struct_name,struct_namespace_name)
                 writer |> write("\tvirtual bool isLocal() const override \{ return true; \}\n")
@@ -1001,6 +1010,7 @@ class CppGenBind : AnyGenBind
             let function_cpp_type = functionPtrSpelling(c,false)
             bind_enchantation = " {function_cpp_type} , {function_cpp_name} "
             cpp_enchantation = function_cpp_name
+        fprint(func_file, "// from {clang_getCursorLocationDescription(c)}\n")
         fprint(func_file, "\taddExtern<{bind_enchantation}{extra_enchantation}>(*this,lib,\"{das_function_name}\",SideEffects::worstDefault,\"{cpp_enchantation}\")")
         let narg = clang_Cursor_getNumArguments(c)
         if narg!=0 || isMethod
@@ -1159,12 +1169,17 @@ class CppGenBind : AnyGenBind
             fprint(enum_decl_file, "DAS_BASE_BIND_ENUM_GEN({cppEnumName},{das_enum_name});\n\n")
             if enums_with_flags |> key_exists(cppEnumName)
                 fprint(enum_add_file,"addEnumFlagOps<{cppEnumName}>(*this,lib,\"{cppEnumName}\");\n");
+    def skip_enum ( ns_en, en : string )
+        return false
     def override parse_Enum ( var cursor : CXCursor; enum_name : string )
         let ns_en = namespace_name(enum_name)
         let das_enum_name = dasEnumName(enum_name,ns_en)
+        if skip_enum(ns_en,enum_name)
+            return
         enumDecl |> push([[auto ns_en,enum_name]])
         let dashing_name = namespace_name(enum_name,"_")
-        fprint(enum_class_file, "class Enumeration_{dashing_name} : public das::Enumeration \{\n")
+        fprint(enum_class_file, "// from {clang_getCursorLocationDescription(cursor)}\n")
+        fprint(enum_class_file, "class Enumeration_{dashing_name} : public das::Enumeration\{\n")
         fprint(enum_class_file, "public:\n")
         fprint(enum_class_file, "\tEnumeration_{dashing_name}() : das::Enumeration(\"{das_enum_name}\") \{\n")
         fprint(enum_class_file, "\t\texternal = true;\n")
@@ -1185,6 +1200,7 @@ class CppGenBind : AnyGenBind
         let tdn = string(clang_getCursorDisplayName(c))
         var tdt = clang_getCanonicalType(clang_getCursorType(c))
         let tdts = string(clang_getTypeSpelling(tdt))
+        fprint(alias_add_file, "// from {clang_getCursorLocationDescription(c)}\n")
         fprint(alias_add_file, "auto alias_{tdn} = typeFactory<{tdts}>::make(lib);\n")
         fprint(alias_add_file, "alias_{tdn}->alias = \"{tdn}\";\n")
         fprint(alias_add_file, "addAlias(alias_{tdn});\n\n")
@@ -1231,7 +1247,10 @@ class CppGenBind : AnyGenBind
         module_need_h_file |> fwrite("#pragma once\n")
         generateModuleNeedHPrefix()
         if include_parse_file
-            module_need_h_file |> fwrite("#include <{PARSE_FILE_NAME}>\n")
+            if include_local_parse_file
+                module_need_h_file |> fwrite("#include \"{PARSE_FILE_NAME}\"\n")
+            else
+                module_need_h_file |> fwrite("#include <{PARSE_FILE_NAME}>\n")
         module_need_h_file |> fwrite("#include \"{bind_module}.enum.decl.inc\"\n")
         module_need_h_file |> fwrite("#include \"{bind_module}.enum.decl.cast.inc\"\n")
         module_need_h_file |> fwrite("#include \"{bind_module}.struct.decl.inc\"\n")

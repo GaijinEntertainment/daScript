@@ -209,6 +209,40 @@ namespace das
         static __forceinline vec4f from ( int64_t x )          { return v_cast_vec4f(v_ldui_half(&x)); }
     };
 
+#if defined(_MSC_VER)
+
+    template <>
+    struct cast <long> {
+        static __forceinline long to ( vec4f x )               { return (long) v_extract_xi64(v_cast_vec4i(x)); }
+        static __forceinline vec4f from ( long x )             { return v_cast_vec4f(v_ldui_half(&x)); }
+    };
+
+    template <>
+    struct cast <unsigned long> {
+        static __forceinline unsigned long to ( vec4f x )      { return (unsigned long) v_extract_xi64(v_cast_vec4i(x)); }
+        static __forceinline vec4f from ( unsigned long x )    { return v_cast_vec4f(v_ldui_half(&x)); }
+    };
+
+    template <>
+    struct cast <long double> {
+        static __forceinline long double to(vec4f x)            { union { vec4f v; long double t; } A; A.v = x; return A.t; }
+        static __forceinline vec4f from ( long double x )       { union { vec4f v; long double t; } A; A.t = x; return A.v; }
+    };
+
+    template <>
+    struct cast <wchar_t> {
+        static __forceinline wchar_t to ( vec4f x )           { return wchar_t(v_extract_xi(v_cast_vec4i(x))); }
+        static __forceinline vec4f from ( wchar_t x )         { return v_cast_vec4f(v_seti_x(x)); }
+    };
+
+    template <>
+    struct cast <char> {
+        static __forceinline char to ( vec4f x )            { return char(v_extract_xi(v_cast_vec4i(x))); }
+        static __forceinline vec4f from ( char x )          { return v_cast_vec4f(v_seti_x(x)); }
+    };
+
+
+#endif
 
 #if defined(__APPLE__)
     #if __LP64__
