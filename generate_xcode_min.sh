@@ -12,6 +12,7 @@ time {
         -DDAS_BGFX_DISABLED:BOOL=TRUE           \
         -DDAS_XBYAK_DISABLED:BOOL=TRUE          \
         -DDAS_CLANG_BIND_DISABLED:BOOL=TRUE     \
+        -DDAS_LLVM_DISABLED:BOOL=TRUE           \
         -DDAS_MINFFT_DISABLED:BOOL=TRUE         \
         -DDAS_SOUND_DISABLED:BOOL=TRUE          \
         -DDAS_STDDLG_DISABLED:BOOL=TRUE         \
