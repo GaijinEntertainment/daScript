@@ -17,21 +17,18 @@ def main
     LLVMDisposeMessage(error)
     var engine : LLVMExecutionEngineRef
     error = ""
-    LLVMInitializeAllTargets()
-    LLVMInitializeAllTargetMCs()
-    if LLVMCreateExecutionEngineForModule(safe_addr(engine), mod, safe_addr(error)) != 0
-        panic("failed to create execution engine")
+    LLVMLinkInMCJIT()
+    LLVMInitializeNativeTarget()
+    LLVMInitializeNativeAsmPrinter()
+    LLVMInitializeNativeAsmParser()
+    if LLVMCreateJITCompilerForModule(safe_addr(engine), mod, 2u, safe_addr(error)) != 0
+        panic("failed to create JIT compilerdue to {error}")
     if error != ""
         LLVMDisposeMessage(error)
         panic("error")
-    var x = 10ul
-    var y = 11ul
-    var args <- [[LLVMGenericValueRef
-        LLVMCreateGenericValueOfInt(LLVMInt32Type(), x, 0);
-        LLVMCreateGenericValueOfInt(LLVMInt32Type(), y, 0)
-    ]]
-    var res = LLVMRunFunction(engine, sum, 2u, safe_addr(args[0]))
-    print("result = {int(LLVMGenericValueToInt(res, 0))}\n")
+    var pfun = LLVMGetFunctionAddress(engine, "sum")
+    let res = run_int_int_int_function(unsafe(reinterpret<void?> pfun), 11, 12)
+    print("result = {res}\n")
     LLVMDumpModule(mod)
     LLVMDisposeBuilder(builder)
     LLVMDisposeExecutionEngine(engine)
