@@ -25,49 +25,104 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 
     LIST(APPEND CMAKE_MODULE_PATH ${DAS_LLVM_DIR})
 
+
 	SET(DAS_LLVM_MODULE_SRC
-	#	${DAS_LLVM_DIR}/src/need_dasLlvm.h
+	# monkey patched
+		${DAS_LLVM_DIR}/src/cb_dasLLVM.h
+	# GENERATED
+		${DAS_LLVM_DIR}/src/need_dasLLVM.h
 		${DAS_LLVM_DIR}/src/dasLLVM.h
 		${DAS_LLVM_DIR}/src/dasLLVM.cpp
-#	# user include
-#		${DAS_LLVM_DIR}/src/dasLlvm.main.cpp
-#	# generated binding includes
-#		${DAS_LLVM_DIR}/src/dasLlvm.alias.add.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.dummy.add.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.enum.add.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.enum.class.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.enum.decl.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.enum.decl.cast.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.struct.add.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.struct.postadd.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.struct.class.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.struct.decl.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.struct.impl.inc
-#		${DAS_LLVM_DIR}/src/dasLlvm.struct.cast.inc
-#	# generated functions
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_1.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_2.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_3.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_4.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_5.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_6.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_7.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_8.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_9.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_10.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_11.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_12.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_13.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_14.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_15.cpp
-#		${DAS_LLVM_DIR}/src/dasLlvm.func_16.cpp
+	# user include
+		${DAS_LLVM_DIR}/src/dasLLVM.main.cpp
+	# generated binding includes
+		${DAS_LLVM_DIR}/src/dasLLVM.alias.add.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.dummy.add.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.enum.add.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.enum.class.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.enum.decl.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.enum.decl.cast.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.struct.add.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.struct.postadd.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.struct.class.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.struct.decl.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.struct.impl.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.struct.cast.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.func.reg.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.func.decl.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.func.aot.inc
+		${DAS_LLVM_DIR}/src/dasLLVM.func.aot.decl.inc
+	# generated functions
+		${DAS_LLVM_DIR}/src/dasLLVM.func_1.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_2.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_3.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_4.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_5.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_6.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_7.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_8.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_9.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_10.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_11.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_12.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_13.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_14.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_15.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_16.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_17.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_18.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_19.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_20.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_21.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_22.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_23.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_24.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_25.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_26.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_27.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_28.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_29.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_30.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_31.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_32.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_33.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_34.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_35.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_36.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_37.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_38.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_39.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_40.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_41.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_42.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_43.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_44.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_45.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_46.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_47.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_48.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_49.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_50.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_51.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_52.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_53.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_54.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_55.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_56.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_57.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_58.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_59.cpp
 	)
 
 	ADD_MODULE_LIB(libDasModuleLlvm)
-	ADD_MODULE_CPP(dasLlvm)
+	ADD_MODULE_CPP(dasLLVM)
 	# ADD_MODULE_NATIVE(LLVM_boost)
 	ADD_LIBRARY(libDasModuleLlvm ${DAS_LLVM_MODULE_SRC} ${DAS_LLVM_MODULE_PLATFORM_SRC})
-	TARGET_LINK_LIBRARIES(libDasModuleLlvm ${LLVM_LIBRARIES} ${LIBCLANG_LIB}/libclang.lib)
+	TARGET_LINK_LIBRARIES(libDasModuleLlvm ${LLVM_LIBRARIES}
+		${LIBCLANG_LIB}/LLVM-C.lib
+		${LIBCLANG_LIB}/Remarks.lib
+		${LIBCLANG_LIB}/LTO.lib
+	)
 	# ADD_DEPENDENCIES(libDasModuleLlvm)
 	TARGET_INCLUDE_DIRECTORIES(libDasModuleLlvm PUBLIC ${LLVM_INCLUDE_DIR} ${LIBCLANG_INCLUDE})
 
