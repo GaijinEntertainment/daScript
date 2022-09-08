@@ -10,11 +10,17 @@ MAKE_TYPE_FACTORY(NetworkServer,Server)
 
 namespace das {
 
-    bool needShutdown = false;
+    static atomic<int32_t> g_moduleNetworkTotalServers{0};
     class ServerAdapter : public Server {
     public:
         ServerAdapter(char * pClass, const StructInfo * info, Context * ctx ) {
             update(pClass,info,ctx);
+            if ( !g_moduleNetworkTotalServers++ )
+                Server::startup();
+        }
+        virtual ~ServerAdapter() {
+            if ( !--g_moduleNetworkTotalServers )
+                Server::shutdown();
         }
         void update ( char * pClass, const StructInfo * info, Context * ctx ) {
             context = ctx;
@@ -79,7 +85,6 @@ namespace das {
     #include "network.das.inc"
 
     bool makeServer ( const void * pClass, const StructInfo * info, Context * context ) {
-        needShutdown = needShutdown || Server::startup();
         auto server = make_smart<ServerAdapter>((char *)pClass,info,context);
         if ( !server->isValid() ) return false;
         server.orphan();
@@ -154,9 +159,6 @@ namespace das {
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_network.h\"\n";
             return ModuleAotType::cpp;
-        }
-        virtual ~Module_Network() {
-            if ( needShutdown ) Server::shutdown();
         }
     };
 }

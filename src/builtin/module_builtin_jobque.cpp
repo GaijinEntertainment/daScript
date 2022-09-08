@@ -194,8 +194,8 @@ namespace das {
         }, 0, JobPriority::Default);
     }
 
-    atomic<int32_t> g_jobQueAvailable{0};
-    atomic<int32_t> g_jobQueTotalThreads;
+    static atomic<int32_t> g_jobQueAvailable{0};
+    static atomic<int32_t> g_jobQueTotalThreads{0};
 
     bool is_job_que_shutting_down () {
         return g_jobQueAvailable == 0;
@@ -288,7 +288,6 @@ namespace das {
         Module_JobQue() : Module("jobque") {
             DAS_PROFILE_SECTION("Module_JobQue");
             g_jobQueAvailable++;
-            g_jobQueTotalThreads = 0;
             // libs
             ModuleLibrary lib;
             lib.addModule(this);
