@@ -2806,6 +2806,11 @@ namespace das {
         }
         return -1;
     }
+
+    float4 das_invoke_code ( void * pfun, vec4f anything, void * cmres, Context * context );
+    bool das_is_jit_function ( const Func func );
+    bool das_remove_jit ( const Func func );
+    bool das_instrument_jit ( void * pfun, const Func func, Context * context );
 }
 
 #if defined(_MSC_VER)

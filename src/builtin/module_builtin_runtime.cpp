@@ -959,6 +959,53 @@ namespace das
     addExtern<DAS_BIND_FUN(OPNAME##_str_dstr)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_str_dstr)); \
     addExtern<DAS_BIND_FUN(OPNAME##_dstr_str)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_dstr_str));
 
+    float4 das_invoke_code ( void * pfun, vec4f anything, void * cmres, Context * context ) {
+        vec4f * arguments = cast<vec4f *>::to(anything);
+        vec4f (*fun)(Context *, vec4f *, void *) = (vec4f(*)(Context *, vec4f *, void *)) pfun;
+        vec4f res = fun ( context, arguments, cmres );
+        return res;
+    }
+
+    bool das_is_jit_function ( const Func func ) {
+        auto simfn = func.PTR;
+        if ( !simfn ) return false;
+        return simfn->code && simfn->code->rtti_node_isJit();
+    }
+
+    bool das_remove_jit ( const Func func ) {
+        auto simfn = func.PTR;
+        if ( !simfn ) return false;
+        if ( simfn->code && simfn->code->rtti_node_isJit() ) {
+            auto jitNode = static_cast<SimNode_Jit *>(simfn->code);
+            simfn->code = jitNode->saved_code;
+            simfn->aot = jitNode->saved_aot;
+            simfn->aotFunction = jitNode->saved_aot_function;
+            simfn->jit = false;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    bool das_instrument_jit ( void * pfun, const Func func, Context * context ) {
+        auto simfn = func.PTR;
+        if ( !simfn ) return false;
+        if ( simfn->code && simfn->code->rtti_node_isJit() ) {
+            auto jitNode = static_cast<SimNode_Jit *>(simfn->code);
+            jitNode->func = (JitFunction) pfun;
+        } else {
+            auto node = context->code->makeNode<SimNode_Jit>(LineInfo(), (JitFunction)pfun);
+            node->saved_code = simfn->code;
+            node->saved_aot = simfn->aot;
+            node->saved_aot_function = simfn->aotFunction;
+            simfn->code = node;
+            simfn->aot = false;
+            simfn->aotFunction = nullptr;
+            simfn->jit = true;
+        }
+        return true;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1310,5 +1357,18 @@ namespace das
         // clz
         addExtern<DAS_BIND_FUN(uint32_clz)>(*this, lib, "clz", SideEffects::none, "uint32_clz")->arg("bits");
         addExtern<DAS_BIND_FUN(uint32_ctz)>(*this, lib, "ctz", SideEffects::none, "uint32_ctz")->arg("bits");
+        // jit
+        addExtern<DAS_BIND_FUN(das_invoke_code)>(*this, lib, "invoke_code",
+            SideEffects::worstDefault, "das_invoke_code")
+                ->args({"code","arguments","cmres","context"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_instrument_jit)>(*this, lib, "instrument_jit",
+            SideEffects::worstDefault, "das_instrument_jit")
+                ->args({"code","function","context"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_remove_jit)>(*this, lib, "remove_jit",
+            SideEffects::worstDefault, "das_remove_jit")
+                ->args({"function"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_is_jit_function)>(*this, lib, "is_jit_function",
+            SideEffects::worstDefault, "das_is_jit_function")
+                ->args({"function"});
     }
 }
