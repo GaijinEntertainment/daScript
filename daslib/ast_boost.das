@@ -656,6 +656,13 @@ def append_annotation ( var blk:smart_ptr<ExprBlock>; mod_name,ann_name:string; 
     add_block_annotation(blk, decl)
     decl := null
 
+def append_annotation ( var st:smart_ptr<Structure>; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
+    var ann = find_annotation(mod_name, ann_name)
+    assert(ann!=null)
+    var decl <- append_annotation(mod_name, ann_name, args)
+    add_structure_annotation(st, decl)
+    decl := null
+
 def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:string; val:bool )
     let argIdx = arguments |> add_annotation_argument(argName)
     arguments[argIdx].basicType = Type tBool

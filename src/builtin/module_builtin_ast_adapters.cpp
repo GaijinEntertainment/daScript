@@ -1651,6 +1651,21 @@ namespace das {
         blk->annotations.push_back(ann);
     }
 
+    void addAndApplyStructAnnotation ( smart_ptr_raw<Structure> st, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context ) {
+        string err;
+        if (!ann->annotation->rtti_isStructureAnnotation()) {
+            context->throw_error_ex("annotation %s failed to apply to struct %s, not a StructureAnnotation",
+                ann->annotation->name.c_str(), st->name.c_str());
+        }
+        auto stAnn = (StructureAnnotation*)ann->annotation.get();
+        auto program = daScriptEnvironment::bound->g_Program;
+        if ( !stAnn->touch(st, *program->thisModuleGroup, ann->arguments, err) ) {
+            context->throw_error_ex("annotation %s failed to apply to struct %s",
+                ann->annotation->name.c_str(), st->name.c_str());
+        }
+        st->annotations.push_back(ann);
+    }
+
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(*line_info, "adapter is required");
@@ -1740,6 +1755,9 @@ namespace das {
                 ->args({"module","annotation","context"});
         addExtern<DAS_BIND_FUN(addStructureStructureAnnotation)>(*this, lib,  "add_structure_annotation",
             SideEffects::modifyExternal, "addStructureStructureAnnotation")
+                ->args({"structure","annotation","context"});
+        addExtern<DAS_BIND_FUN(addAndApplyStructAnnotation)>(*this, lib,  "add_structure_annotation",
+            SideEffects::modifyExternal, "addAndApplyStructAnnotation")
                 ->args({"structure","annotation","context"});
         // enumeration annotation
         addAnnotation(make_smart<AstEnumerationAnnotationAnnotation>(lib));
