@@ -298,6 +298,9 @@ namespace das {
                     }
                 }
                 swap ( pStruct->annotations, *annL );
+                for ( const auto & pA : *annL ) {
+                    pStruct->annotations.push_back(pA);
+                }
                 delete annL;
             }
         }
