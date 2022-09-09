@@ -509,11 +509,12 @@ namespace das {
         virtual void preVisit ( ExprFor * ffor ) override {
             Visitor::preVisit(ffor);
             ss << "for ";
-        }
-        virtual void preVisitFor ( ExprFor * ffor, const VariablePtr & var, bool last ) override {
-            Visitor::preVisitFor(ffor,var,last);
-            ss << var->name;
-            if ( !last ) ss << ","; else ss << " in ";
+            bool first = true;
+            for ( auto i : ffor->iterators ) {
+                if ( first) first = false; else ss << ", ";
+                ss << i;
+            }
+            ss << " ";
         }
         virtual void preVisitForBody ( ExprFor * ffor, Expression * body ) override {
             Visitor::preVisitForBody(ffor, body);

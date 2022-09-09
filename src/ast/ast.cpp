@@ -1473,7 +1473,8 @@ namespace das {
         for ( const auto & ex :lst ) {
             if ( ex->rtti_isBlock() ) {
                 auto blk = static_pointer_cast<ExprBlock>(ex);
-                if ( blk->isCollapseable && blk->finalList.empty() ) {
+                // note: no need to check for `isCollapseable'. typically needCollapse is sufficient
+                if ( /* blk->isCollapseable && */ blk->finalList.empty() ) {
                     collapse(res, blk->list);
                 } else {
                     res.push_back(ex);

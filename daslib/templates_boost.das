@@ -281,6 +281,13 @@ def make_expression_block ( var exprs:array<ExpressionPtr> ) : smart_ptr<ExprBlo
     delete exprs
     return blk
 
+def make_expression_block ( var exprs:dasvector`smart_ptr`Expression ) : smart_ptr<ExprBlock>
+    //! Create ExprBlock and move all expressions from expr to the list of the block.
+    var blk <- new [[ExprBlock()]]
+    for e in exprs
+        blk.list |> emplace_new <| clone_expression(e)
+    return blk
+
 def private add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDeclFlags; var value:ExpressionPtr; priv:bool )
     var vvar <- new [[Variable() at=vat,
         name:=vname,

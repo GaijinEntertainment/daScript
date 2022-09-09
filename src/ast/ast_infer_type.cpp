@@ -2245,6 +2245,8 @@ namespace das {
                                 yva->generated = true;
                                 block->arguments.push_back(yva);
                             }
+                            // collapse it from the very top, so that all the macro goo which adds empty block goo collapses
+                            block->collapse();
                             // make it all
                             bool isUnsafe = !safeExpression(expr);
                             if ( verifyCapture(expr->capture, cl, isUnsafe, expr->at) ) {
