@@ -1,29 +1,22 @@
 require daslib/safe_addr
-require llvm
+require llvm/llvm_boost
 
 [export]
 def main
     var mod = LLVMModuleCreateWithName("my_module")
-    var param_types <- [[LLVMTypeRef LLVMInt32Type(); LLVMInt32Type() ]]
-    var ret_type = LLVMFunctionType(LLVMInt32Type(), safe_addr(param_types[0]), 2u, 0)
+    var ret_type = LLVMFunctionType(LLVMInt32Type(), [[LLVMTypeRef LLVMInt32Type(); LLVMInt32Type() ]])
     var sum = LLVMAddFunction(mod, "sum", ret_type)
     var entry = LLVMAppendBasicBlock(sum, "entry")
     var builder = LLVMCreateBuilder()
     LLVMPositionBuilderAtEnd(builder, entry)
     var tmp = LLVMBuildAdd(builder, LLVMGetParam(sum, 0u), LLVMGetParam(sum, 1u), "tmp")
     LLVMBuildRet(builder, tmp)
-    var error : string
-    LLVMVerifyModule(mod, LLVMVerifierFailureAction LLVMAbortProcessAction, safe_addr(error))
-    LLVMDisposeMessage(error)
+    LLVMVerifyModule(mod, LLVMVerifierFailureAction LLVMAbortProcessAction)
     var engine : LLVMExecutionEngineRef
-    error = ""
+    var error : string
     LLVMInitializeAllTargets()
     LLVMInitializeAllTargetMCs()
-    if LLVMCreateExecutionEngineForModule(safe_addr(engine), mod, safe_addr(error)) != 0
-        panic("failed to create execution engine")
-    if error != ""
-        LLVMDisposeMessage(error)
-        panic("error")
+    LLVMCreateExecutionEngineForModule(engine, mod)
     var x = 10ul
     var y = 11ul
     var args <- [[LLVMGenericValueRef
