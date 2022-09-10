@@ -921,6 +921,9 @@ namespace das {
             addProperty<bool (TypeDecl::*)() const, &ManagedType::isShareable>("isShareable", "isShareable");
             addProperty<DAS_BIND_MANAGED_PROP(isIndex)>("isIndex","isIndex");
             addProperty<DAS_BIND_MANAGED_PROP(isInteger)>("isInteger","isInteger");
+            addProperty<DAS_BIND_MANAGED_PROP(isSignedInteger)>("isSignedInteger","isSignedInteger");
+            addProperty<DAS_BIND_MANAGED_PROP(isUnsignedInteger)>("isUnsignedInteger","isUnsignedInteger");
+            addProperty<DAS_BIND_MANAGED_PROP(isFloatOrDouble)>("isFloatOrDouble","isFloatOrDouble");
             addProperty<DAS_BIND_MANAGED_PROP(isNumeric)>("isNumeric","isNumeric");
             addProperty<DAS_BIND_MANAGED_PROP(isNumericComparable)>("isNumericComparable","isNumericComparable");
             addProperty<DAS_BIND_MANAGED_PROP(isPointer)>("isPointer","isPointer");

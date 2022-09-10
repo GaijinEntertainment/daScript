@@ -88,6 +88,9 @@ namespace das {
         bool isShareable() const;
         bool isIndex() const;
         bool isInteger() const;
+        bool isSignedInteger() const;
+        bool isUnsignedInteger() const;
+        bool isFloatOrDouble() const;
         bool isNumeric() const;
         bool isNumericStorage() const;
         bool isNumericComparable() const;

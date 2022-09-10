@@ -2026,6 +2026,17 @@ namespace das
         }
     }
 
+    bool TypeDecl::isFloatOrDouble() const {
+        if (dim.size() != 0) return false;
+        switch (baseType) {
+        case Type::tFloat:
+        case Type::tDouble:
+            return true;
+        default:;
+        }
+        return false;
+    }
+
     bool TypeDecl::isInteger() const {
         if (dim.size() != 0) return false;
         switch (baseType) {
@@ -2044,6 +2055,32 @@ namespace das
         return false;
     }
 
+    bool TypeDecl::isSignedInteger() const {
+        if (dim.size() != 0) return false;
+        switch (baseType) {
+        case Type::tInt:
+        case Type::tInt8:
+        case Type::tInt16:
+        case Type::tInt64:
+            return true;
+        default:;
+        }
+        return false;
+    }
+
+    bool TypeDecl::isUnsignedInteger() const {
+        if (dim.size() != 0) return false;
+        switch (baseType) {
+        case Type::tUInt:
+        case Type::tBitfield:
+        case Type::tUInt8:
+        case Type::tUInt16:
+        case Type::tUInt64:
+            return true;
+        default:;
+        }
+        return false;
+    }
 
     bool TypeDecl::isNumeric() const {
         if (dim.size() != 0) return false;
