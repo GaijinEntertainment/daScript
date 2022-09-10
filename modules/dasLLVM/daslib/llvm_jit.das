@@ -15,7 +15,12 @@ var g_mod : LLVMOpaqueModule?
 var g_engine : LLVMExecutionEngineRef
 var g_builder : LLVMOpaqueBuilder?
 
-def init_jit
+[init]
+def private init_jit
+    if is_in_completion() || is_compiling_macros()
+        return
+    if g_builder != null    // prevent double init
+        return
     g_mod = LLVMModuleCreateWithName("llvm_jit_module")
     g_builder = LLVMCreateBuilder()
     LLVMLinkInMCJIT()
@@ -24,10 +29,17 @@ def init_jit
     LLVMInitializeNativeAsmParser()
     LLVMCreateJITCompilerForModule(g_engine, g_mod)
 
-def finalize_jit
-    LLVMDumpModule(g_mod)
-    LLVMDisposeBuilder(g_builder)
-    LLVMDisposeExecutionEngine(g_engine)
+[finalize]
+def private finalize_jit
+    if is_in_completion() || is_compiling_macros()
+        return
+    if g_builder == null    // prevent double finalize
+        return
+    LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMReturnStatusAction, false)
+    LLVMDumpModule(g_mod); g_mod = null
+    LLVMDisposeBuilder(g_builder); g_builder = null
+    LLVMDisposeExecutionEngine(g_engine); g_engine = null
+
 
 class LlvmJitVisitor : AstVisitor
     e2v : table<Expression?;LLVMOpaqueValue?>
@@ -52,7 +64,25 @@ class LlvmJitVisitor : AstVisitor
             failed(e, "unresolved expression")
         return res
 
+    def base_type_to_llvm_type ( e:ExpressionPtr; t:Type )
+        if t == Type tInt || t == Type tUInt || t == Type tBitfield
+            return LLVMInt32Type()
+        if t == Type tInt64 || t == Type tUInt64
+            return LLVMInt64Type()
+        if t == Type tInt16 || t == Type tUInt16
+            return LLVMInt16Type()
+        if t == Type tInt8 || t == Type tUInt8
+            return LLVMInt8Type()
+        elif t == Type tFloat
+            return LLVMFloatType()
+        elif t == Type tDouble
+            return LLVMDoubleType()
+        else
+            failed(e, "unsupported type {t}")
+            return LLVMInt32Type()
+
     def override preVisitFunction(fun:FunctionPtr) : void
+        assert(g_builder!=null, "missing builder")
         fnmna = get_mangled_name(fun)
         var ret_type = LLVMFunctionType(LLVMFloat4Type(), [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u) ]])
         ffunc = LLVMAddFunction(g_mod, fnmna, ret_type)
@@ -72,12 +102,7 @@ class LlvmJitVisitor : AstVisitor
             var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(expr.argumentIndex), 0), "arg_ptr_{expr.argumentIndex}")
             if expr.varFlags.r2v
                 assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
-                let bt = expr._type.baseType
-                if bt == Type tInt
-                    var arg_value = LLVMBuildLoad2(g_builder, LLVMInt32Type(), arg_ptr, "arg_r2v_{expr.argumentIndex}")
-                    setR(expr, arg_value)
-                else
-                    failed(expr, "{expr.variable.name} support r2v for {bt}")
+                setR(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), arg_ptr, "arg_r2v_{expr.argumentIndex}"))
             else
                 setR(expr, arg_ptr)
         else
@@ -91,11 +116,8 @@ class LlvmJitVisitor : AstVisitor
             var tres : LLVMOpaqueValue?
             var tsrc = getR(expr.subexpr)
             if etype.isWorkhorseType
-                if etype.baseType == Type tInt
-                    var tbit = LLVMBuildBitCast(g_builder, tsrc, LLVMFloatType(), "tbit")
-                    tres = LLVMBuildInsertElement(g_builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
-                else
-                    failed(expr.subexpr, "unsupported workhorse return type {describe(etype)}")
+                var tbit = LLVMBuildBitCast(g_builder, tsrc, LLVMFloatType(), "tbit")
+                tres = LLVMBuildInsertElement(g_builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
             else
                 failed(expr.subexpr, "unsupported return type {describe(etype)}")
             LLVMBuildRet(g_builder, tres)
@@ -107,16 +129,55 @@ class LlvmJitVisitor : AstVisitor
         var left = getR(expr.left)
         var right = getR(expr.right)
         if expr.op=="+"
-            setR(expr, LLVMBuildAdd(g_builder, left, right, "add_result"))
+            if expr._type.isInteger
+                setR(expr, LLVMBuildAdd(g_builder, left, right, "op_add"))
+            elif expr._type.isFloatOrDouble
+                setR(expr, LLVMBuildFAdd(g_builder, left, right, "op_add"))
+            else
+                failed(expr, "unsupported add type {expr._type}")
+        elif expr.op=="-"
+            if expr._type.isInteger
+                setR(expr, LLVMBuildSub(g_builder, left, right, "op_sub"))
+            elif expr._type.isFloatOrDouble
+                setR(expr, LLVMBuildFSub(g_builder, left, right, "op_sub"))
+            else
+                failed(expr, "unsupported sub type {expr._type}")
+        elif expr.op=="*"
+            if expr._type.isInteger
+                setR(expr, LLVMBuildMul(g_builder, left, right, "op_sub"))
+            elif expr._type.isFloatOrDouble
+                setR(expr, LLVMBuildFMul(g_builder, left, right, "op_sub"))
+            else
+                failed(expr, "unsupported mul type {expr._type}")
+        elif expr.op=="/"
+            if expr._type.isSignedInteger
+                setR(expr, LLVMBuildSDiv(g_builder, left, right, "op_sub"))
+            elif expr._type.isUnsignedInteger
+                setR(expr, LLVMBuildUDiv(g_builder, left, right, "op_sub"))
+            elif expr._type.isFloatOrDouble
+                setR(expr, LLVMBuildFDiv(g_builder, left, right, "op_sub"))
+            else
+                failed(expr, "unsupported div type {expr._type}")
+        elif expr.op=="%"
+            if expr._type.isSignedInteger
+                setR(expr, LLVMBuildSRem(g_builder, left, right, "op_sub"))
+            elif expr._type.isUnsignedInteger
+                setR(expr, LLVMBuildURem(g_builder, left, right, "op_sub"))
+            elif expr._type.isFloatOrDouble
+                setR(expr, LLVMBuildFRem(g_builder, left, right, "op_sub"))
+            else
+                failed(expr, "unsupported div type {expr._type}")
         else
             failed(expr, "unsupported binary operator {expr.op}")
         return expr
 
 def public generate_llvm ( fn : FunctionPtr )
-    if is_in_completion()
+    if is_in_completion() || is_compiling_macros()
         return null
 
-    init_jit()
+    init_jit()  // we can't be sure init is called before this
+
+    print("generate_llvm\n")
 
     var astVisitor = new LlvmJitVisitor()
     var astVisitorAdapter <- make_visitor(*astVisitor)
@@ -124,16 +185,12 @@ def public generate_llvm ( fn : FunctionPtr )
 
     var failed = false
 
-    var error : string
-    if LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMReturnStatusAction, safe_addr(error)) != 0
-        let msg = clone_string(error)
-        LLVMDisposeMessage(error)
-        print("\n\nLLVM JIT FAILED:\n{error}\n\n")
-        failed = true
-
     if length(astVisitor.errors) > 0
         let errors = astVisitor.errors |> join("\n")
         print("\n\nLLVM JIT FAILED:\n{errors}\n\n")
+        failed = true
+
+    if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMReturnStatusAction, false)
         failed = true
 
     var code = failed ? 0ul : LLVMGetFunctionAddress(g_engine, astVisitor.fnmna)
@@ -142,7 +199,6 @@ def public generate_llvm ( fn : FunctionPtr )
     unsafe
         delete astVisitor
 
-    // finalize_jit()
     return unsafe(reinterpret<void?> code)
 
 [function_macro(name="jit_llvm")]
@@ -163,10 +219,6 @@ class Jit_LLVM_Macro : AstFunctionAnnotation
                     fnptr := null
                 else
                     panic("missing 'options rtti'")
-        let show_disasm = find_arg("asm",args) ?as tBool ?? false
-        let verbose = find_arg("verbose",args) ?as tBool ?? false
-        let opt_level = find_arg("o",args) ?as tInt ?? 3
-        let no_exceptions = find_arg("no_exceptions",args) ?as tBool ?? false
         apply_template(qblock) <| $ ( rules )
             rules |> replaceVariable("PFUN") <| new [[ExprAddr() target:=func.name]]
             rules |> replaceVariable("PMOD") <| new [[ExprConstString() value:=compiling_module().name]]

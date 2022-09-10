@@ -17,12 +17,17 @@ def LLVMFloat4Type
 def LLVMFunctionType ( var ret_type:LLVMTypeRef; var param_types:LLVMTypeRef[]; isVariadic:bool = false )
     return LLVMFunctionType( ret_type, unsafe(addr(param_types[0])), uint(length(param_types)), isVariadic ? 1 : 0)
 
-def LLVMVerifyModule(mod:LLVMOpaqueModule?; action:LLVMVerifierFailureAction)
+def LLVMVerifyModule(mod:LLVMOpaqueModule?; action:LLVMVerifierFailureAction; fail:bool=true)
     var error : string
     if LLVMVerifyModule(mod, action, safe_addr(error)) != 0
-        let msg = clone_string(error)
-        LLVMDisposeMessage(error)
-        panic(error)
+        if fail
+            let msg = clone_string(error)
+            LLVMDisposeMessage(error)
+            panic(msg)
+        else
+            LLVMDisposeMessage(error)
+        return false
+    return true
 
 def LLVMCreateJITCompilerForModule(var engine:LLVMExecutionEngineRef&; mod:LLVMOpaqueModule?; optlevel:uint=2u )
     var error : string
