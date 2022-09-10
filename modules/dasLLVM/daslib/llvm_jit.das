@@ -11,6 +11,8 @@ require daslib/ast public
 require daslib/safe_addr
 require daslib/strings_boost
 
+let LLVM_JIT_OPT_LEVEL = 2u // 0u
+
 var g_mod : LLVMOpaqueModule?
 var g_engine : LLVMExecutionEngineRef
 var g_builder : LLVMOpaqueBuilder?
@@ -27,7 +29,10 @@ def private init_jit
     LLVMInitializeNativeTarget()
     LLVMInitializeNativeAsmPrinter()
     LLVMInitializeNativeAsmParser()
-    LLVMCreateJITCompilerForModule(g_engine, g_mod)
+    LLVMCreateJITCompilerForModule(g_engine, g_mod, LLVM_JIT_OPT_LEVEL)
+    // add default functions
+    var je = LLVMAddFunction(g_mod, "jit_exception", LLVMFunctionType(LLVMVoidType(),[[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, je, get_jit_exception())
 
 [finalize]
 def private finalize_jit
@@ -35,14 +40,13 @@ def private finalize_jit
         return
     if g_builder == null    // prevent double finalize
         return
-    LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMReturnStatusAction, false)
     LLVMDumpModule(g_mod); g_mod = null
     LLVMDisposeBuilder(g_builder); g_builder = null
     LLVMDisposeExecutionEngine(g_engine); g_engine = null
 
-
 class LlvmJitVisitor : AstVisitor
     e2v : table<Expression?;LLVMOpaqueValue?>
+    str2v : table<string; LLVMOpaqueValue?>
     errors : array<string>
     fnmna : string
     ffunc : LLVMOpaqueValue?
@@ -125,6 +129,32 @@ class LlvmJitVisitor : AstVisitor
             LLVMBuildRetVoid(g_builder)
         return expr
 
+    def build_string_constant ( message:string )
+        if str2v |> key_exists(message)
+            return str2v[message]
+        let msg_size = uint(length(message))
+        var strType = LLVMArrayType( LLVMInt8Type(), msg_size+1u )
+        var str = LLVMAddGlobal(g_mod, strType, "")
+        LLVMSetInitializer(str, LLVMConstString(message, msg_size, 0))
+        LLVMSetGlobalConstant(str, 1)
+        LLVMSetLinkage(str, LLVMLinkage LLVMPrivateLinkage)
+        LLVMSetUnnamedAddress(str, LLVMUnnamedAddr LLVMGlobalUnnamedAddr)
+        LLVMSetAlignment(str, 1u)
+        str2v[message] = str
+        return str
+
+    def get_string_constant_ptr ( message:string )
+        var str = build_string_constant(message)
+        var str_ptr = LLVMBuildBitCast(g_builder, str, LLVMPointerType(LLVMInt8Type(), 0u), "")
+        return LLVMBuildGEP(g_builder, str_ptr, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "string_constant {message}")
+
+    def build_exception ( message:string )
+        var params = [[auto
+            get_string_constant_ptr(message);
+            LLVMGetParam(ffunc,0u)
+        ]]
+        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, "jit_exception"), unsafe(addr(params[0])), 2u, "")
+
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
         var left = getR(expr.left)
         var right = getR(expr.right)
@@ -150,6 +180,21 @@ class LlvmJitVisitor : AstVisitor
             else
                 failed(expr, "unsupported mul type {expr._type}")
         elif expr.op=="/"
+            if expr._type.isInteger // for integer division we check division by zero
+                // if right==0
+                //  jit_exception("division by zero", context)
+                var check_div_0 = LLVMAppendBasicBlock(ffunc, "check_div_0")
+                var check_true = LLVMAppendBasicBlock(ffunc, "check_true")
+                var check_end = LLVMAppendBasicBlock(ffunc, "check_end")
+                LLVMBuildBr(g_builder, check_div_0)
+                LLVMPositionBuilderAtEnd(g_builder, check_div_0)
+                let zero =  LLVMConstInt(base_type_to_llvm_type(expr.right, expr._type.baseType), 0ul, 0)
+                let cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, right, zero, "cmp_is_zero")
+                LLVMBuildCondBr(g_builder, cond, check_true, check_end)
+                LLVMPositionBuilderAtEnd(g_builder, check_true)
+                build_exception("division by zero")
+                LLVMBuildBr(g_builder, check_end)
+                LLVMPositionBuilderAtEnd(g_builder, check_end)
             if expr._type.isSignedInteger
                 setR(expr, LLVMBuildSDiv(g_builder, left, right, "op_sub"))
             elif expr._type.isUnsignedInteger
@@ -174,31 +219,21 @@ class LlvmJitVisitor : AstVisitor
 def public generate_llvm ( fn : FunctionPtr )
     if is_in_completion() || is_compiling_macros()
         return null
-
     init_jit()  // we can't be sure init is called before this
-
-    print("generate_llvm\n")
-
     var astVisitor = new LlvmJitVisitor()
     var astVisitorAdapter <- make_visitor(*astVisitor)
     visit(fn, astVisitorAdapter)
-
     var failed = false
-
     if length(astVisitor.errors) > 0
         let errors = astVisitor.errors |> join("\n")
         print("\n\nLLVM JIT FAILED:\n{errors}\n\n")
         failed = true
-
-    if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMReturnStatusAction, false)
+    if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMAbortProcessAction, false)
         failed = true
-
     var code = failed ? 0ul : LLVMGetFunctionAddress(g_engine, astVisitor.fnmna)
-
     astVisitorAdapter := null
     unsafe
         delete astVisitor
-
     return unsafe(reinterpret<void?> code)
 
 [function_macro(name="jit_llvm")]

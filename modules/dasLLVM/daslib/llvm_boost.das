@@ -11,11 +11,17 @@ require daslib/safe_addr
 def LLVMBuildGEP ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string )
     return LLVMBuildGEP(builder, ptr, unsafe(addr(index)), 1u, name)
 
+def LLVMBuildGEP2 ( builder:LLVMOpaqueBuilder?; ty:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string )
+    return LLVMBuildGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)
+
 def LLVMFloat4Type
     return LLVMVectorType(LLVMFloatType(), 4u)
 
 def LLVMFunctionType ( var ret_type:LLVMTypeRef; var param_types:LLVMTypeRef[]; isVariadic:bool = false )
     return LLVMFunctionType( ret_type, unsafe(addr(param_types[0])), uint(length(param_types)), isVariadic ? 1 : 0)
+
+def LLVMFunctionType ( var ret_type:LLVMTypeRef; isVariadic:bool = false )
+    return LLVMFunctionType( ret_type, null, 0u, isVariadic ? 1 : 0)
 
 def LLVMVerifyModule(mod:LLVMOpaqueModule?; action:LLVMVerifierFailureAction; fail:bool=true)
     var error : string
