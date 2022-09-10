@@ -2811,6 +2811,10 @@ namespace das {
     bool das_is_jit_function ( const Func func );
     bool das_remove_jit ( const Func func );
     bool das_instrument_jit ( void * pfun, const Func func, Context * context );
+    void jit_exception ( const char * text, Context * context );
+    void * das_get_jit_exception ( );
+    vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context );
+    void * das_get_jit_call_or_fastcall ( );
 }
 
 #if defined(_MSC_VER)

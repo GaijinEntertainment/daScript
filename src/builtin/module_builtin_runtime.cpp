@@ -376,7 +376,7 @@ namespace das
     // core functions
 
     void builtin_throw ( char * text, Context * context, LineInfoArg * at ) {
-        context->throw_error_at(*at, text);
+        context->throw_error_at(at ? *at : LineInfo(), text);
     }
 
     void builtin_print ( char * text, Context * context ) {
@@ -1006,6 +1006,22 @@ namespace das
         return true;
     }
 
+    void jit_exception ( const char * text, Context * context ) {
+        context->throw_error(text);
+    }
+
+    void * das_get_jit_exception ( ) {
+        return (void *) &jit_exception;
+    }
+
+    vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context ) {
+        return context->callOrFastcall(fn, args, nullptr);
+    }
+
+    void * das_get_jit_call_or_fastcall ( ) {
+        return (void *) &jit_call_or_fastcall;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1370,5 +1386,10 @@ namespace das
         addExtern<DAS_BIND_FUN(das_is_jit_function)>(*this, lib, "is_jit_function",
             SideEffects::worstDefault, "das_is_jit_function")
                 ->args({"function"});
+        addExtern<DAS_BIND_FUN(das_get_jit_exception)>(*this, lib, "get_jit_exception",
+            SideEffects::none, "das_get_jit_exception");
+        // JIT table
+        addExtern<DAS_BIND_FUN(das_get_jit_call_or_fastcall)>(*this, lib, "get_jit_call_or_fastcall",
+            SideEffects::none, "das_get_jit_call_or_fastcall");
     }
 }
