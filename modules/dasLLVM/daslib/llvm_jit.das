@@ -51,6 +51,8 @@ struct private IteBlock
     if_true   : LLVMOpaqueBasicBlock?
     if_false  : LLVMOpaqueBasicBlock?
     if_end    : LLVMOpaqueBasicBlock?
+    if_true_terminates  : bool
+    if_false_terminates : bool
 
 class LlvmJitVisitor : AstVisitor
     e2v : table<Expression?;LLVMOpaqueValue?>
@@ -81,16 +83,18 @@ class LlvmJitVisitor : AstVisitor
     def base_type_to_llvm_type ( e:ExpressionPtr; t:Type )
         if t == Type tInt || t == Type tUInt || t == Type tBitfield
             return LLVMInt32Type()
-        if t == Type tInt64 || t == Type tUInt64
+        elif t == Type tInt64 || t == Type tUInt64
             return LLVMInt64Type()
-        if t == Type tInt16 || t == Type tUInt16
+        elif t == Type tInt16 || t == Type tUInt16
             return LLVMInt16Type()
-        if t == Type tInt8 || t == Type tUInt8 || t == Type tBool
+        elif t == Type tInt8 || t == Type tUInt8
             return LLVMInt8Type()
         elif t == Type tFloat
             return LLVMFloatType()
         elif t == Type tDouble
             return LLVMDoubleType()
+        elif t == Type tBool
+            return LLVMInt1Type()
         else
             failed(e, "unsupported type {t}")
             return LLVMInt32Type()
@@ -103,7 +107,6 @@ class LlvmJitVisitor : AstVisitor
         var entry = LLVMAppendBasicBlock(ffunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, entry)
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
-        LLVMBuildUnreachable(g_builder)
         ffunc = null
         return fun
 
@@ -248,11 +251,14 @@ class LlvmJitVisitor : AstVisitor
                 opR = LLVMBuildICmp(g_builder, get_uint_compare_op(expr,string(expr.op)), left, right, "op_bool_{expr.op}")
             elif expr.left._type.isFloatOrDouble
                 opR = LLVMBuildFCmp(g_builder, get_float_compare_op(expr,string(expr.op)), left, right, "op_fbool_{expr.op}")
+            elif expr.left._type.baseType == Type tBool
+                opR = LLVMBuildICmp(g_builder, get_bool_compare_op(expr,string(expr.op)), left, right, "op_bool_{expr.op}")
+            else
+                failed(expr, "unsupported compare type {expr._type}")
             if opR == null
                 opR = LLVMGetUndef(LLVMInt8Type())
                 failed(expr, "unsupported cmp type {expr.left._type} {expr.op} {expr.right._type}")
-            var opI8 = LLVMBuildZExt(g_builder, opR, LLVMInt8Type(), "op_bool_{expr.op}_i8")
-            setR(expr, opI8)
+            setR(expr, opR)
         else
             failed(expr, "unsupported binary operator {expr.op}")
         return expr
@@ -261,6 +267,15 @@ class LlvmJitVisitor : AstVisitor
         assert(expr._type.isWorkhorseType)
         setR(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), getR(expr.subexpr), "r2v"))
         return expr
+
+    def get_bool_compare_op ( e:ExpressionPtr; op:string )
+        if op=="=="
+            return LLVMIntPredicate LLVMIntEQ
+        elif op=="!="
+            return LLVMIntPredicate LLVMIntNE
+        else
+            failed(e, "unsupported bool compare operator {op}")
+            return LLVMIntPredicate LLVMIntEQ
 
     def get_int_compare_op ( e:ExpressionPtr; op:string )
         if op=="=="
@@ -318,35 +333,39 @@ class LlvmJitVisitor : AstVisitor
         var before_if = LLVMAppendBasicBlock(ffunc, "if_cond_at_{expr.at.line}")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder, before_if)
+        let itt = is_terminator_expression(expr.if_true)
+        let ift = expr.if_false != null ? is_terminator_expression(expr.if_false) : false
         var blk = [[IteBlock
             if_true  = LLVMAppendBasicBlock(ffunc, "if_true_at_line_{int(expr.at.line)}"),
             if_false = LLVMAppendBasicBlock(ffunc, "if_false_at_line_{int(expr.at.line)}"),
-            if_end   = LLVMAppendBasicBlock(ffunc, "if_end_at_line_{int(expr.at.line)}")
+            if_end   = (!itt || !ift) ? LLVMAppendBasicBlock(ffunc, "if_end_at_line_{int(expr.at.line)}") : null,
+            if_true_terminates = itt,
+            if_false_terminates = ift
         ]]
         ite2blocks[get_expr_ptr(expr)] = blk
     def override preVisitExprIfThenElseIfBlock(expr:smart_ptr<ExprIfThenElse>;ifBlock:ExpressionPtr) : void
         var blk = ite2blocks[get_expr_ptr(expr)]                        // we start if_true block
-        var cond_bool = LLVMBuildTrunc(g_builder, getR(expr.cond), LLVMInt1Type(), "cond_bool")
-        LLVMBuildCondBr(g_builder, cond_bool, blk.if_true, blk.if_false)
+        LLVMBuildCondBr(g_builder, getR(expr.cond), blk.if_true, blk.if_false)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_true)
     def override preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr) : void
-        if !is_terminator_expression(expr.if_true)
-            LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
         var blk = ite2blocks[get_expr_ptr(expr)]
+        if !blk.if_true_terminates
+            LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
         LLVMPositionBuilderAtEnd(g_builder, blk.if_false)
     def override visitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : ExpressionPtr
-        if !is_terminator_expression(expr.if_false)
-            LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_false block we jump to if_end
         var blk = ite2blocks[get_expr_ptr(expr)]
-        LLVMPositionBuilderAtEnd(g_builder, blk.if_end)                 // if_end starts here
+        if !blk.if_false_terminates
+            LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_false block we jump to if_end
+        if blk.if_end != null
+            LLVMPositionBuilderAtEnd(g_builder, blk.if_end)
         return expr
 
 // op3
     def override visitExprOp3(expr:smart_ptr<ExprOp3>) : ExpressionPtr
         // TODO: verify if there are sideeffects
         //  if there are sideeffects, we need to evaluate the condition first, then only the left or right side
-        var cond = LLVMBuildTrunc(g_builder, getR(expr.subexpr), LLVMIntType(1u), "to_1_bit")
-        setR(expr, LLVMBuildSelect(g_builder, cond, getR(expr.left), getR(expr.right), "op3"))
+        //  LLVMBuildPhi?
+        setR(expr, LLVMBuildSelect(g_builder, getR(expr.subexpr), getR(expr.left), getR(expr.right), "op3"))
         return expr
 // constants
     def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr
@@ -407,7 +426,7 @@ class LlvmJitVisitor : AstVisitor
         // TODO: implement
         return expr
     def override visitExprConstBool(expr:smart_ptr<ExprConstBool>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt8Type(), expr.value ? 1ul : 0ul, 0))
+        setR(expr, LLVMConstInt(LLVMInt1Type(), expr.value ? 1ul : 0ul, 0))
         return expr
     def override visitExprConstFloat(expr:smart_ptr<ExprConstFloat>) : ExpressionPtr
         setR(expr, LLVMConstReal(LLVMFloatType(), double(expr.value)))
