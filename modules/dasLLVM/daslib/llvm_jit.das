@@ -75,7 +75,7 @@ class LlvmJitVisitor : AstVisitor
             return LLVMInt64Type()
         if t == Type tInt16 || t == Type tUInt16
             return LLVMInt16Type()
-        if t == Type tInt8 || t == Type tUInt8
+        if t == Type tInt8 || t == Type tUInt8 || t == Type tBool
             return LLVMInt8Type()
         elif t == Type tFloat
             return LLVMFloatType()
@@ -214,6 +214,92 @@ class LlvmJitVisitor : AstVisitor
                 failed(expr, "unsupported div type {expr._type}")
         else
             failed(expr, "unsupported binary operator {expr.op}")
+        return expr
+
+// constants
+    def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr
+        setR(expr, LLVMConstPointerNull(LLVMVoidType()))
+        return expr
+    def override visitExprConstEnumeration(expr:smart_ptr<ExprConstEnumeration>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstBitfield(expr:smart_ptr<ExprConstBitfield>) : ExpressionPtr
+        setR(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
+        return expr
+    def override visitExprConstInt8(expr:smart_ptr<ExprConstInt8>) : ExpressionPtr
+        setR(expr, LLVMConstInt(LLVMInt8Type(), uint64(expr.value), 0))
+        return expr
+    def override visitExprConstInt16(expr:smart_ptr<ExprConstInt16>) : ExpressionPtr
+        setR(expr, LLVMConstInt(LLVMInt16Type(), uint64(expr.value), 0))
+        return expr
+    def override visitExprConstInt64(expr:smart_ptr<ExprConstInt64>) : ExpressionPtr
+        setR(expr, LLVMConstInt(LLVMInt64Type(), uint64(expr.value), 0))
+        return expr
+    def override visitExprConstInt(expr:smart_ptr<ExprConstInt>) : ExpressionPtr
+        setR(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
+        return expr
+    def override visitExprConstInt2(expr:smart_ptr<ExprConstInt2>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstInt3(expr:smart_ptr<ExprConstInt3>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstInt4(expr:smart_ptr<ExprConstInt4>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstUInt8(expr:smart_ptr<ExprConstUInt8>) : ExpressionPtr
+        setR(expr, LLVMConstInt(LLVMInt8Type(), uint64(expr.value), 0))
+        return expr
+    def override visitExprConstUInt16(expr:smart_ptr<ExprConstUInt16>) : ExpressionPtr
+        setR(expr, LLVMConstInt(LLVMInt16Type(), uint64(expr.value), 0))
+        return expr
+    def override visitExprConstUInt64(expr:smart_ptr<ExprConstUInt64>) : ExpressionPtr
+        setR(expr, LLVMConstInt(LLVMInt64Type(), uint64(expr.value), 0))
+        return expr
+    def override visitExprConstUInt(expr:smart_ptr<ExprConstUInt>) : ExpressionPtr
+        setR(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
+        return expr
+    def override visitExprConstUInt2(expr:smart_ptr<ExprConstUInt2>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstUInt3(expr:smart_ptr<ExprConstUInt3>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstUInt4(expr:smart_ptr<ExprConstUInt4>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstRange(expr:smart_ptr<ExprConstRange>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstURange(expr:smart_ptr<ExprConstURange>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstBool(expr:smart_ptr<ExprConstBool>) : ExpressionPtr
+        setR(expr, LLVMConstInt(LLVMInt8Type(), expr.value ? 1ul : 0ul, 0))
+        return expr
+    def override visitExprConstFloat(expr:smart_ptr<ExprConstFloat>) : ExpressionPtr
+        setR(expr, LLVMConstReal(LLVMFloatType(), double(expr.value)))
+        return expr
+    def override visitExprConstFloat2(expr:smart_ptr<ExprConstFloat2>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstFloat3(expr:smart_ptr<ExprConstFloat3>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstFloat4(expr:smart_ptr<ExprConstFloat4>) : ExpressionPtr
+        // TODO: implement
+        return expr
+    def override visitExprConstString(expr:smart_ptr<ExprConstString>) : ExpressionPtr
+        setR(expr, get_string_constant_ptr(string(expr.value)))
+        return expr
+    def override visitExprConstDouble(expr:smart_ptr<ExprConstDouble>) : ExpressionPtr
+        setR(expr, LLVMConstReal(LLVMFloatType(), expr.value))
+        return expr
+    def override visitExprFakeContext(expr:smart_ptr<ExprFakeContext>) : ExpressionPtr
+        setR(expr, LLVMGetParam(ffunc,0u))
+        return expr
+    def override visitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : ExpressionPtr
+        setR(expr, LLVMConstPointerNull(LLVMVoidType()))
         return expr
 
 def public generate_llvm ( fn : FunctionPtr )
