@@ -361,12 +361,38 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // op3
+    def override preVisitExprOp3(expr:smart_ptr<ExprOp3>): void
+        var before_if = LLVMAppendBasicBlock(ffunc, "op3_cond_at_{expr.at.line}")
+        LLVMBuildBr(g_builder, before_if)
+        LLVMPositionBuilderAtEnd(g_builder, before_if)
+        var blk = [[IteBlock
+            if_true  = LLVMAppendBasicBlock(ffunc, "op3_true_at_line_{int(expr.at.line)}"),
+            if_false = LLVMAppendBasicBlock(ffunc, "op3_false_at_line_{int(expr.at.line)}"),
+            if_end   = LLVMAppendBasicBlock(ffunc, "op3_end_at_line_{int(expr.at.line)}"),
+            if_true_terminates = false,
+            if_false_terminates = false
+        ]]
+        ite2blocks[get_expr_ptr(expr)] = blk
+    def override preVisitExprOp3Left(expr:smart_ptr<ExprOp3>;left:ExpressionPtr): void
+        var blk = ite2blocks[get_expr_ptr(expr)]                        // we start if_true block
+        LLVMBuildCondBr(g_builder, getR(expr.subexpr), blk.if_true, blk.if_false)
+        LLVMPositionBuilderAtEnd(g_builder, blk.if_true)
+    def override preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr): void
+        var blk = ite2blocks[get_expr_ptr(expr)]
+        LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
+        LLVMPositionBuilderAtEnd(g_builder, blk.if_false)
     def override visitExprOp3(expr:smart_ptr<ExprOp3>) : ExpressionPtr
-        // TODO: verify if there are sideeffects
-        //  if there are sideeffects, we need to evaluate the condition first, then only the left or right side
-        //  LLVMBuildPhi?
-        setR(expr, LLVMBuildSelect(g_builder, getR(expr.subexpr), getR(expr.left), getR(expr.right), "op3"))
+        var blk = ite2blocks[get_expr_ptr(expr)]
+        LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
+        LLVMPositionBuilderAtEnd(g_builder, blk.if_end)
+        // TODO: build correct return type for the phi node
+        var res = LLVMBuildPhi(g_builder, base_type_to_llvm_type(expr,expr._type.baseType), "op3")
+        var phi_vals = [[LLVMOpaqueValue? getR(expr.left); getR(expr.right)]]
+        var phi_blocks = [[LLVMOpaqueBasicBlock? blk.if_true; blk.if_false]]
+        LLVMAddIncoming(res, phi_vals, phi_blocks)
+        setR(expr, res)
         return expr
+
 // constants
     def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr
         setR(expr, LLVMConstPointerNull(LLVMVoidType()))

@@ -8,6 +8,11 @@ require llvm public
 
 require daslib/safe_addr
 
+def LLVMAddIncoming(phi:LLVMOpaqueValue?; var phi_vals:LLVMOpaqueValue? []; var phi_blocks:LLVMOpaqueBasicBlock? [])
+    static_if typeinfo(dim phi_vals) != typeinfo(dim phi_blocks)
+        concept_assert(false, "LLVMAddIncoming: phi_vals and phi_blocks must have the same length")
+    LLVMAddIncoming(phi, unsafe(addr(phi_vals[0])), unsafe(addr(phi_blocks[0])), uint(length(phi_vals)))
+
 def LLVMBuildGEP ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string )
     return LLVMBuildGEP(builder, ptr, unsafe(addr(index)), 1u, name)
 
