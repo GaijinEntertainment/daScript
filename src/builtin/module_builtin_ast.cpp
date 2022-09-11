@@ -612,6 +612,10 @@ namespace das {
         addExtern<DAS_BIND_FUN(find_unique_structure)>(*this, lib,  "find_unique_structure",
             SideEffects::accessExternal, "find_unique_structure")
                 ->args({"program","name","context","at"});
+        // helpers
+        addExtern<DAS_BIND_FUN(exprReturns)>(*this, lib,  "is_terminator_expression",
+            SideEffects::none, "exprReturns")
+                ->args({"expr"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {
