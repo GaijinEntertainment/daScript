@@ -742,6 +742,18 @@ namespace das {
                 return true;
             }
         }
+        virtual bool generic_apply ( const FunctionPtr & func, ModuleGroup & group,
+                            const AnnotationArgumentList & args, string & errors ) override {
+            if ( auto fnApply = get_generic_apply(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "generic_apply", [&]() {
+                    result = invoke_generic_apply(context,fnApply,classPtr,func,group,args,errors);
+                });
+                return result;
+            } else {
+                return true;
+            }
+        }
         virtual bool finalize ( const FunctionPtr & func, ModuleGroup & group,
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & errors ) override {

@@ -273,7 +273,7 @@ namespace das {
             }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
             if ( fn->exports ) { ss << "[export]\n"; }
-            if ( fn->init ) { ss << "[init]\n"; }
+            if ( fn->init ) { ss << "[init" << (fn->lateInit ? "(late)" : "") << "]\n"; }
             if ( fn->macroInit ) { ss << "[macro_init]\n"; }
             if ( fn->macroFunction ) { ss << "[macro_function]\n"; }
             if ( fn->shutdown ) { ss << "[finalize]\n"; }

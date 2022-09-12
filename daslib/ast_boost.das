@@ -218,13 +218,15 @@ def find_unique_generic ( mod : Module?; name : string; canfail:bool = false )
         return [[FunctionPtr]]
     return res
 
-def setup_call_list(name: string; at:LineInfo; isInit:bool = false; isPrivate:bool = true) : ExprBlock?
+def setup_call_list(name: string; at:LineInfo; isInit:bool = false; isPrivate:bool = true; isLateInit:bool = false) : ExprBlock?
     var fn <- compiling_module() |> find_unique_function(name)
     if fn == null
         fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
         fn.flags |= FunctionFlags generated
         if isInit
             fn.flags |= FunctionFlags init
+            if isLateInit
+                fn.moreFlags |= MoreFunctionFlags lateInit
         if isPrivate
             fn.flags |= FunctionFlags privateFunction
         fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
@@ -737,3 +739,14 @@ def private setup
         add_new_structure_annotation("lint_macro",new SetupLintMacro())
         add_new_structure_annotation("global_lint_macro",new SetupGlobalLintMacro())
         add_new_variant_macro("better_rtti_in_expr", new BetterRttiVisitor())
+
+
+def public function_to_type ( fn : FunctionPtr ) : TypeDeclPtr
+    var td <- new [[TypeDecl() baseType=Type tFunction]]
+    unsafe
+        td.firstType <- fn.result!=null ? clone_type(fn.result) : new [[TypeDecl() baseType=Type autoinfer]]
+        td.argNames |> resize(length(fn.arguments))
+        for arg,argi in fn.arguments,range(100500)
+            td.argTypes |> emplace_new <| clone_type(arg._type)
+            td.argNames[argi] := arg.name
+    return td

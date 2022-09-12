@@ -1056,6 +1056,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(aotHash)>("aotHash");
             // properties
             addProperty<DAS_BIND_MANAGED_PROP(getOrigin)>("origin","getOrigin");
+            addProperty<DAS_BIND_MANAGED_PROP(isGeneric)>("isGeneric","isGeneric");
         }
     };
 

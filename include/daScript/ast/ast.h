@@ -327,6 +327,8 @@ namespace das
         virtual bool rtti_isFunctionAnnotation() const override { return true; }
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & libGroup,
                             const AnnotationArgumentList & args, string & err ) = 0;
+        virtual bool generic_apply ( const FunctionPtr &, ModuleGroup &,
+                            const AnnotationArgumentList &, string & ) { return true; };
         virtual bool finalize ( const FunctionPtr & func, ModuleGroup & libGroup,
                                const AnnotationArgumentList & args,
                                const AnnotationArgumentList & progArgs, string & err ) = 0;
@@ -767,6 +769,7 @@ namespace das
                 bool    macroFunction : 1;
                 bool    needStringCast : 1;
                 bool    aotHashDeppendsOnArguments : 1;
+                bool    lateInit : 1;
             };
             uint32_t moreFlags = 0;
 

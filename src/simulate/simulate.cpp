@@ -1318,12 +1318,28 @@ namespace das
         abiArg = nullptr;
         stack.pop(EP,SP);
         if ( !aotInitScript ) {
+            bool anyLate = false;
+            // TODO: at some point we may consider reordering functions for the purposes of late init beeing at the end
+            //  or even more explicit function ordering, i.e. 'before' and 'after' annotations
+            // regular initialization
             for ( int j=0; j!=totalFunctions && !stopFlags; ++j ) {
                 auto & pf = functions[j];
                 if ( pf.debugInfo->flags & FuncInfo::flag_init ) {
-                    callOrFastcall(&pf, nullptr, 0);
+                    if ( pf.debugInfo->flags & FuncInfo::flag_late_init ) {
+                        anyLate = true;
+                    } else {
+                        callOrFastcall(&pf, nullptr, 0);
+                    }
                 }
-
+            }
+            // late initialization
+            for ( int j=0; j!=totalFunctions && !stopFlags; ++j ) {
+                auto & pf = functions[j];
+                if ( pf.debugInfo->flags & FuncInfo::flag_init ) {
+                    if ( pf.debugInfo->flags & FuncInfo::flag_late_init ) {
+                        callOrFastcall(&pf, nullptr, 0);
+                    }
+                }
             }
         }
         // now, share the data

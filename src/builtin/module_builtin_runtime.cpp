@@ -137,8 +137,13 @@ namespace das
 
     struct InitFunctionAnnotation : MarkFunctionAnnotation {
         InitFunctionAnnotation() : MarkFunctionAnnotation("init") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string &) override {
             func->init = true;
+            for ( auto & arg : args ) {
+                if ( arg.name=="late" && arg.type == Type::tBool ) {
+                    func->lateInit = arg.bValue;
+                }
+            }
             return true;
         };
         virtual bool finalize(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & errors) override {

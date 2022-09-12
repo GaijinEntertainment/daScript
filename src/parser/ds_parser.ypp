@@ -1413,8 +1413,7 @@ func_addr_expr
     |   '@' '@'[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration[blockType] '>' { yyextra->das_arrow_depth --; } name_in_namespace[name] {
         auto expr = new ExprAddr(tokAt(scanner,@loc),*$name);
         delete $name;
-        expr->funcType = make_smart<TypeDecl>(Type::tFunction);
-        expr->funcType->firstType = TypeDeclPtr($blockType);
+        expr->funcType = TypeDeclPtr($blockType);
         $$ = expr;
     }
     |   '@' '@'[loc] '<' { yyextra->das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } name_in_namespace[name] {

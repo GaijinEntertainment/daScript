@@ -600,17 +600,8 @@ namespace das {
             return result;
         }
 
-        MatchingFunctions findTypedFuncAddr ( const string & name, const vector<TypeDeclPtr> & arguments, const TypeDeclPtr & resType ) const {
-            MatchingFunctions funcs =  findMatchingFunctions(name, arguments, false, false);
-            for ( auto it = funcs.begin(); it != funcs.end();  ) {
-                const auto & mf = *it;
-                if ( !mf->result->isSameType(*resType,RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes) ) {
-                    it = funcs.erase(it);
-                } else {
-                    ++ it;
-                }
-            }
-            return funcs;
+        MatchingFunctions findTypedFuncAddr ( const string & name, const vector<TypeDeclPtr> & arguments ) const {
+            return findMatchingFunctions(name, arguments, false, false);
         }
 
         MatchingFunctions findCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
@@ -1911,6 +1902,11 @@ namespace das {
     // ExprAddr
         virtual ExpressionPtr visit ( ExprAddr * expr ) override {
             if (expr->funcType) {
+                // when we infer function type, we really don't care for the result.
+                // however having auto or alias in the result may cause problems, so we swap it to void
+                // and then swap it back to whatever it was
+                auto retT = expr->funcType->firstType;
+                expr->funcType->firstType = make_smart<TypeDecl>(Type::tVoid);
                 if (expr->funcType->isAlias()) {
                     auto aT = inferAlias(expr->funcType);
                     if (aT) {
@@ -1927,11 +1923,16 @@ namespace das {
                         expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
+                expr->funcType->firstType = retT;
             }
             expr->func = nullptr;
             MatchingFunctions fns;
             if (expr->funcType) {
-                fns = findTypedFuncAddr(expr->target, expr->funcType->argTypes, expr->funcType->firstType);
+                if ( !expr->funcType->isFunction() ) {
+                    error("function of non-function type " + describeType(expr->funcType),  "", "",
+                        expr->at, CompilationError::type_not_found);
+                }
+                fns = findTypedFuncAddr(expr->target, expr->funcType->argTypes);
             } else {
                 fns = findFuncAddr(expr->target);
             }
@@ -6548,6 +6549,19 @@ namespace das {
                                     + "\texisting instance from module " + exf->fromGeneric->module->name, "",
                                     expr->at, CompilationError::function_already_declared);
                                 return nullptr;
+                            }
+                        } else {
+                            // perform generic_apply
+                            for ( auto & pA : clone->annotations ) {
+                                if ( pA->annotation->rtti_isFunctionAnnotation() ) {
+                                    auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
+                                    string err;
+                                    if ( !ann->generic_apply(clone, *(program->thisModuleGroup), pA->arguments, err) ) {
+                                        error("Macro [" +pA->annotation->name + "] failed to generic_apply to a function " + clone->name + "\n",
+                                            err, "", clone->at, CompilationError::invalid_annotation);
+                                        return nullptr;
+                                    }
+                                }
                             }
                         }
                         expr->name = callCloneName(clone->name);
