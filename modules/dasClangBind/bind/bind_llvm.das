@@ -36,6 +36,16 @@ class LlvmGen : CppGenBind
         "Target.h";
         "TargetMachine.h";
         "Types.h";
+    // transforms
+        "AggressiveInstCombine.h";
+        "Coroutines.h";
+        "InstCombine.h";
+        "IPO.h";
+        "PassBuilder.h";
+        "PassManagerBuilder.h";
+        "Scalar.h";
+        "Utils.h";
+        "Vectorize.h";
     // def version
         "abi-breaking.h";
         "AsmParsers.def";
