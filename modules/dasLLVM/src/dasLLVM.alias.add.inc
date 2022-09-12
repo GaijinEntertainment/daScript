@@ -531,3 +531,13 @@ auto alias_LLVMRemarkParserRef = typeFactory<LLVMRemarkOpaqueParser *>::make(lib
 alias_LLVMRemarkParserRef->alias = "LLVMRemarkParserRef";
 addAlias(alias_LLVMRemarkParserRef);
 
+// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:20:46
+auto alias_LLVMPassManagerBuilderRef = typeFactory<LLVMOpaquePassManagerBuilder *>::make(lib);
+alias_LLVMPassManagerBuilderRef->alias = "LLVMPassManagerBuilderRef";
+addAlias(alias_LLVMPassManagerBuilderRef);
+
+// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:31:46
+auto alias_LLVMPassBuilderOptionsRef = typeFactory<LLVMOpaquePassBuilderOptions *>::make(lib);
+alias_LLVMPassBuilderOptionsRef->alias = "LLVMPassBuilderOptionsRef";
+addAlias(alias_LLVMPassBuilderOptionsRef);
+

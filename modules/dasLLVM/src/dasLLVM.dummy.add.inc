@@ -16,6 +16,7 @@ addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOrcOpaqueIndirectStubsManager
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaqueModule", "LLVMOpaqueModule", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaqueUse", "LLVMOpaqueUse", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMComdat", "LLVMComdat", 1, 1));
+addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaquePassManagerBuilder", "LLVMOpaquePassManagerBuilder", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaqueModuleFlagEntry", "LLVMOpaqueModuleFlagEntry", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOrcOpaqueLookupState", "LLVMOrcOpaqueLookupState", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaqueExecutionEngine", "LLVMOpaqueExecutionEngine", 1, 1));
@@ -52,6 +53,7 @@ addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaqueValue", "LLVMOpaqueValu
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaqueError", "LLVMOpaqueError", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOrcOpaqueLLJIT", "LLVMOrcOpaqueLLJIT", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaqueContext", "LLVMOpaqueContext", 1, 1));
+addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaquePassBuilderOptions", "LLVMOpaquePassBuilderOptions", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOrcOpaqueSymbolStringPoolEntry", "LLVMOrcOpaqueSymbolStringPoolEntry", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaqueModuleProvider", "LLVMOpaqueModuleProvider", 1, 1));
 addAnnotation(make_smart<DummyTypeAnnotation>("LLVMOpaqueLTOInput", "LLVMOpaqueLTOInput", 1, 1));

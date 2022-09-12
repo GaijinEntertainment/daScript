@@ -112,6 +112,10 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 		${DAS_LLVM_DIR}/src/dasLLVM.func_57.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_58.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_59.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_60.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_61.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_62.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_63.cpp
 	)
 
 	ADD_MODULE_LIB(libDasModuleLlvm)

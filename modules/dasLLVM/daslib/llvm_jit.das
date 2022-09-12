@@ -48,9 +48,10 @@ def private finalize_jit
     LLVMDisposeExecutionEngine(g_engine); g_engine = null
 
 struct private IteBlock
-    if_true   : LLVMOpaqueBasicBlock?
-    if_false  : LLVMOpaqueBasicBlock?
-    if_end    : LLVMOpaqueBasicBlock?
+    if_true  : LLVMOpaqueBasicBlock?
+    if_false : LLVMOpaqueBasicBlock?
+    if_end   : LLVMOpaqueBasicBlock?
+    result : LLVMOpaqueValue?
     if_true_terminates  : bool
     if_false_terminates : bool
 
@@ -97,6 +98,15 @@ class LlvmJitVisitor : AstVisitor
             return LLVMInt1Type()
         else
             failed(e, "unsupported type {t}")
+            return LLVMInt32Type()
+
+    def type_to_llvm_abi_type ( e:ExpressionPtr; t:TypeDeclPtr )
+        if t.isWorkhorseType
+            return base_type_to_llvm_type(e, t.baseType)
+        elif t.isPointer || t.isRef
+            return LLVMPointerType(LLVMVoidType(), 0u)
+        else
+            failed(e, "unsupported type {describe(t)}")
             return LLVMInt32Type()
 
     def override preVisitFunction(fun:FunctionPtr) : void
@@ -370,7 +380,8 @@ class LlvmJitVisitor : AstVisitor
             if_false = LLVMAppendBasicBlock(ffunc, "op3_false_at_line_{int(expr.at.line)}"),
             if_end   = LLVMAppendBasicBlock(ffunc, "op3_end_at_line_{int(expr.at.line)}"),
             if_true_terminates = false,
-            if_false_terminates = false
+            if_false_terminates = false,
+            result = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(expr,expr._type), "op3_temp_result_at_line_{int(expr.at.line)}")
         ]]
         ite2blocks[get_expr_ptr(expr)] = blk
     def override preVisitExprOp3Left(expr:smart_ptr<ExprOp3>;left:ExpressionPtr): void
@@ -379,18 +390,22 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder, blk.if_true)
     def override preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr): void
         var blk = ite2blocks[get_expr_ptr(expr)]
+        LLVMBuildStore(g_builder, getR(expr.left), blk.result)
         LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
         LLVMPositionBuilderAtEnd(g_builder, blk.if_false)
     def override visitExprOp3(expr:smart_ptr<ExprOp3>) : ExpressionPtr
         var blk = ite2blocks[get_expr_ptr(expr)]
+        LLVMBuildStore(g_builder, getR(expr.right), blk.result)
         LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_end)
-        // TODO: build correct return type for the phi node
-        var res = LLVMBuildPhi(g_builder, base_type_to_llvm_type(expr,expr._type.baseType), "op3")
+        /*
+        var res = LLVMBuildPhi(g_builder, type_to_llvm_abi_type(expr,expr._type), "op3")
         var phi_vals = [[LLVMOpaqueValue? getR(expr.left); getR(expr.right)]]
         var phi_blocks = [[LLVMOpaqueBasicBlock? blk.if_true; blk.if_false]]
         LLVMAddIncoming(res, phi_vals, phi_blocks)
-        setR(expr, res)
+        */
+
+        setR(expr, LLVMBuildLoad(g_builder, blk.result, "op3_result_at_line_{int(expr.at.line)}"))
         return expr
 
 // constants
@@ -493,6 +508,14 @@ def public generate_llvm ( fn : FunctionPtr )
         failed = true
     if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
         failed = true
+    if !failed
+        var pmb = LLVMPassManagerBuilderCreate()
+        var mpm = LLVMCreatePassManager()
+        LLVMPassManagerBuilderSetOptLevel(pmb, 2u)
+        LLVMPassManagerBuilderPopulateModulePassManager(pmb, mpm)
+        LLVMRunPassManager(mpm, g_mod)
+        LLVMDisposePassManager(mpm)
+        LLVMPassManagerBuilderDispose(pmb)
     var code = failed ? 0ul : LLVMGetFunctionAddress(g_engine, astVisitor.fnmna)
     astVisitorAdapter := null
     unsafe

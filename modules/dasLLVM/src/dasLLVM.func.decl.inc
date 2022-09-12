@@ -60,3 +60,7 @@ void initFunctions_56();
 void initFunctions_57();
 void initFunctions_58();
 void initFunctions_59();
+void initFunctions_60();
+void initFunctions_61();
+void initFunctions_62();
+void initFunctions_63();
