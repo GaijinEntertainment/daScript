@@ -11,7 +11,8 @@ require daslib/ast public
 require daslib/safe_addr
 require daslib/strings_boost
 
-let LLVM_JIT_OPT_LEVEL = 2u // 0u
+let LLVM_ENABLE_OPT_PASS = true
+let LLVM_JIT_OPT_LEVEL = 2u
 
 var g_mod : LLVMOpaqueModule?
 var g_engine : LLVMExecutionEngineRef
@@ -101,10 +102,10 @@ class LlvmJitVisitor : AstVisitor
             return LLVMInt32Type()
 
     def type_to_llvm_abi_type ( e:ExpressionPtr; t:TypeDeclPtr )
-        if t.isWorkhorseType
-            return base_type_to_llvm_type(e, t.baseType)
-        elif t.isPointer || t.isRef
+        if t.isPointer || t.isRef
             return LLVMPointerType(LLVMVoidType(), 0u)
+        elif t.isWorkhorseType
+            return base_type_to_llvm_type(e, t.baseType)
         else
             failed(e, "unsupported type {describe(t)}")
             return LLVMInt32Type()
@@ -132,7 +133,7 @@ class LlvmJitVisitor : AstVisitor
                 assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
                 setR(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), arg_ptr, "arg_r2v_{expr.argumentIndex}"))
             else
-                setR(expr, arg_ptr)
+                setR(expr, LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(LLVMVoidType(),0u), "arg_to_void" ))
         else
             failed(expr, "ExprLetVariable {expr.variable.name} : {describe(expr.variable._type)}")
         return expr
@@ -508,7 +509,7 @@ def public generate_llvm ( fn : FunctionPtr )
         failed = true
     if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
         failed = true
-    if !failed
+    if !failed && LLVM_ENABLE_OPT_PASS
         var pmb = LLVMPassManagerBuilderCreate()
         LLVMPassManagerBuilderSetOptLevel(pmb, 2u)
         var fpm = LLVMCreateFunctionPassManagerForModule(g_mod)
