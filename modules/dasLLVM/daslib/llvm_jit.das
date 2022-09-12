@@ -510,11 +510,13 @@ def public generate_llvm ( fn : FunctionPtr )
         failed = true
     if !failed
         var pmb = LLVMPassManagerBuilderCreate()
-        var mpm = LLVMCreatePassManager()
         LLVMPassManagerBuilderSetOptLevel(pmb, 2u)
-        LLVMPassManagerBuilderPopulateModulePassManager(pmb, mpm)
-        LLVMRunPassManager(mpm, g_mod)
-        LLVMDisposePassManager(mpm)
+        var fpm = LLVMCreateFunctionPassManagerForModule(g_mod)
+        LLVMPassManagerBuilderPopulateFunctionPassManager(pmb, fpm)
+        while LLVMRunFunctionPassManager(fpm, LLVMGetNamedFunction(g_mod, string(get_mangled_name(fn))))==1
+            pass
+        LLVMDisposePassManager(fpm)
+
         LLVMPassManagerBuilderDispose(pmb)
     var code = failed ? 0ul : LLVMGetFunctionAddress(g_engine, astVisitor.fnmna)
     astVisitorAdapter := null
