@@ -1175,6 +1175,10 @@ expression_return
         pRet->moveSemantics = true;
         $$ = pRet;
     }
+    |   DAS_RETURN[loc] expr[subexpr] DAS_IF[locif] { yyextra->das_need_oxford_comma=true; } expr[cond] ';' {
+        $$ = new ExprIfThenElse ( tokAt(scanner,@locif), $cond,
+            make_smart<ExprReturn>(tokAt(scanner,@loc),ExpressionPtr($subexpr)), nullptr);
+    }
     ;
 
 expression_yield
