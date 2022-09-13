@@ -535,13 +535,10 @@ def public generate_llvm_code ( fmna:string )
 [function_macro(name="jit_llvm")]
 class Jit_LLVM_Macro : AstFunctionAnnotation
     def generate_jit ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        var efun <- new [[ExprAddr()
-            target := func.name,
-            funcType <- function_to_type(func)
-        ]]; defer_delete(efun)
+        var funt <- function_to_type(func); defer_delete(funt)
+        var efun <- qmacro( @@ <$t(funt)> $i(func.name) ); defer_delete(efun)
         let emod = string(compiling_module().name)
         let fmna = get_mangled_name(func)
-
         var qres <- qmacro_block() <|
             unsafe
                 if get_ptr(this_program()) != null
@@ -552,7 +549,6 @@ class Jit_LLVM_Macro : AstFunctionAnnotation
                     panic("missing 'options rtti'")
         var reg <- setup_call_list("all`things`jit", func.at, true)
         reg.list |> emplace(qres)
-
         var qres_late <- qmacro_block() <|
             unsafe
                 var gen = generate_llvm_code($v(fmna))
@@ -562,8 +558,6 @@ class Jit_LLVM_Macro : AstFunctionAnnotation
                     remove_jit(reinterpret<function> $e(efun))
         var reg_late <- setup_call_list("all`things`jit`late", func.at, true)
         reg_late.list |> emplace(qres_late)
-
-
         return true
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         if is_in_completion()

@@ -16,20 +16,20 @@ def test_min3 ( a, b, c : int )
     else
         return b < c ? b : c
 
-def add (a,b)
-    return a + b
-
 [jit_llvm]
 def add_jit (a,b)
     return a + b
 
+def test_add( t:T?; a,b)
+    t |> strictEqual ( add_jit(a,b), a + b )
+
 [test]
 def test_apply_variant ( t:T? )
+    t |> success ( is_jit_function(@@<(a:int;b:int):int> add_jit) )
+    t |> success ( is_jit_function(@@<(a:uint;b:uint):uint> add_jit) )
     t |> run("add") <| @ ( t : T? )
         var fake <- Faker()
         fuzz <|
-            let left = fake |> random_int
-            let right = fake |> random_int
-            let expected = add(left,right)
-            let actual = add_jit(left,right)
-            t |> equal(expected, actual)
+            t |> test_add ( fake |> random_int,  fake |> random_int )
+            t |> test_add ( fake |> random_uint, fake |> random_uint )
+            t |> test_add ( fake |> random_float, fake |> random_float )
