@@ -85,23 +85,15 @@ class LlvmJitVisitor : AstVisitor
         return res
 
     def base_type_to_llvm_type ( e:ExpressionPtr; t:Type )
-        if t == Type tInt || t == Type tUInt || t == Type tBitfield
-            return LLVMInt32Type()
-        elif t == Type tInt64 || t == Type tUInt64
-            return LLVMInt64Type()
-        elif t == Type tInt16 || t == Type tUInt16
-            return LLVMInt16Type()
-        elif t == Type tInt8 || t == Type tUInt8
-            return LLVMInt8Type()
-        elif t == Type tFloat
-            return LLVMFloatType()
-        elif t == Type tDouble
-            return LLVMDoubleType()
-        elif t == Type tBool
-            return LLVMInt1Type()
-        else
-            failed(e, "unsupported type {t}")
-            return LLVMInt32Type()
+        return LLVMInt32Type()  if t == Type tInt || t == Type tUInt || t == Type tBitfield
+        return LLVMInt64Type()  if t == Type tInt64 || t == Type tUInt64
+        return LLVMInt16Type()  if t == Type tInt16 || t == Type tUInt16
+        return LLVMInt8Type()   if t == Type tInt8 || t == Type tUInt8
+        return LLVMFloatType()  if t == Type tFloat
+        return LLVMDoubleType() if t == Type tDouble
+        return LLVMInt1Type()   if t == Type tBool
+        failed(e, "unsupported type {t}")
+        return LLVMInt32Type()
 
     def type_to_llvm_abi_type ( e:ExpressionPtr; t:TypeDeclPtr )
         if t.isPointer || t.isRef
@@ -295,55 +287,34 @@ class LlvmJitVisitor : AstVisitor
             return LLVMIntPredicate LLVMIntEQ
 
     def get_int_compare_op ( e:ExpressionPtr; op:string )
-        if op=="=="
-            return LLVMIntPredicate LLVMIntEQ
-        elif op=="!="
-            return LLVMIntPredicate LLVMIntNE
-        elif op=="<"
-            return LLVMIntPredicate LLVMIntSLT
-        elif op=="<="
-            return LLVMIntPredicate LLVMIntSLE
-        elif op==">"
-            return LLVMIntPredicate LLVMIntSGT
-        elif op==">="
-            return LLVMIntPredicate LLVMIntSGE
-        else
-            failed(e, "unsupported int compare operator {op}")
-            return LLVMIntPredicate LLVMIntEQ
+        return LLVMIntPredicate LLVMIntEQ   if op=="=="
+        return LLVMIntPredicate LLVMIntNE   if op=="!="
+        return LLVMIntPredicate LLVMIntSLT  if op=="<"
+        return LLVMIntPredicate LLVMIntSLE  if op=="<="
+        return LLVMIntPredicate LLVMIntSGT  if op==">"
+        return LLVMIntPredicate LLVMIntSGE  if op==">="
+        failed(e, "unsupported int compare operator {op}")
+        return LLVMIntPredicate LLVMIntEQ
 
     def get_uint_compare_op ( e:ExpressionPtr; op:string )
-        if op=="=="
-            return LLVMIntPredicate LLVMIntEQ
-        elif op=="!="
-            return LLVMIntPredicate LLVMIntNE
-        elif op=="<"
-            return LLVMIntPredicate LLVMIntULT
-        elif op=="<="
-            return LLVMIntPredicate LLVMIntULE
-        elif op==">"
-            return LLVMIntPredicate LLVMIntUGT
-        elif op==">="
-            return LLVMIntPredicate LLVMIntUGE
-        else
-            failed(e, "unsupported uint compare operator {op}")
-            return LLVMIntPredicate LLVMIntEQ
+        return LLVMIntPredicate LLVMIntEQ   if op=="=="
+        return LLVMIntPredicate LLVMIntNE   if op=="!="
+        return LLVMIntPredicate LLVMIntULT  if op=="<"
+        return LLVMIntPredicate LLVMIntULE  if op=="<="
+        return LLVMIntPredicate LLVMIntUGT  if op==">"
+        return LLVMIntPredicate LLVMIntUGE  if op==">="
+        failed(e, "unsupported uint compare operator {op}")
+        return LLVMIntPredicate LLVMIntEQ
 
     def get_float_compare_op ( e:ExpressionPtr; op:string )
-        if op=="=="
-            return LLVMRealPredicate LLVMRealOEQ
-        elif op=="!="
-            return LLVMRealPredicate LLVMRealONE
-        elif op=="<"
-            return LLVMRealPredicate LLVMRealOLT
-        elif op=="<="
-            return LLVMRealPredicate LLVMRealOLE
-        elif op==">"
-            return LLVMRealPredicate LLVMRealOGT
-        elif op==">="
-            return LLVMRealPredicate LLVMRealOGE
-        else
-            failed(e, "unsupported float compare operator {op}")
-            return LLVMRealPredicate LLVMRealOEQ
+        return LLVMRealPredicate LLVMRealOEQ    if op=="=="
+        return LLVMRealPredicate LLVMRealONE    if op=="!="
+        return LLVMRealPredicate LLVMRealOLT    if op=="<"
+        return LLVMRealPredicate LLVMRealOLE    if op=="<="
+        return LLVMRealPredicate LLVMRealOGT    if op==">"
+        return LLVMRealPredicate LLVMRealOGE    if op==">="
+        failed(e, "unsupported float compare operator {op}")
+        return LLVMRealPredicate LLVMRealOEQ
 
 // if-then-else
     def override preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : void
