@@ -156,6 +156,10 @@ class LlvmJitVisitor : AstVisitor
                 tres = LLVMBuildInsertElement(g_builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
             elif bt==Type tFloat
                 tres = LLVMBuildInsertElement(g_builder, vres, tsrc, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
+            elif bt==Type tDouble
+                var vvec = LLVMGetUndef(LLVMVectorType(LLVMDoubleType(), 2u))
+                var vsrc = LLVMBuildInsertElement(g_builder, vvec, tsrc, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "double_vec")
+                tres = LLVMBuildBitCast(g_builder, vsrc, LLVMFloat4Type(), "return_result")
             else
                 failed(expr, "unsupported cast_to_vec4f cast {describe(etype)}")
         else
