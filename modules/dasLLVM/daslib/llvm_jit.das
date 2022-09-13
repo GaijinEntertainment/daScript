@@ -10,8 +10,10 @@ require daslib/templates_boost
 require daslib/ast public
 require daslib/safe_addr
 require daslib/strings_boost
+require daslib/defer
 
 let LLVM_ENABLE_OPT_PASS = true
+let LLVM_OPT_LEVEL = 2u
 let LLVM_JIT_OPT_LEVEL = 2u
 
 var g_mod : LLVMOpaqueModule?
@@ -497,7 +499,7 @@ class LlvmJitVisitor : AstVisitor
 
 def public generate_llvm ( fn : FunctionPtr )
     if is_in_completion() || is_compiling_macros()
-        return null
+        return
     init_jit()  // we can't be sure init is called before this
     var astVisitor = new LlvmJitVisitor()
     var astVisitorAdapter <- make_visitor(*astVisitor)
@@ -505,49 +507,72 @@ def public generate_llvm ( fn : FunctionPtr )
     var failed = false
     if length(astVisitor.errors) > 0
         let errors = astVisitor.errors |> join("\n")
-        print("\n\nLLVM JIT FAILED:\n{errors}\n\n")
+        to_log(LOG_ERROR,"LLVM JIT FAILED:\n{errors}\n")
         failed = true
     if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
         failed = true
     if !failed && LLVM_ENABLE_OPT_PASS
         var pmb = LLVMPassManagerBuilderCreate()
-        LLVMPassManagerBuilderSetOptLevel(pmb, 2u)
+        LLVMPassManagerBuilderSetOptLevel(pmb, LLVM_OPT_LEVEL)
         var fpm = LLVMCreateFunctionPassManagerForModule(g_mod)
         LLVMPassManagerBuilderPopulateFunctionPassManager(pmb, fpm)
         while LLVMRunFunctionPassManager(fpm, LLVMGetNamedFunction(g_mod, string(get_mangled_name(fn))))==1
             pass
         LLVMDisposePassManager(fpm)
-
         LLVMPassManagerBuilderDispose(pmb)
-    var code = failed ? 0ul : LLVMGetFunctionAddress(g_engine, astVisitor.fnmna)
     astVisitorAdapter := null
     unsafe
         delete astVisitor
+
+def public generate_llvm_code ( fmna:string )
+    if is_in_completion() || is_compiling_macros()
+        return null
+    var code = LLVMGetFunctionAddress(g_engine, fmna)
+    if code==0ul
+        to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")
     return unsafe(reinterpret<void?> code)
 
 [function_macro(name="jit_llvm")]
 class Jit_LLVM_Macro : AstFunctionAnnotation
+    def generate_jit ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        var efun <- new [[ExprAddr()
+            target := func.name,
+            funcType <- function_to_type(func)
+        ]]; defer_delete(efun)
+        let emod = string(compiling_module().name)
+        let fmna = get_mangled_name(func)
+
+        var qres <- qmacro_block() <|
+            unsafe
+                if get_ptr(this_program()) != null
+                    var fnptr <- find_module_function_via_rtti(find_module_via_rtti(this_program(),$v(emod)),$e(efun))
+                    generate_llvm(fnptr)
+                    fnptr := null
+                else
+                    panic("missing 'options rtti'")
+        var reg <- setup_call_list("all`things`jit", func.at, true)
+        reg.list |> emplace(qres)
+
+        var qres_late <- qmacro_block() <|
+            unsafe
+                var gen = generate_llvm_code($v(fmna))
+                if gen != null
+                    gen |> instrument_jit(reinterpret<function> $e(efun))
+                else
+                    remove_jit(reinterpret<function> $e(efun))
+        var reg_late <- setup_call_list("all`things`jit`late", func.at, true)
+        reg_late.list |> emplace(qres_late)
+
+
+        return true
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         if is_in_completion()
             return true
         func.sideEffectFlags |= bitfield(int(SideEffects userScenario))
-        var qblock <- quote() <|
-            unsafe
-                if get_ptr(this_program()) != null
-                    var fnptr <- find_module_function_via_rtti(find_module_via_rtti(this_program(),PMOD),PFUN)
-                    var gen = generate_llvm(fnptr)
-                    if gen != null
-                        gen |> instrument_jit(reinterpret<function> PFUN)
-                    else
-                        remove_jit(reinterpret<function> PFUN)
-                    fnptr := null
-                else
-                    panic("missing 'options rtti'")
-        apply_template(qblock) <| $ ( rules )
-            rules |> replaceVariable("PFUN") <| new [[ExprAddr() target:=func.name]]
-            rules |> replaceVariable("PMOD") <| new [[ExprConstString() value:=compiling_module().name]]
-        var qres <- move_unquote_block(qblock)
-        qres.blockFlags ^= ExprBlockFlags isClosure
-        var reg <- setup_call_list("all`things`jit", func.at, true)
-        reg.list |> emplace(qres)
-        return true
+        if func.isGeneric
+            return true
+        return generate_jit(func, group, args, errors)
+    def override generic_apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        if is_in_completion()
+            return true
+        return generate_jit(func, group, args, errors)
