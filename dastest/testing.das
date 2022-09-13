@@ -4,6 +4,7 @@ module testing shared
 
 require rtti
 require strings // to compare strings/das_strings
+require daslib/math_bits
 
 class T
     name: string
@@ -81,6 +82,14 @@ def accept(t: T?; value)
 
 def strictEqual(t: T?; a; b; msg = ""): bool
     if a == b
+        return true
+    t->errorAt(!empty(msg) ? msg : "values differ", get_line_info(1))
+    t->errorAt("\texpected: {a}", get_line_info(1))
+    t->fatalAt("\tgot: {b}", get_line_info(1))
+    return false
+
+def strictEqual(t: T?; a,b:float; msg = ""): bool
+    if float_bits_to_int(a) == float_bits_to_int(b)
         return true
     t->errorAt(!empty(msg) ? msg : "values differ", get_line_info(1))
     t->errorAt("\texpected: {a}", get_line_info(1))

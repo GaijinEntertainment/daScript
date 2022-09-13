@@ -1933,6 +1933,16 @@ namespace das {
                         expr->at, CompilationError::type_not_found);
                 }
                 fns = findTypedFuncAddr(expr->target, expr->funcType->argTypes);
+                if ( fns.size()==0 ) {
+                    string moduleName, funcName;
+                    splitTypeName(expr->target, moduleName, funcName);
+                    fns = findTypedFuncAddr(moduleName + "::`" + funcName, expr->funcType->argTypes);
+                    if ( fns.size()==1 && !fns.back()->fromGeneric ) {
+                        error("function not found " + expr->target,  "", "",
+                            expr->at, CompilationError::function_not_found);
+                        return Visitor::visit(expr);
+                    }
+                }
             } else {
                 fns = findFuncAddr(expr->target);
             }
