@@ -12,6 +12,7 @@ require daslib/static_let
 require daslib/strings
 require daslib/defer
 require math
+require daslib/math_bits
 
 struct MonthNameAndDay
     name: string
@@ -98,7 +99,7 @@ def public random_float ( var faker:Faker )
     //! Generates random float.
     var i = 0u
     faker.rnd |> next(i)
-    return unsafe(reinterpret<float> i)
+    return uint_bits_to_float(i)
 
 def public random_float2 ( var faker:Faker )
     //! Generates random float2.

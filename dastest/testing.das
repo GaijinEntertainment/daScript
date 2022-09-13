@@ -96,6 +96,13 @@ def strictEqual(t: T?; a,b:float; msg = ""): bool
     t->fatalAt("\tgot: {b}", get_line_info(1))
     return false
 
+def strictEqual(t: T?; a,b:double; msg = ""): bool
+    if double_bits_to_int64(a) == double_bits_to_int64(b)
+        return true
+    t->errorAt(!empty(msg) ? msg : "values differ", get_line_info(1))
+    t->errorAt("\texpected: {a}", get_line_info(1))
+    t->fatalAt("\tgot: {b}", get_line_info(1))
+    return false
 
 def success(t: T?; a; msg = ""): bool
     if a
