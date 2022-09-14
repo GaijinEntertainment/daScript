@@ -725,6 +725,9 @@ expression_if_then_else
         eite->isStatic = $loc;
         $$ = eite;
     }
+    |   expr[if_true] DAS_IF[loc] { yyextra->das_need_oxford_comma = true; } expr[cond] {
+        $$ = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),ExpressionPtr($if_true),nullptr);
+    }
     ;
 
 expression_for_loop
