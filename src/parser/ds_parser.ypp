@@ -394,6 +394,8 @@
 %type <pExpression>     expression_yield
 %type <pExpression>     expression_else
 %type <pExpression>     expression_if_then_else
+%type <pExpression>     expression_else_one_liner
+%type <pExpression>     optional_return_result
 %type <pExpression>     expression_try_catch
 %type <pExpression>     expr_new
 %type <pExpression>     expr_pipe
@@ -718,6 +720,20 @@ if_or_static_if
     |   DAS_STATIC_IF   { $$ = true; }
     ;
 
+optional_return_result
+    :   { $$ = nullptr; }
+    |   expr[result] { $$ = $result; }
+
+expression_else_one_liner
+    :   { $$ = nullptr; }
+    |   DAS_ELSE[loc] { yyextra->das_need_oxford_comma = true; }    expr[if_false] {
+            $$ = $if_false;
+    }
+    |   DAS_ELSE[loc] { yyextra->das_need_oxford_comma = true; }    DAS_RETURN optional_return_result[result] {
+            $$ = new ExprReturn(tokAt(scanner,@loc), ExpressionPtr($result));
+    }
+    ;
+
 expression_if_then_else
     :   if_or_static_if[loc] expr[cond] expression_block[block] expression_else[then] {
         auto eite = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),
@@ -725,8 +741,8 @@ expression_if_then_else
         eite->isStatic = $loc;
         $$ = eite;
     }
-    |   expr[if_true] DAS_IF[loc] { yyextra->das_need_oxford_comma = true; } expr[cond] {
-        $$ = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),ExpressionPtr($if_true),nullptr);
+    |   expr[if_true] DAS_IF[loc] { yyextra->das_need_oxford_comma = true; } expr[cond] expression_else_one_liner[if_false] {
+        $$ = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),ExpressionPtr($if_true),ExpressionPtr($if_false));
     }
     ;
 
@@ -1178,13 +1194,13 @@ expression_return
         pRet->moveSemantics = true;
         $$ = pRet;
     }
-    |   DAS_RETURN[loc] DAS_IF[locif] { yyextra->das_need_oxford_comma=true; } expr[cond] ';' {
+    |   DAS_RETURN[loc] DAS_IF[locif] { yyextra->das_need_oxford_comma=true; } expr[cond] expression_else_one_liner[if_false] ';' {
         $$ = new ExprIfThenElse ( tokAt(scanner,@locif), $cond,
-            make_smart<ExprReturn>(tokAt(scanner,@loc),nullptr), nullptr);
+            make_smart<ExprReturn>(tokAt(scanner,@loc),nullptr), ExpressionPtr($if_false));
     }
-    |   DAS_RETURN[loc] expr[subexpr] DAS_IF[locif] { yyextra->das_need_oxford_comma=true; } expr[cond] ';' {
+    |   DAS_RETURN[loc] expr[subexpr] DAS_IF[locif] { yyextra->das_need_oxford_comma=true; } expr[cond] expression_else_one_liner[if_false] ';' {
         $$ = new ExprIfThenElse ( tokAt(scanner,@locif), $cond,
-            make_smart<ExprReturn>(tokAt(scanner,@loc),ExpressionPtr($subexpr)), nullptr);
+            make_smart<ExprReturn>(tokAt(scanner,@loc),ExpressionPtr($subexpr)), ExpressionPtr($if_false));
     }
     ;
 
