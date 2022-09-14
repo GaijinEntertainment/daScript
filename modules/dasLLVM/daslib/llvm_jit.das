@@ -274,13 +274,10 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
     def get_bool_compare_op ( e:ExpressionPtr; op:string )
-        if op=="=="
-            return LLVMIntPredicate LLVMIntEQ
-        elif op=="!="
-            return LLVMIntPredicate LLVMIntNE
-        else
-            failed(e, "unsupported bool compare operator {op}")
-            return LLVMIntPredicate LLVMIntEQ
+        return LLVMIntPredicate LLVMIntEQ   if op=="=="
+        return LLVMIntPredicate LLVMIntNE   if op=="!="
+        failed(e, "unsupported bool compare operator {op}")
+        return LLVMIntPredicate LLVMIntEQ
 
     def get_int_compare_op ( e:ExpressionPtr; op:string )
         return LLVMIntPredicate LLVMIntEQ   if op=="=="
@@ -497,8 +494,7 @@ def public generate_llvm ( fn : FunctionPtr )
 def public generate_llvm_code ( fmna:string )
     return null if is_in_completion() || is_compiling_macros()
     var code = LLVMGetFunctionAddress(g_engine, fmna)
-    if code==0ul
-        to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")
+    to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")  if code==0ul
     return unsafe(reinterpret<void?> code)
 
 [function_macro(name="jit_llvm")]
@@ -529,13 +525,10 @@ class Jit_LLVM_Macro : AstFunctionAnnotation
         reg_late.list |> emplace(qres_late)
         return true
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        if is_in_completion()
-            return true
+        return true if is_in_completion()
         func.sideEffectFlags |= bitfield(int(SideEffects userScenario))
-        if func.isGeneric
-            return true
+        return true if func.isGeneric
         return generate_jit(func, group, args, errors)
     def override generic_apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        if is_in_completion()
-            return true
+        return true if is_in_completion()
         return generate_jit(func, group, args, errors)
