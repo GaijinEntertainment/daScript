@@ -829,4 +829,11 @@ namespace das {
         }
         return gen;
     }
+
+    ExprBlock * ast_wrapInBlock ( Expression * expr ) {
+        auto block = new ExprBlock();
+        block->at = expr->at;
+        block->list.push_back(ExpressionPtr(expr));
+        return block;
+    }
  }
