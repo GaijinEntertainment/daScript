@@ -325,6 +325,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             uint32_t len = 0;
             info->getSourceAndLength(src, len);
             yy_scan_bytes(src, len, yyscanner);
+            yylineno = 1;
         }
     }
     BEGIN(normal);
