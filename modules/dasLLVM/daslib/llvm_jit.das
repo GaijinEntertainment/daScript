@@ -25,10 +25,8 @@ def private get_expr_ptr ( expr:ExpressionPtr )
 
 [init]
 def private init_jit
-    if is_in_completion() || is_compiling_macros()
-        return
-    if g_builder != null    // prevent double init
-        return
+    return if is_in_completion() || is_compiling_macros()
+    return if g_builder != null    // prevent double init
     g_mod = LLVMModuleCreateWithName("llvm_jit_module")
     g_builder = LLVMCreateBuilder()
     LLVMLinkInMCJIT()
@@ -42,10 +40,8 @@ def private init_jit
 
 [finalize]
 def private finalize_jit
-    if is_in_completion() || is_compiling_macros()
-        return
-    if g_builder == null    // prevent double finalize
-        return
+    return if is_in_completion() || is_compiling_macros()
+    return if g_builder == null    // prevent double finalize
     LLVMDumpModule(g_mod); g_mod = null
     LLVMDisposeBuilder(g_builder); g_builder = null
     LLVMDisposeExecutionEngine(g_engine); g_engine = null
@@ -473,8 +469,7 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 def public generate_llvm ( fn : FunctionPtr )
-    if is_in_completion() || is_compiling_macros()
-        return
+    return if is_in_completion() || is_compiling_macros()
     init_jit()  // we can't be sure init is called before this
     var astVisitor = new LlvmJitVisitor()
     var astVisitorAdapter <- make_visitor(*astVisitor)
@@ -500,8 +495,7 @@ def public generate_llvm ( fn : FunctionPtr )
         delete astVisitor
 
 def public generate_llvm_code ( fmna:string )
-    if is_in_completion() || is_compiling_macros()
-        return null
+    return null if is_in_completion() || is_compiling_macros()
     var code = LLVMGetFunctionAddress(g_engine, fmna)
     if code==0ul
         to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")
