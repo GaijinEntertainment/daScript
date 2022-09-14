@@ -490,6 +490,7 @@ namespace das {
         "log",                          Type::tBool,
         "log_optimization_passes",      Type::tBool,
         "log_stack",                    Type::tBool,
+        "log_init",                     Type::tBool,
         "log_symbol_use",               Type::tBool,
         "log_var_scope",                Type::tBool,
         "log_nodes",                    Type::tBool,

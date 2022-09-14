@@ -3016,6 +3016,29 @@ namespace das
             context.relocateCode(true);
             context.relocateCode();
         }
+        // build init functions
+        vector<SimFunction *> allInitFunctions;
+        for ( int fni=0; fni!=context.totalFunctions; fni++ ) {
+            auto & fn = context.functions[fni];
+            if ( fn.debugInfo->flags & FuncInfo::flag_init ) {
+                allInitFunctions.push_back(&fn);
+            }
+        }
+        stable_sort(allInitFunctions.begin(), allInitFunctions.end(), [](auto a, auto b) {
+            int lateA = a->debugInfo->flags & FuncInfo::flag_late_init;
+            int lateB = b->debugInfo->flags & FuncInfo::flag_late_init;
+            return lateA < lateB;
+        });
+        if ( options.getBoolOption("log_init") ) {
+            logs << "INIT FUNCTIONS:\n";
+            for ( auto & inf : allInitFunctions ) {
+                logs << "\t" << inf->mangledName << "\n";
+            }
+            logs << "\n";
+        }
+        context.totalInitFunctions = (uint32_t) allInitFunctions.size();
+        context.initFunctions = (SimFunction **) context.code->allocate(allInitFunctions.size()*sizeof(SimFunction *));
+        memcpy ( context.initFunctions, allInitFunctions.data(), allInitFunctions.size()*sizeof(SimFunction *) );
         // run init script and restart
         if ( !folding ) {
             auto time1 = ref_time_ticks();

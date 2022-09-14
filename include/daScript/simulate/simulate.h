@@ -683,6 +683,8 @@ namespace das
         int totalVariables = 0;
         int totalFunctions = 0;
         SimNode * aotInitScript = nullptr;
+        SimFunction ** initFunctions = nullptr;
+        int totalInitFunctions = 0;
     protected:
         bool            debugger = false;
         volatile bool   singleStepMode = false;

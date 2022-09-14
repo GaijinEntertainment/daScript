@@ -594,7 +594,13 @@ namespace das {
                 if ( func->used && !func->builtIn ) {
                     func->index = totalFunctions++;
                     if ( log ) {
-                        logs << "\t" << func->index << "\t" << func->totalStackSize << "\t" << func->getMangledName() << "\n";
+                        logs << "\t" << func->index << "\t" << func->totalStackSize << "\t" << func->getMangledName();
+                        if ( func->init ) {
+                            logs << " [init";
+                            if (func->lateInit ) logs << "(late)";
+                            logs << "]";
+                        }
+                        logs << "\n";
                     }
                 }
                 else {
