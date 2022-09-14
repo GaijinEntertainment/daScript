@@ -101,4 +101,10 @@ using das_safe_set = std::set<K,C>;
 #endif
 
 
+#ifndef das_to_stdout
+#define das_to_stdout(...) { fprintf(stdout, __VA_ARGS__); fflush(stdout); }
+#endif
 
+#ifndef das_to_stderr
+#define das_to_stderr(...) { fprintf(stderr, __VA_ARGS__); fflush(stderr); }
+#endif

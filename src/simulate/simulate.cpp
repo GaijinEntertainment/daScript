@@ -1614,11 +1614,9 @@ namespace das
                 marker = "";
 
             if ( level>=LogLevel::warning ) {
-                fprintf(stderr, multiline_log ? "%s%s\n" : "%s%s", marker, text);
-                fflush(stderr);
+                das_to_stderr(multiline_log ? "%s%s\n" : "%s%s", marker, text);
             } else {
-                fprintf(stdout, multiline_log ? "%s%s\n" : "%s%s", marker, text);
-                fflush(stdout);
+                das_to_stdout(multiline_log ? "%s%s\n" : "%s%s", marker, text);
             }
         }
     }
@@ -1721,15 +1719,13 @@ namespace das
 
     void Context::to_out ( const char * message ) {
         if (message) {
-            fprintf(stdout, "%s", message);
-            fflush(stdout);
+            das_to_stdout("%s", message);
         }
     }
 
     void Context::to_err ( const char * message ) {
         if (message) {
-            fprintf(stderr, "%s", message);
-            fflush(stderr);
+            das_to_stderr("%s", message);
         }
     }
 
