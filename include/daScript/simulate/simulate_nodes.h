@@ -996,6 +996,94 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
     };
 
+    // Invoke function by name
+
+    struct SimNode_InvokeFnByNameAny : SimNode_CallBase {
+        SimNode_InvokeFnByNameAny(const LineInfo& at) : SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
+    template <int argCount>
+    struct SimNode_InvokeFnByName : SimNode_InvokeFnByNameAny {
+        SimNode_InvokeFnByName ( const LineInfo & at ) : SimNode_InvokeFnByNameAny(at) {}
+        virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE \
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            bool unique = false;
+            auto funcName = cast<char *>::to(argValues[0]);
+            if (!funcName) context.throw_error_at(debugInfo,"invoke null function");
+            SimFunction * simFunc = context.findFunction(funcName, unique);
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
+            if (!unique) context.throw_error_at(debugInfo,"invoke non-unique function %s", funcName);
+            if ( simFunc->cmres ) context.throw_error_at(debugInfo,"can't dynamically invoke function, which returns by reference");
+            if ( simFunc->unsafe ) context.throw_error_at(debugInfo,"can't dynamically invoke unsafe function");
+            if ( argCount>1 ) {
+                return context.call(simFunc, argValues + 1, &debugInfo);
+            } else {
+                return context.call(simFunc, nullptr, &debugInfo);
+            }
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                                                   \
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            DAS_PROFILE_NODE                                                                    \
+            vec4f argValues[argCount ? argCount : 1];                                           \
+            EvalBlock<argCount>::eval(context, arguments, argValues);                           \
+            bool unique = false; \
+            auto funcName = cast<char *>::to(argValues[0]);                                     \
+            if (!funcName) context.throw_error_at(debugInfo,"invoke null function");            \
+            SimFunction * simFunc = context.findFunction(funcName, unique);                     \
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
+            if (!unique) context.throw_error_at(debugInfo,"invoke non-unique function %s", funcName); \
+            if ( simFunc->cmres ) context.throw_error_at(debugInfo,"can't dynamically invoke function, which returns by reference"); \
+            if ( simFunc->unsafe ) context.throw_error_at(debugInfo,"can't dynamically invoke unsafe function"); \
+            if ( argCount>1 ) {                                                                 \
+                return cast<CTYPE>::to(context.call(simFunc, argValues + 1, &debugInfo));       \
+            } else {                                                                            \
+                return cast<CTYPE>::to(context.call(simFunc, nullptr, &debugInfo));             \
+            }                                                                                   \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    template <>
+    struct SimNode_InvokeFnByName<-1> : SimNode_InvokeFnByNameAny {
+        SimNode_InvokeFnByName(const LineInfo& at) : SimNode_InvokeFnByNameAny(at) {}
+        virtual vec4f eval(Context& context) override {
+            DAS_PROFILE_NODE
+            vec4f argValues[32];
+            evalArgs(context, argValues);
+            bool unique = false;
+            auto funcName = cast<char *>::to(argValues[0]);
+            if (!funcName) context.throw_error_at(debugInfo,"invoke null function");
+            SimFunction * simFunc = context.findFunction(funcName, unique);
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
+            if (!unique) context.throw_error_at(debugInfo,"invoke non-unique function %s", funcName);
+            if ( simFunc->cmres ) context.throw_error_at(debugInfo,"can't dynamically invoke function, which returns by reference");
+            if ( simFunc->unsafe ) context.throw_error_at(debugInfo,"can't dynamically invoke unsafe function");
+            return context.call(simFunc, argValues + 1, &debugInfo);
+        }
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+            DAS_PROFILE_NODE \
+            vec4f argValues[32]; \
+            evalArgs(context, argValues); \
+            bool unique = false; \
+            auto funcName = cast<char *>::to(argValues[0]); \
+            if (!funcName) context.throw_error_at(debugInfo,"invoke null function"); \
+            SimFunction * simFunc = context.findFunction(funcName, unique); \
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function"); \
+            if (!unique) context.throw_error_at(debugInfo,"invoke non-unique function %s", funcName); \
+            if ( simFunc->cmres ) context.throw_error_at(debugInfo,"can't dynamically invoke function, which returns by reference"); \
+            if ( simFunc->unsafe ) context.throw_error_at(debugInfo,"can't dynamically invoke unsafe function"); \
+            return cast<CTYPE>::to(context.call(simFunc, argValues + 1, &debugInfo)); \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+
     // Invoke lambda
 
     struct SimNode_InvokeLambdaAny : SimNode_CallBase {

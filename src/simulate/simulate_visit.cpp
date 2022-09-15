@@ -129,6 +129,13 @@ namespace das {
         V_END();
     }
 
+    SimNode* SimNode_InvokeFnByNameAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(InvokeFnByName);
+        V_CALL();
+        V_END();
+    }
+
     SimNode* SimNode_InvokeLambdaAny::visit(SimVisitor& vis) {
         V_BEGIN();
         V_OP(InvokeLambda);

@@ -2574,12 +2574,22 @@ namespace das {
                     expr->at, CompilationError::invalid_argument_type);
                 return Visitor::visit(expr);
             }
-            if ( !blockT->isGoodBlockType() && !blockT->isGoodFunctionType() && !blockT->isGoodLambdaType() ) {
-                error("expecting block, or function, or lambda, not a " + describeType(blockT),  "", "",
+            // promote invoke(string_name,...) into string_name(...)
+            if ( expr->arguments[0]->rtti_isStringConstant() ) {
+                auto cname = static_pointer_cast<ExprConstString>(expr->arguments[0])->text;
+                auto call = make_smart<ExprCall>(expr->at, cname);
+                for ( size_t i=1; i<expr->arguments.size(); ++i ) {
+                    call->arguments.push_back(expr->arguments[i]->clone());
+                }
+                reportAstChanged();
+                return call;
+            }
+            if ( !blockT->isGoodBlockType() && !blockT->isGoodFunctionType() && !blockT->isGoodLambdaType() && !blockT->isString() ) {
+                error("expecting block, or function, or lambda, or string, not a " + describeType(blockT),  "", "",
                     expr->at, CompilationError::invalid_argument_type);
                  return Visitor::visit(expr);
             }
-            if ( expr->arguments.size()-1 != blockT->argTypes.size() ) {
+            if ( !blockT->isString() && expr->arguments.size()-1 != blockT->argTypes.size() ) {
                 error("invalid number of arguments, expecting " + describeType(blockT), "", "",
                       expr->at, CompilationError::invalid_argument_count);
                 return Visitor::visit(expr);

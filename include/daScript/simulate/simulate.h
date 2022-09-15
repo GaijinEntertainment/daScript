@@ -84,6 +84,8 @@ namespace das
                 bool    fastcall : 1;
                 bool    builtin : 1;
                 bool    jit : 1;
+                bool    unsafe : 1;
+                bool    cmres : 1;
             };
         };
     };

@@ -2819,6 +2819,7 @@ namespace das {
                 if (bt == Type::tBlock) ss << "das_invoke";
                 else if (bt == Type::tLambda) ss << "das_invoke_lambda";
                 else if (bt == Type::tFunction) ss << "das_invoke_function";
+                else if (bt == Type::tString) ss << "das_invoke_function_by_name";
                 else ss << "das_invoke /*unknown*/";
                 ExprInvoke * einv = static_cast<ExprInvoke *>(call);
                 ss << "<" << describeCppType(call->type) << ">::invoke";

@@ -1165,6 +1165,7 @@ namespace das
         SimNode_CallBase * pInvoke;
         {
             if ( isCopyOrMove() ) {
+                DAS_ASSERTF ( blockT->baseType!=Type::tString, "its never CMRES for named function" );
                 auto getSp = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
                 if ( blockT->baseType==Type::tBlock ) {
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeAndCopyOrMove>(
@@ -1177,7 +1178,9 @@ namespace das
                                                         int(arguments.size()), at, getSp);
                 }
             } else {
-                if ( blockT->baseType==Type::tBlock ) {
+                if ( blockT->baseType==Type::tString ) {
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeFnByName>(int(arguments.size()),at);
+                } else if ( blockT->baseType==Type::tBlock ) {
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_Invoke>(int(arguments.size()),at);
                 } else if ( blockT->baseType==Type::tFunction ) {
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeFn>(int(arguments.size()),at);
@@ -2900,6 +2903,10 @@ namespace das
                     gfun.aotFunction = nullptr;
                     gfun.flags = 0;
                     gfun.fastcall = pfun->fastCall;
+                    gfun.unsafe = pfun->unsafeOperation;
+                    if ( pfun->result->isRefType() && !pfun->result->ref ) {
+                        gfun.cmres = true;
+                    }
                     if ( pfun->module->builtIn && !pfun->module->promoted ) {
                         gfun.builtin = true;
                     }

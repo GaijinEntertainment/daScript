@@ -2037,6 +2037,73 @@ namespace das {
     };
 
     template <typename ResType>
+    struct das_invoke_function_by_name {
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName ) {
+            if (!funcName) __context__->throw_error("invoke null function");
+            bool unique = false;
+            SimFunction * simFunc = __context__->findFunction(funcName, unique);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!unique) __context__->throw_error_ex("invoke non-unique function ", funcName);
+            if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
+            if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = ResType (*) ( Context * );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                return (*fnPtr) ( __context__ );
+            } else {
+                vec4f result = __context__->callOrFastcall(simFunc, nullptr, __lineinfo__);
+                return cast<ResType>::to(result);
+            }
+        }
+        template <typename ...ArgType>
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName, ArgType ...arg ) {
+            if (!funcName) __context__->throw_error("invoke null function");
+            bool unique = false;
+            SimFunction * simFunc = __context__->findFunction(funcName, unique);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!unique) __context__->throw_error_ex("invoke non-unique function ", funcName);
+            if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
+            if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
+            if ( simFunc->aotFunction ) {
+                using fnPtrType = ResType (*) ( Context *, ArgType... );
+                auto fnPtr = (fnPtrType) simFunc->aotFunction;
+                return (*fnPtr) ( __context__, forward<ArgType>(arg)... );
+            } else {
+                vec4f arguments [] = { cast<ArgType>::from(arg)... };
+                vec4f result = __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
+                return cast<ResType>::to(result);
+            }
+        }
+    };
+
+    template <>
+    struct das_invoke_function_by_name<void> {
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName ) {
+            if (!funcName) __context__->throw_error("invoke null function");
+            bool unique = false;
+            SimFunction * simFunc = __context__->findFunction(funcName, unique);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!unique) __context__->throw_error_ex("invoke non-unique function ", funcName);
+            if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
+            if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
+            __context__->callOrFastcall(simFunc, nullptr, __lineinfo__);
+        }
+        template <typename ...ArgType>
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName, ArgType ...arg ) {
+            vec4f arguments [] = { cast<ArgType>::from(arg)... };
+            if (!funcName) __context__->throw_error("invoke null function");
+            bool unique = false;
+            SimFunction * simFunc = __context__->findFunction(funcName, unique);
+            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!unique) __context__->throw_error_ex("invoke non-unique function ", funcName);
+            if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
+            if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
+            __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
+        }
+    };
+
+
+    template <typename ResType>
     struct das_invoke_lambda {
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;

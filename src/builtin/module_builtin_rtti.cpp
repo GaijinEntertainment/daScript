@@ -287,7 +287,7 @@ namespace das {
     TypeDeclPtr makeSimFunctionFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "SimFunctionFlags";
-        ft->argNames = { "aot", "fastcall", "builtin", "jit" };
+        ft->argNames = { "aot", "fastcall", "builtin", "jit", "unsafe", "cmres" };
         return ft;
     }
 
