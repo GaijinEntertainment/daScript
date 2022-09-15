@@ -125,6 +125,19 @@ namespace das {
         }
     }
 
+    Channel * channelCreate( Context * context, LineInfoArg * at ) {
+        Channel * ch = new Channel(context);
+        ch->addRef();
+        return ch;
+    }
+
+    void channelRemove( Channel * ch, Context * context, LineInfoArg * at ) {
+        if (ch->releaseRef()) {
+            context->throw_error_at(*at, "channel beeing deleted while being used");
+        }
+        delete ch;
+    }
+
     void channelAddRef ( Channel * ch, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(*at, "channelAddRef: channel is null");
         ch->addRef();
@@ -309,6 +322,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(withChannelEx)>(*this, lib,  "with_channel",
                 SideEffects::invoke, "withChannelEx")
                     ->args({"count","block","context","line"});
+            addExtern<DAS_BIND_FUN(channelCreate)>(*this, lib, "channel_create",
+                SideEffects::invoke, "channelCreate")
+                    ->args({ "context","line" })->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(channelRemove)>(*this, lib, "channel_remove",
+                SideEffects::invoke, "channelRemove")
+                    ->args({ "channel", "context","line" })->unsafeOperation = true;;
             addExtern<DAS_BIND_FUN(channelAddRef)>(*this, lib,  "add_ref",
                 SideEffects::modifyArgumentAndAccessExternal, "channelAddRef")
                     ->args({"channel","context","line"});
