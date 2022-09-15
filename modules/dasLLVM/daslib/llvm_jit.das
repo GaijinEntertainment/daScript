@@ -15,6 +15,7 @@ require daslib/defer
 let LLVM_ENABLE_OPT_PASS = true
 let LLVM_OPT_LEVEL = 2u
 let LLVM_JIT_OPT_LEVEL = 2u
+let LLVM_LOG_RESULT = false
 
 var g_mod : LLVMOpaqueModule?
 var g_engine : LLVMExecutionEngineRef
@@ -42,7 +43,9 @@ def private init_jit
 def private finalize_jit
     return if is_in_completion() || is_compiling_macros()
     return if g_builder == null    // prevent double finalize
-    LLVMDumpModule(g_mod); g_mod = null
+    if LLVM_LOG_RESULT
+        LLVMDumpModule(g_mod)
+    g_mod = null
     LLVMDisposeBuilder(g_builder); g_builder = null
     LLVMDisposeExecutionEngine(g_engine); g_engine = null
 
@@ -526,7 +529,7 @@ class Jit_LLVM_Macro : AstFunctionAnnotation
         return true
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         return true if is_in_completion()
-        func.sideEffectFlags |= bitfield(int(SideEffects userScenario))
+        // func.sideEffectFlags |= bitfield(int(SideEffects userScenario))
         return true if func.isGeneric
         return generate_jit(func, group, args, errors)
     def override generic_apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
