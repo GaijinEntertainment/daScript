@@ -15,7 +15,7 @@ require daslib/defer
 let LLVM_ENABLE_OPT_PASS = true
 let LLVM_OPT_LEVEL = 2u
 let LLVM_JIT_OPT_LEVEL = 2u
-let LLVM_LOG_RESULT = false
+let LLVM_LOG_RESULT = true
 
 var g_mod : LLVMOpaqueModule?
 var g_engine : LLVMExecutionEngineRef
@@ -59,6 +59,7 @@ struct private IteBlock
 
 class LlvmJitVisitor : AstVisitor
     e2v : table<Expression?;LLVMOpaqueValue?>
+    v2v : table<Variable?;LLVMOpaqueValue?>
     str2v : table<string; LLVMOpaqueValue?>
     errors : array<string>
     fnmna : string
@@ -71,16 +72,31 @@ class LlvmJitVisitor : AstVisitor
     def failed ( e:ExpressionPtr; msg:string )
         errors |> push("{msg}, expr = {e.__rtti} at {describe(e.at)}")
 
-    def setR ( e : ExpressionPtr; ov:LLVMOpaqueValue? )
+    def failed_V ( v:VariablePtr; msg:string )
+        errors |> push("{msg}, var = {describe(v)} at {describe(v.at)}")
+
+    def setE ( e : ExpressionPtr; ov:LLVMOpaqueValue? )
         e2v[get_ptr(e)] = ov
 
-    def getR ( e : ExpressionPtr )
+    def getE ( e : ExpressionPtr )
         var res : LLVMOpaqueValue?
         e2v |> find_if_exists(get_ptr(e)) <| $ ( val )
             res = *val
         if res == null
             res = LLVMGetUndef(LLVMInt32Type())
             failed(e, "unresolved expression {describe(e)}")
+        return res
+
+    def setV ( e : VariablePtr; ov:LLVMOpaqueValue? )
+        v2v[get_ptr(e)] = ov
+
+    def getV ( e : VariablePtr )
+        var res : LLVMOpaqueValue?
+        v2v |> find_if_exists(get_ptr(e)) <| $ ( val )
+            res = *val
+        if res == null
+            res = LLVMGetUndef(LLVMInt32Type())
+            failed_V(e, "unresolved variable {describe(e)}")
         return res
 
     def base_type_to_llvm_type ( e:ExpressionPtr; t:Type )
@@ -109,6 +125,15 @@ class LlvmJitVisitor : AstVisitor
             failed(e, "unsupported type {describe(t)}")
             return LLVMInt32Type()
 
+    def type_to_llvm_type ( e:ExpressionPtr; t:TypeDeclPtr )
+        if t.isPointer || t.isRef
+            return LLVMPointerType(LLVMVoidType(), 0u)
+        elif t.isWorkhorseType
+            return base_type_to_llvm_type(e, t.baseType)
+        else
+            failed(e, "unsupported type {describe(t)}")
+            return LLVMInt32Type()
+
     def override preVisitFunction(fun:FunctionPtr) : void
         assert(g_builder!=null, "missing builder")
         fnmna = get_mangled_name(fun)
@@ -120,19 +145,38 @@ class LlvmJitVisitor : AstVisitor
         ffunc = null
         return fun
 
+    def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
+        var vtype = arg._type.isRef ?  LLVMPointerType(LLVMVoidType(),0u) : type_to_llvm_type(expr, arg._type)
+        var vmem = LLVMBuildAlloca(g_builder, vtype, "variable_{arg.name}")
+        LLVMSetAlignment(vmem, 16u)
+        setV(arg, vmem)
+        if arg.init == null
+            var vsize = arg._type.isRef ?  typeinfo(sizeof type<void?>) : arg._type.sizeOf
+            LLVMBuildMemSet(g_builder, vmem, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(vsize), 0), 16u)
+
+    def override visitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
+        var tdst = getV(arg)
+        build_copy(tdst, expr)
+        return blk
+
     def override visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
         if expr.varFlags._block
             failed(expr, "{expr.variable.name} support block variable")
         elif expr.varFlags.local    // local varaibels
-            failed(expr, "{expr.variable.name} support local variable")
+            var var_ptr = getV(expr.variable)
+            if expr.varFlags.r2v
+                assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
+                setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), var_ptr, "var_r2v_{expr.argumentIndex}"))
+            else
+                setE(expr, LLVMBuildPointerCast(g_builder, var_ptr, LLVMPointerType(LLVMVoidType(),0u), "var_data" ))
         elif expr.varFlags.argument // arguments
             var args = LLVMGetParam(ffunc, 1u)
             var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(expr.argumentIndex), 0), "arg_ptr_{expr.argumentIndex}")
             if expr.varFlags.r2v
                 assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
-                setR(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), arg_ptr, "arg_r2v_{expr.argumentIndex}"))
+                setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), arg_ptr, "arg_r2v_{expr.argumentIndex}"))
             else
-                setR(expr, LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(LLVMVoidType(),0u), "arg_to_void" ))
+                setE(expr, LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(LLVMVoidType(),0u), "arg_to_void" ))
         else
             failed(expr, "ExprLetVariable {expr.variable.name} : {describe(expr.variable._type)}")
         return expr
@@ -141,7 +185,7 @@ class LlvmJitVisitor : AstVisitor
         assume etype = expr._type
         var vres = LLVMGetUndef(LLVMFloat4Type())
         var tres : LLVMOpaqueValue?
-        var tsrc = getR(expr)
+        var tsrc = getE(expr)
         if etype.isWorkhorseType
             let bt = etype.baseType
             if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
@@ -158,17 +202,17 @@ class LlvmJitVisitor : AstVisitor
                 var vsrc = LLVMBuildInsertElement(g_builder, vvec, tsrc, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "double_vec")
                 tres = LLVMBuildBitCast(g_builder, vsrc, LLVMFloat4Type(), "return_result")
             elif bt==Type tInt2 || bt==Type tUInt2 || bt==Type tRange || bt==Type tURange
-                var tbit = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;0;0}], "int_vec")
+                var tbit = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;-1;-1}], "int2_vec")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMFloat4Type(), "return_result")
             elif bt==Type tInt3 || bt==Type tUInt3
-                var tbit = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;2;0}], "int_vec")
+                var tbit = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;2;-1}], "int3_vec")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMFloat4Type(), "return_result")
             elif bt==Type tInt4 || bt==Type tUInt4
                 tres = LLVMBuildBitCast(g_builder, tsrc, LLVMFloat4Type(), "return_result")
             elif bt==Type tFloat2
-                tres = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;0;0}], "return_result")
+                tres = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;-1;-1}], "return_result")
             elif bt==Type tFloat3
-                tres = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;2;0}], "return_result")
+                tres = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;2;-1}], "return_result")
             elif bt==Type tFloat4
                 tres = tsrc
             else
@@ -214,28 +258,44 @@ class LlvmJitVisitor : AstVisitor
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, "jit_exception"), unsafe(addr(params[0])), 2u, "")
 
+    def build_copy ( tdst:LLVMOpaqueValue?; right:ExpressionPtr )
+        var tsrc = getE(right)
+        if right._type.isRef
+            let copySize = right._type.sizeOf
+            var rsize = LLVMConstInt(LLVMInt32Type(), uint64(copySize), 0)
+            LLVMBuildMemCpy(g_builder, tdst, 16u, tsrc, 16u, rsize)
+        else
+            var dst_type = LLVMPointerType(type_to_llvm_type(right, right._type),0u)
+            var dst_ptr = LLVMBuildPointerCast(g_builder, tdst, dst_type, "dst_ptr_type" )
+            LLVMBuildStore(g_builder, tsrc, dst_ptr)
+
+    def override visitExprCopy(expr:smart_ptr<ExprCopy>) : ExpressionPtr
+        var tdst = getE(expr.left)
+        build_copy(tdst, expr.right)
+        return expr
+
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
-        var left = getR(expr.left)
-        var right = getR(expr.right)
+        var left = getE(expr.left)
+        var right = getE(expr.right)
         if expr.op=="+"
             if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
-                setR(expr, LLVMBuildAdd(g_builder, left, right, "op_add"))
+                setE(expr, LLVMBuildAdd(g_builder, left, right, "op_add"))
             elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
-                setR(expr, LLVMBuildFAdd(g_builder, left, right, "op_add"))
+                setE(expr, LLVMBuildFAdd(g_builder, left, right, "op_add"))
             else
                 failed(expr, "unsupported add type {expr._type}")
         elif expr.op=="-"
             if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
-                setR(expr, LLVMBuildSub(g_builder, left, right, "op_sub"))
+                setE(expr, LLVMBuildSub(g_builder, left, right, "op_sub"))
             elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
-                setR(expr, LLVMBuildFSub(g_builder, left, right, "op_sub"))
+                setE(expr, LLVMBuildFSub(g_builder, left, right, "op_sub"))
             else
                 failed(expr, "unsupported sub type {expr._type}")
         elif expr.op=="*"
             if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
-                setR(expr, LLVMBuildMul(g_builder, left, right, "op_mul"))
+                setE(expr, LLVMBuildMul(g_builder, left, right, "op_mul"))
             elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
-                setR(expr, LLVMBuildFMul(g_builder, left, right, "op_mul"))
+                setE(expr, LLVMBuildFMul(g_builder, left, right, "op_mul"))
             else
                 failed(expr, "unsupported mul type {expr._type}")
         elif expr.op=="/" || expr.op=="%"
@@ -255,20 +315,20 @@ class LlvmJitVisitor : AstVisitor
                 LLVMPositionBuilderAtEnd(g_builder, check_end)
             if expr.op=="/"
                 if expr._type.isSignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tInt)
-                    setR(expr, LLVMBuildSDiv(g_builder, left, right, "op_div"))
+                    setE(expr, LLVMBuildSDiv(g_builder, left, right, "op_div"))
                 elif expr._type.isUnsignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tUInt)
-                    setR(expr, LLVMBuildUDiv(g_builder, left, right, "op_div"))
+                    setE(expr, LLVMBuildUDiv(g_builder, left, right, "op_div"))
                 elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
-                    setR(expr, LLVMBuildFDiv(g_builder, left, right, "op_div"))
+                    setE(expr, LLVMBuildFDiv(g_builder, left, right, "op_div"))
                 else
                     failed(expr, "unsupported div type {expr._type}")
             else
                 if expr._type.isSignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tInt)
-                    setR(expr, LLVMBuildSRem(g_builder, left, right, "op_mod"))
+                    setE(expr, LLVMBuildSRem(g_builder, left, right, "op_mod"))
                 elif expr._type.isUnsignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tUInt)
-                    setR(expr, LLVMBuildURem(g_builder, left, right, "op_mod"))
+                    setE(expr, LLVMBuildURem(g_builder, left, right, "op_mod"))
                 elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
-                    setR(expr, LLVMBuildFRem(g_builder, left, right, "op_mod"))
+                    setE(expr, LLVMBuildFRem(g_builder, left, right, "op_mod"))
                 else
                     failed(expr, "unsupported mod type {expr._type}")
         elif expr.op=="<" || expr.op==">" || expr.op=="<=" || expr.op==">=" || expr.op=="==" || expr.op=="!="
@@ -286,14 +346,14 @@ class LlvmJitVisitor : AstVisitor
             if opR == null
                 opR = LLVMGetUndef(LLVMInt8Type())
                 failed(expr, "unsupported cmp type {expr.left._type} {expr.op} {expr.right._type}")
-            setR(expr, opR)
+            setE(expr, opR)
         else
             failed(expr, "unsupported binary operator {expr.op}")
         return expr
 
     def override visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
         assert(expr._type.isWorkhorseType)
-        setR(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), getR(expr.subexpr), "r2v"))
+        setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), getE(expr.subexpr), "r2v"))
         return expr
 
     def get_bool_compare_op ( e:ExpressionPtr; op:string )
@@ -349,7 +409,7 @@ class LlvmJitVisitor : AstVisitor
         ite2blocks[get_expr_ptr(expr)] = blk
     def override preVisitExprIfThenElseIfBlock(expr:smart_ptr<ExprIfThenElse>;ifBlock:ExpressionPtr) : void
         var blk = ite2blocks[get_expr_ptr(expr)]                        // we start if_true block
-        LLVMBuildCondBr(g_builder, getR(expr.cond), blk.if_true, blk.if_false)
+        LLVMBuildCondBr(g_builder, getE(expr.cond), blk.if_true, blk.if_false)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_true)
     def override preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr) : void
         var blk = ite2blocks[get_expr_ptr(expr)]
@@ -380,25 +440,25 @@ class LlvmJitVisitor : AstVisitor
         ite2blocks[get_expr_ptr(expr)] = blk
     def override preVisitExprOp3Left(expr:smart_ptr<ExprOp3>;left:ExpressionPtr): void
         var blk = ite2blocks[get_expr_ptr(expr)]                        // we start if_true block
-        LLVMBuildCondBr(g_builder, getR(expr.subexpr), blk.if_true, blk.if_false)
+        LLVMBuildCondBr(g_builder, getE(expr.subexpr), blk.if_true, blk.if_false)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_true)
     def override preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr): void
         var blk = ite2blocks[get_expr_ptr(expr)]
-        LLVMBuildStore(g_builder, getR(expr.left), blk.result)
+        LLVMBuildStore(g_builder, getE(expr.left), blk.result)
         LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
         LLVMPositionBuilderAtEnd(g_builder, blk.if_false)
     def override visitExprOp3(expr:smart_ptr<ExprOp3>) : ExpressionPtr
         var blk = ite2blocks[get_expr_ptr(expr)]
-        LLVMBuildStore(g_builder, getR(expr.right), blk.result)
+        LLVMBuildStore(g_builder, getE(expr.right), blk.result)
         LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_end)
         /*
         var res = LLVMBuildPhi(g_builder, type_to_llvm_abi_type(expr,expr._type), "op3")
-        var phi_vals = [[LLVMOpaqueValue? getR(expr.left); getR(expr.right)]]
+        var phi_vals = [[LLVMOpaqueValue? getE(expr.left); getE(expr.right)]]
         var phi_blocks = [[LLVMOpaqueBasicBlock? blk.if_true; blk.if_false]]
         LLVMAddIncoming(res, phi_vals, phi_blocks)
         */
-        setR(expr, LLVMBuildLoad(g_builder, blk.result, "op3_result_at_line_{int(expr.at.line)}"))
+        setE(expr, LLVMBuildLoad(g_builder, blk.result, "op3_result_at_line_{int(expr.at.line)}"))
         return expr
 
 // function calls
@@ -407,136 +467,136 @@ class LlvmJitVisitor : AstVisitor
         var x, y : LLVMOpaqueValue?
         if expr.arguments.length==1
             x = LLVMConstInt(LLVMInt32Type(), 0ul, 0)
-            y = getR(expr.arguments[0])
+            y = getE(expr.arguments[0])
         else
-            x = getR(expr.arguments[0])
-            y = getR(expr.arguments[1])
+            x = getE(expr.arguments[0])
+            y = getE(expr.arguments[1])
         return LLVMBuildInt2_xy(g_builder, x, y, string(expr.name))
 
     def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
         // TODO: build table of intrinsic functions, which build LLVMOpaqueValue? from ExprCall
         let call_name = "{expr.func._module.name}::{expr.func.name}"
         if call_name=="$::range" || call_name=="$::urange"
-            setR(expr, intrinsic_builtin_range(expr))
+            setE(expr, intrinsic_builtin_range(expr))
         else
             failed(expr, "unsupported call {call_name}")
         return expr
 
 // constants
     def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr
-        setR(expr, LLVMConstPointerNull(LLVMVoidType()))
+        setE(expr, LLVMConstPointerNull(LLVMVoidType()))
         return expr
     def override visitExprConstEnumeration(expr:smart_ptr<ExprConstEnumeration>) : ExpressionPtr
         // TODO: implement
         return expr
     def override visitExprConstBitfield(expr:smart_ptr<ExprConstBitfield>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
+        setE(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstInt8(expr:smart_ptr<ExprConstInt8>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt8Type(), uint64(expr.value), 0))
+        setE(expr, LLVMConstInt(LLVMInt8Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstInt16(expr:smart_ptr<ExprConstInt16>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt16Type(), uint64(expr.value), 0))
+        setE(expr, LLVMConstInt(LLVMInt16Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstInt64(expr:smart_ptr<ExprConstInt64>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt64Type(), uint64(expr.value), 0))
+        setE(expr, LLVMConstInt(LLVMInt64Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstInt(expr:smart_ptr<ExprConstInt>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
+        setE(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstInt2(expr:smart_ptr<ExprConstInt2>) : ExpressionPtr
         var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
         var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
-        setR(expr, LLVMBuildInt2_xy(g_builder, x, y, "int2"))
+        setE(expr, LLVMBuildInt2_xy(g_builder, x, y, "int2"))
         return expr
     def override visitExprConstInt3(expr:smart_ptr<ExprConstInt3>) : ExpressionPtr
         var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
         var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
         var z = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.z), 0)
-        setR(expr, LLVMBuildInt3_xyz(g_builder, x, y, z, "int3"))
+        setE(expr, LLVMBuildInt3_xyz(g_builder, x, y, z, "int3"))
         return expr
     def override visitExprConstInt4(expr:smart_ptr<ExprConstInt4>) : ExpressionPtr
         var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
         var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
         var z = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.z), 0)
         var w = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.w), 0)
-        setR(expr, LLVMBuildInt4_xyzw(g_builder, x, y, z, w, "int4"))
+        setE(expr, LLVMBuildInt4_xyzw(g_builder, x, y, z, w, "int4"))
         return expr
     def override visitExprConstUInt8(expr:smart_ptr<ExprConstUInt8>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt8Type(), uint64(expr.value), 0))
+        setE(expr, LLVMConstInt(LLVMInt8Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstUInt16(expr:smart_ptr<ExprConstUInt16>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt16Type(), uint64(expr.value), 0))
+        setE(expr, LLVMConstInt(LLVMInt16Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstUInt64(expr:smart_ptr<ExprConstUInt64>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt64Type(), uint64(expr.value), 0))
+        setE(expr, LLVMConstInt(LLVMInt64Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstUInt(expr:smart_ptr<ExprConstUInt>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
+        setE(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstUInt2(expr:smart_ptr<ExprConstUInt2>) : ExpressionPtr
         var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
         var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
-        setR(expr, LLVMBuildInt2_xy(g_builder, x, y, "uint2"))
+        setE(expr, LLVMBuildInt2_xy(g_builder, x, y, "uint2"))
         return expr
     def override visitExprConstUInt3(expr:smart_ptr<ExprConstUInt3>) : ExpressionPtr
         var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
         var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
         var z = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.z), 0)
-        setR(expr, LLVMBuildInt3_xyz(g_builder, x, y, z, "uint3"))
+        setE(expr, LLVMBuildInt3_xyz(g_builder, x, y, z, "uint3"))
         return expr
     def override visitExprConstUInt4(expr:smart_ptr<ExprConstUInt4>) : ExpressionPtr
         var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
         var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
         var z = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.z), 0)
         var w = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.w), 0)
-        setR(expr, LLVMBuildInt4_xyzw(g_builder, x, y, z, w, "uint4"))
+        setE(expr, LLVMBuildInt4_xyzw(g_builder, x, y, z, w, "uint4"))
         return expr
     def override visitExprConstRange(expr:smart_ptr<ExprConstRange>) : ExpressionPtr
         var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
         var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
-        setR(expr, LLVMBuildInt2_xy(g_builder, x, y, "range"))
+        setE(expr, LLVMBuildInt2_xy(g_builder, x, y, "range"))
         return expr
     def override visitExprConstURange(expr:smart_ptr<ExprConstURange>) : ExpressionPtr
         var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
         var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
-        setR(expr, LLVMBuildInt2_xy(g_builder, x, y, "urange"))
+        setE(expr, LLVMBuildInt2_xy(g_builder, x, y, "urange"))
         return expr
     def override visitExprConstBool(expr:smart_ptr<ExprConstBool>) : ExpressionPtr
-        setR(expr, LLVMConstInt(LLVMInt1Type(), expr.value ? 1ul : 0ul, 0))
+        setE(expr, LLVMConstInt(LLVMInt1Type(), expr.value ? 1ul : 0ul, 0))
         return expr
     def override visitExprConstFloat(expr:smart_ptr<ExprConstFloat>) : ExpressionPtr
-        setR(expr, LLVMConstReal(LLVMFloatType(), double(expr.value)))
+        setE(expr, LLVMConstReal(LLVMFloatType(), double(expr.value)))
         return expr
     def override visitExprConstFloat2(expr:smart_ptr<ExprConstFloat2>) : ExpressionPtr
         var x = LLVMConstReal(LLVMFloatType(), double(expr.value.x))
         var y = LLVMConstReal(LLVMFloatType(), double(expr.value.y))
-        setR(expr, LLVMBuildFloat2_xy(g_builder, x, y, "float2"))
+        setE(expr, LLVMBuildFloat2_xy(g_builder, x, y, "float2"))
         return expr
     def override visitExprConstFloat3(expr:smart_ptr<ExprConstFloat3>) : ExpressionPtr
         var x = LLVMConstReal(LLVMFloatType(), double(expr.value.x))
         var y = LLVMConstReal(LLVMFloatType(), double(expr.value.y))
         var z = LLVMConstReal(LLVMFloatType(), double(expr.value.z))
-        setR(expr, LLVMBuildFloat3_xyz(g_builder, x, y, z, "float3"))
+        setE(expr, LLVMBuildFloat3_xyz(g_builder, x, y, z, "float3"))
         return expr
     def override visitExprConstFloat4(expr:smart_ptr<ExprConstFloat4>) : ExpressionPtr
         var x = LLVMConstReal(LLVMFloatType(), double(expr.value.x))
         var y = LLVMConstReal(LLVMFloatType(), double(expr.value.y))
         var z = LLVMConstReal(LLVMFloatType(), double(expr.value.z))
         var w = LLVMConstReal(LLVMFloatType(), double(expr.value.w))
-        setR(expr, LLVMBuildFloat4_xyzw(g_builder, x, y, z, w, "float4"))
+        setE(expr, LLVMBuildFloat4_xyzw(g_builder, x, y, z, w, "float4"))
         return expr
     def override visitExprConstString(expr:smart_ptr<ExprConstString>) : ExpressionPtr
-        setR(expr, get_string_constant_ptr(string(expr.value)))
+        setE(expr, get_string_constant_ptr(string(expr.value)))
         return expr
     def override visitExprConstDouble(expr:smart_ptr<ExprConstDouble>) : ExpressionPtr
-        setR(expr, LLVMConstReal(LLVMFloatType(), expr.value))
+        setE(expr, LLVMConstReal(LLVMFloatType(), expr.value))
         return expr
     def override visitExprFakeContext(expr:smart_ptr<ExprFakeContext>) : ExpressionPtr
-        setR(expr, LLVMGetParam(ffunc,0u))
+        setE(expr, LLVMGetParam(ffunc,0u))
         return expr
     def override visitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : ExpressionPtr
-        setR(expr, LLVMConstPointerNull(LLVMVoidType()))
+        setE(expr, LLVMConstPointerNull(LLVMVoidType()))
         return expr
 
 def public generate_llvm ( fn : FunctionPtr )

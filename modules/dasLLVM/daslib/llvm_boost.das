@@ -10,7 +10,12 @@ require daslib/safe_addr
 require daslib/defer
 
 def LLVMBuildShuffleVector(builder:LLVMOpaqueBuilder?; v1, v2:LLVMOpaqueValue?; mask:array<int>; name:string )
-    var elem <- [{for m in mask; LLVMConstInt(LLVMInt32Type(), uint64(m), 0)}]
+    var elem : array<LLVMOpaqueValue?>
+    for m in mask
+        if m!=-1
+            elem |> push(LLVMConstInt(LLVMInt32Type(), uint64(m), 0))
+        else
+            elem |> push(LLVMGetUndef(LLVMInt32Type()))
     defer_delete(elem)
     return LLVMBuildShuffleVector(builder, v1, v2, LLVMConstVector(unsafe(addr(elem[0])), 4u), name)
 
