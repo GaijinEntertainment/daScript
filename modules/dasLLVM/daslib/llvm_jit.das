@@ -157,7 +157,7 @@ class LlvmJitVisitor : AstVisitor
                 var vvec = LLVMGetUndef(LLVMVectorType(LLVMDoubleType(), 2u))
                 var vsrc = LLVMBuildInsertElement(g_builder, vvec, tsrc, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "double_vec")
                 tres = LLVMBuildBitCast(g_builder, vsrc, LLVMFloat4Type(), "return_result")
-            elif bt==Type tInt2 || bt==Type tUInt2
+            elif bt==Type tInt2 || bt==Type tUInt2 || bt==Type tRange || bt==Type tURange
                 var tbit = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;0;0}], "int_vec")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMFloat4Type(), "return_result")
             elif bt==Type tInt3 || bt==Type tUInt3
@@ -425,13 +425,22 @@ class LlvmJitVisitor : AstVisitor
         setR(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstInt2(expr:smart_ptr<ExprConstInt2>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
+        var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
+        setR(expr, LLVMBuildInt2_xy(g_builder, x, y, "int2"))
         return expr
     def override visitExprConstInt3(expr:smart_ptr<ExprConstInt3>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
+        var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
+        var z = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.z), 0)
+        setR(expr, LLVMBuildInt3_xyz(g_builder, x, y, z, "int3"))
         return expr
     def override visitExprConstInt4(expr:smart_ptr<ExprConstInt4>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
+        var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
+        var z = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.z), 0)
+        var w = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.w), 0)
+        setR(expr, LLVMBuildInt4_xyzw(g_builder, x, y, z, w, "int4"))
         return expr
     def override visitExprConstUInt8(expr:smart_ptr<ExprConstUInt8>) : ExpressionPtr
         setR(expr, LLVMConstInt(LLVMInt8Type(), uint64(expr.value), 0))
@@ -446,19 +455,32 @@ class LlvmJitVisitor : AstVisitor
         setR(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))
         return expr
     def override visitExprConstUInt2(expr:smart_ptr<ExprConstUInt2>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
+        var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
+        setR(expr, LLVMBuildInt2_xy(g_builder, x, y, "uint2"))
         return expr
     def override visitExprConstUInt3(expr:smart_ptr<ExprConstUInt3>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
+        var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
+        var z = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.z), 0)
+        setR(expr, LLVMBuildInt3_xyz(g_builder, x, y, z, "uint3"))
         return expr
     def override visitExprConstUInt4(expr:smart_ptr<ExprConstUInt4>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
+        var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
+        var z = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.z), 0)
+        var w = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.w), 0)
+        setR(expr, LLVMBuildInt4_xyzw(g_builder, x, y, z, w, "uint4"))
         return expr
     def override visitExprConstRange(expr:smart_ptr<ExprConstRange>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
+        var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
+        setR(expr, LLVMBuildInt2_xy(g_builder, x, y, "range"))
         return expr
     def override visitExprConstURange(expr:smart_ptr<ExprConstURange>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.x), 0)
+        var y = LLVMConstInt(LLVMInt32Type(), uint64(expr.value.y), 0)
+        setR(expr, LLVMBuildInt2_xy(g_builder, x, y, "urange"))
         return expr
     def override visitExprConstBool(expr:smart_ptr<ExprConstBool>) : ExpressionPtr
         setR(expr, LLVMConstInt(LLVMInt1Type(), expr.value ? 1ul : 0ul, 0))
@@ -467,13 +489,22 @@ class LlvmJitVisitor : AstVisitor
         setR(expr, LLVMConstReal(LLVMFloatType(), double(expr.value)))
         return expr
     def override visitExprConstFloat2(expr:smart_ptr<ExprConstFloat2>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstReal(LLVMFloatType(), double(expr.value.x))
+        var y = LLVMConstReal(LLVMFloatType(), double(expr.value.y))
+        setR(expr, LLVMBuildFloat2_xy(g_builder, x, y, "float2"))
         return expr
     def override visitExprConstFloat3(expr:smart_ptr<ExprConstFloat3>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstReal(LLVMFloatType(), double(expr.value.x))
+        var y = LLVMConstReal(LLVMFloatType(), double(expr.value.y))
+        var z = LLVMConstReal(LLVMFloatType(), double(expr.value.z))
+        setR(expr, LLVMBuildFloat3_xyz(g_builder, x, y, z, "float3"))
         return expr
     def override visitExprConstFloat4(expr:smart_ptr<ExprConstFloat4>) : ExpressionPtr
-        // TODO: implement
+        var x = LLVMConstReal(LLVMFloatType(), double(expr.value.x))
+        var y = LLVMConstReal(LLVMFloatType(), double(expr.value.y))
+        var z = LLVMConstReal(LLVMFloatType(), double(expr.value.z))
+        var w = LLVMConstReal(LLVMFloatType(), double(expr.value.w))
+        setR(expr, LLVMBuildFloat4_xyzw(g_builder, x, y, z, w, "float4"))
         return expr
     def override visitExprConstString(expr:smart_ptr<ExprConstString>) : ExpressionPtr
         setR(expr, get_string_constant_ptr(string(expr.value)))
@@ -555,3 +586,4 @@ class Jit_LLVM_Macro : AstFunctionAnnotation
     def override generic_apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         return true if is_in_completion()
         return generate_jit(func, group, args, errors)
+
