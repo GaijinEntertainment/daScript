@@ -66,6 +66,8 @@ namespace das {
     int channelAppend ( Channel * ch, int size, Context * context, LineInfoArg * at );
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
+    Channel* channelCreate( Context * context, LineInfoArg * at);
+    void channelRemove(Channel * ch, Context * context, LineInfoArg * at);
     void channelAddRef ( Channel * ch, Context * context, LineInfoArg * at );
     void channelReleaseRef ( Channel * & ch, Context * context, LineInfoArg * at );
     void waitForChannel ( Channel * status, Context * context, LineInfoArg * at );
