@@ -91,6 +91,12 @@ class LlvmJitVisitor : AstVisitor
         return LLVMFloatType()  if t == Type tFloat
         return LLVMDoubleType() if t == Type tDouble
         return LLVMInt1Type()   if t == Type tBool
+        return LLVMInt2Type()   if t == Type tInt2 || t == Type tUInt2
+        return LLVMInt3Type()   if t == Type tInt3 || t == Type tUInt3
+        return LLVMInt4Type()   if t == Type tInt4 || t == Type tUInt4
+        return LLVMFloat2Type() if t == Type tFloat2
+        return LLVMFloat3Type() if t == Type tFloat3
+        return LLVMFloat4Type() if t == Type tFloat4
         failed(e, "unsupported type {t}")
         return LLVMInt32Type()
 
@@ -151,6 +157,20 @@ class LlvmJitVisitor : AstVisitor
                 var vvec = LLVMGetUndef(LLVMVectorType(LLVMDoubleType(), 2u))
                 var vsrc = LLVMBuildInsertElement(g_builder, vvec, tsrc, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "double_vec")
                 tres = LLVMBuildBitCast(g_builder, vsrc, LLVMFloat4Type(), "return_result")
+            elif bt==Type tInt2 || bt==Type tUInt2
+                var tbit = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;0;0}], "int_vec")
+                tres = LLVMBuildBitCast(g_builder, tbit, LLVMFloat4Type(), "return_result")
+            elif bt==Type tInt3 || bt==Type tUInt3
+                var tbit = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;2;0}], "int_vec")
+                tres = LLVMBuildBitCast(g_builder, tbit, LLVMFloat4Type(), "return_result")
+            elif bt==Type tInt4 || bt==Type tUInt4
+                tres = LLVMBuildBitCast(g_builder, tsrc, LLVMFloat4Type(), "return_result")
+            elif bt==Type tFloat2
+                tres = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;0;0}], "return_result")
+            elif bt==Type tFloat3
+                tres = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;2;0}], "return_result")
+            elif bt==Type tFloat4
+                tres = tsrc
             else
                 failed(expr, "unsupported cast_to_vec4f cast {describe(etype)}")
         else
@@ -198,30 +218,29 @@ class LlvmJitVisitor : AstVisitor
         var left = getR(expr.left)
         var right = getR(expr.right)
         if expr.op=="+"
-            if expr._type.isInteger
+            if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
                 setR(expr, LLVMBuildAdd(g_builder, left, right, "op_add"))
-            elif expr._type.isFloatOrDouble
+            elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
                 setR(expr, LLVMBuildFAdd(g_builder, left, right, "op_add"))
             else
                 failed(expr, "unsupported add type {expr._type}")
         elif expr.op=="-"
-            if expr._type.isInteger
+            if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
                 setR(expr, LLVMBuildSub(g_builder, left, right, "op_sub"))
-            elif expr._type.isFloatOrDouble
+            elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
                 setR(expr, LLVMBuildFSub(g_builder, left, right, "op_sub"))
             else
                 failed(expr, "unsupported sub type {expr._type}")
         elif expr.op=="*"
-            if expr._type.isInteger
+            if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
                 setR(expr, LLVMBuildMul(g_builder, left, right, "op_mul"))
-            elif expr._type.isFloatOrDouble
+            elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
                 setR(expr, LLVMBuildFMul(g_builder, left, right, "op_mul"))
             else
                 failed(expr, "unsupported mul type {expr._type}")
-        elif expr.op=="/"
-            if expr._type.isInteger // for integer division we check division by zero
-                // if right==0
-                //  jit_exception("division by zero", context)
+        elif expr.op=="/" || expr.op=="%"
+            // for integer division we check division by zero
+            if expr._type.isInteger
                 var check_div_0 = LLVMAppendBasicBlock(ffunc, "check_div_0")
                 var check_true = LLVMAppendBasicBlock(ffunc, "check_true")
                 var check_end = LLVMAppendBasicBlock(ffunc, "check_end")
@@ -234,23 +253,24 @@ class LlvmJitVisitor : AstVisitor
                 build_exception("division by zero")
                 LLVMBuildBr(g_builder, check_end)
                 LLVMPositionBuilderAtEnd(g_builder, check_end)
-            if expr._type.isSignedInteger
-                setR(expr, LLVMBuildSDiv(g_builder, left, right, "op_div"))
-            elif expr._type.isUnsignedInteger
-                setR(expr, LLVMBuildUDiv(g_builder, left, right, "op_div"))
-            elif expr._type.isFloatOrDouble
-                setR(expr, LLVMBuildFDiv(g_builder, left, right, "op_div"))
+            if expr.op=="/"
+                if expr._type.isSignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tInt)
+                    setR(expr, LLVMBuildSDiv(g_builder, left, right, "op_div"))
+                elif expr._type.isUnsignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tUInt)
+                    setR(expr, LLVMBuildUDiv(g_builder, left, right, "op_div"))
+                elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
+                    setR(expr, LLVMBuildFDiv(g_builder, left, right, "op_div"))
+                else
+                    failed(expr, "unsupported div type {expr._type}")
             else
-                failed(expr, "unsupported div type {expr._type}")
-        elif expr.op=="%"
-            if expr._type.isSignedInteger
-                setR(expr, LLVMBuildSRem(g_builder, left, right, "op_mod"))
-            elif expr._type.isUnsignedInteger
-                setR(expr, LLVMBuildURem(g_builder, left, right, "op_mod"))
-            elif expr._type.isFloatOrDouble
-                setR(expr, LLVMBuildFRem(g_builder, left, right, "op_mod"))
-            else
-                failed(expr, "unsupported mod type {expr._type}")
+                if expr._type.isSignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tInt)
+                    setR(expr, LLVMBuildSRem(g_builder, left, right, "op_mod"))
+                elif expr._type.isUnsignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tUInt)
+                    setR(expr, LLVMBuildURem(g_builder, left, right, "op_mod"))
+                elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
+                    setR(expr, LLVMBuildFRem(g_builder, left, right, "op_mod"))
+                else
+                    failed(expr, "unsupported mod type {expr._type}")
         elif expr.op=="<" || expr.op==">" || expr.op=="<=" || expr.op==">=" || expr.op=="==" || expr.op=="!="
             var opR : LLVMOpaqueValue?
             if expr.left._type.isSignedInteger

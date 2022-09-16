@@ -7,6 +7,12 @@ module llvm_boost shared
 require llvm public
 
 require daslib/safe_addr
+require daslib/defer
+
+def LLVMBuildShuffleVector(builder:LLVMOpaqueBuilder?; v1, v2:LLVMOpaqueValue?; mask:array<int>; name:string )
+    var elem <- [{for m in mask; LLVMConstInt(LLVMInt32Type(), uint64(m), 0)}]
+    defer_delete(elem)
+    return LLVMBuildShuffleVector(builder, v1, v2, LLVMConstVector(unsafe(addr(elem[0])), 4u), name)
 
 def LLVMAddIncoming(phi:LLVMOpaqueValue?; var phi_vals:LLVMOpaqueValue? []; var phi_blocks:LLVMOpaqueBasicBlock? [])
     static_if typeinfo(dim phi_vals) != typeinfo(dim phi_blocks)
@@ -21,6 +27,21 @@ def LLVMBuildGEP2 ( builder:LLVMOpaqueBuilder?; ty:LLVMOpaqueType?; ptr:LLVMOpaq
 
 def LLVMFloat4Type
     return LLVMVectorType(LLVMFloatType(), 4u)
+
+def LLVMFloat3Type
+    return LLVMVectorType(LLVMFloatType(), 3u)
+
+def LLVMFloat2Type
+    return LLVMVectorType(LLVMFloatType(), 2u)
+
+def LLVMInt4Type
+    return LLVMVectorType(LLVMInt32Type(), 4u)
+
+def LLVMInt3Type
+    return LLVMVectorType(LLVMInt32Type(), 3u)
+
+def LLVMInt2Type
+    return LLVMVectorType(LLVMInt32Type(), 2u)
 
 def LLVMFunctionType ( var ret_type:LLVMTypeRef; var param_types:LLVMTypeRef[]; isVariadic:bool = false )
     return LLVMFunctionType( ret_type, unsafe(addr(param_types[0])), uint(length(param_types)), isVariadic ? 1 : 0)
