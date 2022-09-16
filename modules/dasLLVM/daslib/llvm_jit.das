@@ -398,8 +398,28 @@ class LlvmJitVisitor : AstVisitor
         var phi_blocks = [[LLVMOpaqueBasicBlock? blk.if_true; blk.if_false]]
         LLVMAddIncoming(res, phi_vals, phi_blocks)
         */
-
         setR(expr, LLVMBuildLoad(g_builder, blk.result, "op3_result_at_line_{int(expr.at.line)}"))
+        return expr
+
+// function calls
+
+    def intrinsic_builtin_range(expr:smart_ptr<ExprCall>)
+        var x, y : LLVMOpaqueValue?
+        if expr.arguments.length==1
+            x = LLVMConstInt(LLVMInt32Type(), 0ul, 0)
+            y = getR(expr.arguments[0])
+        else
+            x = getR(expr.arguments[0])
+            y = getR(expr.arguments[1])
+        return LLVMBuildInt2_xy(g_builder, x, y, string(expr.name))
+
+    def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
+        // TODO: build table of intrinsic functions, which build LLVMOpaqueValue? from ExprCall
+        let call_name = "{expr.func._module.name}::{expr.func.name}"
+        if call_name=="$::range" || call_name=="$::urange"
+            setR(expr, intrinsic_builtin_range(expr))
+        else
+            failed(expr, "unsupported call {call_name}")
         return expr
 
 // constants
