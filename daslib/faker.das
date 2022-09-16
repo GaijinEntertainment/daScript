@@ -101,6 +101,30 @@ def public random_float ( var faker:Faker )
     faker.rnd |> next(i)
     return uint_bits_to_float(i)
 
+def public random_int2 ( var faker:Faker )
+    //! Generates random int2.
+    return int2(faker |> random_int, faker |> random_int)
+
+def public random_int3 ( var faker:Faker )
+    //! Generates random int3.
+    return int3(faker |> random_int, faker |> random_int, faker |> random_int)
+
+def public random_int4 ( var faker:Faker )
+    //! Generates random int4.
+    return int4(faker |> random_int, faker |> random_int, faker |> random_int, faker |> random_int)
+
+def public random_uint2 ( var faker:Faker )
+    //! Generates random uint2.
+    return uint2(faker |> random_uint, faker |> random_uint)
+
+def public random_uint3 ( var faker:Faker )
+    //! Generates random uint3.
+    return uint3(faker |> random_uint, faker |> random_uint, faker |> random_uint)
+
+def public random_uint4 ( var faker:Faker )
+    //! Generates random uint4.
+    return uint4(faker |> random_uint, faker |> random_uint, faker |> random_uint, faker |> random_uint)
+
 def public random_float2 ( var faker:Faker )
     //! Generates random float2.
     return float2(faker |> random_float, faker |> random_float)
