@@ -36,8 +36,15 @@ def private init_jit
     LLVMInitializeNativeAsmParser()
     LLVMCreateJITCompilerForModule(g_engine, g_mod, LLVM_JIT_OPT_LEVEL)
     // add default functions
-    var je = LLVMAddFunction(g_mod, "jit_exception", LLVMFunctionType(LLVMVoidType(),[[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    var je = LLVMAddFunction(g_mod, "jit_exception",
+        LLVMFunctionType(LLVMVoidType(),
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, je, get_jit_exception())
+    var jc = LLVMAddFunction(g_mod, "jit_call_or_fastcall",
+        LLVMFunctionType(LLVMFloat4Type(),
+            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jc, get_jit_call_or_fastcall())
+
 
 [finalize]
 def private finalize_jit
@@ -63,8 +70,9 @@ class LlvmJitVisitor : AstVisitor
     str2v : table<string; LLVMOpaqueValue?>
     errors : array<string>
     fnmna : string
-    ffunc : LLVMOpaqueValue?
+    [[do_not_delete]] ffunc : LLVMOpaqueValue?
     ite2blocks : table<Expression?; IteBlock>
+    [[do_not_delete]] thisFunc : Function?
 
     def LlvmJitVisitor
         pass
@@ -136,13 +144,18 @@ class LlvmJitVisitor : AstVisitor
 
     def override preVisitFunction(fun:FunctionPtr) : void
         assert(g_builder!=null, "missing builder")
+        thisFunc = get_ptr(fun)
         fnmna = get_mangled_name(fun)
-        var ret_type = LLVMFunctionType(LLVMFloat4Type(), [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u) ]])
+        var ret_type = LLVMFunctionType(LLVMFloat4Type(),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u) ]])
         ffunc = LLVMAddFunction(g_mod, fnmna, ret_type)
         var entry = LLVMAppendBasicBlock(ffunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, entry)
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
+        if fun.body != null && !is_terminator_expression(fun.body)
+            LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
         ffunc = null
+        thisFunc = null
         return fun
 
     def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
@@ -180,6 +193,21 @@ class LlvmJitVisitor : AstVisitor
         else
             failed(expr, "ExprLetVariable {expr.variable.name} : {describe(expr.variable._type)}")
         return expr
+
+    def cast_from_vec4f ( expr:ExpressionPtr; etype:TypeDeclPtr; v4f:LLVMOpaqueValue? )
+        var tres : LLVMOpaqueValue?
+        if etype.isWorkhorseType
+            let bt = etype.baseType
+            if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
+                var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
+                tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
+            elif bt == Type tFloat4
+                return v4f
+            else
+                failed(expr, "unsupported cast_from_vec4f cast {describe(etype)}")
+        else
+            failed(expr, "unsupported cast_from_vec4f type {describe(etype)}")
+        return tres
 
     def cast_to_vec4f ( expr:ExpressionPtr )
         assume etype = expr._type
@@ -227,9 +255,9 @@ class LlvmJitVisitor : AstVisitor
             if tres != null
                 LLVMBuildRet(g_builder, tres)
             else
-                LLVMBuildRetVoid(g_builder)
+                LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
         else
-            LLVMBuildRetVoid(g_builder)
+            LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
         return expr
 
     def build_string_constant ( message:string )
@@ -248,7 +276,7 @@ class LlvmJitVisitor : AstVisitor
 
     def get_string_constant_ptr ( message:string )
         var str = build_string_constant(message)
-        var str_ptr = LLVMBuildBitCast(g_builder, str, LLVMPointerType(LLVMInt8Type(), 0u), "")
+        var str_ptr = LLVMBuildPointerCast(g_builder, str, LLVMPointerType(LLVMInt8Type(), 0u), "")
         return LLVMBuildGEP(g_builder, str_ptr, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "string_constant {message}")
 
     def build_exception ( message:string )
@@ -473,7 +501,58 @@ class LlvmJitVisitor : AstVisitor
             y = getE(expr.arguments[1])
         return LLVMBuildInt2_xy(g_builder, x, y, string(expr.name))
 
+    def build_null_ptr(nullT:LLVMOpaqueType?)
+        return LLVMBuildPointerCast(g_builder, LLVMConstPointerNull(nullT), LLVMPointerType(LLVMVoidType(),0u), "null")
+
     def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
+        if !expr.func.flags.builtIn
+            let nargs = length(expr.arguments)
+            var args : LLVMOpaqueValue?
+            if nargs != 0
+                args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), uint(nargs)), "args")
+                LLVMSetAlignment(args, 16u)
+                for a,ai in expr.arguments,range(100500)
+                    var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
+                    var arg_val = getE(a)
+                    var arg_cast_type = type_to_llvm_abi_type(expr, a._type)
+                    var argp_ptr = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(arg_cast_type, 0u), "call_arg_{ai}_typed_ptr")
+                    LLVMBuildStore(g_builder, arg_val, argp_ptr)
+                args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
+            else
+                args = LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))
+            if get_ptr(expr.func)==thisFunc
+                var params <- [{LLVMOpaqueValue?
+                    LLVMGetParam(ffunc, 0u);                // context
+                    args;                                   // args
+                    build_null_ptr(LLVMVoidType())          // cmres
+                }]
+                let fmna = get_mangled_name(FunctionPtr(expr.func))
+                var func = LLVMGetNamedFunction(g_mod, fmna)
+                var ccall = LLVMBuildCall(g_builder, func, unsafe(addr(params[0])), 3u, "")
+                if expr.func.result.isVoid
+                    setE(expr, ccall)
+                else
+                    var cres = cast_from_vec4f(expr, expr._type, ccall)
+                    setE(expr, cres)
+            else
+                var MNH_ADDR : uint64
+                unsafe
+                    let mangled_name = get_mangled_name(FunctionPtr(expr.func))
+                    let MNH = hash(mangled_name)
+                    MNH_ADDR = get_function_address(MNH)
+                var params <- [{LLVMOpaqueValue?
+                    LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0); // SimFunction *
+                    args;                                       // args
+                    LLVMGetParam(ffunc, 0u)                     // context
+                }]
+                var func = LLVMGetNamedFunction(g_mod, "jit_call_or_fastcall")
+                var ccall = LLVMBuildCall(g_builder, func, unsafe(addr(params[0])), 3u, "")
+                if expr.func.result.isVoid
+                    setE(expr, ccall)
+                else
+                    var cres = cast_from_vec4f(expr, expr._type, ccall)
+                    setE(expr, cres)
+            return expr
         // TODO: build table of intrinsic functions, which build LLVMOpaqueValue? from ExprCall
         let call_name = "{expr.func._module.name}::{expr.func.name}"
         if call_name=="$::range" || call_name=="$::urange"
@@ -624,6 +703,7 @@ def public generate_llvm ( fn : FunctionPtr )
     astVisitorAdapter := null
     unsafe
         delete astVisitor
+    // LLVMDumpModule(g_mod)
 
 def public generate_llvm_code ( fmna:string )
     return null if is_in_completion() || is_compiling_macros()
