@@ -24,6 +24,10 @@ def LLVMAddIncoming(phi:LLVMOpaqueValue?; var phi_vals:LLVMOpaqueValue? []; var 
         concept_assert(false, "LLVMAddIncoming: phi_vals and phi_blocks must have the same length")
     LLVMAddIncoming(phi, unsafe(addr(phi_vals[0])), unsafe(addr(phi_blocks[0])), uint(length(phi_vals)))
 
+def LLVMAddIncoming(phi:LLVMOpaqueValue?; var phi_vals:array<LLVMOpaqueValue?>; var phi_blocks:array<LLVMOpaqueBasicBlock?>)
+    assert(length(phi_vals) == length(phi_blocks), "LLVMAddIncoming: phi_vals and phi_blocks must have the same length")
+    LLVMAddIncoming(phi, unsafe(addr(phi_vals[0])), unsafe(addr(phi_blocks[0])), uint(length(phi_vals)))
+
 def LLVMBuildGEP ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string )
     return LLVMBuildGEP(builder, ptr, unsafe(addr(index)), 1u, name)
 
@@ -50,6 +54,13 @@ def LLVMInt2Type
 
 def LLVMFunctionType ( var ret_type:LLVMTypeRef; var param_types:LLVMTypeRef[]; isVariadic:bool = false )
     return LLVMFunctionType( ret_type, unsafe(addr(param_types[0])), uint(length(param_types)), isVariadic ? 1 : 0)
+
+def LLVMFunctionType ( var ret_type:LLVMTypeRef; var param_types:array<LLVMTypeRef>; isVariadic:bool = false )
+    let nparam = length(param_types)
+    if nparam == 0
+        return LLVMFunctionType( ret_type, null, 0u, isVariadic ? 1 : 0)
+    else
+        return LLVMFunctionType( ret_type, unsafe(addr(param_types[0])), uint(nparam), isVariadic ? 1 : 0)
 
 def LLVMFunctionType ( var ret_type:LLVMTypeRef; isVariadic:bool = false )
     return LLVMFunctionType( ret_type, null, 0u, isVariadic ? 1 : 0)
@@ -115,3 +126,16 @@ def LLVMBuildFloat4_xyzw ( builder:LLVMOpaqueBuilder?; x,y,z,w:LLVMOpaqueValue?;
     vres = LLVMBuildInsertElement(builder, vres, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
     vres = LLVMBuildInsertElement(builder, vres, z, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
     return LLVMBuildInsertElement(builder, vres, w, LLVMConstInt(LLVMInt32Type(), 3ul, 0), name)
+
+def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; var args:LLVMOpaqueValue? []; name:string )
+    return LLVMBuildCall( builder, func, unsafe(addr(args[0])), uint(length(args)), name)
+
+def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; name:string )
+    return LLVMBuildCall( builder, func, null, 0u, name)
+
+def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; var args:array<LLVMOpaqueValue?>; name:string )
+    let nparams = length(args)
+    if nparams != 0
+        return LLVMBuildCall( builder, func, unsafe(addr(args[0])), uint(nparams), name)
+    else
+        return LLVMBuildCall( builder, func, null, 0u, name)

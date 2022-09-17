@@ -60,7 +60,6 @@ struct private IteBlock
     if_true  : LLVMOpaqueBasicBlock?
     if_false : LLVMOpaqueBasicBlock?
     if_end   : LLVMOpaqueBasicBlock?
-    result : LLVMOpaqueValue?
     if_true_terminates  : bool
     if_false_terminates : bool
 
@@ -70,18 +69,31 @@ class LlvmJitVisitor : AstVisitor
     str2v : table<string; LLVMOpaqueValue?>
     errors : array<string>
     fnmna : string
-    [[do_not_delete]] ffunc : LLVMOpaqueValue?
+    [[do_not_delete]] ffunc, wfunc : LLVMOpaqueValue?
     ite2blocks : table<Expression?; IteBlock>
     [[do_not_delete]] thisFunc : Function?
+    subblocks : table<LLVMOpaqueBasicBlock?; LLVMOpaqueBasicBlock?>
+    sbstack : array<LLVMOpaqueBasicBlock?>
 
     def LlvmJitVisitor
         pass
 
-    def failed ( e:ExpressionPtr; msg:string )
-        errors |> push("{msg}, expr = {e.__rtti} at {describe(e.at)}")
+    def append_basic_block ( name:string; add_to_phi:bool=false )
+        var blk = LLVMAppendBasicBlock(ffunc,name)
+        subblocks[blk] = blk
+        if add_to_phi
+            for st in sbstack
+                subblocks[st] = blk
+        return blk
+
+    def failed ( msg:string )
+        errors |> push("{msg}")
+
+    def failed_E ( e:ExpressionPtr; msg:string )
+        failed ( "{msg}. expr = {e.__rtti} at {describe(e.at)}")
 
     def failed_V ( v:VariablePtr; msg:string )
-        errors |> push("{msg}, var = {describe(v)} at {describe(v.at)}")
+        failed ( "{msg}. var = {describe(v)} at {describe(v.at)}")
 
     def setE ( e : ExpressionPtr; ov:LLVMOpaqueValue? )
         e2v[get_ptr(e)] = ov
@@ -92,7 +104,7 @@ class LlvmJitVisitor : AstVisitor
             res = *val
         if res == null
             res = LLVMGetUndef(LLVMInt32Type())
-            failed(e, "unresolved expression {describe(e)}")
+            failed_E(e, "unresolved expression {describe(e)}")
         return res
 
     def setV ( e : VariablePtr; ov:LLVMOpaqueValue? )
@@ -107,7 +119,13 @@ class LlvmJitVisitor : AstVisitor
             failed_V(e, "unresolved variable {describe(e)}")
         return res
 
-    def base_type_to_llvm_type ( e:ExpressionPtr; t:Type )
+    def tryGetV ( e : VariablePtr )
+        var res : LLVMOpaqueValue?
+        v2v |> find_if_exists(get_ptr(e)) <| $ ( val )
+            res = *val
+        return res
+
+    def base_type_to_llvm_type ( t:Type )
         return LLVMInt32Type()  if t == Type tInt || t == Type tUInt || t == Type tBitfield
         return LLVMInt64Type()  if t == Type tInt64 || t == Type tUInt64
         return LLVMInt16Type()  if t == Type tInt16 || t == Type tUInt16
@@ -121,36 +139,70 @@ class LlvmJitVisitor : AstVisitor
         return LLVMFloat2Type() if t == Type tFloat2
         return LLVMFloat3Type() if t == Type tFloat3
         return LLVMFloat4Type() if t == Type tFloat4
-        failed(e, "unsupported type {t}")
+        failed("unsupported type {t}")
         return LLVMInt32Type()
 
-    def type_to_llvm_abi_type ( e:ExpressionPtr; t:TypeDeclPtr )
+    def type_to_llvm_abi_type ( t:TypeDeclPtr )
         if t.isPointer || t.isRef
             return LLVMPointerType(LLVMVoidType(), 0u)
         elif t.isWorkhorseType
-            return base_type_to_llvm_type(e, t.baseType)
+            return base_type_to_llvm_type(t.baseType)
         else
-            failed(e, "unsupported type {describe(t)}")
+            failed("type_to_llvm_abi_type: unsupported type {describe(t)} at {t.at}")
             return LLVMInt32Type()
 
-    def type_to_llvm_type ( e:ExpressionPtr; t:TypeDeclPtr )
+    def type_to_llvm_type ( t:TypeDeclPtr )
         if t.isPointer || t.isRef
             return LLVMPointerType(LLVMVoidType(), 0u)
         elif t.isWorkhorseType
-            return base_type_to_llvm_type(e, t.baseType)
+            return base_type_to_llvm_type(t.baseType)
         else
-            failed(e, "unsupported type {describe(t)}")
+            failed("type_to_llvm_type: unsupported type {describe(t)} at {t.at}")
             return LLVMInt32Type()
 
     def override preVisitFunction(fun:FunctionPtr) : void
         assert(g_builder!=null, "missing builder")
         thisFunc = get_ptr(fun)
         fnmna = get_mangled_name(fun)
+        // implementation function
+        var fun_args <-  [{for a in fun.arguments; type_to_llvm_abi_type(a._type)}]
+        fun_args |> push(LLVMPointerType(LLVMVoidType(), 0u))  // context
+        var fun_type = LLVMFunctionType(type_to_llvm_abi_type(fun.result), fun_args)
+        ffunc = LLVMAddFunction(g_mod, "{fnmna} implementation", fun_type)
+        // wrapper function
         var ret_type = LLVMFunctionType(LLVMFloat4Type(),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u) ]])
-        ffunc = LLVMAddFunction(g_mod, fnmna, ret_type)
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // context
+            LLVMPointerType(LLVMFloat4Type(),0u);               // args
+            LLVMPointerType(LLVMVoidType(),0u)                  // cmres
+        ]])
+        wfunc = LLVMAddFunction(g_mod, fnmna, ret_type)
+        var wentry = LLVMAppendBasicBlock(wfunc, "entry")
+        LLVMPositionBuilderAtEnd(g_builder, wentry)
+        // build wrapper function
+        var wargs : array<LLVMOpaqueValue?>
+        var args = LLVMGetParam(wfunc, 1u)
+        for a,ai in fun.arguments, range(100500)
+            var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "arg_ptr_{ai}")
+            var arg_v : LLVMOpaqueValue?
+            if !a._type.isRef
+                arg_v = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(a._type), arg_ptr, "arg_value_{ai}")
+            else
+                arg_v = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(LLVMVoidType(),0u), "arg_ptr_{ai}" )
+            wargs |> push(arg_v)
+        wargs |> push(LLVMGetParam(wfunc, 0u))  // context
+        var ret_v = LLVMBuildCall(g_builder, ffunc, wargs, "call_{fnmna}_implementation")
+        if !fun.result.isVoid
+            var tres = cast_to_vec4f(fun.result, ret_v)
+            if tres != null
+                LLVMBuildRet(g_builder, tres)
+            else
+                LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
+        else
+            LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
+        // now write to regular function
         var entry = LLVMAppendBasicBlock(ffunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, entry)
+
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
         if fun.body != null && !is_terminator_expression(fun.body)
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
@@ -159,7 +211,7 @@ class LlvmJitVisitor : AstVisitor
         return fun
 
     def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
-        var vtype = arg._type.isRef ?  LLVMPointerType(LLVMVoidType(),0u) : type_to_llvm_type(expr, arg._type)
+        var vtype = arg._type.isRef ?  LLVMPointerType(LLVMVoidType(),0u) : type_to_llvm_type(arg._type)
         var vmem = LLVMBuildAlloca(g_builder, vtype, "variable_{arg.name}")
         LLVMSetAlignment(vmem, 16u)
         setV(arg, vmem)
@@ -174,24 +226,38 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
         if expr.varFlags._block
-            failed(expr, "{expr.variable.name} support block variable")
+            failed_E(expr, "{expr.variable.name} support block variable")
         elif expr.varFlags.local    // local varaibels
             var var_ptr = getV(expr.variable)
             if expr.varFlags.r2v
                 assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
-                setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), var_ptr, "var_r2v_{expr.argumentIndex}"))
+                setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr._type.baseType), var_ptr, "var_r2v_{expr.variable.name}"))
             else
-                setE(expr, LLVMBuildPointerCast(g_builder, var_ptr, LLVMPointerType(LLVMVoidType(),0u), "var_data" ))
+                setE(expr, LLVMBuildPointerCast(g_builder, var_ptr, LLVMPointerType(LLVMVoidType(),0u), "var_data_{expr.variable.name}" ))
         elif expr.varFlags.argument // arguments
-            var args = LLVMGetParam(ffunc, 1u)
-            var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(expr.argumentIndex), 0), "arg_ptr_{expr.argumentIndex}")
+            var tryV = tryGetV(expr.variable)
+            if tryV != null
+                if expr.varFlags.r2v
+                    assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
+                    setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr._type.baseType), tryV, "var_r2v_{expr.variable.name}"))
+                else
+                    setE(expr, LLVMBuildPointerCast(g_builder, tryV, LLVMPointerType(LLVMVoidType(),0u), "var_ptr_{expr.variable.name}" ))
+                return expr
+            var arg = LLVMGetParam(ffunc, uint(expr.argumentIndex))
             if expr.varFlags.r2v
                 assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
-                setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), arg_ptr, "arg_r2v_{expr.argumentIndex}"))
+                setE(expr, arg)
             else
-                setE(expr, LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(LLVMVoidType(),0u), "arg_to_void" ))
+                if expr._type.isRef && expr._type.isWorkhorseType
+                    tryV = LLVMBuildAlloca(g_builder, base_type_to_llvm_type(expr._type.baseType), "var_{expr.variable.name}")
+                    LLVMSetAlignment(tryV, 16u)
+                    LLVMBuildStore(g_builder, arg, tryV)
+                    setV(expr.variable, tryV)
+                    setE(expr, tryV)
+                else
+                    setE(expr, LLVMBuildPointerCast(g_builder, arg, LLVMPointerType(LLVMVoidType(),0u), "var_ptr_{expr.variable.name}" ))
         else
-            failed(expr, "ExprLetVariable {expr.variable.name} : {describe(expr.variable._type)}")
+            failed_E(expr, "ExprLetVariable {expr.variable.name} : {describe(expr.variable._type)}")
         return expr
 
     def cast_from_vec4f ( expr:ExpressionPtr; etype:TypeDeclPtr; v4f:LLVMOpaqueValue? )
@@ -204,16 +270,14 @@ class LlvmJitVisitor : AstVisitor
             elif bt == Type tFloat4
                 return v4f
             else
-                failed(expr, "unsupported cast_from_vec4f cast {describe(etype)}")
+                failed_E(expr, "unsupported cast_from_vec4f cast {describe(etype)}")
         else
-            failed(expr, "unsupported cast_from_vec4f type {describe(etype)}")
+            failed_E(expr, "unsupported cast_from_vec4f type {describe(etype)}")
         return tres
 
-    def cast_to_vec4f ( expr:ExpressionPtr )
-        assume etype = expr._type
+    def cast_to_vec4f ( etype:TypeDeclPtr; tsrc:LLVMOpaqueValue? )
         var vres = LLVMGetUndef(LLVMFloat4Type())
         var tres : LLVMOpaqueValue?
-        var tsrc = getE(expr)
         if etype.isWorkhorseType
             let bt = etype.baseType
             if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
@@ -244,20 +308,16 @@ class LlvmJitVisitor : AstVisitor
             elif bt==Type tFloat4
                 tres = tsrc
             else
-                failed(expr, "unsupported cast_to_vec4f cast {describe(etype)}")
+                failed("unsupported cast_to_vec4f cast {describe(etype)}")
         else
-            failed(expr, "unsupported cast_to_vec4f type {describe(etype)}")
+            failed("unsupported cast_to_vec4f type {describe(etype)}")
         return tres
 
     def override visitExprReturn(expr:smart_ptr<ExprReturn>) : ExpressionPtr
-        if expr.subexpr != null
-            var tres = cast_to_vec4f(expr.subexpr)
-            if tres != null
-                LLVMBuildRet(g_builder, tres)
-            else
-                LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
+        if !thisFunc.result.isVoid
+            LLVMBuildRet(g_builder, getE(expr.subexpr))
         else
-            LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
+            LLVMBuildRetVoid(g_builder)
         return expr
 
     def build_string_constant ( message:string )
@@ -276,15 +336,15 @@ class LlvmJitVisitor : AstVisitor
 
     def get_string_constant_ptr ( message:string )
         var str = build_string_constant(message)
-        var str_ptr = LLVMBuildPointerCast(g_builder, str, LLVMPointerType(LLVMInt8Type(), 0u), "")
-        return LLVMBuildGEP(g_builder, str_ptr, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "string_constant {message}")
+        return LLVMBuildPointerCast(g_builder, str, LLVMPointerType(LLVMInt8Type(), 0u), "")
+        /// return LLVMBuildGEP(g_builder, str_ptr, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "string_constant {message}")
 
     def build_exception ( message:string )
         var params = [[auto
-            get_string_constant_ptr(message);
-            LLVMGetParam(ffunc,0u)
+            get_string_constant_ptr(message);                   // message
+            LLVMGetParam(ffunc,uint(thisFunc.arguments.length)) // context is always last argument of function
         ]]
-        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, "jit_exception"), unsafe(addr(params[0])), 2u, "")
+        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, "jit_exception"), params, "")
 
     def build_copy ( tdst:LLVMOpaqueValue?; right:ExpressionPtr )
         var tsrc = getE(right)
@@ -293,7 +353,7 @@ class LlvmJitVisitor : AstVisitor
             var rsize = LLVMConstInt(LLVMInt32Type(), uint64(copySize), 0)
             LLVMBuildMemCpy(g_builder, tdst, 16u, tsrc, 16u, rsize)
         else
-            var dst_type = LLVMPointerType(type_to_llvm_type(right, right._type),0u)
+            var dst_type = LLVMPointerType(type_to_llvm_type(right._type),0u)
             var dst_ptr = LLVMBuildPointerCast(g_builder, tdst, dst_type, "dst_ptr_type" )
             LLVMBuildStore(g_builder, tsrc, dst_ptr)
 
@@ -311,30 +371,30 @@ class LlvmJitVisitor : AstVisitor
             elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildFAdd(g_builder, left, right, "op_add"))
             else
-                failed(expr, "unsupported add type {expr._type}")
+                failed_E(expr, "unsupported add type {expr._type}")
         elif expr.op=="-"
             if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildSub(g_builder, left, right, "op_sub"))
             elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildFSub(g_builder, left, right, "op_sub"))
             else
-                failed(expr, "unsupported sub type {expr._type}")
+                failed_E(expr, "unsupported sub type {expr._type}")
         elif expr.op=="*"
             if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildMul(g_builder, left, right, "op_mul"))
             elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildFMul(g_builder, left, right, "op_mul"))
             else
-                failed(expr, "unsupported mul type {expr._type}")
+                failed_E(expr, "unsupported mul type {expr._type}")
         elif expr.op=="/" || expr.op=="%"
             // for integer division we check division by zero
             if expr._type.isInteger
-                var check_div_0 = LLVMAppendBasicBlock(ffunc, "check_div_0")
-                var check_true = LLVMAppendBasicBlock(ffunc, "check_true")
-                var check_end = LLVMAppendBasicBlock(ffunc, "check_end")
+                var check_div_0 = append_basic_block("check_div_0")
+                var check_true = append_basic_block("check_true")
+                var check_end = append_basic_block("check_end")
                 LLVMBuildBr(g_builder, check_div_0)
                 LLVMPositionBuilderAtEnd(g_builder, check_div_0)
-                let zero =  LLVMConstInt(base_type_to_llvm_type(expr.right, expr._type.baseType), 0ul, 0)
+                let zero =  LLVMConstInt(base_type_to_llvm_type(expr._type.baseType), 0ul, 0)
                 let cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, right, zero, "cmp_is_zero")
                 LLVMBuildCondBr(g_builder, cond, check_true, check_end)
                 LLVMPositionBuilderAtEnd(g_builder, check_true)
@@ -349,7 +409,7 @@ class LlvmJitVisitor : AstVisitor
                 elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
                     setE(expr, LLVMBuildFDiv(g_builder, left, right, "op_div"))
                 else
-                    failed(expr, "unsupported div type {expr._type}")
+                    failed_E(expr, "unsupported div type {expr._type}")
             else
                 if expr._type.isSignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tInt)
                     setE(expr, LLVMBuildSRem(g_builder, left, right, "op_mod"))
@@ -358,7 +418,7 @@ class LlvmJitVisitor : AstVisitor
                 elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
                     setE(expr, LLVMBuildFRem(g_builder, left, right, "op_mod"))
                 else
-                    failed(expr, "unsupported mod type {expr._type}")
+                    failed_E(expr, "unsupported mod type {expr._type}")
         elif expr.op=="<" || expr.op==">" || expr.op=="<=" || expr.op==">=" || expr.op=="==" || expr.op=="!="
             var opR : LLVMOpaqueValue?
             if expr.left._type.isSignedInteger
@@ -370,24 +430,24 @@ class LlvmJitVisitor : AstVisitor
             elif expr.left._type.baseType == Type tBool
                 opR = LLVMBuildICmp(g_builder, get_bool_compare_op(expr,string(expr.op)), left, right, "op_bool_{expr.op}")
             else
-                failed(expr, "unsupported compare type {expr._type}")
+                failed_E(expr, "unsupported compare type {expr._type}")
             if opR == null
                 opR = LLVMGetUndef(LLVMInt8Type())
-                failed(expr, "unsupported cmp type {expr.left._type} {expr.op} {expr.right._type}")
+                failed_E(expr, "unsupported cmp type {expr.left._type} {expr.op} {expr.right._type}")
             setE(expr, opR)
         else
-            failed(expr, "unsupported binary operator {expr.op}")
+            failed_E(expr, "unsupported binary operator {expr.op}")
         return expr
 
     def override visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
         assert(expr._type.isWorkhorseType)
-        setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr, expr._type.baseType), getE(expr.subexpr), "r2v"))
+        setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr._type.baseType), getE(expr.subexpr), "r2v"))
         return expr
 
     def get_bool_compare_op ( e:ExpressionPtr; op:string )
         return LLVMIntPredicate LLVMIntEQ   if op=="=="
         return LLVMIntPredicate LLVMIntNE   if op=="!="
-        failed(e, "unsupported bool compare operator {op}")
+        failed_E(e, "unsupported bool compare operator {op}")
         return LLVMIntPredicate LLVMIntEQ
 
     def get_int_compare_op ( e:ExpressionPtr; op:string )
@@ -397,7 +457,7 @@ class LlvmJitVisitor : AstVisitor
         return LLVMIntPredicate LLVMIntSLE  if op=="<="
         return LLVMIntPredicate LLVMIntSGT  if op==">"
         return LLVMIntPredicate LLVMIntSGE  if op==">="
-        failed(e, "unsupported int compare operator {op}")
+        failed_E(e, "unsupported int compare operator {op}")
         return LLVMIntPredicate LLVMIntEQ
 
     def get_uint_compare_op ( e:ExpressionPtr; op:string )
@@ -407,7 +467,7 @@ class LlvmJitVisitor : AstVisitor
         return LLVMIntPredicate LLVMIntULE  if op=="<="
         return LLVMIntPredicate LLVMIntUGT  if op==">"
         return LLVMIntPredicate LLVMIntUGE  if op==">="
-        failed(e, "unsupported uint compare operator {op}")
+        failed_E(e, "unsupported uint compare operator {op}")
         return LLVMIntPredicate LLVMIntEQ
 
     def get_float_compare_op ( e:ExpressionPtr; op:string )
@@ -417,20 +477,20 @@ class LlvmJitVisitor : AstVisitor
         return LLVMRealPredicate LLVMRealOLE    if op=="<="
         return LLVMRealPredicate LLVMRealOGT    if op==">"
         return LLVMRealPredicate LLVMRealOGE    if op==">="
-        failed(e, "unsupported float compare operator {op}")
+        failed_E(e, "unsupported float compare operator {op}")
         return LLVMRealPredicate LLVMRealOEQ
 
 // if-then-else
     def override preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : void
-        var before_if = LLVMAppendBasicBlock(ffunc, "if_cond_at_{expr.at.line}")
+        var before_if = append_basic_block("if_cond_at_{expr.at.line}")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder, before_if)
         let itt = is_terminator_expression(expr.if_true)
         let ift = expr.if_false != null ? is_terminator_expression(expr.if_false) : false
         var blk = [[IteBlock
-            if_true  = LLVMAppendBasicBlock(ffunc, "if_true_at_line_{int(expr.at.line)}"),
-            if_false = LLVMAppendBasicBlock(ffunc, "if_false_at_line_{int(expr.at.line)}"),
-            if_end   = (!itt || !ift) ? LLVMAppendBasicBlock(ffunc, "if_end_at_line_{int(expr.at.line)}") : null,
+            if_true  = append_basic_block("if_true_at_line_{int(expr.at.line)}"),
+            if_false = append_basic_block("if_false_at_line_{int(expr.at.line)}"),
+            if_end   = (!itt || !ift) ? append_basic_block("if_end_at_line_{int(expr.at.line)}") : null,
             if_true_terminates = itt,
             if_false_terminates = ift
         ]]
@@ -454,39 +514,44 @@ class LlvmJitVisitor : AstVisitor
 
 // op3
     def override preVisitExprOp3(expr:smart_ptr<ExprOp3>): void
-        var before_if = LLVMAppendBasicBlock(ffunc, "op3_cond_at_{expr.at.line}")
+        var before_if = append_basic_block("op3_cond_at_{expr.at.line}")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder, before_if)
         var blk = [[IteBlock
-            if_true  = LLVMAppendBasicBlock(ffunc, "op3_true_at_line_{int(expr.at.line)}"),
-            if_false = LLVMAppendBasicBlock(ffunc, "op3_false_at_line_{int(expr.at.line)}"),
-            if_end   = LLVMAppendBasicBlock(ffunc, "op3_end_at_line_{int(expr.at.line)}"),
+            if_true  = append_basic_block("op3_true_at_line_{int(expr.at.line)}"),
+            if_false = append_basic_block("op3_false_at_line_{int(expr.at.line)}"),
+            if_end   = append_basic_block("op3_end_at_line_{int(expr.at.line)}", true),
             if_true_terminates = false,
-            if_false_terminates = false,
-            result = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(expr,expr._type), "op3_temp_result_at_line_{int(expr.at.line)}")
+            if_false_terminates = false
         ]]
         ite2blocks[get_expr_ptr(expr)] = blk
     def override preVisitExprOp3Left(expr:smart_ptr<ExprOp3>;left:ExpressionPtr): void
         var blk = ite2blocks[get_expr_ptr(expr)]                        // we start if_true block
         LLVMBuildCondBr(g_builder, getE(expr.subexpr), blk.if_true, blk.if_false)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_true)
+        sbstack |> push(blk.if_true)
     def override preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr): void
         var blk = ite2blocks[get_expr_ptr(expr)]
-        LLVMBuildStore(g_builder, getE(expr.left), blk.result)
         LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
         LLVMPositionBuilderAtEnd(g_builder, blk.if_false)
+        sbstack |> pop()
+        sbstack |> push(blk.if_false)
     def override visitExprOp3(expr:smart_ptr<ExprOp3>) : ExpressionPtr
         var blk = ite2blocks[get_expr_ptr(expr)]
-        LLVMBuildStore(g_builder, getE(expr.right), blk.result)
         LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_end)
-        /*
-        var res = LLVMBuildPhi(g_builder, type_to_llvm_abi_type(expr,expr._type), "op3")
-        var phi_vals = [[LLVMOpaqueValue? getE(expr.left); getE(expr.right)]]
-        var phi_blocks = [[LLVMOpaqueBasicBlock? blk.if_true; blk.if_false]]
-        LLVMAddIncoming(res, phi_vals, phi_blocks)
-        */
-        setE(expr, LLVMBuildLoad(g_builder, blk.result, "op3_result_at_line_{int(expr.at.line)}"))
+        sbstack |> pop()
+        var res = LLVMBuildPhi(g_builder, type_to_llvm_abi_type(expr._type), "op3")
+        var phi_val = [[auto
+            getE(expr.left);
+            getE(expr.right)
+        ]]
+        var phi_blk = [[auto
+            subblocks[blk.if_true];
+            subblocks[blk.if_false]
+        ]]
+        LLVMAddIncoming(res, phi_val, phi_blk)
+        setE(expr, res)
         return expr
 
 // function calls
@@ -506,35 +571,30 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
         if !expr.func.flags.builtIn
-            let nargs = length(expr.arguments)
-            var args : LLVMOpaqueValue?
-            if nargs != 0
-                args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), uint(nargs)), "args")
-                LLVMSetAlignment(args, 16u)
-                for a,ai in expr.arguments,range(100500)
-                    var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
-                    var arg_val = getE(a)
-                    var arg_cast_type = type_to_llvm_abi_type(expr, a._type)
-                    var argp_ptr = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(arg_cast_type, 0u), "call_arg_{ai}_typed_ptr")
-                    LLVMBuildStore(g_builder, arg_val, argp_ptr)
-                args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
-            else
-                args = LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))
-            if get_ptr(expr.func)==thisFunc
-                var params <- [{LLVMOpaqueValue?
-                    LLVMGetParam(ffunc, 0u);                // context
-                    args;                                   // args
-                    build_null_ptr(LLVMVoidType())          // cmres
-                }]
+            if get_ptr(expr.func)==thisFunc     // recursive call or jit call
+                var params <- [{for a in expr.arguments; getE(a)}]
+                params |> push(LLVMGetParam(ffunc, uint(length(expr.arguments)))) // context
                 let fmna = get_mangled_name(FunctionPtr(expr.func))
-                var func = LLVMGetNamedFunction(g_mod, fmna)
-                var ccall = LLVMBuildCall(g_builder, func, unsafe(addr(params[0])), 3u, "")
-                if expr.func.result.isVoid
-                    setE(expr, ccall)
-                else
-                    var cres = cast_from_vec4f(expr, expr._type, ccall)
-                    setE(expr, cres)
+                var func = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
+                var ccall = LLVMBuildCall(g_builder, func, params, "")
+                setE(expr, ccall)
             else
+                // build array of arguments
+                let nargs = length(expr.arguments)
+                var args : LLVMOpaqueValue?
+                if nargs != 0
+                    args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), uint(nargs)), "args")
+                    LLVMSetAlignment(args, 16u)
+                    for a,ai in expr.arguments,range(100500)
+                        var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
+                        var arg_val = getE(a)
+                        var arg_cast_type = type_to_llvm_abi_type(a._type)
+                        var argp_ptr = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(arg_cast_type, 0u), "call_arg_{ai}_typed_ptr")
+                        LLVMBuildStore(g_builder, arg_val, argp_ptr)
+                    args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
+                else
+                    args = LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))
+                // call by pointer
                 var MNH_ADDR : uint64
                 unsafe
                     let mangled_name = get_mangled_name(FunctionPtr(expr.func))
@@ -546,7 +606,7 @@ class LlvmJitVisitor : AstVisitor
                     LLVMGetParam(ffunc, 0u)                     // context
                 }]
                 var func = LLVMGetNamedFunction(g_mod, "jit_call_or_fastcall")
-                var ccall = LLVMBuildCall(g_builder, func, unsafe(addr(params[0])), 3u, "")
+                var ccall = LLVMBuildCall(g_builder, func, params, "")
                 if expr.func.result.isVoid
                     setE(expr, ccall)
                 else
@@ -558,7 +618,7 @@ class LlvmJitVisitor : AstVisitor
         if call_name=="$::range" || call_name=="$::urange"
             setE(expr, intrinsic_builtin_range(expr))
         else
-            failed(expr, "unsupported call {call_name}")
+            failed_E(expr, "unsupported call {call_name}")
         return expr
 
 // constants

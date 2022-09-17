@@ -1,23 +1,10 @@
-require dastest/testing_boost public
+require dastest/testing_boost
 
 require llvm/llvm_jit
 require daslib/fuzzer
 require daslib/faker
 
 require daslib/constant_expression
-
-/*
-[jit_llvm]
-def test_min2 ( a, b : int )
-    return a < b ? a : b
-
-[jit_llvm]
-def test_min3 ( a, b, c : int )
-    if a < b
-        return a < c ? a : c
-    else
-        return b < c ? b : c
-*/
 
 [jit_llvm]
 def add_jit (a,b)
