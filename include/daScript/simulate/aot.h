@@ -2882,6 +2882,7 @@ namespace das {
     void * das_get_jit_exception ( );
     vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context );
     void * das_get_jit_call_or_fastcall ( );
+    uint64_t das_get_SimFunction_by_MNH ( uint64_t MNH, Context * context );
 }
 
 #if defined(_MSC_VER)

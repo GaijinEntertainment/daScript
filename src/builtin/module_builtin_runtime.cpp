@@ -1027,6 +1027,10 @@ namespace das
         return (void *) &jit_call_or_fastcall;
     }
 
+    uint64_t das_get_SimFunction_by_MNH ( uint64_t MNH, Context * context ) {
+        return (uint64_t) context->fnByMangledName(MNH);
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1393,8 +1397,10 @@ namespace das
                 ->args({"function"});
         addExtern<DAS_BIND_FUN(das_get_jit_exception)>(*this, lib, "get_jit_exception",
             SideEffects::none, "das_get_jit_exception");
-        // JIT table
         addExtern<DAS_BIND_FUN(das_get_jit_call_or_fastcall)>(*this, lib, "get_jit_call_or_fastcall",
             SideEffects::none, "das_get_jit_call_or_fastcall");
+        addExtern<DAS_BIND_FUN(das_get_SimFunction_by_MNH)>(*this, lib, "get_function_address",
+            SideEffects::none, "das_get_SimFunction_by_MNH")
+                ->args({"MNH","at"});
     }
 }
