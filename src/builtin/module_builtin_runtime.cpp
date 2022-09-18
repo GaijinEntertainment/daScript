@@ -142,6 +142,8 @@ namespace das
             for ( auto & arg : args ) {
                 if ( arg.name=="late" && arg.type == Type::tBool ) {
                     func->lateInit = arg.bValue;
+                } else if ( arg.name=="tag" || arg.name=="before" || arg.name=="after" ) {
+                    func->lateInit = true;
                 }
             }
             return true;

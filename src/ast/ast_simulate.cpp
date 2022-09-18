@@ -18,6 +18,100 @@ das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
 namespace das
 {
+    // topological sort for the [init] nodes
+
+    struct InitSort {
+        struct Entry {
+            uint64_t    id;
+            vector<string>  pass;
+            vector<string>  before;
+            vector<string>  after;
+        };
+        vector<Entry> entires;
+
+        struct Node {
+            uint64_t            id;
+            vector<uint64_t>    before;
+        };
+
+        vector<Node> build_unsorted () {
+            map<uint64_t, Node> nodes;
+            map<string, set<uint64_t>> tags;
+            for ( auto & e : entires ) {
+                Node & n = nodes[e.id];
+                n.id = e.id;
+                for ( auto & p : e.pass ) {
+                    tags[p].insert(e.id);
+                }
+            }
+            for ( auto & e : entires ) {
+                Node & n = nodes[e.id];
+                for ( auto & b : e.before ) {
+                    for ( auto & t : tags[b] ) {
+                        n.before.push_back(t);
+                    }
+                }
+                for ( auto & a : e.after ) {
+                    for ( auto & t : tags[a] ) {
+                        nodes[t].before.push_back(e.id);
+                    }
+                }
+            }
+            vector<Node> unsorted;
+            for ( auto & n : nodes ) {
+                unsorted.emplace_back(n.second);
+            }
+            return unsorted;
+        }
+
+        vector<uint64_t> sort () {
+            auto unsorted = build_unsorted();
+            vector<uint64_t> result;
+            auto lnodes = unsorted.size();
+            if ( lnodes != 0 ) {
+                vector<Node> sorted;
+                sorted.reserve(lnodes);
+                while ( unsorted.size() ) {
+                    auto node = move(unsorted[0]);
+                    unsorted.erase(unsorted.begin());
+                    if ( node.before.size()==0 ) {
+                        for ( auto & other : unsorted ) {
+                            for ( int i=int(other.before.size())-1; i>=0; --i ) {
+                                if ( other.before[i] == node.id ) {
+                                    other.before.erase(other.before.begin()+i);
+                                }
+                            }
+                        }
+                        sorted.emplace_back(node);
+                    } else {
+                        unsorted.emplace_back(node);
+                    }
+                }
+                DAS_ASSERTF(sorted.size()==lnodes,"cyclic dependency in [init] nodes");
+                result.reserve(lnodes);
+                for ( auto & n : sorted ) {
+                    result.push_back(n.id);
+                }
+            }
+            return result;
+        }
+
+        void addNode ( uint64_t mnh, AnnotationArgumentList & args ) {
+            Entry e;
+            e.id = mnh;
+            for ( auto & arg : args ) {
+                if ( arg.name=="tag" && arg.type==Type::tString ) {
+                    e.pass.push_back(arg.sValue);
+                } else if ( arg.name=="before" && arg.type==Type::tString ) {
+                    e.before.push_back(arg.sValue);
+                } else if ( arg.name=="after" && arg.type==Type::tString ) {
+                    e.after.push_back(arg.sValue);
+                }
+            }
+            entires.push_back(e);
+        }
+    };
+
     // common for move and copy
 
     SimNode * makeLocalCMResMove (const LineInfo & at, Context & context, uint32_t offset, const ExpressionPtr & rE ) {
@@ -2875,7 +2969,7 @@ namespace das
         context.totalFunctions = totalFunctions;
         auto debuggerOrGC = getDebugger()  || context.thisProgram->options.getBoolOption("gc",false);
         vector<FunctionPtr> lookupFunctionTable;
-        das_map<uint32_t,SimFunction *> sharedLookup;
+        das_hash_map<uint64_t,Function *> fnByMnh;
         if ( totalFunctions ) {
             for (auto & pm : library.modules) {
                 pm->functions.foreach([&](auto pfun){
@@ -2888,6 +2982,7 @@ namespace das
                             "\tMangled name " + mangledName + " hash is " + to_string(MNH), "",
                                 pfun->at);
                     }
+                    fnByMnh[MNH] = pfun.get();
                     auto & gfun = context.functions[pfun->index];
                     gfun.name = context.code->allocateName(pfun->name);
                     gfun.mangledName = context.code->allocateName(mangledName);
@@ -3031,7 +3126,7 @@ namespace das
                 allInitFunctions.push_back(&fn);
             }
         }
-        stable_sort(allInitFunctions.begin(), allInitFunctions.end(), [](auto a, auto b) {
+        stable_sort(allInitFunctions.begin(), allInitFunctions.end(), [](auto a, auto b) { // sort them, so that late init is last
             int lateA = a->debugInfo->flags & FuncInfo::flag_late_init;
             int lateB = b->debugInfo->flags & FuncInfo::flag_late_init;
             return lateA < lateB;
@@ -3042,6 +3137,32 @@ namespace das
                 logs << "\t" << inf->mangledName << "\n";
             }
             logs << "\n";
+        }
+        // find first late init
+        InitSort initSort;
+        int firstLateInit = -1;
+        for ( int i=0; i!=allInitFunctions.size(); ++i ) {
+            auto initFn = allInitFunctions[i];
+            if ( initFn->debugInfo->flags & FuncInfo::flag_late_init ) {
+                if ( firstLateInit==-1 ) firstLateInit = i;
+                auto pfn = fnByMnh[initFn->mangledNameHash];
+                DAS_ASSERT(pfn);
+                for ( auto & ann : pfn->annotations ) {
+                    if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                        auto fna = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                        if ( fna->name=="init" ) {
+                            initSort.addNode(initFn->mangledNameHash, ann->arguments);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if ( firstLateInit!=-1 ) {
+            auto sorted = initSort.sort();
+            for ( int i=0; i!=sorted.size(); ++i ) {
+                allInitFunctions[firstLateInit+i] = context.fnByMangledName(sorted[i]);
+            }
         }
         context.totalInitFunctions = (uint32_t) allInitFunctions.size();
         context.initFunctions = (SimFunction **) context.code->allocate(allInitFunctions.size()*sizeof(SimFunction *));
