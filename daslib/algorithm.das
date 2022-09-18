@@ -185,3 +185,38 @@ def binary_search ( a; f, last : int; val : auto(TT); less : block<(a, b:TT cons
     else
         unsafe
             return binary_search(temp_array(a), f, last, val, less)
+
+[expect_any_array(arr)]
+def erase_all ( var arr; value )
+    static_if typeinfo(stripped_typename arr[0]) != typeinfo(stripped_typename value)
+        concept_assert(false, "value type {typeinfo(stripped_typename value)} should be the same as array {typeinfo(stripped_typename arr)} element type {typeinfo(stripped_typename arr[0])}")
+        return -1
+    else
+        var i = length(arr) - 1
+        while i >= 0
+            if arr[i] == value
+                erase(arr, i)
+            i --
+
+def topological_sort ( nodes : array<auto(Node)> )
+    static_if !typeinfo(has_field <before> type<Node>) || !typeinfo(has_field <id> type<Node>)
+        concept_assert(false, "Node type {typeinfo(stripped_typename type<Node>)} should have fields 'before' and 'id'")
+    else
+        var sorted : array<Node>
+        let lnodes = length(nodes)
+        if lnodes != 0
+            sorted |> reserve(lnodes)
+            var unsorted : array<Node> := nodes
+            while length(unsorted) > 0
+                var node <- unsorted[0]
+                unsorted |> erase(0)
+                if length(node.before) == 0
+                    for other in unsorted
+                        other.before |> erase_all(node.id)
+                    sorted |> emplace(node)
+                else
+                    unsorted |>emplace(node)
+            if length(sorted) != lnodes
+                panic("cyclic dependency detected")
+            delete unsorted
+        return <- sorted
