@@ -188,6 +188,7 @@ def binary_search ( a; f, last : int; val : auto(TT); less : block<(a, b:TT cons
 
 [expect_any_array(arr)]
 def erase_all ( var arr; value )
+    //! Erase all elements equal to value from arr
     static_if typeinfo(stripped_typename arr[0]) != typeinfo(stripped_typename value)
         concept_assert(false, "value type {typeinfo(stripped_typename value)} should be the same as array {typeinfo(stripped_typename arr)} element type {typeinfo(stripped_typename arr[0])}")
         return -1
@@ -199,8 +200,12 @@ def erase_all ( var arr; value )
             i --
 
 def topological_sort ( nodes : array<auto(Node)> )
-    static_if !typeinfo(has_field <before> type<Node>) || !typeinfo(has_field <id> type<Node>)
-        concept_assert(false, "Node type {typeinfo(stripped_typename type<Node>)} should have fields 'before' and 'id'")
+    //! Topological sort of a graph.
+    //! Each node has an id, and set (table with no values) of dependencies.
+    //! Dependency `before` represents a link from a node, which should appear in the sorted list before the node.
+    //! Returns a sorted list of nodes.
+    static_if !typeinfo(has_field <before> type<Node>) || !typeinfo(is_table nodes[0].before) || !typeinfo(has_field <id> type<Node>)
+        concept_assert(false, "Node type {typeinfo(stripped_typename type<Node>)} should have fields 'before:table<id>' and 'id'")
     else
         var sorted : array<Node>
         let lnodes = length(nodes)
@@ -212,7 +217,7 @@ def topological_sort ( nodes : array<auto(Node)> )
                 unsorted |> erase(0)
                 if length(node.before) == 0
                     for other in unsorted
-                        other.before |> erase_all(node.id)
+                        other.before |> erase(node.id)
                     sorted |> emplace(node)
                 else
                     unsorted |>emplace(node)
