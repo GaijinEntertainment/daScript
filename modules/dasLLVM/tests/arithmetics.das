@@ -48,6 +48,58 @@ def test_mod( t:T?; a,b:auto(TT) )
     if b != TT()
         t |> strictEqual ( a % b, mod_jit(a,b), "{a} % {b}" )
 
+[jit_llvm]
+def add_equ_jit (a,b)
+    var c = a
+    c += b
+    return c
+
+[jit_llvm]
+def sub_equ_jit (a,b)
+    var c = a
+    c -= b
+    return c
+
+[jit_llvm]
+def mul_equ_jit (a,b)
+    var c = a
+    c *= b
+    return c
+
+[jit_llvm]
+def div_equ_jit (a,b)
+    var c = a
+    c /= b
+    return c
+
+[jit_llvm]
+def mod_equ_jit (a,b)
+    var c = a
+    c %= b
+    return c
+
+def test_add_equ( t:T?; a,b:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT;b:TT):void> add_jit) )
+    t |> strictEqual ( a + b, add_equ_jit(a,b), "a + b" )
+
+def test_sub_equ( t:T?; a,b:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT;b:TT):void> sub_jit) )
+    t |> strictEqual ( a - b, sub_equ_jit(a,b), "{a} - {b}" )
+
+def test_mul_equ( t:T?; a,b:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT;b:TT):void> mul_jit) )
+    t |> strictEqual ( a * b, mul_equ_jit(a,b), "{a} * {b}" )
+
+def test_div_equ( t:T?; a,b:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT;b:TT):void> div_jit) )
+    if b != TT()
+        t |> strictEqual ( a / b, div_equ_jit(a,b), "{a} / {b}" )
+
+def test_mod_equ( t:T?; a,b:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT;b:TT):void> mod_jit) )
+    if b != TT()
+        t |> strictEqual ( a % b, mod_equ_jit(a,b), "{a} % {b}" )
+
 [constant_expression(funcname)]
 def fuzz_numeric_and_vector ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_int,  fake |> random_int )
@@ -80,6 +132,14 @@ def test_arithmetics ( t:T? )
         fuzz_numeric_and_vector(t, fake, "test_mul")
         fuzz_numeric_and_vector(t, fake, "test_div")
         fuzz_numeric(t, fake, "test_mod")
+
+    t |> run("+=, -=, *=, /=, %=") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz_numeric_and_vector(t, fake, "test_add_equ")
+        fuzz_numeric_and_vector(t, fake, "test_sub_equ")
+        fuzz_numeric_and_vector(t, fake, "test_mul_equ")
+        fuzz_numeric_and_vector(t, fake, "test_div_equ")
+        fuzz_numeric(t, fake, "test_mod_equ")
 
 
 

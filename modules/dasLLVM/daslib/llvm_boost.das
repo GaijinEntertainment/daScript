@@ -34,6 +34,10 @@ def LLVMBuildGEP ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; var index:L
 def LLVMBuildGEP2 ( builder:LLVMOpaqueBuilder?; ty:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string )
     return LLVMBuildGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)
 
+def LLVMBuildStore2 ( builder:LLVMOpaqueBuilder?; typ:LLVMOpaqueType?; val:LLVMOpaqueValue?; ptr:LLVMOpaqueValue?  )
+    var tptr = LLVMBuildPointerCast(builder, ptr, LLVMPointerType(typ,0u), "")
+    return LLVMBuildStore(builder, val, tptr)
+
 def LLVMFloat4Type
     return LLVMVectorType(LLVMFloatType(), 4u)
 

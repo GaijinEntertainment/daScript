@@ -20,6 +20,7 @@ let LLVM_LOG_RESULT = true
 var g_mod : LLVMOpaqueModule?
 var g_engine : LLVMExecutionEngineRef
 var g_builder : LLVMOpaqueBuilder?
+var g_failed : bool = false
 
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
@@ -362,39 +363,67 @@ class LlvmJitVisitor : AstVisitor
         build_copy(tdst, expr.right)
         return expr
 
+    def isReadModifyWriteOp2 ( name:das_string )
+        return (name=="+=" || name=="-=" || name=="*=" || name=="/=" || name=="%=" ||
+            name=="&=" || name=="|=" || name=="^=" || name=="<<=" || name==">>=")
+
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
         var left = getE(expr.left)
         var right = getE(expr.right)
+        assume opType = expr.right._type
+        var r2v_type = isReadModifyWriteOp2(expr.op) ? type_to_llvm_abi_type(opType) : null
+        var r2v_left = isReadModifyWriteOp2(expr.op) ? LLVMBuildLoad2(g_builder, r2v_type, left, "r2v_left") : null
         if expr.op=="+"
-            if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildAdd(g_builder, left, right, "op_add"))
-            elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
-                setE(expr, LLVMBuildFAdd(g_builder, left, right, "op_add"))
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildAdd(g_builder, left, right, ""))
+            elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                setE(expr, LLVMBuildFAdd(g_builder, left, right, ""))
             else
-                failed_E(expr, "unsupported add type {expr._type}")
+                failed_E(expr, "unsupported + type {opType}")
+        elif expr.op=="+="
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildAdd(g_builder, r2v_left, right, ""), left))
+            elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildFAdd(g_builder, r2v_left, right, ""), left))
+            else
+                failed_E(expr, "unsupported += type {opType}")
         elif expr.op=="-"
-            if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildSub(g_builder, left, right, "op_sub"))
-            elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
-                setE(expr, LLVMBuildFSub(g_builder, left, right, "op_sub"))
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildSub(g_builder, left, right, ""))
+            elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                setE(expr, LLVMBuildFSub(g_builder, left, right, ""))
             else
-                failed_E(expr, "unsupported sub type {expr._type}")
+                failed_E(expr, "unsupported - type {opType}")
+        elif expr.op=="-="
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildSub(g_builder, r2v_left, right, ""), left))
+            elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildFSub(g_builder, r2v_left, right, ""), left))
+            else
+                failed_E(expr, "unsupported -= type {opType}")
         elif expr.op=="*"
-            if expr._type.isInteger || (expr._type.isVectorType && (expr._type.vectorBaseType==Type tInt || expr._type.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildMul(g_builder, left, right, "op_mul"))
-            elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
-                setE(expr, LLVMBuildFMul(g_builder, left, right, "op_mul"))
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildMul(g_builder, left, right, ""))
+            elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                setE(expr, LLVMBuildFMul(g_builder, left, right, ""))
             else
-                failed_E(expr, "unsupported mul type {expr._type}")
-        elif expr.op=="/" || expr.op=="%"
+                failed_E(expr, "unsupported * type {opType}")
+        elif expr.op=="*="
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildMul(g_builder, r2v_left, right, ""), left))
+            elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildFMul(g_builder, r2v_left, right, ""), left))
+            else
+                failed_E(expr, "unsupported *= type {opType}")
+        elif expr.op=="/" || expr.op=="%" || expr.op=="/=" || expr.op=="%="
             // for integer division we check division by zero
-            if expr._type.isInteger
+            if opType.isInteger
                 var check_div_0 = append_basic_block("check_div_0")
                 var check_true = append_basic_block("check_true")
                 var check_end = append_basic_block("check_end")
                 LLVMBuildBr(g_builder, check_div_0)
                 LLVMPositionBuilderAtEnd(g_builder, check_div_0)
-                let zero =  LLVMConstInt(base_type_to_llvm_type(expr._type.baseType), 0ul, 0)
+                let zero =  LLVMConstInt(base_type_to_llvm_type(opType.baseType), 0ul, 0)
                 let cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, right, zero, "cmp_is_zero")
                 LLVMBuildCondBr(g_builder, cond, check_true, check_end)
                 LLVMPositionBuilderAtEnd(g_builder, check_true)
@@ -402,35 +431,55 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildBr(g_builder, check_end)
                 LLVMPositionBuilderAtEnd(g_builder, check_end)
             if expr.op=="/"
-                if expr._type.isSignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tInt)
-                    setE(expr, LLVMBuildSDiv(g_builder, left, right, "op_div"))
-                elif expr._type.isUnsignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tUInt)
-                    setE(expr, LLVMBuildUDiv(g_builder, left, right, "op_div"))
-                elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
-                    setE(expr, LLVMBuildFDiv(g_builder, left, right, "op_div"))
+                if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
+                    setE(expr, LLVMBuildSDiv(g_builder, left, right, ""))
+                elif opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tUInt)
+                    setE(expr, LLVMBuildUDiv(g_builder, left, right, ""))
+                elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                    setE(expr, LLVMBuildFDiv(g_builder, left, right, ""))
                 else
-                    failed_E(expr, "unsupported div type {expr._type}")
+                    failed_E(expr, "unsupported /= type {opType}")
+            elif expr.op=="/="
+                if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
+                    setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildSDiv(g_builder, r2v_left, right, ""), left))
+                elif opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tUInt)
+                    setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildUDiv(g_builder, r2v_left, right, ""), left))
+                elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                    setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildFDiv(g_builder, r2v_left, right, ""), left))
+                else
+                    failed_E(expr, "unsupported /= type {opType}")
+            elif expr.op=="%"
+                if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
+                    setE(expr, LLVMBuildSRem(g_builder, left, right, ""))
+                elif opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tUInt)
+                    setE(expr, LLVMBuildURem(g_builder, left, right, ""))
+                elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                    setE(expr, LLVMBuildFRem(g_builder, left, right, ""))
+                else
+                    failed_E(expr, "unsupported % type {opType}")
+            elif expr.op=="%="
+                if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
+                    setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildSRem(g_builder, r2v_left, right, ""), left))
+                elif opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tUInt)
+                    setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildURem(g_builder, r2v_left, right, ""), left))
+                elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                    setE(expr, LLVMBuildStore2(g_builder, r2v_type, LLVMBuildFRem(g_builder, r2v_left, right, ""), left))
+                else
+                    failed_E(expr, "unsupported %= type {opType}")
             else
-                if expr._type.isSignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tInt)
-                    setE(expr, LLVMBuildSRem(g_builder, left, right, "op_mod"))
-                elif expr._type.isUnsignedInteger || (expr._type.isVectorType && expr._type.vectorBaseType==Type tUInt)
-                    setE(expr, LLVMBuildURem(g_builder, left, right, "op_mod"))
-                elif expr._type.isFloatOrDouble || (expr._type.isVectorType && expr._type.vectorBaseType==Type tFloat)
-                    setE(expr, LLVMBuildFRem(g_builder, left, right, "op_mod"))
-                else
-                    failed_E(expr, "unsupported mod type {expr._type}")
+                failed_E(expr, "unsupported division type operator {expr.op}")
         elif expr.op=="<" || expr.op==">" || expr.op=="<=" || expr.op==">=" || expr.op=="==" || expr.op=="!="
             var opR : LLVMOpaqueValue?
             if expr.left._type.isSignedInteger
-                opR = LLVMBuildICmp(g_builder, get_int_compare_op(expr,string(expr.op)), left, right, "op_bool_{expr.op}")
+                opR = LLVMBuildICmp(g_builder, get_int_compare_op(expr,string(expr.op)), left, right, "")
             elif expr.left._type.isUnsignedInteger
-                opR = LLVMBuildICmp(g_builder, get_uint_compare_op(expr,string(expr.op)), left, right, "op_bool_{expr.op}")
+                opR = LLVMBuildICmp(g_builder, get_uint_compare_op(expr,string(expr.op)), left, right, "")
             elif expr.left._type.isFloatOrDouble
-                opR = LLVMBuildFCmp(g_builder, get_float_compare_op(expr,string(expr.op)), left, right, "op_fbool_{expr.op}")
+                opR = LLVMBuildFCmp(g_builder, get_float_compare_op(expr,string(expr.op)), left, right, "")
             elif expr.left._type.baseType == Type tBool
-                opR = LLVMBuildICmp(g_builder, get_bool_compare_op(expr,string(expr.op)), left, right, "op_bool_{expr.op}")
+                opR = LLVMBuildICmp(g_builder, get_bool_compare_op(expr,string(expr.op)), left, right, "")
             else
-                failed_E(expr, "unsupported compare type {expr._type}")
+                failed_E(expr, "unsupported compare type {opType}")
             if opR == null
                 opR = LLVMGetUndef(LLVMInt8Type())
                 failed_E(expr, "unsupported cmp type {expr.left._type} {expr.op} {expr.right._type}")
@@ -744,32 +793,35 @@ def public generate_llvm ( fn : FunctionPtr )
     var astVisitor = new LlvmJitVisitor()
     var astVisitorAdapter <- make_visitor(*astVisitor)
     visit(fn, astVisitorAdapter)
-    var failed = false
     if length(astVisitor.errors) > 0
         let errors = astVisitor.errors |> join("\n")
         to_log(LOG_ERROR,"LLVM JIT FAILED:\n{errors}\n")
-        failed = true
+        g_failed = true
     if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
-        failed = true
-    if !failed && LLVM_ENABLE_OPT_PASS
-        var pmb = LLVMPassManagerBuilderCreate()
-        LLVMPassManagerBuilderSetOptLevel(pmb, LLVM_OPT_LEVEL)
-        var fpm = LLVMCreateFunctionPassManagerForModule(g_mod)
-        LLVMPassManagerBuilderPopulateFunctionPassManager(pmb, fpm)
-        while LLVMRunFunctionPassManager(fpm, LLVMGetNamedFunction(g_mod, string(get_mangled_name(fn))))==1
-            pass
-        LLVMDisposePassManager(fpm)
-        LLVMPassManagerBuilderDispose(pmb)
+        g_failed = true
     astVisitorAdapter := null
     unsafe
         delete astVisitor
-    // LLVMDumpModule(g_mod)
 
 def public generate_llvm_code ( fmna:string )
     return null if is_in_completion() || is_compiling_macros()
+    return null if g_failed
     var code = LLVMGetFunctionAddress(g_engine, fmna)
     to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")  if code==0ul
     return unsafe(reinterpret<void?> code)
+
+[init(tag=optimize_llvm_jit)]
+def private optimize_llvm_module
+    return if is_in_completion() || is_compiling_macros()
+    return if g_failed || !LLVM_ENABLE_OPT_PASS
+    var pmb = LLVMPassManagerBuilderCreate()
+    LLVMPassManagerBuilderSetOptLevel(pmb, LLVM_OPT_LEVEL)
+    var pm = LLVMCreatePassManager()
+    LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm)
+    // LLVMPassManagerBuilderPopulateLTOPassManager(pmb, pm, 1, 1)
+    LLVMRunPassManager(pm,g_mod)
+    LLVMDisposePassManager(pm)
+    LLVMPassManagerBuilderDispose(pmb)
 
 [function_macro(name="jit_llvm")]
 class Jit_LLVM_Macro : AstFunctionAnnotation
@@ -786,7 +838,12 @@ class Jit_LLVM_Macro : AstFunctionAnnotation
                     fnptr := null
                 else
                     panic("missing 'options rtti'")
-        var reg <- setup_call_list("all`things`jit", func.at, true)
+        var reg <- setup_call_list("all`things`jit", func.at) <| $ ( fn )
+            fn.flags |= FunctionFlags init | FunctionFlags privateFunction
+            fn.moreFlags |= MoreFunctionFlags lateInit
+            append_annotation(fn,"$","init",[{auto
+                [[auto "after", [[RttiValue tString="optimize_llvm_jit"]] ]]
+            }])
         reg.list |> emplace(qres)
         var qres_late <- qmacro_block() <|
             unsafe
@@ -795,7 +852,12 @@ class Jit_LLVM_Macro : AstFunctionAnnotation
                     gen |> instrument_jit(reinterpret<function> $e(efun))
                 else
                     remove_jit(reinterpret<function> $e(efun))
-        var reg_late <- setup_call_list("all`things`jit`late", func.at, true)
+        var reg_late <- setup_call_list("all`things`jit`late", func.at) <| $ ( fn )
+            fn.flags |= FunctionFlags init | FunctionFlags privateFunction
+            fn.moreFlags |= MoreFunctionFlags lateInit
+            append_annotation(fn,"$","init",[{auto
+                [[auto "before", [[RttiValue tString="optimize_llvm_jit"]] ]]
+            }])
         reg_late.list |> emplace(qres_late)
         return true
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
