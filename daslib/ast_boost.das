@@ -218,29 +218,32 @@ def find_unique_generic ( mod : Module?; name : string; canfail:bool = false )
         return [[FunctionPtr]]
     return res
 
-def setup_call_list(name: string; at:LineInfo; isInit:bool = false; isPrivate:bool = true; isLateInit:bool = false) : ExprBlock?
+def setup_call_list(name: string; at:LineInfo; subblock:block<(var fn:FunctionPtr):void> ) : ExprBlock?
     var fn <- compiling_module() |> find_unique_function(name)
     if fn == null
         fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
         fn.flags |= FunctionFlags generated
+        fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
+        var blk <- new [[ExprBlock() at=at]]
+        var res = get_ptr(blk)
+        fn.body <- blk
+        invoke(subblock, fn)
+        if !(compiling_module() |> add_function(fn))
+            panic("failed to setup macro, can't add function {fn.name}")
+        return res
+    elif fn.body.__rtti != "ExprBlock"
+        panic("expecting func.ExprBlock")
+    unsafe
+        return reinterpret<ExprBlock?> fn.body
+
+def setup_call_list(name: string; at:LineInfo; isInit:bool = false; isPrivate:bool = true; isLateInit:bool = false) : ExprBlock?
+    return setup_call_list(name,at) <| $ ( fn )
         if isInit
             fn.flags |= FunctionFlags init
             if isLateInit
                 fn.moreFlags |= MoreFunctionFlags lateInit
         if isPrivate
             fn.flags |= FunctionFlags privateFunction
-        fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
-        var blk <- new [[ExprBlock() at=at]]
-        var res = get_ptr(blk)
-        fn.body <- blk
-        if !(compiling_module() |> add_function(fn))
-            panic("failed to setup macro, can't add function {fn.name}")
-        return res
-    else
-        if fn.body.__rtti != "ExprBlock"
-            panic("expecting func.ExprBlock")
-        unsafe
-            return reinterpret<ExprBlock?> fn.body
 
 def setup_macro(name: string; at:LineInfo) : ExprBlock?
     compiling_program().flags |= ProgramFlags needMacroModule
