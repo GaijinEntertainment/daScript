@@ -2883,6 +2883,8 @@ namespace das {
     vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context );
     void * das_get_jit_call_or_fastcall ( );
     uint64_t das_get_SimFunction_by_MNH ( uint64_t MNH, Context * context );
+    uint32_t das_get_eval_top_offset ();
+
 }
 
 #if defined(_MSC_VER)

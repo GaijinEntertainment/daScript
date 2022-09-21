@@ -171,6 +171,11 @@ namespace das {
         fclose((FILE *)f);
     }
 
+    void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(*at, "can't fflush NULL");
+        fflush((FILE *)f);
+    }
+
     const FILE * builtin_stdin() {
         return stdin;
     }
@@ -478,6 +483,9 @@ namespace das {
                     ->args({"name","mode"});
             addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose",
                 SideEffects::modifyExternal, "builtin_fclose")
+                    ->args({"file","context","line"});
+            addExtern<DAS_BIND_FUN(builtin_fflush)>(*this, lib, "fflush",
+                SideEffects::modifyExternal, "builtin_fflush")
                     ->args({"file","context","line"});
             addExtern<DAS_BIND_FUN(builtin_fprint)>(*this, lib, "fprint",
                 SideEffects::modifyExternal, "builtin_fprint")

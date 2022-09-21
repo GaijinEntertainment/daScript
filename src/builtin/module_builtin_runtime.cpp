@@ -1021,6 +1021,10 @@ namespace das
         return (void *) &jit_exception;
     }
 
+    uint32_t das_get_eval_top_offset () {
+        return uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop));
+    }
+
     vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context ) {
         return context->callOrFastcall(fn, args, nullptr);
     }
@@ -1404,5 +1408,8 @@ namespace das
         addExtern<DAS_BIND_FUN(das_get_SimFunction_by_MNH)>(*this, lib, "get_function_address",
             SideEffects::none, "das_get_SimFunction_by_MNH")
                 ->args({"MNH","at"});
+        addExtern<DAS_BIND_FUN(das_get_eval_top_offset)>(*this, lib, "get_jit_context_eval_top_offset",
+            SideEffects::none, "das_get_eval_top_offset");
+
     }
 }

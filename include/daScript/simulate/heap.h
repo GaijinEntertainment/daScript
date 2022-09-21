@@ -117,7 +117,7 @@ namespace das {
         __forceinline bool is_stack_ptr ( char * p ) const {
             return (stack<=p) && (p<=(stack + stackSize));
         }
-    protected:
+    public:
         char *      stack = nullptr;
         char *      evalTop = nullptr;
         char *      stackTop = nullptr;

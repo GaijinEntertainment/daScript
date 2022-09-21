@@ -9,6 +9,7 @@ namespace das {
 
     const FILE * builtin_fopen  ( const char * name, const char * mode );
     void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at );
+    void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at );
     void builtin_fprint ( const FILE * f, const char * text, Context * context, LineInfoArg * at );
     char * builtin_fread ( const FILE * _f, Context * context, LineInfoArg * at );
     char* builtin_fgets(const FILE* _f, Context* context, LineInfoArg * at );
