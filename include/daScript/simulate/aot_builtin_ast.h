@@ -534,6 +534,7 @@ namespace das {
     void for_each_for_loop_macro ( Module * mod, const TBlock<void,ForLoopMacroPtr> & block, Context * context, LineInfoArg * at );
     Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at );
     bool exprReturns ( const ExpressionPtr & expr );
+    bool exprReturnsOrBreaks ( const ExpressionPtr & expr );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {

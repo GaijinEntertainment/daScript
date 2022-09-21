@@ -616,6 +616,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(exprReturns)>(*this, lib,  "is_terminator_expression",
             SideEffects::none, "exprReturns")
                 ->args({"expr"});
+        addExtern<DAS_BIND_FUN(exprReturnsOrBreaks)>(*this, lib,  "is_terminator_or_break_expression",
+            SideEffects::none, "exprReturnsOrBreaks")
+                ->args({"expr"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {

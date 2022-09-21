@@ -33,7 +33,7 @@ namespace das {
         } else if ( expr->rtti_isBlock() ) {
             auto block = static_pointer_cast<ExprBlock>(expr);
             for ( auto & be : block->list ) {
-                if ( be->rtti_isBreak() ) {
+                if ( be->rtti_isBreak() || be->rtti_isContinue() ) {
                     break;
                 }
                 if ( exprReturns(be) ) {
@@ -57,6 +57,40 @@ namespace das {
         } else if ( expr->rtti_isUnsafe() ) {
             auto us = static_pointer_cast<ExprUnsafe>(expr);
             return exprReturns(us->body);
+        }
+        return false;
+    }
+
+   bool exprReturnsOrBreaks ( const ExpressionPtr & expr ) {
+        if ( expr->rtti_isReturn() ) {
+            return true;
+        } else if ( expr->rtti_isBlock() ) {
+            auto block = static_pointer_cast<ExprBlock>(expr);
+            for ( auto & be : block->list ) {
+                if ( be->rtti_isBreak() || be->rtti_isContinue() ) {
+                    return true;
+                }
+                if ( exprReturnsOrBreaks(be) ) {
+                    return true;
+                }
+            }
+        } else if ( expr->rtti_isIfThenElse() ) {
+            auto ite = static_pointer_cast<ExprIfThenElse>(expr);
+            if ( ite->if_false ) {
+                return exprReturnsOrBreaks(ite->if_true) && exprReturnsOrBreaks(ite->if_false);
+            }
+        } else if ( expr->rtti_isWith() ) {
+            auto wth = static_pointer_cast<ExprWith>(expr);
+            return exprReturnsOrBreaks(wth->body);
+        } else if ( expr->rtti_isWhile() ) {
+            auto wh = static_pointer_cast<ExprWhile>(expr);
+            return exprReturns(wh->body);   // note has its own break
+        } else if ( expr->rtti_isFor() ) {
+            auto fr = static_pointer_cast<ExprFor>(expr);
+            return exprReturns(fr->body);   // note has its own break
+        } else if ( expr->rtti_isUnsafe() ) {
+            auto us = static_pointer_cast<ExprUnsafe>(expr);
+            return exprReturnsOrBreaks(us->body);
         }
         return false;
     }
