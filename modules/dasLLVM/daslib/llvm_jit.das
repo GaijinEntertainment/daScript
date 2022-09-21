@@ -11,11 +11,14 @@ require daslib/ast public
 require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
+require daslib/fio
 
-let LLVM_ENABLE_OPT_PASS = true
-let LLVM_OPT_LEVEL = 2u
-let LLVM_JIT_OPT_LEVEL = 2u
-let LLVM_LOG_RESULT = true
+let LLVM_DEBUG_EVERYTHING = false
+
+let LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
+let LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
+let LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
+let LLVM_LOG_RESULT = false
 
 var g_mod : LLVMOpaqueModule?
 var g_engine : LLVMExecutionEngineRef
@@ -53,6 +56,7 @@ def private finalize_jit
     return if g_builder == null    // prevent double finalize
     if LLVM_LOG_RESULT
         LLVMDumpModule(g_mod)
+        fflush(fstderr())
     g_mod = null
     LLVMDisposeBuilder(g_builder); g_builder = null
     LLVMDisposeExecutionEngine(g_engine); g_engine = null
@@ -82,6 +86,7 @@ class LlvmJitVisitor : AstVisitor
     subblocks : table<LLVMOpaqueBasicBlock?; LLVMOpaqueBasicBlock?>
     sbstack : array<LLVMOpaqueBasicBlock?>
     loop_stack : array<LoopBlock>
+    [[do_not_delete]] local_stack : LLVMOpaqueValue?
 
     def LlvmJitVisitor
         pass
@@ -195,7 +200,9 @@ class LlvmJitVisitor : AstVisitor
         for a,ai in fun.arguments, range(100500)
             var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "arg_ptr_{ai}")
             var arg_v : LLVMOpaqueValue?
-            if !a._type.isRef
+            if a._type.flags.ref
+                arg_v = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMVoidType(),0u), arg_ptr, "arg_ref_value_{ai}")
+            elif !a._type.isRef
                 arg_v = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(a._type), arg_ptr, "arg_value_{ai}")
             else
                 arg_v = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(LLVMVoidType(),0u), "arg_ptr_{ai}" )
@@ -213,6 +220,10 @@ class LlvmJitVisitor : AstVisitor
         // now write to regular function
         var entry = LLVMAppendBasicBlock(ffunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, entry)
+        // allocate local stack
+        local_stack = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMInt8Type(), uint(fun.totalStackSize)), "")
+        LLVMSetAlignment(local_stack, 16u)
+        local_stack = LLVMBuildPointerCast(g_builder, local_stack, LLVMPointerType(LLVMInt8Type(),0u), "LOCAL_STACK")
 
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
         if fun.body != null && !is_terminator_expression(fun.body)
@@ -223,8 +234,8 @@ class LlvmJitVisitor : AstVisitor
 
     def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
         var vtype = arg._type.isRef ?  LLVMPointerType(LLVMVoidType(),0u) : type_to_llvm_type(arg._type)
-        var vmem = LLVMBuildAlloca(g_builder, vtype, "variable_{arg.name}")
-        LLVMSetAlignment(vmem, 16u)
+        var v_ptr = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(arg.stackTop), 0), "")
+        var vmem = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "variable_{arg.name}")
         setV(arg, vmem)
         if arg.init == null
             var vsize = arg._type.isRef ?  typeinfo(sizeof type<void?>) : arg._type.sizeOf
@@ -246,6 +257,14 @@ class LlvmJitVisitor : AstVisitor
             else
                 setE(expr, LLVMBuildPointerCast(g_builder, var_ptr, LLVMPointerType(LLVMVoidType(),0u), "var_data_{expr.variable.name}" ))
         elif expr.varFlags.argument // arguments
+            if expr.variable._type.flags.ref
+                var arg = LLVMGetParam(ffunc, uint(expr.argumentIndex))
+                if expr.varFlags.r2v
+                    assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
+                    setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr._type.baseType), arg, "var_ref_r2v_{expr.variable.name}"))
+                else
+                    setE(expr, LLVMBuildPointerCast(g_builder, arg, LLVMPointerType(LLVMVoidType(),0u), "var_ref_ptr_{expr.variable.name}" ))
+                return expr
             var tryV = tryGetV(expr.variable)
             if tryV != null
                 if expr.varFlags.r2v

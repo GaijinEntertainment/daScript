@@ -17,6 +17,7 @@ def fibI(n)
         let tmp = cur
         cur += last
         last = tmp
+        i ++
     return cur
 
 [jit_llvm,sideeffects]
