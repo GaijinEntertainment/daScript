@@ -753,3 +753,7 @@ def public function_to_type ( fn : FunctionPtr ) : TypeDeclPtr
             td.argTypes |> emplace_new <| clone_type(arg._type)
             td.argNames[argi] := arg.name
     return td
+
+def public visit_finally ( blk:ExprBlock?; adapter:smart_ptr<VisitorAdapter> )
+    unsafe
+        visit_finally(reinterpret<smart_ptr<ExprBlock>> blk, adapter)

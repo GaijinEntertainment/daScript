@@ -1715,6 +1715,14 @@ namespace das {
         return res;
     }
 
+    void astVisitBlockFinally ( smart_ptr_raw<ExprBlock> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(*line_info, "adapter is required");
+        if (!expr)
+            context->throw_error_at(*line_info, "expr is required");
+        expr->visitFinally(*adapter);
+    }
+
     void Module_Ast::registerAdapterAnnotations(ModuleLibrary & lib) {
         // visitor
         addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
@@ -1732,6 +1740,9 @@ namespace das {
                 ->args({"function","adapter","context","line"});
         addExtern<DAS_BIND_FUN(astVisitExpression)>(*this, lib,  "visit",
             SideEffects::accessExternal, "astVisitExpression")
+                ->args({"expression","adapter","context","line"});
+        addExtern<DAS_BIND_FUN(astVisitBlockFinally)>(*this, lib,  "visit_finally",
+            SideEffects::accessExternal, "astVisitBlockFinally")
                 ->args({"expression","adapter","context","line"});
         // function annotation
         addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
