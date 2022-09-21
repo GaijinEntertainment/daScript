@@ -64,7 +64,13 @@ struct private IteBlock
     if_true_terminates  : bool
     if_false_terminates : bool
 
+struct private LoopBlock
+    loop_start : LLVMOpaqueBasicBlock?
+    loop_body  : LLVMOpaqueBasicBlock?
+    loop_end   : LLVMOpaqueBasicBlock?
+
 class LlvmJitVisitor : AstVisitor
+    adapter : smart_ptr<VisitorAdapter>
     e2v : table<Expression?;LLVMOpaqueValue?>
     v2v : table<Variable?;LLVMOpaqueValue?>
     str2v : table<string; LLVMOpaqueValue?>
@@ -75,6 +81,7 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete]] thisFunc : Function?
     subblocks : table<LLVMOpaqueBasicBlock?; LLVMOpaqueBasicBlock?>
     sbstack : array<LLVMOpaqueBasicBlock?>
+    loop_stack : array<LoopBlock>
 
     def LlvmJitVisitor
         pass
@@ -650,9 +657,9 @@ class LlvmJitVisitor : AstVisitor
                     let MNH = hash(mangled_name)
                     MNH_ADDR = get_function_address(MNH)
                 var params <- [{LLVMOpaqueValue?
-                    LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0); // SimFunction *
-                    args;                                       // args
-                    LLVMGetParam(ffunc, 0u)                     // context
+                    LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0);         // SimFunction *
+                    args;                                               // args
+                    LLVMGetParam(ffunc, uint(length(expr.arguments)))  // context
                 }]
                 var func = LLVMGetNamedFunction(g_mod, "jit_call_or_fastcall")
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
@@ -668,6 +675,48 @@ class LlvmJitVisitor : AstVisitor
             setE(expr, intrinsic_builtin_range(expr))
         else
             failed_E(expr, "unsupported call {call_name}")
+        return expr
+
+// break
+    def override preVisitExprBreak(expr:smart_ptr<ExprBreak>) : void
+        var lblk = loop_stack |> back()
+        LLVMBuildBr(g_builder, lblk.loop_end)
+// continue
+    def override preVisitExprContinue(expr:smart_ptr<ExprContinue>) : void
+        var lblk = loop_stack |> back()
+        LLVMBuildBr(g_builder, lblk.loop_start)
+
+// block
+    def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>) : void
+        if blk.blockFlags.inTheLoop
+            blk.blockFlags |= ExprBlockFlags finallyDisabled
+    def override visitExprBlock(var blk:smart_ptr<ExprBlock>) : ExpressionPtr
+        if blk.blockFlags.inTheLoop
+            blk.blockFlags ^= ExprBlockFlags finallyDisabled
+        return blk
+// while loop
+    def override preVisitExprWhile(expr:smart_ptr<ExprWhile>) : void
+        var lblk = [[LoopBlock
+            loop_start = LLVMAppendBasicBlock(ffunc, "while_start"),
+            loop_body = LLVMAppendBasicBlock(ffunc, "while_body"),
+            loop_end = LLVMAppendBasicBlock(ffunc, "while_end")
+        ]]
+        loop_stack |> push(lblk)
+        LLVMBuildBr(g_builder, lblk.loop_start)
+        LLVMPositionBuilderAtEnd(g_builder, lblk.loop_start)
+    def override preVisitExprWhileBody(expr:smart_ptr<ExprWhile>;right:ExpressionPtr) : void
+        var lblk = loop_stack |> back()
+        LLVMBuildCondBr(g_builder, getE(expr.cond), lblk.loop_body, lblk.loop_end)
+        LLVMPositionBuilderAtEnd(g_builder, lblk.loop_body)
+    def override visitExprWhile(expr:smart_ptr<ExprWhile>) : ExpressionPtr
+        var lblk = loop_stack |> back()
+        loop_stack |> pop()
+        LLVMBuildBr(g_builder, lblk.loop_start)
+        LLVMPositionBuilderAtEnd(g_builder, lblk.loop_end)
+        if expr.body is ExprBlock
+            let body = expr.body as ExprBlock
+            if length(body.finalList) != 0
+                visit_finally(body, adapter)
         return expr
 
 // constants
@@ -791,15 +840,16 @@ def public generate_llvm ( fn : FunctionPtr )
     return if is_in_completion() || is_compiling_macros()
     init_jit()  // we can't be sure init is called before this
     var astVisitor = new LlvmJitVisitor()
-    var astVisitorAdapter <- make_visitor(*astVisitor)
-    visit(fn, astVisitorAdapter)
+    unsafe
+        astVisitor.adapter <- make_visitor(*astVisitor)
+    visit(fn, astVisitor.adapter)
     if length(astVisitor.errors) > 0
         let errors = astVisitor.errors |> join("\n")
         to_log(LOG_ERROR,"LLVM JIT FAILED:\n{errors}\n")
         g_failed = true
     if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
         g_failed = true
-    astVisitorAdapter := null
+    astVisitor.adapter := null
     unsafe
         delete astVisitor
 
