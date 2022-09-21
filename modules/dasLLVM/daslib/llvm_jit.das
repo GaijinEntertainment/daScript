@@ -147,6 +147,7 @@ class LlvmJitVisitor : AstVisitor
         return LLVMFloat2Type() if t == Type tFloat2
         return LLVMFloat3Type() if t == Type tFloat3
         return LLVMFloat4Type() if t == Type tFloat4
+        return LLVMPointerType(LLVMInt8Type(),0u) if t == Type tString
         failed("unsupported type {t}")
         return LLVMInt32Type()
 
@@ -155,6 +156,8 @@ class LlvmJitVisitor : AstVisitor
             return LLVMPointerType(LLVMVoidType(), 0u)
         elif t.isWorkhorseType
             return base_type_to_llvm_type(t.baseType)
+        elif t.isVoid
+            return LLVMVoidType()
         else
             failed("type_to_llvm_abi_type: unsupported type {describe(t)} at {t.at}")
             return LLVMInt32Type()
@@ -198,7 +201,7 @@ class LlvmJitVisitor : AstVisitor
                 arg_v = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(LLVMVoidType(),0u), "arg_ptr_{ai}" )
             wargs |> push(arg_v)
         wargs |> push(LLVMGetParam(wfunc, 0u))  // context
-        var ret_v = LLVMBuildCall(g_builder, ffunc, wargs, "call_{fnmna}_implementation")
+        var ret_v = LLVMBuildCall(g_builder, ffunc, wargs, "")
         if !fun.result.isVoid
             var tres = cast_to_vec4f(fun.result, ret_v)
             if tres != null
@@ -213,7 +216,7 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
         if fun.body != null && !is_terminator_expression(fun.body)
-            LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
+            LLVMBuildRetVoid(g_builder)
         ffunc = null
         thisFunc = null
         return fun
@@ -344,8 +347,8 @@ class LlvmJitVisitor : AstVisitor
 
     def get_string_constant_ptr ( message:string )
         var str = build_string_constant(message)
-        return LLVMBuildPointerCast(g_builder, str, LLVMPointerType(LLVMInt8Type(), 0u), "")
-        /// return LLVMBuildGEP(g_builder, str_ptr, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "string_constant {message}")
+        return LLVMBuildPointerCast(g_builder, str, LLVMPointerType(LLVMInt8Type(), 0u), "string_constant {message}")
+        // return LLVMBuildGEP(g_builder, str_ptr, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "string_constant {message}")
 
     def build_exception ( message:string )
         var params = [[auto
@@ -373,6 +376,37 @@ class LlvmJitVisitor : AstVisitor
     def isReadModifyWriteOp2 ( name:das_string )
         return (name=="+=" || name=="-=" || name=="*=" || name=="/=" || name=="%=" ||
             name=="&=" || name=="|=" || name=="^=" || name=="<<=" || name==">>=")
+
+    def override visitExprOp1(expr:smart_ptr<ExprOp1>) : ExpressionPtr
+        var sexpr = getE(expr.subexpr)
+        assume opType = expr.subexpr._type
+        if expr.op=="+++" || expr.op=="++"
+            var expr_t = base_type_to_llvm_type(opType.baseType)
+            var sexpr_v = LLVMBuildLoad2(g_builder, expr_t, sexpr, "")
+            var res_v : LLVMOpaqueValue?
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                res_v = LLVMBuildAdd(g_builder, sexpr_v, LLVMConstInt(expr_t,1ul,0), "")
+            elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                res_v = LLVMBuildFAdd(g_builder, sexpr_v, LLVMConstReal(expr_t,1.lf), "")
+            else
+                failed_E(expr, "unsupported ++ type {opType}")
+            LLVMBuildStore2(g_builder, expr_t, res_v, sexpr)
+            setE(expr, sexpr_v)
+        elif expr.op=="---" || expr.op=="--"
+            var expr_t = base_type_to_llvm_type(opType.baseType)
+            var sexpr_v = LLVMBuildLoad2(g_builder, expr_t, sexpr, "")
+            var res_v : LLVMOpaqueValue?
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                res_v = LLVMBuildSub(g_builder, sexpr_v, LLVMConstInt(expr_t,1ul,0), "")
+            elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+                res_v = LLVMBuildFSub(g_builder, sexpr_v, LLVMConstReal(expr_t,1.lf), "")
+            else
+                failed_E(expr, "unsupported -- type {opType}")
+            LLVMBuildStore2(g_builder, expr_t, res_v, sexpr)
+            setE(expr, sexpr_v)
+        else
+            failed_E(expr, "unsupported unary operator {expr.op}")
+        return expr
 
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
         var left = getE(expr.left)
@@ -541,8 +575,8 @@ class LlvmJitVisitor : AstVisitor
         var before_if = append_basic_block("if_cond_at_{expr.at.line}")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder, before_if)
-        let itt = is_terminator_expression(expr.if_true)
-        let ift = expr.if_false != null ? is_terminator_expression(expr.if_false) : false
+        let itt = is_terminator_or_break_expression(expr.if_true)
+        let ift = expr.if_false != null ? is_terminator_or_break_expression(expr.if_false) : false
         var blk = [[IteBlock
             if_true  = append_basic_block("if_true_at_line_{int(expr.at.line)}"),
             if_false = append_basic_block("if_false_at_line_{int(expr.at.line)}"),
@@ -641,13 +675,12 @@ class LlvmJitVisitor : AstVisitor
                 if nargs != 0
                     args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), uint(nargs)), "args")
                     LLVMSetAlignment(args, 16u)
+                    args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
                     for a,ai in expr.arguments,range(100500)
                         var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
                         var arg_val = getE(a)
                         var arg_cast_type = type_to_llvm_abi_type(a._type)
-                        var argp_ptr = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(arg_cast_type, 0u), "call_arg_{ai}_typed_ptr")
-                        LLVMBuildStore(g_builder, arg_val, argp_ptr)
-                    args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
+                        LLVMBuildStore2(g_builder, arg_cast_type, arg_val, arg_ptr)
                 else
                     args = LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))
                 // call by pointer
@@ -656,10 +689,11 @@ class LlvmJitVisitor : AstVisitor
                     let mangled_name = get_mangled_name(FunctionPtr(expr.func))
                     let MNH = hash(mangled_name)
                     MNH_ADDR = get_function_address(MNH)
+
                 var params <- [{LLVMOpaqueValue?
-                    LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0);         // SimFunction *
-                    args;                                               // args
-                    LLVMGetParam(ffunc, uint(length(expr.arguments)))  // context
+                    LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0);             // SimFunction *
+                    args;                                                   // args
+                    LLVMGetParam(ffunc, uint(length(thisFunc.arguments)))   // context
                 }]
                 var func = LLVMGetNamedFunction(g_mod, "jit_call_or_fastcall")
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
@@ -827,7 +861,7 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, get_string_constant_ptr(string(expr.value)))
         return expr
     def override visitExprConstDouble(expr:smart_ptr<ExprConstDouble>) : ExpressionPtr
-        setE(expr, LLVMConstReal(LLVMFloatType(), expr.value))
+        setE(expr, LLVMConstReal(LLVMDoubleType(), expr.value))
         return expr
     def override visitExprFakeContext(expr:smart_ptr<ExprFakeContext>) : ExpressionPtr
         setE(expr, LLVMGetParam(ffunc,0u))
