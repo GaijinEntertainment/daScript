@@ -62,7 +62,7 @@ VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f ang, vec4f& s, vec4f& c)
   vec4f vzero = v_zero();
 
   xl = v_mul(ang, V_C_2_DIV_PI);
-  xl = v_add(xl, v_sel(V_C_HALF, ang, v_msbit()));
+  xl = v_add(xl, v_btsel(V_C_HALF, ang, v_msbit()));
 
   q = v_cvt_vec4i(xl);
 
