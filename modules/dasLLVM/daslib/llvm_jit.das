@@ -18,7 +18,7 @@ let LLVM_DEBUG_EVERYTHING = false
 let LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
-let LLVM_LOG_RESULT = false
+let LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING
 
 var g_mod : LLVMOpaqueModule?
 var g_engine : LLVMExecutionEngineRef
@@ -243,7 +243,11 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
         var tdst = getV(arg)
-        build_copy(tdst, expr)
+        if arg._type.flags.ref
+            var src = getE(expr)
+            LLVMBuildStore2(g_builder, LLVMPointerType(LLVMVoidType(),0u), src, tdst)
+        else
+            build_copy(tdst, expr)
         return blk
 
     def override visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
@@ -251,6 +255,8 @@ class LlvmJitVisitor : AstVisitor
             failed_E(expr, "{expr.variable.name} support block variable")
         elif expr.varFlags.local    // local varaibels
             var var_ptr = getV(expr.variable)
+            if expr.variable._type.isRef
+                var_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMVoidType(),0u), var_ptr, "")
             if expr.varFlags.r2v
                 assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
                 setE(expr, LLVMBuildLoad2(g_builder, base_type_to_llvm_type(expr._type.baseType), var_ptr, "var_r2v_{expr.variable.name}"))
