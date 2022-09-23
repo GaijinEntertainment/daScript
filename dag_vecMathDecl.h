@@ -93,6 +93,9 @@ typedef const struct bsph3f& bsph3f_cref;
 
 #if _TARGET_SIMD_SSE
   #include <emmintrin.h>
+#ifdef _MSC_VER
+  #include <intrin.h>
+#endif
 
   typedef __m128 vec4f;
   typedef __m128 vec3f;
