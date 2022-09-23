@@ -146,14 +146,14 @@ class LlvmJitVisitor : AstVisitor
         return LLVMFloatType()  if t == Type tFloat
         return LLVMDoubleType() if t == Type tDouble
         return LLVMInt1Type()   if t == Type tBool
-        return LLVMInt2Type()   if t == Type tInt2 || t == Type tUInt2
+        return LLVMInt2Type()   if t == Type tInt2 || t == Type tUInt2 || t == Type tRange || t == Type tURange
         return LLVMInt3Type()   if t == Type tInt3 || t == Type tUInt3
         return LLVMInt4Type()   if t == Type tInt4 || t == Type tUInt4
         return LLVMFloat2Type() if t == Type tFloat2
         return LLVMFloat3Type() if t == Type tFloat3
         return LLVMFloat4Type() if t == Type tFloat4
         return LLVMPointerType(LLVMInt8Type(),0u) if t == Type tString
-        failed("unsupported type {t}")
+        failed("base_type_to_llvm_type: unsupported type {t}")
         return LLVMInt32Type()
 
     def type_to_llvm_abi_type ( t:TypeDeclPtr )
@@ -753,6 +753,87 @@ class LlvmJitVisitor : AstVisitor
         if blk.blockFlags.inTheLoop
             blk.blockFlags ^= ExprBlockFlags finallyDisabled
         return blk
+// for loop
+
+// for
+    def override preVisitExprFor(expr:smart_ptr<ExprFor>) : void
+        var lblk = [[LoopBlock
+            loop_start = LLVMAppendBasicBlock(ffunc, "for_body"),
+            loop_body = LLVMAppendBasicBlock(ffunc, "for_body"),
+            loop_end = LLVMAppendBasicBlock(ffunc, "for_end")
+        ]]
+        loop_stack |> push(lblk)
+
+    def override visitExprFor(expr:smart_ptr<ExprFor>) : ExpressionPtr
+        var lblk = loop_stack |> back()
+        loop_stack |> pop()
+
+        for svar,ssrc in expr.iteratorVariables,expr.sources
+            if ssrc._type.isRange
+                var svar_v = LLVMBuildLoad2(g_builder, type_to_llvm_type(svar._type), getV(svar), "")
+                svar_v = LLVMBuildAdd(g_builder, svar_v, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+                LLVMBuildStore2(g_builder, type_to_llvm_type(svar._type), svar_v, getV(svar))
+            else
+                failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
+
+        LLVMBuildBr(g_builder, lblk.loop_start)
+        LLVMPositionBuilderAtEnd(g_builder, lblk.loop_end)
+        if expr.body is ExprBlock
+            let body = expr.body as ExprBlock
+            if length(body.finalList) != 0
+                visit_finally(body, adapter)
+        return expr
+
+    def override preVisitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool) : void
+        // add variable to be looked up
+        var vtype = svar._type.isRef ?  LLVMPointerType(LLVMVoidType(),0u) : type_to_llvm_type(svar._type)
+        var v_ptr = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(svar.stackTop), 0), "")
+        var vmem = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "for_loop_variable_{svar.name}")
+        setV(svar, vmem)
+        // initialize its memory with 0 (should we?)
+        var vsize = svar._type.isRef ?  typeinfo(sizeof type<void?>) : svar._type.sizeOf
+        LLVMBuildMemSet(g_builder, vmem, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(vsize), 0), 16u)
+
+    def override preVisitExprForBody(expr:smart_ptr<ExprFor>) : void
+
+        var lblk = loop_stack |> back()
+
+        var range2 : table<Expression?; LLVMOpaqueValue?>
+
+        for svar,ssrc in expr.iteratorVariables,expr.sources
+            if ssrc._type.isRange
+                var srange = getE(ssrc)
+                var sfrom = LLVMBuildExtractElement(g_builder, srange, LLVMConstInt(LLVMInt32Type(),0ul,0), "range_from_{svar.name}")
+                var sto = LLVMBuildExtractElement(g_builder, srange, LLVMConstInt(LLVMInt32Type(),1ul,0), "range_to_{svar.name}")
+                var cmp_from_to = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntSLT, sfrom, sto, "")
+                var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_not_empty")
+                LLVMBuildCondBr(g_builder, cmp_from_to, okay, lblk.loop_end)
+                LLVMPositionBuilderAtEnd(g_builder, okay)
+
+                range2[get_ptr(ssrc)] = sto
+                LLVMBuildStore2(g_builder, type_to_llvm_type(svar._type), sfrom, getV(svar))
+            else
+                failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
+
+        LLVMBuildBr(g_builder, lblk.loop_start)
+        LLVMPositionBuilderAtEnd(g_builder, lblk.loop_start)
+
+        for svar,ssrc in expr.iteratorVariables,expr.sources
+            if ssrc._type.isRange
+                var sto = range2[get_ptr(ssrc)]
+                var svar_v = LLVMBuildLoad2(g_builder, type_to_llvm_type(svar._type), getV(svar), "")
+                var rcond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, svar_v, sto, "")
+                var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_okay")
+                LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, okay)
+                LLVMPositionBuilderAtEnd(g_builder, okay)
+            else
+                failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
+
+        LLVMBuildBr(g_builder, lblk.loop_body)
+        LLVMPositionBuilderAtEnd(g_builder, lblk.loop_body)
+
+
+
 // while loop
     def override preVisitExprWhile(expr:smart_ptr<ExprWhile>) : void
         var lblk = [[LoopBlock
