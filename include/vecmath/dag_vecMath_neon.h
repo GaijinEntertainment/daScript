@@ -35,7 +35,7 @@ VECMATH_FINLINE vec4i VECTORCALL v_splat_wi(vec4i a) { return vdupq_lane_s32(vge
 
 VECMATH_FINLINE vec4f VECTORCALL v_splats(float a) { return vmovq_n_f32(a); }
 VECMATH_FINLINE vec4i VECTORCALL v_splatsi(int a) {return vmovq_n_s32(a);}
-VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a) {return vreinterpretq_s32_s64(vmovq_n_s64(a));}
+VECMATH_FINLINE vec4i VECTORCALL v_splatsi64(int64_t a) {return vdupq_n_s64(a);}
 VECMATH_FINLINE vec4f VECTORCALL v_set_x(float a) { return vsetq_lane_f32(a, v_zero(), 0); } // set x, zero others
 VECMATH_FINLINE vec4i VECTORCALL v_seti_x(int a) { return vsetq_lane_s32(a, v_zero(), 0); } // set x, zero others
 VECMATH_FINLINE vec4f VECTORCALL v_make_vec4f(float x, float y, float z, float w) { return (vec4f){x, y, z, w}; }
@@ -81,6 +81,7 @@ VECMATH_FINLINE int VECTORCALL v_signmask(vec4f V)
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_eq(vec4f a, vec4f b) { return (vec4f)vceqq_f32(a, b); }
+VECMATH_FINLINE vec4f VECTORCALL v_cmp_neq(vec4f a, vec4f b) { return (vec4f)vmvnq_u32(vceqq_f32(a, b)); }
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_eqi(vec4f a, vec4f b) { return (vec4f)vceqq_s32((vec4i)a, (vec4i)b); }
 VECMATH_FINLINE vec4i VECTORCALL v_cmp_eqi(vec4i a, vec4i b) { return (vec4i)vceqq_s32(a, b); }
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_ge(vec4f a, vec4f b) { return (vec4f)vcgeq_f32(a, b); }
@@ -92,9 +93,13 @@ VECMATH_FINLINE vec4f VECTORCALL v_and(vec4f a, vec4f b) { return (vec4f)vandq_s
 VECMATH_FINLINE vec4f VECTORCALL v_andnot(vec4f a, vec4f b) { return (vec4f)vandq_s32(vmvnq_s32((vec4i)a), (vec4i)b); }
 VECMATH_FINLINE vec4f VECTORCALL v_or(vec4f a, vec4f b) { return (vec4f)vorrq_s32((vec4i)a, (vec4i)b); }
 VECMATH_FINLINE vec4f VECTORCALL v_xor(vec4f a, vec4f b) { return (vec4f)veorq_s32((vec4i)a, (vec4i)b); }
-VECMATH_FINLINE vec4f VECTORCALL v_sel(vec4f a, vec4f b, vec4f c) { return vbslq_f32((uint32x4_t)c, b, a); }
-VECMATH_FINLINE vec4i VECTORCALL v_seli(vec4i a, vec4i b, vec4i c) { return vbslq_s32((uint32x4_t)c, b, a); }
-VECMATH_FINLINE float32x2_t VECTORCALL v_sel2(float32x2_t a, float32x2_t b, int32x2_t c) { return vbsl_f32((uint32x2_t)c, b, a); }
+VECMATH_FINLINE vec4f VECTORCALL v_sel(vec4f a, vec4f b, vec4f c)
+{
+  return vbslq_f32((uint32x4_t)vshrq_n_s32(vreinterpretq_s32_f32(c), 31), b, a);
+}
+VECMATH_FINLINE vec4i VECTORCALL v_seli(vec4i a, vec4i b, vec4i c) { return vbslq_s32((uint32x4_t)vshrq_n_s32(c, 31), b, a); }
+VECMATH_FINLINE vec4f VECTORCALL v_btsel(vec4f a, vec4f b, vec4f c) { return vbslq_f32((uint32x4_t)c, b, a); }
+VECMATH_FINLINE vec4i VECTORCALL v_btseli(vec4i a, vec4i b, vec4i c) { return vbslq_s32((uint32x4_t)c, b, a); }
 
 VECMATH_FINLINE int VECTORCALL v_check_xyz_non_zero(vec4f a)
 {
@@ -174,11 +179,13 @@ VECMATH_FINLINE vec4f VECTORCALL v_add(vec4f a, vec4f b) { return vaddq_f32(a, b
 VECMATH_FINLINE vec4f VECTORCALL v_sub(vec4f a, vec4f b) { return vsubq_f32(a, b); }
 VECMATH_FINLINE vec4f VECTORCALL v_mul(vec4f a, vec4f b) { return vmulq_f32(a, b); }
 VECMATH_FINLINE vec4f VECTORCALL v_madd(vec4f a, vec4f b, vec4f c) { return vmlaq_f32(c, a, b); }
+VECMATH_FINLINE vec4f VECTORCALL v_msub(vec4f a, vec4f b, vec4f c) { return vsubq_f32(vmulq_f32(a, b), c); }
 VECMATH_FINLINE vec4f VECTORCALL v_nmsub(vec4f a, vec4f b, vec4f c) { return vmlsq_f32(c, a, b); }
 VECMATH_FINLINE vec4f VECTORCALL v_add_x(vec4f a, vec4f b) { return vaddq_f32(a, b); }
 VECMATH_FINLINE vec4f VECTORCALL v_sub_x(vec4f a, vec4f b) { return vsubq_f32(a, b); }
 VECMATH_FINLINE vec4f VECTORCALL v_mul_x(vec4f a, vec4f b) { return vmulq_f32(a, b); }
 VECMATH_FINLINE vec4f VECTORCALL v_madd_x(vec4f a, vec4f b, vec4f c) { return vmlaq_f32(c, a, b); }
+VECMATH_FINLINE vec4f VECTORCALL v_msub_x(vec4f a, vec4f b, vec4f c) { return vsubq_f32(vmulq_f32(a, b), c); }
 VECMATH_FINLINE vec4f VECTORCALL v_nmsub_x(vec4f a, vec4f b, vec4f c) { return vmlsq_f32(c, a, b); }
 
 VECMATH_FINLINE vec4i VECTORCALL v_addi(vec4i a, vec4i b) { return vaddq_s32(a, b); }
@@ -893,10 +900,14 @@ VECMATH_FINLINE vec4f VECTORCALL v_bbox3_outer_rad(vec3f bmin, vec3f bmax)
 {
   return v_mul(V_C_HALF, v_length3(v_sub(bmax, bmin)));
 }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_inner_rad(vec3f bmin, vec3f bmax)
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_inner_diameter(vec3f bmin, vec3f bmax)
 {
   vec4f s = v_sub(bmax, bmin);
-  return v_mul(V_C_HALF, v_min(s, v_min(v_rot_1(s), v_rot_2(s))));
+  return v_min(s, v_min(v_rot_1(s), v_rot_2(s)));
+}
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_inner_rad(vec3f bmin, vec3f bmax)
+{
+  return v_mul(V_C_HALF, v_bbox3_inner_diameter(bmin, bmax));
 }
 
 VECMATH_FINLINE int VECTORCALL v_check_xz_non_zero(vec4f a)
@@ -998,20 +1009,6 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_mat(vec3f col0, vec3f col1, vec
 
 VECMATH_FINLINE short VECTORCALL v_extract_xi16(vec4i v) { return vgetq_lane_s16(vreinterpretq_s16_s32(v), 0); }
 
-VECMATH_FINLINE float VECTORCALL v_extract(vec4f v, int i)
-{
-  alignas(16) float a[4];
-  v_st(a, v);
-  return a[i];
-}
-
-VECMATH_FINLINE int VECTORCALL v_extracti(vec4i v, int i)
-{
-  alignas(16) int a[4];
-  v_sti(a, v);
-  return a[i];
-}
-
 VECMATH_FINLINE float VECTORCALL v_extract_x(vec4f v) { return vgetq_lane_f32(v, 0); }
 VECMATH_FINLINE float VECTORCALL v_extract_y(vec4f v) { return vgetq_lane_f32(v, 1); }
 VECMATH_FINLINE float VECTORCALL v_extract_z(vec4f v) { return vgetq_lane_f32(v, 2); }
@@ -1026,12 +1023,18 @@ VECMATH_FINLINE int64_t VECTORCALL v_extract_xi64(vec4i v) {return vgetq_lane_s6
 
 #define V_TEST_VEC_X_BIT0(v) (vget_lane_u32(v, 0) & 1)
 
+VECMATH_FINLINE int VECTORCALL v_test_vec_x_eqi(vec3f v, vec3f a)
+{
+  return V_TEST_VEC_X_BIT0(vceq_s32(vget_low_f32(v), vget_low_f32(a)));
+}
+VECMATH_FINLINE int VECTORCALL v_test_vec_x_eqi_0(vec3f v) { return v_extract_xi(v_cast_vec4i(v)) == 0 ? 1 : 0; }
+
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_eq(vec3f v, vec3f a) { return V_TEST_VEC_X_BIT0(vceq_f32(vget_low_f32(v), vget_low_f32(a))); }
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_gt(vec3f v, vec3f a) { return V_TEST_VEC_X_BIT0(vcgt_f32(vget_low_f32(v), vget_low_f32(a))); }
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_ge(vec3f v, vec3f a) { return V_TEST_VEC_X_BIT0(vcge_f32(vget_low_f32(v), vget_low_f32(a))); }
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_lt(vec3f v, vec3f a) { return V_TEST_VEC_X_BIT0(vclt_f32(vget_low_f32(v), vget_low_f32(a))); }
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_le(vec3f v, vec3f a) { return V_TEST_VEC_X_BIT0(vcle_f32(vget_low_f32(v), vget_low_f32(a))); }
-VECMATH_FINLINE int VECTORCALL v_test_vec_x_eq_0(vec3f v) { return V_TEST_VEC_X_BIT0(vceq_s32(vget_low_s32((vec4i)v), vmov_n_s32(0))); }
+VECMATH_FINLINE int VECTORCALL v_test_vec_x_eq_0(vec3f v) { return V_TEST_VEC_X_BIT0(vceq_f32(vget_low_f32(v), vmov_n_f32(0))); }
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_gt_0(vec3f v) { return V_TEST_VEC_X_BIT0(vcgt_f32(vget_low_f32(v), vmov_n_f32(0))); }
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_ge_0(vec3f v) { return V_TEST_VEC_X_BIT0(vcge_f32(vget_low_f32(v), vmov_n_f32(0))); }
 VECMATH_FINLINE int VECTORCALL v_test_vec_x_lt_0(vec3f v) { return V_TEST_VEC_X_BIT0(vclt_f32(vget_low_f32(v), vmov_n_f32(0))); }

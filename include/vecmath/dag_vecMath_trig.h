@@ -8,9 +8,9 @@
 
 #include <vecmath/dag_vecMath.h>
 
-#define _MINUS_DP1         -0.78515625
-#define _MINUS_DP2         -2.4187564849853515625e-4
-#define _MINUS_DP3         -3.77489497744594108e-8
+#define _MINUS_DP1         -0.78515625f
+#define _MINUS_DP2         -2.4187564849853515625e-4f
+#define _MINUS_DP3         -3.77489497744594108e-8f
 
 #define _SINCOS_CC0        -0.0013602249f
 #define _SINCOS_CC1         0.0416566950f
@@ -62,7 +62,7 @@ VECMATH_FINLINE void VECTORCALL v_sincos4(vec4f ang, vec4f& s, vec4f& c)
   vec4f vzero = v_zero();
 
   xl = v_mul(ang, V_C_2_DIV_PI);
-  xl = v_add(xl, v_sel(V_C_HALF, ang, v_msbit()));
+  xl = v_add(xl, v_btsel(V_C_HALF, ang, v_msbit()));
 
   q = v_cvt_vec4i(xl);
 

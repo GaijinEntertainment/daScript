@@ -32,6 +32,7 @@
 
 #if _TARGET_SIMD_SSE
   DECL_VEC_CONST vec4f_const V_C_HALF = { REPLICATE(0.5f) };
+  DECL_VEC_CONST vec4f_const V_C_HALF_MINUS_EPS = { REPLICATE(0.5f - 1.192092896e-07f * 32) };
   DECL_VEC_CONST vec4f_const V_C_ONE = { REPLICATE(1.0f) };
   DECL_VEC_CONST vec4f_const V_C_TWO = { REPLICATE(2.0f) };
   DECL_VEC_CONST vec4f_const V_C_PI = { REPLICATE(3.141592f) };                  // pi
@@ -40,21 +41,24 @@
   DECL_VEC_CONST vec4f_const V_C_PI_DIV_4 = { REPLICATE(0.785398f) };            // pi/4
   DECL_VEC_CONST vec4f_const V_C_2_DIV_PI = { REPLICATE(0.636619f) };            // 2/pi
   DECL_VEC_CONST vec4f_const V_C_4_DIV_PI = { REPLICATE(1.273239f) };            // 4/pi
-  DECL_VEC_CONST vec4f_const V_C_FLT_EPSILON = { REPLICATE(1.192092896e-07f) };
+  DECL_VEC_CONST vec4f_const V_C_MAX_VAL = { REPLICATE(1e32f) };
+  DECL_VEC_CONST vec4f_const V_C_MIN_VAL = { REPLICATE(-1e32f) };
+  DECL_VEC_CONST vec4f_const V_C_EPS_VAL = { REPLICATE(1.192092896e-07f) };
+  DECL_VEC_CONST vec4f_const V_C_VERY_SMALL_VAL = { REPLICATE(4e-19) };          // ~sqrt(FLT_MIN), safe threshold for passing argument to rcp(x)
 
   DECL_VEC_CONST vec4i_const V_CI_SIGN_MASK = { REPLICATE(0x80000000) };
   DECL_VEC_CONST vec4i_const V_CI_INV_SIGN_MASK = { REPLICATE(0x7FFFFFFF) };
+  DECL_VEC_CONST vec4i_const V_CI_3FF = { REPLICATE(0x3FF) };
+  DECL_VEC_CONST vec4i_const V_CI_070 = { REPLICATE(0x70) };
+  DECL_VEC_CONST vec4i_const V_CI_0FF = { REPLICATE(0xFF) };
+  DECL_VEC_CONST vec4i_const V_CI_01F = { REPLICATE(0x1F) };
+  DECL_VEC_CONST vec4i_const V_CI_07FFFFF = { REPLICATE(0x7fffff) };
   DECL_VEC_CONST vec4i_const V_CI_0 = { REPLICATE(0) };
   DECL_VEC_CONST vec4i_const V_CI_1 = { REPLICATE(1) };
   DECL_VEC_CONST vec4i_const V_CI_2 = { REPLICATE(2) };
   DECL_VEC_CONST vec4i_const V_CI_3 = { REPLICATE(3) };
   DECL_VEC_CONST vec4i_const V_CI_4 = { REPLICATE(4) };
-#endif
 
-#if _TARGET_SIMD_SSE
-  DECL_VEC_CONST vec4f_const V_C_MAX_VAL = { REPLICATE(1e32f) };
-  DECL_VEC_CONST vec4f_const V_C_MIN_VAL = { REPLICATE(-1e32f) };
-  DECL_VEC_CONST vec4f_const V_C_EPS_VAL = { REPLICATE(1.19209290e-07f) };
   DECL_VEC_CONST vec4f_const V_C_UNIT_1000 = {1.0f, 0.0f, 0.0f, 0.0f};
   DECL_VEC_CONST vec4f_const V_C_UNIT_0100 = {0.0f, 1.0f, 0.0f, 0.0f};
   DECL_VEC_CONST vec4f_const V_C_UNIT_0010 = {0.0f, 0.0f, 1.0f, 0.0f};
@@ -77,57 +81,10 @@
   DECL_VEC_CONST vec4i_const V_CI_MASK1011 = { 0xFFFFFFFF, 0, 0xFFFFFFFF, 0xFFFFFFFF };
   DECL_VEC_CONST vec4i_const V_CI_MASK0111 = { 0, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
   DECL_VEC_CONST vec4i_const V_CI_MASK1111 = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF };
-  DECL_VEC_CONST vec4i_const V_CI_3FF = { REPLICATE( 0x3FF ) };
-  DECL_VEC_CONST vec4i_const V_CI_070 = { REPLICATE( 0x70 ) };
-  DECL_VEC_CONST vec4i_const V_CI_0FF = { REPLICATE( 0xFF ) };
-  DECL_VEC_CONST vec4i_const V_CI_01F = { REPLICATE( 0x1F ) };
-  DECL_VEC_CONST vec4i_const V_CI_07FFFFF = { REPLICATE( 0x7fffff ) };
 
 #elif _TARGET_SIMD_NEON
-  #define DVM_SPLAT1F(a) (vdupq_n_f32(a))
-  #define DVM_SPLAT1I(a) (vdupq_n_s32(a))
-  #define DVM_VECFLOAT4  (float32x4_t)
-  #define DVM_VECUINT4   (int32x4_t)
-
-  #define V_CI2_MASK10  (int32x2_t) { -1, 0 }
-  #define V_CI2_MASK01  (int32x2_t) { 0, -1 }
-
-  #define V_C_MAX_VAL DVM_SPLAT1F(1e32f)
-  #define V_C_MIN_VAL DVM_SPLAT1F(-1e32f)
-  #define V_C_EPS_VAL DVM_SPLAT1F(1.19209290e-07f)
-
-  #define V_C_UNIT_1000 DVM_VECFLOAT4{ 1.0f, 0.0f, 0.0f, 0.0f }
-  #define V_C_UNIT_0100 DVM_VECFLOAT4{ 0.0f, 1.0f, 0.0f, 0.0f }
-  #define V_C_UNIT_0010 DVM_VECFLOAT4{ 0.0f, 0.0f, 1.0f, 0.0f }
-  #define V_C_UNIT_0001 DVM_VECFLOAT4{ 0.0f, 0.0f, 0.0f, 1.0f }
-  #define V_C_UNIT_1110 DVM_VECFLOAT4{ 1.0f, 1.0f, 1.0f, 0.0f }
-  #define V_C_UNIT_0011 DVM_VECFLOAT4{ 0.0f, 0.0f, 1.0f, 1.0f }
-
-  #define V_CI_MASK0000 DVM_SPLAT1I(0)
-  #define V_CI_MASK1000 DVM_VECUINT4{ -1, 0, 0, 0 }
-  #define V_CI_MASK0100 DVM_VECUINT4{ 0, -1, 0, 0 }
-  #define V_CI_MASK0010 DVM_VECUINT4{ 0, 0, -1, 0 }
-  #define V_CI_MASK0001 DVM_VECUINT4{ 0, 0, 0, -1 }
-  #define V_CI_MASK1100 DVM_VECUINT4{ -1, -1, 0, 0 }
-  #define V_CI_MASK0110 DVM_VECUINT4{ 0, -1, -1, 0 }
-  #define V_CI_MASK0011 DVM_VECUINT4{ 0, 0, -1, -1 }
-  #define V_CI_MASK1010 DVM_VECUINT4{ -1, 0, -1, 0 }
-  #define V_CI_MASK0101 DVM_VECUINT4{ 0, -1, 0, -1 }
-  #define V_CI_MASK1110 DVM_VECUINT4{ -1, -1, -1, 0 }
-  #define V_CI_MASK1101 DVM_VECUINT4{ -1, -1, 0, -1 }
-  #define V_CI_MASK1011 DVM_VECUINT4{ -1, 0, -1, -1 }
-  #define V_CI_MASK0111 DVM_VECUINT4{ 0, -1, -1, -1 }
-  #define V_CI_MASK1111 DVM_VECUINT4{ -1, -1, -1, -1 }
-  #define V_CI_3FF DVM_SPLAT1I( 0x3FF )
-  #define V_CI_070 DVM_SPLAT1I( 0x70 )
-  #define V_CI_0FF DVM_SPLAT1I( 0xFF )
-  #define V_CI_0FF DVM_SPLAT1I( 0xFF )
-  #define V_CI_01F DVM_SPLAT1I( 0x1F )
-  #define V_CI_07FFFFF DVM_SPLAT1I(0x7fffff)
-#endif
-
-#if _TARGET_SIMD_NEON
   #define V_C_HALF            vdupq_n_f32(0.5f)
+  #define V_C_HALF_MINUS_EPS  vdupq_n_f32(0.5f - 1.192092896e-07f * 32)
   #define V_C_ONE             vdupq_n_f32(1.0f)
   #define V_C_TWO             vdupq_n_f32(2.0f)
   #define V_C_PI              vdupq_n_f32(3.141592f)           // pi
@@ -136,15 +93,53 @@
   #define V_C_PI_DIV_4        vdupq_n_f32(0.785398f)           // pi/4
   #define V_C_2_DIV_PI        vdupq_n_f32(0.636619f)           // 2/pi
   #define V_C_4_DIV_PI        vdupq_n_f32(1.273239f)           // 4/pi
-  #define V_C_FLT_EPSILON     vdupq_n_f32(1.192092896e-07f)
+  #define V_C_MAX_VAL         vdupq_n_f32(1e32f)
+  #define V_C_MIN_VAL         vdupq_n_f32(-1e32f)
+  #define V_C_EPS_VAL         vdupq_n_f32(1.192092896e-07f)
+  #define V_C_VERY_SMALL_VAL  vdupq_n_f32(4e-19f)              // ~sqrt(FLT_MIN), safe threshold for passing argument to rcp(x)
 
   #define V_CI_SIGN_MASK      vdupq_n_s32(0x80000000)
   #define V_CI_INV_SIGN_MASK  vdupq_n_s32(0x7FFFFFFF)
+  #define V_CI_3FF            vdupq_n_s32(0x3FF)
+  #define V_CI_070            vdupq_n_s32(0x70)
+  #define V_CI_0FF            vdupq_n_s32(0xFF)
+  #define V_CI_0FF            vdupq_n_s32(0xFF)
+  #define V_CI_01F            vdupq_n_s32(0x1F)
+  #define V_CI_07FFFFF        vdupq_n_s32(0x7fffff)
   #define V_CI_0              vdupq_n_s32(0)
   #define V_CI_1              vdupq_n_s32(1)
   #define V_CI_2              vdupq_n_s32(2)
   #define V_CI_3              vdupq_n_s32(3)
   #define V_CI_4              vdupq_n_s32(4)
+
+  #define DECL_VECFLOAT4      (float32x4_t)
+  #define DECL_VECUINT4       (int32x4_t)
+
+  #define V_CI2_MASK10        (int32x2_t) { -1, 0 }
+  #define V_CI2_MASK01        (int32x2_t) { 0, -1 }
+
+  #define V_C_UNIT_1000       DECL_VECFLOAT4{ 1.0f, 0.0f, 0.0f, 0.0f }
+  #define V_C_UNIT_0100       DECL_VECFLOAT4{ 0.0f, 1.0f, 0.0f, 0.0f }
+  #define V_C_UNIT_0010       DECL_VECFLOAT4{ 0.0f, 0.0f, 1.0f, 0.0f }
+  #define V_C_UNIT_0001       DECL_VECFLOAT4{ 0.0f, 0.0f, 0.0f, 1.0f }
+  #define V_C_UNIT_1110       DECL_VECFLOAT4{ 1.0f, 1.0f, 1.0f, 0.0f }
+  #define V_C_UNIT_0011       DECL_VECFLOAT4{ 0.0f, 0.0f, 1.0f, 1.0f }
+
+  #define V_CI_MASK0000       vdupq_n_s32(0)
+  #define V_CI_MASK1000       DECL_VECUINT4{ -1, 0, 0, 0 }
+  #define V_CI_MASK0100       DECL_VECUINT4{ 0, -1, 0, 0 }
+  #define V_CI_MASK0010       DECL_VECUINT4{ 0, 0, -1, 0 }
+  #define V_CI_MASK0001       DECL_VECUINT4{ 0, 0, 0, -1 }
+  #define V_CI_MASK1100       DECL_VECUINT4{ -1, -1, 0, 0 }
+  #define V_CI_MASK0110       DECL_VECUINT4{ 0, -1, -1, 0 }
+  #define V_CI_MASK0011       DECL_VECUINT4{ 0, 0, -1, -1 }
+  #define V_CI_MASK1010       DECL_VECUINT4{ -1, 0, -1, 0 }
+  #define V_CI_MASK0101       DECL_VECUINT4{ 0, -1, 0, -1 }
+  #define V_CI_MASK1110       DECL_VECUINT4{ -1, -1, -1, 0 }
+  #define V_CI_MASK1101       DECL_VECUINT4{ -1, -1, 0, -1 }
+  #define V_CI_MASK1011       DECL_VECUINT4{ -1, 0, -1, -1 }
+  #define V_CI_MASK0111       DECL_VECUINT4{ 0, -1, -1, -1 }
+  #define V_CI_MASK1111       DECL_VECUINT4{ -1, -1, -1, -1 }
 #endif
 
 #undef REPLICATE
