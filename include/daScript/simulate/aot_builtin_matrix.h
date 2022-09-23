@@ -13,8 +13,8 @@ namespace das {
     float3x3 float3x3_mul(const float3x3 &a, const float3x3 &b);
     inline float3x4 float3x4_mul(const float3x4 &a, const float3x4 &b) {
         mat44f va,vb,vc;
-        v_mat44_make_from_43cu(va, &a.m[0].x);
-        v_mat44_make_from_43cu(vb, &b.m[0].x);
+        v_mat44_make_from_43cu_unsafe(va, &a.m[0].x);
+        v_mat44_make_from_43cu_unsafe(vb, &b.m[0].x);
         v_mat44_mul43(vc, va, vb);
         float3x4 ret;
         v_mat_43cu_from_mat44(&ret.m[0].x, vc);
@@ -25,7 +25,7 @@ namespace das {
     float4x4 float4x4_inverse( const float4x4 & src);
     inline float3x4 float3x4_inverse( const float3x4 & src ) {
         mat44f mat, invMat;
-        v_mat44_make_from_43cu(mat, &src.m[0].x);
+        v_mat44_make_from_43cu_unsafe(mat, &src.m[0].x);
         v_mat44_inverse43(invMat, mat);
         float3x4 ret;
         v_mat_43cu_from_mat44(&ret.m[0].x, invMat);
@@ -54,7 +54,7 @@ namespace das {
 
     inline float3 float3x4_mul_vec3p(const float3x4 &a, float3 b) {
         mat44f va;
-        v_mat44_make_from_43cu(va, &a.m[0].x);
+        v_mat44_make_from_43cu_unsafe(va, &a.m[0].x);
         return v_mat44_mul_vec3p(va, v_ldu(&b.x));
     }
 
@@ -71,7 +71,7 @@ namespace das {
 
     inline float3 rotate(const float3x4 &a, float3 b) {
         mat44f va;
-        v_mat44_make_from_43cu(va, &a.m[0].x);
+        v_mat44_make_from_43cu_unsafe(va, &a.m[0].x);
         return v_mat44_mul_vec3v(va, v_ldu(&b.x));
     }
 
