@@ -305,6 +305,10 @@ class LlvmJitVisitor : AstVisitor
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
             elif bt == Type tFloat4
                 return v4f
+            elif bt == Type tBool
+                var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
+                tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
+                tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt1Type(), "down_to_1_bit")
             else
                 failed_E(expr, "unsupported cast_from_vec4f cast {describe(etype)}")
         else
@@ -621,6 +625,12 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder, blk.if_false)
     def override visitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : ExpressionPtr
         var blk = ite2blocks[get_expr_ptr(expr)]
+
+        if expr.if_false == null
+            if !blk.if_true_terminates
+                LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
+            LLVMPositionBuilderAtEnd(g_builder, blk.if_false)
+
         if !blk.if_false_terminates
             LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_false block we jump to if_end
         if blk.if_end != null
