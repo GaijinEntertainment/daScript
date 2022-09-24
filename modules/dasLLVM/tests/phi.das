@@ -6,11 +6,11 @@ require daslib/faker
 
 require daslib/constant_expression
 
-[jit_llvm, sideeffects]
+[jit, sideeffects]
 def test_min ( a, b : int )
     return a < b ? a : b
 
-[jit_llvm, sideeffects]
+[jit, sideeffects]
 def test_min ( a, b, c : int )
     if a < b
         return a < c ? a : c

@@ -20,6 +20,13 @@ let LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING
 
+struct JitEngine
+    mod : LLVMOpaqueModule?
+    engine : LLVMExecutionEngineRef
+    builder : LLVMOpaqueBuilder?
+
+var private g_all_engines : array<JitEngine>
+
 var g_mod : LLVMOpaqueModule?
 var g_engine : LLVMExecutionEngineRef
 var g_builder : LLVMOpaqueBuilder?
@@ -28,10 +35,11 @@ var g_failed : bool = false
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
 
-[init]
+[macro_function]
 def private init_jit
     return if is_in_completion() || is_compiling_macros()
     return if g_builder != null    // prevent double init
+    g_failed = false
     g_mod = LLVMModuleCreateWithName("llvm_jit_module")
     g_builder = LLVMCreateBuilder()
     LLVMLinkInMCJIT()
@@ -49,17 +57,27 @@ def private init_jit
             [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jc, get_jit_call_or_fastcall())
 
-
-[finalize]
+[macro_function]
 def private finalize_jit
     return if is_in_completion() || is_compiling_macros()
     return if g_builder == null    // prevent double finalize
     if LLVM_LOG_RESULT
         LLVMDumpModule(g_mod)
         fflush(fstderr())
-    g_mod = null
-    LLVMDisposeBuilder(g_builder); g_builder = null
-    LLVMDisposeExecutionEngine(g_engine); g_engine = null
+    g_all_engines |> push([[ JitEngine
+        mod <- g_mod,
+        engine <- g_engine,
+        builder <- g_builder
+    ]])
+
+[finalize]
+def private finalize_all_jit
+    for je in g_all_engines
+        LLVMDisposeExecutionEngine(je.engine); je.engine = null
+        LLVMDisposeBuilder(je.builder); je.builder = null
+        // TODO: figure out why this crashes
+        // LLVMDisposeModule(je.mod); je.mod = null
+    delete g_all_engines
 
 struct private IteBlock
     if_true  : LLVMOpaqueBasicBlock?
@@ -87,9 +105,10 @@ class LlvmJitVisitor : AstVisitor
     sbstack : array<LLVMOpaqueBasicBlock?>
     loop_stack : array<LoopBlock>
     [[do_not_delete]] local_stack : LLVMOpaqueValue?
+    [[do_not_delete]] jit_context : Context?
 
-    def LlvmJitVisitor
-        pass
+    def LlvmJitVisitor ( ctx:Context? )
+        jit_context = ctx
 
     def append_basic_block ( name:string; add_to_phi:bool=false )
         var blk = LLVMAppendBasicBlock(ffunc,name)
@@ -248,7 +267,7 @@ class LlvmJitVisitor : AstVisitor
             LLVMBuildStore2(g_builder, LLVMPointerType(LLVMVoidType(),0u), src, tdst)
         else
             build_copy(tdst, expr)
-        return blk
+        return expr
 
     def override visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
         if expr.varFlags._block
@@ -601,7 +620,7 @@ class LlvmJitVisitor : AstVisitor
 
 // if-then-else
     def override preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : void
-        var before_if = append_basic_block("if_cond_at_{expr.at.line}")
+        var before_if = append_basic_block("if_cond_at_{int(expr.at.line)}")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder, before_if)
         let itt = is_terminator_or_break_expression(expr.if_true)
@@ -723,7 +742,10 @@ class LlvmJitVisitor : AstVisitor
                 unsafe
                     let mangled_name = get_mangled_name(FunctionPtr(expr.func))
                     let MNH = hash(mangled_name)
-                    MNH_ADDR = get_function_address(MNH)
+                    MNH_ADDR = get_function_address(MNH,*jit_context)
+
+                if MNH_ADDR==0ul
+                    failed_E(expr, "missing function pointer for {expr.func.name}")
 
                 var params <- [{LLVMOpaqueValue?
                     LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0);             // SimFunction *
@@ -778,14 +800,6 @@ class LlvmJitVisitor : AstVisitor
         var lblk = loop_stack |> back()
         loop_stack |> pop()
 
-        for svar,ssrc in expr.iteratorVariables,expr.sources
-            if ssrc._type.isRange
-                var svar_v = LLVMBuildLoad2(g_builder, type_to_llvm_type(svar._type), getV(svar), "")
-                svar_v = LLVMBuildAdd(g_builder, svar_v, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
-                LLVMBuildStore2(g_builder, type_to_llvm_type(svar._type), svar_v, getV(svar))
-            else
-                failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
-
         LLVMBuildBr(g_builder, lblk.loop_start)
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_end)
         if expr.body is ExprBlock
@@ -825,8 +839,20 @@ class LlvmJitVisitor : AstVisitor
             else
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
 
-        LLVMBuildBr(g_builder, lblk.loop_start)
+        var for_iterate = LLVMAppendBasicBlock(ffunc, "for_body_loop")
+        LLVMBuildBr(g_builder, for_iterate)
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_start)
+
+        for svar,ssrc in expr.iteratorVariables,expr.sources
+            if ssrc._type.isRange
+                var svar_v = LLVMBuildLoad2(g_builder, type_to_llvm_type(svar._type), getV(svar), "")
+                svar_v = LLVMBuildAdd(g_builder, svar_v, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+                LLVMBuildStore2(g_builder, type_to_llvm_type(svar._type), svar_v, getV(svar))
+            else
+                failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
+
+        LLVMBuildBr(g_builder, for_iterate)
+        LLVMPositionBuilderAtEnd(g_builder, for_iterate)
 
         for svar,ssrc in expr.iteratorVariables,expr.sources
             if ssrc._type.isRange
@@ -986,10 +1012,10 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, LLVMConstPointerNull(LLVMVoidType()))
         return expr
 
-def public generate_llvm ( fn : FunctionPtr )
+[macro_function]
+def private generate_llvm ( ctx:Context?; fn : FunctionPtr )
     return if is_in_completion() || is_compiling_macros()
-    init_jit()  // we can't be sure init is called before this
-    var astVisitor = new LlvmJitVisitor()
+    var astVisitor = new LlvmJitVisitor(ctx)
     unsafe
         astVisitor.adapter <- make_visitor(*astVisitor)
     visit(fn, astVisitor.adapter)
@@ -1003,14 +1029,15 @@ def public generate_llvm ( fn : FunctionPtr )
     unsafe
         delete astVisitor
 
-def public generate_llvm_code ( fmna:string )
+[macro_function]
+def private generate_llvm_code ( fmna:string )
     return null if is_in_completion() || is_compiling_macros()
     return null if g_failed
     var code = LLVMGetFunctionAddress(g_engine, fmna)
     to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")  if code==0ul
     return unsafe(reinterpret<void?> code)
 
-[init(tag=optimize_llvm_jit)]
+[macro_function]
 def private optimize_llvm_module
     return if is_in_completion() || is_compiling_macros()
     return if g_failed || !LLVM_ENABLE_OPT_PASS
@@ -1023,49 +1050,28 @@ def private optimize_llvm_module
     LLVMDisposePassManager(pm)
     LLVMPassManagerBuilderDispose(pmb)
 
-[function_macro(name="jit_llvm")]
-class Jit_LLVM_Macro : AstFunctionAnnotation
-    def generate_jit ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        var funt <- function_to_type(func); defer_delete(funt)
-        var efun <- qmacro( @@ <$t(funt)> $i(func.name) ); defer_delete(efun)
-        let emod = string(compiling_module().name)
-        let fmna = get_mangled_name(func)
-        var qres <- qmacro_block() <|
-            unsafe
-                if get_ptr(this_program()) != null
-                    var fnptr <- find_module_function_via_rtti(find_module_via_rtti(this_program(),$v(emod)),$e(efun))
-                    generate_llvm(fnptr)
-                    fnptr := null
-                else
-                    panic("missing 'options rtti'")
-        var reg <- setup_call_list("all`things`jit", func.at) <| $ ( fn )
-            fn.flags |= FunctionFlags init | FunctionFlags privateFunction
-            fn.moreFlags |= MoreFunctionFlags lateInit
-            append_annotation(fn,"$","init",[{auto
-                [[auto "after", [[RttiValue tString="optimize_llvm_jit"]] ]]
-            }])
-        reg.list |> emplace(qres)
-        var qres_late <- qmacro_block() <|
-            unsafe
-                var gen = generate_llvm_code($v(fmna))
-                if gen != null
-                    gen |> instrument_jit(reinterpret<function> $e(efun))
-                else
-                    remove_jit(reinterpret<function> $e(efun))
-        var reg_late <- setup_call_list("all`things`jit`late", func.at) <| $ ( fn )
-            fn.flags |= FunctionFlags init | FunctionFlags privateFunction
-            fn.moreFlags |= MoreFunctionFlags lateInit
-            append_annotation(fn,"$","init",[{auto
-                [[auto "before", [[RttiValue tString="optimize_llvm_jit"]] ]]
-            }])
-        reg_late.list |> emplace(qres_late)
+[simulate_macro(name="jit_llvm")]
+class JIT_LLVM : AstSimulateMacro
+    def override simulate ( prog:Program?; var ctx:Context? ) : bool
+        return true if is_in_completion() || is_compiling_macros()
+        init_jit()
+        prog |> for_each_module <| $ ( mod )
+            mod |> for_each_function("") <| $ ( fun )
+                if fun.moreFlags.requestJit
+                    generate_llvm(ctx, fun)
+        optimize_llvm_module()
+        prog |> for_each_module <| $ ( mod )
+            mod |> for_each_function("") <| $ ( fun )
+                if fun.moreFlags.requestJit
+                    var mangled_name = get_mangled_name(fun)
+                    let MNH = hash(mangled_name)
+                    var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
+                    var gen = generate_llvm_code(mangled_name)
+                    unsafe
+                        if gen != null
+                            gen |> instrument_jit(simfun)
+                        else
+                            remove_jit(simfun)
+        finalize_jit()
         return true
-    def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        return true if is_in_completion()
-        // func.sideEffectFlags |= bitfield(int(SideEffects userScenario))
-        return true if func.isGeneric
-        return generate_jit(func, group, args, errors)
-    def override generic_apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        return true if is_in_completion()
-        return generate_jit(func, group, args, errors)
 

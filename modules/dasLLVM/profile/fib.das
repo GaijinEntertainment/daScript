@@ -2,13 +2,13 @@ require dastest/testing_boost
 require llvm/llvm_jit
 require testProfile
 
-[jit_llvm,sideeffects]
+[jit,sideeffects]
 def fibR_jit(n:int)
     if (n < 2)
         return n
     return fibR_jit(n - 1) + fibR_jit(n - 2)
 
-[jit_llvm,sideeffects]
+[jit,sideeffects]
 def fibI_jit(n:int)
     var last = 0
     var cur = 1

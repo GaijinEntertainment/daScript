@@ -2,21 +2,21 @@ require dastest/testing_boost
 require llvm/llvm_jit
 
 
-[jit_llvm]
+[jit]
 def range_for ( value:int )
     var i = 0
     for _ in range(0,value)
         i ++
     return i
 
-[jit_llvm]
+[jit]
 def range_for_range ( value:range )
     var i = 0
     for _ in value
         i ++
     return i
 
-[jit_llvm]
+[jit]
 def range_for_range_extra ( value:range )
     var i = 0
     for a,b in value,range(13,100500)
@@ -24,7 +24,7 @@ def range_for_range_extra ( value:range )
     return i
 
 
-[jit_llvm]
+[jit]
 def range_for_with_break ( value,max_value:int )
     var i = 0
     for _ in range(0,value)
@@ -33,7 +33,7 @@ def range_for_with_break ( value,max_value:int )
         i ++
     return i
 
-[jit_llvm]
+[jit]
 def range_for_with_continue ( value,max_value:int )
     var i = 0
     var j = 0
@@ -44,7 +44,7 @@ def range_for_with_continue ( value,max_value:int )
         j ++
     return j
 
-[jit_llvm]
+[jit]
 def range_for_with_finally ( value:int )
     var i = 0
     var tf = 0

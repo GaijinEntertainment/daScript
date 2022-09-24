@@ -6,23 +6,23 @@ require daslib/faker
 
 require daslib/constant_expression
 
-[jit_llvm]
+[jit]
 def add_jit (a,b)
     return a + b
 
-[jit_llvm]
+[jit]
 def sub_jit (a,b)
     return a - b
 
-[jit_llvm]
+[jit]
 def mul_jit (a,b)
     return a * b
 
-[jit_llvm]
+[jit]
 def div_jit (a,b)
     return a / b
 
-[jit_llvm]
+[jit]
 def mod_jit (a,b)
     return a % b
 
@@ -48,31 +48,31 @@ def test_mod( t:T?; a,b:auto(TT) )
     if b != TT()
         t |> strictEqual ( a % b, mod_jit(a,b), "{a} % {b}" )
 
-[jit_llvm]
+[jit]
 def add_equ_jit (a,b)
     var c = a
     c += b
     return c
 
-[jit_llvm]
+[jit]
 def sub_equ_jit (a,b)
     var c = a
     c -= b
     return c
 
-[jit_llvm]
+[jit]
 def mul_equ_jit (a,b)
     var c = a
     c *= b
     return c
 
-[jit_llvm]
+[jit]
 def div_equ_jit (a,b)
     var c = a
     c /= b
     return c
 
-[jit_llvm]
+[jit]
 def mod_equ_jit (a,b)
     var c = a
     c %= b
@@ -164,20 +164,20 @@ def fuzz_numeric_op1 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_float )
     invoke ( funcname, t, fake |> random_double )
 
-[jit_llvm]
+[jit]
 def post_inc_jit (var a)
     return a++
 
-[jit_llvm]
+[jit]
 def post_dec_jit (var a)
     return a--
 
-[jit_llvm]
+[jit]
 def pre_inc_jit (var a)
     ++a
     return a
 
-[jit_llvm]
+[jit]
 def pre_dec_jit (var a)
     --a
     return a

@@ -2,13 +2,13 @@ require dastest/testing_boost
 
 require llvm/llvm_jit
 
-[jit_llvm]
+[jit]
 def inc_local_ref ( var a : int& )
     unsafe
         var b & = a
         return b++
 
-[jit_llvm]
+[jit]
 def inc_arg_ref ( var a : int& )
     return a++
 

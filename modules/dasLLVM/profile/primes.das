@@ -2,14 +2,14 @@ require dastest/testing_boost
 require llvm/llvm_jit
 require testProfile
 
-[jit_llvm,sideeffects]
+[jit,sideeffects]
 def isprime_jit(n:int)
     for i in range(2, n)
         if (n % i == 0)
             return false
     return true
 
-[jit_llvm,sideeffects]
+[jit,sideeffects]
 def primes_jit(n:int)
     var count = 0
     for i in range(2, n+1)
@@ -17,7 +17,7 @@ def primes_jit(n:int)
             ++count
     return count
 
-[jit_llvm,sideeffects]
+[jit,sideeffects]
 def primesI_jit(n:int)
     var count = 0
     for i in range(2, n+1)

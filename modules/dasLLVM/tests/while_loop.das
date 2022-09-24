@@ -2,14 +2,14 @@ require dastest/testing_boost
 require llvm/llvm_jit
 
 
-[jit_llvm]
+[jit]
 def count ( value:int )
     var i = 0
     while i < value
         i ++
     return i
 
-[jit_llvm]
+[jit]
 def count_with_break ( value,max_value:int )
     var i = 0
     while i < value
@@ -18,7 +18,7 @@ def count_with_break ( value,max_value:int )
         i ++
     return i
 
-[jit_llvm]
+[jit]
 def count_with_continue ( value,max_value:int )
     var i = 0
     var j = 0
@@ -29,7 +29,7 @@ def count_with_continue ( value,max_value:int )
         j ++
     return j
 
-[jit_llvm]
+[jit]
 def count_with_finally ( value:int )
     var i = 0
     var tf = 0
