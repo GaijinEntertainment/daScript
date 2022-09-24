@@ -372,6 +372,39 @@ public:
   }
 };
 
+class AstSimulateMacro_Adapter {
+protected:
+  enum {
+    __fn_preSimulate = 0,
+    __fn_simulate = 1,
+  };
+protected:
+  int _das_class_method_offset[2];
+public:
+  AstSimulateMacro_Adapter ( const StructInfo * info ) {
+      _das_class_method_offset[__fn_preSimulate] = adapt_field_offset("preSimulate",info);
+      _das_class_method_offset[__fn_simulate] = adapt_field_offset("simulate",info);
+  }
+  __forceinline Func get_preSimulate ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_preSimulate]);
+  }
+  __forceinline bool invoke_preSimulate ( Context * __context__, Func __funcCall__, void * self, Program * const  prog, Context * const  ctx ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,Program * const ,Context * const >
+        (__context__,nullptr,__funcCall__,
+          self,prog,ctx);
+  }
+  __forceinline Func get_simulate ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_simulate]);
+  }
+  __forceinline bool invoke_simulate ( Context * __context__, Func __funcCall__, void * self, Program * const  prog, Context * const  ctx ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,Program * const ,Context * const >
+        (__context__,nullptr,__funcCall__,
+          self,prog,ctx);
+  }
+};
+
 class AstReaderMacro_Adapter {
 protected:
   enum {

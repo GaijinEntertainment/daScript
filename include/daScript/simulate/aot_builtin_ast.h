@@ -473,6 +473,8 @@ namespace das {
     void addModuleForLoopMacro ( Module * module, ForLoopMacroPtr & _newM, Context * );
     CaptureMacroPtr makeCaptureMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleCaptureMacro ( Module * module, CaptureMacroPtr & _newM, Context * );
+    SimulateMacroPtr makeSimulateMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
+    void addModuleSimulateMacro ( Module * module, SimulateMacroPtr & _newM, Context * );
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & ann, Context * context );
     FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
     StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );

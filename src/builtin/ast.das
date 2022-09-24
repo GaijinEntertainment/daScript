@@ -27,6 +27,7 @@ typedef
     TypeInfoMacroPtr = smart_ptr<TypeInfoMacro>
     ForLoopMacroPtr = smart_ptr<ForLoopMacro>
     CaptureMacroPtr = smart_ptr<CaptureMacro>
+    SimulateMacroPtr = smart_ptr<SimulateMacro>
 
 [generic]
 def describe ( decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true )
@@ -107,6 +108,11 @@ class AstForLoopMacro
 class AstCaptureMacro
     def abstract captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; etype:TypeDeclPtr ) : ExpressionPtr
     def abstract captureFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
+
+[macro_interface]
+class AstSimulateMacro
+    def abstract preSimulate ( prog:Program?; ctx:Context? ) : bool
+    def abstract simulate ( prog:Program?; ctx:Context? ) : bool
 
 [macro_interface]
 class AstReaderMacro
@@ -696,6 +702,18 @@ def make_capture_macro ( name : string; someClassPtr ) : CaptureMacroPtr
         concept_assert(false,"expecting pointer to class")
         return [[CaptureMacroPtr]]
 
+var private gc_root_AstSimulateMacro : array<AstSimulateMacro?>
+
+[macro_function]
+def make_simulate_macro ( name : string; someClassPtr ) : SimulateMacroPtr
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        gc_root_AstSimulateMacro |> push(someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return make_simulate_macro(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return [[SimulateMacroPtr]]
+
 [macro_function]
 def add_new_block_annotation ( name:string; someClassPtr )
     var ann <- make_block_annotation(name, someClassPtr)
@@ -749,6 +767,13 @@ def add_new_for_loop_macro ( name:string; someClassPtr )
 def add_new_capture_macro ( name:string; someClassPtr )
     var ann <- make_capture_macro(name, someClassPtr)
     this_module() |> add_capture_macro(ann)
+    unsafe
+        delete ann
+
+[macro_function]
+def add_new_simulate_macro ( name:string; someClassPtr )
+    var ann <- make_simulate_macro(name, someClassPtr)
+    this_module() |> add_simulate_macro(ann)
     unsafe
         delete ann
 

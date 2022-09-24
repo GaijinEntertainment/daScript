@@ -1110,6 +1110,44 @@ namespace das {
         }
     };
 
+    struct SimulateMacroAdapter : SimulateMacro, AstSimulateMacro_Adapter {
+        SimulateMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : SimulateMacro(n), AstSimulateMacro_Adapter(info), classPtr(pClass), context(ctx) {
+        }
+        virtual bool preSimulate ( Program * prog, Context * ctx ) override {
+            if ( auto fnPreSimulate = get_preSimulate(classPtr) ) {
+                bool result;
+                runMacroFunction(context, "preSimulate", [&]() {
+                    result = invoke_preSimulate(context,fnPreSimulate,classPtr,prog,ctx);
+                });
+                return result;
+            } else {
+                return true;
+            }
+        }
+        virtual bool simulate ( Program * prog, Context * ctx ) override {
+            if ( auto fnSimulate = get_simulate(classPtr) ) {
+                bool result;
+                runMacroFunction(context, "simulate", [&]() {
+                    invoke_simulate(context,fnSimulate,classPtr,prog,ctx);
+                });
+                return result;
+            } else {
+                return true;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
+
+    struct AstSimulateMacroAnnotation : ManagedStructureAnnotation<SimulateMacro,false,true> {
+        AstSimulateMacroAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("SimulateMacro", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+        }
+    };
+
     struct ReaderMacroAdapter : ReaderMacro, AstReaderMacro_Adapter {
         ReaderMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : ReaderMacro(n), AstReaderMacro_Adapter(info), classPtr(pClass), context(ctx) {
@@ -1516,6 +1554,15 @@ namespace das {
         module->captureMacros.push_back(newM);
     }
 
+    SimulateMacroPtr makeSimulateMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<SimulateMacroAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleSimulateMacro ( Module * module, SimulateMacroPtr & _newM, Context * ) {
+        SimulateMacroPtr newM = move(_newM);
+        module->simulateMacros.push_back(newM);
+    }
+
     void addModuleInferMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
         PassMacroPtr newM = move(_newM);
         module->macros.push_back(newM);
@@ -1869,6 +1916,14 @@ namespace das {
                 ->args({"name","class","info","context"});
         addExtern<DAS_BIND_FUN(addModuleCaptureMacro)>(*this, lib,  "add_capture_macro",
             SideEffects::modifyExternal, "addModuleCaptureMacro")
+                ->args({"module","annotation","context"});
+        // simulate macro macro
+        addAnnotation(make_smart<AstSimulateMacroAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(makeSimulateMacro)>(*this, lib,  "make_simulate_macro",
+            SideEffects::modifyExternal, "makeSimulateMacro")
+                ->args({"name","class","info","context"});
+        addExtern<DAS_BIND_FUN(addModuleSimulateMacro)>(*this, lib,  "add_simulate_macro",
+            SideEffects::modifyExternal, "addModuleSimulateMacro")
                 ->args({"module","annotation","context"});
     }
 }

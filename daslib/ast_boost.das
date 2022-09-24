@@ -331,6 +331,9 @@ class SetupForLoopMacro : SetupAnyAnnotation
 class SetupCaptureMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_capture_macro"
 
+class SetupSimulateMacro : SetupAnyAnnotation
+    override annotation_function_call : string = "add_new_simulate_macro"
+
 class SetupCallMacro : SetupAnyAnnotation
     override annotation_function_call : string = "add_new_call_macro"
 
@@ -734,6 +737,7 @@ def private setup
         add_new_structure_annotation("variant_macro",new SetupVariantMacro())
         add_new_structure_annotation("for_loop_macro",new SetupForLoopMacro())
         add_new_structure_annotation("capture_macro",new SetupCaptureMacro())
+        add_new_structure_annotation("simulate_macro",new SetupSimulateMacro())
         add_new_structure_annotation("tag_structure",new TagStructureAnnotation())
         add_new_structure_annotation("tag_function_macro",new TagFunctionMacro())
         add_new_structure_annotation("infer_macro",new SetupInferMacro())

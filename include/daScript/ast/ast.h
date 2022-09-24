@@ -58,6 +58,9 @@ namespace das
     struct CaptureMacro;
     typedef smart_ptr<CaptureMacro> CaptureMacroPtr;
 
+    struct SimulateMacro;
+    typedef smart_ptr<SimulateMacro> SimulateMacroPtr;
+
     struct AnnotationArgumentList;
 
     //      [annotation (value,value,...,value)]
@@ -988,6 +991,7 @@ namespace das
         vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
         vector<ForLoopMacroPtr>                     forLoopMacros;      // for loop macros (for every for loop)
         vector<CaptureMacroPtr>                     captureMacros;      // lambda capture macros
+        vector<SimulateMacroPtr>                    simulateMacros;     // simulate macros (every time we simulate context)
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         CommentReaderPtr                            commentReader;      // /* blah */ or // blah
         string  name;
@@ -1119,6 +1123,13 @@ namespace das
         virtual ExpressionPtr visitIs     (  Program *, Module *, ExprIsVariant * ) { return nullptr; }
         virtual ExpressionPtr visitAs     (  Program *, Module *, ExprAsVariant * ) { return nullptr; }
         virtual ExpressionPtr visitSafeAs (  Program *, Module *, ExprSafeAsVariant * ) { return nullptr; }
+        string name;
+    };
+
+    struct SimulateMacro : ptr_ref_count {
+        SimulateMacro ( const string na = "" ) : name(na) {}
+        virtual bool preSimulate ( Program *, Context * ) { return true; }
+        virtual bool simulate ( Program *, Context * ) { return true; }
         string name;
     };
 
