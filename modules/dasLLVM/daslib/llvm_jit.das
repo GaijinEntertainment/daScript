@@ -110,6 +110,21 @@ class LlvmJitVisitor : AstVisitor
     def LlvmJitVisitor ( ctx:Context? )
         jit_context = ctx
 
+    def add_llvm_functions ( fun : FunctionPtr )
+        fnmna = get_mangled_name(fun)
+        // implementation function
+        var fun_args <-  [{for a in fun.arguments; type_to_llvm_abi_type(a._type)}]
+        fun_args |> push(LLVMPointerType(LLVMVoidType(), 0u))  // context
+        var fun_type = LLVMFunctionType(type_to_llvm_abi_type(fun.result), fun_args)
+        ffunc = LLVMAddFunction(g_mod, "{fnmna} implementation", fun_type)
+        // wrapper function
+        var ret_type = LLVMFunctionType(LLVMFloat4Type(),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // context
+            LLVMPointerType(LLVMFloat4Type(),0u);               // args
+            LLVMPointerType(LLVMVoidType(),0u)                  // cmres
+        ]])
+        wfunc = LLVMAddFunction(g_mod, fnmna, ret_type)
+
     def append_basic_block ( name:string; add_to_phi:bool=false )
         var blk = LLVMAppendBasicBlock(ffunc,name)
         subblocks[blk] = blk
@@ -199,21 +214,11 @@ class LlvmJitVisitor : AstVisitor
         assert(g_builder!=null, "missing builder")
         thisFunc = get_ptr(fun)
         fnmna = get_mangled_name(fun)
-        // implementation function
-        var fun_args <-  [{for a in fun.arguments; type_to_llvm_abi_type(a._type)}]
-        fun_args |> push(LLVMPointerType(LLVMVoidType(), 0u))  // context
-        var fun_type = LLVMFunctionType(type_to_llvm_abi_type(fun.result), fun_args)
-        ffunc = LLVMAddFunction(g_mod, "{fnmna} implementation", fun_type)
-        // wrapper function
-        var ret_type = LLVMFunctionType(LLVMFloat4Type(),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // context
-            LLVMPointerType(LLVMFloat4Type(),0u);               // args
-            LLVMPointerType(LLVMVoidType(),0u)                  // cmres
-        ]])
-        wfunc = LLVMAddFunction(g_mod, fnmna, ret_type)
+        ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
+        wfunc = LLVMGetNamedFunction(g_mod, fnmna)
+        // build wrapper function
         var wentry = LLVMAppendBasicBlock(wfunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, wentry)
-        // build wrapper function
         var wargs : array<LLVMOpaqueValue?>
         var args = LLVMGetParam(wfunc, 1u)
         for a,ai in fun.arguments, range(100500)
@@ -715,7 +720,7 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
         if !expr.func.flags.builtIn
-            if get_ptr(expr.func)==thisFunc     // recursive call or jit call
+            if expr.func.moreFlags.requestJit
                 var params <- [{for a in expr.arguments; getE(a)}]
                 params |> push(LLVMGetParam(ffunc, uint(length(expr.arguments)))) // context
                 let fmna = get_mangled_name(FunctionPtr(expr.func))
@@ -1055,23 +1060,28 @@ class JIT_LLVM : AstSimulateMacro
     def override simulate ( prog:Program?; var ctx:Context? ) : bool
         return true if is_in_completion() || is_compiling_macros()
         init_jit()
+        var funcs : array<FunctionPtr>
+        var fake_visitor = new LlvmJitVisitor(ctx)
         prog |> for_each_module <| $ ( mod )
             mod |> for_each_function("") <| $ ( fun )
                 if fun.moreFlags.requestJit
-                    generate_llvm(ctx, fun)
+                    fake_visitor->add_llvm_functions(fun)
+                    funcs |> emplace(fun)
+        unsafe
+            delete fake_visitor
+        for fun in funcs
+            generate_llvm(ctx, fun)
         optimize_llvm_module()
-        prog |> for_each_module <| $ ( mod )
-            mod |> for_each_function("") <| $ ( fun )
-                if fun.moreFlags.requestJit
-                    var mangled_name = get_mangled_name(fun)
-                    let MNH = hash(mangled_name)
-                    var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
-                    var gen = generate_llvm_code(mangled_name)
-                    unsafe
-                        if gen != null
-                            gen |> instrument_jit(simfun)
-                        else
-                            remove_jit(simfun)
+        for fun in funcs
+            var mangled_name = get_mangled_name(fun)
+            let MNH = hash(mangled_name)
+            var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
+            var gen = generate_llvm_code(mangled_name)
+            unsafe
+                if gen != null
+                    gen |> instrument_jit(simfun)
+                else
+                    remove_jit(simfun)
         finalize_jit()
         return true
 
