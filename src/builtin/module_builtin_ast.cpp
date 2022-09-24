@@ -230,6 +230,13 @@ namespace das {
         return int32_t(((Table *) _tab)->size);
     }
 
+    void for_each_module ( Program * prog, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
+        prog->library.foreach_in_order([&](auto mod){
+            das_invoke<void>::invoke<Module *>(context,at,block,mod);
+            return true;
+        },prog->thisModule.get());
+    }
+
     void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDeclPtr> & block, Context * context, LineInfoArg * at ) {
         mod->aliasTypes.foreach([&](auto aliasType){
             das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,at,block,aliasType->alias.c_str(),aliasType);
@@ -425,6 +432,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(compileModule)>(*this, lib,  "compiling_module",
             SideEffects::accessExternal, "compileModule")
                 ->arg("context");;
+        addExtern<DAS_BIND_FUN(for_each_module)>(*this, lib,  "for_each_module",
+            SideEffects::accessExternal, "for_each_module")
+                ->args({"program","block","context","line"});
         addExtern<DAS_BIND_FUN(forEachFunction)>(*this, lib,  "for_each_function",
             SideEffects::accessExternal, "forEachFunction")
                 ->args({"module","name","block","context","line"});

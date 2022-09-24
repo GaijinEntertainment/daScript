@@ -1048,7 +1048,7 @@ namespace das {
             addFieldEx ( "flags", "flags",
                 offsetof(Function, flags), makeFunctionFlags() );
             addFieldEx ( "moreFlags", "moreFlags",
-                offsetof(Function, flags), makeMoreFunctionFlags() );
+                offsetof(Function, moreFlags), makeMoreFunctionFlags() );
             addFieldEx ( "sideEffectFlags", "sideEffectFlags",
                 offsetof(Function, sideEffectFlags), makeFunctionSideEffectFlags() );
             addField<DAS_BIND_MANAGED_FIELD(inferStack)>("inferStack");

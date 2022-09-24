@@ -1129,7 +1129,7 @@ namespace das {
             if ( auto fnSimulate = get_simulate(classPtr) ) {
                 bool result;
                 runMacroFunction(context, "simulate", [&]() {
-                    invoke_simulate(context,fnSimulate,classPtr,prog,ctx);
+                    result = invoke_simulate(context,fnSimulate,classPtr,prog,ctx);
                 });
                 return result;
             } else {

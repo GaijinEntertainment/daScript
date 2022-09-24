@@ -773,6 +773,7 @@ namespace das
                 bool    needStringCast : 1;
                 bool    aotHashDeppendsOnArguments : 1;
                 bool    lateInit : 1;
+                bool    requestJit : 1;
             };
             uint32_t moreFlags = 0;
 

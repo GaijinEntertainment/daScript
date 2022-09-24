@@ -70,6 +70,14 @@ namespace das
         };
     };
 
+    struct RequestJitFunctionAnnotation : MarkFunctionAnnotation {
+        RequestJitFunctionAnnotation() : MarkFunctionAnnotation("jit") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->requestJit = true;
+            return true;
+        };
+    };
+
     struct UnsafeDerefFunctionAnnotation : MarkFunctionAnnotation {
         UnsafeDerefFunctionAnnotation() : MarkFunctionAnnotation("unsafe_deref") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -1033,10 +1041,6 @@ namespace das
         return (void *) &jit_call_or_fastcall;
     }
 
-    uint64_t das_get_SimFunction_by_MNH ( uint64_t MNH, Context * context ) {
-        return (uint64_t) context->fnByMangledName(MNH);
-    }
-
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1050,6 +1054,7 @@ namespace das
         addAnnotation(make_smart<GenericFunctionAnnotation>());
         addAnnotation(make_smart<MacroFunctionAnnotation>());
         addAnnotation(make_smart<MacroFnFunctionAnnotation>());
+        addAnnotation(make_smart<RequestJitFunctionAnnotation>());
         addAnnotation(make_smart<ExportFunctionAnnotation>());
         addAnnotation(make_smart<NoLintFunctionAnnotation>());
         addAnnotation(make_smart<SideEffectsFunctionAnnotation>());
@@ -1405,9 +1410,6 @@ namespace das
             SideEffects::none, "das_get_jit_exception");
         addExtern<DAS_BIND_FUN(das_get_jit_call_or_fastcall)>(*this, lib, "get_jit_call_or_fastcall",
             SideEffects::none, "das_get_jit_call_or_fastcall");
-        addExtern<DAS_BIND_FUN(das_get_SimFunction_by_MNH)>(*this, lib, "get_function_address",
-            SideEffects::none, "das_get_SimFunction_by_MNH")
-                ->args({"MNH","at"});
         addExtern<DAS_BIND_FUN(das_get_eval_top_offset)>(*this, lib, "get_jit_context_eval_top_offset",
             SideEffects::none, "das_get_eval_top_offset");
 

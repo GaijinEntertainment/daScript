@@ -1129,6 +1129,11 @@ namespace das {
         return Func(context->fnByMangledName(MNH));
     }
 
+    Func builtin_getFunctionByMnh_inContext ( uint64_t MNH, Context & context ) {
+        return Func(context.fnByMangledName(MNH));
+    }
+
+
     uint64_t builtin_getFunctionMnh ( Func func, Context * ) {
         return func.PTR ? func.PTR->mangledNameHash : 0;
     }
@@ -1148,6 +1153,10 @@ namespace das {
     void lockAnyMutex ( recursive_mutex & rm, const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
         lock_guard<recursive_mutex> guard(rm);
         context->invoke(block, nullptr, nullptr, lineInfo);
+    }
+
+    uint64_t das_get_SimFunction_by_MNH ( uint64_t MNH, Context & context ) {
+        return (uint64_t) context.fnByMangledName(MNH);
     }
 
     class Module_Rtti : public Module {
@@ -1360,6 +1369,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_getFunctionByMnh)>(*this, lib, "get_function_by_mangled_name_hash",
                 SideEffects::none, "builtin_getFunctionByMnh")
                     ->args({"src","context"});
+            addExtern<DAS_BIND_FUN(builtin_getFunctionByMnh_inContext)>(*this, lib, "get_function_by_mangled_name_hash",
+                SideEffects::none, "builtin_getFunctionByMnh_inContext")
+                    ->args({"src","context"});
             addExtern<DAS_BIND_FUN(builtin_getFunctionMnh)>(*this, lib, "get_function_mangled_name_hash",
                 SideEffects::none, "builtin_getFunctionMnh")
                     ->args({"src","context"});
@@ -1373,6 +1385,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(lockAnyMutex)>(*this, lib,  "lock_mutex",
                 SideEffects::worstDefault, "lockAnyMutex")
                     ->args({"mutex","block","context","line"});
+            // in context
+            addExtern<DAS_BIND_FUN(das_get_SimFunction_by_MNH)>(*this, lib, "get_function_address",
+                SideEffects::none, "das_get_SimFunction_by_MNH")
+                    ->args({"MNH","at"});
             // extras
             registerVectorFunctions<AnnotationList>::init(this,lib,false,true);
             registerVectorFunctions<AnnotationArgumentList>::init(this,lib,false,false);

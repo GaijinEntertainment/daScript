@@ -269,6 +269,9 @@ namespace das {
                 if ( fn->aotHashDeppendsOnArguments ) {
                     ss << "[aot_hash_deppends_on_arguments]";
                 }
+                if ( fn->requestJit ) {
+                    ss << "[jit]";
+                }
                 ss << "\n";
             }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
