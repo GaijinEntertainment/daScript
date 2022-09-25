@@ -820,6 +820,7 @@ namespace das
             }
             return this;
         }
+        virtual void * getBuiltinAddress() const { return nullptr; }
     public:
         void construct (const vector<TypeDeclPtr> & args );
         void constructExternal (const vector<TypeDeclPtr> & args );

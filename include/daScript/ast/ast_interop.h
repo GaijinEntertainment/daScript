@@ -67,6 +67,7 @@ namespace das
             const char * fnName = context.code->allocateName(this->name);
             return context.code->makeNode<SimNode_InteropFuncCall<func>>(BuiltInFunction::at,fnName);
         }
+        virtual void * getBuiltinAddress() const override { return (void *) &func; }
     };
 
     struct defaultTempFn {

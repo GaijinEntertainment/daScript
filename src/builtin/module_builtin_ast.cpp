@@ -395,6 +395,32 @@ namespace das {
         return st.back().get();
     }
 
+    void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at ) {
+        if ( !fn ) context->throw_error_at(*at, "expecting function");
+        if ( !fn->builtIn || !fn->interopFn ) context->throw_error_at(*at, "expecting built-in interop function");
+        return ((BuiltInFunction *)fn)->getBuiltinAddress();
+    }
+
+    void * das_make_interop_node ( Context & ctx, ExprCall * call, Context * context, LineInfoArg * at ) {
+        if ( !call ) context->throw_error_at(*at, "expecting function call");
+        auto fn = call->func;
+        if ( !fn ) context->throw_error_at(*at, "expecting function");
+        if ( !fn->builtIn || !fn->interopFn ) context->throw_error_at(*at, "expecting built-in interop function");
+        if ( !ctx.thisHelper ) context->throw_error_at(*at, "missing debug info helper. get_aot_interop_node can only be called in the SimulateMacro");
+        int nargs = (int) call->arguments.size();
+        auto node = ctx.code->makeNode<SimNode_AotInteropBase>();
+        node->argumentValues = nullptr;
+        if ( nargs ) {
+            node->types = (TypeInfo **) ctx.code->allocate(nargs * sizeof(TypeInfo*));
+            for ( int i=0; i!=nargs; ++i ) {
+                node->types[i] = ctx.thisHelper->makeTypeInfo(nullptr, call->arguments[i]->type);
+            }
+        } else {
+            node->types = nullptr;
+        }
+        return node;
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -629,6 +655,13 @@ namespace das {
         addExtern<DAS_BIND_FUN(exprReturnsOrBreaks)>(*this, lib,  "is_terminator_or_break_expression",
             SideEffects::none, "exprReturnsOrBreaks")
                 ->args({"expr"});
+        // jit
+        addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
+            SideEffects::none, "das_get_builtin_function_address")
+                ->args({"fn","context","at"});
+        addExtern<DAS_BIND_FUN(das_make_interop_node)>(*this, lib,  "make_interop_node",
+            SideEffects::none, "das_make_interop_node")
+                ->args({"ctx","call","context","at"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {

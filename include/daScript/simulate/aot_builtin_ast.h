@@ -538,6 +538,8 @@ namespace das {
     Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at );
     bool exprReturns ( const ExpressionPtr & expr );
     bool exprReturnsOrBreaks ( const ExpressionPtr & expr );
+    void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at );
+    void * das_make_interop_node ( Context & ctx, ExprCall * call, Context * context, LineInfoArg * at );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {
