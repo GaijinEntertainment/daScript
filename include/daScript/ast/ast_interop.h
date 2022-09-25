@@ -52,6 +52,7 @@ namespace das
             return context.code->makeNode<SimNodeT>(at, fnName);
 #endif
         }
+        virtual void * getBuiltinAddress() const override { return (void *) &fn; }
     };
 
     template  <InteropFunction func, typename RetT, typename ...Args>

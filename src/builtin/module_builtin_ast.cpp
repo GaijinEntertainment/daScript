@@ -397,7 +397,7 @@ namespace das {
 
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at ) {
         if ( !fn ) context->throw_error_at(*at, "expecting function");
-        if ( !fn->builtIn || !fn->interopFn ) context->throw_error_at(*at, "expecting built-in interop function");
+        if ( !fn->builtIn ) context->throw_error_at(*at, "expecting built-in interop function");
         return ((BuiltInFunction *)fn)->getBuiltinAddress();
     }
 
