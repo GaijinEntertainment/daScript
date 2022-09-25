@@ -196,6 +196,8 @@ class LlvmJitVisitor : AstVisitor
             return base_type_to_llvm_type(t.baseType)
         elif t.isVoid
             return LLVMVoidType()
+        elif t.baseType==Type fakeContext || t.baseType==Type fakeLineInfo
+            return LLVMPointerType(LLVMVoidType(),0u)
         else
             failed("type_to_llvm_abi_type: unsupported type {describe(t)} at {t.at}")
             return LLVMInt32Type()
@@ -756,7 +758,22 @@ class LlvmJitVisitor : AstVisitor
             args = LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))
         return args
 
-    def register_interop_function ( expr:smart_ptr<ExprCall> ): LLVMOpaqueValue?
+    def register_extern_function ( expr:smart_ptr<ExprCall> ) : LLVMOpaqueValue?
+        let mangled_name = get_mangled_name(FunctionPtr(expr.func))
+        var ofunc = LLVMGetNamedFunction(g_mod, mangled_name)
+        if ofunc == null
+            var arg_types : array<LLVMOpaqueType?>
+            for arg in expr.func.arguments
+                arg_types |> push(type_to_llvm_abi_type(arg._type))
+            var res_type = type_to_llvm_abi_type(expr.func.result)
+            ofunc = LLVMAddFunction(g_mod, mangled_name, LLVMFunctionType(res_type,arg_types))
+            let FUNC_PTR = get_builtin_function_address(expr.func)
+            if FUNC_PTR==null
+                failed_E(expr, "missing interop function pointer for {expr.func.name}")
+            LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
+        return ofunc
+
+    def register_interop_function ( expr:smart_ptr<ExprCall> ) : LLVMOpaqueValue?
         let mangled_name = get_mangled_name(FunctionPtr(expr.func))
         var ofunc = LLVMGetNamedFunction(g_mod, mangled_name)
         if ofunc == null
@@ -797,7 +814,17 @@ class LlvmJitVisitor : AstVisitor
                     var cres = cast_from_vec4f(expr, expr._type, ccall)
                     setE(expr, cres)
             else
-                failed_E(expr,"built-in function {expr.func.name} is not an interop function, which is not supported yet")
+                var params : array<LLVMOpaqueValue?>
+                for a in expr.arguments
+                    if a._type.baseType==Type fakeContext
+                        params |> push(LLVMGetParam(ffunc, uint(length(thisFunc.arguments))))
+                    elif a._type.baseType==Type fakeLineInfo
+                        params |> push(LLVMConstPointerNull(LLVMVoidType()))
+                    else
+                        params |> push(getE(a))
+                var func = register_extern_function(expr)
+                var ccall = LLVMBuildCall(g_builder, func, params, "")
+                setE(expr, ccall)
         else
             if expr.func.moreFlags.requestJit
                 var params <- [{for a in expr.arguments; getE(a)}]
