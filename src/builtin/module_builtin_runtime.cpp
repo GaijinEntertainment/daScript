@@ -1042,15 +1042,6 @@ namespace das
         return (void *) &jit_call_or_fastcall;
     }
 
-    vec4f jit_call_interop_function ( void * func, void * node, vec4f * args, Context * context ) {
-        auto fn = (InteropFunction *) func;
-        return (*fn) (*context, (SimNode_CallBase *)node, args);
-    }
-
-    void * das_get_jit_call_interop_function ( ) {
-        return (void *) &jit_call_interop_function;
-    }
-
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1422,9 +1413,5 @@ namespace das
             SideEffects::none, "das_get_jit_call_or_fastcall");
         addExtern<DAS_BIND_FUN(das_get_eval_top_offset)>(*this, lib, "get_jit_context_eval_top_offset",
             SideEffects::none, "das_get_eval_top_offset");
-        addExtern<DAS_BIND_FUN(das_get_jit_call_interop_function)>(*this, lib, "get_jit_call_interop_function",
-            SideEffects::none, "das_get_jit_call_interop_function");
-
-
     }
 }

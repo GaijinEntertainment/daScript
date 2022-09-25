@@ -2882,8 +2882,6 @@ namespace das {
     void * das_get_jit_exception ( );
     vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context );
     void * das_get_jit_call_or_fastcall ( );
-    vec4f jit_call_interop_function ( void * func, void * node, vec4f * args, Context * context );
-    void * das_get_jit_call_interop_function ( );
     uint32_t das_get_eval_top_offset ();
 
 }
