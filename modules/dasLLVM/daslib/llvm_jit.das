@@ -7,7 +7,6 @@ module llvm_jit shared private
 require llvm/llvm_boost
 require daslib/ast_boost
 require daslib/templates_boost
-require daslib/ast public
 require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
@@ -48,14 +47,18 @@ def private init_jit
     LLVMInitializeNativeAsmParser()
     LLVMCreateJITCompilerForModule(g_engine, g_mod, LLVM_JIT_OPT_LEVEL)
     // add default functions
-    var je = LLVMAddFunction(g_mod, "jit_exception",
+    var je = LLVMAddFunction(g_mod, "jit_exception",    // jit_exception(text,context *)
         LLVMFunctionType(LLVMVoidType(),
             [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, je, get_jit_exception())
-    var jc = LLVMAddFunction(g_mod, "jit_call_or_fastcall",
+    var jc = LLVMAddFunction(g_mod, "jit_call_or_fastcall", // jit_call_or_fastcall(func,args *,context *)
         LLVMFunctionType(LLVMFloat4Type(),
-            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jc, get_jit_call_or_fastcall())
+    var ic = LLVMAddFunction(g_mod,"jit_call_interop_function", // jit_call_interop_function(func,node *,args *,context *)
+        LLVMFunctionType(LLVMFloat4Type(),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, ic, get_jit_call_interop_function())
 
 [macro_function]
 def private finalize_jit
@@ -333,6 +336,15 @@ class LlvmJitVisitor : AstVisitor
                 var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
                 tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt1Type(), "down_to_1_bit")
+            elif bt == Type tString
+                if typeinfo(sizeof type<void?>)==8
+                    var v2 = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "ptr_vec")
+                    var tbit = LLVMBuildExtractElement(g_builder, v2, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "ptr_bits")
+                    tres = LLVMBuildIntToPtr(g_builder, tbit, LLVMPointerType(LLVMInt8Type(),0u), "cast_from_vec4f")
+                else
+                    var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
+                    tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "ptr_bits")
+                    tres = LLVMBuildIntToPtr(g_builder, tres, LLVMPointerType(LLVMInt8Type(),0u), "cast_from_vec4f")
             else
                 failed_E(expr, "unsupported cast_from_vec4f cast {describe(etype)}")
         else
@@ -351,6 +363,10 @@ class LlvmJitVisitor : AstVisitor
                 var tibit = LLVMBuildZExtOrBitCast(g_builder, tsrc, LLVMInt32Type(), "int_bit")
                 var tbit = LLVMBuildBitCast(g_builder, tibit, LLVMFloatType(), "tbit")
                 tres = LLVMBuildInsertElement(g_builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
+            elif bt==Type tInt64 || bt==Type tUInt64
+                var vvec = LLVMGetUndef(LLVMVectorType(LLVMInt64Type(), 2u))
+                var vsrc = LLVMBuildInsertElement(g_builder, vvec, tsrc, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "int64_vec")
+                tres = LLVMBuildBitCast(g_builder, vsrc, LLVMFloat4Type(), "return_result")
             elif bt==Type tFloat
                 tres = LLVMBuildInsertElement(g_builder, vres, tsrc, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
             elif bt==Type tDouble
@@ -371,6 +387,16 @@ class LlvmJitVisitor : AstVisitor
                 tres = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;2;-1}], "return_result")
             elif bt==Type tFloat4
                 tres = tsrc
+            elif bt==Type tString
+                static_if typeinfo(sizeof type<void?>)==8
+                    var vvec = LLVMGetUndef(LLVMVectorType(LLVMInt64Type(), 2u))
+                    var tval = LLVMBuildPtrToInt(g_builder, tsrc, LLVMInt64Type(), "ptr_bit")
+                    var vsrc = LLVMBuildInsertElement(g_builder, vvec, tval, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "ptr64_vec")
+                    tres = LLVMBuildBitCast(g_builder, vsrc, LLVMFloat4Type(), "return_result")
+                else
+                    var tval = LLVMBuildPtrToInt(g_builder, tsrc, LLVMInt32Type(), "ptr_bit")
+                    var tbit = LLVMBuildBitCast(g_builder, tval, LLVMFloatType(), "ptr_f_bit")
+                    tres = LLVMBuildInsertElement(g_builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
             else
                 failed("unsupported cast_to_vec4f cast {describe(etype)}")
         else
@@ -718,8 +744,57 @@ class LlvmJitVisitor : AstVisitor
     def build_null_ptr(nullT:LLVMOpaqueType?)
         return LLVMBuildPointerCast(g_builder, LLVMConstPointerNull(nullT), LLVMPointerType(LLVMVoidType(),0u), "null")
 
+    def build_array_of_arguments ( expr:smart_ptr<ExprCall> ) : LLVMOpaqueValue?
+        let nargs = length(expr.arguments)
+        var args : LLVMOpaqueValue?
+        if nargs != 0
+            args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), uint(nargs)), "args")
+            LLVMSetAlignment(args, 16u)
+            args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
+            for a,ai in expr.arguments,range(100500)
+                var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
+                var arg_val = getE(a)
+                var arg_cast_type = type_to_llvm_abi_type(a._type)
+                LLVMBuildStore2(g_builder, arg_cast_type, arg_val, arg_ptr)
+        else
+            args = LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))
+        return args
+
     def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
-        if !expr.func.flags.builtIn
+
+        // TODO: build table of intrinsic functions, which build LLVMOpaqueValue? from ExprCall
+        let call_name = "{expr.func._module.name}::{expr.func.name}"
+        if call_name=="$::range" || call_name=="$::urange"
+            setE(expr, intrinsic_builtin_range(expr))
+            return expr
+
+        if expr.func.flags.builtIn
+            if expr.func.flags.interopFn
+                var args = build_array_of_arguments(expr)
+                let FUNC_PTR = get_builtin_function_address(expr.func)
+                if FUNC_PTR==null
+                    failed_E(expr, "missing interop function pointer for {expr.func.name}")
+                let FUNC_ADDR = intptr(FUNC_PTR)
+                let NODE_PTR = make_interop_node(*jit_context,get_ptr(expr))
+                if NODE_PTR==null
+                    failed_E(expr, "missing interop function node pointer for {expr.func.name}")
+                let NODE_ADDR = intptr(NODE_PTR)
+                var params <- [{LLVMOpaqueValue?
+                    LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), FUNC_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)); // Function *
+                    LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), NODE_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)); // Node *
+                    args;                                                   // args
+                    LLVMGetParam(ffunc, uint(length(thisFunc.arguments)))   // context
+                }]
+                var func = LLVMGetNamedFunction(g_mod, "jit_call_interop_function")
+                var ccall = LLVMBuildCall(g_builder, func, params, "")
+                if expr.func.result.isVoid
+                    setE(expr, ccall)
+                else
+                    var cres = cast_from_vec4f(expr, expr._type, ccall)
+                    setE(expr, cres)
+            else
+                failed_E(expr,"built-in function {expr.func.name} is not an interop function, which is not supported yet")
+        else
             if expr.func.moreFlags.requestJit
                 var params <- [{for a in expr.arguments; getE(a)}]
                 params |> push(LLVMGetParam(ffunc, uint(length(expr.arguments)))) // context
@@ -728,32 +803,16 @@ class LlvmJitVisitor : AstVisitor
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
                 setE(expr, ccall)
             else
-                // build array of arguments
-                let nargs = length(expr.arguments)
-                var args : LLVMOpaqueValue?
-                if nargs != 0
-                    args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), uint(nargs)), "args")
-                    LLVMSetAlignment(args, 16u)
-                    args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
-                    for a,ai in expr.arguments,range(100500)
-                        var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
-                        var arg_val = getE(a)
-                        var arg_cast_type = type_to_llvm_abi_type(a._type)
-                        LLVMBuildStore2(g_builder, arg_cast_type, arg_val, arg_ptr)
-                else
-                    args = LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))
-                // call by pointer
+                var args = build_array_of_arguments(expr)
                 var MNH_ADDR : uint64
                 unsafe
                     let mangled_name = get_mangled_name(FunctionPtr(expr.func))
                     let MNH = hash(mangled_name)
                     MNH_ADDR = get_function_address(MNH,*jit_context)
-
                 if MNH_ADDR==0ul
                     failed_E(expr, "missing function pointer for {expr.func.name}")
-
                 var params <- [{LLVMOpaqueValue?
-                    LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0);             // SimFunction *
+                    LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)); // SimNode *
                     args;                                                   // args
                     LLVMGetParam(ffunc, uint(length(thisFunc.arguments)))   // context
                 }]
@@ -764,13 +823,6 @@ class LlvmJitVisitor : AstVisitor
                 else
                     var cres = cast_from_vec4f(expr, expr._type, ccall)
                     setE(expr, cres)
-            return expr
-        // TODO: build table of intrinsic functions, which build LLVMOpaqueValue? from ExprCall
-        let call_name = "{expr.func._module.name}::{expr.func.name}"
-        if call_name=="$::range" || call_name=="$::urange"
-            setE(expr, intrinsic_builtin_range(expr))
-        else
-            failed_E(expr, "unsupported call {call_name}")
         return expr
 
 // break
