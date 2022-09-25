@@ -246,9 +246,12 @@ class LlvmJitVisitor : AstVisitor
         var entry = LLVMAppendBasicBlock(ffunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, entry)
         // allocate local stack
-        local_stack = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMInt8Type(), uint(fun.totalStackSize)), "")
-        LLVMSetAlignment(local_stack, 16u)
-        local_stack = LLVMBuildPointerCast(g_builder, local_stack, LLVMPointerType(LLVMInt8Type(),0u), "LOCAL_STACK")
+        if uint(fun.totalStackSize) != SIZE_OF_PROLOGUE
+            local_stack = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMInt8Type(), uint(fun.totalStackSize)), "")
+            LLVMSetAlignment(local_stack, 16u)
+            local_stack = LLVMBuildPointerCast(g_builder, local_stack, LLVMPointerType(LLVMInt8Type(),0u), "LOCAL_STACK")
+        else
+            local_stack = null
 
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
         if fun.body != null && !is_terminator_expression(fun.body)
