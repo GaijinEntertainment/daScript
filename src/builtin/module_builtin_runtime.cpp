@@ -1413,5 +1413,6 @@ namespace das
             SideEffects::none, "das_get_jit_call_or_fastcall");
         addExtern<DAS_BIND_FUN(das_get_eval_top_offset)>(*this, lib, "get_jit_context_eval_top_offset",
             SideEffects::none, "das_get_eval_top_offset");
+        addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
     }
 }
