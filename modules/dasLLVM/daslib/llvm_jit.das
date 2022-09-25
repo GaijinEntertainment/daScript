@@ -55,10 +55,6 @@ def private init_jit
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jc, get_jit_call_or_fastcall())
-    var ic = LLVMAddFunction(g_mod,"jit_call_interop_function", // jit_call_interop_function(func,node *,args *,context *)
-        LLVMFunctionType(LLVMFloat4Type(),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
-    LLVMAddGlobalMapping(g_engine, ic, get_jit_call_interop_function())
 
 [macro_function]
 def private finalize_jit
@@ -760,6 +756,19 @@ class LlvmJitVisitor : AstVisitor
             args = LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))
         return args
 
+    def register_interop_function ( expr:smart_ptr<ExprCall> ): LLVMOpaqueValue?
+        let mangled_name = get_mangled_name(FunctionPtr(expr.func))
+        var ofunc = LLVMGetNamedFunction(g_mod, mangled_name)
+        if ofunc == null
+            ofunc = LLVMAddFunction(g_mod, mangled_name, // InteropFunction(context *, node *, args *)
+                LLVMFunctionType(LLVMFloat4Type(),
+                    [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u)]]))
+            let FUNC_PTR = get_builtin_function_address(expr.func)
+            if FUNC_PTR==null
+                failed_E(expr, "missing interop function pointer for {expr.func.name}")
+            LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
+        return ofunc
+
     def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
 
         // TODO: build table of intrinsic functions, which build LLVMOpaqueValue? from ExprCall
@@ -771,21 +780,16 @@ class LlvmJitVisitor : AstVisitor
         if expr.func.flags.builtIn
             if expr.func.flags.interopFn
                 var args = build_array_of_arguments(expr)
-                let FUNC_PTR = get_builtin_function_address(expr.func)
-                if FUNC_PTR==null
-                    failed_E(expr, "missing interop function pointer for {expr.func.name}")
-                let FUNC_ADDR = intptr(FUNC_PTR)
+                var func = register_interop_function(expr)
                 let NODE_PTR = make_interop_node(*jit_context,get_ptr(expr))
                 if NODE_PTR==null
                     failed_E(expr, "missing interop function node pointer for {expr.func.name}")
                 let NODE_ADDR = intptr(NODE_PTR)
                 var params <- [{LLVMOpaqueValue?
-                    LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), FUNC_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)); // Function *
+                    LLVMGetParam(ffunc, uint(length(thisFunc.arguments)));  // Context *
                     LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), NODE_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)); // Node *
-                    args;                                                   // args
-                    LLVMGetParam(ffunc, uint(length(thisFunc.arguments)))   // context
+                    args                                                   // args
                 }]
-                var func = LLVMGetNamedFunction(g_mod, "jit_call_interop_function")
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
                 if expr.func.result.isVoid
                     setE(expr, ccall)
