@@ -985,11 +985,21 @@ namespace das {
                 ss << "\n#if 0 // skipping structure " << that->name << " declaration due to CPP layout";
             }
             ss << "namespace " << aotModuleName(that->module) << " {\n";
+            for ( auto & ann : that->annotations ) {
+                if ( ann->annotation->rtti_isStructureTypeAnnotation() ) {
+                    static_pointer_cast<StructureAnnotation>(ann->annotation)->aotPrefix(ss);
+                }
+            }
             ss << "\nstruct " << that->name;
             if (that->cppLayout && that->parent) {
                 ss << " : " << that->parent->name;
             }
             ss << " {\n";
+            for ( auto & ann : that->annotations ) {
+                if ( ann->annotation->rtti_isStructureTypeAnnotation() ) {
+                    static_pointer_cast<StructureAnnotation>(ann->annotation)->aotBody(ss);
+                }
+            }
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
@@ -1014,6 +1024,11 @@ namespace das {
                 for ( auto & tf : that->fields ) {
                     ss << "static_assert(offsetof(" << that->name << "," << tf.name << ")=="
                         << tf.offset << ",\"structure field offset mismatch with DAS\");\n";
+                }
+            }
+            for ( auto & ann : that->annotations ) {
+                if ( ann->annotation->rtti_isStructureTypeAnnotation() ) {
+                    static_pointer_cast<StructureAnnotation>(ann->annotation)->aotSuffix(ss);
                 }
             }
             ss << "}\n";    // namespace

@@ -181,15 +181,21 @@ protected:
     __fn_finish = 1,
     __fn_patch = 2,
     __fn_complete = 3,
+    __fn_aotPrefix = 4,
+    __fn_aotBody = 5,
+    __fn_aotSuffix = 6,
   };
 protected:
-  int _das_class_method_offset[4];
+  int _das_class_method_offset[7];
 public:
   AstStructureAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
       _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
       _das_class_method_offset[__fn_patch] = adapt_field_offset("patch",info);
       _das_class_method_offset[__fn_complete] = adapt_field_offset("complete",info);
+      _das_class_method_offset[__fn_aotPrefix] = adapt_field_offset("aotPrefix",info);
+      _das_class_method_offset[__fn_aotBody] = adapt_field_offset("aotBody",info);
+      _das_class_method_offset[__fn_aotSuffix] = adapt_field_offset("aotSuffix",info);
   }
   __forceinline Func get_apply ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_apply]);
@@ -226,6 +232,33 @@ public:
       <void *,smart_ptr_raw<Structure>,smart_ptr_raw<Context>>
         (__context__,nullptr,__funcCall__,
           self,st,ctx);
+  }
+  __forceinline Func get_aotPrefix ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_aotPrefix]);
+  }
+  __forceinline void invoke_aotPrefix ( Context * __context__, Func __funcCall__, void * self, StringBuilderWriter & writer ) const {
+    das_invoke_function<void>::invoke
+      <void *,StringBuilderWriter &>
+        (__context__,nullptr,__funcCall__,
+          self,writer);
+  }
+  __forceinline Func get_aotBody ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_aotBody]);
+  }
+  __forceinline void invoke_aotBody ( Context * __context__, Func __funcCall__, void * self, StringBuilderWriter & writer ) const {
+    das_invoke_function<void>::invoke
+      <void *,StringBuilderWriter &>
+        (__context__,nullptr,__funcCall__,
+          self,writer);
+  }
+  __forceinline Func get_aotSuffix ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_aotSuffix]);
+  }
+  __forceinline void invoke_aotSuffix ( Context * __context__, Func __funcCall__, void * self, StringBuilderWriter & writer ) const {
+    das_invoke_function<void>::invoke
+      <void *,StringBuilderWriter &>
+        (__context__,nullptr,__funcCall__,
+          self,writer);
   }
 };
 

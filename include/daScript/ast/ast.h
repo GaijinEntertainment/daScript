@@ -468,6 +468,9 @@ namespace das
         virtual bool patch (const StructurePtr &, ModuleGroup &,
             const AnnotationArgumentList &, string &, bool & /*astChanged*/ ) { return true; } // this one happens after infer. this can restart infer by setting astChange
         virtual void complete ( Context *, const StructurePtr & ) { }
+        virtual void aotPrefix ( TextWriter & ) { }
+        virtual void aotBody   ( TextWriter & ) { }
+        virtual void aotSuffix ( TextWriter & ) { }
     };
     typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
 
