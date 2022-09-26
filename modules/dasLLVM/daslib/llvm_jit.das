@@ -31,6 +31,10 @@ var g_engine : LLVMExecutionEngineRef
 var g_builder : LLVMOpaqueBuilder?
 var g_failed : bool = false
 
+let FN_JIT_EXCEPTION = "`jit`exception`"
+let FN_JIT_CALL_OR_FASTCALL = "`jit`call_or_fastcall`"
+let FN_JIT_STRING_BUILDER = "`jit`string_builder`"
+
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
 
@@ -47,14 +51,18 @@ def private init_jit
     LLVMInitializeNativeAsmParser()
     LLVMCreateJITCompilerForModule(g_engine, g_mod, LLVM_JIT_OPT_LEVEL)
     // add default functions
-    var je = LLVMAddFunction(g_mod, "jit_exception",    // jit_exception(text,context *)
+    var je = LLVMAddFunction(g_mod, FN_JIT_EXCEPTION,    // jit_exception(text,context *)
         LLVMFunctionType(LLVMVoidType(),
             [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, je, get_jit_exception())
-    var jc = LLVMAddFunction(g_mod, "jit_call_or_fastcall", // jit_call_or_fastcall(func,args *,context *)
+    var jc = LLVMAddFunction(g_mod, FN_JIT_CALL_OR_FASTCALL, // jit_call_or_fastcall(func,args *,context *)
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jc, get_jit_call_or_fastcall())
+    var jsb = LLVMAddFunction(g_mod, FN_JIT_STRING_BUILDER, // jit_string_builder ( context *, node *, args * )
+        LLVMFunctionType(LLVMPointerType(LLVMInt8Type(),0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jsb, get_jit_string_builder())
 
 [macro_function]
 def private finalize_jit
@@ -435,7 +443,7 @@ class LlvmJitVisitor : AstVisitor
             get_string_constant_ptr(message);                   // message
             LLVMGetParam(ffunc,uint(thisFunc.arguments.length)) // context is always last argument of function
         ]]
-        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, "jit_exception"), params, "")
+        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_EXCEPTION), params, "")
 
     def build_copy ( tdst:LLVMOpaqueValue?; right:ExpressionPtr )
         var tsrc = getE(right)
@@ -745,14 +753,14 @@ class LlvmJitVisitor : AstVisitor
     def build_null_ptr(nullT:LLVMOpaqueType?)
         return LLVMBuildPointerCast(g_builder, LLVMConstPointerNull(nullT), LLVMPointerType(LLVMVoidType(),0u), "null")
 
-    def build_array_of_arguments ( expr:smart_ptr<ExprCall> ) : LLVMOpaqueValue?
-        let nargs = length(expr.arguments)
+    def build_array_of_arguments ( arguments:dasvector`smart_ptr`Expression ) : LLVMOpaqueValue?
+        let nargs = length(arguments)
         var args : LLVMOpaqueValue?
         if nargs != 0
             args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), uint(nargs)), "args")
             LLVMSetAlignment(args, 16u)
             args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
-            for a,ai in expr.arguments,range(100500)
+            for a,ai in arguments,range(100500)
                 var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
                 var arg_val = getE(a)
                 var arg_cast_type = type_to_llvm_abi_type(a._type)
@@ -799,7 +807,7 @@ class LlvmJitVisitor : AstVisitor
 
         if expr.func.flags.builtIn
             if expr.func.flags.interopFn
-                var args = build_array_of_arguments(expr)
+                var args = build_array_of_arguments(expr.arguments)
                 var func = register_interop_function(expr)
                 let NODE_PTR = make_interop_node(*jit_context,get_ptr(expr))
                 if NODE_PTR==null
@@ -837,7 +845,7 @@ class LlvmJitVisitor : AstVisitor
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
                 setE(expr, ccall)
             else
-                var args = build_array_of_arguments(expr)
+                var args = build_array_of_arguments(expr.arguments)
                 var MNH_ADDR : uint64
                 unsafe
                     let mangled_name = get_mangled_name(FunctionPtr(expr.func))
@@ -850,13 +858,29 @@ class LlvmJitVisitor : AstVisitor
                     args;                                                   // args
                     LLVMGetParam(ffunc, uint(length(thisFunc.arguments)))   // context
                 }]
-                var func = LLVMGetNamedFunction(g_mod, "jit_call_or_fastcall")
+                var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL)
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
                 if expr.func.result.isVoid
                     setE(expr, ccall)
                 else
                     var cres = cast_from_vec4f(expr, expr._type, ccall)
                     setE(expr, cres)
+        return expr
+
+    def override visitExprStringBuilder(expr:smart_ptr<ExprStringBuilder>) : ExpressionPtr
+        var args = build_array_of_arguments(expr.elements)
+        var func = LLVMGetNamedFunction(g_mod, FN_JIT_STRING_BUILDER)
+        assert(func!=null)
+        let NODE_PTR = make_interop_node(*jit_context,get_ptr(expr))
+        if NODE_PTR==null
+            failed_E(expr, "missing interop function node pointer for String Builder")
+        let NODE_ADDR = intptr(NODE_PTR)
+        var params <- [{LLVMOpaqueValue?
+            LLVMGetParam(ffunc, uint(length(thisFunc.arguments)));  // Context *
+            LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), NODE_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)); // Node *
+            args                                                   // args
+        }]
+        setE(expr, LLVMBuildCall(g_builder, func, params, "string_builder"))
         return expr
 
 // break
