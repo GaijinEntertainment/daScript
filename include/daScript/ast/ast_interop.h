@@ -52,7 +52,7 @@ namespace das
             return context.code->makeNode<SimNodeT>(at, fnName);
 #endif
         }
-        virtual void * getBuiltinAddress() const override { return (void *) &fn; }
+        virtual void * getBuiltinAddress() const override { return (void *) fn; }
     };
 
     template  <InteropFunction func, typename RetT, typename ...Args>
@@ -68,7 +68,7 @@ namespace das
             const char * fnName = context.code->allocateName(this->name);
             return context.code->makeNode<SimNode_InteropFuncCall<func>>(BuiltInFunction::at,fnName);
         }
-        virtual void * getBuiltinAddress() const override { return (void *) &func; }
+        virtual void * getBuiltinAddress() const override { return (void *) func; }
     };
 
     struct defaultTempFn {
