@@ -236,29 +236,29 @@ public:
   __forceinline Func get_aotPrefix ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_aotPrefix]);
   }
-  __forceinline void invoke_aotPrefix ( Context * __context__, Func __funcCall__, void * self, StringBuilderWriter & writer ) const {
+  __forceinline void invoke_aotPrefix ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> st, AnnotationArgumentList const  & args, StringBuilderWriter & writer ) const {
     das_invoke_function<void>::invoke
-      <void *,StringBuilderWriter &>
+      <void *,smart_ptr_raw<Structure>,AnnotationArgumentList const  &,StringBuilderWriter &>
         (__context__,nullptr,__funcCall__,
-          self,writer);
+          self,st,args,writer);
   }
   __forceinline Func get_aotBody ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_aotBody]);
   }
-  __forceinline void invoke_aotBody ( Context * __context__, Func __funcCall__, void * self, StringBuilderWriter & writer ) const {
+  __forceinline void invoke_aotBody ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> st, AnnotationArgumentList const  & args, StringBuilderWriter & writer ) const {
     das_invoke_function<void>::invoke
-      <void *,StringBuilderWriter &>
+      <void *,smart_ptr_raw<Structure>,AnnotationArgumentList const  &,StringBuilderWriter &>
         (__context__,nullptr,__funcCall__,
-          self,writer);
+          self,st,args,writer);
   }
   __forceinline Func get_aotSuffix ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_aotSuffix]);
   }
-  __forceinline void invoke_aotSuffix ( Context * __context__, Func __funcCall__, void * self, StringBuilderWriter & writer ) const {
+  __forceinline void invoke_aotSuffix ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> st, AnnotationArgumentList const  & args, StringBuilderWriter & writer ) const {
     das_invoke_function<void>::invoke
-      <void *,StringBuilderWriter &>
+      <void *,smart_ptr_raw<Structure>,AnnotationArgumentList const  &,StringBuilderWriter &>
         (__context__,nullptr,__funcCall__,
-          self,writer);
+          self,st,args,writer);
   }
 };
 

@@ -987,7 +987,7 @@ namespace das {
             ss << "namespace " << aotModuleName(that->module) << " {\n";
             for ( auto & ann : that->annotations ) {
                 if ( ann->annotation->rtti_isStructureTypeAnnotation() ) {
-                    static_pointer_cast<StructureAnnotation>(ann->annotation)->aotPrefix(ss);
+                    static_pointer_cast<StructureAnnotation>(ann->annotation)->aotPrefix(that, ann->arguments, ss);
                 }
             }
             ss << "\nstruct " << that->name;
@@ -997,7 +997,7 @@ namespace das {
             ss << " {\n";
             for ( auto & ann : that->annotations ) {
                 if ( ann->annotation->rtti_isStructureTypeAnnotation() ) {
-                    static_pointer_cast<StructureAnnotation>(ann->annotation)->aotBody(ss);
+                    static_pointer_cast<StructureAnnotation>(ann->annotation)->aotBody(that, ann->arguments, ss);
                 }
             }
         }
@@ -1028,7 +1028,7 @@ namespace das {
             }
             for ( auto & ann : that->annotations ) {
                 if ( ann->annotation->rtti_isStructureTypeAnnotation() ) {
-                    static_pointer_cast<StructureAnnotation>(ann->annotation)->aotSuffix(ss);
+                    static_pointer_cast<StructureAnnotation>(ann->annotation)->aotSuffix(that, ann->arguments, ss);
                 }
             }
             ss << "}\n";    // namespace

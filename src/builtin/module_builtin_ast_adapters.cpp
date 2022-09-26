@@ -935,25 +935,25 @@ namespace das {
                 });
             }
         }
-        virtual void aotPrefix ( TextWriter & writer ) override {
+        virtual void aotPrefix ( const StructurePtr & st, const AnnotationArgumentList & args,TextWriter & writer ) override {
             if ( auto fnAotPrefix = get_aotPrefix(classPtr) ) {
                 runMacroFunction(context, "aotPrefix", [&]() {
-                    invoke_aotPrefix(context,fnAotPrefix,classPtr,reinterpret_cast<StringBuilderWriter&>(writer));
+                    invoke_aotPrefix(context,fnAotPrefix,classPtr,st,args,reinterpret_cast<StringBuilderWriter&>(writer));
                 });
             }
         }
-        virtual void aotBody   ( TextWriter & writer ) override {
+        virtual void aotBody  ( const StructurePtr & st, const AnnotationArgumentList & args, TextWriter & writer ) override {
             if ( auto fnAotBody = get_aotBody(classPtr) ) {
                 runMacroFunction(context, "aotBody", [&]() {
-                    invoke_aotBody(context,fnAotBody,classPtr,reinterpret_cast<StringBuilderWriter&>(writer));
+                    invoke_aotBody(context,fnAotBody,classPtr,st,args,reinterpret_cast<StringBuilderWriter&>(writer));
                 });
             }
 
         }
-        virtual void aotSuffix ( TextWriter & writer ) override {
+        virtual void aotSuffix ( const StructurePtr & st, const AnnotationArgumentList & args,TextWriter & writer ) override {
             if ( auto fnAotSuffix = get_aotSuffix(classPtr) ) {
                 runMacroFunction(context, "aotSuffix", [&]() {
-                    invoke_aotSuffix(context,fnAotSuffix,classPtr,reinterpret_cast<StringBuilderWriter&>(writer));
+                    invoke_aotSuffix(context,fnAotSuffix,classPtr,st,args,reinterpret_cast<StringBuilderWriter&>(writer));
                 });
             }
         }

@@ -89,9 +89,9 @@ class AstStructureAnnotation
     def abstract finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
     def abstract patch ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
     def abstract complete ( var st:StructurePtr; var ctx:smart_ptr<Context> ) : void
-    def abstract aotPrefix ( var writer : StringBuilderWriter ) : void
-    def abstract aotBody ( var writer : StringBuilderWriter ) : void
-    def abstract aotSuffix ( var writer : StringBuilderWriter ) : void
+    def abstract aotPrefix ( var st:StructurePtr; args:AnnotationArgumentList; var writer : StringBuilderWriter ) : void
+    def abstract aotBody ( var st:StructurePtr; args:AnnotationArgumentList; var writer : StringBuilderWriter ) : void
+    def abstract aotSuffix ( var st:StructurePtr; args:AnnotationArgumentList; var writer : StringBuilderWriter ) : void
 
 [macro_interface]
 class AstPassMacro
