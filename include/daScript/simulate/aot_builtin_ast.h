@@ -540,6 +540,7 @@ namespace das {
     bool exprReturnsOrBreaks ( const ExpressionPtr & expr );
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at );
     void * das_make_interop_node ( Context & ctx, ExprCall * call, Context * context, LineInfoArg * at );
+    void * das_sb_make_interop_node ( Context & ctx, ExprStringBuilder * call, Context * context, LineInfoArg * at );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {

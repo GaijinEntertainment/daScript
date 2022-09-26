@@ -2879,11 +2879,12 @@ namespace das {
     bool das_remove_jit ( const Func func );
     bool das_instrument_jit ( void * pfun, const Func func, Context * context );
     void jit_exception ( const char * text, Context * context );
-    void * das_get_jit_exception ( );
+    void * das_get_jit_exception ();
     vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context );
-    void * das_get_jit_call_or_fastcall ( );
+    void * das_get_jit_call_or_fastcall ();
     uint32_t das_get_eval_top_offset ();
-
+    char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args );
+    void * das_get_jit_string_builder ();
 }
 
 #if defined(_MSC_VER)

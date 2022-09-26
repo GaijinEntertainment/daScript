@@ -1042,6 +1042,24 @@ namespace das
         return (void *) &jit_call_or_fastcall;
     }
 
+    char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        StringBuilderWriter writer;
+        DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
+        for ( int i = 0; i!=call->nArguments; ++i ) {
+            walker.walk(args[i], call->types[i]);
+        }
+        auto length = writer.tellp();
+        if ( length ) {
+            return context.stringHeap->allocateString(writer.c_str(), length);
+        } else {
+            return nullptr;
+        }
+    }
+
+    void * das_get_jit_string_builder ( ) {
+        return (void *) &jit_string_builder;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1411,6 +1429,8 @@ namespace das
             SideEffects::none, "das_get_jit_exception");
         addExtern<DAS_BIND_FUN(das_get_jit_call_or_fastcall)>(*this, lib, "get_jit_call_or_fastcall",
             SideEffects::none, "das_get_jit_call_or_fastcall");
+        addExtern<DAS_BIND_FUN(das_get_jit_string_builder)>(*this, lib, "get_jit_string_builder",
+            SideEffects::none, "das_get_jit_string_builder");
         addExtern<DAS_BIND_FUN(das_get_eval_top_offset)>(*this, lib, "get_jit_context_eval_top_offset",
             SideEffects::none, "das_get_eval_top_offset");
         addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
