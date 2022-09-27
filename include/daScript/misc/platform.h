@@ -237,5 +237,17 @@ inline size_t das_aligned_memsize(void * ptr){
 #define DAS_THREAD_LOCAL  thread_local
 #endif
 
+#ifndef DAS_AOT_INLINE_LAMBDA
+    #ifdef _MSC_VER
+        #if (_MSC_VER >= 1900)
+            #define DAS_AOT_INLINE_LAMBDA [[msvc::forceinline]]
+        #else
+            #define DAS_AOT_INLINE_LAMBDA
+        #endif
+    #else
+        #define DAS_AOT_INLINE_LAMBDA __attribute__((always_inline))
+    #endif
+#endif
+
 #include "daScript/misc/smart_ptr.h"
 

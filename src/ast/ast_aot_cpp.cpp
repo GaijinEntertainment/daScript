@@ -986,7 +986,7 @@ namespace das {
             }
             ss << "namespace " << aotModuleName(that->module) << " {\n";
             for ( auto & ann : that->annotations ) {
-                if ( ann->annotation->rtti_isStructureTypeAnnotation() ) {
+                if ( ann->annotation->rtti_isStructureAnnotation() ) {
                     static_pointer_cast<StructureAnnotation>(ann->annotation)->aotPrefix(that, ann->arguments, ss);
                 }
             }
@@ -996,7 +996,7 @@ namespace das {
             }
             ss << " {\n";
             for ( auto & ann : that->annotations ) {
-                if ( ann->annotation->rtti_isStructureTypeAnnotation() ) {
+                if ( ann->annotation->rtti_isStructureAnnotation() ) {
                     static_pointer_cast<StructureAnnotation>(ann->annotation)->aotBody(that, ann->arguments, ss);
                 }
             }
@@ -1027,7 +1027,7 @@ namespace das {
                 }
             }
             for ( auto & ann : that->annotations ) {
-                if ( ann->annotation->rtti_isStructureTypeAnnotation() ) {
+                if ( ann->annotation->rtti_isStructureAnnotation() ) {
                     static_pointer_cast<StructureAnnotation>(ann->annotation)->aotSuffix(that, ann->arguments, ss);
                 }
             }
@@ -2789,7 +2789,11 @@ namespace das {
                 }
                 ss << " " << collector.getVarName(arg);
             }
-            ss << ")->" << describeCppType(block->returnType);
+            ss << ") ";
+            if ( block->aotSkipMakeBlock ) {
+                ss << "DAS_AOT_INLINE_LAMBDA ";
+            }
+            ss << "-> " << describeCppType(block->returnType);
         }
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
