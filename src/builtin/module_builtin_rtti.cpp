@@ -359,6 +359,27 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
             addField<DAS_BIND_MANAGED_FIELD(module)>("_module","module");
             addProperty<DAS_BIND_MANAGED_PROP(isYetAnotherVectorTemplate)>("is_any_vector","isYetAnotherVectorTemplate");
+            addProperty<DAS_BIND_MANAGED_PROP(canMove)>("canMove");
+            addProperty<DAS_BIND_MANAGED_PROP(canCopy)>("canCopy");
+            addProperty<DAS_BIND_MANAGED_PROP(canClone)>("canClone");
+            addProperty<DAS_BIND_MANAGED_PROP(isPod)>("isPod");
+            addProperty<DAS_BIND_MANAGED_PROP(isRawPod)>("isRawPod");
+            addProperty<DAS_BIND_MANAGED_PROP(isRefType)>("isRefType");
+            addProperty<DAS_BIND_MANAGED_PROP(hasNonTrivialCtor)>("hasNonTrivialCtor");
+            addProperty<DAS_BIND_MANAGED_PROP(hasNonTrivialDtor)>("hasNonTrivialDtor");
+            addProperty<DAS_BIND_MANAGED_PROP(hasNonTrivialCopy)>("hasNonTrivialCopy");
+            addProperty<DAS_BIND_MANAGED_PROP(canBePlacedInContainer)>("canBePlacedInContainer");
+            addProperty<DAS_BIND_MANAGED_PROP(isLocal)>("isLocal");
+            addProperty<DAS_BIND_MANAGED_PROP(canNew)>("canNew");
+            addProperty<DAS_BIND_MANAGED_PROP(canDelete)>("canDelete");
+            addProperty<DAS_BIND_MANAGED_PROP(needDelete)>("needDelete");
+            addProperty<DAS_BIND_MANAGED_PROP(canDeletePtr)>("canDeletePtr");
+            addProperty<DAS_BIND_MANAGED_PROP(isIterable)>("isIterable");
+            addProperty<DAS_BIND_MANAGED_PROP(isShareable)>("isShareable");
+            addProperty<DAS_BIND_MANAGED_PROP(isSmart)>("isSmart");
+            addProperty<DAS_BIND_MANAGED_PROP(avoidNullPtr)>("avoidNullPtr");
+            addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf", "getSizeOf");
+            addProperty<DAS_BIND_MANAGED_PROP(getAlignOf)>("alignOf", "getAlignOf");
         }
     };
 
