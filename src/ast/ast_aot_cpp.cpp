@@ -2789,7 +2789,11 @@ namespace das {
                 }
                 ss << " " << collector.getVarName(arg);
             }
-            ss << ")->" << describeCppType(block->returnType);
+            ss << ") ";
+            if ( block->aotSkipMakeBlock ) {
+                ss << "DAS_AOT_INLINE_LAMBDA ";
+            }
+            ss << "-> " << describeCppType(block->returnType);
         }
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
