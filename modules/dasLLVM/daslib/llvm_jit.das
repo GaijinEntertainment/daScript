@@ -30,6 +30,7 @@ var g_mod : LLVMOpaqueModule?
 var g_engine : LLVMExecutionEngineRef
 var g_builder : LLVMOpaqueBuilder?
 var g_failed : bool = false
+var g_str2v : table<string; LLVMOpaqueValue?>
 
 let FN_JIT_EXCEPTION = "`jit`exception`"
 let FN_JIT_CALL_OR_FASTCALL = "`jit`call_or_fastcall`"
@@ -76,6 +77,7 @@ def private finalize_jit
         engine <- g_engine,
         builder <- g_builder
     ]])
+    delete g_str2v
 
 [finalize]
 def private finalize_all_jit
@@ -102,7 +104,6 @@ class LlvmJitVisitor : AstVisitor
     adapter : smart_ptr<VisitorAdapter>
     e2v : table<Expression?;LLVMOpaqueValue?>
     v2v : table<Variable?;LLVMOpaqueValue?>
-    str2v : table<string; LLVMOpaqueValue?>
     errors : array<string>
     fnmna : string
     [[do_not_delete]] ffunc, wfunc : LLVMOpaqueValue?
@@ -396,7 +397,7 @@ class LlvmJitVisitor : AstVisitor
                 tres = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;2;-1}], "return_result")
             elif bt==Type tFloat4
                 tres = tsrc
-            elif bt==Type tString
+            elif bt==Type tString || bt==Type tPointer
                 static_if typeinfo(sizeof type<void?>)==8
                     var vvec = LLVMGetUndef(LLVMVectorType(LLVMInt64Type(), 2u))
                     var tval = LLVMBuildPtrToInt(g_builder, tsrc, LLVMInt64Type(), "ptr_bit")
@@ -407,7 +408,7 @@ class LlvmJitVisitor : AstVisitor
                     var tbit = LLVMBuildBitCast(g_builder, tval, LLVMFloatType(), "ptr_f_bit")
                     tres = LLVMBuildInsertElement(g_builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
             else
-                failed("unsupported cast_to_vec4f cast {describe(etype)}")
+                failed("unsupported workhorse cast_to_vec4f cast {describe(etype)}")
         else
             failed("unsupported cast_to_vec4f type {describe(etype)}")
         return tres
@@ -420,8 +421,8 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
     def build_string_constant ( message:string )
-        if str2v |> key_exists(message)
-            return str2v[message]
+        if g_str2v |> key_exists(message)
+            return g_str2v[message]
         let msg_size = uint(length(message))
         var strType = LLVMArrayType( LLVMInt8Type(), msg_size+1u )
         var str = LLVMAddGlobal(g_mod, strType, "")
@@ -430,7 +431,7 @@ class LlvmJitVisitor : AstVisitor
         LLVMSetLinkage(str, LLVMLinkage LLVMPrivateLinkage)
         LLVMSetUnnamedAddress(str, LLVMUnnamedAddr LLVMGlobalUnnamedAddr)
         LLVMSetAlignment(str, 1u)
-        str2v[message] = str
+        g_str2v[message] = str
         return str
 
     def get_string_constant_ptr ( message:string )
@@ -459,6 +460,44 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprCopy(expr:smart_ptr<ExprCopy>) : ExpressionPtr
         var tdst = getE(expr.left)
         build_copy(tdst, expr.right)
+        return expr
+
+    def check_ptr_zero ( tsrc:LLVMOpaqueValue? )
+        var check_null_ptr = append_basic_block("check_null_ptr")
+        var check_true = append_basic_block("check_true")
+        var check_end = append_basic_block("check_end")
+        LLVMBuildBr(g_builder, check_null_ptr)
+        LLVMPositionBuilderAtEnd(g_builder, check_null_ptr)
+        var tval = LLVMBuildPtrToInt(g_builder, tsrc, LLVMIntPtrType(), "ptr_bit")
+        var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, tval, LLVMConstInt(LLVMIntPtrType(), 0ul, 0), "null_check")
+        LLVMBuildCondBr(g_builder, cond, check_true, check_end)
+        LLVMPositionBuilderAtEnd(g_builder, check_true)
+        build_exception("dereferencing null pointer")
+        LLVMBuildBr(g_builder, check_end)
+        LLVMPositionBuilderAtEnd(g_builder, check_end)
+
+    def override visitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>) : ExpressionPtr
+        var tsrc = getE(expr.subexpr)
+        check_ptr_zero(tsrc)
+        setE(expr, tsrc)
+        return expr
+
+    def override visitExprAt(expr:smart_ptr<ExprAt>) : ExpressionPtr
+        var tsrc = getE(expr.subexpr)
+        var tidx = getE(expr.index)
+        assume subExprT = expr.subexpr._type
+        if subExprT.isPointer
+            check_ptr_zero(tsrc)
+            var element_type = type_to_llvm_type(subExprT.firstType)
+            var ptr_cast = LLVMBuildPointerCast(g_builder,tsrc, LLVMPointerType(element_type,0u), "ptr_cast")
+            var ptr_idx = LLVMBuildGEP(g_builder, ptr_cast, tidx, "ptr_at")
+            if expr.atFlags.r2v
+                var at_r2v = LLVMBuildLoad2(g_builder, element_type, ptr_idx, "at_r2v")
+                setE(expr, at_r2v)
+            else
+                setE(expr, ptr_idx)
+        else
+            failed("unsupported visitExprAt type {describe(subExprT)}")
         return expr
 
     def isReadModifyWriteOp2 ( name:das_string )
@@ -495,6 +534,20 @@ class LlvmJitVisitor : AstVisitor
         else
             failed_E(expr, "unsupported unary operator {expr.op}")
         return expr
+
+    def check_divide_by_0 ( right:LLVMOpaqueValue?; opType:TypeDeclPtr )
+        var check_div_0 = append_basic_block("check_div_0")
+        var check_true = append_basic_block("check_true")
+        var check_end = append_basic_block("check_end")
+        LLVMBuildBr(g_builder, check_div_0)
+        LLVMPositionBuilderAtEnd(g_builder, check_div_0)
+        let zero =  LLVMConstInt(base_type_to_llvm_type(opType.baseType), 0ul, 0)
+        let cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, right, zero, "cmp_is_zero")
+        LLVMBuildCondBr(g_builder, cond, check_true, check_end)
+        LLVMPositionBuilderAtEnd(g_builder, check_true)
+        build_exception("division by zero")
+        LLVMBuildBr(g_builder, check_end)
+        LLVMPositionBuilderAtEnd(g_builder, check_end)
 
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
         var left = getE(expr.left)
@@ -547,18 +600,7 @@ class LlvmJitVisitor : AstVisitor
         elif expr.op=="/" || expr.op=="%" || expr.op=="/=" || expr.op=="%="
             // for integer division we check division by zero
             if opType.isInteger
-                var check_div_0 = append_basic_block("check_div_0")
-                var check_true = append_basic_block("check_true")
-                var check_end = append_basic_block("check_end")
-                LLVMBuildBr(g_builder, check_div_0)
-                LLVMPositionBuilderAtEnd(g_builder, check_div_0)
-                let zero =  LLVMConstInt(base_type_to_llvm_type(opType.baseType), 0ul, 0)
-                let cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, right, zero, "cmp_is_zero")
-                LLVMBuildCondBr(g_builder, cond, check_true, check_end)
-                LLVMPositionBuilderAtEnd(g_builder, check_true)
-                build_exception("division by zero")
-                LLVMBuildBr(g_builder, check_end)
-                LLVMPositionBuilderAtEnd(g_builder, check_end)
+                check_divide_by_0(right, opType)
             if expr.op=="/"
                 if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
                     setE(expr, LLVMBuildSDiv(g_builder, left, right, ""))

@@ -56,6 +56,12 @@ def LLVMInt3Type
 def LLVMInt2Type
     return LLVMVectorType(LLVMInt32Type(), 2u)
 
+def LLVMIntPtrType : LLVMOpaqueType?
+    static_if typeinfo(sizeof type<void?>)==8
+        return LLVMInt64Type()
+    else
+        return LLVMInt32Type()
+
 def LLVMFunctionType ( var ret_type:LLVMTypeRef; var param_types:LLVMTypeRef[]; isVariadic:bool = false )
     return LLVMFunctionType( ret_type, unsafe(addr(param_types[0])), uint(length(param_types)), isVariadic ? 1 : 0)
 
