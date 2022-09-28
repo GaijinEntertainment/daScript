@@ -21,6 +21,15 @@ def addAll ( var a : int?; count:int )
             c += a[i]
     return c
 
+[jit]
+def ptrAdd ( var a : int?; count:int )
+    var c = 0
+    for i in range(count)
+        c += *a
+        unsafe
+            ++ a
+    return c
+
 [test]
 def test_ref ( t:T? )
     t |> run("ptr2ref") <| @ ( t : T? )
@@ -40,3 +49,10 @@ def test_ref ( t:T? )
         for i in x
             t |> equal(i, 13)
         t |> equal(addAll(px,10), 130)
+    t |> run("ptr ++") <| @ ( t : T? )
+        var x : int[10]
+        var px = unsafe(addr(x[0]))
+        for i,j in x,range(10)
+            i = j
+        t |> success ( is_jit_function(@@addAll) )
+        t |> equal( addAll(px,10), 45 )

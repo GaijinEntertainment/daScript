@@ -195,6 +195,7 @@ class LlvmJitVisitor : AstVisitor
         return LLVMFloat3Type() if t == Type tFloat3
         return LLVMFloat4Type() if t == Type tFloat4
         return LLVMPointerType(LLVMInt8Type(),0u) if t == Type tString
+        return LLVMPointerType(LLVMVoidType(),0u) if t == Type tPointer
         failed("base_type_to_llvm_type: unsupported type {t}")
         return LLVMInt32Type()
 
@@ -261,6 +262,13 @@ class LlvmJitVisitor : AstVisitor
             local_stack = LLVMBuildPointerCast(g_builder, local_stack, LLVMPointerType(LLVMInt8Type(),0u), "LOCAL_STACK")
         else
             local_stack = null
+        // allocate arguments, which need to be promoted to local variables
+        for a,ai in fun.arguments,range(10050)
+            if (a.access_flags.access_ref || a.access_flags.access_pass) && !a._type.isRefType
+                var tryV = LLVMBuildAlloca(g_builder, type_to_llvm_type(a._type), "var_{a.name}")
+                LLVMSetAlignment(tryV, 16u)
+                LLVMBuildStore(g_builder, LLVMGetParam(ffunc, uint(ai)), tryV)
+                setV(a, tryV)
 
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
         if fun.body != null && !is_terminator_expression(fun.body)
@@ -321,14 +329,7 @@ class LlvmJitVisitor : AstVisitor
                 assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
                 setE(expr, arg)
             else
-                if expr._type.isRef && expr._type.isWorkhorseType
-                    tryV = LLVMBuildAlloca(g_builder, base_type_to_llvm_type(expr._type.baseType), "var_{expr.variable.name}")
-                    LLVMSetAlignment(tryV, 16u)
-                    LLVMBuildStore(g_builder, arg, tryV)
-                    setV(expr.variable, tryV)
-                    setE(expr, tryV)
-                else
-                    setE(expr, LLVMBuildPointerCast(g_builder, arg, LLVMPointerType(LLVMVoidType(),0u), "var_ptr_{expr.variable.name}" ))
+                setE(expr, LLVMBuildPointerCast(g_builder, arg, LLVMPointerType(LLVMVoidType(),0u), "var_ptr_{expr.variable.name}" ))
         else
             failed_E(expr, "ExprLetVariable {expr.variable.name} : {describe(expr.variable._type)}")
         return expr
