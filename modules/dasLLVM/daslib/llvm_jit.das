@@ -215,13 +215,21 @@ class LlvmJitVisitor : AstVisitor
             return LLVMInt32Type()
 
     def type_to_llvm_type ( t:TypeDeclPtr )
-        if t.isPointer
-            return LLVMPointerType(t.firstType!=null ? type_to_llvm_type(t.firstType) : LLVMVoidType(), 0u)
+        var res : LLVMOpaqueType?
+        if t.dim.length != 0
+            var ndt <- clone_type(t); defer_delete(ndt)
+            ndt.dim |> clear()
+            res = type_to_llvm_type(ndt)
+            for d in t.dim
+                res = LLVMArrayType(res, uint(d))
+        elif t.isPointer
+            res = LLVMPointerType(t.firstType!=null ? type_to_llvm_type(t.firstType) : LLVMVoidType(), 0u)
         elif t.isWorkhorseType
-            return base_type_to_llvm_type(t.baseType)
+            res = base_type_to_llvm_type(t.baseType)
         else
             failed("type_to_llvm_type: unsupported type {describe(t)} at {t.at}")
-            return LLVMInt32Type()
+            res = LLVMInt32Type()
+        return res
 
     def override preVisitFunction(fun:FunctionPtr) : void
         assert(g_builder!=null, "missing builder")
@@ -242,7 +250,8 @@ class LlvmJitVisitor : AstVisitor
             elif !a._type.isRef
                 arg_v = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(a._type), arg_ptr, "arg_value_{ai}")
             else
-                arg_v = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(LLVMVoidType(),0u), "arg_ptr_{ai}" )
+                // arg_v = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(LLVMVoidType(),0u), "arg_ptr_{ai}" )
+                arg_v = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(a._type), arg_ptr, "arg_any_{ai}")
             wargs |> push(arg_v)
         wargs |> push(LLVMGetParam(wfunc, 0u))  // context
         var ret_v = LLVMBuildCall(g_builder, ffunc, wargs, "")
@@ -436,7 +445,6 @@ class LlvmJitVisitor : AstVisitor
     def get_string_constant_ptr ( message:string )
         var str = build_string_constant(message)
         return LLVMBuildPointerCast(g_builder, str, LLVMPointerType(LLVMInt8Type(), 0u), "string_constant {message}")
-        // return LLVMBuildGEP(g_builder, str_ptr, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "string_constant {message}")
 
     def build_exception ( message:string )
         var params = [[auto
@@ -479,6 +487,19 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, tsrc)
         return expr
 
+    def check_range ( tidx, maxIdx:LLVMOpaqueValue? )
+        var check_null_ptr = append_basic_block("check_dim_range")
+        var check_true = append_basic_block("check_true")
+        var check_end = append_basic_block("check_end")
+        LLVMBuildBr(g_builder, check_null_ptr)
+        LLVMPositionBuilderAtEnd(g_builder, check_null_ptr)
+        var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntUGE, tidx, maxIdx, "range_check")
+        LLVMBuildCondBr(g_builder, cond, check_true, check_end)
+        LLVMPositionBuilderAtEnd(g_builder, check_true)
+        build_exception("dim index out of range")
+        LLVMBuildBr(g_builder, check_end)
+        LLVMPositionBuilderAtEnd(g_builder, check_end)
+
     def override visitExprAt(expr:smart_ptr<ExprAt>) : ExpressionPtr
         var tsrc = getE(expr.subexpr)
         var tidx = getE(expr.index)
@@ -489,6 +510,18 @@ class LlvmJitVisitor : AstVisitor
             var ptr_idx = LLVMBuildGEP(g_builder, tsrc, tidx, "ptr_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "at_r2v")
+                setE(expr, at_r2v)
+            else
+                setE(expr, ptr_idx)
+        elif subExprT.dim.length != 0
+            var etype <- clone_type(subExprT); defer_delete(etype)
+            let maxIndex = etype.dim[etype.dim.length-1]
+            etype.dim |> pop()
+            var element_type = type_to_llvm_type(etype)
+            check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0))
+            var ptr_idx = LLVMBuildGEP2(g_builder, element_type, tsrc, tidx, "dim_at")
+            if expr.atFlags.r2v
+                var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "dim_at_r2v")
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
