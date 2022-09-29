@@ -95,12 +95,12 @@ namespace das {
     void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src );
     uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src );
 
-    __forceinline bool equ_sptr_sptr ( const smart_ptr_raw<void> & left, const smart_ptr_raw<void> & right ) { return left.get() == right.get(); }
-    __forceinline bool nequ_sptr_sptr ( const smart_ptr_raw<void> & left, const smart_ptr_raw<void> & right ) { return left.get() != right.get(); }
-    __forceinline bool equ_sptr_ptr ( const smart_ptr_raw<void> & left, const void * right ) { return left.get() == right; }
-    __forceinline bool nequ_sptr_ptr ( const smart_ptr_raw<void> & left, const void * right ) { return left.get() != right; }
-    __forceinline bool equ_ptr_sptr ( const void * left, const smart_ptr_raw<void> & right ) { return left == right.get(); }
-    __forceinline bool nequ_ptr_sptr ( const void * left, const smart_ptr_raw<void> & right ) { return left != right.get(); }
+    __forceinline bool equ_sptr_sptr ( const smart_ptr_raw<void> left, const smart_ptr_raw<void> right ) { return left.get() == right.get(); }
+    __forceinline bool nequ_sptr_sptr ( const smart_ptr_raw<void> left, const smart_ptr_raw<void> right ) { return left.get() != right.get(); }
+    __forceinline bool equ_sptr_ptr ( const smart_ptr_raw<void> left, const void * right ) { return left.get() == right; }
+    __forceinline bool nequ_sptr_ptr ( const smart_ptr_raw<void> left, const void * right ) { return left.get() != right; }
+    __forceinline bool equ_ptr_sptr ( const void * left, const smart_ptr_raw<void> right ) { return left == right.get(); }
+    __forceinline bool nequ_ptr_sptr ( const void * left, const smart_ptr_raw<void> right ) { return left != right.get(); }
 
     void gc0_save_ptr ( char * name, void * data, Context * context, LineInfoArg * line );
     void gc0_save_smart_ptr ( char * name, smart_ptr_raw<void> data, Context * context, LineInfoArg * line );
