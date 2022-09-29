@@ -3206,6 +3206,7 @@ namespace das
         context.debugger = getDebugger();
         isSimulating = false;
         context.thisHelper = &helper;   // note - we may need helper for the 'complete'
+        daScriptEnvironment::bound->g_Program = this;   // node - we are calling macros
         library.foreach_in_order([&](Module * pm) -> bool {
             for ( auto & sm : pm->simulateMacros ) {
                 if ( !sm->preSimulate(this, &context) ) {
@@ -3244,6 +3245,7 @@ namespace das
             return true;
         }, thisModule.get());
         context.thisHelper = nullptr;
+        daScriptEnvironment::bound->g_Program = nullptr;
         // dispatch about new inited context
         context.announceCreation();
         if ( options.getBoolOption("log_debug_mem",false) ) {

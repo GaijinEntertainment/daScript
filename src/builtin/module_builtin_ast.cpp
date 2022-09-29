@@ -148,14 +148,17 @@ namespace das {
         return program;
     }
 
-    char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context ) {
+    char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at ) {
+        if ( !t )
+            context->throw_error_at(at ? *at : LineInfo(), "expecting type, not null");
         return context->stringHeap->allocateString(t->describe(
             d_extra ? TypeDecl::DescribeExtra::yes : TypeDecl::DescribeExtra::no,
             d_contracts ? TypeDecl::DescribeContracts::yes : TypeDecl::DescribeContracts::no,
             d_module ? TypeDecl::DescribeModule::yes : TypeDecl::DescribeModule::no));
     }
 
-    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, Context * context ) {
+    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, Context * context, LineInfoArg * at ) {
+        if ( !t ) context->throw_error_at(at ? *at : LineInfo(), "expecting type, not null");
         return context->stringHeap->allocateString(describeCppType(t,
             d_substitureRef ? CpptSubstitureRef::yes : CpptSubstitureRef::no,
             d_skipRef ? CpptSkipRef::yes : CpptSkipRef::no,
@@ -163,13 +166,15 @@ namespace das {
             d_redundantConst ? CpptRedundantConst::yes : CpptRedundantConst::no));
     }
 
-    char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context ) {
+    char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context, LineInfoArg * at ) {
+        if ( !t ) context->throw_error_at(at ? *at : LineInfo(), "expecting expression, not null");
         TextWriter ss;
         ss << *t;
         return context->stringHeap->allocateString(ss.str());
     }
 
-    char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context ) {
+    char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context, LineInfoArg * at ) {
+        if ( !t ) context->throw_error_at(at ? *at : LineInfo(), "expecting function, not null");
         TextWriter ss;
         ss << *t;
         return context->stringHeap->allocateString(ss.str());
@@ -179,7 +184,8 @@ namespace das {
         return context->stringHeap->allocateString(das_to_string(bt));
     }
 
-    char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context ) {
+    char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context, LineInfoArg * at ) {
+        if ( !bft ) context->throw_error_at(at ? *at : LineInfo(), "expecting bitfield type, not null");
         return context->stringHeap->allocateString(bft->findBitfieldName(value));
     }
 
@@ -519,19 +525,19 @@ namespace das {
                 ->args({"module","structure"});
         addExtern<DAS_BIND_FUN(ast_describe_typedecl)>(*this, lib,  "describe_typedecl",
             SideEffects::none, "ast_describe_typedecl")
-                ->args({"type","extra","contracts","module","context"});
+                ->args({"type","extra","contracts","module","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_describe_typedecl_cpp)>(*this, lib,  "describe_typedecl_cpp",
             SideEffects::none, "ast_describe_typedecl_cpp")
-                ->args({"type","substitueRef","skipRef","skipConst","redundantConst","context"});
+                ->args({"type","substitueRef","skipRef","skipConst","redundantConst","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "describe_expression",
             SideEffects::none, "ast_describe_expression")
-                ->args({"expression","context"});
+                ->args({"expression","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "describe_function",
             SideEffects::none, "describe_function")
-                ->args({"function","context"});
+                ->args({"function","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_find_bitfield_name)>(*this, lib,  "find_bitfield_name",
             SideEffects::none, "find_bitfield_name")
-                ->args({"bit","value","context"});
+                ->args({"bit","value","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_find_enum_value)>(*this, lib,  "find_enum_value",
             SideEffects::none, "find_enum_value")
                 ->args({"enum","value"});

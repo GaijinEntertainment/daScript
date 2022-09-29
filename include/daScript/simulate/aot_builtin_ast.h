@@ -420,12 +420,12 @@ namespace das {
 #undef DECL_VISIT
 #undef IMPL_BIND_EXPR
 
-    char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context );
-    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, Context * context );
-    char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context );
-    char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context );
+    char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at );
+    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, Context * context, LineInfoArg * at );
+    char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context, LineInfoArg * at );
+    char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context, LineInfoArg * at );
     char * ast_das_to_string ( Type bt, Context * context );
-    char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context );
+    char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context, LineInfoArg * at );
     int64_t ast_find_enum_value ( EnumerationPtr enu, const char * value );
 
     int32_t any_array_size ( void * _arr );
