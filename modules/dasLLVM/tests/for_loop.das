@@ -56,17 +56,22 @@ def range_for_with_finally ( value:int )
 
 [jit]
 def dim_for ( var a:int[10] )
+    var count = 0
     for j in a
         j = 13
+        count ++
+    return count
 
 [jit]
 def dim_and_range_for ( var a:int[10] )
+    var count = 0
     for i,j in range(5),a
         j = i
+        count ++
+    return count
 
 [test]
 def test_for_loop ( t:T? )
-
     t |> run("range for") <| @ ( t : T? )
         t |> success ( is_jit_function ( @@range_for ) )
         t |> success ( is_jit_function ( @@range_for_range ) )
@@ -84,10 +89,10 @@ def test_for_loop ( t:T? )
         t |> success ( is_jit_function ( @@dim_for ) )
         t |> success ( is_jit_function ( @@dim_and_range_for ) )
         var a : int[10]
-        dim_for(a)
+        t |> equal ( dim_for(a), 10 )
         for i in a
             t |> equal ( i, 13 )
-        dim_and_range_for(a)
+        t |> equal ( dim_and_range_for(a), 5 )
         for i,j in a,range(10)
             t |> equal ( i, j<5 ? j : 13 )
 
