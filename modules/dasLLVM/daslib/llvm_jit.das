@@ -473,8 +473,7 @@ class LlvmJitVisitor : AstVisitor
         var check_end = append_basic_block("check_end")
         LLVMBuildBr(g_builder, check_null_ptr)
         LLVMPositionBuilderAtEnd(g_builder, check_null_ptr)
-        var tval = LLVMBuildPtrToInt(g_builder, tsrc, LLVMIntPtrType(), "ptr_bit")
-        var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, tval, LLVMConstInt(LLVMIntPtrType(), 0ul, 0), "null_check")
+        var cond = LLVMBuildIsNull(g_builder, tsrc, "null_check")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_true)
         build_exception("dereferencing null pointer")
@@ -1014,7 +1013,7 @@ class LlvmJitVisitor : AstVisitor
         var range2 : table<Expression?; LLVMOpaqueValue?>
 
         for svar,ssrc in expr.iteratorVariables,expr.sources
-            if ssrc._type.isRange
+            if ssrc._type.isRange           // range()
                 var srange = getE(ssrc)
                 var sfrom = LLVMBuildExtractElement(g_builder, srange, LLVMConstInt(LLVMInt32Type(),0ul,0), "range_from_{svar.name}")
                 var sto = LLVMBuildExtractElement(g_builder, srange, LLVMConstInt(LLVMInt32Type(),1ul,0), "range_to_{svar.name}")
@@ -1024,6 +1023,15 @@ class LlvmJitVisitor : AstVisitor
                 LLVMPositionBuilderAtEnd(g_builder, okay)
                 range2[get_ptr(ssrc)] = sto
                 LLVMBuildStore(g_builder, sfrom, getV(svar))
+            elif ssrc._type.dim.length != 0  // []
+                var element_type = type_to_llvm_type(svar._type)
+                var sdim = getE(ssrc)
+                var s0 = LLVMBuildGEP2(g_builder, element_type, sdim, LLVMConstInt(LLVMInt32Type(),0ul,0), "dim_0")
+                LLVMBuildStore(g_builder, s0, getV(svar))
+                let dimSize = ssrc._type.dim[ssrc._type.dim.length-1]
+                var sto = LLVMBuildGEP2(g_builder, element_type, sdim, LLVMConstInt(LLVMInt32Type(),uint64(dimSize),0), "")
+                sto = LLVMBuildPtrToInt(g_builder, sto, LLVMIntPtrType(), "dim_end")
+                range2[get_ptr(ssrc)] = sto
             else
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
 
@@ -1032,10 +1040,14 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_start)
 
         for svar,ssrc in expr.iteratorVariables,expr.sources
-            if ssrc._type.isRange
+            if ssrc._type.isRange           // range()
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
                 svar_v = LLVMBuildAdd(g_builder, svar_v, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
                 LLVMBuildStore(g_builder, svar_v, getV(svar))
+            elif ssrc._type.dim.length != 0 // []
+                var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
+                var svar_i = LLVMBuildGEP2(g_builder, type_to_llvm_type(svar._type), svar_v, LLVMConstInt(LLVMInt32Type(),1ul,0), "")
+                LLVMBuildStore(g_builder, svar_i, getV(svar))
             else
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
 
@@ -1043,10 +1055,18 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder, for_iterate)
 
         for svar,ssrc in expr.iteratorVariables,expr.sources
-            if ssrc._type.isRange
+            if ssrc._type.isRange                       // range
                 var sto = range2[get_ptr(ssrc)]
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
                 var rcond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, svar_v, sto, "")
+                var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_okay")
+                LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, okay)
+                LLVMPositionBuilderAtEnd(g_builder, okay)
+            elif ssrc._type.dim.length != 0             // []
+                var sto = range2[get_ptr(ssrc)]
+                var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
+                var svar_i = LLVMBuildPtrToInt(g_builder, svar_v, LLVMIntPtrType(), "")
+                var rcond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, svar_i, sto, "")
                 var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_okay")
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, okay)
                 LLVMPositionBuilderAtEnd(g_builder, okay)
