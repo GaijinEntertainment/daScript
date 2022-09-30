@@ -763,7 +763,8 @@ def public visit_finally ( blk:ExprBlock?; adapter:smart_ptr<VisitorAdapter> )
         visit_finally(reinterpret<smart_ptr<ExprBlock>> blk, adapter)
 
 def public isCMRES ( fun:FunctionPtr ) : bool
-    return fun.result.isRefType && !fun.result.flags.ref
+    return fun.flags.copyOnReturn || fun.flags.moveOnReturn
 
 def public isCMRES ( fun:Function? ) : bool
-    return fun.result.isRefType && !fun.result.flags.ref
+    return fun.flags.copyOnReturn || fun.flags.moveOnReturn
+
