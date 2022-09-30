@@ -105,6 +105,7 @@ class LlvmJitVisitor : AstVisitor
     adapter : smart_ptr<VisitorAdapter>
     e2v : table<Expression?;LLVMOpaqueValue?>
     v2v : table<Variable?;LLVMOpaqueValue?>
+    call2cmres : table<Expression?;LLVMOpaqueValue?>
     errors : array<string>
     fnmna : string
     [[do_not_delete]] ffunc, wfunc : LLVMOpaqueValue?
@@ -299,23 +300,36 @@ class LlvmJitVisitor : AstVisitor
         thisFunc = null
         return fun
 
+    def isCall2CMRES ( expr:ExpressionPtr )
+        return (expr is ExprCall) && isCMRES((expr as ExprCall).func)
+
+    def make_call_to_cmres ( expr:ExpressionPtr; v_ptr:LLVMOpaqueValue? )
+        if isCall2CMRES(expr)
+            call2cmres[get_ptr(expr)] = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMVoidType(),0u), "call_result_{(expr as ExprCall).func.name}")
+            return true
+        return false
+
     def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
-        var vtype = arg._type.isRef ?  LLVMPointerType(type_to_llvm_type(arg._type),0u) : type_to_llvm_type(arg._type)
+        var vtype = arg._type.flags.ref ?  LLVMPointerType(type_to_llvm_type(arg._type),0u) : type_to_llvm_type(arg._type)
         var v_ptr : LLVMOpaqueValue?
         if arg.flags.aliasCMRES
             v_ptr = get_cmres_param()
-            v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vtype, "variable_cmres_{arg.name}")
+            v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "variable_cmres_{arg.name}")
         else
             v_ptr = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(arg.stackTop), 0), "")
             v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "variable_{arg.name}")
         setV(arg, v_ptr)
         if arg.init == null
-            var vsize = arg._type.isRef ?  typeinfo(sizeof type<void?>) : arg._type.sizeOf
+            var vsize = arg._type.flags.ref ?  typeinfo(sizeof type<void?>) : arg._type.sizeOf
             LLVMBuildMemSet(g_builder, v_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(vsize), 0), 16u)
+        elif make_call_to_cmres(arg.init, v_ptr)
+            pass    // do nothing
 
     def override visitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
         var tdst = getV(arg)
-        if arg._type.flags.ref
+        if isCall2CMRES(expr)
+            pass    // this variable is initialized via cmres call
+        elif arg._type.flags.ref
             var src = getE(expr)
             LLVMBuildStore(g_builder, src, tdst)
         else
@@ -330,7 +344,7 @@ class LlvmJitVisitor : AstVisitor
             var var_ptr = getV(expr.variable)
             if expr.variable.flags.aliasCMRES
                 pass
-            elif varType.isRef
+            if varType.flags.ref
                 var_ptr = LLVMBuildLoad(g_builder, var_ptr, "")
             if expr.varFlags.r2v
                 assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
@@ -494,9 +508,16 @@ class LlvmJitVisitor : AstVisitor
         else
             LLVMBuildStore(g_builder, tsrc, tdst)
 
-    def override visitExprCopy(expr:smart_ptr<ExprCopy>) : ExpressionPtr
+    def override preVisitExprCopyRight(expr:smart_ptr<ExprCopy>;right:ExpressionPtr): void
         var tdst = getE(expr.left)
-        build_copy(tdst, expr.right)
+        make_call_to_cmres(expr.right, tdst)
+
+    def override visitExprCopy(expr:smart_ptr<ExprCopy>) : ExpressionPtr
+        if isCall2CMRES(expr.right)
+            pass    // already a call to cmres, no need to copy
+        else
+            var tdst = getE(expr.left)
+            build_copy(tdst, expr.right)
         return expr
 
     def check_ptr_zero ( tsrc:LLVMOpaqueValue? )
@@ -917,6 +938,18 @@ class LlvmJitVisitor : AstVisitor
             setE(expr, intrinsic_builtin_range(expr))
             return expr
 
+        // get CMRES, if its local
+        var cmresEval : LLVMOpaqueValue?
+        if isCMRES(expr.func)
+            if !expr.doesNotNeedSp && expr.stackTop!=0u
+                cmresEval = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(expr.stackTop), 0), "")
+                cmresEval = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "cmres_eval_{call_name}")
+            elif call2cmres |> key_exists(get_ptr(expr))
+                cmresEval = call2cmres[get_ptr(ExpressionPtr(expr))]
+            else
+                cmresEval = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
+                failed_E(expr, "CMRES is not local, not supported yet")
+
         if expr.func.flags.builtIn
             if expr.func.flags.interopFn
                 var args = build_array_of_arguments(expr.arguments)
@@ -944,7 +977,9 @@ class LlvmJitVisitor : AstVisitor
         else
             if expr.func.moreFlags.requestJit
                 var params <- build_call_params(expr)
-                params |> push(LLVMGetParam(ffunc, uint(length(expr.arguments)))) // context
+                params |> push(get_context_param()) // context
+                if cmresEval!=null
+                    params |> push(cmresEval)       // cmres
                 let fmna = get_mangled_name(FunctionPtr(expr.func))
                 var func = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
