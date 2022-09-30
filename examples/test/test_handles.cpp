@@ -516,6 +516,24 @@ void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * conte
     context->invoke(blk, args, nullptr, at);
 }
 
+TDim<int32_t,10> testCMRES ( Context * __context__ )
+{
+	TDim<int32_t,10> __a_rename_at_7; das_zero(__a_rename_at_7);
+	{
+		bool __need_loop_8 = true;
+		// j : int& -const
+		das_iterator<TDim<int32_t,10>> __j_iterator(__a_rename_at_7);
+		int32_t * __j_rename_at_8;
+		__need_loop_8 = __j_iterator.first(__context__,(__j_rename_at_8)) && __need_loop_8;
+		for ( ; __need_loop_8 ; __need_loop_8 = __j_iterator.next(__context__,(__j_rename_at_8)) )
+		{
+			das_copy((*__j_rename_at_8),13);
+		}
+		__j_iterator.close(__context__,(__j_rename_at_8));
+	};
+	return das_auto_cast_ref<TDim<int32_t,10>>::cast(__a_rename_at_7);
+}
+
 void testFooArray(const TBlock<void,FooArray> & blk, Context * context, LineInfoArg * at) {
     FooArray arr;
     for (int32_t x = 0; x != 10; ++x) {
@@ -608,6 +626,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addCtorAndUsing<Point3Array>(*this, lib, "Point3Array", "Point3Array");
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
         SideEffects::modifyExternal, "testPoint3Array");
+    addExtern<DAS_BIND_FUN(testCMRES),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "testCMRES",
+        SideEffects::modifyExternal, "testCMRES");
     // foo array
     addExtern<DAS_BIND_FUN(testFooArray)>(*this, lib, "testFooArray",
         SideEffects::modifyExternal, "testFooArray");

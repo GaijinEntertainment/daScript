@@ -761,3 +761,9 @@ def public function_to_type ( fn : FunctionPtr ) : TypeDeclPtr
 def public visit_finally ( blk:ExprBlock?; adapter:smart_ptr<VisitorAdapter> )
     unsafe
         visit_finally(reinterpret<smart_ptr<ExprBlock>> blk, adapter)
+
+def public isCMRES ( fun:FunctionPtr ) : bool
+    return fun.result.isRefType && !fun.result.flags.ref
+
+def public isCMRES ( fun:Function? ) : bool
+    return fun.result.isRefType && !fun.result.flags.ref

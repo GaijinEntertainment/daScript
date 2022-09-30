@@ -55,6 +55,7 @@ template <> struct das::das_alias<Point3> : das::das_alias_vec<Point3,float3> {}
 typedef das::vector<Point3> Point3Array;
 
 void testPoint3Array(const das::TBlock<void, const Point3Array> & blk, das::Context * context, das::LineInfoArg * lineinfo);
+das::TDim<int32_t,10> testCMRES ( das::Context * __context__ );
 
 struct SomeDummyType {
     int32_t foo;
