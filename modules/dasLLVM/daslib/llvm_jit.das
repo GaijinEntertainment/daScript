@@ -12,12 +12,13 @@ require daslib/strings_boost
 require daslib/defer
 require daslib/fio
 
+let LLVM_DEBUG_RESULT = false
 let LLVM_DEBUG_EVERYTHING = false
 
 let LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
-let LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING
+let LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING || LLVM_DEBUG_RESULT
 
 struct JitEngine
     mod : LLVMOpaqueModule?
@@ -123,7 +124,12 @@ class LlvmJitVisitor : AstVisitor
         // implementation function
         var fun_args <-  [{for a in fun.arguments; type_to_llvm_abi_type(a._type)}]
         fun_args |> push(LLVMPointerType(LLVMVoidType(), 0u))  // context
-        var fun_type = LLVMFunctionType(type_to_llvm_abi_type(fun.result), fun_args)
+        var fun_type : LLVMOpaqueType?
+        if isCMRES(fun)
+            fun_args |> push(LLVMPointerType(LLVMVoidType(), 0u))  // CMRES
+            fun_type = LLVMFunctionType(LLVMVoidType(), fun_args)
+        else
+            fun_type = LLVMFunctionType(type_to_llvm_abi_type(fun.result), fun_args)
         ffunc = LLVMAddFunction(g_mod, "{fnmna} implementation", fun_type)
         // wrapper function
         var ret_type = LLVMFunctionType(LLVMFloat4Type(),
@@ -254,13 +260,18 @@ class LlvmJitVisitor : AstVisitor
                 arg_v = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(a._type), arg_ptr, "arg_any_{ai}")
             wargs |> push(arg_v)
         wargs |> push(LLVMGetParam(wfunc, 0u))  // context
+        if isCMRES(fun)
+            wargs |> push(LLVMGetParam(wfunc, 2u))  // cmres
         var ret_v = LLVMBuildCall(g_builder, ffunc, wargs, "")
         if !fun.result.isVoid
-            var tres = cast_to_vec4f(fun.result, ret_v)
-            if tres != null
-                LLVMBuildRet(g_builder, tres)
+            if isCMRES(fun)
+                LLVMBuildRet(g_builder, cast_ptr_to_vec4f(LLVMGetParam(wfunc,2u)))
             else
-                LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
+                var tres = cast_to_vec4f(fun.result, ret_v)
+                if tres != null
+                    LLVMBuildRet(g_builder, tres)
+                else
+                    LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
         else
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
         // now write to regular function
@@ -290,12 +301,17 @@ class LlvmJitVisitor : AstVisitor
 
     def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
         var vtype = arg._type.isRef ?  LLVMPointerType(type_to_llvm_type(arg._type),0u) : type_to_llvm_type(arg._type)
-        var v_ptr = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(arg.stackTop), 0), "")
-        var vmem = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "variable_{arg.name}")
-        setV(arg, vmem)
+        var v_ptr : LLVMOpaqueValue?
+        if arg.flags.aliasCMRES
+            v_ptr = get_cmres_param()
+            v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vtype, "variable_cmres_{arg.name}")
+        else
+            v_ptr = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(arg.stackTop), 0), "")
+            v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "variable_{arg.name}")
+        setV(arg, v_ptr)
         if arg.init == null
             var vsize = arg._type.isRef ?  typeinfo(sizeof type<void?>) : arg._type.sizeOf
-            LLVMBuildMemSet(g_builder, vmem, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(vsize), 0), 16u)
+            LLVMBuildMemSet(g_builder, v_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(vsize), 0), 16u)
 
     def override visitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
         var tdst = getV(arg)
@@ -312,7 +328,9 @@ class LlvmJitVisitor : AstVisitor
             failed_E(expr, "{expr.variable.name} support block variable")
         elif expr.varFlags.local    // local varaibels
             var var_ptr = getV(expr.variable)
-            if varType.isRef
+            if expr.variable.flags.aliasCMRES
+                pass
+            elif varType.isRef
                 var_ptr = LLVMBuildLoad(g_builder, var_ptr, "")
             if expr.varFlags.r2v
                 assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
@@ -369,6 +387,17 @@ class LlvmJitVisitor : AstVisitor
             failed_E(expr, "unsupported cast_from_vec4f type {describe(etype)}")
         return tres
 
+    def cast_ptr_to_vec4f ( tsrc:LLVMOpaqueValue? )
+        static_if typeinfo(sizeof type<void?>)==8
+            var vvec = LLVMGetUndef(LLVMVectorType(LLVMInt64Type(), 2u))
+            var tval = LLVMBuildPtrToInt(g_builder, tsrc, LLVMInt64Type(), "")
+            var vsrc = LLVMBuildInsertElement(g_builder, vvec, tval, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            return LLVMBuildBitCast(g_builder, vsrc, LLVMFloat4Type(), "ptr_to_vec4f")
+        else
+            var tval = LLVMBuildPtrToInt(g_builder, tsrc, LLVMInt32Type(), "")
+            var tbit = LLVMBuildBitCast(g_builder, tval, LLVMFloatType(), "")
+            return LLVMBuildInsertElement(g_builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "ptr_to_vec4f")
+
     def cast_to_vec4f ( etype:TypeDeclPtr; tsrc:LLVMOpaqueValue? )
         var vres = LLVMGetUndef(LLVMFloat4Type())
         var tres : LLVMOpaqueValue?
@@ -406,15 +435,7 @@ class LlvmJitVisitor : AstVisitor
             elif bt==Type tFloat4
                 tres = tsrc
             elif bt==Type tString || bt==Type tPointer
-                static_if typeinfo(sizeof type<void?>)==8
-                    var vvec = LLVMGetUndef(LLVMVectorType(LLVMInt64Type(), 2u))
-                    var tval = LLVMBuildPtrToInt(g_builder, tsrc, LLVMInt64Type(), "ptr_bit")
-                    var vsrc = LLVMBuildInsertElement(g_builder, vvec, tval, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "ptr64_vec")
-                    tres = LLVMBuildBitCast(g_builder, vsrc, LLVMFloat4Type(), "return_result")
-                else
-                    var tval = LLVMBuildPtrToInt(g_builder, tsrc, LLVMInt32Type(), "ptr_bit")
-                    var tbit = LLVMBuildBitCast(g_builder, tval, LLVMFloatType(), "ptr_f_bit")
-                    tres = LLVMBuildInsertElement(g_builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
+                tres = cast_ptr_to_vec4f(tsrc)
             else
                 failed("unsupported workhorse cast_to_vec4f cast {describe(etype)}")
         else
@@ -423,7 +444,12 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitExprReturn(expr:smart_ptr<ExprReturn>) : ExpressionPtr
         if !thisFunc.result.isVoid
-            LLVMBuildRet(g_builder, getE(expr.subexpr))
+            if isCMRES(thisFunc)
+                if !expr.returnFlags.returnCMRES
+                    build_copy(get_cmres_param(),expr.subexpr)
+                LLVMBuildRetVoid(g_builder)
+            else
+                LLVMBuildRet(g_builder, getE(expr.subexpr))
         else
             LLVMBuildRetVoid(g_builder)
         return expr
@@ -446,10 +472,16 @@ class LlvmJitVisitor : AstVisitor
         var str = build_string_constant(message)
         return LLVMBuildPointerCast(g_builder, str, LLVMPointerType(LLVMInt8Type(), 0u), "string_constant {message}")
 
+    def get_context_param : LLVMOpaqueValue?
+        return LLVMGetParam(ffunc,uint(thisFunc.arguments.length))
+
+    def get_cmres_param : LLVMOpaqueValue?
+        return LLVMGetParam(ffunc,uint(thisFunc.arguments.length+1))
+
     def build_exception ( message:string )
         var params = [[auto
-            get_string_constant_ptr(message);                   // message
-            LLVMGetParam(ffunc,uint(thisFunc.arguments.length)) // context is always last argument of function
+            get_string_constant_ptr(message);   // message
+            get_context_param()                 // context
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_EXCEPTION), params, "")
 

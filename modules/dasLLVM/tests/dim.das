@@ -15,7 +15,7 @@ def addAll ( var a : int[10] )
     return c
 
 [test]
-def test_ref ( t:T? )
+def test_dim ( t:T? )
     t |> run("array []") <| @ ( t : T? )
         var x : int[10]
         t |> success ( is_jit_function(@@makeAll13) )
