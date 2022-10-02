@@ -2882,7 +2882,6 @@ namespace das {
     void * das_get_jit_exception ();
     vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context );
     void * das_get_jit_call_or_fastcall ();
-    uint32_t das_get_eval_top_offset ();
     char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args );
     void * das_get_jit_string_builder ();
     void * jit_get_global_mnh ( uint64_t mnh, Context & context );

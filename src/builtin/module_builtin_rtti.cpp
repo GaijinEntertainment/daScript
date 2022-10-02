@@ -205,9 +205,19 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeModuleFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "ModuleFlags";
+        ft->argNames = {
+            "builtIn", "promoted", "isPublic", "isModule", "isSolidContext"
+        };
+        return ft;
+    }
+
     struct ModuleAnnotation : ManagedStructureAnnotation<Module,false> {
         ModuleAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Module", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addFieldEx ( "moduleFlags", "moduleFlags", offsetof(Module, moduleFlags), makeModuleFlags() );
         }
     };
 
@@ -1198,6 +1208,7 @@ namespace das {
             addAlias(makeContextCategoryFlags());
             addAlias(makeTypeInfoFlags());
             addAlias(makeStructInfoFlags());
+            addAlias(makeModuleFlags());
             // enums
             addEnumeration(make_smart<EnumerationCompilationError>());
             // type annotations

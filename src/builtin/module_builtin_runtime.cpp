@@ -1030,10 +1030,6 @@ namespace das
         return (void *) &jit_exception;
     }
 
-    uint32_t das_get_eval_top_offset () {
-        return uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop));
-    }
-
     vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context ) {
         return context->callOrFastcall(fn, args, nullptr);
     }
@@ -1439,10 +1435,10 @@ namespace das
             SideEffects::none, "das_get_jit_call_or_fastcall");
         addExtern<DAS_BIND_FUN(das_get_jit_string_builder)>(*this, lib, "get_jit_string_builder",
             SideEffects::none, "das_get_jit_string_builder");
-        addExtern<DAS_BIND_FUN(das_get_eval_top_offset)>(*this, lib, "get_jit_context_eval_top_offset",
-            SideEffects::none, "das_get_eval_top_offset");
         addExtern<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
             SideEffects::none, "das_get_jit_get_global_mnh");
         addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
+        addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
+        addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
     }
 }
