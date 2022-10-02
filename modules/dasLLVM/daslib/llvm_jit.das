@@ -36,6 +36,7 @@ var g_str2v : table<string; LLVMOpaqueValue?>
 let FN_JIT_EXCEPTION = "`jit`exception`"
 let FN_JIT_CALL_OR_FASTCALL = "`jit`call_or_fastcall`"
 let FN_JIT_STRING_BUILDER = "`jit`string_builder`"
+let FN_JIT_GET_GLOBAL_MNH = "`jit`get_global_mnh`"
 
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
@@ -57,14 +58,23 @@ def private init_jit
         LLVMFunctionType(LLVMVoidType(),
             [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, je, get_jit_exception())
+
     var jc = LLVMAddFunction(g_mod, FN_JIT_CALL_OR_FASTCALL, // jit_call_or_fastcall(func,args *,context *)
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jc, get_jit_call_or_fastcall())
+
     var jsb = LLVMAddFunction(g_mod, FN_JIT_STRING_BUILDER, // jit_string_builder ( context *, node *, args * )
         LLVMFunctionType(LLVMPointerType(LLVMInt8Type(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jsb, get_jit_string_builder())
+
+    // TODO: set sideeffects of this function to none
+    var jgm = LLVMAddFunction(g_mod, FN_JIT_GET_GLOBAL_MNH,  // jit_get_global_mnh ( uint64_t mnh, context * )
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
+            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jgm, get_jit_get_global_mnh())
+
 
 [macro_function]
 def private finalize_jit
@@ -292,6 +302,17 @@ class LlvmJitVisitor : AstVisitor
                 LLVMSetAlignment(tryV, 16u)
                 LLVMBuildStore(g_builder, LLVMGetParam(ffunc, uint(ai)), tryV)
                 setV(a, tryV)
+        // go through all used global variables, and access them
+        get_use_global_variables(fun) <| $ ( variable )
+            let mangled_name = get_mangled_name(variable)
+            let MNH = hash(mangled_name)
+            var params = [[auto
+                LLVMConstInt(LLVMInt64Type(), MNH, 0);         // mnh
+                get_context_param()     // context
+            ]]
+            var vptr = LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_GET_GLOBAL_MNH), params, "")
+            vptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(type_to_llvm_type(variable._type),0u), "global_var_{variable.name}")
+            setV(variable, vptr)
 
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
         if fun.body != null && !is_terminator_expression(fun.body)
@@ -370,7 +391,11 @@ class LlvmJitVisitor : AstVisitor
             else
                 setE(expr, arg)
         else
-            failed_E(expr, "ExprLetVariable {expr.variable.name} : {describe(expr.variable._type)}")
+            var vptr = getV(expr.variable)
+            if expr.varFlags.r2v
+                setE(expr, LLVMBuildLoad(g_builder, vptr, "global_var_r2v_{expr.variable.name}"))
+            else
+                setE(expr, vptr)
         return expr
 
     def cast_from_vec4f ( expr:ExpressionPtr; etype:TypeDeclPtr; v4f:LLVMOpaqueValue? )
