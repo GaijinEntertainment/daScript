@@ -131,6 +131,9 @@ class LlvmJitVisitor : AstVisitor
         jit_context = ctx
 
     def add_llvm_functions ( fun : FunctionPtr )
+        thisFunc = get_ptr(fun)
+        defer <|
+            thisFunc = null
         fnmna = get_mangled_name(fun)
         // implementation function
         var fun_args <-  [{for a in fun.arguments; type_to_llvm_abi_type(a._type)}]
@@ -142,6 +145,14 @@ class LlvmJitVisitor : AstVisitor
         else
             fun_type = LLVMFunctionType(type_to_llvm_abi_type(fun.result), fun_args)
         ffunc = LLVMAddFunction(g_mod, "{fnmna} implementation", fun_type)
+        for a,ai in fun.arguments,urange(100500)
+            if a._type.isRef
+                LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.alignOf))
+            elif a._type.isPointer && a._type.firstType!=null
+                LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.firstType.alignOf))
+        LLVMSetParamAlignment(get_context_param(), 16u)
+        if isCMRES(fun)
+            LLVMSetParamAlignment(get_cmres_param(), uint(fun.result.alignOf))
         // wrapper function
         var ret_type = LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // context
@@ -149,6 +160,10 @@ class LlvmJitVisitor : AstVisitor
             LLVMPointerType(LLVMVoidType(),0u)                  // cmres
         ]])
         wfunc = LLVMAddFunction(g_mod, fnmna, ret_type)
+        LLVMSetParamAlignment(LLVMGetParam(wfunc, 0u), 16u)
+        LLVMSetParamAlignment(LLVMGetParam(wfunc, 1u), 16u)
+        if isCMRES(fun)
+            LLVMSetParamAlignment(LLVMGetParam(wfunc, 2u), uint(fun.result.alignOf))
 
     def append_basic_block ( name:string; add_to_phi:bool=false )
         var blk = LLVMAppendBasicBlock(ffunc,name)
