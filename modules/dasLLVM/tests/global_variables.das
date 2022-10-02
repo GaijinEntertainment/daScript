@@ -16,3 +16,5 @@ def test_global ( t:T? )
         t |> equal(2, inc_global())
         t |> equal(3, inc_global())
         t |> equal(4, inc_global())
+        t |> equal(5, count)
+

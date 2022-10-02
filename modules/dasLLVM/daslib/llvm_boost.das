@@ -149,3 +149,9 @@ def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; var args:
         return LLVMBuildCall( builder, func, unsafe(addr(args[0])), uint(nparams), name)
     else
         return LLVMBuildCall( builder, func, null, 0u, name)
+
+def describe ( typ:LLVMOpaqueType? )
+    var st = LLVMPrintTypeToString(typ)
+    var stc = clone_string(st)
+    LLVMDisposeMessage(st)
+    return stc

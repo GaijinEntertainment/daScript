@@ -304,15 +304,16 @@ class LlvmJitVisitor : AstVisitor
                 setV(a, tryV)
         // go through all used global variables, and access them
         get_use_global_variables(fun) <| $ ( variable )
-            let mangled_name = get_mangled_name(variable)
-            let MNH = hash(mangled_name)
-            var params = [[auto
-                LLVMConstInt(LLVMInt64Type(), MNH, 0);         // mnh
-                get_context_param()     // context
-            ]]
-            var vptr = LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_GET_GLOBAL_MNH), params, "")
-            vptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(type_to_llvm_type(variable._type),0u), "global_var_{variable.name}")
-            setV(variable, vptr)
+            if !variable._module.moduleFlags.isSolidContext
+                let mangled_name = get_mangled_name(variable)
+                let MNH = hash(mangled_name)
+                var params = [[auto
+                    LLVMConstInt(LLVMInt64Type(), MNH, 0);         // mnh
+                    get_context_param()     // context
+                ]]
+                var vptr = LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_GET_GLOBAL_MNH), params, "")
+                vptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(type_to_llvm_type(variable._type),0u), "global_var_{variable.name}")
+                setV(variable, vptr)
 
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
         if fun.body != null && !is_terminator_expression(fun.body)
@@ -391,7 +392,15 @@ class LlvmJitVisitor : AstVisitor
             else
                 setE(expr, arg)
         else
-            var vptr = getV(expr.variable)
+            var vptr : LLVMOpaqueValue?
+            if expr.variable._module.moduleFlags.isSolidContext
+                var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(LLVMInt8Type(),0u), "")
+                var global_ptr = LLVMBuildGEP(g_builder, ctx_ptr, LLVMConstInt(LLVMInt32Type(), uint64(CONTEXT_OFFSET_OF_GLOBALS), 0), "")
+                global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMInt8Type(),0u), global_ptr, "")
+                vptr = LLVMBuildGEP(g_builder, global_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.variable.stackTop), 0), "")
+                vptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(type_to_llvm_type(expr.variable._type),0u), "global_var_{expr.variable.name}")
+            else
+                vptr = getV(expr.variable)
             if expr.varFlags.r2v
                 setE(expr, LLVMBuildLoad(g_builder, vptr, "global_var_r2v_{expr.variable.name}"))
             else
