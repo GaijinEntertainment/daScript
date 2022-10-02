@@ -1060,6 +1060,14 @@ namespace das
         return (void *) &jit_string_builder;
     }
 
+    void * jit_get_global_mnh ( uint64_t mnh, Context & context ) {
+        return context.globals + context.globalOffsetByMangledName(mnh);
+    }
+
+    void * das_get_jit_get_global_mnh () {
+        return (void *) &jit_get_global_mnh;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1433,6 +1441,8 @@ namespace das
             SideEffects::none, "das_get_jit_string_builder");
         addExtern<DAS_BIND_FUN(das_get_eval_top_offset)>(*this, lib, "get_jit_context_eval_top_offset",
             SideEffects::none, "das_get_eval_top_offset");
+        addExtern<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
+            SideEffects::none, "das_get_jit_get_global_mnh");
         addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
     }
 }

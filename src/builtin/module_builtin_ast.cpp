@@ -149,8 +149,7 @@ namespace das {
     }
 
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at ) {
-        if ( !t )
-            context->throw_error_at(at ? *at : LineInfo(), "expecting type, not null");
+        if ( !t ) context->throw_error_at(at ? *at : LineInfo(), "expecting type, not null");
         return context->stringHeap->allocateString(t->describe(
             d_extra ? TypeDecl::DescribeExtra::yes : TypeDecl::DescribeExtra::no,
             d_contracts ? TypeDecl::DescribeContracts::yes : TypeDecl::DescribeContracts::no,
@@ -320,12 +319,33 @@ namespace das {
         }
     }
 
-    char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context ) {
+    char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context, LineInfoArg * at ) {
+        if ( !func ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
         return context->stringHeap->allocateString(func->getMangledName());
     }
 
-    char * get_mangled_name_t ( smart_ptr_raw<TypeDecl> typ, Context * context ) {
+    char * get_mangled_name_t ( smart_ptr_raw<TypeDecl> typ, Context * context, LineInfoArg * at ) {
+        if ( !typ ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
         return context->stringHeap->allocateString(typ->getMangledName());
+    }
+
+    char * get_mangled_name_v ( smart_ptr_raw<Variable> var, Context * context, LineInfoArg * at ) {
+        if ( !var ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
+        return context->stringHeap->allocateString(var->getMangledName());
+    }
+
+    void get_use_global_variables ( smart_ptr_raw<Function> func, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at ) {
+        if ( !func ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
+        for ( auto & var : func->useGlobalVariables ) {
+            das_invoke<void>::invoke<VariablePtr>(context,at,block,var);
+        }
+    }
+
+    void get_use_functions ( smart_ptr_raw<Function> func, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at ) {
+        if ( !func ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
+        for ( auto & fn : func->useFunctions ) {
+            das_invoke<void>::invoke<FunctionPtr>(context,at,block,fn);
+        }
     }
 
     class MangledNameParserCtx : public MangledNameParser {
@@ -543,10 +563,13 @@ namespace das {
                 ->args({"enum","value"});
         addExtern<DAS_BIND_FUN(get_mangled_name)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name")
-                ->args({"function","context"});
+                ->args({"function","context","line"});
         addExtern<DAS_BIND_FUN(get_mangled_name_t)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_t")
-                ->args({"type","context"});
+                ->args({"type","context","line"});
+        addExtern<DAS_BIND_FUN(get_mangled_name_v)>(*this, lib,  "get_mangled_name",
+            SideEffects::none, "get_mangled_name_v")
+                ->args({"variable","context","line"});
         // type conversion functions
         addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
             SideEffects::none, "das_to_string")
@@ -678,6 +701,13 @@ namespace das {
         addExtern<DAS_BIND_FUN(exprReturnsOrBreaks)>(*this, lib,  "is_terminator_or_break_expression",
             SideEffects::none, "exprReturnsOrBreaks")
                 ->args({"expr"});
+        // used variables and functions
+        addExtern<DAS_BIND_FUN(get_use_global_variables)>(*this, lib,  "get_use_global_variables",
+            SideEffects::invoke, "get_use_global_variables")
+                ->args({"func","block","context","at"});
+        addExtern<DAS_BIND_FUN(get_use_functions)>(*this, lib,  "get_use_functions",
+            SideEffects::invoke, "get_use_functions")
+                ->args({"func","block","context","at"});
         // jit
         addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
             SideEffects::none, "das_get_builtin_function_address")

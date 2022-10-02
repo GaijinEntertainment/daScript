@@ -2885,6 +2885,8 @@ namespace das {
     uint32_t das_get_eval_top_offset ();
     char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args );
     void * das_get_jit_string_builder ();
+    void * jit_get_global_mnh ( uint64_t mnh, Context & context );
+    void * das_get_jit_get_global_mnh ();
 }
 
 #if defined(_MSC_VER)
