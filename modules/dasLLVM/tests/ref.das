@@ -12,6 +12,13 @@ def inc_local_ref ( var a : int& )
 def inc_arg_ref ( var a : int& )
     return a++
 
+var global_ref = 13
+
+[jit]
+def get_global_ref : int&
+    unsafe
+        return global_ref
+
 [test]
 def test_ref ( t:T? )
     t |> run("local ref") <| @ ( t : T? )
@@ -26,3 +33,14 @@ def test_ref ( t:T? )
         t |> equal(a, 2)
         t |> equal(b, 1)
         t |> success(is_jit_function(@@inc_arg_ref))
+    t |> run("global ref") <| @ ( t : T? )
+        t |> equal(13, global_ref)
+        t |> equal(13, get_global_ref())
+        get_global_ref() ++
+        t |> equal(14, global_ref)
+        t |> equal(14, get_global_ref())
+        global_ref ++
+        t |> equal(15, global_ref)
+        t |> equal(15, get_global_ref())
+        t |> success(is_jit_function(@@get_global_ref))
+

@@ -12,7 +12,7 @@ require daslib/strings_boost
 require daslib/defer
 require daslib/fio
 
-let LLVM_DEBUG_RESULT = false
+let LLVM_DEBUG_RESULT = true
 let LLVM_DEBUG_EVERYTHING = false
 
 let LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
@@ -464,7 +464,9 @@ class LlvmJitVisitor : AstVisitor
     def cast_to_vec4f ( etype:TypeDeclPtr; tsrc:LLVMOpaqueValue? )
         var vres = LLVMGetUndef(LLVMFloat4Type())
         var tres : LLVMOpaqueValue?
-        if etype.isWorkhorseType
+        if etype.isRef
+            tres = cast_ptr_to_vec4f(tsrc)
+        elif etype.isWorkhorseType
             let bt = etype.baseType
             if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
                 var tbit = LLVMBuildBitCast(g_builder, tsrc, LLVMFloatType(), "tbit")
