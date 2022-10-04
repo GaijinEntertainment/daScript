@@ -12,7 +12,7 @@ require daslib/strings_boost
 require daslib/defer
 require daslib/fio
 
-let LLVM_DEBUG_RESULT = true
+let LLVM_DEBUG_RESULT = false
 let LLVM_DEBUG_EVERYTHING = false
 
 let LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
@@ -258,6 +258,8 @@ class LlvmJitVisitor : AstVisitor
             res = LLVMPointerType(t.firstType!=null ? type_to_llvm_type(t.firstType) : LLVMVoidType(), 0u)
         elif t.isWorkhorseType
             res = base_type_to_llvm_type(t.baseType)
+        elif t.isStructure
+            res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
         else
             failed("type_to_llvm_type: unsupported type {describe(t)} at {t.at}")
             res = LLVMInt32Type()
@@ -1074,6 +1076,44 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, LLVMBuildCall(g_builder, func, params, "string_builder"))
         return expr
 
+// field
+    def override visitExprField(expr:smart_ptr<ExprField>) : ExpressionPtr
+        if expr.value._type.isBitfield
+            failed_E(expr, "bitfields are not supported yet")
+        elif expr.field==null && expr.fieldIndex==-1
+            failed_E(expr, "annotations are not supported yet")
+            /*
+            if ( r2v ) {
+                auto resN = annotation->simulateGetFieldR2V(name, context, at, value);
+                if ( !resN ) {
+                    context.thisProgram->error("integration error, simulateGetFieldR2V returned null", "", "",
+                                               at, CompilationError::missing_node );
+                }
+                return resN;
+            } else {
+                auto resN = annotation->simulateGetField(name, context, at, value);
+                if ( !resN ) {
+                    context.thisProgram->error("integration error, simulateGetField returned null", "", "",
+                                               at, CompilationError::missing_node );
+                }
+                return resN;
+            }
+            */
+        else
+            assert(expr.field!=null)
+            var val_ptr = getE(expr.value)
+            if expr.value._type.isPointer && !expr.derefFlags.unsafeDeref
+                check_ptr_zero(val_ptr)
+            val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.field.offset), 0), "")
+            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, LLVMPointerType(type_to_llvm_type(expr.field._type), 0u), "{describe(expr.value._type,false,false,false)}.{expr.field.name}")
+            if expr.fieldFlags.r2v
+                setE(expr, LLVMBuildLoad(g_builder, field_ptr, ""))
+            else
+                setE(expr, field_ptr)
+        return expr
+
+
 // break
     def override preVisitExprBreak(expr:smart_ptr<ExprBreak>) : void
         var lblk = loop_stack |> back()
@@ -1091,9 +1131,9 @@ class LlvmJitVisitor : AstVisitor
         if blk.blockFlags.inTheLoop
             blk.blockFlags ^= ExprBlockFlags finallyDisabled
         return blk
+
 // for loop
 
-// for
     def override preVisitExprFor(expr:smart_ptr<ExprFor>) : void
         var lblk = [[LoopBlock
             loop_start = LLVMAppendBasicBlock(ffunc, "for_body"),
@@ -1193,8 +1233,6 @@ class LlvmJitVisitor : AstVisitor
 
         LLVMBuildBr(g_builder, lblk.loop_body)
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_body)
-
-
 
 // while loop
     def override preVisitExprWhile(expr:smart_ptr<ExprWhile>) : void
