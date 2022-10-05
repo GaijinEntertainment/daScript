@@ -266,6 +266,8 @@ class LlvmJitVisitor : AstVisitor
             res = base_type_to_llvm_type(t.baseType)
         elif t.isStructure
             res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
+        elif t.isVoid
+            res = LLVMVoidType()
         else
             failed("type_to_llvm_type: unsupported type {describe(t)} at {t.at}")
             res = LLVMInt32Type()
@@ -952,7 +954,7 @@ class LlvmJitVisitor : AstVisitor
             var arg_types : array<LLVMOpaqueType?>
             for arg in expr.func.arguments
                 arg_types |> push(type_to_llvm_abi_type(arg._type))
-            var res_type = type_to_llvm_abi_type(expr.func.result)
+            var res_type = type_to_llvm_type(expr.func.result)
             ofunc = LLVMAddFunction(g_mod, mangled_name, LLVMFunctionType(res_type,arg_types))
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
@@ -1032,7 +1034,11 @@ class LlvmJitVisitor : AstVisitor
                 var params <- build_call_params(expr)
                 var func = register_extern_function(expr)
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
-                setE(expr, ccall)
+                if cmresEval!=null
+                    LLVMBuildStore2(g_builder, type_to_llvm_type(expr.func.result), ccall, cmresEval)
+                    setE(expr, cmresEval)
+                else
+                    setE(expr, ccall)
         else
             if expr.func.moreFlags.requestJit
                 var params <- build_call_params(expr)

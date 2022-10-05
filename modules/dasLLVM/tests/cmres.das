@@ -1,6 +1,7 @@
 require dastest/testing_boost
 
 require llvm/llvm_jit
+require UnitTest
 
 [jit]
 def cmres_via_copy ( var a:int[10] )
@@ -38,6 +39,11 @@ def cmres_var_init_via_call_with_cmres
     var a = cmres_alias_no_jit()    // calling non-jit function
     return a
 
+[jit]
+def cmres_call_native
+    var a = testCMRES()
+    return a
+
 [test]
 def test_cmres ( t:T? )
     t |> run("cmres via copy") <| @ ( t : T? )
@@ -68,4 +74,8 @@ def test_cmres ( t:T? )
         var x = cmres_var_init_via_call_with_cmres()
         for xx,i in x,range(100500)
             t |> equal(i, xx)
-
+    t |> run("cmres call native") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@cmres_call_native) )
+        var b = cmres_call_native()
+        for bb in b
+            t  |> equal(13, bb)
