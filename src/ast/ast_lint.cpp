@@ -574,8 +574,8 @@ namespace das {
         if (!options.getBoolOption("lint", true)) {
             return;
         }
-        TextWriter logs;
-        buildAccessFlags(logs);
+        // note: build access flags is now called before patchAnnotations, and is no longer needed in lint
+        // TextWriter logs; buildAccessFlags(logs);
         checkSideEffects();
         // lint it
         LintVisitor lintV(this);

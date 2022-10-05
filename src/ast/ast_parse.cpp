@@ -352,6 +352,7 @@ namespace das {
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             totInfer += get_time_usec(timeI);
             if ( !program->failed() ) {
+                program->buildAccessFlags(logs);    // this is used by the lint pass
                 if ( program->patchAnnotations() ) {
                     goto restartInfer;
                 }
