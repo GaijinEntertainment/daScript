@@ -44,6 +44,10 @@ def cmres_call_native
     var a = testCMRES()
     return a
 
+[jit]
+def cmres_return_call_cmres
+    return testCMRES()
+
 [test]
 def test_cmres ( t:T? )
     t |> run("cmres via copy") <| @ ( t : T? )
@@ -77,5 +81,10 @@ def test_cmres ( t:T? )
     t |> run("cmres call native") <| @ ( t : T? )
         t |> success ( is_jit_function(@@cmres_call_native) )
         var b = cmres_call_native()
+        for bb in b
+            t  |> equal(13, bb)
+    t |> run("cmres return call cmres") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@cmres_return_call_cmres) )
+        var b = cmres_return_call_cmres()
         for bb in b
             t  |> equal(13, bb)

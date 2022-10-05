@@ -517,6 +517,10 @@ class LlvmJitVisitor : AstVisitor
             failed("unsupported cast_to_vec4f type {describe(etype)}")
         return tres
 
+    def override preVisitExprReturn(expr:smart_ptr<ExprReturn>)
+        if isCMRES(thisFunc) && expr.returnFlags.returnCallCMRES
+            make_call_to_cmres(expr.subexpr, get_cmres_param())
+
     def override visitExprReturn(expr:smart_ptr<ExprReturn>) : ExpressionPtr
         if !thisFunc.result.isVoid
             if isCMRES(thisFunc)
