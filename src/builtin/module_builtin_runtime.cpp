@@ -1038,6 +1038,14 @@ namespace das
         return (void *) &jit_call_or_fastcall;
     }
 
+    vec4f jit_call_with_cmres ( SimFunction * fn, vec4f * args, void * cmres, Context * context ) {
+        return context->callWithCopyOnReturn(fn, args, cmres, nullptr);
+    }
+
+    void * das_get_jit_call_with_cmres ( ) {
+        return (void *) &jit_call_with_cmres;
+    }
+
     char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
@@ -1433,6 +1441,8 @@ namespace das
             SideEffects::none, "das_get_jit_exception");
         addExtern<DAS_BIND_FUN(das_get_jit_call_or_fastcall)>(*this, lib, "get_jit_call_or_fastcall",
             SideEffects::none, "das_get_jit_call_or_fastcall");
+        addExtern<DAS_BIND_FUN(das_get_jit_call_with_cmres)>(*this, lib, "get_jit_call_with_cmres",
+            SideEffects::none, "das_get_jit_call_with_cmres");
         addExtern<DAS_BIND_FUN(das_get_jit_string_builder)>(*this, lib, "get_jit_string_builder",
             SideEffects::none, "das_get_jit_string_builder");
         addExtern<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
