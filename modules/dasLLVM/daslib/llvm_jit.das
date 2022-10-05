@@ -35,6 +35,7 @@ var g_str2v : table<string; LLVMOpaqueValue?>
 
 let FN_JIT_EXCEPTION = "`jit`exception`"
 let FN_JIT_CALL_OR_FASTCALL = "`jit`call_or_fastcall`"
+let FN_JIT_CALL_WITH_CMRES = "`jit`call_with_cmres`"
 let FN_JIT_STRING_BUILDER = "`jit`string_builder`"
 let FN_JIT_GET_GLOBAL_MNH = "`jit`get_global_mnh`"
 
@@ -63,6 +64,11 @@ def private init_jit
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jc, get_jit_call_or_fastcall())
+
+    var jcm = LLVMAddFunction(g_mod, FN_JIT_CALL_WITH_CMRES, // jit_call_with_cmres(func,args *,cmres *,context *)
+        LLVMFunctionType(LLVMFloat4Type(),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jcm, get_jit_call_with_cmres())
 
     var jsb = LLVMAddFunction(g_mod, FN_JIT_STRING_BUILDER, // jit_string_builder ( context *, node *, args * )
         LLVMFunctionType(LLVMPointerType(LLVMInt8Type(),0u),
@@ -1036,7 +1042,10 @@ class LlvmJitVisitor : AstVisitor
                 let fmna = get_mangled_name(FunctionPtr(expr.func))
                 var func = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
-                setE(expr, ccall)
+                if cmresEval != null
+                    setE(expr, cmresEval)
+                else
+                    setE(expr, ccall)
             else
                 var args = build_array_of_arguments(expr.arguments)
                 var MNH_ADDR : uint64
@@ -1046,14 +1055,17 @@ class LlvmJitVisitor : AstVisitor
                     MNH_ADDR = get_function_address(MNH,*jit_context)
                 if MNH_ADDR==0ul
                     failed_E(expr, "missing function pointer for {expr.func.name}")
-                var params <- [{LLVMOpaqueValue?
-                    LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)); // SimNode *
-                    args;                                                   // args
-                    LLVMGetParam(ffunc, uint(length(thisFunc.arguments)))   // context
-                }]
-                var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL)
+                var params : array<LLVMOpaqueValue?>
+                params |> push(LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)))  // mnh
+                params |> push(args)
+                if cmresEval!=null
+                    params |> push(cmresEval)
+                params |> push(LLVMGetParam(ffunc, uint(length(thisFunc.arguments))))   // context
+                var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
-                if expr.func.result.isVoid
+                if cmresEval != null
+                    setE(expr, cmresEval)
+                elif expr.func.result.isVoid
                     setE(expr, ccall)
                 else
                     var cres = cast_from_vec4f(expr, expr._type, ccall)

@@ -27,6 +27,17 @@ def cmres_copy_local ( which:bool )
     a = cmres_alias()
     return which ? a : b
 
+def cmres_alias_no_jit
+    var a:int[10]
+    for i in range(10)
+        a[i] = i
+    return a
+
+[jit]
+def cmres_var_init_via_call_with_cmres
+    var a = cmres_alias_no_jit()    // calling non-jit function
+    return a
+
 [test]
 def test_cmres ( t:T? )
     t |> run("cmres via copy") <| @ ( t : T? )
@@ -50,6 +61,11 @@ def test_cmres ( t:T? )
     t |> run("cmres copy local") <| @ ( t : T? )
         t |> success ( is_jit_function(@@cmres_copy_local) )
         var x = cmres_copy_local(true)
+        for xx,i in x,range(100500)
+            t |> equal(i, xx)
+    t |> run("cmres var init via call with cmres") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@cmres_var_init_via_call_with_cmres) )
+        var x = cmres_var_init_via_call_with_cmres()
         for xx,i in x,range(100500)
             t |> equal(i, xx)
 
