@@ -43,6 +43,10 @@ def test_div( t:T?; a,b:auto(TT) )
     if b != TT()
         t |> strictEqual ( a / b, div_jit(a,b), "{a} / {b}" )
 
+def test_div_vec( t:T?; a,b:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT;b:TT):void> div_jit) )
+    t |> strictEqual ( a / b, div_jit(a,b), "{a} / {b}" )
+
 def test_mod( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> mod_jit) )
     if b != TT()
@@ -95,6 +99,10 @@ def test_div_equ( t:T?; a,b:auto(TT) )
     if b != TT()
         t |> strictEqual ( a / b, div_equ_jit(a,b), "{a} / {b}" )
 
+def test_div_equ_vec( t:T?; a,b:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT;b:TT):void> div_equ_jit) )
+    t |> strictEqual ( a / b, div_equ_jit(a,b), "{a} / {b}" )
+
 def test_mod_equ( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> mod_equ_jit) )
     if b != TT()
@@ -122,6 +130,30 @@ def fuzz_numeric_op2 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_uint, fake |> random_uint )
     invoke ( funcname, t, fake |> random_float, fake |> random_float )
     invoke ( funcname, t, fake |> random_double, fake |> random_double )
+
+[constant_expression(funcname)]
+def fuzz_numeric_vec_scal_op2 ( t:T?; var fake:Faker; funcname:string )
+    invoke ( funcname, t, fake |> random_int2,  fake |> random_int )
+    invoke ( funcname, t, fake |> random_int3,  fake |> random_int )
+    invoke ( funcname, t, fake |> random_int4,  fake |> random_int )
+    invoke ( funcname, t, fake |> random_uint2,  fake |> random_uint )
+    invoke ( funcname, t, fake |> random_uint3,  fake |> random_uint )
+    invoke ( funcname, t, fake |> random_uint4,  fake |> random_uint )
+    invoke ( funcname, t, fake |> random_float2, fake |> random_float )
+    invoke ( funcname, t, fake |> random_float3, fake |> random_float )
+    invoke ( funcname, t, fake |> random_float4, fake |> random_float )
+
+[constant_expression(funcname)]
+def fuzz_numeric_scal_vec_op2 ( t:T?; var fake:Faker; funcname:string )
+    invoke ( funcname, t, fake |> random_int,  fake |> random_int2 )
+    invoke ( funcname, t, fake |> random_int,  fake |> random_int3 )
+    invoke ( funcname, t, fake |> random_int,  fake |> random_int4 )
+    invoke ( funcname, t, fake |> random_uint,  fake |> random_uint2 )
+    invoke ( funcname, t, fake |> random_uint,  fake |> random_uint3 )
+    invoke ( funcname, t, fake |> random_uint,  fake |> random_uint4 )
+    invoke ( funcname, t, fake |> random_float, fake |> random_float2 )
+    invoke ( funcname, t, fake |> random_float, fake |> random_float3 )
+    invoke ( funcname, t, fake |> random_float, fake |> random_float4 )
 
 [test]
 def test_arithmetics_op2 ( t:T? )
@@ -163,6 +195,20 @@ def fuzz_numeric_op1 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_uint )
     invoke ( funcname, t, fake |> random_float )
     invoke ( funcname, t, fake |> random_double )
+
+[test]
+def test_arithmetics_vec_and_scalar_op2 ( t:T? )
+    t |> run("* / vector vs salar") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz_numeric_vec_scal_op2(t, fake, "test_mul")
+        fuzz_numeric_vec_scal_op2(t, fake, "test_div_vec")
+        fuzz_numeric_scal_vec_op2(t, fake, "test_mul")
+        fuzz_numeric_scal_vec_op2(t, fake, "test_div_vec")
+
+    t |> run("*= /= vector vs scalar") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz_numeric_vec_scal_op2(t, fake, "test_mul_equ")
+        fuzz_numeric_vec_scal_op2(t, fake, "test_div_equ_vec")
 
 [jit]
 def post_inc_jit (var a)

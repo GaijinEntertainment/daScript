@@ -48,12 +48,24 @@ def cmres_call_native
 def cmres_return_call_cmres
     return testCMRES()
 
+[jit]
+def cmres_passthrough ( var a:int[10] )
+    return cmres_via_copy(a)
+
 [test]
 def test_cmres ( t:T? )
     t |> run("cmres via copy") <| @ ( t : T? )
         t |> success ( is_jit_function(@@cmres_via_copy) )
         var x : int[10]
         var b = cmres_via_copy(x)
+        for xx in x
+            t |> equal(13, xx)
+        for bb in b
+            t  |> equal(13, bb)
+    t |> run("cmres passthrough via copy") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@cmres_passthrough) )
+        var x : int[10]
+        var b = cmres_passthrough(x)
         for xx in x
             t |> equal(13, xx)
         for bb in b

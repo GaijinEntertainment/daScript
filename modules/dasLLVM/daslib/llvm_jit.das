@@ -695,11 +695,29 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildBr(g_builder, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_end)
 
+    def expand_scalar ( scalar:LLVMOpaqueValue?; vecType:TypeDeclPtr )
+        var vec = LLVMGetUndef(type_to_llvm_type(vecType))
+        for d in range(vecType.vectorDim)
+            var idx = LLVMConstInt(LLVMInt32Type(), uint64(d), 0)
+            vec = LLVMBuildInsertElement(g_builder, vec, scalar, idx, "")
+        return vec
+
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
         var left = getE(expr.left)
         var right = getE(expr.right)
         assume opType = expr.right._type
-        var r2v_left = isReadModifyWriteOp2(expr.op) ? LLVMBuildLoad(g_builder, left, "r2v_left") : null
+        var r2v_left = isReadModifyWriteOp2(expr.op) ? LLVMBuildLoad(g_builder, left, "") : null
+
+        // note: we need to handle vector vs scalar operations here
+        // the way we do it, is we expand scalar up to vector type
+        if expr.op=="*" || expr.op=="*=" || expr.op=="/" || expr.op=="/="
+            if expr.left._type.baseType != expr.right._type.baseType // vec * scalar || scalar * vec, and so on
+                if opType.isVectorType
+                    assert(expr.op=="*" || expr.op=="/")    // scalar * vec || scalar / vec only
+                    left = expand_scalar(left, opType)
+                else
+                    right = expand_scalar(right, expr.left._type)
+
         if expr.op=="+"
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildAdd(g_builder, left, right, ""))
@@ -744,7 +762,7 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported *= type {opType}")
         elif expr.op=="/" || expr.op=="%" || expr.op=="/=" || expr.op=="%="
             // for integer division we check division by zero
-            if opType.isInteger
+            if opType.isInteger && expr.left._type.isInteger
                 check_divide_by_0(right, opType)
             if expr.op=="/"
                 if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
