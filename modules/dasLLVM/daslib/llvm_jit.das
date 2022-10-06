@@ -943,6 +943,22 @@ class LlvmJitVisitor : AstVisitor
 
 // function calls
 
+    def intrinsic_math_sqrt(expr:smart_ptr<ExprCall>)
+        var sqrt_name = "llvm.sqrt.f32"
+        assume opType = expr.arguments[0]._type
+        if opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+            if opType.baseType==Type tDouble
+                sqrt_name = "llvm.sqrt.f64"
+        else
+            return null
+        var args <- [{auto getE(expr.arguments[0])}]
+        var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
+        var id = LLVMLookupIntrinsicID(sqrt_name)
+        var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+        if decl==null
+            return null
+        return LLVMBuildCall(g_builder, decl, args, "sqrt")
+
     def intrinsic_builtin_range(expr:smart_ptr<ExprCall>)
         var x, y : LLVMOpaqueValue?
         if expr.arguments.length==1
@@ -1017,8 +1033,14 @@ class LlvmJitVisitor : AstVisitor
 
         // TODO: build table of intrinsic functions, which build LLVMOpaqueValue? from ExprCall
         let call_name = "{expr.func._module.name}::{expr.func.name}"
+        var intrin_call : LLVMOpaqueValue?
         if call_name=="$::range" || call_name=="$::urange"
-            setE(expr, intrinsic_builtin_range(expr))
+            intrin_call = intrinsic_builtin_range(expr)
+        elif call_name=="math::sqrt"
+            intrin_call = intrinsic_math_sqrt(expr)
+        // return intrinsic if its set
+        if intrin_call!=null
+            setE(expr, intrin_call)
             return expr
 
         // get CMRES, if its local
@@ -1116,11 +1138,36 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, LLVMBuildCall(g_builder, func, params, "string_builder"))
         return expr
 
+// swizzle
+
+    def override visitExprSwizzle(expr:smart_ptr<ExprSwizzle>) : ExpressionPtr
+        var val = getE(expr.value)
+        if expr._type.flags.ref
+            failed_E(expr, "return ref swizzle is not supported yet")
+            setE(expr, LLVMGetUndef(LLVMInt32Type()))
+        else
+            var isSequencial = true
+            for i in range(1,length(expr.fields))
+                if (int(expr.fields[i-1])+1)!=int(expr.fields[i])
+                    isSequencial = false
+                    break
+            if expr.value._type.flags.ref && isSequencial
+                var vec_element_type = base_type_to_llvm_type(expr.value._type.vectorBaseType)
+                var val_ptr = LLVMBuildBitCast(g_builder, val, LLVMPointerType(vec_element_type, 0u), "")
+                val_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
+                setE(expr, LLVMBuildLoad2(g_builder, type_to_llvm_type(expr._type), val_ptr, "swizzle_{expr.fields}"))
+            else
+                failed_E(expr, "val.swizzle is not supported yet, sequencial: {isSequencial} ref:{expr.value._type.flags.ref}")
+                setE(expr, LLVMGetUndef(LLVMInt32Type()))
+        return expr
+
 // field
     def override visitExprField(expr:smart_ptr<ExprField>) : ExpressionPtr
         if expr.value._type.isBitfield
+            setE(expr, LLVMGetUndef(LLVMInt32Type()))
             failed_E(expr, "bitfields are not supported yet")
         elif expr.field==null && expr.fieldIndex==-1
+            setE(expr, LLVMGetUndef(type_to_llvm_type(expr._type)))
             failed_E(expr, "annotations are not supported yet")
             /*
             if ( r2v ) {

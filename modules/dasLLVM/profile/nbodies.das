@@ -47,6 +47,10 @@ def offset_momentum(var bodies:body[5])
         px -= b.v * b.mass
     bodies[0].v = px / SOLAR_MASS
 
+[jit,export]
+def inv_length_jit(var r:float3)
+    return 1.0 / sqrt(r.x*r.x + r.y*r.y + r.z*r.z)
+
 [jit]
 def advance(var bodies:body[5])
     var i = 0
@@ -55,7 +59,7 @@ def advance(var bodies:body[5])
         for j in range(i, nbodies)
             var b2:body& = unsafe(bodies[j])
             let dx = b.x - b2.x
-            let inv_distance = inv_length(dx)
+            let inv_distance = inv_length_jit(dx)
             let mag = inv_distance * inv_distance * inv_distance
             b.v -= dx * (b2.mass*mag)
             b2.v += dx * (b.mass*mag)
@@ -79,6 +83,7 @@ def scale_bodies(scale; var bodies:body[5])
         b.mass *= scale * scale
         b.v *= scale
 
+[jit]
 def nbodies(n:int)
     scale_bodies(0.01,g_bodies)
     for i in range(n)

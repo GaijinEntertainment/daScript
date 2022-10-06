@@ -8,6 +8,7 @@ require llvm public
 
 require daslib/safe_addr
 require daslib/defer
+require strings
 
 def LLVMBuildShuffleVector(builder:LLVMOpaqueBuilder?; v1, v2:LLVMOpaqueValue?; mask:array<int>; name:string )
     var elem : array<LLVMOpaqueValue?>
@@ -150,8 +151,20 @@ def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; var args:
     else
         return LLVMBuildCall( builder, func, null, 0u, name)
 
+def LLVMLookupIntrinsicID ( name:string )
+    return LLVMLookupIntrinsicID(name,uint64(length(name)))
+
+def LLVMGetIntrinsicDeclaration ( mod:LLVMOpaqueModule?; id:uint; var argTypes:array<LLVMOpaqueType?> )
+    return LLVMGetIntrinsicDeclaration(mod, id, unsafe(addr(argTypes[0])), uint64(length(argTypes)))
+
 def describe ( typ:LLVMOpaqueType? )
     var st = LLVMPrintTypeToString(typ)
+    var stc = clone_string(st)
+    LLVMDisposeMessage(st)
+    return stc
+
+def describe ( typ:LLVMOpaqueValue? )
+    var st = LLVMPrintValueToString(typ)
     var stc = clone_string(st)
     LLVMDisposeMessage(st)
     return stc
