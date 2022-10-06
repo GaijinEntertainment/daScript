@@ -3211,6 +3211,7 @@ namespace das
             for ( auto & sm : pm->simulateMacros ) {
                 if ( !sm->preSimulate(this, &context) ) {
                     error("simulate macro " + pm->name + "::" + sm->name + " failed to preSimulate", "", "", LineInfo());
+                    daScriptEnvironment::bound->g_Program = nullptr;
                     return false;
                 }
             }
@@ -3239,6 +3240,7 @@ namespace das
             for ( auto & sm : pm->simulateMacros ) {
                 if ( !sm->simulate(this, &context) ) {
                     error("simulate macro " + pm->name + "::" + sm->name + " failed to simulate", "", "", LineInfo());
+                    daScriptEnvironment::bound->g_Program = nullptr;
                     return false;
                 }
             }
