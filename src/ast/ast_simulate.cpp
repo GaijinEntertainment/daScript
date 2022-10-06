@@ -3206,12 +3206,13 @@ namespace das
         context.debugger = getDebugger();
         isSimulating = false;
         context.thisHelper = &helper;   // note - we may need helper for the 'complete'
+        auto boundProgram = daScriptEnvironment::bound->g_Program;
         daScriptEnvironment::bound->g_Program = this;   // node - we are calling macros
         library.foreach_in_order([&](Module * pm) -> bool {
             for ( auto & sm : pm->simulateMacros ) {
                 if ( !sm->preSimulate(this, &context) ) {
                     error("simulate macro " + pm->name + "::" + sm->name + " failed to preSimulate", "", "", LineInfo());
-                    daScriptEnvironment::bound->g_Program = nullptr;
+                    daScriptEnvironment::bound->g_Program = boundProgram;
                     return false;
                 }
             }
@@ -3240,14 +3241,14 @@ namespace das
             for ( auto & sm : pm->simulateMacros ) {
                 if ( !sm->simulate(this, &context) ) {
                     error("simulate macro " + pm->name + "::" + sm->name + " failed to simulate", "", "", LineInfo());
-                    daScriptEnvironment::bound->g_Program = nullptr;
+                    daScriptEnvironment::bound->g_Program = boundProgram;
                     return false;
                 }
             }
             return true;
         }, thisModule.get());
         context.thisHelper = nullptr;
-        daScriptEnvironment::bound->g_Program = nullptr;
+        daScriptEnvironment::bound->g_Program = boundProgram;
         // dispatch about new inited context
         context.announceCreation();
         if ( options.getBoolOption("log_debug_mem",false) ) {
