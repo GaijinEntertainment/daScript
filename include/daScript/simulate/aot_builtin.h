@@ -53,6 +53,8 @@ namespace das {
     void builtin_array_free ( Array & dim, int szt, Context * __context__ );
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ );
 
+    void toLog ( int level, const char * text );
+
     vec4f builtin_verify_locks ( Context & context, SimNode_CallBase * node, vec4f * args );
 
     bool builtin_iterator_first ( const Sequence & it, void * data, Context * context );
