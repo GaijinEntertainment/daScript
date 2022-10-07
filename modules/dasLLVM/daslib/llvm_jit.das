@@ -11,6 +11,7 @@ require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
 require daslib/fio
+require math
 
 let LLVM_DEBUG_RESULT = false
 let LLVM_DEBUG_EVERYTHING = false
@@ -1345,6 +1346,85 @@ class LlvmJitVisitor : AstVisitor
             if length(body.finalList) != 0
                 visit_finally(body, adapter)
         return expr
+
+// make structure
+    // def override canVisitMakeStructBody(expr:smart_ptr<ExprMakeStruct>) : bool
+    // def override canVisitMakeStructBlock(expr:smart_ptr<ExprMakeStruct>;blk:ExpressionPtr) : bool
+    def override preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : void
+        // failed_E(expr, "make struct is not supported")
+        var mks_ptr : LLVMOpaqueValue?
+        if expr.makeFlags.useCMRES
+            mks_ptr = get_cmres_param()
+        else
+            mks_ptr = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(expr.stackTop), 0), "")
+        let stride = expr.makeType.stride
+        if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
+            let total = int(expr.structs.length)
+            let bytes = max(total,1) * stride
+            let align = uint(expr.makeType.alignOf)
+            LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
+
+    def override visitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : ExpressionPtr
+        return expr
+    def override preVisitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool) : void
+        pass
+    def override visitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool) : void
+        pass
+    def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
+        pass
+    def override visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
+        var field = find_structure_field(expr.makeType.structType, string(decl.name))
+        if field==null
+            failed_E(expr, "field {decl.name} not found")
+            return decl
+        let stride = expr.makeType.stride
+        let offset =  index*stride + field.offset
+        if decl.value |> isMakeLocal
+            failed_E(expr, "makeStruct: make local is not supported")
+        elif expr.makeFlags.useCMRES
+            var cmres_ptr = LLVMBuildPointerCast(g_builder, get_cmres_param(), LLVMPointerType(LLVMInt8Type(), 0u), "")
+            var dst_ptr = LLVMBuildGEP(g_builder, cmres_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "cmres.{decl.name}")
+            dst_ptr = LLVMBuildPointerCast(g_builder, dst_ptr, LLVMPointerType(type_to_llvm_type(field._type), 0u), "")
+            if decl.flags.moveSemantics
+                failed_E(expr, "makeStruct: CMRES copy is not supported")
+            else
+                build_copy(dst_ptr, decl.value)
+        elif expr.makeFlags.useStackRef
+            failed_E(expr, "makeStruct: useStackRef is not supported")
+        elif decl.flags.moveSemantics
+            failed_E(expr, "makeStruct: move is not supported")
+        else
+            failed_E(expr, "makeStruct: copy is not supported")
+
+        /*
+                    if ( decl->value->rtti_isMakeLocal() ) {
+                        // so what happens here, is we ask it for the generated commands and append it to this list only
+                        auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
+                        auto lsim = mkl->simulateLocal(context);
+                        simlist.insert(simlist.end(), lsim.begin(), lsim.end());
+                        continue;
+                    } else if ( useCMRES ) {
+                        if ( decl->moveSemantics ){
+                            cpy = makeLocalCMResMove(at,context,offset,decl->value);
+                        } else {
+                            cpy = makeLocalCMResCopy(at,context,offset,decl->value);
+                        }
+                    } else if ( useStackRef ) {
+                        if ( decl->moveSemantics ){
+                            cpy = makeLocalRefMove(at,context,stackTop,offset,decl->value);
+                        } else {
+                            cpy = makeLocalRefCopy(at,context,stackTop,offset,decl->value);
+                        }
+                    } else {
+                        if ( decl->moveSemantics ){
+                            cpy = makeLocalMove(at,context,stackTop+offset,decl->value);
+                        } else {
+                            cpy = makeLocalCopy(at,context,stackTop+offset,decl->value);
+                        }
+                    }
+        */
+        return decl
+
 
 // constants
     def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr
