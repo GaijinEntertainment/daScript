@@ -768,3 +768,11 @@ def public isCMRES ( fun:FunctionPtr ) : bool
 def public isCMRES ( fun:Function? ) : bool
     return fun.flags.copyOnReturn || fun.flags.moveOnReturn
 
+def public isMakeLocal ( expr:ExpressionPtr )
+    return ((expr.__rtti=="ExprMakeLocal")
+        ||  (expr.__rtti=="ExprMakeLocal")
+        ||  (expr.__rtti=="ExprMakeVariant")
+        ||  (expr.__rtti=="ExprMakeArray")
+        ||  (expr.__rtti=="ExprMakeTuple"))
+
+

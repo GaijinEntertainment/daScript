@@ -413,6 +413,12 @@ namespace das {
         return false;
     }
 
+    Structure::FieldDeclaration * ast_findStructureField ( Structure * structType, const char * field, Context * context, LineInfoArg * at ) {
+        if ( !structType ) context->throw_error_at(at ? *at : LineInfo(),"expecting structure");
+        if ( !field ) return nullptr;
+        return (Structure::FieldDeclaration *) structType->findField(field);
+    }
+
     Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at ) {
         if ( !name ) return nullptr;
         if ( !prog ) context->throw_error_at(*at, "expecting program");
@@ -559,8 +565,11 @@ namespace das {
             SideEffects::none, "find_bitfield_name")
                 ->args({"bit","value","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_find_enum_value)>(*this, lib,  "find_enum_value",
-            SideEffects::none, "find_enum_value")
+            SideEffects::none, "ast_find_enum_value")
                 ->args({"enum","value"});
+        addExtern<DAS_BIND_FUN(ast_findStructureField)>(*this, lib,  "find_structure_field",
+            SideEffects::none, "ast_findStructureField")
+                ->args({"structPtr","field","context","lineinfo"});
         addExtern<DAS_BIND_FUN(get_mangled_name)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name")
                 ->args({"function","context","line"});
