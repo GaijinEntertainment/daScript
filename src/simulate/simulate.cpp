@@ -1575,31 +1575,28 @@ namespace das
         }
     }
 
-    bool multiline_log = true;
+    const char * getLogMarker(int level)
+    {
+        if ( level >= LogLevel::error )
+            return "[E] ";
+        else if ( level >= LogLevel::warning )
+            return "[W] ";
+        else if ( level >= LogLevel::info )
+            return "[I] ";
+        else
+            return "";
+    }
 
-    void toLog ( int level, const char * text ) {
+    void logger ( int level, const char *prefix, const char * text ) {
         bool any = false;
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             any |= pAgent->onLog(int(level), text);
         });
         if ( !any ) {
-            const char * marker = "";
-
-            if ( level >= LogLevel::error )
-                marker = "[E] ";
-            else if ( level >= LogLevel::warning )
-                marker = "[W] ";
-            else if ( level >= LogLevel::info )
-                marker = "[I] ";
-            else if ( level >= LogLevel::debug )
-                marker = "";
-            else if ( level >= LogLevel::trace )
-                marker = "";
-
             if ( level>=LogLevel::warning ) {
-                das_to_stderr(multiline_log ? "%s%s\n" : "%s%s", marker, text);
+                das_to_stderr("%s%s", prefix, text);
             } else {
-                das_to_stdout(multiline_log ? "%s%s\n" : "%s%s", marker, text);
+                das_to_stdout("%s%s", prefix, text);
             }
         }
     }

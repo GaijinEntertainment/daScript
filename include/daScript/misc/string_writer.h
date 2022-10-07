@@ -169,7 +169,8 @@ namespace das {
         trace       = 0,
     };
 
-    void toLog ( int level, const char * text );
+    const char * getLogMarker(int level);
+    void logger ( int level, const char *marker, const char * text );
 
     class LOG : public TextWriter {
     public:
@@ -178,7 +179,8 @@ namespace das {
             int newPos = tellp();
             if (newPos != pos) {
                 string st(data.data() + pos, newPos - pos);
-                toLog(logLevel, st.c_str());
+                logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str());
+                useMarker = false;
                 data.clear();
                 pos = newPos = 0;
             }
@@ -186,5 +188,6 @@ namespace das {
     protected:
         int pos = 0;
         int logLevel = LogLevel::debug;
+        bool useMarker = true;
     };
 }
