@@ -1355,8 +1355,8 @@ class LlvmJitVisitor : AstVisitor
         var mks_ptr : LLVMOpaqueValue?
         if expr.makeFlags.useCMRES
             mks_ptr = get_cmres_param()
+            mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
                 mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
             mks_ptr = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(expr.stackTop+expr.extraOffset), 0), "")
@@ -1366,6 +1366,7 @@ class LlvmJitVisitor : AstVisitor
             let bytes = max(total,1) * stride
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
+        setE(expr, mks_ptr)
 
     def override visitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : ExpressionPtr
         return expr
@@ -1383,7 +1384,10 @@ class LlvmJitVisitor : AstVisitor
         if decl.value |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
             val.extraOffset = uint(offset)
-
+        elif isCall2CMRES(decl.value)
+            var v_ptr = getE(expr)
+            v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+            make_call_to_cmres ( decl.value, v_ptr )
     def override visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
         var field = find_structure_field(expr.makeType.structType, string(decl.name))
         if field==null

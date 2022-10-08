@@ -47,6 +47,10 @@ def make_struct_with_substruct_cmres
 def make_struct_with_substruct_cmres_with_init
     return [[Bar() b=10, foo=[[Foo() a=2, b=3.]]]]
 
+[jit]
+def make_struct_with_field_call_to_cmres
+    return [[Bar a=1, foo=Foo(), b=4]]
+
 [test]
 def test_struct ( t:T? )
     t |> run("struct field") <| @ ( t : T? )
@@ -104,4 +108,12 @@ def test_struct ( t:T? )
         t |> equal ( "1234", f.foo.c )
         t |> equal ( 1234, f.foo.d )
         t |> equal ( 10, f.b )
-
+    t |> run("make struct with substruct equal to call to cmres") <| @ ( t : T? )
+        var f = make_struct_with_field_call_to_cmres()
+        t |> success ( is_jit_function(@@make_struct_with_field_call_to_cmres) )
+        t |> equal ( 1, f.a )
+        t |> equal ( 1234,  f.foo.a )
+        t |> equal ( 1234., f.foo.b )
+        t |> equal ( "1234",f.foo.c )
+        t |> equal ( 1234,  f.foo.d )
+        t |> equal ( 4, f.b )
