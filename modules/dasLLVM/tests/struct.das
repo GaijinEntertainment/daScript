@@ -8,6 +8,11 @@ struct Foo
     c : string = "1234"
     d : int = 1234
 
+struct Bar
+    a : int = 13
+    foo : Foo
+    b : int
+
 [jit]
 def struct_field ( var f : Foo )
     f.a = 1
@@ -33,6 +38,14 @@ def make_struct_cmres
 [jit]
 def make_struct_cmres_with_init
     return [[Foo() a=1, c="bar"]]
+
+[jit]
+def make_struct_with_substruct_cmres
+    return [[Bar a=1, foo=[[Foo a=2, b=3.]], b=4]]
+
+[jit]
+def make_struct_with_substruct_cmres_with_init
+    return [[Bar() b=10, foo=[[Foo() a=2, b=3.]]]]
 
 [test]
 def test_struct ( t:T? )
@@ -73,5 +86,22 @@ def test_struct ( t:T? )
         t |> equal ( 1234.0, f.b )
         t |> equal ( "bar", f.c )
         t |> equal ( 1234, f.d )
-
+    t |> run("make struct with substruct cmres") <| @ ( t : T? )
+        var f = make_struct_with_substruct_cmres()
+        t |> success ( is_jit_function(@@make_struct_with_substruct_cmres) )
+        t |> equal ( 1, f.a )
+        t |> equal ( 2, f.foo.a )
+        t |> equal ( 3., f.foo.b )
+        t |> equal ( "", f.foo.c )
+        t |> equal ( 0, f.foo.d )
+        t |> equal ( 4, f.b )
+    t |> run("make struct with substruct cmres with init") <| @ ( t : T? )
+        var f = make_struct_with_substruct_cmres_with_init()
+        t |> success ( is_jit_function(@@make_struct_with_substruct_cmres_with_init) )
+        t |> equal ( 13, f.a )
+        t |> equal ( 2, f.foo.a )
+        t |> equal ( 3., f.foo.b )
+        t |> equal ( "1234", f.foo.c )
+        t |> equal ( 1234, f.foo.d )
+        t |> equal ( 10, f.b )
 

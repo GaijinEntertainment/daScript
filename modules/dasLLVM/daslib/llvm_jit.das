@@ -1355,8 +1355,11 @@ class LlvmJitVisitor : AstVisitor
         var mks_ptr : LLVMOpaqueValue?
         if expr.makeFlags.useCMRES
             mks_ptr = get_cmres_param()
+            if expr.extraOffset != 0u
+                mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
-            mks_ptr = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(expr.stackTop), 0), "")
+            mks_ptr = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(expr.stackTop+expr.extraOffset), 0), "")
         let stride = expr.makeType.stride
         if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
             let total = int(expr.structs.length)
@@ -1371,16 +1374,25 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool) : void
         pass
     def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
-        pass
+        var field = find_structure_field(expr.makeType.structType, string(decl.name))
+        if field==null
+            failed_E(expr, "field {decl.name} not found")
+            return
+        let stride = expr.makeType.stride
+        let offset =  int(expr.extraOffset) + index*stride + field.offset
+        if decl.value |> isMakeLocal
+            var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
+            val.extraOffset = uint(offset)
+
     def override visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
         var field = find_structure_field(expr.makeType.structType, string(decl.name))
         if field==null
             failed_E(expr, "field {decl.name} not found")
             return decl
         let stride = expr.makeType.stride
-        let offset =  index*stride + field.offset
+        let offset =  int(expr.extraOffset) + index*stride + field.offset
         if decl.value |> isMakeLocal
-            failed_E(expr, "makeStruct: make local is not supported")
+            pass // do nothign. we already taken care of makeLocal in preVisitExprMakeStructField
         elif expr.makeFlags.useCMRES
             var cmres_ptr = LLVMBuildPointerCast(g_builder, get_cmres_param(), LLVMPointerType(LLVMInt8Type(), 0u), "")
             var dst_ptr = LLVMBuildGEP(g_builder, cmres_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "cmres.{decl.name}")
