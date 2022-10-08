@@ -1348,8 +1348,6 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // make structure
-    // def override canVisitMakeStructBody(expr:smart_ptr<ExprMakeStruct>) : bool
-    // def override canVisitMakeStructBlock(expr:smart_ptr<ExprMakeStruct>;blk:ExpressionPtr) : bool
     def override preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : void
         // failed_E(expr, "make struct is not supported")
         var mks_ptr : LLVMOpaqueValue?
@@ -1367,78 +1365,45 @@ class LlvmJitVisitor : AstVisitor
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
         setE(expr, mks_ptr)
-
-    def override visitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : ExpressionPtr
-        return expr
-    def override preVisitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool) : void
-        pass
-    def override visitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool) : void
-        pass
     def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
         var field = find_structure_field(expr.makeType.structType, string(decl.name))
         if field==null
             failed_E(expr, "field {decl.name} not found")
             return
         let stride = expr.makeType.stride
-        let offset =  int(expr.extraOffset) + index*stride + field.offset
+        let offset =  index*stride + field.offset
+        var v_ptr = getE(expr)
+        v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
         if decl.value |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
-            val.extraOffset = uint(offset)
-        elif isCall2CMRES(decl.value)
-            var v_ptr = getE(expr)
-            v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
-            make_call_to_cmres ( decl.value, v_ptr )
+            val.extraOffset = uint(offset) + expr.extraOffset
+        elif make_call_to_cmres ( decl.value, v_ptr )
+            pass
     def override visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
         var field = find_structure_field(expr.makeType.structType, string(decl.name))
         if field==null
             failed_E(expr, "field {decl.name} not found")
             return decl
         let stride = expr.makeType.stride
-        let offset =  int(expr.extraOffset) + index*stride + field.offset
+        let offset =  index*stride + field.offset
+        var v_ptr = getE(expr)
+        v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "[{index}].{decl.name}")
+        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(type_to_llvm_type(field._type), 0u), "")
         if decl.value |> isMakeLocal
             pass // do nothign. we already taken care of makeLocal in preVisitExprMakeStructField
+        elif isCall2CMRES(decl.value)
+            pass // do nothing. we already handle this in preVisitExprMakeStructField
         elif expr.makeFlags.useCMRES
-            var cmres_ptr = LLVMBuildPointerCast(g_builder, get_cmres_param(), LLVMPointerType(LLVMInt8Type(), 0u), "")
-            var dst_ptr = LLVMBuildGEP(g_builder, cmres_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "cmres.{decl.name}")
-            dst_ptr = LLVMBuildPointerCast(g_builder, dst_ptr, LLVMPointerType(type_to_llvm_type(field._type), 0u), "")
             if decl.flags.moveSemantics
                 failed_E(expr, "makeStruct: CMRES copy is not supported")
             else
-                build_copy(dst_ptr, decl.value)
+                build_copy(v_ptr, decl.value)
         elif expr.makeFlags.useStackRef
             failed_E(expr, "makeStruct: useStackRef is not supported")
         elif decl.flags.moveSemantics
             failed_E(expr, "makeStruct: move is not supported")
         else
-            failed_E(expr, "makeStruct: copy is not supported")
-
-        /*
-                    if ( decl->value->rtti_isMakeLocal() ) {
-                        // so what happens here, is we ask it for the generated commands and append it to this list only
-                        auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
-                        auto lsim = mkl->simulateLocal(context);
-                        simlist.insert(simlist.end(), lsim.begin(), lsim.end());
-                        continue;
-                    } else if ( useCMRES ) {
-                        if ( decl->moveSemantics ){
-                            cpy = makeLocalCMResMove(at,context,offset,decl->value);
-                        } else {
-                            cpy = makeLocalCMResCopy(at,context,offset,decl->value);
-                        }
-                    } else if ( useStackRef ) {
-                        if ( decl->moveSemantics ){
-                            cpy = makeLocalRefMove(at,context,stackTop,offset,decl->value);
-                        } else {
-                            cpy = makeLocalRefCopy(at,context,stackTop,offset,decl->value);
-                        }
-                    } else {
-                        if ( decl->moveSemantics ){
-                            cpy = makeLocalMove(at,context,stackTop+offset,decl->value);
-                        } else {
-                            cpy = makeLocalCopy(at,context,stackTop+offset,decl->value);
-                        }
-                    }
-        */
+            build_copy(v_ptr, decl.value)
         return decl
 
 

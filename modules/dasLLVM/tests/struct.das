@@ -51,6 +51,18 @@ def make_struct_with_substruct_cmres_with_init
 def make_struct_with_field_call_to_cmres
     return [[Bar a=1, foo=Foo(), b=4]]
 
+[jit]
+def make_struct_on_stack(which:bool)
+    var a = [[Foo a=1, b=2.0, c="3", d=4]]
+    var b = [[Foo a=2, b=3.0, c="4", d=5]]
+    return which ? a : b
+
+[jit]
+def make_struct_with_substruct_on_stack(which:bool)
+    var a = [[Bar a=1, foo=[[Foo a=2, b=3.]], b=4]]
+    var b = [[Bar a=2, foo=[[Foo a=3, b=4.]], b=5]]
+    return which ? a : b
+
 [test]
 def test_struct ( t:T? )
     t |> run("struct field") <| @ ( t : T? )
@@ -117,3 +129,31 @@ def test_struct ( t:T? )
         t |> equal ( "1234",f.foo.c )
         t |> equal ( 1234,  f.foo.d )
         t |> equal ( 4, f.b )
+    t |> run("make struct on stack") <| @ ( t : T? )
+        var a = make_struct_on_stack(true)
+        var b = make_struct_on_stack(false)
+        t |> success ( is_jit_function(@@make_struct_on_stack) )
+        t |> equal ( 1,   a.a )
+        t |> equal ( 2.,  a.b )
+        t |> equal ( "3", a.c )
+        t |> equal ( 4,   a.d )
+        t |> equal ( 2,   b.a )
+        t |> equal ( 3.,  b.b )
+        t |> equal ( "4", b.c )
+        t |> equal ( 5,   b.d )
+    t |> run("make struct with substruct on stack") <| @ ( t : T? )
+        var a = make_struct_with_substruct_on_stack(true)
+        var b = make_struct_with_substruct_on_stack(false)
+        t |> success ( is_jit_function(@@make_struct_with_substruct_on_stack) )
+        t |> equal ( 1,  a.a )
+        t |> equal ( 2,  a.foo.a )
+        t |> equal ( 3., a.foo.b )
+        t |> equal ( "", a.foo.c )
+        t |> equal ( 0,  a.foo.d )
+        t |> equal ( 4,  a.b )
+        t |> equal ( 2,  b.a )
+        t |> equal ( 3,  b.foo.a )
+        t |> equal ( 4., b.foo.b )
+        t |> equal ( "", b.foo.c )
+        t |> equal ( 0,  b.foo.d )
+        t |> equal ( 5,  b.b )
