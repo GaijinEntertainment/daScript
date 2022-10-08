@@ -770,7 +770,7 @@ def public isCMRES ( fun:Function? ) : bool
 
 def public isMakeLocal ( expr:ExpressionPtr )
     return ((expr.__rtti=="ExprMakeLocal")
-        ||  (expr.__rtti=="ExprMakeLocal")
+        ||  (expr.__rtti=="ExprMakeStruct")
         ||  (expr.__rtti=="ExprMakeVariant")
         ||  (expr.__rtti=="ExprMakeArray")
         ||  (expr.__rtti=="ExprMakeTuple"))
