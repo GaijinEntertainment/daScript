@@ -695,6 +695,21 @@ def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:stri
     arguments[argIdx].sValue := val
     return argIdx
 
+def add_annotation_argument ( var arguments:AnnotationArgumentList; ann : rtti::AnnotationArgument )
+    let argIdx = arguments |> add_annotation_argument(string(ann.name))
+    arguments[argIdx].basicType = ann.basicType
+    if ann.basicType == Type tBool
+        arguments[argIdx].bValue = ann.bValue
+    elif ann.basicType == Type tInt
+        arguments[argIdx].iValue = ann.iValue
+    elif ann.basicType == Type tFloat
+        arguments[argIdx].fValue = ann.fValue
+    elif ann.basicType == Type tString
+        arguments[argIdx].sValue := ann.sValue
+    else
+        assert(false, "unsupported annotation type, add more types")
+    return argIdx
+
 def get_for_source_index(expr:smart_ptr<ExprFor>; svar:VariablePtr)
     for v,t in expr.iteratorVariables,range(100500)
         if v==svar
