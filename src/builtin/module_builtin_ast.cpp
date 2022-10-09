@@ -433,7 +433,7 @@ namespace das {
         return ((BuiltInFunction *)fn)->getBuiltinAddress();
     }
 
-    void * das_make_interop_node ( Context & ctx, ExprCall * call, Context * context, LineInfoArg * at ) {
+    void * das_make_interop_node ( Context & ctx, ExprCallFunc * call, Context * context, LineInfoArg * at ) {
         if ( !call ) context->throw_error_at(*at, "expecting function call");
         auto fn = call->func;
         if ( !fn ) context->throw_error_at(*at, "expecting function");

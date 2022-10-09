@@ -540,7 +540,7 @@ namespace das {
     bool exprReturns ( const ExpressionPtr & expr );
     bool exprReturnsOrBreaks ( const ExpressionPtr & expr );
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at );
-    void * das_make_interop_node ( Context & ctx, ExprCall * call, Context * context, LineInfoArg * at );
+    void * das_make_interop_node ( Context & ctx, ExprCallFunc * call, Context * context, LineInfoArg * at );
     void * das_sb_make_interop_node ( Context & ctx, ExprStringBuilder * call, Context * context, LineInfoArg * at );
     void get_use_global_variables ( smart_ptr_raw<Function> func, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at );
     void get_use_functions ( smart_ptr_raw<Function> func, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at );

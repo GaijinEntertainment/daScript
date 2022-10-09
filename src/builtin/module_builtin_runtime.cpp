@@ -1070,6 +1070,38 @@ namespace das
         return (void *) &jit_get_global_mnh;
     }
 
+    void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
+        return context->heap->allocate(bytes);
+    }
+
+    void * das_get_jit_alloc_heap () {
+        return (void *) &jit_alloc_heap;
+    }
+
+    void * jit_alloc_persistent ( uint32_t bytes, Context * context ) {
+        return das_aligned_alloc16(bytes);
+    }
+
+    void * das_get_jit_alloc_persistent () {
+        return (void *) &jit_alloc_persistent;
+    }
+
+    void jit_free_heap ( void * bytes, uint32_t size, Context * context ) {
+        context->heap->free((char *)bytes,size);
+    }
+
+    void * das_get_jit_free_heap () {
+        return (void *) &jit_free_heap;
+    }
+
+    void jit_free_persistent ( void * bytes, Context * context ) {
+        das_aligned_free16(bytes);
+    }
+
+    void * das_get_jit_free_persistent () {
+        return (void *) &jit_free_persistent;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1445,6 +1477,14 @@ namespace das
             SideEffects::none, "das_get_jit_string_builder");
         addExtern<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
             SideEffects::none, "das_get_jit_get_global_mnh");
+        addExtern<DAS_BIND_FUN(das_get_jit_alloc_heap)>(*this, lib, "get_jit_alloc_heap",
+            SideEffects::none, "das_get_jit_alloc_heap");
+        addExtern<DAS_BIND_FUN(das_get_jit_alloc_persistent)>(*this, lib, "get_jit_alloc_persistent",
+            SideEffects::none, "das_get_jit_alloc_persistent");
+        addExtern<DAS_BIND_FUN(das_get_jit_free_heap)>(*this, lib, "get_jit_free_heap",
+            SideEffects::none, "das_get_jit_free_heap");
+        addExtern<DAS_BIND_FUN(das_get_jit_free_persistent)>(*this, lib, "get_jit_free_persistent",
+            SideEffects::none, "das_get_jit_free_persistent");
         addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
