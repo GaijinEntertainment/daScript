@@ -39,6 +39,10 @@ let FN_JIT_CALL_OR_FASTCALL = "`jit`call_or_fastcall`"
 let FN_JIT_CALL_WITH_CMRES = "`jit`call_with_cmres`"
 let FN_JIT_STRING_BUILDER = "`jit`string_builder`"
 let FN_JIT_GET_GLOBAL_MNH = "`jit`get_global_mnh`"
+let FN_JIT_ALLOC_HEAP = "`jit`alloc_heap`"
+let FN_JIT_ALLOC_PERSISTENT = "`jit`alloc_persistent`"
+let FN_JIT_FREE_HEAP = "`jit`free_heap`"
+let FN_JIT_FREE_PERSISTENT = "`jit`free_persistent`"
 
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
@@ -56,32 +60,51 @@ def private init_jit
     LLVMInitializeNativeAsmParser()
     LLVMCreateJITCompilerForModule(g_engine, g_mod, LLVM_JIT_OPT_LEVEL)
     // add default functions
-    var je = LLVMAddFunction(g_mod, FN_JIT_EXCEPTION,    // jit_exception(text,context *)
+    var jit_exception = LLVMAddFunction(g_mod, FN_JIT_EXCEPTION,    // jit_exception(text,context *)
         LLVMFunctionType(LLVMVoidType(),
             [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
-    LLVMAddGlobalMapping(g_engine, je, get_jit_exception())
+    LLVMAddGlobalMapping(g_engine, jit_exception, get_jit_exception())
 
-    var jc = LLVMAddFunction(g_mod, FN_JIT_CALL_OR_FASTCALL, // jit_call_or_fastcall(func,args *,context *)
+    var jit_call_or_fastcall = LLVMAddFunction(g_mod, FN_JIT_CALL_OR_FASTCALL, // jit_call_or_fastcall(func,args *,context *)
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
-    LLVMAddGlobalMapping(g_engine, jc, get_jit_call_or_fastcall())
+    LLVMAddGlobalMapping(g_engine, jit_call_or_fastcall, get_jit_call_or_fastcall())
 
-    var jcm = LLVMAddFunction(g_mod, FN_JIT_CALL_WITH_CMRES, // jit_call_with_cmres(func,args *,cmres *,context *)
+    var jit_call_with_cmres = LLVMAddFunction(g_mod, FN_JIT_CALL_WITH_CMRES, // jit_call_with_cmres(func,args *,cmres *,context *)
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
-    LLVMAddGlobalMapping(g_engine, jcm, get_jit_call_with_cmres())
+    LLVMAddGlobalMapping(g_engine, jit_call_with_cmres, get_jit_call_with_cmres())
 
-    var jsb = LLVMAddFunction(g_mod, FN_JIT_STRING_BUILDER, // jit_string_builder ( context *, node *, args * )
+    var jit_string_builder = LLVMAddFunction(g_mod, FN_JIT_STRING_BUILDER, // jit_string_builder ( context *, node *, args * )
         LLVMFunctionType(LLVMPointerType(LLVMInt8Type(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u) ]]))
-    LLVMAddGlobalMapping(g_engine, jsb, get_jit_string_builder())
+    LLVMAddGlobalMapping(g_engine, jit_string_builder, get_jit_string_builder())
 
     // TODO: set sideeffects of this function to none
-    var jgm = LLVMAddFunction(g_mod, FN_JIT_GET_GLOBAL_MNH,  // jit_get_global_mnh ( uint64_t mnh, context * )
+    var jit_get_global_mnh = LLVMAddFunction(g_mod, FN_JIT_GET_GLOBAL_MNH,  // jit_get_global_mnh ( uint64_t mnh, context * )
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
-    LLVMAddGlobalMapping(g_engine, jgm, get_jit_get_global_mnh())
+    LLVMAddGlobalMapping(g_engine, jit_get_global_mnh, get_jit_get_global_mnh())
 
+    var jit_alloc_heap = LLVMAddFunction(g_mod, FN_JIT_ALLOC_HEAP,  // jit_alloc_heap ( uint64_t mnh, context * )
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
+            [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_alloc_heap, get_jit_alloc_heap())
+
+    var jit_alloc_persistent = LLVMAddFunction(g_mod, FN_JIT_ALLOC_PERSISTENT,  // jit_alloc_persistent ( uint64_t mnh, context * )
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
+            [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_alloc_persistent, get_jit_alloc_persistent())
+
+    var jit_free_heap = LLVMAddFunction(g_mod, FN_JIT_FREE_HEAP,  // void jit_free_heap ( void * bytes, uint32_t size, Context * context )
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_free_heap, get_jit_free_heap())
+
+    var jit_free_persistent = LLVMAddFunction(g_mod, FN_JIT_FREE_PERSISTENT,  // void jit_free_persistent ( void * bytes, Context * context )
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_free_persistent, get_jit_free_persistent())
 
 [macro_function]
 def private finalize_jit
@@ -586,7 +609,7 @@ class LlvmJitVisitor : AstVisitor
             build_copy(tdst, expr.right)
         return expr
 
-    def check_ptr_zero ( tsrc:LLVMOpaqueValue? )
+    def check_ptr_zero ( tsrc:LLVMOpaqueValue?; message:string="dereferencing null pointer")
         var check_null_ptr = append_basic_block("check_null_ptr")
         var check_true = append_basic_block("check_true")
         var check_end = append_basic_block("check_end")
@@ -595,7 +618,7 @@ class LlvmJitVisitor : AstVisitor
         var cond = LLVMBuildIsNull(g_builder, tsrc, "null_check")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_true)
-        build_exception("dereferencing null pointer")
+        build_exception(message)
         LLVMBuildBr(g_builder, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_end)
 
@@ -944,7 +967,7 @@ class LlvmJitVisitor : AstVisitor
 
 // function calls
 
-    def intrinsic_math_sqrt(expr:smart_ptr<ExprCall>)
+    def intrinsic_math_sqrt(expr:smart_ptr<ExprCallFunc>)
         var sqrt_name = "llvm.sqrt.f32"
         assume opType = expr.arguments[0]._type
         if opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
@@ -960,7 +983,7 @@ class LlvmJitVisitor : AstVisitor
             return null
         return LLVMBuildCall(g_builder, decl, args, "sqrt")
 
-    def intrinsic_builtin_range(expr:smart_ptr<ExprCall>)
+    def intrinsic_builtin_range(expr:smart_ptr<ExprCallFunc>)
         var x, y : LLVMOpaqueValue?
         if expr.arguments.length==1
             x = LLVMConstInt(LLVMInt32Type(), 0ul, 0)
@@ -986,7 +1009,7 @@ class LlvmJitVisitor : AstVisitor
             args = LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))
         return args
 
-    def register_extern_function ( expr:smart_ptr<ExprCall> ) : LLVMOpaqueValue?
+    def register_extern_function ( expr:smart_ptr<ExprCallFunc> ) : LLVMOpaqueValue?
         let mangled_name = get_mangled_name(FunctionPtr(expr.func))
         var ofunc = LLVMGetNamedFunction(g_mod, mangled_name)
         if ofunc == null
@@ -1001,7 +1024,7 @@ class LlvmJitVisitor : AstVisitor
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
         return ofunc
 
-    def register_interop_function ( expr:smart_ptr<ExprCall> ) : LLVMOpaqueValue?
+    def register_interop_function ( expr:smart_ptr<ExprCallFunc> ) : LLVMOpaqueValue?
         let mangled_name = get_mangled_name(FunctionPtr(expr.func))
         var ofunc = LLVMGetNamedFunction(g_mod, mangled_name)
         if ofunc == null
@@ -1014,7 +1037,7 @@ class LlvmJitVisitor : AstVisitor
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
         return ofunc
 
-    def build_call_params ( expr:smart_ptr<ExprCall> )
+    def build_call_params ( expr:smart_ptr<ExprCallFunc> )
         var params : array<LLVMOpaqueValue?>
         for a,ai in expr.arguments,range(100500)
             if a._type.baseType==Type fakeContext
@@ -1030,8 +1053,7 @@ class LlvmJitVisitor : AstVisitor
                 params |> push( getE(a) )
         return <- params
 
-    def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
-
+    def make_call ( expr:smart_ptr<ExprCallFunc>; doesNotNeedSp:bool )
         // TODO: build table of intrinsic functions, which build LLVMOpaqueValue? from ExprCall
         let call_name = "{expr.func._module.name}::{expr.func.name}"
         var intrin_call : LLVMOpaqueValue?
@@ -1042,12 +1064,12 @@ class LlvmJitVisitor : AstVisitor
         // return intrinsic if its set
         if intrin_call!=null
             setE(expr, intrin_call)
-            return expr
+            return
 
         // get CMRES, if its local
         var cmresEval : LLVMOpaqueValue?
         if isCMRES(expr.func)
-            if !expr.doesNotNeedSp && expr.stackTop!=0u
+            if !doesNotNeedSp && expr.stackTop!=0u
                 cmresEval = LLVMBuildGEP(g_builder, local_stack, LLVMConstInt(LLVMInt32Type(), uint64(expr.stackTop), 0), "")
                 cmresEval = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "cmres_eval_{call_name}")
             elif call2cmres |> key_exists(get_ptr(expr))
@@ -1121,6 +1143,9 @@ class LlvmJitVisitor : AstVisitor
                 else
                     var cres = cast_from_vec4f(expr, expr._type, ccall)
                     setE(expr, cres)
+
+    def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
+        make_call(expr, expr.doesNotNeedSp)
         return expr
 
     def override visitExprStringBuilder(expr:smart_ptr<ExprStringBuilder>) : ExpressionPtr
@@ -1406,6 +1431,42 @@ class LlvmJitVisitor : AstVisitor
             build_copy(v_ptr, decl.value)
         return decl
 
+// new
+
+    def build_alloc ( bytes:int; persistent:bool )
+        var params = [[auto
+            LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0);    // bytes
+            get_context_param()                                 // context
+        ]]
+        return LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, persistent ? FN_JIT_ALLOC_PERSISTENT : FN_JIT_ALLOC_HEAP), params, "")
+
+
+    def override preVisitExprNew(expr:smart_ptr<ExprNew>): void
+        var new_ptr : LLVMOpaqueValue?
+        if expr.typeexpr.baseType==Type tHandle
+            failed_E(expr, "new handle is not supported yet")
+            return
+        else
+            var persistent = false
+            if expr.typeexpr.baseType == Type tStructure
+                persistent = expr.typeexpr.structType.flags.persistent
+            let bytes = expr._type.firstType.sizeOf
+            new_ptr = build_alloc(bytes, persistent)
+            check_ptr_zero(new_ptr, "new returned null")
+            if expr.initializer
+                call2cmres[get_ptr(ExpressionPtr(expr))] = new_ptr
+                make_call(expr, false)
+            else
+                LLVMBuildMemSet(g_builder, new_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
+        new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, type_to_llvm_type(expr._type), "new")
+        setE(expr, new_ptr)
+
+    def override visitExprNew(expr:smart_ptr<ExprNew>) : ExpressionPtr
+        return expr
+    def override preVisitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool): void
+        pass
+    def override visitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool) : ExpressionPtr
+        return arg
 
 // constants
     def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr

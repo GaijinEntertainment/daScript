@@ -63,6 +63,14 @@ def make_struct_with_substruct_on_stack(which:bool)
     var b = [[Bar a=2, foo=[[Foo a=3, b=4.]], b=5]]
     return which ? a : b
 
+[jit]
+def new_struct_on_heap
+    return new Foo
+
+[jit]
+def new_struct_with_ctor_on_heap
+    return new Foo()
+
 [test]
 def test_struct ( t:T? )
     t |> run("struct field") <| @ ( t : T? )
@@ -157,3 +165,17 @@ def test_struct ( t:T? )
         t |> equal ( "", b.foo.c )
         t |> equal ( 0,  b.foo.d )
         t |> equal ( 5,  b.b )
+    t |> run("new struct on heap") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@new_struct_on_heap) )
+        var f = new_struct_on_heap()
+        t |> equal ( 0, f.a )
+        t |> equal ( 0., f.b )
+        t |> equal ( "", f.c )
+        t |> equal ( 0, f.d )
+    t |> run("new struct with ctor on heap") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@new_struct_with_ctor_on_heap) )
+        var f = new_struct_with_ctor_on_heap()
+        t |> equal ( 1234, f.a )
+        t |> equal ( 1234., f.b )
+        t |> equal ( "1234", f.c )
+        t |> equal ( 1234, f.d )
