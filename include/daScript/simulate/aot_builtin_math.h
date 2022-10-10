@@ -52,7 +52,6 @@ namespace das {
 
     __forceinline vec4f cross3(vec4f a, vec4f b){vec4f v = v_cross3(a,b); return v;}
 
-    // use reliable versions of isnan() and isfinite() that will not be cut out by the optimizer due to -ffast-math flag
     __forceinline bool   fisnan(float  a) { return isnan(a); }
     __forceinline bool   disnan(double a) { return isnan(a); }
     __forceinline bool   fisfinite(float  a) { return !isinf(a); }
