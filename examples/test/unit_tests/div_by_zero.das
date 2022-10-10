@@ -32,11 +32,5 @@ def test()
     // uint64
     verify(div_by_zero(1ul)==1ul)
     verify(mod_by_zero(1ul)==1ul)
-    // float
-    verify(div_by_zero(1.0f)==1.0f)
-    verify(mod_by_zero(1.0f)==1.0f)
-    // double
-    verify(div_by_zero(1.0lf)==1.0lf)
-    verify(mod_by_zero(1.0lf)==1.0lf)
     return true
 

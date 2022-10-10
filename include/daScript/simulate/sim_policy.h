@@ -117,25 +117,17 @@ namespace  das {
     struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t>, SimPolicy_MathTT<uint64_t> {};
 
     struct SimPolicy_Float : SimPolicy_Type<float> {
-        static __forceinline float Mod ( float a, float b, Context & context, LineInfo * at ) {
-            if ( b==0.0f ) context.throw_error_at(at ? *at : LineInfo(), "division by zero in modulo");
-            return (float)fmod(a,b);
-        }
-        static __forceinline void SetMod ( float & a, float b, Context & context, LineInfo * at ) {
-            if ( b==0.0f ) context.throw_error_at(at ? *at : LineInfo(), "division by zero in modulo");
-            a = (float)fmod(a,b);
-        }
+        static __forceinline float Div ( float a, float b, Context &, LineInfo * ) { return a / b; }
+        static __forceinline void SetDiv  ( float & a, float b, Context &, LineInfo * ) { a /= b; }
+        static __forceinline float Mod ( float a, float b, Context &, LineInfo * ) { return (float)fmod(a,b); }
+        static __forceinline void SetMod ( float & a, float b, Context &, LineInfo * ) { a = (float)fmod(a,b); }
     };
 
     struct SimPolicy_Double : SimPolicy_Type<double>, SimPolicy_MathTT<double> {
-        static __forceinline double Mod ( double a, double b, Context & context, LineInfo * at ) {
-            if ( b==0.0 ) context.throw_error_at(at ? *at : LineInfo(), "division by zero in modulo");
-            return fmod(a,b);
-        }
-        static __forceinline void SetMod ( double & a, double b, Context & context, LineInfo * at ) {
-            if ( b==0.0 ) context.throw_error_at(at ? *at : LineInfo(), "division by zero in modulo");
-            a = fmod(a,b);
-        }
+        static __forceinline double Div ( double a, double b, Context &, LineInfo * ) { return a / b; }
+        static __forceinline void SetDiv  ( double & a, double b, Context &, LineInfo * ) { a /= b; }
+        static __forceinline double Mod ( double a, double b, Context &, LineInfo * ) { return fmod(a,b); }
+        static __forceinline void SetMod ( double & a, double b, Context &, LineInfo * ) { a = fmod(a,b); }
         static __forceinline int Trunci ( double a, Context &, LineInfo * )          { return int(trunc(a)); }
         static __forceinline int Roundi ( double a, Context &, LineInfo * )          { return int(round(a)); }
         static __forceinline int Floori ( double a, Context &, LineInfo * )          { return int(floor(a)); }
