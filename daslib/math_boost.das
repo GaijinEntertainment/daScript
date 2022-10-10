@@ -11,11 +11,6 @@ module math_boost shared public
 require daslib/math_bits public
 require math public
 
-let inf = 1.0 / 0.0
-let neg_inf = -1.0 / 0.0
-let neg_nan = inf / inf
-let nan = - (inf / inf)
-
 struct AABR
     //! axis aligned bounding rectangle
     min, max : float2

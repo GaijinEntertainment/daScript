@@ -1,6 +1,11 @@
 require dastest/testing_boost
 require daslib/math_boost
 
+let inf = 1.0 / 0.0
+let neg_inf = -1.0 / 0.0
+let neg_nan = inf / inf
+let nan = - (inf / inf)
+
 [sideeffects]
 def eq ( a,b )
     return a==b
@@ -25,7 +30,6 @@ def leq ( a,b )
 def geq ( a,b )
     return a>=b
 
-
 [test]
 def test_inf_and_nan ( t:T? )
     t |> run("inf and neg inf") <| @@ ( t : T? )
@@ -33,6 +37,20 @@ def test_inf_and_nan ( t:T? )
         t |> strictEqual ( -100.0/0.0, neg_inf )
         t |> strictEqual ( inf/inf, neg_nan )
         t |> strictEqual ( -(inf/inf), nan )
+
+    t |> run("is_finite and is_nan") <| @@ ( t : T? )
+        t |> success ( !is_finite(inf) )
+        t |> success ( !is_finite(neg_inf) )
+        t |> success ( is_finite(nan) )
+        t |> success ( is_finite(neg_nan) )
+        t |> success ( is_finite(1.) )
+        t |> success ( is_finite(0.) )
+        t |> success ( is_nan(nan) )
+        t |> success ( is_nan(neg_nan) )
+        t |> success ( !is_nan(inf) )
+        t |> success ( !is_nan(neg_inf) )
+        t |> success ( !is_nan(1.) )
+        t |> success ( !is_nan(0.) )
 
     t |> run("inf and nan comparisons") <| @@ ( t : T? )
         t |> success ( !eq(nan,nan) )
