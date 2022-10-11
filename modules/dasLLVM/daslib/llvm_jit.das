@@ -469,15 +469,16 @@ class LlvmJitVisitor : AstVisitor
                 var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
                 tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt1Type(), "down_to_1_bit")
-            elif bt == Type tString
+            elif bt == Type tString || bt == Type tPointer
+                var ptr_type = bt==Type tString ? LLVMPointerType(LLVMInt8Type(),0u) : type_to_llvm_type(etype)
                 if typeinfo(sizeof type<void?>)==8
                     var v2 = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "ptr_vec")
                     var tbit = LLVMBuildExtractElement(g_builder, v2, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "ptr_bits")
-                    tres = LLVMBuildIntToPtr(g_builder, tbit, LLVMPointerType(LLVMInt8Type(),0u), "cast_from_vec4f")
+                    tres = LLVMBuildIntToPtr(g_builder, tbit, ptr_type, "cast_from_vec4f")
                 else
                     var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
                     tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "ptr_bits")
-                    tres = LLVMBuildIntToPtr(g_builder, tres, LLVMPointerType(LLVMInt8Type(),0u), "cast_from_vec4f")
+                    tres = LLVMBuildIntToPtr(g_builder, tres, ptr_type, "cast_from_vec4f")
             else
                 failed_E(expr, "unsupported cast_from_vec4f cast {describe(etype)}")
         else
@@ -595,7 +596,11 @@ class LlvmJitVisitor : AstVisitor
             var ralign = uint(right._type.alignOf)
             LLVMBuildMemCpy(g_builder, tdst, ralign, tsrc, ralign, rsize)
         else
-            LLVMBuildStore(g_builder, tsrc, tdst)
+            if LLVMIsNull(tsrc)==1
+                let null_ptr = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
+                LLVMBuildStore2(g_builder, LLVMPointerType(LLVMVoidType(),0u), null_ptr, tdst)
+            else
+                LLVMBuildStore(g_builder, tsrc, tdst)
 
     def override preVisitExprCopyRight(expr:smart_ptr<ExprCopy>;right:ExpressionPtr): void
         var tdst = getE(expr.left)
@@ -624,7 +629,8 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>) : ExpressionPtr
         var tsrc = getE(expr.subexpr)
-        check_ptr_zero(tsrc)
+        if !thisFunc.flags.unsafeDeref
+            check_ptr_zero(tsrc)
         setE(expr, tsrc)
         return expr
 
@@ -646,7 +652,8 @@ class LlvmJitVisitor : AstVisitor
         var tidx = getE(expr.index)
         assume subExprT = expr.subexpr._type
         if subExprT.isPointer
-            check_ptr_zero(tsrc)
+            if !thisFunc.flags.unsafeDeref
+                check_ptr_zero(tsrc)
             var element_type = type_to_llvm_type(subExprT.firstType)
             var ptr_idx = LLVMBuildGEP(g_builder, tsrc, tidx, "ptr_at")
             if expr.atFlags.r2v
@@ -836,11 +843,13 @@ class LlvmJitVisitor : AstVisitor
                 opR = LLVMBuildFCmp(g_builder, get_float_compare_op(expr,string(expr.op)), left, right, "")
             elif expr.left._type.baseType == Type tBool
                 opR = LLVMBuildICmp(g_builder, get_bool_compare_op(expr,string(expr.op)), left, right, "")
-            else
-                failed_E(expr, "unsupported compare type {opType}")
+            elif expr.left._type.baseType == Type tPointer
+                var lptr = LLVMBuildPointerCast(g_builder, left, LLVMPointerType(LLVMInt8Type(), 0u), "")
+                var rptr = LLVMBuildPointerCast(g_builder, right, LLVMPointerType(LLVMInt8Type(), 0u), "")
+                opR = LLVMBuildICmp(g_builder, get_uint_compare_op(expr,string(expr.op)), lptr, rptr, "")
             if opR == null
                 opR = LLVMGetUndef(LLVMInt8Type())
-                failed_E(expr, "unsupported cmp type {expr.left._type} {expr.op} {expr.right._type}")
+                failed_E(expr, "unsupported compare type {expr.left._type} {expr.op} {expr.right._type}")
             setE(expr, opR)
         else
             failed_E(expr, "unsupported binary operator {expr.op}")
