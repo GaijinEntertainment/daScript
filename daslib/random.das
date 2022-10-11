@@ -23,7 +23,7 @@ def random_seed2D(var seed:int4&; co:int2; cf:int=0)
 def random_int ( var seed:int4& )
     //! random integer 0..32767 (LCG_RAND_MAX)
     seed.x = 214013*seed.x+2531011
-    return int((seed.x>>16) & LCG_RAND_MAX)
+    return (seed.x>>16) & LCG_RAND_MAX
 
 def random_big_int ( var seed:int4& )
     //! random integer 0..32768*32768-1 (LCG_RAND_MAX_BIG)
