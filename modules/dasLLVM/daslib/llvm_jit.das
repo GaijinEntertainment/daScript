@@ -171,6 +171,11 @@ class LlvmJitVisitor : AstVisitor
         current_block = blk
         LLVMPositionBuilderAtEnd(g_builder, blk)
 
+    def at_function_entry ( blk:block )
+        LLVMPositionBuilderAtEnd(g_builder, function_entry)
+        invoke(blk)
+        LLVMPositionBuilderAtEnd(g_builder, current_block)
+
     def add_llvm_functions ( fun : FunctionPtr )
         thisFunc = get_ptr(fun)
         defer <|
@@ -404,11 +409,10 @@ class LlvmJitVisitor : AstVisitor
             v_ptr = get_cmres_param()
             v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "variable_cmres_{arg.name}")
         else
-            LLVMPositionBuilderAtEnd(g_builder, function_entry)
-            v_ptr = LLVMBuildAlloca(g_builder, vtype, "variable_{arg.name}")
-            LLVMSetAlignment(v_ptr, 16u)
-            v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "variable_{arg.name}")
-            LLVMPositionBuilderAtEnd(g_builder, current_block)
+            at_function_entry <|
+                v_ptr = LLVMBuildAlloca(g_builder, vtype, "variable_{arg.name}")
+                LLVMSetAlignment(v_ptr, 16u)
+                v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "variable_{arg.name}")
         setV(arg, v_ptr)
         if arg.init == null
             var vsize = arg._type.flags.ref ?  typeinfo(sizeof type<void?>) : arg._type.sizeOf
@@ -1139,11 +1143,10 @@ class LlvmJitVisitor : AstVisitor
         if isCMRES(expr.func)
             if !doesNotNeedSp && expr.stackTop!=0u
                 var vtype = type_to_llvm_type(expr._type)
-                LLVMPositionBuilderAtEnd(g_builder, function_entry)
-                cmresEval = LLVMBuildAlloca(g_builder, vtype, "cmres_eval_{expr.name}")
-                LLVMSetAlignment(cmresEval, 16u)
-                cmresEval = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "cmres_eval_{expr.name}")
-                LLVMPositionBuilderAtEnd(g_builder, current_block)
+                at_function_entry <|
+                    cmresEval = LLVMBuildAlloca(g_builder, vtype, "cmres_eval_{expr.name}")
+                    LLVMSetAlignment(cmresEval, 16u)
+                    cmresEval = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "cmres_eval_{expr.name}")
             elif call2cmres |> key_exists(get_ptr(expr))
                 cmresEval = call2cmres[get_ptr(ExpressionPtr(expr))]
             else
@@ -1346,12 +1349,12 @@ class LlvmJitVisitor : AstVisitor
         var vtype = type_to_llvm_type(svar._type)
         if svar._type.isRef
             vtype = LLVMPointerType(vtype,0u)
-        LLVMPositionBuilderAtEnd(g_builder, function_entry)
-        var v_ptr = LLVMBuildAlloca(g_builder, vtype, "for_loop_variable_{svar.name}")
-        LLVMSetAlignment(v_ptr, 16u)
-        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "for_loop_variable_{svar.name}")
-        LLVMPositionBuilderAtEnd(g_builder, current_block)
-        setV(svar, v_ptr)
+        var v_ptr : LLVMOpaqueValue?
+        at_function_entry <|
+            v_ptr = LLVMBuildAlloca(g_builder, vtype, "for_loop_variable_{svar.name}")
+            LLVMSetAlignment(v_ptr, 16u)
+            v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "for_loop_variable_{svar.name}")
+            setV(svar, v_ptr)
         // initialize its memory with 0 (should we?)
         var vsize = svar._type.isRef ?  typeinfo(sizeof type<void?>) : svar._type.sizeOf
         LLVMBuildMemSet(g_builder, v_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(vsize), 0), 16u)
@@ -1465,11 +1468,11 @@ class LlvmJitVisitor : AstVisitor
         else
             mks_ptr = tryE(expr) <|
                 var vtype = type_to_llvm_type(expr._type)
-                LLVMPositionBuilderAtEnd(g_builder, function_entry)
-                var s_ptr = LLVMBuildAlloca(g_builder, vtype, "mks_local_sp_{expr.stackTop}")
-                LLVMSetAlignment(s_ptr, 16u)
-                s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mks_locl_sp_{expr.stackTop}")
-                LLVMPositionBuilderAtEnd(g_builder, current_block)
+                var s_ptr : LLVMOpaqueValue?
+                at_function_entry <|
+                    s_ptr = LLVMBuildAlloca(g_builder, vtype, "mks_local_sp_{expr.stackTop}")
+                    LLVMSetAlignment(s_ptr, 16u)
+                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mks_locl_sp_{expr.stackTop}")
                 return s_ptr
             if expr.extraOffset != 0u
                 mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mks_locl_sp_{expr.stackTop}_eo_{expr.extraOffset}")
