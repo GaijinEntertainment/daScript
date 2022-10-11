@@ -105,7 +105,7 @@ def testTreeJit
 [export]
 def main
     verify(is_jit_function(@@testTreeJit))
-    profile(10, "tree")  <|
+    profile(10, "tree jit")  <|
         testTreeJit()
     profile(10, "tree C++")  <|
         testProfile::testTree()
