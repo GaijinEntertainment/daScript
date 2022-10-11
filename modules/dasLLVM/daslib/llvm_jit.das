@@ -1374,11 +1374,15 @@ class LlvmJitVisitor : AstVisitor
 
 // make structure
     def override preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : void
-        // failed_E(expr, "make struct is not supported")
         var mks_ptr : LLVMOpaqueValue?
         if expr.makeFlags.useCMRES
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            if expr.extraOffset != 0u
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+        elif expr.makeFlags.useStackRef
+            mks_ptr = getE(expr)
+            verify(mks_ptr!=null && LLVMIsUndef(mks_ptr)==0,"USE STACKREF, but no stackref")
             if expr.extraOffset != 0u
                 mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
@@ -1398,11 +1402,14 @@ class LlvmJitVisitor : AstVisitor
         let stride = expr.makeType.stride
         let offset =  index*stride + field.offset
         var v_ptr = getE(expr)
-        v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+        verify(v_ptr!=null && LLVMIsUndef(v_ptr)==0,"make struct field, but no pointer")
+        let field_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
         if decl.value |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
             val.extraOffset = uint(offset) + expr.extraOffset
-        elif make_call_to_cmres ( decl.value, v_ptr )
+            if expr.makeFlags.useStackRef
+                setE(decl.value, v_ptr)
+        elif make_call_to_cmres ( decl.value, field_ptr )
             pass
     def override visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
         var field = find_structure_field(expr.makeType.structType, string(decl.name))
@@ -1418,29 +1425,20 @@ class LlvmJitVisitor : AstVisitor
             pass // do nothign. we already taken care of makeLocal in preVisitExprMakeStructField
         elif isCall2CMRES(decl.value)
             pass // do nothing. we already handle this in preVisitExprMakeStructField
-        elif expr.makeFlags.useCMRES
+        else
             if decl.flags.moveSemantics
-                failed_E(expr, "makeStruct: CMRES copy is not supported")
+                failed_E(expr, "makeStruct: move is not supported")
             else
                 build_copy(v_ptr, decl.value)
-        elif expr.makeFlags.useStackRef
-            failed_E(expr, "makeStruct: useStackRef is not supported")
-        elif decl.flags.moveSemantics
-            failed_E(expr, "makeStruct: move is not supported")
-        else
-            build_copy(v_ptr, decl.value)
         return decl
 
 // new
-
     def build_alloc ( bytes:int; persistent:bool )
         var params = [[auto
             LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0);    // bytes
             get_context_param()                                 // context
         ]]
         return LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, persistent ? FN_JIT_ALLOC_PERSISTENT : FN_JIT_ALLOC_HEAP), params, "")
-
-
     def override preVisitExprNew(expr:smart_ptr<ExprNew>): void
         var new_ptr : LLVMOpaqueValue?
         if expr.typeexpr.baseType==Type tHandle
@@ -1459,14 +1457,24 @@ class LlvmJitVisitor : AstVisitor
             else
                 LLVMBuildMemSet(g_builder, new_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
         new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, type_to_llvm_type(expr._type), "new")
+        if expr._type.dim.length != 0
+            failed_E(expr, "new [] is not supported yet")
         setE(expr, new_ptr)
 
-    def override visitExprNew(expr:smart_ptr<ExprNew>) : ExpressionPtr
-        return expr
-    def override preVisitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool): void
-        pass
-    def override visitExprNewArgument(expr:smart_ptr<ExprNew>;arg:ExpressionPtr;last:bool) : ExpressionPtr
-        return arg
+// ascend
+    def override preVisitExprAscend(expr:smart_ptr<ExprAscend>) : void
+        if expr.subexpr._type.baseType == Type tHandle
+            failed_E(expr, "ascend of handle is not supported")
+            return
+        let bytes = expr.subexpr._type.sizeOf
+        var mks_ptr = build_alloc(bytes, false)
+        check_ptr_zero(mks_ptr, "new [[...]] returned null")
+        LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
+        if expr.ascendFlags.useStackRef
+            let stackref_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            setE(expr.subexpr, stackref_ptr)
+        mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, type_to_llvm_type(expr._type), "")
+        setE(expr,mks_ptr)
 
 // constants
     def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr
