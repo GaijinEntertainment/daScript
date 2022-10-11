@@ -52,11 +52,36 @@ namespace das {
 
     __forceinline vec4f cross3(vec4f a, vec4f b){vec4f v = v_cross3(a,b); return v;}
 
-    // use reliable versions of isnan() and isfinite() that will not be cut out by the optimizer due to -ffast-math flag
-    __forceinline bool   fisnan(float  a) { volatile float b = a; return b != a; }
-    __forceinline bool   disnan(double a) { volatile double b = a; return b != a; }
-    __forceinline bool   fisfinite(float  a) { return fisnan(a) ? true : FLT_MAX >= fabsf(a); }
-    __forceinline bool   disfinite(double a) { return disnan(a) ? true : DBL_MAX >= fabs(a); }
+#if defined(__GNUC__) || defined(__clang__)
+#if !defined(__clang__)
+#define DAS_FINITE_MATH __attribute__((optimize("no-finite-math-only")))
+#else
+#pragma float_control(push)
+#pragma float_control(precise, on)
+#define DAS_FINITE_MATH
+#endif
+#if __clang_major__ < 12 && defined(__clang__) && defined(__FAST_MATH__)
+    //unfortunately older clang versions do not work with float_control
+    FINITE_MATH bool   fisnan(float  a) { volatile float b = a; return b != a; }
+    FINITE_MATH bool   disnan(double  a) { volatile double b = a; return b != a; }
+#else
+    DAS_FINITE_MATH bool   fisnan(float  a) { return __builtin_isnan(a); }
+    DAS_FINITE_MATH bool   disnan(double  a) { return __builtin_isnan(a); }
+#endif
+    DAS_FINITE_MATH bool   fisfinite(float  a) { return !__builtin_isinf(a); }
+    DAS_FINITE_MATH bool   disfinite(double  a) { return !__builtin_isinf(a); }
+#undef DAS_FINITE_MATH
+#if defined(__clang__)
+#pragma float_control(pop)
+#endif
+#else
+    //msvc just does not optimize fast math
+    bool   fisfinite(float  a) { return !isinf(a); }
+    bool   fisnan(float  a) { return isnan(a); }
+    bool   disfinite(double  a) { return !isinf(a); }
+    bool   disnan(double  a) { return isnan(a); }
+#endif
+
 
     __forceinline double dsign (double a){return (a == 0) ? 0 : (a > 0) ? 1 : -1;}
     __forceinline double dabs  (double a){return fabs(a);}
