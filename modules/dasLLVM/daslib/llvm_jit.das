@@ -13,6 +13,8 @@ require daslib/defer
 require daslib/fio
 require math
 
+let LLVM_JIT_ENABLED = true
+
 let LLVM_DEBUG_RESULT = false
 let LLVM_DEBUG_EVERYTHING = false
 
@@ -20,6 +22,7 @@ let LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING || LLVM_DEBUG_RESULT
+let LLVM_INLINE_THRESHOLD = 225u
 
 struct JitEngine
     mod : LLVMOpaqueModule?
@@ -733,6 +736,13 @@ class LlvmJitVisitor : AstVisitor
             vec = LLVMBuildInsertElement(g_builder, vec, scalar, idx, "")
         return vec
 
+    def isExprIntNZ ( expr:ExpressionPtr )
+        return true     if (expr is ExprConstInt) && (expr as ExprConstInt).value!=0
+        return true     if (expr is ExprConstUInt) && (expr as ExprConstUInt).value!=0u
+        return true     if (expr is ExprConstInt64) && (expr as ExprConstInt64).value!=0l
+        return true     if (expr is ExprConstUInt64) && (expr as ExprConstUInt64).value!=0ul
+        return false
+
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
         var left = getE(expr.left)
         var right = getE(expr.right)
@@ -794,7 +804,8 @@ class LlvmJitVisitor : AstVisitor
         elif expr.op=="/" || expr.op=="%" || expr.op=="/=" || expr.op=="%="
             // for integer division we check division by zero
             if opType.isInteger && expr.left._type.isInteger
-                check_divide_by_0(right, opType)
+                if !isExprIntNZ(expr.right)
+                    check_divide_by_0(right, opType)
             if expr.op=="/"
                 if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
                     setE(expr, LLVMBuildSDiv(g_builder, left, right, ""))
@@ -851,6 +862,33 @@ class LlvmJitVisitor : AstVisitor
                 opR = LLVMGetUndef(LLVMInt8Type())
                 failed_E(expr, "unsupported compare type {expr.left._type} {expr.op} {expr.right._type}")
             setE(expr, opR)
+        elif expr.op=="<<"
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildShl(g_builder, left, right, ""))
+            else
+                failed_E(expr, "unsupported << type {opType}")
+        elif expr.op==">>"
+            if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
+                setE(expr, LLVMBuildAShr(g_builder, left, right, ""))
+            elif opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tUInt)
+                setE(expr, LLVMBuildLShr(g_builder, left, right, ""))
+            else
+                failed_E(expr, "unsupported >> type {opType}")
+        elif expr.op=="&"
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildAnd(g_builder, left, right, ""))
+            else
+                failed_E(expr, "unsupported & type {opType}")
+        elif expr.op=="|"
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildOr(g_builder, left, right, ""))
+            else
+                failed_E(expr, "unsupported | type {opType}")
+        elif expr.op=="^"
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildXor(g_builder, left, right, ""))
+            else
+                failed_E(expr, "unsupported ^ type {opType}")
         else
             failed_E(expr, "unsupported binary operator {expr.op}")
         return expr
@@ -1178,8 +1216,10 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprSwizzle(expr:smart_ptr<ExprSwizzle>) : ExpressionPtr
         var val = getE(expr.value)
         if expr._type.flags.ref
-            failed_E(expr, "return ref swizzle is not supported yet")
-            setE(expr, LLVMGetUndef(LLVMInt32Type()))
+            var vec_element_type = base_type_to_llvm_type(expr.value._type.vectorBaseType)
+            var val_ptr = LLVMBuildBitCast(g_builder, val, LLVMPointerType(vec_element_type, 0u), "")
+            val_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
+            setE(expr, val_ptr)
         else
             var isSequencial = true
             for i in range(1,length(expr.fields))
@@ -1633,6 +1673,7 @@ def private optimize_llvm_module
     return if g_failed || !LLVM_ENABLE_OPT_PASS
     var pmb = LLVMPassManagerBuilderCreate()
     LLVMPassManagerBuilderSetOptLevel(pmb, LLVM_OPT_LEVEL)
+    LLVMPassManagerBuilderUseInlinerWithThreshold(pmb, LLVM_INLINE_THRESHOLD)
     var pm = LLVMCreatePassManager()
     LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm)
     // LLVMPassManagerBuilderPopulateLTOPassManager(pmb, pm, 1, 1)
@@ -1644,6 +1685,8 @@ def private optimize_llvm_module
 class JIT_LLVM : AstSimulateMacro
     def override simulate ( prog:Program?; var ctx:Context? ) : bool
         return true if is_in_completion() || is_compiling_macros()
+        if !LLVM_JIT_ENABLED
+            return true
         init_jit()
         var funcs : array<FunctionPtr>
         var fake_visitor = new LlvmJitVisitor(ctx)

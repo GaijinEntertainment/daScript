@@ -63,11 +63,17 @@ def hasValue(var mRoot:Node? &; x: int): bool
     return res
 
 [jit]
+def random_int_jit ( var seed:int4& )
+    //! random integer 0..32767 (LCG_RAND_MAX)
+    seed.x = 214013*seed.x+2531011
+    return (seed.x>>16) & LCG_RAND_MAX
+
+[jit]
 def insert(var mRoot:Node? &; x: int)
     var lower, equal, greater : Node?
     split(mRoot, lower, equal, greater, x)
     if equal == null
-    	equal = new [[Node x=x, y=random_int(seed)]]
+    	equal = new [[Node x=x, y=random_int_jit(seed)]]
     mRoot = merge(lower, equal, greater)
 
 [jit]
