@@ -52,11 +52,11 @@ namespace das {
 
     __forceinline vec4f cross3(vec4f a, vec4f b){vec4f v = v_cross3(a,b); return v;}
 
-    __forceinline bool   fisnan(float  a) { return isnan(a); }
-    __forceinline bool   disnan(double a) { return isnan(a); }
-    __forceinline bool   fisfinite(float  a) { return !isinf(a); }
-    __forceinline bool   disfinite(double a) { return !isinf(a); }
-
+    // use reliable versions of isnan() and isfinite() that will not be cut out by the optimizer due to -ffast-math flag
+    __forceinline bool   fisnan(float  a) { volatile float b = a; return b != a; }
+    __forceinline bool   disnan(double a) { volatile double b = a; return b != a; }
+    __forceinline bool   fisfinite(float  a) { return fisnan(a) ? true : FLT_MAX >= fabsf(a); }
+    __forceinline bool   disfinite(double a) { return disnan(a) ? true : DBL_MAX >= fabs(a); }
 
     __forceinline double dsign (double a){return (a == 0) ? 0 : (a > 0) ? 1 : -1;}
     __forceinline double dabs  (double a){return fabs(a);}
