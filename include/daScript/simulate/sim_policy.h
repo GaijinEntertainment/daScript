@@ -61,7 +61,7 @@ namespace  das {
         static __forceinline void SetBoolXor  ( bool & a, bool b, Context &, LineInfo * ) { a = a ^ b; }
     };
 
-    template <typename TT>
+    template <typename TT, typename UTT>
     struct SimPolicy_Bin : SimPolicy_Type<TT> {
         enum { BITS = sizeof(TT)*8 };
         static __forceinline TT Mod ( TT a, TT b, Context & context, LineInfo * at ) {
@@ -74,11 +74,13 @@ namespace  das {
         static __forceinline TT BinXor ( TT a, TT b, Context &, LineInfo * ) { return a ^ b; }
         static __forceinline TT BinShl ( TT a, TT b, Context &, LineInfo * ) { return a << b; }
         static __forceinline TT BinShr ( TT a, TT b, Context &, LineInfo * ) { return a >> b; }
-        static __forceinline TT BinRotl ( TT a, TT b, Context &, LineInfo * ) {
+        static __forceinline TT BinRotl ( TT _a, TT _b, Context &, LineInfo * ) {
+            auto a = (UTT)_a; auto b = (UTT)_b;
             b &= (BITS-1);
             return (a << b) | (a >> (BITS - b));
         }
-        static __forceinline TT BinRotr ( TT a, TT b, Context &, LineInfo * ) {
+        static __forceinline TT BinRotr ( TT _a, TT _b, Context &, LineInfo * ) {
+            auto a = (UTT)_a; auto b = (UTT)_b;
             b &= (BITS-1);
             return (a >> b) | (a << (BITS - b));
         }
@@ -87,13 +89,15 @@ namespace  das {
         static __forceinline void SetBinXor ( TT & a, TT b, Context &, LineInfo * ) { a ^= b; }
         static __forceinline void SetBinShl ( TT & a, TT b, Context &, LineInfo * ) { a <<= b; }
         static __forceinline void SetBinShr ( TT & a, TT b, Context &, LineInfo * ) { a >>= b; }
-        static __forceinline void SetBinRotl ( TT & a, TT b, Context &, LineInfo * ) {
+        static __forceinline void SetBinRotl ( TT & _a, TT _b, Context &, LineInfo * ) {
+            auto a = (UTT)_a; auto b = (UTT)_b;
             b &= (BITS-1);
-            a = (a << b) | (a >> (BITS - b));
+            _a = TT((a << b) | (a >> (BITS - b)));
         }
-        static __forceinline void SetBinRotr ( TT & a, TT b, Context &, LineInfo * ) {
+        static __forceinline void SetBinRotr ( TT & _a, TT _b, Context &, LineInfo * ) {
+            auto a = (UTT)_a; auto b = (UTT)_b;
             b &= (BITS-1);
-            a = (a >> b) | (a << (BITS - b));
+            _a = TT((a >> b) | (a << (BITS - b)));
         }
         static __forceinline void SetMod    ( TT & a, TT b, Context & context, LineInfo * at ) {
             if ( b==0 ) context.throw_error_at(at ? *at : LineInfo(), "division by zero in modulo");
@@ -111,10 +115,10 @@ namespace  das {
         static __forceinline TT Abs   ( TT a, Context &, LineInfo * )    { return a >= 0 ? a : -a; }
     };
 
-    struct SimPolicy_Int : SimPolicy_Bin<int32_t>, SimPolicy_MathTT<int32_t> {};
-    struct SimPolicy_UInt : SimPolicy_Bin<uint32_t>, SimPolicy_MathTT<uint32_t> {};
-    struct SimPolicy_Int64 : SimPolicy_Bin<int64_t>, SimPolicy_MathTT<int64_t> {};
-    struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t>, SimPolicy_MathTT<uint64_t> {};
+    struct SimPolicy_Int : SimPolicy_Bin<int32_t,uint32_t>, SimPolicy_MathTT<int32_t> {};
+    struct SimPolicy_UInt : SimPolicy_Bin<uint32_t,uint32_t>, SimPolicy_MathTT<uint32_t> {};
+    struct SimPolicy_Int64 : SimPolicy_Bin<int64_t,uint64_t>, SimPolicy_MathTT<int64_t> {};
+    struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t,uint64_t>, SimPolicy_MathTT<uint64_t> {};
 
     struct SimPolicy_Float : SimPolicy_Type<float> {
         static __forceinline float Div ( float a, float b, Context &, LineInfo * ) { return a / b; }
