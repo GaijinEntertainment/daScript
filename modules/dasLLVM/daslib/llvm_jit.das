@@ -786,6 +786,7 @@ class LlvmJitVisitor : AstVisitor
         var left = getE(expr.left)
         var right = getE(expr.right)
         assume opType = expr.right._type
+        assume shiftType = expr.left._type
         var r2v_left = isReadModifyWriteOp2(expr.op) ? LLVMBuildLoad(g_builder, left, "") : null
 
         // note: we need to handle vector vs scalar operations here
@@ -798,48 +799,53 @@ class LlvmJitVisitor : AstVisitor
                 else
                     right = expand_scalar(right, expr.left._type)
 
+        // note: we need to handle shift operations
+        // the way we do it, is we expand scalar up to vector type
+        if expr.op=="<<" || expr.op==">>" || expr.op==">>>" || expr.op=="<<<" || expr.op=="<<=" || expr.op==">>=" || expr.op==">>>=" || expr.op=="<<<="
+            right = build_shift(shiftType, right)
+
         if expr.op=="+"
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildAdd(g_builder, left, right, ""))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildFAdd(g_builder, left, right, ""))
             else
-                failed_E(expr, "unsupported + type {opType}")
+                failed_E(expr, "unsupported + type {describe(opType)}")
         elif expr.op=="+="
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildStore(g_builder, LLVMBuildAdd(g_builder, r2v_left, right, ""), left))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildStore(g_builder, LLVMBuildFAdd(g_builder, r2v_left, right, ""), left))
             else
-                failed_E(expr, "unsupported += type {opType}")
+                failed_E(expr, "unsupported += type {describe(opType)}")
         elif expr.op=="-"
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildSub(g_builder, left, right, ""))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildFSub(g_builder, left, right, ""))
             else
-                failed_E(expr, "unsupported - type {opType}")
+                failed_E(expr, "unsupported - type {describe(opType)}")
         elif expr.op=="-="
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildStore(g_builder, LLVMBuildSub(g_builder, r2v_left, right, ""), left))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildStore(g_builder, LLVMBuildFSub(g_builder, r2v_left, right, ""), left))
             else
-                failed_E(expr, "unsupported -= type {opType}")
+                failed_E(expr, "unsupported -= type {describe(opType)}")
         elif expr.op=="*"
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildMul(g_builder, left, right, ""))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildFMul(g_builder, left, right, ""))
             else
-                failed_E(expr, "unsupported * type {opType}")
+                failed_E(expr, "unsupported * type {describe(opType)}")
         elif expr.op=="*="
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildStore(g_builder, LLVMBuildMul(g_builder, r2v_left, right, ""), left))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildStore(g_builder, LLVMBuildFMul(g_builder, r2v_left, right, ""), left))
             else
-                failed_E(expr, "unsupported *= type {opType}")
+                failed_E(expr, "unsupported *= type {describe(opType)}")
         elif expr.op=="/" || expr.op=="%" || expr.op=="/=" || expr.op=="%="
             // for integer division we check division by zero
             if opType.isInteger && expr.left._type.isInteger
@@ -853,7 +859,7 @@ class LlvmJitVisitor : AstVisitor
                 elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                     setE(expr, LLVMBuildFDiv(g_builder, left, right, ""))
                 else
-                    failed_E(expr, "unsupported /= type {opType}")
+                    failed_E(expr, "unsupported /= type {describe(opType)}")
             elif expr.op=="/="
                 if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
                     setE(expr, LLVMBuildStore(g_builder, LLVMBuildSDiv(g_builder, r2v_left, right, ""), left))
@@ -862,7 +868,7 @@ class LlvmJitVisitor : AstVisitor
                 elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                     setE(expr, LLVMBuildStore(g_builder, LLVMBuildFDiv(g_builder, r2v_left, right, ""), left))
                 else
-                    failed_E(expr, "unsupported /= type {opType}")
+                    failed_E(expr, "unsupported /= type {describe(opType)}")
             elif expr.op=="%"
                 if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
                     setE(expr, LLVMBuildSRem(g_builder, left, right, ""))
@@ -871,7 +877,7 @@ class LlvmJitVisitor : AstVisitor
                 elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                     setE(expr, LLVMBuildFRem(g_builder, left, right, ""))
                 else
-                    failed_E(expr, "unsupported % type {opType}")
+                    failed_E(expr, "unsupported % type {describe(opType)}")
             elif expr.op=="%="
                 if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
                     setE(expr, LLVMBuildStore(g_builder, LLVMBuildSRem(g_builder, r2v_left, right, ""), left))
@@ -880,7 +886,7 @@ class LlvmJitVisitor : AstVisitor
                 elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                     setE(expr, LLVMBuildStore(g_builder, LLVMBuildFRem(g_builder, r2v_left, right, ""), left))
                 else
-                    failed_E(expr, "unsupported %= type {opType}")
+                    failed_E(expr, "unsupported %= type {describe(opType)}")
             else
                 failed_E(expr, "unsupported division type operator {expr.op}")
         elif expr.op=="<" || expr.op==">" || expr.op=="<=" || expr.op==">=" || expr.op=="==" || expr.op=="!="
@@ -899,35 +905,38 @@ class LlvmJitVisitor : AstVisitor
                 opR = LLVMBuildICmp(g_builder, get_uint_compare_op(expr,string(expr.op)), lptr, rptr, "")
             if opR == null
                 opR = LLVMGetUndef(LLVMInt8Type())
-                failed_E(expr, "unsupported compare type {expr.left._type} {expr.op} {expr.right._type}")
+                failed_E(expr, "unsupported compare type {describe(expr.left._type)} {expr.op} {describe(expr.right._type)}")
             setE(expr, opR)
         elif expr.op=="<<"
-            assume shiftType = expr.left._type
             if shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType==Type tInt || shiftType.vectorBaseType==Type tUInt))
-                var shift = build_shift(shiftType, right)
-                setE(expr, LLVMBuildShl(g_builder, left, shift, ""))
+                setE(expr, LLVMBuildShl(g_builder, left, right, ""))
             else
-                failed_E(expr, "unsupported << type {opType}")
+                failed_E(expr, "unsupported << type {describe(shiftType)}")
+        elif expr.op=="<<="
+            if shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType==Type tInt || shiftType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildStore(g_builder, LLVMBuildShl(g_builder, r2v_left, right, ""), left))
+            else
+                failed_E(expr, "unsupported <<= type {describe(shiftType)}")
         elif expr.op==">>"
-            assume shiftType = expr.left._type
-            var shift = build_shift(shiftType, right)
             if shiftType.isSignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType==Type tInt)
-                setE(expr, LLVMBuildAShr(g_builder, left, shift, ""))
+                setE(expr, LLVMBuildAShr(g_builder, left, right, ""))
             elif shiftType.isUnsignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType==Type tUInt)
-                setE(expr, LLVMBuildLShr(g_builder, left, shift, ""))
+                setE(expr, LLVMBuildLShr(g_builder, left, right, ""))
             else
-                failed_E(expr, "unsupported >> type {opType}")
+                failed_E(expr, "unsupported >> type {describe(shiftType)}")
+        elif expr.op==">>="
+            if shiftType.isSignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType==Type tInt)
+                setE(expr, LLVMBuildStore(g_builder, LLVMBuildAShr(g_builder, r2v_left, right, ""), left))
+            elif shiftType.isUnsignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType==Type tUInt)
+                setE(expr, LLVMBuildStore(g_builder, LLVMBuildLShr(g_builder, r2v_left, right, ""), left))
+            else
+                failed_E(expr, "unsupported >>= type {describe(shiftType)}")
         elif expr.op==">>>" || expr.op=="<<<"
-            assume shiftType = expr.left._type
             if shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 var fshr_name = expr.op==">>>" ? "llvm.fshr.i32" : "llvm.fshl.i32"
                 if shiftType.baseType==Type tInt64 || shiftType.baseType==Type tUInt64
                     fshr_name = expr.op==">>>" ? "llvm.fshr.i64" : "llvm.fshl.i64"
-                let BITS = opType.sizeOf * 8
-                var mask = LLVMConstInt(base_type_to_llvm_type(opType.baseType), uint64(BITS-1), 0)
-                var shift = LLVMBuildAnd(g_builder, right, mask, "")
-                shift = build_shift(shiftType, shift)
-                var args <- [{auto left; left; shift}]
+                var args <- [{auto left; left; right}]
                 var argTypes <- [{auto type_to_llvm_abi_type(shiftType)}]
                 var id = LLVMLookupIntrinsicID(fshr_name)
                 var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)

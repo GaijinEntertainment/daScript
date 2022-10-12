@@ -54,7 +54,7 @@ def and_equ_jit (a,b)
 
 def test_and_equ( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> and_equ_jit) )
-    t |> strictEqual ( a & b, and_equ_jit(a,b), "a & b" )
+    t |> strictEqual ( a & b, and_equ_jit(a,b), "a &= b" )
 
 [jit]
 def or_equ_jit (a,b)
@@ -64,7 +64,7 @@ def or_equ_jit (a,b)
 
 def test_or_equ( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> or_equ_jit) )
-    t |> strictEqual ( a | b, or_equ_jit(a,b), "a | b" )
+    t |> strictEqual ( a | b, or_equ_jit(a,b), "a |= b" )
 
 [jit]
 def xor_equ_jit (a,b)
@@ -74,7 +74,28 @@ def xor_equ_jit (a,b)
 
 def test_xor_equ( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> xor_equ_jit) )
-    t |> strictEqual ( a ^ b, xor_equ_jit(a,b), "a ^ b" )
+    t |> strictEqual ( a ^ b, xor_equ_jit(a,b), "a ^= b" )
+
+[jit]
+def shl_equ_jit (a,b)
+    var c = a
+    c <<= b
+    return c
+
+def test_shl_equ( t:T?; a:auto(TTA); b:auto(TTB) )
+    t |> success ( is_jit_function(@@<(a:TTA;b:TTB):void> shl_equ_jit) )
+    t |> strictEqual ( a << b, shl_equ_jit(a,b), "a <<= b" )
+
+[jit]
+def shr_equ_jit (a,b)
+    var c = a
+    c >>= b
+    return c
+
+def test_shr_equ( t:T?; a:auto(TTA); b:auto(TTB) )
+    t |> success ( is_jit_function(@@<(a:TTA;b:TTB):void> shr_equ_jit) )
+    t |> strictEqual ( a >> b, shr_equ_jit(a,b), "a >>= b" )
+
 
 [constant_expression(funcname)]
 def fuzz_int_vector_op2 ( t:T?; var fake:Faker; funcname:string )
@@ -123,6 +144,8 @@ def test_bit_arithmetics_op2 ( t:T? )
             fuzz_int_vector_op2(t, fake, "test_and_equ")
             fuzz_int_vector_op2(t, fake, "test_or_equ")
             fuzz_int_vector_op2(t, fake, "test_xor_equ")
+            fuzz_shift_op2(t, fake, "test_shl_equ")
+            fuzz_shift_op2(t, fake, "test_shr_equ")
 
 [jit]
 def neg_jit (a)
