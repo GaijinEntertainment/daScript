@@ -773,6 +773,15 @@ class LlvmJitVisitor : AstVisitor
         return true     if (expr is ExprConstUInt64) && (expr as ExprConstUInt64).value!=0ul
         return false
 
+    def build_shift ( opType:TypeDeclPtr; right:LLVMOpaqueValue? )
+        if opType.isVectorType
+            var vres = LLVMGetUndef(type_to_llvm_type(opType))
+            for i in range(opType.vectorDim)
+                vres = LLVMBuildInsertElement(g_builder, vres, right, LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+            return vres
+        else
+            return right
+
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
         var left = getE(expr.left)
         var right = getE(expr.right)
@@ -893,45 +902,39 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported compare type {expr.left._type} {expr.op} {expr.right._type}")
             setE(expr, opR)
         elif expr.op=="<<"
-            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildShl(g_builder, left, right, ""))
+            assume shiftType = expr.left._type
+            if shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType==Type tInt || shiftType.vectorBaseType==Type tUInt))
+                var shift = build_shift(shiftType, right)
+                setE(expr, LLVMBuildShl(g_builder, left, shift, ""))
             else
                 failed_E(expr, "unsupported << type {opType}")
         elif expr.op==">>"
-            if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
-                setE(expr, LLVMBuildAShr(g_builder, left, right, ""))
-            elif opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tUInt)
-                setE(expr, LLVMBuildLShr(g_builder, left, right, ""))
+            assume shiftType = expr.left._type
+            var shift = build_shift(shiftType, right)
+            if shiftType.isSignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType==Type tInt)
+                setE(expr, LLVMBuildAShr(g_builder, left, shift, ""))
+            elif shiftType.isUnsignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType==Type tUInt)
+                setE(expr, LLVMBuildLShr(g_builder, left, shift, ""))
             else
                 failed_E(expr, "unsupported >> type {opType}")
-        elif expr.op==">>>"
-            // b &= (BITS-1);
-            // return (a >> b) | (a << (BITS - b));
-            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+        elif expr.op==">>>" || expr.op=="<<<"
+            assume shiftType = expr.left._type
+            if shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                var fshr_name = expr.op==">>>" ? "llvm.fshr.i32" : "llvm.fshl.i32"
+                if shiftType.baseType==Type tInt64 || shiftType.baseType==Type tUInt64
+                    fshr_name = expr.op==">>>" ? "llvm.fshr.i64" : "llvm.fshl.i64"
                 let BITS = opType.sizeOf * 8
                 var mask = LLVMConstInt(base_type_to_llvm_type(opType.baseType), uint64(BITS-1), 0)
-                var rshift = LLVMBuildAnd(g_builder, right, mask, "")
-                var bits = LLVMConstInt(base_type_to_llvm_type(opType.baseType), uint64(BITS), 0)
-                var lshift = LLVMBuildSub(g_builder, bits, rshift, "")
-                var a_shr_b = LLVMBuildLShr(g_builder, left, rshift, "")
-                var a_shl_bmb = LLVMBuildShl(g_builder, left, lshift, "")
-                var a_rol_b = LLVMBuildOr(g_builder, a_shr_b, a_shl_bmb, "")
-                setE(expr, a_rol_b)
-            else
-                failed_E(expr, "unsupported >>> type {opType}")
-        elif expr.op=="<<<"
-            // b &= (BITS-1);
-            // return (a << b) | (a >> (BITS - b));
-            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-                let BITS = opType.sizeOf * 8
-                var mask = LLVMConstInt(base_type_to_llvm_type(opType.baseType), uint64(BITS-1), 0)
-                var rshift = LLVMBuildAnd(g_builder, right, mask, "")
-                var bits = LLVMConstInt(base_type_to_llvm_type(opType.baseType), uint64(BITS), 0)
-                var lshift = LLVMBuildSub(g_builder, bits, rshift, "")
-                var a_shr_b = LLVMBuildLShr(g_builder, left, lshift, "")
-                var a_shl_bmb = LLVMBuildShl(g_builder, left, rshift, "")
-                var a_rol_b = LLVMBuildOr(g_builder, a_shr_b, a_shl_bmb, "")
-                setE(expr, a_rol_b)
+                var shift = LLVMBuildAnd(g_builder, right, mask, "")
+                shift = build_shift(shiftType, shift)
+                var args <- [{auto left; left; shift}]
+                var argTypes <- [{auto type_to_llvm_abi_type(shiftType)}]
+                var id = LLVMLookupIntrinsicID(fshr_name)
+                var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+                if decl==null
+                    failed_E(expr, "failed to get intrinsic {fshr_name}")
+                else
+                    setE(expr, LLVMBuildCall(g_builder, decl, args, ">>>"))
             else
                 failed_E(expr, "unsupported >>> type {opType}")
         elif expr.op=="&"
@@ -939,16 +942,31 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, LLVMBuildAnd(g_builder, left, right, ""))
             else
                 failed_E(expr, "unsupported & type {opType}")
+        elif expr.op=="&="
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildStore(g_builder, LLVMBuildAnd(g_builder, r2v_left, right, ""), left))
+            else
+                failed_E(expr, "unsupported &= type {opType}")
         elif expr.op=="|"
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildOr(g_builder, left, right, ""))
             else
                 failed_E(expr, "unsupported | type {opType}")
+        elif expr.op=="|="
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildStore(g_builder, LLVMBuildOr(g_builder, r2v_left, right, ""), left))
+            else
+                failed_E(expr, "unsupported |= type {opType}")
         elif expr.op=="^"
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildXor(g_builder, left, right, ""))
             else
                 failed_E(expr, "unsupported ^ type {opType}")
+        elif expr.op=="^="
+            if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+                setE(expr, LLVMBuildStore(g_builder, LLVMBuildXor(g_builder, r2v_left, right, ""), left))
+            else
+                failed_E(expr, "unsupported ^= type {opType}")
         else
             failed_E(expr, "unsupported binary operator {expr.op}")
         return expr

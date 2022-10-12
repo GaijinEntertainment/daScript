@@ -32,25 +32,25 @@ def test_add( t:T?; a,b:auto(TT) )
 
 def test_sub( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> sub_jit) )
-    t |> strictEqual ( a - b, sub_jit(a,b), "{a} - {b}" )
+    t |> strictEqual ( a - b, sub_jit(a,b), "a - b" )
 
 def test_mul( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> mul_jit) )
-    t |> strictEqual ( a * b, mul_jit(a,b), "{a} * {b}" )
+    t |> strictEqual ( a * b, mul_jit(a,b), "a * b" )
 
 def test_div( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> div_jit) )
     if b != TT()
-        t |> strictEqual ( a / b, div_jit(a,b), "{a} / {b}" )
+        t |> strictEqual ( a / b, div_jit(a,b), "a / b" )
 
 def test_div_vec( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> div_jit) )
-    t |> strictEqual ( a / b, div_jit(a,b), "{a} / {b}" )
+    t |> strictEqual ( a / b, div_jit(a,b), "a / b" )
 
 def test_mod( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> mod_jit) )
     if b != TT()
-        t |> strictEqual ( a % b, mod_jit(a,b), "{a} % {b}" )
+        t |> strictEqual ( a % b, mod_jit(a,b), "a % b" )
 
 [jit]
 def add_equ_jit (a,b)
@@ -88,25 +88,25 @@ def test_add_equ( t:T?; a,b:auto(TT) )
 
 def test_sub_equ( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> sub_equ_jit) )
-    t |> strictEqual ( a - b, sub_equ_jit(a,b), "{a} - {b}" )
+    t |> strictEqual ( a - b, sub_equ_jit(a,b), "a - b" )
 
 def test_mul_equ( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> mul_equ_jit) )
-    t |> strictEqual ( a * b, mul_equ_jit(a,b), "{a} * {b}" )
+    t |> strictEqual ( a * b, mul_equ_jit(a,b), "a * b" )
 
 def test_div_equ( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> div_equ_jit) )
     if b != TT()
-        t |> strictEqual ( a / b, div_equ_jit(a,b), "{a} / {b}" )
+        t |> strictEqual ( a / b, div_equ_jit(a,b), "a / b" )
 
 def test_div_equ_vec( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> div_equ_jit) )
-    t |> strictEqual ( a / b, div_equ_jit(a,b), "{a} / {b}" )
+    t |> strictEqual ( a / b, div_equ_jit(a,b), "a / b" )
 
 def test_mod_equ( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT;b:TT):void> mod_equ_jit) )
     if b != TT()
-        t |> strictEqual ( a % b, mod_equ_jit(a,b), "{a} % {b}" )
+        t |> strictEqual ( a % b, mod_equ_jit(a,b), "a % b" )
 
 [constant_expression(funcname)]
 def fuzz_numeric_and_vector_op2 ( t:T?; var fake:Faker; funcname:string )
@@ -159,19 +159,21 @@ def fuzz_numeric_scal_vec_op2 ( t:T?; var fake:Faker; funcname:string )
 def test_arithmetics_op2 ( t:T? )
     t |> run("+, -, *, /, %") <| @ ( t : T? )
         var fake <- Faker()
-        fuzz_numeric_and_vector_op2(t, fake, "test_add")
-        fuzz_numeric_and_vector_op2(t, fake, "test_sub")
-        fuzz_numeric_and_vector_op2(t, fake, "test_mul")
-        fuzz_numeric_and_vector_op2(t, fake, "test_div")
-        fuzz_numeric_op2(t, fake, "test_mod")
+        fuzz <|
+            fuzz_numeric_and_vector_op2(t, fake, "test_add")
+            fuzz_numeric_and_vector_op2(t, fake, "test_sub")
+            fuzz_numeric_and_vector_op2(t, fake, "test_mul")
+            fuzz_numeric_and_vector_op2(t, fake, "test_div")
+            fuzz_numeric_op2(t, fake, "test_mod")
 
     t |> run("+=, -=, *=, /=, %=") <| @ ( t : T? )
         var fake <- Faker()
-        fuzz_numeric_and_vector_op2(t, fake, "test_add_equ")
-        fuzz_numeric_and_vector_op2(t, fake, "test_sub_equ")
-        fuzz_numeric_and_vector_op2(t, fake, "test_mul_equ")
-        fuzz_numeric_and_vector_op2(t, fake, "test_div_equ")
-        fuzz_numeric_op2(t, fake, "test_mod_equ")
+        fuzz <|
+            fuzz_numeric_and_vector_op2(t, fake, "test_add_equ")
+            fuzz_numeric_and_vector_op2(t, fake, "test_sub_equ")
+            fuzz_numeric_and_vector_op2(t, fake, "test_mul_equ")
+            fuzz_numeric_and_vector_op2(t, fake, "test_div_equ")
+            fuzz_numeric_op2(t, fake, "test_mod_equ")
 
 [constant_expression(funcname)]
 def fuzz_numeric_and_vector_op1 ( t:T?; var fake:Faker; funcname:string )
@@ -200,15 +202,17 @@ def fuzz_numeric_op1 ( t:T?; var fake:Faker; funcname:string )
 def test_arithmetics_vec_and_scalar_op2 ( t:T? )
     t |> run("* / vector vs salar") <| @ ( t : T? )
         var fake <- Faker()
-        fuzz_numeric_vec_scal_op2(t, fake, "test_mul")
-        fuzz_numeric_vec_scal_op2(t, fake, "test_div_vec")
-        fuzz_numeric_scal_vec_op2(t, fake, "test_mul")
-        fuzz_numeric_scal_vec_op2(t, fake, "test_div_vec")
+        fuzz <|
+            fuzz_numeric_vec_scal_op2(t, fake, "test_mul")
+            fuzz_numeric_vec_scal_op2(t, fake, "test_div_vec")
+            fuzz_numeric_scal_vec_op2(t, fake, "test_mul")
+            fuzz_numeric_scal_vec_op2(t, fake, "test_div_vec")
 
     t |> run("*= /= vector vs scalar") <| @ ( t : T? )
         var fake <- Faker()
-        fuzz_numeric_vec_scal_op2(t, fake, "test_mul_equ")
-        fuzz_numeric_vec_scal_op2(t, fake, "test_div_equ_vec")
+        fuzz <|
+            fuzz_numeric_vec_scal_op2(t, fake, "test_mul_equ")
+            fuzz_numeric_vec_scal_op2(t, fake, "test_div_equ_vec")
 
 [jit]
 def post_inc_jit (var a)
@@ -230,25 +234,26 @@ def pre_dec_jit (var a)
 
 def test_post_inc( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> post_inc_jit) )
-    t |> strictEqual ( a, post_inc_jit(a), "return {a} ++" )
+    t |> strictEqual ( a, post_inc_jit(a), "return a ++" )
 
 def test_post_dec( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> post_dec_jit) )
-    t |> strictEqual ( a, post_dec_jit(a), "return {a} --" )
+    t |> strictEqual ( a, post_dec_jit(a), "return a --" )
 
 def test_pre_inc( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> pre_inc_jit) )
-    t |> strictEqual ( a+TT(1), pre_inc_jit(a), "return ++ {a}" )
+    t |> strictEqual ( a+TT(1), pre_inc_jit(a), "return ++ a" )
 
 def test_pre_dec( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> pre_dec_jit) )
-    t |> strictEqual ( a-TT(1), pre_dec_jit(a), "return -- {a}" )
+    t |> strictEqual ( a-TT(1), pre_dec_jit(a), "return -- a" )
 
 [test]
 def test_arithmetics_op1 ( t:T? )
     t |> run("++, --, +++, ---") <| @ ( t : T? )
         var fake <- Faker()
-        fuzz_numeric_op1(t, fake, "test_post_inc")
-        fuzz_numeric_op1(t, fake, "test_post_dec")
-        fuzz_numeric_op1(t, fake, "test_pre_inc")
-        fuzz_numeric_op1(t, fake, "test_pre_dec")
+        fuzz <|
+            fuzz_numeric_op1(t, fake, "test_post_inc")
+            fuzz_numeric_op1(t, fake, "test_post_dec")
+            fuzz_numeric_op1(t, fake, "test_pre_inc")
+            fuzz_numeric_op1(t, fake, "test_pre_dec")

@@ -33,7 +33,7 @@ def toHex(hash:uint[8])
             format(writer,"%08x",i)
     return st
 
-[jit]
+[jit,unsafe_deref]
 def digestBlock(data:uint?; var hash:uint[8])
     var digest:uint[64]
     for j in range(16)
