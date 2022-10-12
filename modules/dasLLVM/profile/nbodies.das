@@ -95,7 +95,7 @@ def main
     offset_momentum(g_bodies)
     // print("\ninitial energy {energy()}\n")
     energy(g_bodies)
-    profile(10, "n-bodies")  <|
+    profile(10, "n-bodies jit")  <|
         nbodies(500000)
     // print("\nresult energy {energy()}\n")
     energy(g_bodies)
