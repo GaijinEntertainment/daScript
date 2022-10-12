@@ -707,7 +707,7 @@ class LlvmJitVisitor : AstVisitor
 
     def isReadModifyWriteOp2 ( name:das_string )
         return (name=="+=" || name=="-=" || name=="*=" || name=="/=" || name=="%=" ||
-            name=="&=" || name=="|=" || name=="^=" || name=="<<=" || name==">>=")
+            name=="&=" || name=="|=" || name=="^=" || name=="<<=" || name==">>=" || name=="<<<=" || name==">>>=")
 
     def override visitExprOp1(expr:smart_ptr<ExprOp1>) : ExpressionPtr
         var sexpr = getE(expr.subexpr)
@@ -932,18 +932,34 @@ class LlvmJitVisitor : AstVisitor
             else
                 failed_E(expr, "unsupported >>= type {describe(shiftType)}")
         elif expr.op==">>>" || expr.op=="<<<"
-            if shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+            if shiftType.isInteger
                 var fshr_name = expr.op==">>>" ? "llvm.fshr.i32" : "llvm.fshl.i32"
                 if shiftType.baseType==Type tInt64 || shiftType.baseType==Type tUInt64
                     fshr_name = expr.op==">>>" ? "llvm.fshr.i64" : "llvm.fshl.i64"
                 var args <- [{auto left; left; right}]
-                var argTypes <- [{auto type_to_llvm_abi_type(shiftType)}]
+                var argTypes <- [{auto base_type_to_llvm_type(shiftType.baseType)}]
                 var id = LLVMLookupIntrinsicID(fshr_name)
                 var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
                 if decl==null
                     failed_E(expr, "failed to get intrinsic {fshr_name}")
                 else
-                    setE(expr, LLVMBuildCall(g_builder, decl, args, ">>>"))
+                    setE(expr, LLVMBuildCall(g_builder, decl, args, string(expr.op)))
+            else
+                failed_E(expr, "unsupported >>> type {opType}")
+        elif expr.op==">>>=" || expr.op=="<<<="
+            if shiftType.isInteger
+                var fshr_name = expr.op==">>>=" ? "llvm.fshr.i32" : "llvm.fshl.i32"
+                if shiftType.baseType==Type tInt64 || shiftType.baseType==Type tUInt64
+                    fshr_name = expr.op==">>>=" ? "llvm.fshr.i64" : "llvm.fshl.i64"
+                var args <- [{auto r2v_left; r2v_left; right}]
+                var argTypes <- [{auto base_type_to_llvm_type(shiftType.baseType)}]
+                var id = LLVMLookupIntrinsicID(fshr_name)
+                var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+                if decl==null
+                    failed_E(expr, "failed to get intrinsic {fshr_name}")
+                else
+                    var cll = LLVMBuildCall(g_builder, decl, args, string(expr.op))
+                    setE(expr, LLVMBuildStore(g_builder, cll, left))
             else
                 failed_E(expr, "unsupported >>> type {opType}")
         elif expr.op=="&"

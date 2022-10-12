@@ -96,6 +96,32 @@ def test_shr_equ( t:T?; a:auto(TTA); b:auto(TTB) )
     t |> success ( is_jit_function(@@<(a:TTA;b:TTB):void> shr_equ_jit) )
     t |> strictEqual ( a >> b, shr_equ_jit(a,b), "a >>= b" )
 
+[jit]
+def rol_jit (a,b)
+    return a <<< b
+
+def test_rol( t:T?; a:auto(TTA); b:auto(TTB) )
+    t |> success ( is_jit_function(@@<(a:TTA;b:TTB):void> rol_jit) )
+    t |> strictEqual ( a <<< b, rol_jit(a,b), "a <<< b" )
+
+[jit]
+def ror_jit (a,b)
+    return a >>> b
+
+def test_ror( t:T?; a:auto(TTA); b:auto(TTB) )
+    t |> success ( is_jit_function(@@<(a:TTA;b:TTB):void> ror_jit) )
+    t |> strictEqual ( a >>> b, ror_jit(a,b), "a >>> b" )
+
+[jit]
+def rol_equ_jit (a,b)
+    var c = a
+    c <<<= b
+    return c
+
+def test_rol_equ( t:T?; a:auto(TTA); b:auto(TTB) )
+    t |> success ( is_jit_function(@@<(a:TTA;b:TTB):void> rol_equ_jit) )
+    t |> strictEqual ( a <<< b, rol_equ_jit(a,b), "a <<<= b" )
+
 
 [constant_expression(funcname)]
 def fuzz_int_vector_op2 ( t:T?; var fake:Faker; funcname:string )
@@ -119,16 +145,13 @@ def fuzz_shift_op2 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_uint3,  fake |> random_int )
     invoke ( funcname, t, fake |> random_uint4,  fake |> random_int )
 
-[jit]
-def foobar
-    return 43
+[constant_expression(funcname)]
+def fuzz_rotate_op2 ( t:T?; var fake:Faker; funcname:string )
+    invoke ( funcname, t, fake |> random_int,  fake |> random_int )
+    invoke ( funcname, t, fake |> random_uint, fake |> random_uint )
 
 [test]
 def test_bit_arithmetics_op2 ( t:T? )
-
-    if !is_jit_function(@@foobar)
-        return
-
     t |> run("& | ^") <| @ ( t : T? )
         var fake <- Faker()
         fuzz <|
@@ -137,6 +160,8 @@ def test_bit_arithmetics_op2 ( t:T? )
             fuzz_int_vector_op2(t, fake, "test_xor")
             fuzz_shift_op2(t, fake, "test_shl")
             fuzz_shift_op2(t, fake, "test_shr")
+            fuzz_rotate_op2(t, fake, "test_rol")
+            fuzz_rotate_op2(t, fake, "test_ror")
 
     t |> run("&=") <| @ ( t : T? )
         var fake <- Faker()
@@ -146,6 +171,7 @@ def test_bit_arithmetics_op2 ( t:T? )
             fuzz_int_vector_op2(t, fake, "test_xor_equ")
             fuzz_shift_op2(t, fake, "test_shl_equ")
             fuzz_shift_op2(t, fake, "test_shr_equ")
+            fuzz_rotate_op2(t, fake, "test_rol_equ")
 
 [jit]
 def neg_jit (a)
@@ -162,8 +188,6 @@ def fuzz_int_uint ( t:T?; var fake:Faker; funcname:string )
 
 [test]
 def test_bit_arithmetics_op1 ( t:T? )
-    return
-
     t |> run("~") <| @ ( t : T? )
         var fake <- Faker()
         fuzz <|
