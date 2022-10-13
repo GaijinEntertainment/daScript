@@ -618,6 +618,7 @@ namespace das {
             // constants
             addConstant(*this,"PI",(float)M_PI);
             addConstant(*this,"FLT_EPSILON",FLT_EPSILON);
+            addConstant(*this,"DBL_EPSILON",DBL_EPSILON);
             // trigonometry functions
             addFunctionTrig<float>(*this, lib);
             addFunctionTrig<float2>(*this,lib);
