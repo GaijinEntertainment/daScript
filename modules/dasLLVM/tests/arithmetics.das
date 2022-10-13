@@ -108,53 +108,6 @@ def test_mod_equ( t:T?; a,b:auto(TT) )
     if b != TT()
         t |> strictEqual ( a % b, mod_equ_jit(a,b), "a % b" )
 
-[constant_expression(funcname)]
-def fuzz_numeric_and_vector_op2 ( t:T?; var fake:Faker; funcname:string )
-    invoke ( funcname, t, fake |> random_int,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint, fake |> random_uint )
-    invoke ( funcname, t, fake |> random_float, fake |> random_float )
-    invoke ( funcname, t, fake |> random_double, fake |> random_double )
-    invoke ( funcname, t, fake |> random_int2,  fake |> random_int2 )
-    invoke ( funcname, t, fake |> random_int3,  fake |> random_int3 )
-    invoke ( funcname, t, fake |> random_int4,  fake |> random_int4 )
-    invoke ( funcname, t, fake |> random_uint2,  fake |> random_uint2 )
-    invoke ( funcname, t, fake |> random_uint3,  fake |> random_uint3 )
-    invoke ( funcname, t, fake |> random_uint4,  fake |> random_uint4 )
-    invoke ( funcname, t, fake |> random_float2, fake |> random_float2 )
-    invoke ( funcname, t, fake |> random_float3, fake |> random_float3 )
-    invoke ( funcname, t, fake |> random_float4, fake |> random_float4 )
-
-[constant_expression(funcname)]
-def fuzz_numeric_op2 ( t:T?; var fake:Faker; funcname:string )
-    invoke ( funcname, t, fake |> random_int,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint, fake |> random_uint )
-    invoke ( funcname, t, fake |> random_float, fake |> random_float )
-    invoke ( funcname, t, fake |> random_double, fake |> random_double )
-
-[constant_expression(funcname)]
-def fuzz_numeric_vec_scal_op2 ( t:T?; var fake:Faker; funcname:string )
-    invoke ( funcname, t, fake |> random_int2,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_int3,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_int4,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint2,  fake |> random_uint )
-    invoke ( funcname, t, fake |> random_uint3,  fake |> random_uint )
-    invoke ( funcname, t, fake |> random_uint4,  fake |> random_uint )
-    invoke ( funcname, t, fake |> random_float2, fake |> random_float )
-    invoke ( funcname, t, fake |> random_float3, fake |> random_float )
-    invoke ( funcname, t, fake |> random_float4, fake |> random_float )
-
-[constant_expression(funcname)]
-def fuzz_numeric_scal_vec_op2 ( t:T?; var fake:Faker; funcname:string )
-    invoke ( funcname, t, fake |> random_int,  fake |> random_int2 )
-    invoke ( funcname, t, fake |> random_int,  fake |> random_int3 )
-    invoke ( funcname, t, fake |> random_int,  fake |> random_int4 )
-    invoke ( funcname, t, fake |> random_uint,  fake |> random_uint2 )
-    invoke ( funcname, t, fake |> random_uint,  fake |> random_uint3 )
-    invoke ( funcname, t, fake |> random_uint,  fake |> random_uint4 )
-    invoke ( funcname, t, fake |> random_float, fake |> random_float2 )
-    invoke ( funcname, t, fake |> random_float, fake |> random_float3 )
-    invoke ( funcname, t, fake |> random_float, fake |> random_float4 )
-
 [test]
 def test_arithmetics_op2 ( t:T? )
     t |> run("+, -, *, /, %") <| @ ( t : T? )
@@ -174,29 +127,6 @@ def test_arithmetics_op2 ( t:T? )
             fuzz_numeric_and_vector_op2(t, fake, "test_mul_equ")
             fuzz_numeric_and_vector_op2(t, fake, "test_div_equ")
             fuzz_numeric_op2(t, fake, "test_mod_equ")
-
-[constant_expression(funcname)]
-def fuzz_numeric_and_vector_op1 ( t:T?; var fake:Faker; funcname:string )
-    invoke ( funcname, t, fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint )
-    invoke ( funcname, t, fake |> random_float )
-    invoke ( funcname, t, fake |> random_double )
-    invoke ( funcname, t, fake |> random_int2 )
-    invoke ( funcname, t, fake |> random_int3 )
-    invoke ( funcname, t, fake |> random_int4 )
-    invoke ( funcname, t, fake |> random_uint2 )
-    invoke ( funcname, t, fake |> random_uint3 )
-    invoke ( funcname, t, fake |> random_uint4 )
-    invoke ( funcname, t, fake |> random_float2 )
-    invoke ( funcname, t, fake |> random_float3 )
-    invoke ( funcname, t, fake |> random_float4 )
-
-[constant_expression(funcname)]
-def fuzz_numeric_op1 ( t:T?; var fake:Faker; funcname:string )
-    invoke ( funcname, t, fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint )
-    invoke ( funcname, t, fake |> random_float )
-    invoke ( funcname, t, fake |> random_double )
 
 [test]
 def test_arithmetics_vec_and_scalar_op2 ( t:T? )

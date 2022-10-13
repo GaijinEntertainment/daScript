@@ -37,7 +37,7 @@ def intrinsic_builtin_float(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOp
     elif argType.isUnsignedInteger
         return LLVMBuildUIToFP(g_builder, arguments[0], LLVMFloatType(), "uint_to_float")
     else
-        failed("float({describe(argType)}) is not supported (yet?)")
+        failed_E(expr, "float({describe(argType)}) is not supported (yet?)")
         return null
 
 def intrinsic_builtin_range(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
@@ -55,15 +55,14 @@ def intrinsic_builtin_range(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOp
 def intrinsic_math_sqrt(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var sqrt_name = "llvm.sqrt.f32"
     assume opType = expr.arguments[0]._type
-    if opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+    if opType.isFloatOrDouble
         if opType.baseType==Type tDouble
             sqrt_name = "llvm.sqrt.f64"
-    else
-        return null
     var args <- [{auto[] arguments[0]}]
     var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
     var id = LLVMLookupIntrinsicID(sqrt_name)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if decl==null
+        failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
     return LLVMBuildCall(g_builder, decl, args, "sqrt")

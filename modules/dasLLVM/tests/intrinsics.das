@@ -3,46 +3,34 @@ require dastest/testing_boost
 require llvm/llvm_jit
 require daslib/fuzzer
 require daslib/faker
+require daslib/math
+require daslib/constant_expression
 
 [jit]
-def int_to_float ( x : int )
+def jit_float ( x )
     return float(x)
 
-[jit]
-def uint_to_float ( x : uint )
-    return float(x)
-
-[jit]
-def float_to_float ( x : float )
-    return float(x)
-
-[jit]
-def double_to_float ( x : double )
-    return float(x)
+def test_float( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_float) )
+    t |> strictEqual ( float(a), jit_float(a), "float(a)" )
 
 [test]
 def test_intrin_float ( t:T? )
-    t |> run("float(int)") <| @ ( t : T? )
-        t |> success ( is_jit_function <| @@int_to_float )
-        var fake <- Faker()
-        fuzz <|
-            let x = fake |> random_int
-            t |> strictEqual ( float(x), int_to_float(x) )
-    t |> run("float(uint)") <| @ ( t : T? )
-        t |> success ( is_jit_function <| @@uint_to_float )
-        var fake <- Faker()
-        fuzz <|
-            let x = fake |> random_uint
-            t |> strictEqual ( float(x), uint_to_float(x) )
-    t |> run("float(float)") <| @ ( t : T? )
-        t |> success ( is_jit_function <| @@float_to_float )
-        var fake <- Faker()
-        fuzz <|
-            let x = fake |> random_float
-            t |> strictEqual ( float(x), float_to_float(x) )
-    t |> run("float(double)") <| @ ( t : T? )
-        t |> success ( is_jit_function <| @@double_to_float )
-        var fake <- Faker()
-        fuzz <|
-            let x = fake |> random_double
-            t |> strictEqual ( float(x), double_to_float(x) )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_numeric_op1(t,fake,"test_float")
+
+[jit]
+def jit_sqrt ( x )
+    return sqrt(x)
+
+def test_sqrt( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_sqrt) )
+    t |> strictEqual ( sqrt(a), jit_sqrt(a), "sqrt(a)" )
+
+[test]
+def test_intrin_sqrt ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_float_or_float_vec(t,fake,"test_sqrt")
+

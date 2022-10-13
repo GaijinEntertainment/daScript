@@ -122,34 +122,6 @@ def test_rol_equ( t:T?; a:auto(TTA); b:auto(TTB) )
     t |> success ( is_jit_function(@@<(a:TTA;b:TTB):void> rol_equ_jit) )
     t |> strictEqual ( a <<< b, rol_equ_jit(a,b), "a <<<= b" )
 
-
-[constant_expression(funcname)]
-def fuzz_int_vector_op2 ( t:T?; var fake:Faker; funcname:string )
-    invoke ( funcname, t, fake |> random_int,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint, fake |> random_uint )
-    invoke ( funcname, t, fake |> random_int2,  fake |> random_int2 )
-    invoke ( funcname, t, fake |> random_int3,  fake |> random_int3 )
-    invoke ( funcname, t, fake |> random_int4,  fake |> random_int4 )
-    invoke ( funcname, t, fake |> random_uint2,  fake |> random_uint2 )
-    invoke ( funcname, t, fake |> random_uint3,  fake |> random_uint3 )
-    invoke ( funcname, t, fake |> random_uint4,  fake |> random_uint4 )
-
-[constant_expression(funcname)]
-def fuzz_shift_op2 ( t:T?; var fake:Faker; funcname:string )
-    invoke ( funcname, t, fake |> random_int,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint, fake |> random_uint )
-    invoke ( funcname, t, fake |> random_int2,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_int3,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_int4,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint2,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint3,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint4,  fake |> random_int )
-
-[constant_expression(funcname)]
-def fuzz_rotate_op2 ( t:T?; var fake:Faker; funcname:string )
-    invoke ( funcname, t, fake |> random_int,  fake |> random_int )
-    invoke ( funcname, t, fake |> random_uint, fake |> random_uint )
-
 [test]
 def test_bit_arithmetics_op2 ( t:T? )
     t |> run("& | ^") <| @ ( t : T? )
