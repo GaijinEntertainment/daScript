@@ -133,6 +133,7 @@ namespace das
 #define ADD_VEC_CTOR_1(VTYPE,VNAME) \
 addFunction ( make_smart<BuiltInFn<SimNode_Zero,VTYPE>> (#VTYPE,lib,"v_zero",false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,1>,VTYPE,float>>   (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<double,  SimPolicy<VTYPE>,1>,VTYPE,double>>  (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,1>,VTYPE,int32_t>> (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,1>,VTYPE,uint32_t>>(#VTYPE,lib,VNAME,false) );
 

@@ -261,6 +261,7 @@ namespace  das {
         static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cvt_vec4f(v_ldui_half(x)); }
         static __forceinline vec4f setXY ( const uint32_t *__restrict x ) { return setXY((const int32_t*)x); }
         static __forceinline vec4f splats ( float x ) { return v_splats(x); }
+        static __forceinline vec4f splats ( double x ) { return v_splats((float)x); }
         static __forceinline vec4f splats ( int32_t  x ) { return v_splats((float)x); }
         static __forceinline vec4f splats ( uint32_t x ) { return v_splats((float)x); }
         // basic
@@ -354,6 +355,7 @@ namespace  das {
         static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cast_vec4f(v_ldui_half(x)); }
         static __forceinline vec4f setXY ( const uint32_t *__restrict x ) { return setXY((const int32_t*)x); }
         static __forceinline vec4f splats ( float x ) { return v_cast_vec4f(v_splatsi((int)x)); }
+        static __forceinline vec4f splats ( double x ) { return v_cast_vec4f(v_splatsi((int)x)); }
         static __forceinline vec4f splats ( int32_t  x ) { return v_cast_vec4f(v_splatsi(x)); }
         static __forceinline vec4f splats ( uint32_t x ) { return v_cast_vec4f(v_splatsi(x)); }
         // basic
