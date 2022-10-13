@@ -11,6 +11,12 @@
 
 
 #include "dag_vecMath.h"
+#ifdef __cplusplus
+#include <cmath> //for fabsf, which is used once, and not wise
+#else
+#include <math.h>
+#endif
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4800)
@@ -507,6 +513,13 @@ VECMATH_FINLINE vec4f VECTORCALL v_mat44_det43(mat44f_cref m)
 {
   return v_dot3(m.col2, v_cross3(m.col0, m.col1));
 }
+VECMATH_FINLINE vec4f VECTORCALL v_mat44_max_scale43_x(mat44f_cref tm)
+{
+  vec4f xScaleSq = v_length3_sq_x(tm.col0);
+  vec4f yScaleSq = v_length3_sq_x(tm.col1);
+  vec4f zScaleSq = v_length3_sq_x(tm.col2);
+  return v_sqrt_x(v_max(xScaleSq, v_max(yScaleSq, zScaleSq)));
+}
 
 VECMATH_FINLINE void VECTORCALL v_bbox3_init_empty(bbox3f &b)
 {
@@ -514,7 +527,7 @@ VECMATH_FINLINE void VECTORCALL v_bbox3_init_empty(bbox3f &b)
   b.bmax = v_sub(v_zero(), b.bmin);
 }
 VECMATH_FINLINE void VECTORCALL v_bbox3_init(bbox3f &b, vec3f p) { b.bmin = b.bmax = p; }
-VECMATH_FINLINE void VECTORCALL v_bbox3_init(bbox3f &b, mat44f_cref m, bbox3f_cref b2)
+VECMATH_FINLINE void VECTORCALL v_bbox3_init(bbox3f &b, mat44f_cref m, bbox3f b2)
 {
   // What we're doing here is this:
   // xxxx*m0 + yyyy*m1 + zzzz*m2 + m3
@@ -553,31 +566,31 @@ VECMATH_FINLINE void VECTORCALL v_bbox3_init(bbox3f &b, mat44f_cref m, bbox3f_cr
 }
 
 //return all mask if empty
-VECMATH_FINLINE vec4f VECTORCALL v_bbox_isempty(bbox3f_cref bbox) {return v_cmp_gt(bbox.bmin, bbox.bmax);}
+VECMATH_FINLINE vec4f VECTORCALL v_bbox_isempty(bbox3f bbox) {return v_cmp_gt(bbox.bmin, bbox.bmax);}
 
 VECMATH_FINLINE void VECTORCALL v_bbox3_add_pt(bbox3f &b, vec3f p)
 {
   b.bmin = v_min(b.bmin, p);
   b.bmax = v_max(b.bmax, p);
 }
-VECMATH_FINLINE void VECTORCALL v_bbox3_add_box(bbox3f &b, bbox3f_cref b2)
+VECMATH_FINLINE void VECTORCALL v_bbox3_add_box(bbox3f &b, bbox3f b2)
 {
   b.bmin = v_min(b.bmin, b2.bmin);
   b.bmax = v_max(b.bmax, b2.bmax);
 }
 
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt000(bbox3f_cref b) { return b.bmin; }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt111(bbox3f_cref b) { return b.bmax; }
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt000(bbox3f b) { return b.bmin; }
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt111(bbox3f b) { return b.bmax; }
 
-VECMATH_FINLINE void VECTORCALL v_bbox3_add_transformed_box(bbox3f &b, mat44f_cref m, bbox3f_cref b2)
+VECMATH_FINLINE void VECTORCALL v_bbox3_add_transformed_box(bbox3f &b, mat44f_cref m, bbox3f b2)
 {
   bbox3f temp;
   v_bbox3_init(temp, m, b2);
   v_bbox3_add_box(b, temp);
 }
 
-VECMATH_FINLINE vec3f VECTORCALL v_bbox3_size(bbox3f_cref b) { return v_sub(b.bmax, b.bmin); }
-VECMATH_FINLINE bbox3f v_bbox3_scale(bbox3f_cref b, vec4f size_factor)
+VECMATH_FINLINE vec3f VECTORCALL v_bbox3_size(bbox3f b) { return v_sub(b.bmax, b.bmin); }
+VECMATH_FINLINE bbox3f v_bbox3_scale(bbox3f b, vec4f size_factor)
 {
   vec3f center = v_bbox3_center(b);
   return bbox3f
@@ -586,23 +599,23 @@ VECMATH_FINLINE bbox3f v_bbox3_scale(bbox3f_cref b, vec4f size_factor)
     v_lerp_vec4f(size_factor, center, b.bmax)
   };
 }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_test_pt_inside(bbox3f_cref b, vec3f p)
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_test_pt_inside(bbox3f b, vec3f p)
 {
   vec3f m = v_and(v_cmp_ge(p, b.bmin), v_cmp_ge(b.bmax, p));
   return v_and(v_splat_x(m), v_and(v_splat_y(m), v_splat_z(m)));
 }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_test_box_inside(bbox3f_cref b, bbox3f_cref b2)
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_test_box_inside(bbox3f b, bbox3f b2)
 {
   return v_and(v_bbox3_test_pt_inside(b, b2.bmin), v_bbox3_test_pt_inside(b, b2.bmax));
 }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_test_box_intersect(bbox3f_cref b1, bbox3f_cref b2)
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_test_box_intersect(bbox3f b1, bbox3f b2)
 {
   vec3f m = v_and(v_cmp_ge(b2.bmax, b1.bmin), v_cmp_ge(b1.bmax, b2.bmin));
   return v_and(v_splat_x(m), v_and(v_splat_y(m), v_splat_z(m)));
 }
 
 //any box can be empty and full world
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_test_box_intersect_safe(bbox3f_cref b1, bbox3f_cref b2)
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_test_box_intersect_safe(bbox3f b1, bbox3f b2)
 {
   vec3f m = v_and(v_and(v_cmp_gt(b1.bmax, b1.bmin), v_cmp_gt(b2.bmax, b2.bmin)),
                   v_and(v_cmp_ge(b2.bmax, b1.bmin), v_cmp_ge(b1.bmax, b2.bmin)));
@@ -714,12 +727,12 @@ VECMATH_FINLINE bool VECTORCALL v_bbox3_test_trasformed_box_intersect_b(bbox3f b
   // bbox intersection check
   mat44f tm;
   v_mat44_inverse43(tm, tm0);
-  v_mat44_mul(tm, tm, tm1);
+  v_mat44_mul43(tm, tm, tm1);
   if (v_bbox3_test_trasformed_box_intersect_b(v_bbox3_scale(box0, size_factor), box1, tm))
     return true;
 
   v_mat44_inverse43(tm, tm1);
-  v_mat44_mul(tm, tm, tm0);
+  v_mat44_mul43(tm, tm, tm0);
   if (v_bbox3_test_trasformed_box_intersect_b(v_bbox3_scale(box1, size_factor), box0, tm)) //-V764 box1, box order is correct
     return true;
 
@@ -731,17 +744,27 @@ VECMATH_FINLINE bool VECTORCALL v_bbox3_test_trasformed_box_intersect_b(bbox3f b
   return v_bbox3_test_trasformed_box_intersect_b(box0, tm0, box1, tm1, v_splats(1.f));
 }
 
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_sph_intersect(bbox3f_cref box, vec4f bsph_r2)
+VECMATH_FINLINE bool VECTORCALL v_bbox3_test_trasformed_box_intersect_rel_tm_b(bbox3f box0, const mat44f& b0_to_b1,
+                                                                               bbox3f box1, const mat44f& b1_to_b0)
+{
+  if (v_bbox3_test_trasformed_box_intersect_b(box0, box1, b1_to_b0))
+    return true;
+  if (v_bbox3_test_trasformed_box_intersect_b(box1, box0, b0_to_b1)) //-V764 box1, box0 order is correct
+    return true;
+  return false;
+}
+
+VECMATH_FINLINE int VECTORCALL v_bbox3_test_sph_intersect(bbox3f box, vec4f bsph_r2)
 {
   vec4f distSq = v_length3_sq_x(v_add(v_max(v_sub(box.bmin, bsph_r2), v_zero()),
                                       v_max(v_sub(bsph_r2, box.bmax), v_zero()))); // Dist from sph center to bounding box squared
   return v_test_vec_x_le_0(v_sub_x(distSq, v_splat_w(bsph_r2)));
 }
 
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_outer_rad(bbox3f_cref b) { return v_bbox3_outer_rad(b.bmin, b.bmax); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_inner_rad(bbox3f_cref b) { return v_bbox3_inner_rad(b.bmin, b.bmax); }
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_outer_rad(bbox3f b) { return v_bbox3_outer_rad(b.bmin, b.bmax); }
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_inner_rad(bbox3f b) { return v_bbox3_inner_rad(b.bmin, b.bmax); }
 
-VECMATH_FINLINE bool VECTORCALL v_bbox3_is_empty(bbox3f_cref bbox)
+VECMATH_FINLINE bool VECTORCALL v_bbox3_is_empty(bbox3f bbox)
 {
   vec3f boxSize = v_bbox3_size(bbox);
   vec3f boxValid = v_min(boxSize, v_min(v_rot_1(boxSize), v_rot_2(boxSize)));
@@ -1929,7 +1952,7 @@ VECMATH_FINLINE int VECTORCALL v_screen_size_b(vec3f box2_xyXY, vec3f threshold,
 
 
 //just a bit faster then scalar version. The same speed, if you'll have 4 v_ld. use if you have vectors
-VECMATH_INLINE int VECTORCALL v_test_segment_box_intersection_dir(vec3f start, vec3f dir, bbox3f_cref box)
+VECMATH_INLINE int VECTORCALL v_test_segment_box_intersection_dir(vec3f start, vec3f dir, bbox3f box)
 {
   // avoid using pair of v_div (due to compiler may change them uncontrollably to v_mul(a, v_rcp(b))
   // and thus get NaN instead of expected +inf and -inf)
@@ -1957,13 +1980,13 @@ VECMATH_INLINE int VECTORCALL v_test_segment_box_intersection_dir(vec3f start, v
   #endif
 }
 
-VECMATH_FINLINE int VECTORCALL v_test_segment_box_intersection(vec3f start, vec3f end, bbox3f_cref box)
+VECMATH_FINLINE int VECTORCALL v_test_segment_box_intersection(vec3f start, vec3f end, bbox3f box)
 {
   return v_test_segment_box_intersection_dir(start, v_sub(end, start), box);
 }
 
 // return -1 if no intersection found, or box side index in [0; 5] and output param 'at' in range [0.0; 1.0]
-inline int VECTORCALL v_test_segment_box_intersection_side(vec3f start, vec3f end, bbox3f_cref box, float& out_at)
+inline int VECTORCALL v_test_segment_box_intersection_side(vec3f start, vec3f end, bbox3f box, float& out_at)
 {
   int ret = -1;
   out_at = v_extract_x(V_C_MAX_VAL);
@@ -2471,6 +2494,8 @@ VECMATH_INLINE int VECTORCALL vec_float_to_int(float x)
 {
   return v_extract_xi(v_cvt_vec4i(v_splats(x)));
 }
+
+VECMATH_INLINE float invsqrt(float x) { return v_extract_x(v_rsqrt_x(v_set_x(x))); }
 
 #ifdef _MSC_VER
 #pragma warning(pop)
