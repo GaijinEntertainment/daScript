@@ -16,7 +16,8 @@ let g_intrin_lookup <- {{
 // math
     "math::rcp" => @@intrinsic_math_rcp;
     "math::rcp_est"=> @@intrinsic_math_rcp;
-    "math::sqrt" => @@intrinsic_math_sqrt
+    "math::exp" => @@intrinsic_math_float_op1;
+    "math::sqrt" => @@intrinsic_math_float_op1
 }}
 
 def public lookup_intinsic(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
@@ -63,12 +64,15 @@ def intrinsic_math_rcp(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueV
         failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
         return null
 
-def intrinsic_math_sqrt(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
-    var sqrt_name = "llvm.sqrt.f32"
+def intrinsic_math_float_op1(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var sqrt_name = "llvm.{expr.name}.f32"
     assume opType = expr.arguments[0]._type
-    if opType.isFloatOrDouble
+    if opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
         if opType.baseType==Type tDouble
-            sqrt_name = "llvm.sqrt.f64"
+            sqrt_name = "llvm.{expr.name}.f64"
+    else
+        failed_E(expr, "{expr.name}({describe(opType)}) is not supported (yet?)")
+        return null
     var args <- [{auto[] arguments[0]}]
     var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
     var id = LLVMLookupIntrinsicID(sqrt_name)
@@ -76,4 +80,5 @@ def intrinsic_math_sqrt(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaque
     if decl==null
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
-    return LLVMBuildCall(g_builder, decl, args, "sqrt")
+    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+

@@ -49,3 +49,19 @@ def test_intrin_rcp ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_float_or_float_vec(t,fake,"test_rcp")
+
+[sideeffects,jit]
+def jit_exp ( x )
+    return exp(x)
+
+def test_exp( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_exp) )
+    jit_exp(a)
+    // note: we can't really compare, because precision is different
+    //t |> equal ( exp(a), jit_exp(a), "exp(a)" )
+
+[test]
+def test_intrin_exp ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_float_double_or_float_vec(t,fake,"test_exp")
