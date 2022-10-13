@@ -178,8 +178,20 @@ def test_pre_dec( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> pre_dec_jit) )
     t |> strictEqual ( a-TT(1), pre_dec_jit(a), "return -- a" )
 
+[jit]
+def neg_jit (a)
+    return -a
+
+def test_neg( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> neg_jit) )
+    t |> nearEqual ( -a, neg_jit(a), "-a {a}" )
+
 [test]
 def test_arithmetics_op1 ( t:T? )
+    t |> run("-") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            fuzz_numeric_and_vector_op1(t, fake, "test_neg")
     t |> run("++, --, +++, ---") <| @ ( t : T? )
         var fake <- Faker()
         fuzz <|
