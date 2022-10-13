@@ -508,7 +508,8 @@ class LlvmJitVisitor : AstVisitor
 
     def isReadModifyWriteOp2 ( name:das_string )
         return (name=="+=" || name=="-=" || name=="*=" || name=="/=" || name=="%=" ||
-            name=="&=" || name=="|=" || name=="^=" || name=="<<=" || name==">>=" || name=="<<<=" || name==">>>=")
+            name=="&=" || name=="|=" || name=="^=" || name=="<<=" || name==">>=" ||
+            name=="<<<=" || name==">>>=" || name=="&&=" || name=="||=" || name=="^^=")
 
     def override visitExprOp1(expr:smart_ptr<ExprOp1>) : ExpressionPtr
         var sexpr = getE(expr.subexpr)
@@ -796,6 +797,16 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, LLVMBuildStore(g_builder, LLVMBuildXor(g_builder, r2v_left, right, ""), left))
             else
                 failed_E(expr, "unsupported ^= type {opType}")
+        elif expr.op=="^^"
+            if opType.isBool
+                setE(expr, LLVMBuildXor(g_builder, left, right, ""))
+            else
+                failed_E(expr, "unsupported ^^ type {opType}")
+        elif expr.op=="^^="
+            if opType.isBool
+                setE(expr, LLVMBuildStore(g_builder, LLVMBuildXor(g_builder, r2v_left, right, ""), left))
+            else
+                failed_E(expr, "unsupported ^^= type {opType}")
         else
             failed_E(expr, "unsupported binary operator {expr.op}")
         return expr
