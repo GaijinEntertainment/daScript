@@ -9,8 +9,6 @@
 #define _DAGOR_PUBLIC_MATH_DAG_VECMATH_NEON_H_
 #pragma once
 
-#include <math.h> //for fabsf, which is used once, and not wise
-
 #define VECMATH_NEON_SQRT_MIN_THRESHOLD_VALUE 1e-16
 
 VECMATH_FINLINE vec4f VECTORCALL v_zero() { return vdupq_n_f32(0); }
@@ -892,7 +890,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_mat44_det(mat44f_cref m)
   return v_dot4(t0, cof0);
 }
 
-VECMATH_FINLINE vec3f VECTORCALL v_bbox3_center(bbox3f_cref b)
+VECMATH_FINLINE vec3f VECTORCALL v_bbox3_center(bbox3f b)
 {
   return v_mul(v_add(b.bmin, b.bmax), V_C_HALF);
 }
@@ -918,41 +916,41 @@ VECMATH_FINLINE int VECTORCALL v_check_xz_non_zero(vec4f a)
   return vget_lane_u32(m_and, 0);
 }
 
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_pt_inside_b_xz(bbox3f_cref b, vec3f p)
+VECMATH_FINLINE int VECTORCALL v_bbox3_test_pt_inside_b_xz(bbox3f b, vec3f p)
 {
   vec3f m = v_and(v_cmp_ge(p, b.bmin), v_cmp_ge(b.bmax, p));
   return v_check_xz_non_zero(m);
 }
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_pt_inside_b(bbox3f_cref b, vec3f p)
+VECMATH_FINLINE int VECTORCALL v_bbox3_test_pt_inside_b(bbox3f b, vec3f p)
 {
   vec3f m = v_and(v_cmp_ge(p, b.bmin), v_cmp_ge(b.bmax, p));
   return v_check_xyz_non_zero(m);
 }
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_box_inside_b(bbox3f_cref b, bbox3f_cref b2)
+VECMATH_FINLINE int VECTORCALL v_bbox3_test_box_inside_b(bbox3f b, bbox3f b2)
 {
   vec3f m1 = v_and(v_cmp_ge(b2.bmin, b.bmin), v_cmp_ge(b.bmax, b2.bmin));
   vec3f m2 = v_and(v_cmp_ge(b2.bmax, b.bmin), v_cmp_ge(b.bmax, b2.bmax));
   vec3f m = v_and(m1, m2);
   return v_check_xyz_non_zero(m);
 }
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_box_intersect_b(bbox3f_cref b1, bbox3f_cref b2)
+VECMATH_FINLINE int VECTORCALL v_bbox3_test_box_intersect_b(bbox3f b1, bbox3f b2)
 {
   vec3f m = v_and(v_cmp_ge(b2.bmax, b1.bmin), v_cmp_ge(b1.bmax, b2.bmin));
   return v_check_xyz_non_zero(m);
 }
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_box_intersect_b_safe(bbox3f_cref b1, bbox3f_cref b2)
+VECMATH_FINLINE int VECTORCALL v_bbox3_test_box_intersect_b_safe(bbox3f b1, bbox3f b2)
 {
   vec3f m = v_and(v_and(v_cmp_ge(b1.bmax, b1.bmin), v_cmp_ge(b2.bmax, b2.bmin)),
                   v_and(v_cmp_ge(b2.bmax, b1.bmin), v_cmp_ge(b1.bmax, b2.bmin)));
   return v_check_xyz_non_zero(m);
 }
 
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt001(bbox3f_cref b){ return v_perm_xycc(b.bmin, b.bmax); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt010(bbox3f_cref b){ return v_perm_xbzz(b.bmin, b.bmax); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt011(bbox3f_cref b){ return v_perm_xbcc(b.bmin, b.bmax); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt100(bbox3f_cref b){ return v_perm_xbcc(b.bmax, b.bmin); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt101(bbox3f_cref b){ return v_perm_xbzz(b.bmax, b.bmin); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt110(bbox3f_cref b){ return v_perm_xycc(b.bmax, b.bmin); }
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt001(bbox3f b){ return v_perm_xycc(b.bmin, b.bmax); }
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt010(bbox3f b){ return v_perm_xbzz(b.bmin, b.bmax); }
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt011(bbox3f b){ return v_perm_xbcc(b.bmin, b.bmax); }
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt100(bbox3f b){ return v_perm_xbcc(b.bmax, b.bmin); }
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt101(bbox3f b){ return v_perm_xbzz(b.bmax, b.bmin); }
+VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt110(bbox3f b){ return v_perm_xycc(b.bmax, b.bmin); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_insert(float s, vec4f v, int i)
 {
