@@ -542,6 +542,11 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, LLVMBuildNot(g_builder, sexpr, ""))
             else
                 failed_E(expr, "unsupported ~ type {opType}")
+        elif expr.op=="!"
+            if opType.isBool
+                setE(expr, LLVMBuildNot(g_builder, sexpr, ""))
+            else
+                failed_E(expr, "unsupported ! type {opType}")
         elif expr.op=="-"
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 setE(expr, LLVMBuildNeg(g_builder, sexpr, ""))
