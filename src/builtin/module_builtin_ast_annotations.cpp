@@ -921,6 +921,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isAotAlias)>("isAotAlias","isAotAlias");
             addProperty<bool (TypeDecl::*)() const, &ManagedType::isShareable>("isShareable", "isShareable");
             addProperty<DAS_BIND_MANAGED_PROP(isIndex)>("isIndex","isIndex");
+            addProperty<DAS_BIND_MANAGED_PROP(isBool)>("isBool","isBool");
             addProperty<DAS_BIND_MANAGED_PROP(isInteger)>("isInteger","isInteger");
             addProperty<DAS_BIND_MANAGED_PROP(isSignedInteger)>("isSignedInteger","isSignedInteger");
             addProperty<DAS_BIND_MANAGED_PROP(isUnsignedInteger)>("isUnsignedInteger","isUnsignedInteger");

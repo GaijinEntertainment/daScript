@@ -2037,6 +2037,11 @@ namespace das
         return false;
     }
 
+    bool TypeDecl::isBool() const {
+        if (dim.size() != 0) return false;
+        return baseType==Type::tBool;
+    }
+
     bool TypeDecl::isInteger() const {
         if (dim.size() != 0) return false;
         switch (baseType) {
