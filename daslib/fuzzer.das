@@ -43,14 +43,6 @@ def public fuzz_debug ( fuzz_count:int; blk : block )
         invoke(blk)
 
 [constant_expression(funcname)]
-def public fuzz_float_or_float_vec ( t:T?; var fake:Faker; funcname:string )
-    invoke ( funcname, t, fake |> random_float )
-    invoke ( funcname, t, fake |> random_double )
-    invoke ( funcname, t, fake |> random_float2 )
-    invoke ( funcname, t, fake |> random_float3 )
-    invoke ( funcname, t, fake |> random_float4 )
-
-[constant_expression(funcname)]
 def public fuzz_numeric_and_vector_op2 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_int,  fake |> random_int )
     invoke ( funcname, t, fake |> random_uint, fake |> random_uint )
@@ -146,3 +138,18 @@ def public fuzz_shift_op2 ( t:T?; var fake:Faker; funcname:string )
 def public fuzz_rotate_op2 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_int,  fake |> random_int )
     invoke ( funcname, t, fake |> random_uint, fake |> random_uint )
+
+[constant_expression(funcname)]
+def public fuzz_float_double_or_float_vec ( t:T?; var fake:Faker; funcname:string )
+    invoke ( funcname, t, fake |> random_float )
+    invoke ( funcname, t, fake |> random_double )
+    invoke ( funcname, t, fake |> random_float2 )
+    invoke ( funcname, t, fake |> random_float3 )
+    invoke ( funcname, t, fake |> random_float4 )
+
+[constant_expression(funcname)]
+def public fuzz_float_or_float_vec ( t:T?; var fake:Faker; funcname:string )
+    invoke ( funcname, t, fake |> random_float )
+    invoke ( funcname, t, fake |> random_float2 )
+    invoke ( funcname, t, fake |> random_float3 )
+    invoke ( funcname, t, fake |> random_float4 )
