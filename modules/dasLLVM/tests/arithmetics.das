@@ -184,7 +184,7 @@ def neg_jit (a)
 
 def test_neg( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> neg_jit) )
-    t |> nearEqual ( -a, neg_jit(a), "-a {a}" )
+    t |> strictEqual ( -a, neg_jit(a), "-a {a}" )
 
 [test]
 def test_arithmetics_op1 ( t:T? )
