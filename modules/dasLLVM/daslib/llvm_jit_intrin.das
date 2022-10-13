@@ -12,6 +12,7 @@ let g_intrin_lookup <- {{
 // $, aka builtin
     "$::range" => @@intrinsic_builtin_range;
     "$::urange" => @@intrinsic_builtin_range;
+    "$::float" => @@intrinsic_builtin_float;
 // math
     "math::sqrt"    =>  @@intrinsic_math_sqrt
 }}
@@ -22,6 +23,34 @@ def public lookup_intinsic(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpa
     g_intrin_lookup |> find_if_exists(call_name) <| $ ( pfun )
         result = *pfun |> invoke(expr, arguments)
     return result
+
+// intrinsics, $ aka builtin
+
+def intrinsic_builtin_float(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume argType = expr.arguments[0]._type
+    if argType.baseType==Type tFloat
+        return arguments[0]
+    elif argType.baseType==Type tDouble
+        return LLVMBuildFPTrunc(g_builder, arguments[0], LLVMFloatType(), "double_to_float")
+    elif argType.isSignedInteger
+        return LLVMBuildSIToFP(g_builder, arguments[0], LLVMFloatType(), "int_to_float")
+    elif argType.isUnsignedInteger
+        return LLVMBuildUIToFP(g_builder, arguments[0], LLVMFloatType(), "uint_to_float")
+    else
+        failed("float({describe(argType)}) is not supported (yet?)")
+        return null
+
+def intrinsic_builtin_range(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var x, y : LLVMOpaqueValue?
+    if expr.arguments.length==1
+        x = LLVMConstInt(LLVMInt32Type(), 0ul, 0)
+        y = arguments[0]
+    else
+        x = arguments[0]
+        y = arguments[1]
+    return LLVMBuildInt2_xy(g_builder, x, y, string(expr.name))
+
+// intrinsics, math
 
 def intrinsic_math_sqrt(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var sqrt_name = "llvm.sqrt.f32"
@@ -38,14 +67,3 @@ def intrinsic_math_sqrt(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaque
     if decl==null
         return null
     return LLVMBuildCall(g_builder, decl, args, "sqrt")
-
-def intrinsic_builtin_range(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
-    var x, y : LLVMOpaqueValue?
-    if expr.arguments.length==1
-        x = LLVMConstInt(LLVMInt32Type(), 0ul, 0)
-        y = arguments[0]
-    else
-        x = arguments[0]
-        y = arguments[1]
-    return LLVMBuildInt2_xy(g_builder, x, y, string(expr.name))
-
