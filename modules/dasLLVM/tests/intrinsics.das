@@ -32,5 +32,20 @@ def test_sqrt( t:T?; a:auto(TT) )
 def test_intrin_sqrt ( t:T? )
     var fake <- Faker()
     fuzz <|
-        fuzz_float_or_float_vec(t,fake,"test_sqrt")
+        fuzz_float_double_or_float_vec(t,fake,"test_sqrt")
 
+[sideeffects,jit]
+def jit_rcp ( x )
+    return rcp(x)
+
+def test_rcp( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_rcp) )
+    jit_rcp(a)
+    // note: we can't really compare, because precision is different
+    //t |> equal ( rcp(a), jit_rcp(a), "rcp(a)" )
+
+[test]
+def test_intrin_rcp ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_float_or_float_vec(t,fake,"test_rcp")

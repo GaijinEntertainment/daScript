@@ -210,3 +210,12 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         failed("type_to_llvm_type: unsupported type {describe(t)} at {t.at}")
         res = LLVMInt32Type()
     return res
+
+def public build_broadcast_vector ( opType:TypeDeclPtr; right:LLVMOpaqueValue? )
+    if opType.isVectorType
+        var vres = LLVMGetUndef(type_to_llvm_type(opType))
+        for i in range(opType.vectorDim)
+            vres = LLVMBuildInsertElement(g_builder, vres, right, LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+        return vres
+    else
+        return right

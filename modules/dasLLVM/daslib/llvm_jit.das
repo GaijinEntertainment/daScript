@@ -574,15 +574,6 @@ class LlvmJitVisitor : AstVisitor
         return true     if (expr is ExprConstUInt64) && (expr as ExprConstUInt64).value!=0ul
         return false
 
-    def build_shift ( opType:TypeDeclPtr; right:LLVMOpaqueValue? )
-        if opType.isVectorType
-            var vres = LLVMGetUndef(type_to_llvm_type(opType))
-            for i in range(opType.vectorDim)
-                vres = LLVMBuildInsertElement(g_builder, vres, right, LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
-            return vres
-        else
-            return right
-
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
         var left = getE(expr.left)
         var right = getE(expr.right)
@@ -603,7 +594,7 @@ class LlvmJitVisitor : AstVisitor
         // note: we need to handle shift operations
         // the way we do it, is we expand scalar up to vector type
         if expr.op=="<<" || expr.op==">>" || expr.op==">>>" || expr.op=="<<<" || expr.op=="<<=" || expr.op==">>=" || expr.op==">>>=" || expr.op=="<<<="
-            right = build_shift(shiftType, right)
+            right = build_broadcast_vector(shiftType, right)
 
         if expr.op=="+"
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))

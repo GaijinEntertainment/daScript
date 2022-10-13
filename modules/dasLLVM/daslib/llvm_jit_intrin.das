@@ -14,7 +14,9 @@ let g_intrin_lookup <- {{
     "$::urange" => @@intrinsic_builtin_range;
     "$::float" => @@intrinsic_builtin_float;
 // math
-    "math::sqrt"    =>  @@intrinsic_math_sqrt
+    "math::rcp" => @@intrinsic_math_rcp;
+    "math::rcp_est"=> @@intrinsic_math_rcp;
+    "math::sqrt" => @@intrinsic_math_sqrt
 }}
 
 def public lookup_intinsic(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
@@ -51,6 +53,15 @@ def intrinsic_builtin_range(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOp
     return LLVMBuildInt2_xy(g_builder, x, y, string(expr.name))
 
 // intrinsics, math
+
+def intrinsic_math_rcp(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume argType = expr.arguments[0]._type
+    if argType.baseType==Type tFloat || (argType.isVectorType && argType.vectorBaseType==Type tFloat)
+        var one = build_broadcast_vector (argType, LLVMConstReal(LLVMFloatType(), 1.0lf))
+        return LLVMBuildFDiv(g_builder, one, arguments[0], "rcp")
+    else
+        failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
+        return null
 
 def intrinsic_math_sqrt(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var sqrt_name = "llvm.sqrt.f32"
