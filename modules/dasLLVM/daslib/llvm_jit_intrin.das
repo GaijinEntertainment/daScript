@@ -13,6 +13,7 @@ let g_intrin_lookup <- {{
     "$::range" => @@intrinsic_builtin_range;
     "$::urange" => @@intrinsic_builtin_range;
     "$::float" => @@intrinsic_builtin_float;
+    "$::float4" => @@intrinsic_builtin_float4;
 // math
     "math::rcp" => @@intrinsic_math_rcp;
     "math::rcp_est"=> @@intrinsic_math_rcp;
@@ -30,6 +31,8 @@ def public lookup_intinsic(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpa
 // intrinsics, $ aka builtin
 
 def intrinsic_builtin_float(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    if length(arguments)==0
+        return LLVMConstReal(LLVMFloatType(), 0.0lf)
     assume argType = expr.arguments[0]._type
     if argType.baseType==Type tFloat
         return arguments[0]
@@ -42,6 +45,28 @@ def intrinsic_builtin_float(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOp
     else
         failed_E(expr, "float({describe(argType)}) is not supported (yet?)")
         return null
+
+def intrinsic_builtin_float4(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume resType = expr._type
+    if length(arguments) == 0
+        return build_broadcast_vector (resType, LLVMConstReal(LLVMFloatType(), 0.0lf))
+    elif length(arguments) == 1
+        assume argType = expr.arguments[0]._type
+        if argType.baseType==Type tFloat
+            return build_broadcast_vector(resType,arguments[0])
+        elif argType.baseType==Type tDouble
+            return build_broadcast_vector(resType,LLVMBuildFPTrunc(g_builder, arguments[0], LLVMFloatType(), "double_to_float"))
+        elif argType.isSignedInteger
+            return build_broadcast_vector(resType,LLVMBuildSIToFP(g_builder, arguments[0], LLVMFloatType(), "int_to_float"))
+        elif argType.isUnsignedInteger
+            return build_broadcast_vector(resType,LLVMBuildUIToFP(g_builder, arguments[0], LLVMFloatType(), "uint_to_float"))
+        else
+            failed_E(expr, "float4({describe(argType)}) is not supported (yet?)")
+            return null
+    else
+        failed_E(expr, "float4 of {length(arguments)} arguments is not supported (yet?)")
+        return null
+
 
 def intrinsic_builtin_range(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var x, y : LLVMOpaqueValue?

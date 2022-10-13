@@ -21,6 +21,20 @@ def test_intrin_float ( t:T? )
         fuzz_numeric_op1(t,fake,"test_float")
 
 [jit]
+def jit_float4 ( x )
+    return float4(x)
+
+def test_float4( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_float4) )
+    t |> strictEqual ( float4(a), jit_float4(a), "float4(a)" )
+
+[test]
+def test_intrin_float4 ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_numeric_op1(t,fake,"test_float4")
+
+[jit]
 def jit_sqrt ( x )
     return sqrt(x)
 
