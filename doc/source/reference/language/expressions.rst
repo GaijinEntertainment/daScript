@@ -23,11 +23,11 @@ Assignment
     exp := exp '<-' exp
     exp := exp ':=' exp
 
-daScript implements 3 kind of assignment: the copy assignment(=)::
+daScript implements 3 kind of assignment: copy assignment(=)::
 
     a = 10
 
-copy assignment is equivalent of C++ memcpy operation::
+Copy assignment is equivalent of C++ memcpy operation::
 
     template <typename TT, typename QQ>
     __forceinline void das_copy ( TT & a, const QQ b ) {
@@ -35,17 +35,17 @@ copy assignment is equivalent of C++ memcpy operation::
         memcpy(&a, &b, sizeof(TT));
     }
 
-"move" assignment ::
+"Move" assignment::
 
     var b = new Foo
     var a: Foo?
     a <- b
 
-move assignment nullifies source (b)
+Move assignment nullifies source (b).
 It's main purpose is to correctly move ownership, and optimize copying if you don't need source for heavy types (such as arrays, tables).
-Some external handled types can be non assignable, but still moveable;
+Some external handled types can be non assignable, but still moveable.
 
-move assignment is equivalent of C++ memcpy + memset operations::
+Move assignment is equivalent of C++ memcpy + memset operations::
 
     template <typename TT, typename QQ>
     __forceinline void das_move ( TT & a, const QQ & b ) {
@@ -54,12 +54,12 @@ move assignment is equivalent of C++ memcpy + memset operations::
         memset((TT *)&b, 0, sizeof(TT));
     }
 
-"clone" assignment ::
+"Clone" assignment::
 
     a := b
 
 Clone assignment is syntactic sugar for calling clone(var a: auto&; b: auto&) if it exists or basic assignment for POD types.
-It is also implemented for das_string, array and table types, and creates 'deep' copy.
+It is also implemented for das_string, array and table types, and creates a 'deep' copy.
 
 Some external handled types can be non assignable, but still cloneable (see :ref:`Clone <clone>`).
 
@@ -81,8 +81,8 @@ Operators
 
     expr1 \.\. expr2
 
-is equivalent to `inverval(expr1,expr2)`. By default `interval(a,b:int)` is implemented as `range(a,b)`,
-and `interval(a,b:uint)` is implemented as `urange(a,b)`. Use can define their own interval functions or generics.
+This is equivalent to `inverval(expr1,expr2)`. By default `interval(a,b:int)` is implemented as `range(a,b)`,
+and `interval(a,b:uint)` is implemented as `urange(a,b)`. Users can define their own interval functions or generics.
 
 ^^^^^^^^^^^^^
 ?: Operator
@@ -95,8 +95,8 @@ and `interval(a,b:uint)` is implemented as `urange(a,b)`. Use can define their o
 
     exp := exp_cond '?' exp1 ':' exp2
 
-conditionally evaluate an expression depending on the result of an expression.
-if expr_cond is true, only expr1 will be evaluated. similarly if false - only expr2.
+This conditionally evaluate an expression depending on the result of an expression.
+If expr_cond is true, only exp1 will be evaluated. Similarly, if false, only exp2.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ?? Null-coalescing operator
@@ -110,8 +110,8 @@ if expr_cond is true, only expr1 will be evaluated. similarly if false - only ex
     exp := exp1 '??' exp2
 
 
-Conditionally evaluate an expression2 depending on the result of an expression1.
-Given code is equivalent to:
+Conditionally evaluate exp2 depending on the result of exp1.
+The given code is equivalent to:
 
 ::
 
@@ -135,7 +135,7 @@ Operator precedence is also follows C# design, so that ?? has lower priority tha
     exp := value '?.' key
 
 
-If value is not null exists, return dereference of the field 'key' for struct, otherwise returns null.
+If the value is not null, then dereferences the field 'key' for struct, otherwise returns null.
 
 ::
 
@@ -166,13 +166,13 @@ If value is not null exists, return dereference of the field 'key' for struct, o
         b?.fooPtr?.fooData ?? idummy = 4 // will return reference to b.fooPtr.fooData
         assert(b.fooPtr.fooData == 4 & idummy == 3)
 
-Additionally null propagation of index ?[ can be used with tables::
+Additionally, null propagation of index ?[ can be used with tables::
 
 	var tab <- {{ "one"=>1; "two"=> 2 }}
 	let i = tab?["three"] ?? 3
 	print("i = {i}\n")
 
-It checks both container pointer and availability of the key.
+It checks both the container pointer and the availability of the key.
 
 ^^^^^^^^^^^^^
 Arithmetic
@@ -186,8 +186,8 @@ Arithmetic
     exp:= 'exp' op 'exp'
 
 daScript supports the standard arithmetic operators ``+, -, *, / and %``.
-Other than that is also supports compact operators (``+=, -=, *=, /=, %=``) and
-increment and decrement operators(``++ and --``)::
+It also supports compact operators ``+=, -=, *=, /=, %=`` and
+increment and decrement operators ``++ and --``::
 
     a += 2
     // is the same as writing
@@ -209,7 +209,7 @@ Relational
 
     exp:= 'exp' op 'exp'
 
-Relational operators in daScript are : ``==, <, <=, >, >=, !=``
+Relational operators in daScript are : ``==, <, <=, >, >=, !=``.
 
 These operators return true if the expression is false and a value different than true if the
 expression is true.
@@ -226,19 +226,19 @@ Logical
     exp := exp op exp
     exp := '!' exp
 
-Logical operators in daScript are : ``&&, ||, ^^, !, &&=, ||=, ^^=``
+Logical operators in daScript are : ``&&, ||, ^^, !, &&=, ||=, ^^=``.
 
-The operator ``&&`` (logical and) returns false if its first argument is false, otherwise returns
+The operator ``&&`` (logical and) returns false if its first argument is false, or otherwise returns
 its second argument.
-The operator ``||`` (logical or) returns its first argument if is different than false, otherwise
+The operator ``||`` (logical or) returns its first argument if is different than false, or otherwise
 returns the second argument.
 
 The operator ``^^`` (logical exclusive or) returns true if arguments are different, and false otherwise.
 
-It is important to understand, that && and || would not necessarily 'evaluates' all arguments.
-Unlike C++ equivalents &&= and ||= would also cancel evaluation of the right side.
+It is important to understand, that && and || will not necessarily 'evaluate' all their arguments.
+Unlike their C++ equivalents, &&= and ||= will also cancel evaluation of the right side.
 
-The '!' operator will return false if the given value to negate was true or false otherwise.
+The '!' (negation) operator will return false if the given value was true, or false otherwise.
 
 ^^^^^^^^^^^^^^^^^^^
 Bitwise Operators
@@ -267,7 +267,7 @@ Pipe Operators
     exp:= 'exp' |> 'exp'
     exp:= 'exp' <| 'exp'
 
-daScript supports pipe operators. Pipe operator is similar to 'call' expression with other expression is first argument.
+daScript supports pipe operators. Pipe operators are similar to 'call' expressions where the other expression is first argument.
 
 ::
 
@@ -288,7 +288,7 @@ daScript supports pipe operators. Pipe operator is similar to 'call' expression 
         let t =  addOne() <| 2
         assert(t == 3)
 
-``lpipe`` macro allows piping to the previous line::
+The ``lpipe`` macro allows piping to the previous line::
 
     require daslib/lpipe
 
@@ -296,7 +296,7 @@ daScript supports pipe operators. Pipe operator is similar to 'call' expression 
         print()
         lpipe() <| "this is string constant"
 
-In the example above string constant will be piped to the print expression on the previous line.
+In the example above, the string constant will be piped to the print expression on the previous line.
 This allows piping of multiple blocks while still using significant whitespace syntax.
 
 ^^^^^^^^^^^^^^^^^^^^^
@@ -304,7 +304,7 @@ Operators precedence
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. index::
-    pair: Operators precedence; Operators
+    pair: Operators Precedence; Operators
 
 +--------------------------------------------------------------------------+-----------+
 | ``post++  post--  .   ->  ?. ?[ *(deref)``                               | highest   |
@@ -389,7 +389,7 @@ Only dynamic multi-dimensional arrays can be initialized (for now)::
 .. _struct_contructor:
 
 -------------------------------------------
-Struct, Class, and Handled type Initializer
+Struct, Class, and Handled Type Initializer
 -------------------------------------------
 
 .. index::
@@ -410,7 +410,7 @@ Initialization also supports optional inline block::
 
     var c = [[ Foo x=1, y=2 where $ ( var foo ) { print("{foo}"); } ]]
 
-Classes and handled (external) types can also be initialized using structure initialization syntax. Classes and handled types always require construct syntax, i.e. ().
+Classes and handled (external) types can also be initialized using structure initialization syntax. Classes and handled types always require constructor syntax, i.e. ().
 
 (see :ref:`Structs <structs>`, :ref:`Classes <classes>`, :ref:`Handles <handles>` ).
 
@@ -438,7 +438,7 @@ Variant Initializer
 .. index::
     single: Variant Initializer
 
-Variants are created with a syntax, similar to that of a structure::
+Variants are created with a syntax similar to that of a structure::
 
     variant Foo
         i : int
@@ -458,7 +458,7 @@ Table Initializer
 .. index::
     single: Table Initializer
 
-Tables are created via specifying key => value pairs separated by semicolon::
+Tables are created by specifying key => value pairs separated by semicolon::
 
     var a <- {{ 1=>"one"; 2=>"two" }}
     var a <- {{ 1=>"one"; 2=>2 }}       // error, type mismatch
