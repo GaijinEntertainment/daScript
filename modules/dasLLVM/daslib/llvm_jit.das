@@ -46,6 +46,7 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete]] function_entry : LLVMOpaqueBasicBlock?
     [[do_not_delete]] function_body : LLVMOpaqueBasicBlock?
     [[do_not_delete]] current_block : LLVMOpaqueBasicBlock?
+    [[do_not_delete]] monad2block : table<Expression?;LLVMOpaqueBasicBlock?>
 
     def LlvmJitVisitor ( ctx:Context? )
         jit_context = ctx
@@ -587,7 +588,7 @@ class LlvmJitVisitor : AstVisitor
         return true     if (expr is ExprConstUInt64) && (expr as ExprConstUInt64).value!=0ul
         return false
 
-    def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
+    def visitExprOp2_NonMonade(expr:smart_ptr<ExprOp2>)
         var left = getE(expr.left)
         var right = getE(expr.right)
         assume opType = expr.right._type
@@ -809,6 +810,30 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported ^^= type {opType}")
         else
             failed_E(expr, "unsupported binary operator {expr.op}")
+
+    def override preVisitExprOp2Right(expr:smart_ptr<ExprOp2>;right:ExpressionPtr): void
+        if expr.op=="&&"
+            var monad_true = append_basic_block("monad_true_at_{int(expr.at.line)}")
+            var monad_false = append_basic_block("monad_true_at_{int(expr.at.line)}")
+            var monad_result : LLVMOpaqueValue?
+            at_function_entry <|
+                monad_result = LLVMBuildAlloca(g_builder, LLVMInt1Type(), "{expr.op}_at_{int(expr.at.line)}")
+            var monad_cond = getE(expr.left)
+            monad2block[get_ptr(ExpressionPtr(expr))] = monad_false
+            setE(expr, monad_result)
+            LLVMBuildStore(g_builder, monad_cond, monad_result)
+            LLVMBuildCondBr(g_builder, monad_cond, monad_true, monad_false)
+            position_at_end(monad_true)
+
+    def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
+        if expr.op=="&&"
+            var monad_false = monad2block[get_ptr(ExpressionPtr(expr))]
+            LLVMBuildStore(g_builder, getE(expr.right), getE(expr))
+            LLVMBuildBr(g_builder, monad_false)
+            position_at_end(monad_false)
+            setE(expr, LLVMBuildLoad(g_builder, getE(expr), ""))
+        else
+            visitExprOp2_NonMonade(expr)
         return expr
 
     def override visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr

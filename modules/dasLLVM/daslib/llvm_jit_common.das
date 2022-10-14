@@ -8,6 +8,7 @@ require llvm/llvm_boost
 require daslib/ast_boost
 require daslib/strings
 require daslib/defer
+require daslib/fio
 
 let public LLVM_JIT_ENABLED = true
 

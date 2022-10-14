@@ -15,6 +15,43 @@ def jit_set_xorxor ( var a : bool; b : bool )
     a ^^= b
     return a
 
+var monad_test = 0
+
+[sideeffects]
+def getA_true
+    monad_test |= 1
+    return true
+
+[sideeffects]
+def getA_false
+    return false
+
+[sideeffects]
+def getB_true
+    monad_test |= 2
+    return true
+
+[sideeffects]
+def getB_false
+    monad_test |= 4
+    return true
+
+[jit]
+def jit_andand_true_true
+    return getA_true() && getB_true()
+
+[jit]
+def jit_andand_true_false
+    return getA_true() && getB_false()
+
+[jit]
+def jit_andand_false_true
+    return getA_false() && getB_true()
+
+[jit]
+def jit_andand_false_false
+    return getA_false() && getB_false()
+
 [test]
 def test_bool_arithmetics ( t:T? )
     t |> run("!") <| @ ( t : T? )
@@ -32,3 +69,24 @@ def test_bool_arithmetics ( t:T? )
         t |> equal ( true,  jit_set_xorxor(true, false) )
         t |> equal ( true,  jit_set_xorxor(false,true) )
         t |> equal ( false, jit_set_xorxor(true, true) )
+    t |> run("&&") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@jit_andand_true_true) )
+        monad_test = 0
+        var tt = jit_andand_true_true()
+        t |> success(tt==true)
+        t |> success(monad_test==3)
+        t |> success ( is_jit_function(@@jit_andand_true_false) )
+        monad_test = 0
+        var tf = jit_andand_true_false()
+        t |> success(tf==true)
+        t |> success(monad_test==5)
+        t |> success ( is_jit_function(@@jit_andand_false_true) )
+        monad_test = 0
+        var ft = jit_andand_false_true()
+        t |> success(ft==false)
+        t |> success(monad_test==0)
+        t |> success ( is_jit_function(@@jit_andand_false_false) )
+        monad_test = 0
+        var ff = jit_andand_false_false()
+        t |> success(ff==false)
+        t |> success(monad_test==0)
