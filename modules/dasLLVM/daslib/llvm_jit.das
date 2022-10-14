@@ -812,11 +812,11 @@ class LlvmJitVisitor : AstVisitor
             failed_E(expr, "unsupported binary operator {expr.op}")
 
     def override preVisitExprOp2Right(expr:smart_ptr<ExprOp2>;right:ExpressionPtr): void
-        if expr.op=="&&" || expr.op=="&&="
+        if expr.op=="&&" || expr.op=="&&=" || expr.op=="||" || expr.op=="||="
             var monad_true = append_basic_block("monad_true_at_{int(expr.at.line)}")
             var monad_false = append_basic_block("monad_true_at_{int(expr.at.line)}")
             var monad_result, monad_cond : LLVMOpaqueValue?
-            if expr.op=="&&"
+            if expr.op=="&&" || expr.op=="||"
                 at_function_entry <|
                     monad_result = LLVMBuildAlloca(g_builder, LLVMInt1Type(), "{expr.op}_at_{int(expr.at.line)}")
                 monad_cond = getE(expr.left)
@@ -825,18 +825,21 @@ class LlvmJitVisitor : AstVisitor
                 monad_cond = LLVMBuildLoad(g_builder, monad_result, "")
             monad2block[get_ptr(ExpressionPtr(expr))] = monad_false
             setE(expr, monad_result)
-            if expr.op=="&&"
+            if expr.op=="&&" || expr.op=="||"
                 LLVMBuildStore(g_builder, monad_cond, monad_result)
-            LLVMBuildCondBr(g_builder, monad_cond, monad_true, monad_false)
+            if expr.op=="&&" || expr.op=="&&="
+                LLVMBuildCondBr(g_builder, monad_cond, monad_true, monad_false)
+            else
+                LLVMBuildCondBr(g_builder, monad_cond, monad_false, monad_true)
             position_at_end(monad_true)
 
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
-        if expr.op=="&&" || expr.op=="&&="
+        if expr.op=="&&" || expr.op=="&&=" || expr.op=="||" || expr.op=="||="
             var monad_false = monad2block[get_ptr(ExpressionPtr(expr))]
             LLVMBuildStore(g_builder, getE(expr.right), getE(expr))
             LLVMBuildBr(g_builder, monad_false)
             position_at_end(monad_false)
-            if expr.op=="&&"
+            if expr.op=="&&" || expr.op=="||"
                 setE(expr, LLVMBuildLoad(g_builder, getE(expr), ""))
         else
             visitExprOp2_NonMonade(expr)
