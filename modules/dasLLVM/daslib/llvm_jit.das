@@ -812,26 +812,32 @@ class LlvmJitVisitor : AstVisitor
             failed_E(expr, "unsupported binary operator {expr.op}")
 
     def override preVisitExprOp2Right(expr:smart_ptr<ExprOp2>;right:ExpressionPtr): void
-        if expr.op=="&&"
+        if expr.op=="&&" || expr.op=="&&="
             var monad_true = append_basic_block("monad_true_at_{int(expr.at.line)}")
             var monad_false = append_basic_block("monad_true_at_{int(expr.at.line)}")
-            var monad_result : LLVMOpaqueValue?
-            at_function_entry <|
-                monad_result = LLVMBuildAlloca(g_builder, LLVMInt1Type(), "{expr.op}_at_{int(expr.at.line)}")
-            var monad_cond = getE(expr.left)
+            var monad_result, monad_cond : LLVMOpaqueValue?
+            if expr.op=="&&"
+                at_function_entry <|
+                    monad_result = LLVMBuildAlloca(g_builder, LLVMInt1Type(), "{expr.op}_at_{int(expr.at.line)}")
+                monad_cond = getE(expr.left)
+            else
+                monad_result = getE(expr.left)
+                monad_cond = LLVMBuildLoad(g_builder, monad_result, "")
             monad2block[get_ptr(ExpressionPtr(expr))] = monad_false
             setE(expr, monad_result)
-            LLVMBuildStore(g_builder, monad_cond, monad_result)
+            if expr.op=="&&"
+                LLVMBuildStore(g_builder, monad_cond, monad_result)
             LLVMBuildCondBr(g_builder, monad_cond, monad_true, monad_false)
             position_at_end(monad_true)
 
     def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
-        if expr.op=="&&"
+        if expr.op=="&&" || expr.op=="&&="
             var monad_false = monad2block[get_ptr(ExpressionPtr(expr))]
             LLVMBuildStore(g_builder, getE(expr.right), getE(expr))
             LLVMBuildBr(g_builder, monad_false)
             position_at_end(monad_false)
-            setE(expr, LLVMBuildLoad(g_builder, getE(expr), ""))
+            if expr.op=="&&"
+                setE(expr, LLVMBuildLoad(g_builder, getE(expr), ""))
         else
             visitExprOp2_NonMonade(expr)
         return expr

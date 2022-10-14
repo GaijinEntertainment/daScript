@@ -52,6 +52,30 @@ def jit_andand_false_true
 def jit_andand_false_false
     return getA_false() && getB_false()
 
+[jit]
+def jit_set_andand_true_true
+    var a = getA_true()
+    a &&= getB_true()
+    return a
+
+[jit]
+def jit_set_andand_true_false
+    var a = getA_true()
+    a &&= getB_false()
+    return a
+
+[jit]
+def jit_set_andand_false_true
+    var a = getA_false()
+    a &&= getB_true()
+    return a
+
+[jit]
+def jit_set_andand_false_false
+    var a =getA_false()
+    a &&= getB_false()
+    return a
+
 [test]
 def test_bool_arithmetics ( t:T? )
     t |> run("!") <| @ ( t : T? )
@@ -88,5 +112,26 @@ def test_bool_arithmetics ( t:T? )
         t |> success ( is_jit_function(@@jit_andand_false_false) )
         monad_test = 0
         var ff = jit_andand_false_false()
+        t |> success(ff==false)
+        t |> success(monad_test==0)
+    t |> run("&&=") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@jit_set_andand_true_true) )
+        monad_test = 0
+        var tt = jit_set_andand_true_true()
+        t |> success(tt==true)
+        t |> success(monad_test==3)
+        t |> success ( is_jit_function(@@jit_set_andand_true_false) )
+        monad_test = 0
+        var tf = jit_set_andand_true_false()
+        t |> success(tf==true)
+        t |> success(monad_test==5)
+        t |> success ( is_jit_function(@@jit_set_andand_false_true) )
+        monad_test = 0
+        var ft = jit_set_andand_false_true()
+        t |> success(ft==false)
+        t |> success(monad_test==0)
+        t |> success ( is_jit_function(@@jit_set_andand_false_false) )
+        monad_test = 0
+        var ff = jit_set_andand_false_false()
         t |> success(ff==false)
         t |> success(monad_test==0)
