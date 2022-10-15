@@ -17,6 +17,8 @@ let public LLVM_DEBUG_EVERYTHING = false
 
 let public LLVM_JIT_ALWAYS_SOLID = true
 
+let public LLVM_JIT_MEMGROUPS = false
+
 let public LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let public LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let public LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
@@ -73,7 +75,7 @@ def public init_jit
     // add default functions
     var jit_exception = LLVMAddFunction(g_mod, FN_JIT_EXCEPTION,    // jit_exception(text,context *)
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef get_type_string(); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_exception, get_jit_exception())
     LLVMAddAttributeToFunction(jit_exception, noreturn)
 
@@ -88,7 +90,7 @@ def public init_jit
     LLVMAddGlobalMapping(g_engine, jit_call_with_cmres, get_jit_call_with_cmres())
 
     var jit_string_builder = LLVMAddFunction(g_mod, FN_JIT_STRING_BUILDER, // jit_string_builder ( context *, node *, args * )
-        LLVMFunctionType(LLVMPointerType(LLVMInt8Type(),0u),
+        LLVMFunctionType(get_type_string(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_string_builder, get_jit_string_builder())
     LLVMAddAttributeToFunction(jit_string_builder, readonly)
@@ -158,9 +160,45 @@ def public build_string_constant ( message:string )
     g_str2v[message] = str
     return str
 
+def public get_type_memgroup ( mn:string )
+    static_if LLVM_JIT_MEMGROUPS
+        // TOOD: we need way better than mangled name memgroups
+        var h = hash(mn)
+        var r = uint(h ^ (h >> 32ul))
+        // print("MEMGROUP: {mn} -> {r}\n")
+        return r
+    else
+        return 0u
+
+def public get_type_memgroup ( t:TypeDeclPtr )
+    return get_type_memgroup(t |> get_mangled_name)
+
+def public get_ref_type_memgroup ( t:TypeDeclPtr )
+    var q = unsafe(reinterpret<TypeDecl?> t)
+    q.flags ^= TypeDeclFlags ref
+    var mg = get_type_memgroup(t |> get_mangled_name)
+    q.flags ^= TypeDeclFlags ref
+    return mg
+
+def public get_type_pointer_memgroup ( t:TypeDeclPtr )
+    var mn = t |> get_mangled_name
+    return get_type_memgroup("1<{mn}>?")    // note: we construct mangled name manually here to avoid creating type
+
+def public get_basetype_pointer ( t:Type ) : LLVMOpaqueType?
+    return LLVMPointerType(base_type_to_llvm_type(t),0u)
+
+def public get_type_pointer ( t:TypeDeclPtr ) : LLVMOpaqueType?
+    if t==null
+        return LLVMPointerType(LLVMVoidType(),0u)
+    else
+        return LLVMPointerType(type_to_llvm_type(t),get_type_memgroup(t))
+
+def public get_type_string : LLVMOpaqueType?
+    return LLVMPointerType(LLVMInt8Type(), get_type_memgroup("s"))
+
 def public get_string_constant_ptr ( message:string )
     var str = build_string_constant(message)
-    return LLVMBuildPointerCast(g_builder, str, LLVMPointerType(LLVMInt8Type(), 0u), "string_constant {message}")
+    return LLVMBuildPointerCast(g_builder, str, get_type_string(), "string_constant {message}")
 
 def public failed ( msg:string )
     g_errors |> push("{msg}")
@@ -172,35 +210,35 @@ def public failed_V ( v:VariablePtr; msg:string )
     failed ( "{msg}. var = {describe(v)} at {describe(v.at)}")
 
 def public base_type_to_llvm_type ( t:Type )
-    return LLVMInt32Type()  if t == Type tInt || t == Type tUInt || t == Type tBitfield
-    return LLVMInt64Type()  if t == Type tInt64 || t == Type tUInt64
-    return LLVMInt16Type()  if t == Type tInt16 || t == Type tUInt16
-    return LLVMInt8Type()   if t == Type tInt8 || t == Type tUInt8
-    return LLVMFloatType()  if t == Type tFloat
-    return LLVMDoubleType() if t == Type tDouble
-    return LLVMInt1Type()   if t == Type tBool
-    return LLVMInt2Type()   if t == Type tInt2 || t == Type tUInt2 || t == Type tRange || t == Type tURange
-    return LLVMInt3Type()   if t == Type tInt3 || t == Type tUInt3
-    return LLVMInt4Type()   if t == Type tInt4 || t == Type tUInt4
-    return LLVMFloat2Type() if t == Type tFloat2
-    return LLVMFloat3Type() if t == Type tFloat3
-    return LLVMFloat4Type() if t == Type tFloat4
-    return LLVMPointerType(LLVMInt8Type(),0u) if t == Type tString
+    return LLVMInt32Type()      if t == Type tInt || t == Type tUInt || t == Type tBitfield
+    return LLVMInt64Type()      if t == Type tInt64 || t == Type tUInt64
+    return LLVMInt16Type()      if t == Type tInt16 || t == Type tUInt16
+    return LLVMInt8Type()       if t == Type tInt8 || t == Type tUInt8
+    return LLVMFloatType()      if t == Type tFloat
+    return LLVMDoubleType()     if t == Type tDouble
+    return LLVMInt1Type()       if t == Type tBool
+    return LLVMInt2Type()       if t == Type tInt2 || t == Type tUInt2 || t == Type tRange || t == Type tURange
+    return LLVMInt3Type()       if t == Type tInt3 || t == Type tUInt3
+    return LLVMInt4Type()       if t == Type tInt4 || t == Type tUInt4
+    return LLVMFloat2Type()     if t == Type tFloat2
+    return LLVMFloat3Type()     if t == Type tFloat3
+    return LLVMFloat4Type()     if t == Type tFloat4
+    return get_type_string()    if t == Type tString
     return LLVMPointerType(LLVMVoidType(),0u) if t == Type tPointer
     failed("base_type_to_llvm_type: unsupported type {t}")
     return LLVMInt32Type()
 
 def public type_to_llvm_abi_type ( t:TypeDeclPtr )
     if t.isRef
-        return LLVMPointerType(type_to_llvm_type(t), 0u)
+        return LLVMPointerType(type_to_llvm_type(t), get_ref_type_memgroup(t))
     elif t.isPointer
-        return LLVMPointerType(t.firstType!=null ? type_to_llvm_type(t.firstType) : LLVMVoidType(), 0u)
+        return get_type_pointer(t.firstType)
     elif t.isWorkhorseType
         return base_type_to_llvm_type(t.baseType)
     elif t.isVoid
         return LLVMVoidType()
     elif t.baseType==Type fakeContext || t.baseType==Type fakeLineInfo
-        return LLVMPointerType(LLVMVoidType(),0u)
+        return LLVMPointerType(LLVMVoidType(),get_type_memgroup(t))
     else
         failed("type_to_llvm_abi_type: unsupported type {describe(t)} at {describe(t.at)}")
         return LLVMInt32Type()
@@ -214,7 +252,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         for d in t.dim
             res = LLVMArrayType(res, uint(d))
     elif t.isPointer
-        res = LLVMPointerType(t.firstType!=null ? type_to_llvm_type(t.firstType) : LLVMVoidType(), 0u)
+        res = get_type_pointer(t.firstType)
     elif t.isWorkhorseType
         res = base_type_to_llvm_type(t.baseType)
     elif t.isStructure
@@ -222,12 +260,14 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
     elif t.baseType == Type tArray
         // array type
         var array_fields <- [[auto
-            LLVMPointerType(t.firstType!=null ? type_to_llvm_type(t.firstType) : LLVMVoidType(),0u);    // char * data
+            LLVMPointerType(LLVMVoidType(),0u); // char * data
             LLVMInt32Type();                    // uint32_t size
             LLVMInt32Type();                    // uint32_t capacity
             LLVMInt32Type();                    // uint32_t lock
             LLVMInt32Type()                     // uint32_t flags
         ]]
+        if t.firstType!=null
+            array_fields[0] = LLVMPointerType(type_to_llvm_type(t.firstType),get_type_memgroup(t.firstType));
         res = LLVMStructType(unsafe(addr(array_fields[0])), uint(length(array_fields)), 0)
     elif t.isVoid
         res = LLVMVoidType()

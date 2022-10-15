@@ -166,7 +166,6 @@ class LlvmJitVisitor : AstVisitor
             elif !a._type.isRef
                 arg_v = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(a._type), arg_ptr, "arg_value_{ai}")
             else
-                // arg_v = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(LLVMVoidType(),0u), "arg_ptr_{ai}" )
                 arg_v = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(a._type), arg_ptr, "arg_any_{ai}")
             wargs |> push(arg_v)
         wargs |> push(LLVMGetParam(wfunc, 0u))  // context
@@ -204,7 +203,7 @@ class LlvmJitVisitor : AstVisitor
                     get_context_param()     // context
                 ]]
                 var vptr = LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_GET_GLOBAL_MNH), params, "")
-                vptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(type_to_llvm_type(variable._type),0u), "global_var_{variable.name}")
+                vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(variable._type), "global_var_{variable.name}")
                 setV(variable, vptr)
 
         function_body = LLVMAppendBasicBlock(ffunc, "body")
@@ -229,16 +228,22 @@ class LlvmJitVisitor : AstVisitor
         return false
 
     def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
-        var vtype = arg._type.flags.ref ?  LLVMPointerType(type_to_llvm_type(arg._type),0u) : type_to_llvm_type(arg._type)
+        var vtype, vptrtype : LLVMOpaqueType?
+        if arg._type.flags.ref
+            vtype = get_type_pointer(arg._type)
+            vptrtype = LLVMPointerType(vtype,get_type_pointer_memgroup(arg._type))
+        else
+            vtype = type_to_llvm_type(arg._type)
+            vptrtype = get_type_pointer(arg._type)
         var v_ptr : LLVMOpaqueValue?
         if arg.flags.aliasCMRES
             v_ptr = get_cmres_param()
-            v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "variable_cmres_{arg.name}")
+            v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vptrtype, "variable_cmres_{arg.name}")
         else
             at_function_entry <|
                 v_ptr = LLVMBuildAlloca(g_builder, vtype, "variable_{arg.name}")
                 LLVMSetAlignment(v_ptr, 16u)
-                v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "variable_{arg.name}")
+                v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vptrtype, "variable_{arg.name}")
         setV(arg, v_ptr)
         if arg.init == null
             var vsize = arg._type.flags.ref ?  typeinfo(sizeof type<void?>) : arg._type.sizeOf
@@ -297,7 +302,7 @@ class LlvmJitVisitor : AstVisitor
                 var global_ptr = LLVMBuildGEP(g_builder, ctx_ptr, LLVMConstInt(LLVMInt32Type(), uint64(CONTEXT_OFFSET_OF_GLOBALS), 0), "")
                 global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMInt8Type(),0u), global_ptr, "")
                 vptr = LLVMBuildGEP(g_builder, global_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.variable.stackTop), 0), "")
-                vptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(type_to_llvm_type(expr.variable._type),0u), "global_var_{expr.variable.name}")
+                vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
             else
                 vptr = getV(expr.variable)
             if expr.varFlags.r2v
@@ -320,7 +325,7 @@ class LlvmJitVisitor : AstVisitor
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
                 tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt1Type(), "down_to_1_bit")
             elif bt == Type tString || bt == Type tPointer
-                var ptr_type = bt==Type tString ? LLVMPointerType(LLVMInt8Type(),0u) : type_to_llvm_type(etype)
+                var ptr_type = bt==Type tString ? get_type_string() : type_to_llvm_type(etype)
                 if typeinfo(sizeof type<void?>)==8
                     var v2 = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "ptr_vec")
                     var tbit = LLVMBuildExtractElement(g_builder, v2, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "ptr_bits")
@@ -514,7 +519,6 @@ class LlvmJitVisitor : AstVisitor
             var size = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_SIZE, "array.size")
             check_range(tidx, size, "array index out of range")
             var data = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_DATA, "array.data")
-            // data = LLVMBuildPointerCast(g_builder, data, LLVMPointerType(type_to_llvm_type(expr.subexpr._type.firstType),0u), "")
             var ptr_idx = LLVMBuildGEP(g_builder, data, tidx, "array_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoad(g_builder, data, "array_at_r2v")
@@ -1158,8 +1162,7 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprSwizzle(expr:smart_ptr<ExprSwizzle>) : ExpressionPtr
         var val = getE(expr.value)
         if expr._type.flags.ref
-            var vec_element_type = base_type_to_llvm_type(expr.value._type.vectorBaseType)
-            var val_ptr = LLVMBuildBitCast(g_builder, val, LLVMPointerType(vec_element_type, 0u), "")
+            var val_ptr = LLVMBuildBitCast(g_builder, val, get_basetype_pointer(expr.value._type.vectorBaseType), "")
             val_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
             setE(expr, val_ptr)
         else
@@ -1169,8 +1172,7 @@ class LlvmJitVisitor : AstVisitor
                     isSequencial = false
                     break
             if expr.value._type.flags.ref && isSequencial
-                var vec_element_type = base_type_to_llvm_type(expr.value._type.vectorBaseType)
-                var val_ptr = LLVMBuildBitCast(g_builder, val, LLVMPointerType(vec_element_type, 0u), "")
+                var val_ptr = LLVMBuildBitCast(g_builder, val, get_basetype_pointer(expr.value._type.vectorBaseType), "")
                 val_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
                 setE(expr, LLVMBuildLoad2(g_builder, type_to_llvm_type(expr._type), val_ptr, "swizzle_{expr.fields}"))
             else
@@ -1210,7 +1212,7 @@ class LlvmJitVisitor : AstVisitor
                 check_ptr_zero(val_ptr)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.field.offset), 0), "")
-            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, LLVMPointerType(type_to_llvm_type(expr.field._type), 0u), "{describe(expr.value._type,false,false,false)}.{expr.field.name}")
+            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.field._type), "{describe(expr.value._type,false,false,false)}.{expr.field.name}")
             if expr.fieldFlags.r2v
                 setE(expr, LLVMBuildLoad(g_builder, field_ptr, ""))
             else
@@ -1261,13 +1263,15 @@ class LlvmJitVisitor : AstVisitor
     def override preVisitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool) : void
         // add variable to be looked up
         var vtype = type_to_llvm_type(svar._type)
+        var vptrtype = get_type_pointer(svar._type)
         if svar._type.isRef
-            vtype = LLVMPointerType(vtype,0u)
+            vtype = vptrtype
+            vptrtype = LLVMPointerType(vptrtype, get_type_pointer_memgroup(svar._type))
         var v_ptr : LLVMOpaqueValue?
         at_function_entry <|
             v_ptr = LLVMBuildAlloca(g_builder, vtype, "for_loop_variable_{svar.name}")
             LLVMSetAlignment(v_ptr, 16u)
-            v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(vtype,0u), "for_loop_variable_{svar.name}")
+            v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vptrtype, "for_loop_variable_{svar.name}")
             setV(svar, v_ptr)
         // initialize its memory with 0 (should we?)
         var vsize = svar._type.isRef ?  typeinfo(sizeof type<void?>) : svar._type.sizeOf
@@ -1428,7 +1432,7 @@ class LlvmJitVisitor : AstVisitor
         let offset =  index*stride + field.offset
         var v_ptr = getE(expr)
         v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "[{index}].{decl.name}")
-        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(type_to_llvm_type(field._type), 0u), "")
+        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(field._type), "")
         if decl.value |> isMakeLocal
             pass // do nothign. we already taken care of makeLocal in preVisitExprMakeStructField
         elif isCall2CMRES(decl.value)
