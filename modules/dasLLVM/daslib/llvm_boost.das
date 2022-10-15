@@ -13,6 +13,22 @@ require strings
 def LLVMGetEnumAttributeKindForName(attr_name:string)
     return LLVMGetEnumAttributeKindForName(attr_name,uint64(length(attr_name)))
 
+def LLVMGetEnumAttribute(attr_name:string) : LLVMOpaqueAttributeRef?
+    var attr_id = LLVMGetEnumAttributeKindForName(attr_name)
+    var attr = LLVMCreateEnumAttribute(LLVMGetGlobalContext(), attr_id, 0ul)
+    if attr==null
+        panic("{attr_name} attribute not found")
+    return attr
+
+def LLVMAddAttributeToFunction(ffunc:LLVMOpaqueValue?; attr:LLVMOpaqueAttributeRef?)
+    LLVMAddAttributeAtIndex(ffunc, ~0u, attr)
+
+def LLVMAddAttributeToFunctionResult(ffunc:LLVMOpaqueValue?; attr:LLVMOpaqueAttributeRef?)
+    LLVMAddAttributeAtIndex(ffunc, 0u, attr)
+
+def LLVMAddAttributeToFunctionArgument(ffunc:LLVMOpaqueValue?; ai:uint; attr:LLVMOpaqueAttributeRef?)
+    LLVMAddAttributeAtIndex(ffunc, ai+1u, attr)
+
 def LLVMBuildShuffleVector(builder:LLVMOpaqueBuilder?; v1, v2:LLVMOpaqueValue?; mask:array<int>; name:string )
     var elem : array<LLVMOpaqueValue?>
     for m in mask

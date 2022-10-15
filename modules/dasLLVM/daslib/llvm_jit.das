@@ -77,26 +77,16 @@ class LlvmJitVisitor : AstVisitor
         ffunc = LLVMAddFunction(g_mod, "{fnmna} implementation", fun_type)
 
         // setup parameter alignment
+        var readonly_attr = LLVMGetEnumAttribute("readonly")
         for a,ai in fun.arguments,urange(100500)
             if a._type.isRef
                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.alignOf))
             elif a._type.isPointer && a._type.firstType!=null
                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.firstType.alignOf))
+            if (a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant
+                LLVMAddAttributeToFunctionArgument(ffunc, ai, readonly_attr)
+            // todo: noalias?
         LLVMSetParamAlignment(get_context_param(), 16u)
-
-        // assign input parameter attributes
-        var noalias_id = LLVMGetEnumAttributeKindForName("noalias")
-        var noalias_attr = LLVMCreateEnumAttribute(LLVMGetGlobalContext(), noalias_id, 0ul)
-        assert(noalias_attr!=null)
-        var readonly_id = LLVMGetEnumAttributeKindForName("readonly")
-        var readonly_attr = LLVMCreateEnumAttribute(LLVMGetGlobalContext(), readonly_id, 0ul)
-        assert(readonly_attr!=null)
-        for a,ai in fun.arguments,urange(100500)
-            if a._type.isRef || a._type.baseType==Type tPointer || a._type.baseType==Type tString
-                LLVMAddAttributeAtIndex(ffunc, ai+1u, noalias_attr)
-                if a._type.flags.constant
-                    LLVMAddAttributeAtIndex(ffunc, ai+1u, readonly_attr)
-
         if isCMRES(fun)
             LLVMSetParamAlignment(get_cmres_param(), uint(fun.result.alignOf))
         // wrapper function
@@ -524,7 +514,7 @@ class LlvmJitVisitor : AstVisitor
             var size = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_SIZE, "array.size")
             check_range(tidx, size, "array index out of range")
             var data = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_DATA, "array.data")
-            data = LLVMBuildPointerCast(g_builder, data, LLVMPointerType(type_to_llvm_type(expr.subexpr._type.firstType),0u), "")
+            // data = LLVMBuildPointerCast(g_builder, data, LLVMPointerType(type_to_llvm_type(expr.subexpr._type.firstType),0u), "")
             var ptr_idx = LLVMBuildGEP(g_builder, data, tidx, "array_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoad(g_builder, data, "array_at_r2v")

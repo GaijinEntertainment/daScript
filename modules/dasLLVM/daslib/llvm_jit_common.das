@@ -48,7 +48,6 @@ var public g_errors : array<string>
 
 var g_str2v : table<string; LLVMOpaqueValue?>
 
-var public JIT_ARRAY_TYPE : LLVMOpaqueType?
 let public JIT_ARRAY_FIELD_DATA = 0u
 let public JIT_ARRAY_FIELD_SIZE = 1u
 let public JIT_ARRAY_FIELD_CAPACITY = 2u
@@ -67,11 +66,16 @@ def public init_jit
     LLVMInitializeNativeAsmPrinter()
     LLVMInitializeNativeAsmParser()
     LLVMCreateJITCompilerForModule(g_engine, g_mod, LLVM_JIT_OPT_LEVEL)
+
+    var noreturn = LLVMGetEnumAttribute("noreturn")
+    var readonly = LLVMGetEnumAttribute("readonly")
+
     // add default functions
     var jit_exception = LLVMAddFunction(g_mod, FN_JIT_EXCEPTION,    // jit_exception(text,context *)
         LLVMFunctionType(LLVMVoidType(),
             [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_exception, get_jit_exception())
+    LLVMAddAttributeToFunction(jit_exception, noreturn)
 
     var jit_call_or_fastcall = LLVMAddFunction(g_mod, FN_JIT_CALL_OR_FASTCALL, // jit_call_or_fastcall(func,args *,context *)
         LLVMFunctionType(LLVMFloat4Type(),
@@ -87,22 +91,25 @@ def public init_jit
         LLVMFunctionType(LLVMPointerType(LLVMInt8Type(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_string_builder, get_jit_string_builder())
+    LLVMAddAttributeToFunction(jit_string_builder, readonly)
 
-    // TODO: set sideeffects of this function to none
     var jit_get_global_mnh = LLVMAddFunction(g_mod, FN_JIT_GET_GLOBAL_MNH,  // jit_get_global_mnh ( uint64_t mnh, context * )
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_get_global_mnh, get_jit_get_global_mnh())
+    LLVMAddAttributeToFunction(jit_get_global_mnh, readonly)
 
     var jit_alloc_heap = LLVMAddFunction(g_mod, FN_JIT_ALLOC_HEAP,  // jit_alloc_heap ( uint64_t mnh, context * )
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_alloc_heap, get_jit_alloc_heap())
+    LLVMAddAttributeToFunction(jit_alloc_heap, readonly)
 
     var jit_alloc_persistent = LLVMAddFunction(g_mod, FN_JIT_ALLOC_PERSISTENT,  // jit_alloc_persistent ( uint64_t mnh, context * )
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_alloc_persistent, get_jit_alloc_persistent())
+    LLVMAddAttributeToFunction(jit_alloc_persistent, readonly)
 
     var jit_free_heap = LLVMAddFunction(g_mod, FN_JIT_FREE_HEAP,  // void jit_free_heap ( void * bytes, uint32_t size, Context * context )
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
@@ -113,17 +120,6 @@ def public init_jit
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_free_persistent, get_jit_free_persistent())
-
-    // array type
-    var array_fields <- [[auto
-        LLVMPointerType(LLVMInt8Type(),0u); // char * data
-        LLVMInt32Type();                    // uint32_t size
-        LLVMInt32Type();                    // uint32_t capacity
-        LLVMInt32Type();                    // uint32_t lock
-        LLVMInt32Type()                     // uint32_t flags
-    ]]
-    JIT_ARRAY_TYPE = LLVMStructCreateNamed(LLVMGetGlobalContext(), "array");
-    LLVMStructSetBody(JIT_ARRAY_TYPE, unsafe(addr(array_fields[0])), uint(length(array_fields)), 0)
 
 [macro_function]
 def public finalize_jit
@@ -224,7 +220,15 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
     elif t.isStructure
         res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
     elif t.baseType == Type tArray
-        res = JIT_ARRAY_TYPE
+        // array type
+        var array_fields <- [[auto
+            LLVMPointerType(t.firstType!=null ? type_to_llvm_type(t.firstType) : LLVMVoidType(),0u);    // char * data
+            LLVMInt32Type();                    // uint32_t size
+            LLVMInt32Type();                    // uint32_t capacity
+            LLVMInt32Type();                    // uint32_t lock
+            LLVMInt32Type()                     // uint32_t flags
+        ]]
+        res = LLVMStructType(unsafe(addr(array_fields[0])), uint(length(array_fields)), 0)
     elif t.isVoid
         res = LLVMVoidType()
     else
