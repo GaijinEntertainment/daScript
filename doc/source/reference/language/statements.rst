@@ -12,9 +12,9 @@ A daScript program is a simple sequence of statements::
 
     stats ::= stat [';'|'\n'] stats
 
-Statements in daScript are comparable to the C-Family languages (C/C++, Java, C#,
-etc.): assignment, function calls, program flow control structures etc. plus some
-custom statement like block, struct, and initializers (will be covered in detail
+Statements in daScript are comparable to those in C-family languages (C/C++, Java, C#,
+etc.): there are assignments, function calls, program flow control structures, etc.  There are also some
+custom statements like blocks, structs, and initializers (which will be covered in detail
 later in this document).
 Statements can be separated with a new line or ';'.
 
@@ -30,7 +30,7 @@ Visibility Block
     visibility_block ::= indent (stat)* unindent
     visibility_block ::= '{' (stat)* '}'
 
-A sequence of statements delimited by indenting or curly brackets ({ }) is called visibility_block.
+A sequence of statements delimited by indenting or curly brackets ({ }) is called a visibility_block.
 
 -----------------------
 Control Flow Statements
@@ -50,7 +50,7 @@ true and false
     single: true
     single: false
 
-daScript has a strong boolean type (bool). Only boolean type expression can be part of condition in control statement.
+daScript has a strong boolean type (bool). Only expressions with a boolean type can be part of the condition in control statements.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 if/elif/else statement
@@ -65,7 +65,7 @@ if/elif/else statement
 
     stat ::= 'if' exp '\n' visibility_block (['elif' exp '\n' visibility_block])*  ['else' '\n' visibility_block]
 
-Conditionally execute a statement depending on the result of an expression::
+Conditionally executes a statement depending on the result of an expression::
 
     if a > b
         a = b
@@ -148,7 +148,7 @@ break
 
     stat ::= 'break'
 
-The break statement terminates the execution of a loop (``for`` or ``while``);
+The break statement terminates the execution of a loop (``for`` or ``while``).
 
 ---------
 continue
@@ -161,8 +161,8 @@ continue
 
     stat ::= 'continue'
 
-The continue operator jumps to the next iteration of the loop skipping the execution of
-the following statements.
+The continue operator jumps to the next iteration of the loop, skipping the execution of
+the rest of the statements.
 
 ---------
 return
@@ -176,11 +176,11 @@ return
     stat ::= return [exp]
     stat ::= return <- exp
 
-The return statement terminates the execution of the current function, block, or lambda and
-optionally returns the result of an expression. If the expression is omitted the function
-will return nothing; return types is assumed to be void.
-Return mismatching types from same function is an error (i.e., all returns should return value of same type).
-If function return type is explicit return expression should return that same type.
+The return statement terminates the execution of the current function, block, or lambda, and
+optionally returns the result of an expression. If the expression is omitted, the function
+will return nothing, and the return type is assumed to be void.
+Returning mismatching types from same function is an error (i.e., all returns should return a value of the same type).
+If the function's return type is explicit, the return expression should return the same type.
 
 Example::
 
@@ -199,10 +199,10 @@ Example::
     def foobar(a)
         return a  // return type will be same as argument type
 
-In the generator blocks return must always return bool expression,
+In generator blocks, return must always return boolean expression,
 where false indicates end of generation.
 
-'return <- exp' syntax is for move-on-return ::
+'return <- exp' syntax is for move-on-return::
 
     def make_array
         var a: array<int>
@@ -217,9 +217,9 @@ yield
 
 Yield serves similar purpose as ``return`` for generators (see :ref:`Generators <generators>`).
 
-It has similar to return syntax but can only be used inside the ``generator`` blocks.
+It is similar to return syntax, but can only be used inside ``generator`` blocks.
 
-Yield must always produce a value, which matches that of the generator::
+Yield must always produce a value which matches that of the generator::
 
     let gen <- generator<int>() <| $()
         yield 0         // int 0
@@ -238,8 +238,8 @@ Finally statement
     stat ::= finally visibility-block
 
 Finally declares a block which will be executed once for any block (including control statements).
-Finally block can't contain ``break``, ``continue``, or ``return`` statements.
-It is designed to ensure execution after 'all is done'. Consider ::
+A finally block can't contain ``break``, ``continue``, or ``return`` statements.
+It is designed to ensure execution after 'all is done'. Consider the following::
 
     def test(a: array<int>; b: int)
         for x in a
@@ -259,7 +259,7 @@ It is designed to ensure execution after 'all is done'. Consider ::
 
 Finally may be used for resource de-allocation.
 
-It's possible to add code to the finally statement of the block via ``defer`` macro::
+It's possible to add code to the finally statement of the block with the ``defer`` macro::
 
     require daslib/defer
 
@@ -273,10 +273,10 @@ It's possible to add code to the finally statement of the block via ``defer`` ma
             print("b\n")
         print("a\n")
 
-In the example above functions ``foo`` and ``bar`` are semantically identical.
+In the example above, functions ``foo`` and ``bar`` are semantically identical.
 Multiple ``defer`` statements occur in reverse order.
 
-``defer_delete`` macro adds delete statement for its argument, and does not require block.
+The ``defer_delete`` macro adds a delete statement for its argument, and does not require a block.
 
 ---------------------------
 Local variables declaration
@@ -293,11 +293,11 @@ Local variables declaration
     ro_stat ::= 'let' initz
     rw_stat ::= 'var' initz
 
-Local variables can be declared at any point in the function; they exist between their
-declaration to the end of the visibility block where they have been declared.
-'let' declares read only variable, 'var' declares mutable (read-writer) variable.
+Local variables can be declared at any point in a function. They exist between their
+declaration and the end of the visibility block where they have been declared.
+``let`` declares read only variables, and ``var`` declares mutable (read-write) variables.
 
-Copy ``=``, move ``->``, or clone ``:=`` semantic indicates how variable is to be initialized.
+Copy ``=``, move ``->``, or clone ``:=`` semantics indicate how the variable is to be initialized.
 
 --------------------
 Function declaration
@@ -313,7 +313,7 @@ Function declaration
     arg_decl = [var] id (',' id)* [':' type]
     args ::= (arg_decl)*
 
-declares a new function. Examples::
+Declares a new function. Examples::
 
     def hello
         print("hello")
@@ -342,13 +342,13 @@ try/recover
 
     stat ::= 'try' stat 'recover' visibility-block
 
-The try statement encloses a block of code in which an panic condition can occur,
+The try statement encloses a block of code in which a panic condition can occur,
 such as a fatal runtime error or a panic function. The try-recover clause provides the panic-handling
 code.
 
-It is important to understand that try/recover is not a correct error handling code, and definetly not a way to implement control-flow.
-Much like in GO lang, this is really invalid situation which should not normally happen in the production environment.
-Examples of potential exceptions are: dereferencing null pointer, indexing array out of bounds, etc.
+It is important to understand that try/recover is not correct error handling code, and definitely not a way to implement control-flow.
+Much like in the Go language, this is really an invalid situation which should not normally happen in a production environment.
+Examples of potential exceptions are dereferencing a null pointer, indexing into an array out of bounds, etc.
 
 -----------
 panic
@@ -361,7 +361,7 @@ panic
 
     stat ::= 'panic' '(' [string-exp] ')'
 
-Calling ``panic`` causes runtime exception with string-exp available in the log.
+Calling ``panic`` causes a runtime exception with string-exp available in the log.
 
 ----------------
 global variables
@@ -377,10 +377,10 @@ global variables
     stat ::= 'let|var' { shared } {private} '\n' indent id ':=' expression
 
 Declares a constant global variable.
-This variable will be initialized once during initialization of script (or each time when script init is manually called).
+This variable is initialized once during initialization of the script (or each time when script init is manually called).
 
 ``shared`` indicates that the constant is to be initialized once,
-and its memory is shared between multiple instances of daScript context.
+and its memory is shared between multiple instances of the daScript context.
 
 ``private`` indicates that the variable is not visible outside of its module.
 
@@ -409,6 +409,6 @@ Expression statement
 
     stat ::= exp
 
-In daScript every expression is also allowed as statement, if so, the result of the
+In daScript every expression is also allowed to be a statement.  If so, the result of the
 expression is thrown away.
 
