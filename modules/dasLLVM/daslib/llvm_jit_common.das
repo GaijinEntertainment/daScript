@@ -17,8 +17,6 @@ let public LLVM_DEBUG_EVERYTHING = false
 
 let public LLVM_JIT_ALWAYS_SOLID = true
 
-let public LLVM_JIT_MEMGROUPS = false
-
 let public LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let public LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let public LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
@@ -160,30 +158,6 @@ def public build_string_constant ( message:string )
     g_str2v[message] = str
     return str
 
-def public get_type_memgroup ( mn:string )
-    static_if LLVM_JIT_MEMGROUPS
-        // TOOD: we need way better than mangled name memgroups
-        var h = hash(mn)
-        var r = uint(h ^ (h >> 32ul))
-        // print("MEMGROUP: {mn} -> {r}\n")
-        return r
-    else
-        return 0u
-
-def public get_type_memgroup ( t:TypeDeclPtr )
-    return get_type_memgroup(t |> get_mangled_name)
-
-def public get_ref_type_memgroup ( t:TypeDeclPtr )
-    var q = unsafe(reinterpret<TypeDecl?> t)
-    q.flags ^= TypeDeclFlags ref
-    var mg = get_type_memgroup(t |> get_mangled_name)
-    q.flags ^= TypeDeclFlags ref
-    return mg
-
-def public get_type_pointer_memgroup ( t:TypeDeclPtr )
-    var mn = t |> get_mangled_name
-    return get_type_memgroup("1<{mn}>?")    // note: we construct mangled name manually here to avoid creating type
-
 def public get_basetype_pointer ( t:Type ) : LLVMOpaqueType?
     return LLVMPointerType(base_type_to_llvm_type(t),0u)
 
@@ -191,10 +165,10 @@ def public get_type_pointer ( t:TypeDeclPtr ) : LLVMOpaqueType?
     if t==null
         return LLVMPointerType(LLVMVoidType(),0u)
     else
-        return LLVMPointerType(type_to_llvm_type(t),get_type_memgroup(t))
+        return LLVMPointerType(type_to_llvm_type(t),0u)
 
 def public get_type_string : LLVMOpaqueType?
-    return LLVMPointerType(LLVMInt8Type(), get_type_memgroup("s"))
+    return LLVMPointerType(LLVMInt8Type(), 0u)
 
 def public get_string_constant_ptr ( message:string )
     var str = build_string_constant(message)
@@ -230,7 +204,7 @@ def public base_type_to_llvm_type ( t:Type )
 
 def public type_to_llvm_abi_type ( t:TypeDeclPtr )
     if t.isRef
-        return LLVMPointerType(type_to_llvm_type(t), get_ref_type_memgroup(t))
+        return LLVMPointerType(type_to_llvm_type(t), 0u)
     elif t.isPointer
         return get_type_pointer(t.firstType)
     elif t.isWorkhorseType
@@ -238,7 +212,7 @@ def public type_to_llvm_abi_type ( t:TypeDeclPtr )
     elif t.isVoid
         return LLVMVoidType()
     elif t.baseType==Type fakeContext || t.baseType==Type fakeLineInfo
-        return LLVMPointerType(LLVMVoidType(),get_type_memgroup(t))
+        return LLVMPointerType(LLVMVoidType(),0u)
     else
         failed("type_to_llvm_abi_type: unsupported type {describe(t)} at {describe(t.at)}")
         return LLVMInt32Type()
@@ -267,7 +241,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
             LLVMInt32Type()                     // uint32_t flags
         ]]
         if t.firstType!=null
-            array_fields[0] = LLVMPointerType(type_to_llvm_type(t.firstType),get_type_memgroup(t.firstType));
+            array_fields[0] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
         res = LLVMStructType(unsafe(addr(array_fields[0])), uint(length(array_fields)), 0)
     elif t.isVoid
         res = LLVMVoidType()

@@ -231,7 +231,7 @@ class LlvmJitVisitor : AstVisitor
         var vtype, vptrtype : LLVMOpaqueType?
         if arg._type.flags.ref
             vtype = get_type_pointer(arg._type)
-            vptrtype = LLVMPointerType(vtype,get_type_pointer_memgroup(arg._type))
+            vptrtype = LLVMPointerType(vtype,0u)
         else
             vtype = type_to_llvm_type(arg._type)
             vptrtype = get_type_pointer(arg._type)
@@ -1266,7 +1266,7 @@ class LlvmJitVisitor : AstVisitor
         var vptrtype = get_type_pointer(svar._type)
         if svar._type.isRef
             vtype = vptrtype
-            vptrtype = LLVMPointerType(vptrtype, get_type_pointer_memgroup(svar._type))
+            vptrtype = LLVMPointerType(vptrtype,0u)
         var v_ptr : LLVMOpaqueValue?
         at_function_entry <|
             v_ptr = LLVMBuildAlloca(g_builder, vtype, "for_loop_variable_{svar.name}")
