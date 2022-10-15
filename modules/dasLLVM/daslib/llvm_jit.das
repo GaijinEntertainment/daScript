@@ -75,12 +75,28 @@ class LlvmJitVisitor : AstVisitor
         else
             fun_type = LLVMFunctionType(type_to_llvm_abi_type(fun.result), fun_args)
         ffunc = LLVMAddFunction(g_mod, "{fnmna} implementation", fun_type)
+
+        // setup parameter alignment
         for a,ai in fun.arguments,urange(100500)
             if a._type.isRef
                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.alignOf))
             elif a._type.isPointer && a._type.firstType!=null
                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.firstType.alignOf))
         LLVMSetParamAlignment(get_context_param(), 16u)
+
+        // assign input parameter attributes
+        var noalias_id = LLVMGetEnumAttributeKindForName("noalias")
+        var noalias_attr = LLVMCreateEnumAttribute(LLVMGetGlobalContext(), noalias_id, 0ul)
+        assert(noalias_attr!=null)
+        var readonly_id = LLVMGetEnumAttributeKindForName("readonly")
+        var readonly_attr = LLVMCreateEnumAttribute(LLVMGetGlobalContext(), readonly_id, 0ul)
+        assert(readonly_attr!=null)
+        for a,ai in fun.arguments,urange(100500)
+            if a._type.isRef || a._type.baseType==Type tPointer || a._type.baseType==Type tString
+                LLVMAddAttributeAtIndex(ffunc, ai+1u, noalias_attr)
+                if a._type.flags.constant
+                    LLVMAddAttributeAtIndex(ffunc, ai+1u, readonly_attr)
+
         if isCMRES(fun)
             LLVMSetParamAlignment(get_cmres_param(), uint(fun.result.alignOf))
         // wrapper function

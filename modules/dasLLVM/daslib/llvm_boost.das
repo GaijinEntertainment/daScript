@@ -10,6 +10,9 @@ require daslib/safe_addr
 require daslib/defer
 require strings
 
+def LLVMGetEnumAttributeKindForName(attr_name:string)
+    return LLVMGetEnumAttributeKindForName(attr_name,uint64(length(attr_name)))
+
 def LLVMBuildShuffleVector(builder:LLVMOpaqueBuilder?; v1, v2:LLVMOpaqueValue?; mask:array<int>; name:string )
     var elem : array<LLVMOpaqueValue?>
     for m in mask
