@@ -2887,6 +2887,8 @@ namespace das {
     void * das_get_jit_alloc_persistent ();
     void * das_get_jit_free_heap ();
     void * das_get_jit_free_persistent ();
+    void * das_get_jit_array_lock ();
+    void * das_get_jit_array_unlock ();
 }
 
 #if defined(_MSC_VER)

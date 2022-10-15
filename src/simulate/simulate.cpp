@@ -1744,6 +1744,11 @@ namespace das
         if ( throwBuf ) {
             if ( alwaysStackWalkOnException ) stackWalk(nullptr, false, false);
             if ( breakOnException ) breakPoint(at, "exception", message);
+#if defined(_M_X64)
+            //  "An invalid or unaligned stack was encountered during an unwind operation." exception is issued via longjmp
+            //  this is a known issue with longjmp on x64, and this workaround disables stack unwinding
+            ((_JUMP_BUFFER *)throwBuf)->Frame = 0;
+#endif
             longjmp(*throwBuf,1);
         } else {
             to_err("\nunhandled exception\n");
@@ -1766,6 +1771,12 @@ namespace das
         throw dasException(exception ? exception : "", exceptionAt);
 #else
         if ( throwBuf ) {
+#if defined(_M_X64)
+            //  "An invalid or unaligned stack was encountered during an unwind operation." exception is issued via longjmp
+            //  this is a known issue with longjmp on x64, and this workaround disables stack unwinding
+            ((_JUMP_BUFFER *)throwBuf)->Frame = 0;
+#endif
+
             longjmp(*throwBuf,1);
         } else {
             to_err("\nunhandled exception\n");

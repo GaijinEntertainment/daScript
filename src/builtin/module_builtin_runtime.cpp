@@ -1102,6 +1102,14 @@ namespace das
         return (void *) &jit_free_persistent;
     }
 
+    void * das_get_jit_array_lock () {
+        return (void *) &builtin_array_lock;
+    }
+
+    void * das_get_jit_array_unlock () {
+        return (void *) &builtin_array_unlock;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1485,6 +1493,10 @@ namespace das
             SideEffects::none, "das_get_jit_free_heap");
         addExtern<DAS_BIND_FUN(das_get_jit_free_persistent)>(*this, lib, "get_jit_free_persistent",
             SideEffects::none, "das_get_jit_free_persistent");
+        addExtern<DAS_BIND_FUN(das_get_jit_array_lock)>(*this, lib, "get_jit_array_lock",
+            SideEffects::none, "das_get_jit_array_lock");
+        addExtern<DAS_BIND_FUN(das_get_jit_array_unlock)>(*this, lib, "get_jit_array_unlock",
+            SideEffects::none, "das_get_jit_array_unlock");
         addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
