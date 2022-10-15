@@ -464,7 +464,7 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, tsrc)
         return expr
 
-    def check_range ( tidx, maxIdx:LLVMOpaqueValue? )
+    def check_range ( tidx, maxIdx:LLVMOpaqueValue?; message:string )
         var check_null_ptr = append_basic_block("check_dim_range")
         var check_true = append_basic_block("check_true")
         var check_end = append_basic_block("check_end")
@@ -473,7 +473,7 @@ class LlvmJitVisitor : AstVisitor
         var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntUGE, tidx, maxIdx, "range_check")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         position_at_end(check_true)
-        build_exception("dim index out of range")
+        build_exception(message)
         LLVMBuildBr(g_builder, check_end)
         position_at_end(check_end)
 
@@ -496,13 +496,26 @@ class LlvmJitVisitor : AstVisitor
             let maxIndex = etype.dim[etype.dim.length-1]
             etype.dim |> pop()
             var element_type = type_to_llvm_type(etype)
-            check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0))
+            check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0), "dim index out of range")
             var ptr_idx = LLVMBuildGEP2(g_builder, element_type, tsrc, tidx, "dim_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "dim_at_r2v")
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
+        elif subExprT.baseType == Type tArray
+            var arr = LLVMBuildLoad(g_builder, tsrc, "arr")
+            var size = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_SIZE, "array.size")
+            check_range(tidx, size, "array index out of range")
+            var data = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_DATA, "array.data")
+            data = LLVMBuildPointerCast(g_builder, data, LLVMPointerType(type_to_llvm_type(expr.subexpr._type.firstType),0u), "")
+            var ptr_idx = LLVMBuildGEP(g_builder, data, tidx, "array_at")
+            if expr.atFlags.r2v
+                var at_r2v = LLVMBuildLoad(g_builder, data, "array_at_r2v")
+                setE(expr, at_r2v)
+            else
+                setE(expr, ptr_idx)
+            //  failed("array: unsupported visitExprAt {describe(tsrc)}[{describe(tidx)}] type {describe(subExprT)}")
         else
             failed("unsupported visitExprAt type {describe(subExprT)}")
         return expr

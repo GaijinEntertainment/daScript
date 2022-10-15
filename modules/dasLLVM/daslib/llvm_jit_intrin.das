@@ -10,6 +10,7 @@ require daslib/ast_boost
 
 let g_intrin_lookup <- {{
 // $, aka builtin
+    "$::length" => @@intrinsic_builtin_length;
     "$::range" => @@intrinsic_builtin_range;
     "$::urange" => @@intrinsic_builtin_range;
     "$::float" => @@intrinsic_builtin_float;
@@ -29,6 +30,14 @@ def public lookup_intinsic(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpa
     return result
 
 // intrinsics, $ aka builtin
+
+def intrinsic_builtin_length(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume argType = expr.arguments[0]._type
+    if argType.isGoodArrayType
+        var arr = LLVMBuildLoad(g_builder, arguments[0], "arr")
+        return LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_SIZE, "array.size")
+    else
+        return null
 
 def intrinsic_builtin_float(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     if length(arguments)==0

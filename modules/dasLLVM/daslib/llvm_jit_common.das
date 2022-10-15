@@ -48,6 +48,13 @@ var public g_errors : array<string>
 
 var g_str2v : table<string; LLVMOpaqueValue?>
 
+var public JIT_ARRAY_TYPE : LLVMOpaqueType?
+let public JIT_ARRAY_FIELD_DATA = 0u
+let public JIT_ARRAY_FIELD_SIZE = 1u
+let public JIT_ARRAY_FIELD_CAPACITY = 2u
+let public JIT_ARRAY_FIELD_LOCK = 3u
+let public JIT_ARRAY_FIELD_FLAGS = 4u
+
 [macro_function]
 def public init_jit
     return if is_in_completion() || is_compiling_macros()
@@ -106,6 +113,17 @@ def public init_jit
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_free_persistent, get_jit_free_persistent())
+
+    // array type
+    var array_fields <- [[auto
+        LLVMPointerType(LLVMInt8Type(),0u); // char * data
+        LLVMInt32Type();                    // uint32_t size
+        LLVMInt32Type();                    // uint32_t capacity
+        LLVMInt32Type();                    // uint32_t lock
+        LLVMInt32Type()                     // uint32_t flags
+    ]]
+    JIT_ARRAY_TYPE = LLVMStructCreateNamed(LLVMGetGlobalContext(), "array");
+    LLVMStructSetBody(JIT_ARRAY_TYPE, unsafe(addr(array_fields[0])), uint(length(array_fields)), 0)
 
 [macro_function]
 def public finalize_jit
@@ -188,7 +206,7 @@ def public type_to_llvm_abi_type ( t:TypeDeclPtr )
     elif t.baseType==Type fakeContext || t.baseType==Type fakeLineInfo
         return LLVMPointerType(LLVMVoidType(),0u)
     else
-        failed("type_to_llvm_abi_type: unsupported type {describe(t)} at {t.at}")
+        failed("type_to_llvm_abi_type: unsupported type {describe(t)} at {describe(t.at)}")
         return LLVMInt32Type()
 
 def public type_to_llvm_type ( t:TypeDeclPtr )
@@ -205,10 +223,12 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         res = base_type_to_llvm_type(t.baseType)
     elif t.isStructure
         res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
+    elif t.baseType == Type tArray
+        res = JIT_ARRAY_TYPE
     elif t.isVoid
         res = LLVMVoidType()
     else
-        failed("type_to_llvm_type: unsupported type {describe(t)} at {t.at}")
+        failed("type_to_llvm_type: unsupported type {describe(t)} at {describe(t.at)}")
         res = LLVMInt32Type()
     return res
 
