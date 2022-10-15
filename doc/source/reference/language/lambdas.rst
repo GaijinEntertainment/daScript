@@ -4,10 +4,10 @@
 Lambda
 ======
 
-Lambda is a nameless function which captures local context by clone, copy, or reference.
-Lambda is slower than block, but allows more flexibility in lifetime and capture modes  (see :ref:`Blocks <blocks>`).
+Lambdas are nameless functions which capture the local context by clone, copy, or reference.
+Lambdas are slower than blocks, but allow for more flexibility in lifetime and capture modes  (see :ref:`Blocks <blocks>`).
 
-Lambda type can be declared with a function-like syntax::
+The lambda type can be declared with a function-like syntax::
 
     lambda_type ::= lambda { optional_lambda_type }
     optional_lambda_type ::= < { optional_lambda_arguments } { : return_type } >
@@ -16,20 +16,20 @@ Lambda type can be declared with a function-like syntax::
 
     lambda < (arg1:int;arg2:float&):bool >
 
-Lambda can be local or global variable, it can be passed as an argument by reference.
-Lambda can be moved, but can't be copied or cloned::
+Lambdas can be local or global variables, and can be passed as an argument by reference.
+Lambdas can be moved, but can't be copied or cloned::
 
     def foo ( x : lambda < (arg1:int;arg2:float&):bool > )
         ...
         var y <- x
         ...
 
-Lambda can be invoked via ``invoke``::
+Lambdas can be invoked via ``invoke``::
 
     def inv13 ( x : lambda < (arg1:int):int > )
         return invoke(x,13)
 
-Lambda is typically declared via pipe syntax::
+Lambdas are typically declared via pipe syntax::
 
     var CNT = 0
     let counter <- @ <| (extra:int) : int
@@ -37,17 +37,17 @@ Lambda is typically declared via pipe syntax::
     let t = invoke(counter,13)
 
 There are a lot of similarities between lambda and block declarations.
-Main difference is that blocks are specified with ``$`` symbol, where lambda is specified with ``@`` symbol.
-Lambda can also be declared via inline syntax.
-There is similar simplified syntax for the lambdas containing return expression only.
-If lambda is sufficiently specified in the generic or function,
+The main difference is that blocks are specified with ``$`` symbol, while lambdas are specified with ``@`` symbol.
+Lambdas can also be declared via inline syntax.
+There is a similar simplified syntax for the lambdas containing return expression only.
+If a lambda is sufficiently specified in the generic or function,
 its types will be automatically inferred (see :ref:`Blocks <blocks_declarations>`).
 
 -------
 Capture
 -------
 
-Unlike blocks, lambda can specify it capture types explicitly. There are several available types of capture
+Unlike blocks, lambdas can specify their capture types explicitly. There are several available types of capture:
 
     * by copy
     * by move
@@ -56,7 +56,7 @@ Unlike blocks, lambda can specify it capture types explicitly. There are several
 
 Capturing by reference requires unsafe.
 
-By default capture by copy will be generated. If copy is not available, unsafe would be required for the default capture by move::
+By default, capture by copy will be generated. If copy is not available, unsafe is required for the default capture by move::
 
 	var a1 <- [{int 1;2}]
 	var a2 <- [{int 1;2}]
@@ -70,11 +70,11 @@ By default capture by copy will be generated. If copy is not available, unsafe w
 
 .. _lambdas_finalizer:
 
-Lambda can be deleted, which will cause finalizers on all captured data  (see :ref:`Finalizers <finalizers>`)::
+Lambdas can be deleted, which cause finalizers to be called on all captured data  (see :ref:`Finalizers <finalizers>`)::
 
     delete lam
 
-Lambda can specify custom finalizer which would be invoked before the default finalizer::
+Lambdas can specify a custom finalizer which is invoked before the default finalizer::
 
     var CNT = 0
     var counter <- @ <| (extra:int) : int
@@ -90,9 +90,9 @@ Lambda can specify custom finalizer which would be invoked before the default fi
 Iterators
 ---------
 
-Lambda is the main building block for implementing custom iterators (see :ref:`Iterators <iterators>`).
+Lambdas are the main building blocks for implementing custom iterators (see :ref:`Iterators <iterators>`).
 
-Lambda can be converted to iterator via ``each`` or ``each_ref`` function::
+Lambdas can be converted to iterators via the ``each`` or ``each_ref`` functions::
 
     var count = 0
     let lam <- @ <| (var a:int &) : bool
@@ -104,26 +104,26 @@ Lambda can be converted to iterator via ``each`` or ``each_ref`` function::
     for x,tx in each(lam),range(0,10)
         assert(x==tx)
 
-To serve as an iterator lambda must
+To serve as an iterator, a lambda must
 
-    * have single argument, which would be result of the iteration for each step
+    * have single argument, which is the result of the iteration for each step
     * have boolean return type, where ``true`` means continue iteration, and ``false`` means stop
 
-More straightforward way to make iterator is generator (see :ref:`Generators <generators>`).
+A more straightforward way to make iterator is with generators (see :ref:`Generators <generators>`).
 
 ----------------------
 Implementation details
 ----------------------
 
-Lambda is implemented by creating a nameless structure for the capture, as well as function for the body of the lambda.
+Lambdas are implemented by creating a nameless structure for the capture, as well as a function for the body of the lambda.
 
-Lets review the example with a singled captured variable::
+Let's review an example with a singled captured variable::
 
     var CNT = 0
     let counter <- @ <| (extra:int) : int
         return CNT++ + extra
 
-daScript will generated the following code
+daScript will generated the following code:
 
 Capture structure::
 
@@ -148,7 +148,7 @@ Lambda creation is replaced with the ascend of the capture structure::
 
     let counter:lambda<(extra:int const):int> const <- new<lambda<(extra:int const):int>> [[CNT = CNT]]
 
-C++ Lambda class contains single void pointer for the capture data::
+The C++ Lambda class contains single void pointer for the capture data::
 
     struct Lambda {
         ...
@@ -158,7 +158,7 @@ C++ Lambda class contains single void pointer for the capture data::
 
 The rational behind passing lambda by reference is that when delete is called
 
-    1. finalizer is invoked for the capture data
-    2. capture is replaced via null
+    1. the finalizer is invoked for the capture data
+    2. the capture is replaced via null
 
-Lack of copy or move insures there are no multiple pointers to the single instance of capture data floating around.
+The lack of a copy or move ensures there are not multiple pointers to a single instance of the captured data floating around.
