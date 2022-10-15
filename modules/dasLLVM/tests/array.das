@@ -14,6 +14,16 @@ def addAll ( var a : array<int> )
         c += a[i]
     return c
 
+[jit]
+def resizeLocked ( var a : array<int> )
+    for _a,i in a,range(100500)
+        if i==3
+            a |> resize(20)
+
+[jit]
+def outOfRange ( var a : array<int> )
+    return a[13]
+
 [test]
 def test_array ( t:T? )
     t |> run("array []") <| @ ( t : T? )
@@ -25,3 +35,24 @@ def test_array ( t:T? )
         for i in x
             t |> equal(i, 13)
         t |> equal(addAll(x), 130)
+    t |> run("out of range") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@outOfRange) )
+        var x : array<int>
+        resize(x,10)
+        var failed = false
+        try
+            var r = outOfRange(x)
+            t |> success(r==123456) // code never gets here
+        recover
+            failed = true
+        t |> success(failed, "out of range caused panic")
+    t |> run("resize locked") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@resizeLocked) )
+        var x : array<int>
+        resize(x,10)
+        var failed = false
+        try
+            resizeLocked(x)
+        recover
+            failed = true
+        t |> success(failed, "resize caused panic")

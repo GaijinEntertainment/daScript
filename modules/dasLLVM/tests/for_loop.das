@@ -70,6 +70,22 @@ def dim_and_range_for ( var a:int[10] )
         count ++
     return count
 
+[jit]
+def array_for ( var a:array<int> )
+    var count = 0
+    for j in a
+        j = 13
+        count ++
+    return count
+
+[jit]
+def array_and_range_for ( var a:array<int> )
+    var count = 0
+    for i,j in range(5),a
+        j = i
+        count ++
+    return count
+
 [test]
 def test_for_loop ( t:T? )
     t |> run("range for") <| @ ( t : T? )
@@ -96,5 +112,15 @@ def test_for_loop ( t:T? )
         for i,j in a,range(10)
             t |> equal ( i, j<5 ? j : 13 )
 
-
+    t |> run("array for") <| @ ( t : T? )
+        t |> success ( is_jit_function ( @@array_for ) )
+        t |> success ( is_jit_function ( @@array_and_range_for ) )
+        var a : array<int>
+        a |> resize(10)
+        t |> equal ( array_for(a), 10 )
+        for i in a
+            t |> equal ( i, 13 )
+        t |> equal ( array_and_range_for(a), 5 )
+        for i,j in a,range(10)
+            t |> equal ( i, j<5 ? j : 13 )
 

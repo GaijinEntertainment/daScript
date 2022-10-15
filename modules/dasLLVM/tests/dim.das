@@ -14,6 +14,10 @@ def addAll ( var a : int[10] )
         c += a[i]
     return c
 
+[jit]
+def outOfRange ( var a : int[10]; index:int )
+    return a[index]
+
 [test]
 def test_dim ( t:T? )
     t |> run("array []") <| @ ( t : T? )
@@ -24,3 +28,13 @@ def test_dim ( t:T? )
         for i in x
             t |> equal(i, 13)
         t |> equal(addAll(x), 130)
+    t |> run("out of range") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@outOfRange) )
+        var x :int[10]
+        var failed = false
+        try
+            var r = outOfRange(x,13)
+            t |> success(r==123456) // code never gets here
+        recover
+            failed = true
+        t |> success(failed, "out of range caused panic")

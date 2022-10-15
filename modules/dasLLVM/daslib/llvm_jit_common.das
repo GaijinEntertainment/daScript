@@ -32,6 +32,8 @@ let public FN_JIT_ALLOC_HEAP = "`jit`alloc_heap`"
 let public FN_JIT_ALLOC_PERSISTENT = "`jit`alloc_persistent`"
 let public FN_JIT_FREE_HEAP = "`jit`free_heap`"
 let public FN_JIT_FREE_PERSISTENT = "`jit`free_persistent`"
+let public FN_JIT_ARRAY_LOCK = "`jit`array_lock`"
+let public FN_JIT_ARRAY_UNLOCK = "`jit`array_unlock`"
 
 struct JitEngine
     mod : LLVMOpaqueModule?
@@ -120,6 +122,17 @@ def public init_jit
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_free_persistent, get_jit_free_persistent())
+
+    var jit_array_lock = LLVMAddFunction(g_mod, FN_JIT_ARRAY_LOCK,  // void jit_array_lock ( Array & array, Context * context )
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_array_lock, get_jit_array_lock())
+
+    var jit_array_unlock = LLVMAddFunction(g_mod, FN_JIT_ARRAY_UNLOCK,  // void jit_array_unlock ( Array & array, Context * context )
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_array_unlock, get_jit_array_unlock())
+
 
 [macro_function]
 def public finalize_jit

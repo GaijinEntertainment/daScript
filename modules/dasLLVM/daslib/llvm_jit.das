@@ -426,6 +426,20 @@ class LlvmJitVisitor : AstVisitor
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_EXCEPTION), params, "")
 
+    def build_array_lock ( array_ptr:LLVMOpaqueValue? )
+        var params = [[auto
+            LLVMBuildPointerCast(g_builder, array_ptr, LLVMPointerType(LLVMVoidType(),0u), "");              // array
+            get_context_param()     // context
+        ]]
+        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_LOCK), params, "")
+
+    def build_array_unlock ( array_ptr:LLVMOpaqueValue? )
+        var params = [[auto
+            LLVMBuildPointerCast(g_builder, array_ptr, LLVMPointerType(LLVMVoidType(),0u), "");              // array
+            get_context_param()     // context
+        ]]
+        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_UNLOCK), params, "")
+
     def build_copy ( tdst:LLVMOpaqueValue?; right:ExpressionPtr )
         var tsrc = getE(right)
         if right._type.isRef
@@ -1254,6 +1268,11 @@ class LlvmJitVisitor : AstVisitor
 
         LLVMBuildBr(g_builder, lblk.loop_start)
         position_at_end(lblk.loop_end)
+
+        for ssrc in expr.sources
+            if ssrc._type.isGoodArrayType
+                build_array_unlock(getE(ssrc))
+
         if expr.body is ExprBlock
             let body = expr.body as ExprBlock
             if length(body.finalList) != 0
@@ -1301,6 +1320,20 @@ class LlvmJitVisitor : AstVisitor
                 var sto = LLVMBuildGEP2(g_builder, element_type, sdim, LLVMConstInt(LLVMInt32Type(),uint64(dimSize),0), "")
                 sto = LLVMBuildPtrToInt(g_builder, sto, LLVMIntPtrType(), "dim_end")
                 range2[get_ptr(ssrc)] = sto
+            elif ssrc._type.isGoodArrayType
+                var element_type = type_to_llvm_type(svar._type)
+                var arr = LLVMBuildLoad(g_builder, getE(ssrc), "array")
+                var size = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_SIZE, "array.size")
+                var cmp_from_to = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, size, LLVMConstInt(LLVMInt32Type(),0ul,0), "")
+                var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_not_empty")
+                LLVMBuildCondBr(g_builder, cmp_from_to, okay, lblk.loop_end)
+                position_at_end(okay)
+                build_array_lock(getE(ssrc))
+                var data = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_DATA, "array.data")
+                LLVMBuildStore(g_builder, data, getV(svar))
+                var sto = LLVMBuildGEP2(g_builder, element_type, data, size, "")
+                sto = LLVMBuildPtrToInt(g_builder, sto, LLVMIntPtrType(), "array_end")
+                range2[get_ptr(ssrc)] = sto
             else
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
 
@@ -1314,6 +1347,10 @@ class LlvmJitVisitor : AstVisitor
                 svar_v = LLVMBuildAdd(g_builder, svar_v, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
                 LLVMBuildStore(g_builder, svar_v, getV(svar))
             elif ssrc._type.dim.length != 0 // []
+                var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
+                var svar_i = LLVMBuildGEP2(g_builder, type_to_llvm_type(svar._type), svar_v, LLVMConstInt(LLVMInt32Type(),1ul,0), "")
+                LLVMBuildStore(g_builder, svar_i, getV(svar))
+            elif ssrc._type.isGoodArrayType
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
                 var svar_i = LLVMBuildGEP2(g_builder, type_to_llvm_type(svar._type), svar_v, LLVMConstInt(LLVMInt32Type(),1ul,0), "")
                 LLVMBuildStore(g_builder, svar_i, getV(svar))
@@ -1332,6 +1369,14 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, okay)
                 position_at_end(okay)
             elif ssrc._type.dim.length != 0             // []
+                var sto = range2[get_ptr(ssrc)]
+                var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
+                var svar_i = LLVMBuildPtrToInt(g_builder, svar_v, LLVMIntPtrType(), "")
+                var rcond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, svar_i, sto, "")
+                var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_okay")
+                LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, okay)
+                position_at_end(okay)
+            elif ssrc._type.isGoodArrayType
                 var sto = range2[get_ptr(ssrc)]
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
                 var svar_i = LLVMBuildPtrToInt(g_builder, svar_v, LLVMIntPtrType(), "")
