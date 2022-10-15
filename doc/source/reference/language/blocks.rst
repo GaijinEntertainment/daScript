@@ -4,10 +4,10 @@
 Block
 =====
 
-Block is a nameless function which captures local context by reference.
-Blocks offer significant performance advantage over lambda  (see :ref:`Lambda <lambdas>`).
+Blocks are nameless functions which captures the local context by reference.
+Blocks offer significant performance advantages over lambdas (see :ref:`Lambda <lambdas>`).
 
-Block type can be declared with a function-like syntax::
+The block type can be declared with a function-like syntax::
 
     block_type ::= block { optional_block_type }
     optional_block_type ::= < { optional_block_arguments } { : return_type } >
@@ -16,9 +16,9 @@ Block type can be declared with a function-like syntax::
 
     block < (arg1:int;arg2:float&):bool >
 
-Blocks capture current stack so block can be passed, but never returned.
+Blocks capture the current stack, so blocks can be passed, but never returned.
 Block variables can only be passed as arguments.
-Global or local block variables are prohibited, returning block type is prohibited::
+Global or local block variables are prohibited; returning the block type is also prohibited::
 
     def goo ( b : block )
         ...
@@ -48,11 +48,11 @@ Blocks can also be declared via inline syntax::
 
     res = radd(v1, $(var a:int&) : int { return a++; }) // equivalent to example above
 
-There is simplified syntax for the blocks containing return expression only::
+There is a simplified syntax for blocks that only contain a return expression::
 
     res = radd(v1, $(var a:int&) : int => a++ )         // equivalent to example above
 
-If block is sufficiently specified in the generic or function,
+If a block is sufficiently specified in the generic or function,
 block types will be automatically inferred::
 
     res = radd(v1, $(a) => a++ )                        // equivalent to example above
@@ -81,4 +81,4 @@ Blocks can have annotations::
         testProfile::queryEs() <| $ [es] (var pos:float3&;vel:float3 const)  // [es] is annotation
             pos += vel * dt
 
-Block annotations can be implemented via appropriate macro (see :ref:`Macro <macros>`).
+Block annotations can be implemented via appropriate macros (see :ref:`Macro <macros>`).
