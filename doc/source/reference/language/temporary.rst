@@ -4,9 +4,9 @@
 Temporary types
 ===============
 
-Temporary types are designed to address lifetime issues of data, which is exposed to daScript directly from C++.
+Temporary types are designed to address lifetime issues of data, which are exposed to daScript directly from C++.
 
-Lets review the following C++ example::
+Let's review the following C++ example::
 
     void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context) {
         vec4f args[1];
@@ -14,16 +14,16 @@ Lets review the following C++ example::
         context->invoke(block, args, nullptr);
     }
 
-C++ function here exposes pointer to c-string, internal to std::string.
-From daScript perspective declaration of the function looks like this::
+The C++ function here exposes a pointer a to c-string, internal to std::string.
+From daScript's perspective, the declaration of the function looks like this::
 
     def peek ( str : das_string; blk : block<(arg:string#):void> )
 
 Where string# is a temporary version of a daScript string type.
 
-Main idea behind temporary type is that it can't `escape` outside of the scope of the block, its passed to.
+The main idea behind temporary types is that they can't `escape` outside of the scope of the block they are passed to.
 
-The way its accomplished is that temporary values follow certain rules.
+Temporary values accomplish this by following certain rules.
 
 Temporary values can't be copied or moved::
 
@@ -32,7 +32,7 @@ Temporary values can't be copied or moved::
         peek(t) <| $ ( boo : string# )
             s = boo // error, can't copy temporary value
 
-Temporary values can't be returned, or passed to functions, which require regular values::
+Temporary values can't be returned or passed to functions, which require regular values::
 
     def accept_string(s:string)
         print("s={s}\n")
@@ -41,15 +41,15 @@ Temporary values can't be returned, or passed to functions, which require regula
         peek(t) <| $ ( boo : string# )
             accept_string(boo) // error
 
-Causes the following error::
+This causes the following error::
 
     30304: no matching functions or generics accept_string ( string const&# )
     candidate function:
             accept_string ( s : string const ) : void
                     invalid argument s. expecting string const, passing string const&#
 
-Value needs to be marked as ``implicit`` to accept both temporary and regular values.
-However such functions implicitly promise, that the data will not be cached (copied, moved) in any form::
+Values need to be marked as ``implicit`` to accept both temporary and regular values.
+These functions implicitly promise that the data will not be cached (copied, moved) in any form::
 
     def accept_any_string(s:string implicit)
         print("s={s}\n")
@@ -65,9 +65,9 @@ Temporary values can and are intended to be cloned::
             var boo_clone : string := boo
             accept_string(boo_clone)
 
-Returning a temporary value is unsafe operation.
+Returning a temporary value is an unsafe operation.
 
-Pointer to the temporary value can be received for the corresponding scope via safe_addr macro::
+A pointer to the temporary value can be received for the corresponding scope via the ``safe_addr`` macro::
 
     require daslib/safe_addr
 
