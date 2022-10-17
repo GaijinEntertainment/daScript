@@ -43,6 +43,7 @@ void testParticlesI(int count);
 int testPrimes(int n);
 void testTryCatch(das::Context * context);
 int testTree();
+uint32_t testMaxFrom1s(uint32_t x);
 
 void testManagedInt(const das::TBlock<void, const das::vector<int32_t>> & blk, das::Context * context, das::LineInfoArg * at);
 

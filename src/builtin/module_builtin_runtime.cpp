@@ -1459,9 +1459,13 @@ namespace das
         addConstant<int>(*this, "LOG_TRACE",    LogLevel::trace);
         // separators
         addConstant(*this, "VEC_SEP",   DAS_PRINT_VEC_SEPARATROR);
-        // clz
+        // clz, ctz, popcnt
         addExtern<DAS_BIND_FUN(uint32_clz)>(*this, lib, "clz", SideEffects::none, "uint32_clz")->arg("bits");
+        addExtern<DAS_BIND_FUN(uint64_clz)>(*this, lib, "clz", SideEffects::none, "uint64_clz")->arg("bits");
         addExtern<DAS_BIND_FUN(uint32_ctz)>(*this, lib, "ctz", SideEffects::none, "uint32_ctz")->arg("bits");
+        addExtern<DAS_BIND_FUN(uint64_ctz)>(*this, lib, "ctz", SideEffects::none, "uint64_ctz")->arg("bits");
+        addExtern<DAS_BIND_FUN(uint32_popcount)>(*this, lib, "popcnt", SideEffects::none, "uint32_popcount")->arg("bits");
+        addExtern<DAS_BIND_FUN(uint64_popcount)>(*this, lib, "popcnt", SideEffects::none, "uint64_popcount")->arg("bits");
         // jit
         addExtern<DAS_BIND_FUN(das_invoke_code)>(*this, lib, "invoke_code",
             SideEffects::worstDefault, "das_invoke_code")

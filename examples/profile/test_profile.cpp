@@ -933,6 +933,20 @@ int testTree() {
     return res;
 }
 
+uint32_t testMaxFrom1s(uint32_t x) {
+    // from https://spiiin.github.io/blog/2385889062/
+    auto count1s = das_popcount(x);
+    uint32_t res = 0;
+    for ( uint32_t i=0; i!=count1s; ++i) {
+        res++;
+        res<<=1;
+    }
+    for ( uint32_t i=0; i!=(31u - count1s); ++i) {
+        res<<=1u;
+    }
+    return res;
+}
+
 class Module_TestProfile : public Module {
 public:
     Module_TestProfile() : Module("testProfile") {
@@ -979,6 +993,7 @@ public:
         addExtern<DAS_BIND_FUN(testNBodies)>(*this, lib, "testNBodies",SideEffects::modifyExternal,"testNBodies");
         addExtern<DAS_BIND_FUN(testNBodiesS)>(*this, lib, "testNBodiesS",SideEffects::modifyExternal,"testNBodiesS");
         addExtern<DAS_BIND_FUN(testTree)>(*this, lib, "testTree",SideEffects::modifyExternal,"testTree");
+        addExtern<DAS_BIND_FUN(testMaxFrom1s)>(*this, lib, "testMaxFrom1s",SideEffects::modifyExternal,"testMaxFrom1s");
         // its AOT ready
         verifyAotReady();
     }

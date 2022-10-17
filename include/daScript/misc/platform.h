@@ -117,9 +117,28 @@
         _BitScanForward(&r, x);
         return uint32_t(31 - r);
     }
+    __forceinline uint32_t das_clz64(uint64_t x) {
+        unsigned long r = 0;
+        _BitScanReverse64(&r, x);
+        return uint32_t(64 - r);
+    }
+    __forceinline uint32_t das_ctz64(uint64_t x) {
+        unsigned long r = 0;
+        _BitScanForward64(&r, x);
+        return uint32_t(64 - r);
+    }
+    __forceinline uint32_t das_popcount(uint32_t x) {
+        return uint32_t(__popcnt(x));
+    }
+    __forceinline uint32_t das_popcount64(uint64_t x) {
+        return uint32_t(__popcnt64(x));
+    }
 #else
     #define das_clz __builtin_clz
     #define das_ctz __builtin_ctz
+    #define das_clz64 __builtin_clz
+    #define das_ctz64 __builtin_ctz
+    #define das_popcount __builtin_popcount
 #endif
 
 #ifdef _MSC_VER

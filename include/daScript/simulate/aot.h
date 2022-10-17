@@ -2851,7 +2851,11 @@ namespace das {
     STR_DSTR_OP(  gt,>);
 
     __forceinline uint32_t uint32_clz ( uint32_t x ) { return das_clz(x); }
+    __forceinline uint32_t uint64_clz ( uint64_t x ) { return das_clz64(x); }
     __forceinline uint32_t uint32_ctz ( uint32_t x ) { return das_ctz(x); }
+    __forceinline uint32_t uint64_ctz ( uint64_t x ) { return das_ctz64(x); }
+    __forceinline uint32_t uint32_popcount ( uint32_t x ) { return das_popcount(x); }
+    __forceinline uint32_t uint64_popcount ( uint64_t x ) { return das_popcount64(x); }
 
     __forceinline uint32_t char_set_total ( const TDim<uint32_t,8> & bitset ) {
         uint32_t total = 0;
