@@ -19,6 +19,7 @@ let public LLVM_JIT_ALWAYS_SOLID = true
 
 let public LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let public LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
+let public LLVM_SIZE_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 0u
 let public LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let public LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING || LLVM_DEBUG_RESULT
 let public LLVM_INLINE_THRESHOLD = 225u
@@ -68,6 +69,13 @@ def public init_jit
     LLVMInitializeNativeAsmPrinter()
     LLVMInitializeNativeAsmParser()
     LLVMCreateJITCompilerForModule(g_engine, g_mod, LLVM_JIT_OPT_LEVEL)
+
+    static_if LLVM_DEBUG_EVERYTHING
+        let hostcpu = LLVMGetHostCPUName()
+        let features = LLVMGetHostCPUFeatures()
+        print("LLVM host cpu: {hostcpu}\nLLVM host cpu features: {features}\n")
+        LLVMDisposeMessage(hostcpu)
+        LLVMDisposeMessage(features)
 
     var noreturn = LLVMGetEnumAttribute("noreturn")
     var readonly = LLVMGetEnumAttribute("readonly")

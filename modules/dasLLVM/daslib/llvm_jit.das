@@ -489,6 +489,11 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, tsrc)
         return expr
 
+    def override visitExprRef2Ptr(expr:smart_ptr<ExprRef2Ptr>) : ExpressionPtr
+        var tsrc = getE(expr.subexpr)
+        setE(expr, tsrc)
+        return expr
+
     def check_range ( tidx, maxIdx:LLVMOpaqueValue?; message:string )
         var check_null_ptr = append_basic_block("check_dim_range")
         var check_true = append_basic_block("check_true")
@@ -1415,6 +1420,71 @@ class LlvmJitVisitor : AstVisitor
                 visit_finally(body, adapter)
         return expr
 
+// make array
+    def override preVisitExprMakeArray(expr:smart_ptr<ExprMakeArray>) : void
+        var mks_ptr : LLVMOpaqueValue?
+        if expr.makeFlags.useCMRES
+            mks_ptr = get_cmres_param()
+            mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            if expr.extraOffset != 0u
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+        elif expr.makeFlags.useStackRef
+            mks_ptr = getE(expr)
+            verify(mks_ptr!=null && LLVMIsUndef(mks_ptr)==0,"USE STACKREF, but no stackref")
+            if expr.extraOffset != 0u
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+        else
+            mks_ptr = tryE(expr) <|
+                var vtype = type_to_llvm_type(expr._type)
+                var s_ptr : LLVMOpaqueValue?
+                at_function_entry <|
+                    s_ptr = LLVMBuildAlloca(g_builder, vtype, "mks_local_sp_{expr.stackTop}")
+                    LLVMSetAlignment(s_ptr, 16u)
+                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mks_locl_sp_{expr.stackTop}")
+                return s_ptr
+            if expr.extraOffset != 0u
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mks_locl_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+        let stride = expr.makeType.stride
+        if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
+            let total = int(expr.values.length)
+            let bytes = max(total,1) * stride
+            let align = uint(expr.makeType.alignOf)
+            LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
+        setE(expr, mks_ptr)
+    def override preVisitExprMakeArrayIndex(expr:smart_ptr<ExprMakeArray>;index:int;init:ExpressionPtr;last:bool) : void
+        let stride = expr.makeType.stride
+        let offset =  index*stride
+        var v_ptr = getE(expr)
+        verify(v_ptr!=null && LLVMIsUndef(v_ptr)==0,"make array index, but no pointer")
+        let record_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+        if init |> isMakeLocal
+            var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(init))
+            val.extraOffset = uint(offset) + expr.extraOffset
+            if expr.makeFlags.useCMRES
+                pass
+            elif expr.makeFlags.useStackRef
+                setE(init, v_ptr)
+            else
+                setE(init, v_ptr)
+        elif make_call_to_cmres ( init, record_ptr )
+            pass
+    def override visitExprMakeArrayIndex(expr:smart_ptr<ExprMakeArray>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
+        let stride = expr.makeType.stride
+        let offset =  index*stride
+        var v_ptr = getE(expr)
+        v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "[{index}]")
+        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.recordType), "")
+        if init |> isMakeLocal
+            pass // do nothign. we already taken care of makeLocal in preVisitExprMakeStructField
+        elif isCall2CMRES(init)
+            pass // do nothing. we already handle this in preVisitExprMakeStructField
+        else
+            if expr.recordType.canCopy
+                build_copy(v_ptr, init)
+            else
+                failed_E(expr, "makeArray: move is not supported")
+        return init
+
 // make structure
     def override preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : void
         var mks_ptr : LLVMOpaqueValue?
@@ -1532,6 +1602,17 @@ class LlvmJitVisitor : AstVisitor
             setE(expr.subexpr, stackref_ptr)
         mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, type_to_llvm_type(expr._type), "")
         setE(expr,mks_ptr)
+
+// cast
+    def override visitExprCast(expr:smart_ptr<ExprCast>) : ExpressionPtr
+        var res : LLVMOpaqueValue?
+        if expr.castType.isPointer && expr.subexpr._type.isPointer
+            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_type(expr.castType), "")
+        else
+            res = LLVMGetUndef(type_to_llvm_type(expr.castType))
+            failed_E(expr, "cast<{describe(expr.castType)} is not supported yet")
+        setE(expr, res)
+        return expr
 
 // constants
     def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr
@@ -1682,6 +1763,7 @@ def private optimize_llvm_module
     return if g_failed || !LLVM_ENABLE_OPT_PASS
     var pmb = LLVMPassManagerBuilderCreate()
     LLVMPassManagerBuilderSetOptLevel(pmb, LLVM_OPT_LEVEL)
+    LLVMPassManagerBuilderSetSizeLevel(pmb, LLVM_SIZE_LEVEL)
     LLVMPassManagerBuilderUseInlinerWithThreshold(pmb, LLVM_INLINE_THRESHOLD)
     var pm = LLVMCreatePassManager()
     LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm)
