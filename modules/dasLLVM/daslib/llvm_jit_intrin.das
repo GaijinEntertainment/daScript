@@ -10,11 +10,17 @@ require daslib/ast_boost
 
 let g_intrin_lookup <- {{
 // $, aka builtin
-    "$::length" => @@intrinsic_builtin_length;
-    "$::range" => @@intrinsic_builtin_range;
-    "$::urange" => @@intrinsic_builtin_range;
-    "$::float" => @@intrinsic_builtin_float;
-    "$::float4" => @@intrinsic_builtin_float4;
+    // misc
+        "$::length" => @@intrinsic_builtin_length;
+    // type c-tors
+        "$::range" => @@intrinsic_builtin_range;
+        "$::urange" => @@intrinsic_builtin_range;
+        "$::float" => @@intrinsic_builtin_float;
+        "$::float4" => @@intrinsic_builtin_float4;
+    // bits
+        "$::clz" => @@intrinsic_bit_op1;
+        "$::ctz" => @@intrinsic_bit_op1;
+        "$::popcnt" => @@intrinsic_bit_op1;
 // math
     "math::rcp" => @@intrinsic_math_rcp;
     "math::rcp_est"=> @@intrinsic_math_rcp;
@@ -86,6 +92,36 @@ def intrinsic_builtin_range(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOp
         x = arguments[0]
         y = arguments[1]
     return LLVMBuildInt2_xy(g_builder, x, y, string(expr.name))
+
+let private bit_op1_name <- {{
+    "clz" => "ctlz";
+    "ctz" => "cttz";
+    "popcnt" => "ctpop"
+}}
+
+def intrinsic_bit_op1(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    var op_name : string
+    bit_op1_name |> find_if_exists(string(expr.name)) <| $ ( pname )
+        op_name = *pname
+    if op_name==""
+        failed_E(expr, "{expr.name}({describe(opType)}) is not supported (yet?)")
+        return null
+    var sqrt_name = "llvm.{op_name}.i32"
+    if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+        if opType.baseType==Type tInt64 || opType.baseType==Type tUInt64
+            sqrt_name = "llvm.{op_name}.i64"
+    else
+        failed_E(expr, "{expr.name}({describe(opType)}) is not supported (yet?)")
+        return null
+    var args <- [{auto[] arguments[0]}]
+    var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
+    var id = LLVMLookupIntrinsicID(sqrt_name)
+    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+    if decl==null
+        failed_E(expr, "missing intrinsic {sqrt_name}")
+        return null
+    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
 
 // intrinsics, math
 
