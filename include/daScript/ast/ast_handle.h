@@ -656,8 +656,8 @@ namespace das
 
     template <typename TT>
     void addEquNeqVal(Module & mod, const ModuleLibrary & lib) {
-        addExtern<decltype(&das_equ_val<TT>),  das_equ_val<TT>> (mod, lib, "==", SideEffects::none, "das_equ_val");
-        addExtern<decltype(&das_nequ_val<TT>), das_nequ_val<TT>>(mod, lib, "!=", SideEffects::none, "das_nequ_val");
+        addExtern<decltype(&das_equ_val<TT,TT>),  das_equ_val<TT,TT>> (mod, lib, "==", SideEffects::none, "das_equ_val");
+        addExtern<decltype(&das_nequ_val<TT,TT>), das_nequ_val<TT,TT>>(mod, lib, "!=", SideEffects::none, "das_nequ_val");
     }
 
     void setParents ( Module * mod, const char * child, const std::initializer_list<const char *> & parents );

@@ -103,13 +103,13 @@ namespace das {
         return a != b;
     }
 
-    template <typename TT>
-    __forceinline bool das_equ_val ( TT a, TT b ) {
+    template <typename TT, typename QQ>
+    __forceinline bool das_equ_val ( TT a, QQ b ) {
         return a == b;
     }
 
-    template <typename TT>
-    __forceinline bool das_nequ_val ( TT a, TT b ) {
+    template <typename TT, typename QQ>
+    __forceinline bool das_nequ_val ( TT a, QQ b ) {
         return a != b;
     }
 
