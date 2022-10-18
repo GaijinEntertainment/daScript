@@ -79,3 +79,45 @@ def test_intrin_exp ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_float_double_or_float_vec(t,fake,"test_exp")
+
+[jit]
+def jit_popcount(x)
+    return popcnt(x)
+
+def test_popcount( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_popcount) )
+    t |> equal ( popcnt(a), jit_popcount(a), "popcnt(a)" )
+
+[test]
+def test_popcount ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_all_unsigned_ints_op1(t,fake,"test_popcount")
+
+[jit]
+def jit_ctz(x)
+    return ctz(x)
+
+def test_ctz( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_ctz) )
+    t |> equal ( ctz(a), jit_ctz(a), "ctz(a)" )
+
+[test]
+def test_ctz ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_all_unsigned_ints_op1(t,fake,"test_ctz")
+
+[jit]
+def jit_clz(x)
+    return clz(x)
+
+def test_clz( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_clz) )
+    t |> equal ( clz(a), jit_clz(a), "clz({a})" )
+
+[test]
+def test_clz ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_all_unsigned_ints_op1(t,fake,"test_clz")

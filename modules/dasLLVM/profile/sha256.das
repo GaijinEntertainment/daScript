@@ -77,7 +77,7 @@ def digestBlock(data:uint?; var hash:uint[8])
     hash[6] += g
     hash[7] += h
 
-[jit]
+[jit,unsafe_deref]
 def sha256(msg:array<uint8>)
     var hash = [[uint
         0x6a09e667;
