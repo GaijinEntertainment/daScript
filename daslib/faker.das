@@ -166,6 +166,18 @@ def public random_float4x4 ( var faker:Faker )
 variant BitRepresentation64 //! 64-bit representation of a float
     ui2 : uint[2]
     d   : double
+    i64 : int64
+    u64 : uint64
+
+def public random_int64 ( var faker:Faker )
+    //! Generates random int64
+    var b = [[ BitRepresentation64 ui2=[[uint[2] faker |> random_uint; faker |> random_uint]] ]]
+    return unsafe(b.i64)
+
+def public random_uint64 ( var faker:Faker )
+    //! Generates random uint64
+    var b = [[ BitRepresentation64 ui2=[[uint[2] faker |> random_uint; faker |> random_uint]] ]]
+    return unsafe(b.u64)
 
 def public random_double ( var faker:Faker )
     //! Generates random double.

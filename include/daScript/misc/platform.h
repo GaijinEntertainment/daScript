@@ -115,23 +115,23 @@
     __forceinline uint32_t das_ctz(uint32_t x) {
         unsigned long r = 0;
         _BitScanForward(&r, x);
-        return uint32_t(31 - r);
+        return uint32_t(r);
     }
-    __forceinline uint32_t das_clz64(uint64_t x) {
+    __forceinline uint64_t das_clz64(uint64_t x) {
         unsigned long r = 0;
         _BitScanReverse64(&r, x);
-        return uint32_t(64 - r);
+        return uint64_t(63 - r);
     }
-    __forceinline uint32_t das_ctz64(uint64_t x) {
+    __forceinline uint64_t das_ctz64(uint64_t x) {
         unsigned long r = 0;
         _BitScanForward64(&r, x);
-        return uint32_t(64 - r);
+        return uint64_t(r);
     }
     __forceinline uint32_t das_popcount(uint32_t x) {
         return uint32_t(__popcnt(x));
     }
-    __forceinline uint32_t das_popcount64(uint64_t x) {
-        return uint32_t(__popcnt64(x));
+    __forceinline uint64_t das_popcount64(uint64_t x) {
+        return uint64_t(__popcnt64(x));
     }
 #else
     #define das_clz __builtin_clz

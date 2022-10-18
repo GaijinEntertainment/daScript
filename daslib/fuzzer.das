@@ -113,6 +113,18 @@ def public fuzz_numeric_op1 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_double )
 
 [constant_expression(funcname)]
+def public fuzz_all_ints_op1 ( t:T?; var fake:Faker; funcname:string )
+    invoke ( funcname, t, fake |> random_int )
+    invoke ( funcname, t, fake |> random_uint )
+    invoke ( funcname, t, fake |> random_int64 )
+    invoke ( funcname, t, fake |> random_uint64 )
+
+[constant_expression(funcname)]
+def public fuzz_all_unsigned_ints_op1 ( t:T?; var fake:Faker; funcname:string )
+    invoke ( funcname, t, fake |> random_uint )
+    invoke ( funcname, t, fake |> random_uint64 )
+
+[constant_expression(funcname)]
 def public fuzz_int_vector_op2 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_int,  fake |> random_int )
     invoke ( funcname, t, fake |> random_uint, fake |> random_uint )
