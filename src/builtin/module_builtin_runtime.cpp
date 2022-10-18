@@ -136,6 +136,14 @@ namespace das
         };
     };
 
+    struct UnsafeOutsideOfForFunctionAnnotation : MarkFunctionAnnotation {
+        UnsafeOutsideOfForFunctionAnnotation() : MarkFunctionAnnotation("unsafe_outside_of_for") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->unsafeOutsideOfFor = true;
+            return true;
+        };
+    };
+
     struct NoAotFunctionAnnotation : MarkFunctionAnnotation {
         NoAotFunctionAnnotation() : MarkFunctionAnnotation("no_aot") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -1129,6 +1137,7 @@ namespace das
         addAnnotation(make_smart<SideEffectsFunctionAnnotation>());
         addAnnotation(make_smart<RunAtCompileTimeFunctionAnnotation>());
         addAnnotation(make_smart<UnsafeOpFunctionAnnotation>());
+        addAnnotation(make_smart<UnsafeOutsideOfForFunctionAnnotation>());
         addAnnotation(make_smart<NoAotFunctionAnnotation>());
         addAnnotation(make_smart<InitFunctionAnnotation>());
         addAnnotation(make_smart<FinalizeFunctionAnnotation>());

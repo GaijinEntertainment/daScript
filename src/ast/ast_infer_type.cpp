@@ -5681,6 +5681,10 @@ namespace das {
                 ++ idx;
             }
         }
+        virtual void preVisitForSource ( ExprFor * expr, Expression * that, bool last ) {
+            Visitor::preVisitForSource(expr,that,last);
+            that->isForLoopSource = true;
+        }
         virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * that , bool last ) override {
             if ( that->type && that->type->isRef() ) {
                 return Expression::autoDereference(that);
@@ -6691,6 +6695,9 @@ namespace das {
             */
             if ( expr->func && expr->func->unsafeOperation && !safeExpression(expr) ) {
                 error("unsafe call " + expr->name + " requires unsafe", "", "",
+                    expr->at, CompilationError::unsafe);
+            } else if ( expr->func && expr->func->unsafeOutsideOfFor && !(expr->isForLoopSource || safeExpression(expr)) ) {
+                error(expr->name + " is unsafe, when not source of the for loop. requires unsafe", "", "",
                     expr->at, CompilationError::unsafe);
             } else if (enableInferTimeFolding && expr->func && isConstExprFunc(expr->func)) {
                 vector<ExpressionPtr> cargs; cargs.reserve(expr->arguments.size());

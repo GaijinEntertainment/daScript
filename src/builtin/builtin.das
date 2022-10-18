@@ -359,6 +359,7 @@ def clone(var a:table<string;auto(VT)>;b:table<string;VT> implicit)
         let kk := k
         a[kk] := v
 
+[unsafe_outside_of_for]
 def keys(a:table<auto(keyT);auto(valT)> implicit) : iterator<keyT & const>
     var it : iterator<keyT & const>
     __builtin_table_keys(it,a,typeinfo(sizeof type<keyT>))
@@ -370,11 +371,13 @@ def values(a:table<auto(keyT);void> =const implicit)
 def values(var a:table<auto(keyT);void> =const implicit)
     concept_assert(false,"can't iterate over values of a table<...;void>")
 
+[unsafe_outside_of_for]
 def values(a:table<auto(keyT);auto(valT)> =const implicit) : iterator<valT & const>
     var it : iterator<valT & const>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
 
+[unsafe_outside_of_for]
 def values(var a:table<auto(keyT);auto(valT)> =const implicit) : iterator<valT &>
     var it : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
@@ -449,13 +452,13 @@ def iter_range ( foo )
     concept_assert(typeinfo(is_iterable foo),"requires iterable")
     return range(_::length(foo)) // assuming length(foo) exists
 
-[generic,unsafe_operation]
+[generic,unsafe_outside_of_for]
 def each ( str : string ) : iterator<int>
     var it : iterator<int>
     _builtin_make_string_iterator(it,str)
     return <- it
 
-[unsafe_operation]
+[unsafe_outside_of_for]
 def each ( a : auto(TT)[] ) : iterator<TT&>
     unsafe
         var parr : void? = reinterpret<void?>(addr(a[0]))
@@ -463,7 +466,7 @@ def each ( a : auto(TT)[] ) : iterator<TT&>
         _builtin_make_fixed_array_iterator(it,parr,typeinfo(dim a),typeinfo(sizeof a[0]))
         return <- it
 
-[unsafe_operation]
+[unsafe_outside_of_for]
 def each ( a : array<auto(TT)> ) : iterator<TT&>
     var it : iterator<TT&>
     _builtin_make_good_array_iterator(it, a, typeinfo(sizeof a[0]))

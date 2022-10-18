@@ -584,6 +584,7 @@ namespace das
                 bool    constexpression : 1;
                 bool    noSideEffects : 1;
                 bool    noNativeSideEffects : 1;
+                bool    isForLoopSource : 1;
             };
             uint32_t    flags = 0;
         };
@@ -777,6 +778,7 @@ namespace das
                 bool    aotHashDeppendsOnArguments : 1;
                 bool    lateInit : 1;
                 bool    requestJit : 1;
+                bool    unsafeOutsideOfFor : 1;
             };
             uint32_t moreFlags = 0;
 
