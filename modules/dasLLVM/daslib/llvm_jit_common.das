@@ -57,6 +57,14 @@ let public JIT_ARRAY_FIELD_CAPACITY = 2u
 let public JIT_ARRAY_FIELD_LOCK = 3u
 let public JIT_ARRAY_FIELD_FLAGS = 4u
 
+let public JIT_TABLE_FIELD_KEYS = 5u
+let public JIT_TABLE_FIELD_HASHES = 6u
+let public JIT_TABLE_FIELD_MAX_LOOKUPS = 7u
+let public JIT_TABLE_FIELD_SHIFT = 8u
+
+def public FN_JIT_TABLE_AT(t:Type)
+    return "`jit`table_at`{t}`"
+
 [macro_function]
 def public init_jit
     return if is_in_completion() || is_compiling_macros()
@@ -141,6 +149,15 @@ def public init_jit
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_array_unlock, get_jit_array_unlock())
 
+    for t in get_workhorse_types()
+        var jit_table_at = LLVMAddFunction(g_mod, FN_JIT_TABLE_AT(t),  // int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
+            LLVMFunctionType(LLVMInt32Type(),   // int32_t result
+                [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // table ptr
+                base_type_to_llvm_type(t);                          // key
+                LLVMInt32Type();                                    // valueTypeSize
+                LLVMPointerType(LLVMVoidType(),0u)                  // context
+                ]]))
+        LLVMAddGlobalMapping(g_engine, jit_table_at, get_jit_table_at(unsafe(reinterpret<int> t)))
 
 [macro_function]
 def public finalize_jit
@@ -205,10 +222,10 @@ def public failed_V ( v:VariablePtr; msg:string )
     failed ( "{msg}. var = {describe(v)} at {describe(v.at)}")
 
 def public base_type_to_llvm_type ( t:Type )
-    return LLVMInt32Type()      if t == Type tInt || t == Type tUInt || t == Type tBitfield
+    return LLVMInt32Type()      if t == Type tInt || t == Type tUInt || t == Type tBitfield || t == Type tEnumeration
     return LLVMInt64Type()      if t == Type tInt64 || t == Type tUInt64
-    return LLVMInt16Type()      if t == Type tInt16 || t == Type tUInt16
-    return LLVMInt8Type()       if t == Type tInt8 || t == Type tUInt8
+    return LLVMInt16Type()      if t == Type tInt16 || t == Type tUInt16 || t == Type tEnumeration16
+    return LLVMInt8Type()       if t == Type tInt8 || t == Type tUInt8 || t == Type tEnumeration8
     return LLVMFloatType()      if t == Type tFloat
     return LLVMDoubleType()     if t == Type tDouble
     return LLVMInt1Type()       if t == Type tBool
@@ -262,8 +279,26 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
             LLVMInt32Type()                     // uint32_t flags
         ]]
         if t.firstType!=null
-            array_fields[0] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
+            array_fields[JIT_ARRAY_FIELD_DATA] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
         res = LLVMStructType(unsafe(addr(array_fields[0])), uint(length(array_fields)), 0)
+    elif t.baseType == Type tTable
+        // table type
+        var table_fields <- [[auto
+            LLVMPointerType(LLVMVoidType(),0u); // char * data
+            LLVMInt32Type();                    // uint32_t size
+            LLVMInt32Type();                    // uint32_t capacity
+            LLVMInt32Type();                    // uint32_t lock
+            LLVMInt32Type();                    // uint32_t flags
+            LLVMPointerType(LLVMVoidType(),0u); // char * keys
+            LLVMPointerType(LLVMVoidType(),0u); // char * hashes
+            LLVMInt32Type();                    // uint32_t maxLookup
+            LLVMInt32Type()                     // uint32_t shift
+        ]]
+        if t.firstType!=null
+            table_fields[JIT_TABLE_FIELD_KEYS] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
+        if t.secondType!=null
+            table_fields[JIT_ARRAY_FIELD_DATA] = LLVMPointerType(type_to_llvm_type(t.secondType),0u)
+        res = LLVMStructType(unsafe(addr(table_fields[0])), uint(length(table_fields)), 0)
     elif t.isVoid
         res = LLVMVoidType()
     else

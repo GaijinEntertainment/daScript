@@ -507,6 +507,19 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildBr(g_builder, check_end)
         position_at_end(check_end)
 
+    def build_table_at ( ttype:Type; tab:LLVMOpaqueValue?; key:LLVMOpaqueValue?; valueTypeSize:int ) : LLVMOpaqueValue?
+        var params = [[auto
+            tab;        // table                                        // table ptr
+            key;                                                        // key
+            LLVMConstInt(LLVMInt32Type(), uint64(valueTypeSize), 0);    // valueTypeSize
+            get_context_param()                                         // context
+        ]]
+        var tab_fun = LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_AT(ttype))
+        if tab_fun==null
+            error("table_at {ttype} function not found")
+            return LLVMGetUndef(LLVMInt32Type())
+        return LLVMBuildCall(g_builder, tab_fun, params, "")
+
     def override visitExprAt(expr:smart_ptr<ExprAt>) : ExpressionPtr
         var tsrc = getE(expr.subexpr)
         var tidx = getE(expr.index)
@@ -540,11 +553,22 @@ class LlvmJitVisitor : AstVisitor
             var data = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_DATA, "array.data")
             var ptr_idx = LLVMBuildGEP(g_builder, data, tidx, "array_at")
             if expr.atFlags.r2v
-                var at_r2v = LLVMBuildLoad(g_builder, data, "array_at_r2v")
+                var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "array_at_r2v")
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
             //  failed("array: unsupported visitExprAt {describe(tsrc)}[{describe(tidx)}] type {describe(subExprT)}")
+        elif subExprT.baseType == Type tTable
+            var tab = LLVMBuildLoad(g_builder, tsrc, "tab")
+            var data = LLVMBuildExtractValue(g_builder, tab, JIT_ARRAY_FIELD_DATA, "table.data")
+            var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
+            var at_tab = build_table_at(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+            var ptr_idx = LLVMBuildGEP(g_builder, data, at_tab, "table_at")
+            if expr.atFlags.r2v
+                var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "array_at_r2v")
+                setE(expr, at_r2v)
+            else
+                setE(expr, ptr_idx)
         else
             failed("unsupported visitExprAt type {describe(subExprT)}")
         return expr
