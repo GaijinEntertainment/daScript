@@ -198,11 +198,15 @@ namespace das {
         prog->error(message ? message : "macro error","","",at,CompilationError::macro_failed);
     }
 
-    int32_t get_variant_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index ) {
+    int32_t get_variant_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index, Context * context, LineInfoArg * at ) {
+        if ( !td ) context->throw_error_at(at ? *at : LineInfo(),"expecting variant type");
+        if ( td->baseType!=Type::tVariant ) context->throw_error_at(at ? *at : LineInfo(),"expecting variant type, not %s", td->describe().c_str());
         return td->getVariantFieldOffset(index);
     }
 
-    int32_t get_tuple_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index ) {
+    int32_t get_tuple_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index, Context * context, LineInfoArg * at ) {
+        if ( !td ) context->throw_error_at(at ? *at : LineInfo(),"expecting tuple type");
+        if ( td->baseType!=Type::tTuple ) context->throw_error_at(at ? *at : LineInfo(),"expecting tuple type, not %s", td->describe().c_str());
         return td->getTupleFieldOffset(index);
     }
 
@@ -605,10 +609,10 @@ namespace das {
                 ->arg("type");
         addExtern<DAS_BIND_FUN(get_variant_field_offset)>(*this, lib,  "get_variant_field_offset",
             SideEffects::none, "get_variant_field_offset")
-                ->args({"variant","index"});
+                ->args({"variant","index","context","at"});
         addExtern<DAS_BIND_FUN(get_tuple_field_offset)>(*this, lib,  "get_tuple_field_offset",
             SideEffects::none, "get_tuple_field_offset")
-                ->args({"typle","index"});;
+                ->args({"typle","index","context","at"});
         addExtern<DAS_BIND_FUN(any_table_foreach)>(*this, lib,  "any_table_foreach",
             SideEffects::modifyArgumentAndExternal, "any_table_foreach")
                 ->args({"table","keyStride","valueStride","block","context","line"});
