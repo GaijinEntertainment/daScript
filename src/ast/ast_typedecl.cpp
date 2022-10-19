@@ -1779,6 +1779,8 @@ namespace das
             case Type::tInt64:
             case Type::tUInt64:
             case Type::tEnumeration:
+            case Type::tEnumeration8:
+            case Type::tEnumeration16:
             case Type::tInt:
             case Type::tInt2:
             case Type::tInt3:

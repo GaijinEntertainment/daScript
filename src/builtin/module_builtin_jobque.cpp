@@ -125,7 +125,7 @@ namespace das {
         }
     }
 
-    Channel * channelCreate( Context * context, LineInfoArg * at ) {
+    Channel * channelCreate( Context * context, LineInfoArg * ) {
         Channel * ch = new Channel(context);
         ch->addRef();
         return ch;

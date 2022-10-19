@@ -1086,7 +1086,7 @@ namespace das
         return (void *) &jit_alloc_heap;
     }
 
-    void * jit_alloc_persistent ( uint32_t bytes, Context * context ) {
+    void * jit_alloc_persistent ( uint32_t bytes, Context * ) {
         return das_aligned_alloc16(bytes);
     }
 
@@ -1102,7 +1102,7 @@ namespace das
         return (void *) &jit_free_heap;
     }
 
-    void jit_free_persistent ( void * bytes, Context * context ) {
+    void jit_free_persistent ( void * bytes, Context * ) {
         das_aligned_free16(bytes);
     }
 
@@ -1116,6 +1116,48 @@ namespace das
 
     void * das_get_jit_array_unlock () {
         return (void *) &builtin_array_unlock;
+    }
+
+    template <typename KeyType>
+    int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context ) {
+        TableHash<KeyType> thh(context,valueTypeSize);
+        auto hfn = hash_function(*context, key);
+        return thh.reserve(*tab, key, hfn);
+    }
+
+    void * das_get_jit_table_at ( int32_t baseType, Context * context, LineInfoArg * at ) {
+        switch ( baseType ) {
+            case Type::tBool:           return (void *) &jit_table_at<bool>;
+            case Type::tInt8:           return (void *) &jit_table_at<int8_t>;
+            case Type::tUInt8:          return (void *) &jit_table_at<uint8_t>;
+            case Type::tInt16:          return (void *) &jit_table_at<int16_t>;
+            case Type::tUInt16:         return (void *) &jit_table_at<uint16_t>;
+            case Type::tInt64:          return (void *) &jit_table_at<int64_t>;
+            case Type::tUInt64:         return (void *) &jit_table_at<uint64_t>;
+            case Type::tEnumeration:    return (void *) &jit_table_at<int32_t>;
+            case Type::tEnumeration8:   return (void *) &jit_table_at<int8_t>;
+            case Type::tEnumeration16:  return (void *) &jit_table_at<int16_t>;
+            case Type::tInt:            return (void *) &jit_table_at<int32_t>;
+            case Type::tInt2:           return (void *) &jit_table_at<int2>;
+            case Type::tInt3:           return (void *) &jit_table_at<int3>;
+            case Type::tInt4:           return (void *) &jit_table_at<int4>;
+            case Type::tUInt:           return (void *) &jit_table_at<uint32_t>;
+            case Type::tBitfield:       return (void *) &jit_table_at<uint32_t>;
+            case Type::tUInt2:          return (void *) &jit_table_at<uint2>;
+            case Type::tUInt3:          return (void *) &jit_table_at<uint3>;
+            case Type::tUInt4:          return (void *) &jit_table_at<uint4>;
+            case Type::tFloat:          return (void *) &jit_table_at<float>;
+            case Type::tFloat2:         return (void *) &jit_table_at<float2>;
+            case Type::tFloat3:         return (void *) &jit_table_at<float3>;
+            case Type::tFloat4:         return (void *) &jit_table_at<float4>;
+            case Type::tRange:          return (void *) &jit_table_at<range>;
+            case Type::tURange:         return (void *) &jit_table_at<urange>;
+            case Type::tString:         return (void *) &jit_table_at<char *>;
+            case Type::tDouble:         return (void *) &jit_table_at<double>;
+            case Type::tPointer:        return (void *) &jit_table_at<void *>;
+        }
+        context->throw_error_at(at ? *at : LineInfo(), "jit_table_at: unsupported key type %s", das_to_string(Type(baseType)).c_str() );
+        return nullptr;
     }
 
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
@@ -1510,6 +1552,8 @@ namespace das
             SideEffects::none, "das_get_jit_array_lock");
         addExtern<DAS_BIND_FUN(das_get_jit_array_unlock)>(*this, lib, "get_jit_array_unlock",
             SideEffects::none, "das_get_jit_array_unlock");
+        addExtern<DAS_BIND_FUN(das_get_jit_table_at)>(*this, lib, "get_jit_table_at",
+            SideEffects::none, "das_get_jit_table_at");
         addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));

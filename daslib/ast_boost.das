@@ -790,4 +790,13 @@ def public isMakeLocal ( expr:ExpressionPtr )
         ||  (expr.__rtti=="ExprMakeArray")
         ||  (expr.__rtti=="ExprMakeTuple"))
 
-
+def public get_workhorse_types
+    return [[auto
+        Type tBool;             Type tInt8;             Type tUInt8;            Type tInt16;
+        Type tUInt16;           Type tInt64;            Type tUInt64;           Type tEnumeration;
+        Type tEnumeration8;     Type tEnumeration16;    Type tInt;              Type tInt2;
+        Type tInt3;             Type tInt4;             Type tUInt;             Type tBitfield;
+        Type tUInt2;            Type tUInt3;            Type tUInt4;            Type tFloat;
+        Type tFloat2;           Type tFloat3;           Type tFloat4;           Type tRange;
+        Type tURange;           Type tString;           Type tDouble;           Type tPointer
+    ]]
