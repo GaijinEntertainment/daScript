@@ -4,9 +4,9 @@
 Iterator
 ========
 
-Iterator is an object which can traverse over a sequence, without knowing details of sequence implementation.
+Iterators are objects which can traverse over a sequence without knowing the details of the sequence's implementation.
 
-Iterator type is defined as follows::
+The Iterator type is defined as follows::
 
     iterator_type ::= iterator < type >
 
@@ -15,24 +15,24 @@ Iterator type is defined as follows::
 
 Iterators can be moved, but not copied or cloned.
 
-Iterator can be created via ``each`` function from a range, static array, or dynamic array.
-``each`` functions are unsafe, because iterator does not capture its arguments::
+Iterators can be created via the ``each`` function from a range, static array, or dynamic array.
+``each`` functions are unsafe because the iterator does not capture its arguments::
 
     unsafe
         var it <- each ( [[int 1;2;3;4]] )
 
-The most straightforward way to traverse an iterator is a ``for`` loop::
+The most straightforward way to traverse an iterator is with a ``for`` loop::
 
     for x in it             // iterates over contents of 'it'
         print("x = {x}\n")
 
-For the reference iterator ``for`` loop will provide reference variable::
+For the reference iterator, the ``for`` loop will provide a reference variable::
 
     var t = [[int 1;2;3;4]]
     for x in t      // x is int&
         x ++        // increases values inside t
 
-Iterators can be created from lambda (see :ref:`Lambda <lambdas_iterator>`) or generator (see :ref:`Generator <generators>`).
+Iterators can be created from lambdas (see :ref:`Lambda <lambdas_iterator>`) or generators (see :ref:`Generator <generators>`).
 
 Calling ``delete`` on an iterator will make it sequence out and free its memory::
 
@@ -50,19 +50,19 @@ Loops and iteration functions do it automatically.
 builtin iterators
 -----------------
 
-Table keys and values iterators can be obtained via ``keys`` and ``values`` functions::
+Table keys and values iterators can be obtained via the ``keys`` and ``values`` functions::
 
     var tab <- {{ "one"=>1; "two"=>2 }}
     for k,v in keys(tab),values(tab)        // keys(tab) is iterator<string>
         print("{k} => {v}\n")               // values(tab) is iterator<int&>
 
-Its possible to iterate over each character of the string via ``each`` function::
+It is possible to iterate over each character of the string via the ``each`` function::
 
     unsafe
         for ch in each("hello,world!")      // string iterator is iterator<int>
             print("ch = {ch}\n")
 
-Its possible to iterate over each element of the enumeration via ``each_enum`` function::
+It is possible to iterate over each element of an enumeration via the ``each_enum`` function::
 
     enum Numbers
         one
@@ -76,7 +76,7 @@ Its possible to iterate over each element of the enumeration via ``each_enum`` f
 builtin iteration functions
 -------------------------------------
 
-``empty`` function checks if iterator is null or already sequenced out::
+The ``empty`` function checks if an iterator is null or already sequenced out::
 
     unsafe
         var it <- each ( [[int 1;2;3;4]] )
@@ -84,7 +84,7 @@ builtin iteration functions
             print("x = {x}\n")
         verify(empty(it))           // iterator is sequenced out
 
-More complicated iteration patterns may require ``next`` function::
+More complicated iteration patterns may require the ``next`` function::
 
     var x : int
     while next(it,x)        // this is semantically equivalent to the `for x in it`
@@ -96,8 +96,8 @@ Next can only operate on copyable types.
 low level builtin iteration functions
 -------------------------------------
 
-``_builtin_iterator_first``, ``_builtin_iterator_next``, and ``_builtin_iterator_close`` address regular lifetime cycle of the iterator.
-A semantic equivalent of the for loop can be explicitly written using those operations::
+``_builtin_iterator_first``, ``_builtin_iterator_next``, and ``_builtin_iterator_close`` address the regular lifecycle of the iterator.
+A semantic equivalent of the for loop can be explicitly written using these operations::
 
     var it <- each(range(0,10))
     var i : int
@@ -111,9 +111,9 @@ A semantic equivalent of the for loop can be explicitly written using those oper
         _builtin_iterator_close(it,pi)
 
 ``_builtin_iterator_iterate`` is one function to rule them all. It acts like all 3 functions above.
-On a non-empty iterator it will start with 'first',
-then proceeded to call `next` until the sequence is exhausted.
-Once the iterator is sequenced out, it will call `close`::
+On a non-empty iterator it starts with 'first',
+then proceeds to call `next` until the sequence is exhausted.
+Once the iterator is sequenced out, it calls `close`::
 
     var it <- each(range(0,10))
     var i : int
@@ -127,7 +127,7 @@ Once the iterator is sequenced out, it will call `close`::
 next implementation details
 ---------------------------
 
-Function ``next`` is implemented as follows::
+The function ``next`` is implemented as follows::
 
     def next ( it:iterator<auto(TT)>; var value : TT& ) : bool
         static_if !typeinfo(can_copy type<TT>)
@@ -144,4 +144,4 @@ Function ``next`` is implemented as follows::
             unsafe
                 return _builtin_iterator_iterate(it, addr(value))
 
-Its important to notice, that builtin iteration functions accept pointer instead of reference.
+It is important to notice that builtin iteration functions accept pointers instead of references.

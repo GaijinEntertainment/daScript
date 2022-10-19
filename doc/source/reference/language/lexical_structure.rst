@@ -153,7 +153,7 @@ daScript accepts integer numbers, unsigned integers, floating and double point n
 | ``"``                         | String                                   |
 +-------------------------------+------------------------------------------+
 
-Pesudo BNF
+Pesudo BNF:
 
 .. productionlist::
     IntegerLiteral : [1-9][0-9]* | '0x' [0-9A-Fa-f]+ | ''' [.]+ ''' | 0[0-7]+
@@ -168,7 +168,7 @@ Comments
 
 .. index:: single: comments
 
-A comment is text that the compiler ignores but that is useful for programmers.
+A comment is text that the compiler ignores, but is useful for programmers.
 Comments are normally used to embed annotations in the code. The compiler
 treats them as white space.
 
@@ -182,21 +182,20 @@ followed by the ``*/`` characters. This syntax is the same as ANSI C::
     This lines will be ignored by the compiler.
     */
 
-A comment can also be ``//`` (two slashes) characters, followed by any sequence of
+A comment can also be ``//`` (two slash) characters, followed by any sequence of
 characters.  A new line not immediately preceded by a backslash terminates this form of
-comment.  It is commonly called a *"single-line comment."*::
+comment.  It is commonly called a *"single-line comment"*::
 
     // This is a single line comment. This line will be ignored by the compiler.
 
 
 ------------------
-Semantic indenting
+Semantic Indenting
 ------------------
 
 .. index:: single: indenting
 
 daScript follows semantic indenting (much like Python).
-That means, that logical blocks are arranged with a same indenting, and if control statement requires nesting of block (such as body of function, block, if, for, etc.)
-it have to be indented one step more.
-Indenting step is part of options of program, so it is either 2, 4 or 8, but always the same for whole file.
-Default indenting is 4, and can be globally overridden per project.
+That means that logical blocks are arranged with the same indenting, and if a control statement requires the nesting of a block (such as the body of a function, block, if, for, etc.), it has to be indented one step more.
+The indenting step is part of the options of the program.  It is either 2, 4 or 8, but always the same for whole file.
+The default indenting is 4, but can be globally overridden per project.

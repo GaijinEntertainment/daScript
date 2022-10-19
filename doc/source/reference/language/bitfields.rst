@@ -4,11 +4,11 @@
 Bitfield
 ========
 
-Bitfield is a nameless type which represents a collection of up to 32-bit flags in a single integer::
+Bitfields are a nameless types which represent a collection of up to 32-bit flags in a single integer::
 
     var t : bitfield < one; two; three >
 
-There is shorthand type alias syntax to define a bitfield::
+There is a shorthand type alias syntax to define a bitfield::
 
     bitfield bits123
         one
@@ -33,7 +33,7 @@ If alias is available, bitfield can be constructed via alias notation::
 
     assert(t==bits123 three)
 
-Bitfields can be constructed via integer value. Limited binary logical operators are available::
+Bitfields can be constructed via an integer value. Limited binary logical operators are available::
 
     var t : bitfield < one; two; three > = bitfield(1<<1) | bitfield(1<<2)
     assert(!t.one && t.two && t.three)

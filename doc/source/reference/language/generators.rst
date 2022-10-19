@@ -4,31 +4,31 @@
 Generator
 =========
 
-Generator allows to declare a lambda, which behaves like an iterator.
-For all intents and purposes generator is a lambda passed to an ``each`` or ``each_ref`` function.
+Generators allow you to declare a lambda that behaves like an iterator.
+For all intents and purposes, a generator is a lambda passed to an ``each`` or ``each_ref`` function.
 
-Generator has similar to lambda syntax::
+Generator syntax is similar to lambda syntax::
 
     generator ::= `generator` < type > $ ( ) block
 
-Generator lambda must have no arguments. It always returns boolean::
+Generator lambdas must have no arguments. It always returns boolean::
 
     let gen <- generator<int>() <| $()  // gen is iterator<int>
         for t in range(0,10)
             yield t
         return false                    // returning false stops iteration
 
-Result type of a ``generator`` expression is an iterator (see :ref:`Iterators <iterators>`).
+The result type of a ``generator`` expression is an iterator (see :ref:`Iterators <iterators>`).
 
-Generator outputs iterator values via ``yield`` expression.
-Similar to the return statement move semantic ``yield <-`` is allowed::
+Generators output iterator values via ``yield`` expressions.
+Similar to the return statement, move semantic ``yield <-`` is allowed::
 
     return <- generator<TT> () <| $ ()
         for w in src
             yield <- invoke(blk,w)  // move invoke result
         return false
 
-Generator can output ref type. They can have a capture section::
+Generators can output ref types. They can have a capture section::
 
     unsafe                                                  // unsafe due to capture of src by reference
         var src = [[int 1;2;3;4]]
@@ -40,7 +40,7 @@ Generator can output ref type. They can have a capture section::
             t ++
         print("src = {src}\n")  // will output [[2;3;4;5]]
 
-Generator can have loops and other control structures::
+Generators can have loops and other control structures::
 
     let gen <- generator<int>() <| $()
         var t = 0
@@ -57,7 +57,7 @@ Generator can have loops and other control structures::
             yield t
         return false
 
-Generators can have ``finally`` expression on its blocks, with the exception of the if-then-else blocks::
+Generators can have a ``finally`` expression on its blocks, with the exception of the if-then-else blocks::
 
     let gen <- generator<int>() <| $()
         for t in range(0,9)
@@ -118,10 +118,10 @@ A lambda function is generated::
         return false
 
 Control flow statements are replaced with the ``label`` + ``goto`` equivalents.
-Generator always starts with ``goto __this.yeild``.
-This effectively produces a finite state machine, with ``yield`` variable holding current state index.
+Generators always start with ``goto __this.yield``.
+This effectively produces a finite state machine, with the ``yield`` variable holding current state index.
 
-``yield`` expression is converted into copy result and return value pair.
+The ``yield`` expression is converted into a copy result and return value pair.
 A label is created to specify where to go to next time, after the ``yield``::
 
     _yield_8 = __this.x                 // produce next iterator value
