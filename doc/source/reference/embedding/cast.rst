@@ -8,13 +8,13 @@ C++ ABI and type factory infrastructure
 Cast
 ----
 
-When C++ interfaces with daScript, `cast` ABI is followed.
+When C++ interfaces with daScript, the `cast` ABI is followed.
 
- * by value types are converted to and from `vec4f`, in specific memory layout
- * by reference types have their address converted to and from `vec4f`
+ * Value types are converted to and from `vec4f`, in specific memory layout
+ * Reference types have their address converted to and from `vec4f`
 
-It is expected that vec4f * can be prune to by value type by simple pointer cast,
-becase daScript interpreter will in certain cases access pre-cast data via v_ldu intrinsic::
+It is expected that vec4f * can be pruned to a by value type by simple pointer cast
+becase the daScript interpreter will in certain cases access pre-cast data via the v_ldu intrinsic::
 
     template <typename TT>
     TT get_data ( vec4f * dasData ) {           // default version
@@ -25,16 +25,16 @@ becase daScript interpreter will in certain cases access pre-cast data via v_ldu
         return * (int32_t *) dasData;
     }
 
-ABI infrastructure is implemented via C++ cast template, which servers two primary functions
+ABI infrastructure is implemented via the C++ cast template, which serves two primary functions:
 
- * casting ``from`` C++ to daScript
- * casting ``to`` C++ from daScript
+ * Casting ``from`` C++ to daScript
+ * Casting ``to`` C++ from daScript
 
-The ``from`` function expects daScript type as an input, and outputs vec4f.
+The ``from`` function expects a daScript type as an input, and outputs a vec4f.
 
-The ``to`` function expects vec4f, and outputs daScript type.
+The ``to`` function expects a vec4f, and outputs a daScript type.
 
-Lets review the following example::
+Let's review the following example::
 
     template <>
     struct cast <int32_t> {
@@ -42,9 +42,9 @@ Lets review the following example::
         static __forceinline vec4f from ( int32_t x )          { return v_cast_vec4f(v_splatsi(x)); }
     };
 
-It implements ABI for the int32_t, which packs int32_t value at the beginning of vec4f using multiplatform intrinsics.
+It implements the ABI for the int32_t, which packs an int32_t value at the beginning of the vec4f using multiplatform intrinsics.
 
-Lets review example, which implements default packing of by reference type::
+Let's review another example, which implements default packing of a reference type::
 
     template <typename TT>
     struct cast <TT &> {
@@ -52,7 +52,7 @@ Lets review example, which implements default packing of by reference type::
         static __forceinline vec4f from ( const TT & p )       { return v_cast_vec4f(v_splats_ptr((const void *)&p)); }
     };
 
-Here pointer to the data is packed in vec4f using multiplatform intrinsics.
+Here, a pointer to the data is packed in a vec4f using multiplatform intrinsics.
 
 ------------
 Type factory
@@ -60,14 +60,14 @@ Type factory
 
 When C++ types are exposed to daScript, type factory infrastructure is employed.
 
-To expose any custom C++ type, use ``MAKE_TYPE_FACTORY`` macro,
-or ``MAKE_EXTERNAL_TYPE_FACTORY`` and ``IMPLEMENT_EXTERNAL_TYPE_FACTORY`` macro pair::
+To expose any custom C++ type, use the ``MAKE_TYPE_FACTORY`` macro,
+or the ``MAKE_EXTERNAL_TYPE_FACTORY`` and ``IMPLEMENT_EXTERNAL_TYPE_FACTORY`` macro pair::
 
     MAKE_TYPE_FACTORY(clock, das::Time)
 
-Example above tells daScript that C++ type `das::Time` will be exposed to the daScript with the name `clock`.
+The example above tells daScript that the C++ type `das::Time` will be exposed to daScript with the name `clock`.
 
-Lets look at implementation of ``MAKE_TYPE_FACTORY`` macro::
+Let's look at the implementation of the ``MAKE_TYPE_FACTORY`` macro::
 
     #define MAKE_TYPE_FACTORY(TYPE,CTYPE) \
         namespace das { \
@@ -85,16 +85,16 @@ Lets look at implementation of ``MAKE_TYPE_FACTORY`` macro::
 
 What happens in the example above is that two templated policies are exposed to C++.
 
-``typeName`` policy has single static function ``name``, which returns string name of the type.
+The ``typeName`` policy has a single static function ``name``, which returns the string name of the type.
 
-``typeFactory`` policy creates a smart pointer to daScript `das::TypeDecl` type, which corresponds to C++ type.
-It expects to find type somewhere in the provided ModuleLibrary (see :ref:`Modules <modules>`).
+The ``typeFactory`` policy creates a smart pointer to daScript the `das::TypeDecl` type, which corresponds to C++ type.
+It expects to find the type somewhere in the provided ModuleLibrary (see :ref:`Modules <modules>`).
 
 ------------
 Type aliases
 ------------
 
-Custom type factory is preferable way to create aliases::
+A custom type factory is the preferable way to create aliases::
 
     struct Point3 { float x, y, z; };
 
@@ -110,12 +110,12 @@ Custom type factory is preferable way to create aliases::
 
     template <> struct typeName<Point3>   { constexpr static const char * name() { return "Point3"; } };
 
-In the example above C++ application already has `Point3` type, which is very similar to daScript float3.
-Exposing C++ functions which operate on Point3 is preferable, so implementation creates an alias named `Point3`
-which corresponds to das Type::tFloat3.
+In the example above, the C++ application already has a `Point3` type, which is very similar to daScript's float3.
+Exposing C++ functions which operate on Point3 is preferable, so the implementation creates an alias named `Point3`
+which corresponds to the das Type::tFloat3.
 
-Sometimes custom implementation of ``typeFactory`` is be required to expose C++ to daScript
-type in a more native fashion. Lets review the following example::
+Sometimes, a custom implementation of ``typeFactory`` is required to expose C++ to a daScript
+type in a more native fashion. Let's review the following example::
 
     struct SampleVariant {
         int32_t _variant;
@@ -145,5 +145,5 @@ type in a more native fashion. Lets review the following example::
       }
   };
 
-Here C++ type `SomeVariant` matches daScript variant type with its memory layout.
-The code above exposes C++ type alias and creates corresponding TypeDecl.
+Here, C++ type `SomeVariant` matches the daScript variant type with its memory layout.
+The code above exposes a C++ type alias and creates a corresponding TypeDecl.

@@ -8,10 +8,10 @@ Struct
 .. index::
     single: Structs
 
-daScript implements a structure mechanism similar to languages like C/C++, Java, C#, etc.
-However there are some important difference.
-Structures are first class objects like integer or strings and can be stored in
-table slots, other structures, local variables, arrays, tuples, variants, etc, and passed as function parameters.
+daScript uses a structure mechanism similar to languages like C/C++, Java, C#, etc.
+However, there are some important difference.
+Structures are first class objects like integers or strings and can be stored in
+table slots, other structures, local variables, arrays, tuples, variants, etc., and passed as function parameters.
 
 ------------------
 Struct Declaration
@@ -21,13 +21,13 @@ Struct Declaration
     pair: declaration; Struct
     single: Struct Declaration
 
-A structure object is created through the keyword 'struct' . ::
+A structure object is created through the keyword ``struct``::
 
     struct Foo
         x, y: int
         xf: float
 
-Sturctures can be `private` or `public` ::
+Sturctures can be ``private`` or ``public``::
 
     struct private Foo
         x, y: int
@@ -35,25 +35,25 @@ Sturctures can be `private` or `public` ::
     struct public Bar
         xf: float
 
-If not specified structures inherit module publicity. I.e. in public modules structures are public,
-and in private modules structures are private.
+If not specified, structures inherit module publicity (i.e. in public modules structures are public,
+and in private modules structures are private).
 
-Structures instances are created through a 'new expression' or a 'variable declaration statement'::
+Structure instances are created through a 'new expression' or a variable declaration statement::
 
     let foo: Foo
     let foo: Foo? = new Foo
 
-There are intentionally no 'member functions'. There are only data members for it is a data-type itself.
-Structure can handle function typed member as data (meaning it's pointer can be changed during execution).
-There are initializers allowing to simplify writing complex structure initialization.
-Basically function with same name as structure itself will work as a initializer.
-Compiler will generate 'default' initializer if there are any members with initializer::
+There are intentionally no member functions. There are only data members, since it is a data type itself.
+Structures can handle members with a function type as data (meaning it's a function pointer that can be changed during execution).
+There are initializers that simplify writing complex structure initialization.
+Basically, a function with same name as the structure itself works as an initializer.
+The compiler will generates a 'default' initializer if there are any members with an initializer::
 
     struct Foo
         x: int = 1
         y: int = 2
 
-Structure fields are also initialized as zero by default, regardless of 'initializers' for members, unless you specifically call the initializer::
+Structure fields are initialized to zero by default, regardless of 'initializers' for members, unless you specifically call the initializer::
 
     let fZero : Foo     // no initializer is called, x, y = 0
     let fInited = Foo() // initializer is called, x = 1, y = 2
@@ -64,26 +64,26 @@ Structure field types are inferred, where possible::
         x = 1    // inferred as int
         y = 2.0    // inferred as float
 
-Explicit structure initialization during creation will leave all uninitialized members zeroed::
+Explicit structure initialization during creation leaves all uninitialized members zeroed::
 
     let fExplicit = [[Foo x=13]]  // x = 13, y = 0
 
-the previous code example is a syntactic sugar for::
+The previous code example is syntactic sugar for::
 
     let fExplicit: Foo
     fExplicit.x = 13
 
-Post construction initialization only needs to specify overwritten fields::
+Post-construction initialization only needs to specify overwritten fields::
 
     let fPostConstruction = [[Foo() x=13]]  // x = 13, y = 2
 
-the previous code example is a syntactic sugar for::
+The previous code example is syntactic sugar for::
 
     let fPostConstruction: Foo
     fPostConstruction.x = 13
     fPostConstruction.y = 2
 
-"Clone initializer" is useful patter for creating clone of an existing structure, when both structures are on the heap::
+The "Clone initializer" is useful pattern for creating a clone of an existing structure when both structures are on the heap::
 
     def Foo ( p : Foo? )                // "clone initializer" takes pointer to existing structure
         var self := *p
@@ -98,7 +98,7 @@ Structure Function Members
 
 daScript doesn't have embedded structure member functions, virtual (that can be overridden in inherited structures) or non-virtual.
 Those features are implemented for classes.
-For ease of Objected Oriented Programming non-virtual member functions can be easily emulated with the pipe operator ``|>``::
+For ease of Objected Oriented Programming, non-virtual member functions can be easily emulated with the pipe operator ``|>``::
 
     struct Foo
         x, y: int = 0
@@ -112,7 +112,7 @@ For ease of Objected Oriented Programming non-virtual member functions can be ea
     foo |> setXY(10, 11)   // this is syntactic sugar for setXY(foo, 10, 11)
     setXY(foo, 10, 11)     // exactly same thing as the line above
 
-Since function pointer is a thing, one can emulate 'virtual' functions by storing function pointers as members::
+Since function pointers are a thing, one can emulate 'virtual' functions by storing function pointers as members::
 
     struct Foo
         x, y: int = 0
@@ -128,8 +128,8 @@ Since function pointer is a thing, one can emulate 'virtual' functions by storin
                     // It is also just syntactic sugar for function pointer call
     invoke(foo.set, foo, 1, 2)  // exactly same thing as above
 
-This makes explicit difference between virtual and non-virtual calls in OOP paradigm.
-In fact daScript classes implement virtual functions in exactly that manner.
+This makes the difference between virtual and non-virtual calls in the OOP paradigm explicit.
+In fact, daScript classes implement virtual functions in exactly this manner.
 
 -----------
 Inheritance
@@ -139,8 +139,8 @@ Inheritance
     pair: inheritance; Struct
     single: Inheritance
 
-daScript's structure support single inheritance by adding the ' : ', followed by parent structure name in the structure declaration.
-The syntax for a derived struct is the following ::
+daScript's structures support single inheritance by adding a ' : ', followed by the parent structure's name in the structure declaration.
+The syntax for a derived struct is the following::
 
     struct Bar: Foo
         yf: float
@@ -148,7 +148,7 @@ The syntax for a derived struct is the following ::
 When a derived structure is declared, daScript first copies all base's members to the
 new structure and then proceeds with evaluating the rest of the declaration.
 
-A derived structure has all members of it's base structure. It is just a syntax sugar for copying all members manually first.
+A derived structure has all members of its base structure. It is just syntactic sugar for copying all the members manually first.
 
 .. _structs_alignment:
 
@@ -156,12 +156,12 @@ A derived structure has all members of it's base structure. It is just a syntax 
 Alignment
 ---------
 
-Structure size and alignment are similar to that of the C++
+Structure size and alignment are similar to that of C++:
 
 * individual members are aligned individually
-* overall structure alignment is that of the largest member alignment
+* overall structure alignment is that of the largest member's alignment
 
-Inherited structure alignment can be controlled via [cpp_layout] annotation::
+Inherited structure alignment can be controlled via the [cpp_layout] annotation::
 
     [cpp_layout (pod=false)]
     struct CppS1
@@ -178,9 +178,9 @@ OOP
 ---
 
 There is sufficient amount of infrastructure to support basic OOP on top of the structures.
-However its already available in form of classes with some fixed memory overhead (see :ref:`Classes <classes>`).
+However, it is already available in form of classes with some fixed memory overhead (see :ref:`Classes <classes>`).
 
-It's possible to override method of the base class by override syntax.
+It's possible to override the method of the base class with override syntax.
 Here an example: ::
 
     struct Foo
@@ -200,18 +200,18 @@ Here an example: ::
         thisFoo.y = y
         thisFoo.z = -1
 
-It is safe to use 'cast' keyword to cast derived structure instance to reference to it's parent type::
+It is safe to use the ``cast`` keyword to cast a derived structure instance into its parent type::
 
     var f3d: Foo3D = Foo3D()
     (cast<Foo> f3d).y = 5
 
-It is unsafe to 'cast' to cast base struct to it's derived child::
+It is unsafe to cast a base struct to it's derived child type::
 
     var f3d: Foo3D = Foo3D()
     def foo(var foo: Foo)
         (cast<Foo3D> foo).z = 5  // error, won't compile
 
-if needed, the upcast can be used with unsafe keyword::
+If needed, the upcast can be used with the ``unsafe`` keyword::
 
     struct Foo
         x: int

@@ -4,58 +4,58 @@
 Macros
 ======
 
-In daScript macros are the machinery which allows direct manipulation of a syntax tree.
+In daScript, macros are the machinery that allow direct manipulation of the syntax tree.
 
-Macros are exposed via :ref:`daslib/ast <stdlib_ast>` module and :ref:`daslib/ast_boost <stdlib_ast_boost>` helper module.
+Macros are exposed via the :ref:`daslib/ast <stdlib_ast>` module and :ref:`daslib/ast_boost <stdlib_ast_boost>` helper module.
 
 Macros are evaluated at compilation time during different compilation passes.
-Macros assigned to specific module are evaluated as part of the module, every time module is included.
+Macros assigned to a specific module are evaluated as part of the module every time that module is included.
 
 ------------------
 Compilation passes
 ------------------
 
-daScript compiler performs compilation passes in the following order for each module (see :ref:`Modules <modules>`)
+The daScript compiler performs compilation passes in the following order for each module (see :ref:`Modules <modules>`):
 
-#. parser transforms das program to AST
+#. Parser transforms das program to AST
 
-    #. if there are any parsing errors, compilation stops
+    #. If there are any parsing errors, compilation stops
 
 #. `apply` is called for every function or structure
 
-    #. if there are any errors, compilation stops
+    #. If there are any errors, compilation stops
 
-#. infer pass repeats itself until no new transformations are reported
+#. Infer pass repeats itself until no new transformations are reported
 
-    #. built-in infer pass happens
+    #. Built-in infer pass happens
 
-        #. `transform` macros are called for every function, or expression
+        #. `transform` macros are called for every function or expression
 
-    #. macro passes happen
+    #. Macro passes happen
 
-#. if there are still any errors left, compilation stops
+#. If there are still any errors left, compilation stops
 
-#. `finish` is called for all function and structure macros
+#. `finish` is called for all functions and structure macros
 
-#. lint pass happens
+#. Lint pass happens
 
-    #. if there are any errors, compilation stops
+    #. If there are any errors, compilation stops
 
-#. optimization pass repeats itself until no new transformations are reported
+#. Optimization pass repeats itself until no new transformations are reported
 
-    #. built-in optimization pass happens
+    #. Built-in optimization pass happens
 
-    #. macro optimization pass happens
+    #. Macro optimization pass happens
 
-#. if there are any errors during optimization passes, compilation stops
+#. If there are any errors during optimization passes, compilation stops
 
-#. if module contains any macros, simulation happens
+#. If the module contains any macros, simulation happens
 
-    #. if there are any simulation errors, compilation stops
+    #. If there are any simulation errors, compilation stops
 
-    #. module macros functions (annotated with `_macro`) are invoked
+    #. Module macro functions (annotated with `_macro`) are invoked
 
-        #. if there are any errors, compilation stops
+        #. If there are any errors, compilation stops
 
 Modules are compiled in `require` order.
 
@@ -63,7 +63,7 @@ Modules are compiled in `require` order.
 Invoking macros
 ---------------
 
-To specify function to be evaluated in compilation time ``[_macro]`` annotation is used.
+The ``[_macro]`` annotation is used to specify functions that should be evaluated at compilation time .
 Consider the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`::
 
     [_macro,private]
@@ -71,17 +71,17 @@ Consider the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`::
         if is_compiling_macros_in_module("ast_boost")
             add_new_function_annotation("macro", new MacroMacro())
 
-`setup` function will be evaluated after compilation of each module, which includes ast_boost.
-``is_compiling_macros_in_module`` function returns true if currently compiled module name matches the argument.
-In this particular example function annotation ``macro`` would only be added once, when the module `ast_boost` is compiled.
+The `setup` function is evaluated after the compilation of each module, which includes ast_boost.
+The ``is_compiling_macros_in_module`` function returns true if the currently compiled module name matches the argument.
+In this particular example, the function annotation ``macro`` would only be added once: when the module `ast_boost` is compiled.
 
 Macros are invoked in the following fashion:
 
-#. class is derived from the appropriate base macro class
-#. adapter is created
-#. adapter is registered with the module
+#. Class is derived from the appropriate base macro class
+#. Adapter is created
+#. Adapter is registered with the module
 
-For example this is how this lifetime cycle is implemented for the reader macro::
+For example, this is how this lifetime cycle is implemented for the reader macro::
 
     def add_new_reader_macro ( name:string; someClassPtr )
         var ann <- make_reader_macro(name, someClassPtr)
@@ -93,11 +93,11 @@ For example this is how this lifetime cycle is implemented for the reader macro:
 AstFunctionAnnotation
 ---------------------
 
-``AstFunctionAnnotation`` macro allows to manipulate call to specific function as well as function body.
-Annotation can be added to regular or generic function.
+The ``AstFunctionAnnotation`` macro allows you to manipulate calls to specific functions as well as their function bodies.
+Annotations can be added to regular or generic functions.
 
-``add_new_function_annotation`` adds function annotation to a module.
-There is additionally ``[function_macro]`` annotation which accomplishes the same thing.
+``add_new_function_annotation`` adds a function annotation to a module.
+There is additionally the ``[function_macro]`` annotation which accomplishes the same thing.
 
 ``AstFunctionAnnotation`` allows several different manipulations::
 
@@ -114,37 +114,37 @@ There is additionally ``[function_macro]`` annotation which accomplishes the sam
         def abstract isSpecialized : bool
         def abstract appendToMangledName ( func:FunctionPtr; decl:AnnotationDeclaration; var mangledName:das_string ) : void
 
-``transform`` allows changing call to the function and is applied at infer pass.
-Transform is the best way to replace or modify function call with other semantics.
+``transform`` lets you change calls to the function and is applied at the infer pass.
+Transform is the best way to replace or modify function calls with other semantics.
 
-``verifyCall`` is called durng the `lint` phase on each call to the function and is used to check if call is valid.
+``verifyCall`` is called durng the `lint` phase on each call to the function and is used to check if the call is valid.
 
-``apply`` is applied to function itself before the infer pass.
+``apply`` is applied to the function itself before the infer pass.
 Apply is typically where global function body modifications or instancing occurs.
 
-``finish`` is applied to function itself after the infer pass.
-It's only called to non-generic functions or instances of the generic functions.
+``finish`` is applied to the function itself after the infer pass.
+It's only called on non-generic functions or instances of the generic functions.
 ``finish`` is typically used to register functions, notify C++ code, etc.
-Function is fully defined and inferred, and can no longer be modified.
+After this, the function is fully defined and inferred, and can no longer be modified.
 
 ``patch`` is called after the infer pass. If patch sets astChanged to true, the infer pass will be repeated.
 
-``fixup`` is called after the infer pass. It's used to fixup function body.
+``fixup`` is called after the infer pass. It's used to fixup the function's body.
 
-``lint`` is called during the `lint` phase on the function itself and is used to verify if function is valid.
+``lint`` is called during the `lint` phase on the function itself and is used to verify that the function is valid.
 
 ``complete`` is called during the `simulate` portion of context creation. At this point Context is available.
 
-``isSpecialized`` must return true, if the particular function matching is governed by contracts.
-In that case ``isCompatible`` will be called, and result taken into account.
+``isSpecialized`` must return true if the particular function matching is governed by contracts.
+In that case, ``isCompatible`` is called, and the result taken into account.
 
-``isCompatible`` returns true, if specialized function is compatible with arguments.
-If function is not compatible, errors field must be specified.
+``isCompatible`` returns true if a specialized function is compatible with the given arguments.
+If a function is not compatible, the errors field must be specified.
 
-``appendToMangledName`` is called to append mangled name to the function.
+``appendToMangledName`` is called to append a mangled name to the function.
 That way multiple functions with the same type signature can exist and be differentiated between.
 
-Lets review the following example from `ast_boost` of how ``macro`` annotation is implemented::
+Lets review the following example from `ast_boost` of how the ``macro`` annotation is implemented::
 
     class MacroMacro : AstFunctionAnnotation
         def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
@@ -157,22 +157,22 @@ Lets review the following example from `ast_boost` of how ``macro`` annotation i
             func.body <- blk
             return true
 
-During the `apply` pass function body is appended with ``if is_compiling_macros()`` closure,
-additionally ``init`` flag is set, which is equivalent to ``_macro`` annotation.
-Function annotated with ``[macro]`` will be evaluated during module compilation.
+During the `apply` pass the function body is appended with the ``if is_compiling_macros()`` closure.
+Additionally, the ``init`` flag is set, which is equivalent to a ``_macro`` annotation.
+Functions annotated with ``[macro]`` are evaluated during module compilation.
 
 ------------------
 AstBlockAnnotation
 ------------------
 
-AstBlockAnnotation is used to manipulate block expressions (block, lambda, local function)::
+``AstBlockAnnotation`` is used to manipulate block expressions (blocks, lambdas, local functions)::
 
     class AstBlockAnnotation
         def abstract apply ( var blk:smart_ptr<ExprBlock>; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract finish ( var blk:smart_ptr<ExprBlock>; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
 
-``add_new_block_annotation`` adds function annotation to a module.
-There is additionally ``[block_macro]`` annotation which accomplishes the same thing.
+``add_new_block_annotation`` adds a function annotation to a module.
+There is additionally the ``[block_macro]`` annotation which accomplishes the same thing.
 
 ``apply`` is called for every block expression before the infer pass.
 
@@ -182,7 +182,7 @@ There is additionally ``[block_macro]`` annotation which accomplishes the same t
 AstStructureAnnotation
 ----------------------
 
-``AstStructureAnnotation`` macro allows to manipulate structure or class definitions via annotation::
+The ``AstStructureAnnotation`` macro lets you manipulate structure or class definitions via annotation::
 
     class AstStructureAnnotation
         def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
@@ -190,8 +190,8 @@ AstStructureAnnotation
         def abstract patch ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
         def abstract complete ( var st:StructurePtr; var ctx:smart_ptr<Context> ) : void
 
-``add_new_structure_annotation`` adds function annotation to a module.
-There is additionally ``[structure_macro]`` annotation which accomplishes the same thing.
+``add_new_structure_annotation`` adds a function annotation to a module.
+There is additionally the ``[structure_macro]`` annotation which accomplishes the same thing.
 
 ``AstStructureAnnotation`` allows 2 different manipulations::
 
@@ -199,30 +199,30 @@ There is additionally ``[structure_macro]`` annotation which accomplishes the sa
         def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
 
-``apply`` is invoked before the infer pass. It is the best time to modify structure, generated some code, etc.
+``apply`` is invoked before the infer pass. It is the best time to modify the structure, generate some code, etc.
 
-``finish`` is invoked after the successful infer pass. Its typically used to register structures, perform RTTI operations etc.
-Structure is fully inferred and defined and can no longer be modified afterwards.
+``finish`` is invoked after the successful infer pass. Its typically used to register structures, perform RTTI operations, etc.
+After this, the structure is fully inferred and defined and can no longer be modified afterwards.
 
 ``patch`` is invoked after the infer pass. If patch sets astChanged to true, the infer pass will be repeated.
 
 ``complete`` is invoked during the `simulate` portion of context creation. At this point Context is available.
 
-Example of such annotation is `SetupAnyAnnotation` from :ref:`daslib/ast_boost <stdlib_ast_boost>`.
+An example of such annotation is `SetupAnyAnnotation` from :ref:`daslib/ast_boost <stdlib_ast_boost>`.
 
 ------------------------
 AstEnumerationAnnotation
 ------------------------
 
-``AstStructureAnnotation`` macro allows to manipulate enumeration via annotation::
+The ``AstStructureAnnotation`` macro lets you manipulate enumerations via annotation::
 
     class AstEnumerationAnnotation
         def abstract apply ( var st:EnumerationPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
 
-``add_new_enumeration_annotation`` adds function annotation to a module.
-There is additionally ``[enumeration_macro]`` annotation which accomplishes the same thing.
+``add_new_enumeration_annotation`` adds a function annotation to a module.
+There is additionally the ``[enumeration_macro]`` annotation which accomplishes the same thing.
 
-``apply`` is invoked before the infer pass. It is the best time to modify enumeration, generated some code, etc.
+``apply`` is invoked before the infer pass. It is the best time to modify the enumeration, generate some code, etc.
 
 ---------------
 AstVariantMacro
@@ -230,17 +230,17 @@ AstVariantMacro
 
 ``AstVariantMacro`` is specialized in transforming ``is``, ``as``, and ``?as`` expressions.
 
-``add_new_variant_macro`` adds variant macro to a module.
-There is additionally ``[variant_macro]`` annotation which accomplishes the same thing.
+``add_new_variant_macro`` adds a variant macro to a module.
+There is additionally the ``[variant_macro]`` annotation which accomplishes the same thing.
 
-Each of the 3 transformations are covered in appropriate abstract function::
+Each of the 3 transformations are covered in the appropriate abstract function::
 
     class AstVariantMacro
         def abstract visitExprIsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant> ) : ExpressionPtr
         def abstract visitExprAsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant> ) : ExpressionPtr
         def abstract visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr
 
-Lets review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`::
+Let's review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`::
 
     // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
     // if value is ast::Expr*
@@ -259,27 +259,27 @@ Lets review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>
             if call.arguments[1] is ExprConstString     // HERE EXPRESSION WILL BE REPLACED
                 ...
 
-Here the macro takes advantage of the ExprIsVariant syntax.
-It replaces ``expr is TYPENAME`` expression with ``expr.__rtti = "TYPENAME"`` expression.
-``isExpression`` function ensures that expr is from the ast::Expr* family, i.e. part of the daScript syntax tree.
+Here, the macro takes advantage of the ExprIsVariant syntax.
+It replaces the ``expr is TYPENAME`` expression with an ``expr.__rtti = "TYPENAME"`` expression.
+The ``isExpression`` function ensures that `expr` is from the `ast::Expr*` family, i.e. part of the daScript syntax tree.
 
 --------------
 AstReaderMacro
 --------------
 
-``AstReaderMacro`` allows embedding completely different syntax inside daScript code.
+``AstReaderMacro`` allows embedding a completely different syntax inside daScript code.
 
-``add_new_reader_macro`` adds reader macro to a module.
-There is additionally ``[reader_macro]`` annotation, which essentially automates the same thing.
+``add_new_reader_macro`` adds a reader macro to a module.
+There is additionally the ``[reader_macro]`` annotation, which essentially automates the same thing.
 
-Reader macro accepts characters, collects them if necessary, and returns `ast::Expression`::
+Reader macros accept characters, collect them if necessary, and return an `ast::Expression`::
 
     class AstReaderMacro
         def abstract accept ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; ch:int; info:LineInfo ) : bool
         def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
 
-Reader macros are invoked via following syntax ``% READER_MACRO_NAME ~ character_sequence``.
-``accept`` function notifies the correct terminator of the character sequence::
+Reader macros are invoked via the ``% READER_MACRO_NAME ~ character_sequence`` syntax.
+The ``accept`` function notifies the correct terminator of the character sequence::
 
     var x = %arr~\{\}\w\x\y\n%% // invoking reader macro arr, %% is a terminator
 
@@ -305,36 +305,36 @@ Consider the implementation for the example above::
                 push(mkArr.values,mkC)
             return mkArr
 
-In ``accept`` function macro collects symbols in the sequence.
-Once the sequence ends with the terminator sequence %%, ``accept`` returns false to notify for the end of read.
+The ``accept`` function macro collects symbols in the sequence.
+Once the sequence ends with the terminator sequence %%, ``accept`` returns false to indicate the end of the sequence.
 
-In ``visit`` the collected sequence is converted into make array ``[[int ch1; ch2; ..]]`` expression.
+In ``visit``, the collected sequence is converted into a make array ``[[int ch1; ch2; ..]]`` expression.
 
-More complex examples are JsonReader macro in :ref:`daslib/json_boost <stdlib_json_boost>` or RegexReader in :ref:`daslib/regex_boost <stdlib_regex_boost>`.
+More complex examples include the JsonReader macro in :ref:`daslib/json_boost <stdlib_json_boost>` or RegexReader in :ref:`daslib/regex_boost <stdlib_regex_boost>`.
 
 ------------
 AstCallMacro
 ------------
 
-``AstCallMacro`` operates on expressions, which have similar to function call syntax.
+``AstCallMacro`` operates on expressions which have function call syntax or something similar.
 It occurs during the infer pass.
 
-``add_new_call_macro`` adds call macro to a module.
-``[call_macro]`` annotation automates the same thing::
+``add_new_call_macro`` adds a call macro to a module.
+The ``[call_macro]`` annotation automates the same thing::
 
         class AstCallMacro
             def abstract preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void
             def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
             def abstract canVisitArguments ( expr:smart_ptr<ExprCallMacro> ) : bool
 
-``apply`` from the :ref:`daslib/apply <stdlib_apply>` is an example of such macro::
+``apply`` from :ref:`daslib/apply <stdlib_apply>` is an example of such a macro::
 
     [call_macro(name="apply")]  // apply(value, block)
     class ApplyMacro : AstCallMacro
         def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
             ...
 
-Note how name is provided in the ``[call_macro]`` annotation.
+Note how the name is provided in the ``[call_macro]`` annotation.
 
 ``preVisit`` is called before the arguments are visited.
 
@@ -352,69 +352,69 @@ and can be invoked at numerous passes::
     class AstPassMacro
         def abstract apply ( prog:ProgramPtr; mod:Module? ) : bool
 
-``make_pass_macro`` registers class as a pass macro.
+``make_pass_macro`` registers a class as a pass macro.
 
-``add_new_infer_macro`` adds pass macro to the infer pass. ``[infer]`` annotation accomplishes the same thing.
+``add_new_infer_macro`` adds a pass macro to the infer pass. The ``[infer]`` annotation accomplishes the same thing.
 
-``add_new_dirty_infer_macro`` adds pass macro to the `dirty` section of infer pass. ``[dirty_infer]`` annotation accomplishes the same thing.
+``add_new_dirty_infer_macro`` adds a pass macro to the `dirty` section of infer pass. The ``[dirty_infer]`` annotation accomplishes the same thing.
 
-Typically such macro creates an ``AstVisitor`` which performs necessary transformations.
+Typically, such macros create an ``AstVisitor`` which performs the necessary transformations.
 
 ----------------
 AstTypeInfoMacro
 ----------------
 
-``AstTypeInfoMacro`` is designed to implement custom type information inside typeinfo expression::
+``AstTypeInfoMacro`` is designed to implement custom type information inside a typeinfo expression::
 
     class AstTypeInfoMacro
         def abstract getAstChange ( expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : ExpressionPtr
         def abstract getAstType ( var lib:ModuleLibrary; expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : TypeDeclPtr
 
-``add_new_typeinfo_macro`` adds reader macro to a module.
-There is additionally ``[typeinfo_macro]`` annotation, which essentially automates the same thing.
+``add_new_typeinfo_macro`` adds a reader macro to a module.
+There is additionally the ``[typeinfo_macro]`` annotation, which essentially automates the same thing.
 
-``getAstChange`` returns newly generated ast for the typeinfo expression.
-Alternatively it returns null if no changes are required, or if there is an error.
-In case of error errors string must be filled.
+``getAstChange`` returns a newly generated ast for the typeinfo expression.
+Alternatively, it returns null if no changes are required, or if there is an error.
+In case of error, the errors string must be filled.
 
-``getAstType`` returns type of the new typeinfo expression.
+``getAstType`` returns the type of the new typeinfo expression.
 
 ---------------
 AstForLoopMacro
 ---------------
 
-``AstForLoopMacro`` is designed to implement custom processing of the for loop expressions::
+``AstForLoopMacro`` is designed to implement custom processing of for loop expressions::
 
     class AstForLoopMacro
         def abstract visitExprFor ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprFor> ) : ExpressionPtr
 
-``add_new_for_loop_macro`` adds reader macro to a module.
-There is additionally ``[for_loop_macro]`` annotation, which essentially automates the same thing.
+``add_new_for_loop_macro`` adds a reader macro to a module.
+There is additionally the ``[for_loop_macro]`` annotation, which essentially automates the same thing.
 
-``visitExprFor`` is similar to that of the `AstVisitor`. It returns new expression, or null if no changes are required.
+``visitExprFor`` is similar to that of `AstVisitor`. It returns a new expression, or null if no changes are required.
 
 ---------------
 AstCaptureMacro
 ---------------
 
-``AstCaptureMacro`` is designed to implement custom capturing and finalization of lambda expressions.
+``AstCaptureMacro`` is designed to implement custom capturing and finalization of lambda expressions::
 
     class AstCaptureMacro
         def abstract captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; etype:TypeDeclPtr ) : ExpressionPtr
         def abstract captureFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
 
-``add_new_capture_macro`` adds reader macro to a module.
-There is additionally ``[capture_macro]`` annotation, which essentially automates the same thing.
+``add_new_capture_macro`` adds a reader macro to a module.
+There is additionally the ``[capture_macro]`` annotation, which essentially automates the same thing.
 
-``captureExpression`` is called when an expression is captured. It returns new expression, or null if no changes are required.
+``captureExpression`` is called when an expression is captured. It returns a new expression, or null if no changes are required.
 
-``captureFunction`` is called when a function is captured. This is where custom finalization can be added to `final` section of the function body.
+``captureFunction`` is called when a function is captured. This is where custom finalization can be added to the `final` section of the function body.
 
 ----------------
 AstCommentReader
 ----------------
 
-``AstCommentReader`` is designed to implement custom processing of the comment expressions::
+``AstCommentReader`` is designed to implement custom processing of comment expressions::
 
     class AstCommentReader
         def abstract open ( prog:ProgramPtr; mod:Module?; cpp:bool; info:LineInfo ) : void
@@ -437,39 +437,39 @@ AstCommentReader
         def abstract beforeAlias ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         def abstract afterAlias ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
 
-``add_new_comment_reader`` adds reader macro to a module.
-There is additionally ``[comment_reader]`` annotation, which essentially automates the same thing.
+``add_new_comment_reader`` adds a reader macro to a module.
+There is additionally the ``[comment_reader]`` annotation, which essentially automates the same thing.
 
-``open`` occurs when a any comment is starting parsing.
+``open`` occurs when the parsing of a comment starts.
 
 ``accept`` occurs for every character of the comment.
 
-``close`` occrus when a coment is over.
+``close`` occurs when a comment is over.
 
-``beforeStructure`` and ``afterStructure`` occur before and after each structure or class declaration, regardless if it contains comments.
+``beforeStructure`` and ``afterStructure`` occur before and after each structure or class declaration, regardless of if it has comments.
 
-``beforeStructureFields`` and ``afterStructureFields`` occur before and after each structure or class fields, regardless if it contains comments.
+``beforeStructureFields`` and ``afterStructureFields`` occur before and after each structure or class field, regardless of if it has comments.
 
 ``afterStructureField`` occurs after each field declaration.
 
-``beforeFunction`` and ``afterFunction`` occur before and after each function declaration, regardless if it contains comments.
+``beforeFunction`` and ``afterFunction`` occur before and after each function declaration, regardless of if it has comments.
 
-``beforeGlobalVariables`` and ``afterGlobalVariables`` occur before and after each global variables declaration, regardless if it contains comments.
+``beforeGlobalVariables`` and ``afterGlobalVariables`` occur before and after each global variable declaration, regardless of if it has comments.
 
-``afterGlobalVariable`` occur after each individual global variable declaration.
+``afterGlobalVariable`` occurs after each individual global variable declaration.
 
-``beforeVariant`` and ``afterVariant`` occur before and after each variant declaration, regardless if it contains comments.
+``beforeVariant`` and ``afterVariant`` occur before and after each variant declaration, regardless of if it has comments.
 
-``beforeEnumeration`` and ``afterEnumeration`` occur before and after each enumeration declaration, regardless if it contains comments.
+``beforeEnumeration`` and ``afterEnumeration`` occur before and after each enumeration declaration, regardless of if it has comments.
 
-``beforeAlias`` and ``afterAlias`` occur before and after each alias type declaration, regardless if it contains comments.
+``beforeAlias`` and ``afterAlias`` occur before and after each alias type declaration, regardless or if it has comments.
 
 ----------
 AstVisitor
 ----------
 
-``AstVisitor`` implements visitor pattern for the daScript expression tree.
-It contains callback for every single expression in prefix and postfix form, as well as some additional callbacks::
+``AstVisitor`` implements the visitor pattern for the daScript expression tree.
+It contains a callback for every single expression in prefix and postfix form, as well as some additional callbacks::
 
     class AstVisitor
         ...
@@ -478,17 +478,17 @@ It contains callback for every single expression in prefix and postfix form, as 
             def abstract visitExprFind(expr:smart_ptr<ExprFind>) : ExpressionPtr    // postifx
         ...
 
-Postfix callback can return expression to replace the one passed to the callback.
+Postfix callbacks can return expressions to replace the ones passed to the callback.
 
-PrintVisitor form `ast_print` example implements printing of every single expression in daScript syntax.
+PrintVisitor from the `ast_print` example implements the printing of every single expression in daScript syntax.
 
-``make_visitor`` creates visitor adapter from the class, derived from the AstVisitor.
-Adapter then can be applied to a program via ``visit`` function::
+``make_visitor`` creates a visitor adapter from the class, derived from ``AstVisitor``.
+The adapter then can be applied to a program via the ``visit`` function::
 
     var astVisitor = new PrintVisitor()
     var astVisitorAdapter <- make_visitor(*astVisitor)
     visit(this_program(), astVisitorAdapter)
 
-If expression needs to be visited, and can potentially be fully substituted, ``visit_expression`` function should be used::
+If an expression needs to be visited, and can potentially be fully substituted, the ``visit_expression`` function should be used::
 
     expr <- visit_expression(expr,astVisitorAdapter)

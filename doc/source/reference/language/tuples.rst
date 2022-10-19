@@ -4,7 +4,7 @@
 Tuple
 =====
 
-Tuple is concise syntax to create nameless data structure::
+Tuples are a concise syntax to create nameless data structures::
 
     tuple ::= tuple < element_list >
     element_list ::= nameless_element_list | named_element_list
