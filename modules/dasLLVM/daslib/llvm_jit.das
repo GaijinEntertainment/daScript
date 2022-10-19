@@ -311,6 +311,18 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, vptr)
         return expr
 
+    def cast_from_vec4f_ptr ( v4f:LLVMOpaqueValue?; ptr_type:LLVMOpaqueType? ) : LLVMOpaqueValue?
+        var tres : LLVMOpaqueValue?
+        if typeinfo(sizeof type<void?>)==8
+            var v2 = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "ptr_vec")
+            var tbit = LLVMBuildExtractElement(g_builder, v2, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "ptr_bits")
+            tres = LLVMBuildIntToPtr(g_builder, tbit, ptr_type, "cast_from_vec4f_ptr")
+        else
+            var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
+            tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "ptr_bits")
+            tres = LLVMBuildIntToPtr(g_builder, tres, ptr_type, "cast_from_vec4f_ptr")
+        return tres
+
     def cast_from_vec4f ( expr:ExpressionPtr; etype:TypeDeclPtr; v4f:LLVMOpaqueValue? )
         var tres : LLVMOpaqueValue?
         if etype.isWorkhorseType
@@ -326,16 +338,12 @@ class LlvmJitVisitor : AstVisitor
                 tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt1Type(), "down_to_1_bit")
             elif bt == Type tString || bt == Type tPointer
                 var ptr_type = bt==Type tString ? get_type_string() : type_to_llvm_type(etype)
-                if typeinfo(sizeof type<void?>)==8
-                    var v2 = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "ptr_vec")
-                    var tbit = LLVMBuildExtractElement(g_builder, v2, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "ptr_bits")
-                    tres = LLVMBuildIntToPtr(g_builder, tbit, ptr_type, "cast_from_vec4f")
-                else
-                    var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
-                    tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "ptr_bits")
-                    tres = LLVMBuildIntToPtr(g_builder, tres, ptr_type, "cast_from_vec4f")
+                tres = cast_from_vec4f_ptr(v4f, ptr_type)
             else
                 failed_E(expr, "unsupported cast_from_vec4f cast {describe(etype)}")
+        elif etype.isRef
+            var ptr_type = LLVMPointerType(type_to_llvm_type(etype),0u)
+            tres = cast_from_vec4f_ptr(v4f, ptr_type)
         else
             failed_E(expr, "unsupported cast_from_vec4f type {describe(etype)}")
         return tres
@@ -1043,6 +1051,8 @@ class LlvmJitVisitor : AstVisitor
                 var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
                 var arg_val = getE(a)
                 var arg_cast_type = type_to_llvm_abi_type(a._type)
+                if a._type.isRef
+                    arg_val = LLVMBuildPointerCast(g_builder, arg_val, arg_cast_type, "call_arg_{ai}_cast")
                 LLVMBuildStore2(g_builder, arg_cast_type, arg_val, arg_ptr)
         else
             args = LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))
@@ -1462,12 +1472,12 @@ class LlvmJitVisitor : AstVisitor
                 var vtype = type_to_llvm_type(expr._type)
                 var s_ptr : LLVMOpaqueValue?
                 at_function_entry <|
-                    s_ptr = LLVMBuildAlloca(g_builder, vtype, "mks_local_sp_{expr.stackTop}")
+                    s_ptr = LLVMBuildAlloca(g_builder, vtype, "mka_local_sp_{expr.stackTop}")
                     LLVMSetAlignment(s_ptr, 16u)
-                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mks_locl_sp_{expr.stackTop}")
+                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mka_local_sp_{expr.stackTop}")
                 return s_ptr
             if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mks_locl_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mka_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
         let stride = expr.makeType.stride
         if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
             let total = int(expr.values.length)
@@ -1509,6 +1519,70 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "makeArray: move is not supported")
         return init
 
+// make tuple
+    def override preVisitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>) : void
+        var mks_ptr : LLVMOpaqueValue?
+        if expr.makeFlags.useCMRES
+            mks_ptr = get_cmres_param()
+            mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            if expr.extraOffset != 0u
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+        elif expr.makeFlags.useStackRef
+            mks_ptr = getE(expr)
+            verify(mks_ptr!=null && LLVMIsUndef(mks_ptr)==0,"USE STACKREF, but no stackref")
+            if expr.extraOffset != 0u
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+        else
+            mks_ptr = tryE(expr) <|
+                var vtype = type_to_llvm_type(expr._type)
+                var s_ptr : LLVMOpaqueValue?
+                at_function_entry <|
+                    s_ptr = LLVMBuildAlloca(g_builder, vtype, "mkt_local_sp_{expr.stackTop}")
+                    LLVMSetAlignment(s_ptr, 16u)
+                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mkt_local_sp_{expr.stackTop}")
+                return s_ptr
+            if expr.extraOffset != 0u
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mkt_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+        let stride = expr.makeType.stride
+        if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
+            let total = int(expr.values.length)
+            let bytes = max(total,1) * stride
+            let align = uint(expr.makeType.alignOf)
+            LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
+        setE(expr, mks_ptr)
+    def override preVisitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : void
+        let offset = get_tuple_field_offset(expr.makeType,index)
+        var v_ptr = getE(expr)
+        verify(v_ptr!=null && LLVMIsUndef(v_ptr)==0,"make struct field, but no pointer")
+        let field_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+        if init |> isMakeLocal
+            var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(init))
+            val.extraOffset = uint(offset) + expr.extraOffset
+            if expr.makeFlags.useCMRES
+                pass
+            elif expr.makeFlags.useStackRef
+                setE(init, v_ptr)
+            else
+                setE(init, v_ptr)
+        elif make_call_to_cmres ( init, field_ptr )
+            pass
+    def override visitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
+        let offset = get_tuple_field_offset(expr.makeType,index)
+        var v_ptr = getE(expr)
+        let argName = expr.makeType.argNames.length!=0 ? "_{expr.makeType.argNames[index]}" : "_{describe(expr.makeType.argTypes[index])}"
+        v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "tuple_{index}{argName}")
+        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.makeType.argTypes[index]), "")
+        if init |> isMakeLocal
+            pass // do nothign. we already taken care of makeLocal in preVisitExprMakeStructField
+        elif isCall2CMRES(init)
+            pass // do nothing. we already handle this in preVisitExprMakeStructField
+        else
+            if expr.makeType.canCopy
+                build_copy(v_ptr, init)
+            else
+                failed_E(expr, "makeTuple: move is not supported")
+        return init
+
 // make structure
     def override preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : void
         var mks_ptr : LLVMOpaqueValue?
@@ -1529,11 +1603,10 @@ class LlvmJitVisitor : AstVisitor
                 at_function_entry <|
                     s_ptr = LLVMBuildAlloca(g_builder, vtype, "mks_local_sp_{expr.stackTop}")
                     LLVMSetAlignment(s_ptr, 16u)
-                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mks_locl_sp_{expr.stackTop}")
+                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mks_local_sp_{expr.stackTop}")
                 return s_ptr
             if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mks_locl_sp_{expr.stackTop}_eo_{expr.extraOffset}")
-
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mks_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
         let stride = expr.makeType.stride
         if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
             let total = int(expr.structs.length)
