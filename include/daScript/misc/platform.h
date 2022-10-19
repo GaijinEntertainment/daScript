@@ -139,6 +139,7 @@
     #define das_clz64 __builtin_clz
     #define das_ctz64 __builtin_ctz
     #define das_popcount __builtin_popcount
+    #define das_popcount64 __builtin_popcount
 #endif
 
 #ifdef _MSC_VER
