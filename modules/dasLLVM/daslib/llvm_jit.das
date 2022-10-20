@@ -662,6 +662,21 @@ class LlvmJitVisitor : AstVisitor
         return true     if (expr is ExprConstUInt64) && (expr as ExprConstUInt64).value!=0ul
         return false
 
+    def build_str_cmp ( a,b:LLVMOpaqueValue? ) : LLVMOpaqueValue?
+        return LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod,FN_JIT_STR_CMP), [[auto a;b]], "")
+
+    def reduce_bit_vector ( i1v:LLVMOpaqueValue?; bits:int; op:string )
+        var result = LLVMBuildExtractElement(g_builder, i1v, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "bit_0")
+        for b in range(1,bits)
+            var bit = LLVMBuildExtractElement(g_builder, i1v, LLVMConstInt(LLVMInt32Type(), uint64(b), 0), "bit_{b}")
+            if op=="=="
+                result = LLVMBuildAnd(g_builder, result, bit, "")
+            elif op=="!="
+                result = LLVMBuildOr(g_builder, result, bit, "")
+            else
+                error("unsupported bit reduction operator {op}")
+        return result
+
     def visitExprOp2_NonMonade(expr:smart_ptr<ExprOp2>)
         var left = getE(expr.left)
         var right = getE(expr.right)
@@ -771,18 +786,27 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported division type operator {expr.op}")
         elif expr.op=="<" || expr.op==">" || expr.op=="<=" || expr.op==">=" || expr.op=="==" || expr.op=="!="
             var opR : LLVMOpaqueValue?
-            if expr.left._type.isSignedInteger
+            if expr.left._type.isSignedInteger || (expr.left._type.isVectorType && expr.left._type.vectorBaseType==Type tInt)
                 opR = LLVMBuildICmp(g_builder, get_int_compare_op(expr,string(expr.op)), left, right, "")
-            elif expr.left._type.isUnsignedInteger
+                if expr.left._type.isVectorType
+                    opR = reduce_bit_vector(opR, expr.left._type.vectorDim, string(expr.op))
+            elif expr.left._type.isUnsignedInteger || (expr.left._type.isVectorType && expr.left._type.vectorBaseType==Type tUInt)
                 opR = LLVMBuildICmp(g_builder, get_uint_compare_op(expr,string(expr.op)), left, right, "")
-            elif expr.left._type.isFloatOrDouble
+                if expr.left._type.isVectorType
+                    opR = reduce_bit_vector(opR, expr.left._type.vectorDim, string(expr.op))
+            elif expr.left._type.isFloatOrDouble || (expr.left._type.isVectorType && expr.left._type.vectorBaseType==Type tFloat)
                 opR = LLVMBuildFCmp(g_builder, get_float_compare_op(expr,string(expr.op)), left, right, "")
+                if expr.left._type.isVectorType
+                    opR = reduce_bit_vector(opR, expr.left._type.vectorDim, string(expr.op))
             elif expr.left._type.baseType == Type tBool
                 opR = LLVMBuildICmp(g_builder, get_bool_compare_op(expr,string(expr.op)), left, right, "")
             elif expr.left._type.baseType == Type tPointer
                 var lptr = LLVMBuildPointerCast(g_builder, left, LLVMPointerType(LLVMInt8Type(), 0u), "")
                 var rptr = LLVMBuildPointerCast(g_builder, right, LLVMPointerType(LLVMInt8Type(), 0u), "")
                 opR = LLVMBuildICmp(g_builder, get_uint_compare_op(expr,string(expr.op)), lptr, rptr, "")
+            elif expr.left._type.baseType == Type tString
+                var cmpR = build_str_cmp(left, right)
+                opR = LLVMBuildICmp(g_builder, get_int_compare_op(expr,string(expr.op)), cmpR, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
             if opR == null
                 opR = LLVMGetUndef(LLVMInt8Type())
                 failed_E(expr, "unsupported compare type {describe(expr.left._type)} {expr.op} {describe(expr.right._type)}")
@@ -952,7 +976,7 @@ class LlvmJitVisitor : AstVisitor
 
     def get_float_compare_op ( e:ExpressionPtr; op:string )
         return LLVMRealPredicate LLVMRealOEQ    if op=="=="
-        return LLVMRealPredicate LLVMRealONE    if op=="!="
+        return LLVMRealPredicate LLVMRealUNE    if op=="!="
         return LLVMRealPredicate LLVMRealOLT    if op=="<"
         return LLVMRealPredicate LLVMRealOLE    if op=="<="
         return LLVMRealPredicate LLVMRealOGT    if op==">"
@@ -1086,7 +1110,7 @@ class LlvmJitVisitor : AstVisitor
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
         return ofunc
 
-    def build_call_params ( expr:smart_ptr<ExprCallFunc> )
+    def build_call_params ( expr:smart_ptr<ExprCallFunc>; extern_func : Function? = null )
         var params : array<LLVMOpaqueValue?>
         for a,ai in expr.arguments,range(100500)
             if a._type.baseType==Type fakeContext
@@ -1098,8 +1122,13 @@ class LlvmJitVisitor : AstVisitor
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
                 var ptrValue = LLVMBuildPointerCast(g_builder, getE(a), ptrType, "arg_{funcArg.name}_ptr")
                 params |> push( ptrValue )
+            elif (a._type.baseType==Type tArray || a._type.baseType==Type tTable) && (extern_func != null)
+                assume funcArg = expr.func.arguments[ai]
+                var destType = type_to_llvm_abi_type(funcArg._type)
+                var arg = LLVMBuildPointerCast(g_builder, getE(a), destType, "any_array_{funcArg.name}_ptr")
+                params |> push(arg)
             else
-                params |> push( getE(a) )
+                params |> push(getE(a))
         return <- params
 
     def make_call ( expr:smart_ptr<ExprCallFunc>; doesNotNeedSp:bool )
@@ -1144,7 +1173,7 @@ class LlvmJitVisitor : AstVisitor
                     var cres = cast_from_vec4f(expr, expr._type, ccall)
                     setE(expr, cres)
             else
-                var params <- build_call_params(expr)
+                var params <- build_call_params(expr, expr.func)
                 var func = register_extern_function(expr)
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
                 if cmresEval!=null

@@ -35,6 +35,7 @@ let public FN_JIT_FREE_HEAP = "`jit`free_heap`"
 let public FN_JIT_FREE_PERSISTENT = "`jit`free_persistent`"
 let public FN_JIT_ARRAY_LOCK = "`jit`array_lock`"
 let public FN_JIT_ARRAY_UNLOCK = "`jit`array_unlock`"
+let public FN_JIT_STR_CMP = "`jit`str_cmp`"
 
 struct JitEngine
     mod : LLVMOpaqueModule?
@@ -158,6 +159,11 @@ def public init_jit
                 LLVMPointerType(LLVMVoidType(),0u)                  // context
                 ]]))
         LLVMAddGlobalMapping(g_engine, jit_table_at, get_jit_table_at(unsafe(reinterpret<int> t)))
+
+    var jit_str_cmp = LLVMAddFunction(g_mod, FN_JIT_STR_CMP,  // void jit_str_cmp ( char * a, char * b )
+        LLVMFunctionType(LLVMInt32Type(),
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMInt8Type(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_str_cmp, get_jit_str_cmp())
 
 [macro_function]
 def public finalize_jit
