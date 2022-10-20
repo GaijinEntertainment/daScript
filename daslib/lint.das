@@ -87,10 +87,10 @@ class LintVisitor : AstVisitor
             self->lint_error("variable {v.name}: {describe(v._type)} was written, but never read", v.at)
             return
         if can_make_const && v._type.baseType != Type tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !v.access_flags.access_ref// && !v._type.flags.smartPtr
-            self->lint_error("variable {v.name}: {describe(v._type)} can be made const", v.at)
+            self->lint_error("variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
         if can_make_const && v._type.baseType == Type tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !(v.access_flags.access_ref || v.access_flags.access_pass)
-            self->lint_error("variable {v.name}: {describe(v._type)} can be made const", v.at)
+            self->lint_error("variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
 
     def override preVisitExprLet(expr:smart_ptr<ExprLet>) : void
