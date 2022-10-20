@@ -2894,6 +2894,7 @@ namespace das {
     void * das_get_jit_array_lock ();
     void * das_get_jit_array_unlock ();
     void * das_get_jit_table_at ( int32_t baseType, Context * context, LineInfoArg * at );
+    void * das_get_jit_str_cmp ();
 }
 
 #if defined(_MSC_VER)

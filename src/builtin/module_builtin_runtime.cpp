@@ -1160,6 +1160,14 @@ namespace das
         return nullptr;
     }
 
+    int32_t jit_str_cmp ( char * a, char * b ) {
+        return strcmp(a ? a : "",b ? b : "");
+    }
+
+    void * das_get_jit_str_cmp () {
+        return (void *) &jit_str_cmp;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1554,6 +1562,8 @@ namespace das
             SideEffects::none, "das_get_jit_array_unlock");
         addExtern<DAS_BIND_FUN(das_get_jit_table_at)>(*this, lib, "get_jit_table_at",
             SideEffects::none, "das_get_jit_table_at");
+        addExtern<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
+            SideEffects::none, "das_get_jit_str_cmp");
         addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
