@@ -568,9 +568,9 @@ class LlvmJitVisitor : AstVisitor
             //  failed("array: unsupported visitExprAt {describe(tsrc)}[{describe(tidx)}] type {describe(subExprT)}")
         elif subExprT.baseType == Type tTable
             var tab = LLVMBuildLoad(g_builder, tsrc, "tab")
-            var data = LLVMBuildExtractValue(g_builder, tab, JIT_ARRAY_FIELD_DATA, "table.data")
             var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
             var at_tab = build_table_at(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+            var data = LLVMBuildExtractValue(g_builder, tab, JIT_ARRAY_FIELD_DATA, "table.data")
             var ptr_idx = LLVMBuildGEP(g_builder, data, at_tab, "table_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "array_at_r2v")
@@ -1287,6 +1287,20 @@ class LlvmJitVisitor : AstVisitor
                 return resN;
             }
             */
+        elif expr.value._type.isTuple
+            assert(expr.fieldIndex!=-1)
+            var val_ptr = getE(expr.value)
+            if expr.value._type.isPointer && !expr.derefFlags.unsafeDeref
+                check_ptr_zero(val_ptr)
+            val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            let field_offset = get_tuple_field_offset(expr.value._type, expr.fieldIndex)
+            var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+            let argName = tuple_field_name(expr.value._type,expr.fieldIndex)
+            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
+            if expr.fieldFlags.r2v
+                setE(expr, LLVMBuildLoad(g_builder, field_ptr, ""))
+            else
+                setE(expr, field_ptr)
         else
             assert(expr.field!=null)
             var val_ptr = getE(expr.value)
@@ -1595,10 +1609,15 @@ class LlvmJitVisitor : AstVisitor
                 setE(init, v_ptr)
         elif make_call_to_cmres ( init, field_ptr )
             pass
+    def tuple_field_name ( t:TypeDeclPtr; index:int )
+        if !t.isTuple
+            failed_T(t, "not a tuple {describe(t)}")
+            return "!!not_a_tuple!!"
+        return t.argNames.length!=0 ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
     def override visitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
         let offset = get_tuple_field_offset(expr.makeType,index)
         var v_ptr = getE(expr)
-        let argName = expr.makeType.argNames.length!=0 ? "_{expr.makeType.argNames[index]}" : "_{describe(expr.makeType.argTypes[index])}"
+        let argName = "_{tuple_field_name(expr.makeType,index)}"
         v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "tuple_{index}{argName}")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.makeType.argTypes[index]), "")
         if init |> isMakeLocal

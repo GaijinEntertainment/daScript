@@ -227,6 +227,9 @@ def public failed_E ( e:ExpressionPtr; msg:string )
 def public failed_V ( v:VariablePtr; msg:string )
     failed ( "{msg}. var = {describe(v)} at {describe(v.at)}")
 
+def public failed_T ( v:TypeDeclPtr; msg:string )
+    failed ( "{msg}. var = {describe(v)} at {describe(v.at)}")
+
 def public base_type_to_llvm_type ( t:Type )
     return LLVMInt32Type()      if t == Type tInt || t == Type tUInt || t == Type tBitfield || t == Type tEnumeration
     return LLVMInt64Type()      if t == Type tInt64 || t == Type tUInt64
