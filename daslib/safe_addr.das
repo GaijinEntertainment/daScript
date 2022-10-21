@@ -16,7 +16,6 @@ def public safe_addr(var x : auto(T)& = const) : T-& ? #
     unsafe
         return reinterpret<T-&?#>(addr(x))
 
-
 [tag_function(safe_addr_tag)]
 def public safe_addr(x : auto(T)& = const) : T-& ? const #
     unsafe
@@ -30,3 +29,23 @@ class SafeAddrMacro : AstFunctionAnnotation
         if !is_local_or_global_expr(ExpressionPtr(call.arguments[0]))
             compiling_program() |> macro_error(call.at,"not a local value")
         return [[ExpressionPtr]]
+
+[tag_function(temp_addr_tag)]
+def public temp_addr(x : auto(T)? = const) : T ? const #
+    //! returns temporary pointer from a given pointer
+    unsafe
+        return reinterpret<T? const #>(x)
+
+[tag_function(temp_addr_tag)]
+def public temp_addr(var x : auto(T)? = const) : T ?#
+    unsafe
+        return reinterpret<T?#>(x)
+
+[tag_function_macro(tag="temp_addr_tag")]
+class TempAddrMacro : AstFunctionAnnotation
+    //! This macro reports an error if temp_addr is attempted outside of function arguments.
+    def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        if call.flags.isForLoopSource || call.flags.isCallArgument
+            return true
+        compiling_program() |> macro_error(call.at,"{call.name} can only be used in function arguments or for loop source")
+        return false

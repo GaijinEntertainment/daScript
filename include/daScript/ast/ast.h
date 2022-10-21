@@ -585,6 +585,7 @@ namespace das
                 bool    noSideEffects : 1;
                 bool    noNativeSideEffects : 1;
                 bool    isForLoopSource : 1;
+                bool    isCallArgument : 1;
             };
             uint32_t    flags = 0;
         };

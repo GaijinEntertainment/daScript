@@ -3650,6 +3650,10 @@ namespace das {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
         }
+        virtual void preVisitNewArg ( ExprNew * call, Expression * arg, bool last ) {
+            Visitor::preVisitNewArg(call, arg, last);
+            arg->isCallArgument = true;
+        }
         virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) override {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
             if ( arg->type && arg->type->isAliasOrExpr() ) call->argumentsFailedToInfer = true;
@@ -6103,6 +6107,10 @@ namespace das {
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
+        }
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) {
+            Visitor::preVisitCallArg(call, arg, last);
+            arg->isCallArgument = true;
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) override {
             if (!arg->type) {

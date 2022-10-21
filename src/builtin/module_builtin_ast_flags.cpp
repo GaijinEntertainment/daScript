@@ -26,7 +26,7 @@ namespace das {
     TypeDeclPtr makeExprFlagsFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprFlags";
-        ft->argNames = { "constexpression", "noSideEffects", "noNativeSideEffects" };
+        ft->argNames = { "constexpression", "noSideEffects", "noNativeSideEffects", "isForLoopSource", "isCallArgument" };
         return ft;
     }
 
