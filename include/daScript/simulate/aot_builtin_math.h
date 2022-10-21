@@ -56,9 +56,11 @@ namespace das {
 #if !defined(__clang__)
 #define DAS_FINITE_MATH __attribute__((optimize("no-finite-math-only")))
 #else
+#define DAS_FINITE_MATH
+#endif
+#if defined(__clang__) && !defined(__arm64__)
 #pragma float_control(push)
 #pragma float_control(precise, on)
-#define DAS_FINITE_MATH
 #endif
 #if __clang_major__ < 12 && defined(__clang__) && defined(__FAST_MATH__)
     //unfortunately older clang versions do not work with float_control
@@ -71,7 +73,7 @@ namespace das {
     __forceinline DAS_FINITE_MATH bool   fisfinite(float  a) { return !__builtin_isinf(a); }
     __forceinline DAS_FINITE_MATH bool   disfinite(double  a) { return !__builtin_isinf(a); }
 #undef DAS_FINITE_MATH
-#if defined(__clang__)
+#if defined(__clang__) && !defined(__arm64__)
 #pragma float_control(pop)
 #endif
 #else
