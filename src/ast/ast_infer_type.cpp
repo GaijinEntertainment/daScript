@@ -3650,7 +3650,7 @@ namespace das {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
         }
-        virtual void preVisitNewArg ( ExprNew * call, Expression * arg, bool last ) {
+        virtual void preVisitNewArg ( ExprNew * call, Expression * arg, bool last ) override {
             Visitor::preVisitNewArg(call, arg, last);
             arg->isCallArgument = true;
         }
@@ -5685,7 +5685,7 @@ namespace das {
                 ++ idx;
             }
         }
-        virtual void preVisitForSource ( ExprFor * expr, Expression * that, bool last ) {
+        virtual void preVisitForSource ( ExprFor * expr, Expression * that, bool last ) override {
             Visitor::preVisitForSource(expr,that,last);
             that->isForLoopSource = true;
         }
@@ -6108,7 +6108,7 @@ namespace das {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
         }
-        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) {
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
             Visitor::preVisitCallArg(call, arg, last);
             arg->isCallArgument = true;
         }
