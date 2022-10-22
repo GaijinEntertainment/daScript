@@ -41,6 +41,10 @@ def public temp_ptr(var x : auto(T)? = const) : T ?#
     unsafe
         return reinterpret<T?#>(x)
 
+/*
+
+// this breaks safety. i.e. a:array<FOO>; temp_addr(a[0]); resize(a,100500)
+
 [tag_function(temp_addr_tag)]
 def public temp_addr(var x : auto(T)& = const) : T-& ? #
     //! returns temporary pointer to the given expression
@@ -51,6 +55,7 @@ def public temp_addr(var x : auto(T)& = const) : T-& ? #
 def public temp_addr(x : auto(T)& = const) : T-& ? const #
     unsafe
         return reinterpret<T-&? const #>(addr(x))
+*/
 
 [tag_function_macro(tag="temp_addr_tag")]
 class TempAddrMacro : AstFunctionAnnotation
