@@ -30,13 +30,13 @@ class SafeAddrMacro : AstFunctionAnnotation
             compiling_program() |> macro_error(call.at,"not a local value")
         return [[ExpressionPtr]]
 
-[tag_function(temp_addr_tag)]
+// [tag_function(temp_addr_tag)]
 def public temp_ptr(x : auto(T)? = const) : T ? const #
     //! returns temporary pointer from a given pointer
     unsafe
         return reinterpret<T? const #>(x)
 
-[tag_function(temp_addr_tag)]
+// [tag_function(temp_addr_tag)]
 def public temp_ptr(var x : auto(T)? = const) : T ?#
     unsafe
         return reinterpret<T?#>(x)
@@ -55,7 +55,6 @@ def public temp_addr(var x : auto(T)& = const) : T-& ? #
 def public temp_addr(x : auto(T)& = const) : T-& ? const #
     unsafe
         return reinterpret<T-&? const #>(addr(x))
-*/
 
 [tag_function_macro(tag="temp_addr_tag")]
 class TempAddrMacro : AstFunctionAnnotation
@@ -65,3 +64,4 @@ class TempAddrMacro : AstFunctionAnnotation
             return true
         compiling_program() |> macro_error(call.at,"{call.name} can only be used in function arguments or for loop source")
         return false
+*/
