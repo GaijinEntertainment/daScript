@@ -1744,7 +1744,7 @@ namespace das
         if ( throwBuf ) {
             if ( alwaysStackWalkOnException ) stackWalk(nullptr, false, false);
             if ( breakOnException ) breakPoint(at, "exception", message);
-#if defined(WIN64)
+#if defined(WIN64) || defined(_WIN64)
             //  "An invalid or unaligned stack was encountered during an unwind operation." exception is issued via longjmp
             //  this is a known issue with longjmp on x64, and this workaround disables stack unwinding
             ((_JUMP_BUFFER *)throwBuf)->Frame = 0;
@@ -1771,7 +1771,7 @@ namespace das
         throw dasException(exception ? exception : "", exceptionAt);
 #else
         if ( throwBuf ) {
-#if defined(WIN64)
+#if defined(WIN64) || defined(_WIN64)
             //  "An invalid or unaligned stack was encountered during an unwind operation." exception is issued via longjmp
             //  this is a known issue with longjmp on x64, and this workaround disables stack unwinding
             ((_JUMP_BUFFER *)throwBuf)->Frame = 0;

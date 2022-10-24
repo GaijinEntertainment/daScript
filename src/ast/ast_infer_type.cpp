@@ -4,6 +4,9 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
 
+#define DAS_XSTR(s) #s
+#define DAS_STR(s) DAS_XSTR(s)
+
 namespace das {
 
     // todo: check for eastl and look for better container
@@ -1622,6 +1625,10 @@ namespace das {
             func = f;
             func->hasReturn = false;
             func->noAot |= disableAot;
+            if ( f->arguments.size() >= DAS_MAX_FUNCTION_ARGUMENTS ) {
+                error("function has too many arguments, max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
+                    f->at, CompilationError::too_many_arguments);
+            }
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
@@ -3649,6 +3656,10 @@ namespace das {
         virtual void preVisit ( ExprNew * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
+            if ( call->func && call->func->arguments.size() >= DAS_MAX_FUNCTION_ARGUMENTS ) {
+                error("too many arguments in new, max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
+                    call->at, CompilationError::too_many_arguments);
+            }
         }
         virtual void preVisitNewArg ( ExprNew * call, Expression * arg, bool last ) override {
             Visitor::preVisitNewArg(call, arg, last);
@@ -5993,6 +6004,10 @@ namespace das {
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
+            if ( call->arguments.size() >= DAS_MAX_FUNCTION_ARGUMENTS ) {
+                error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
+                    call->at, CompilationError::too_many_arguments);
+            }
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) override {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
@@ -6029,6 +6044,10 @@ namespace das {
         virtual void preVisit ( ExprNamedCall * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
+            if ( call->arguments.size() >= DAS_MAX_FUNCTION_ARGUMENTS ) {
+                error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
+                    call->at, CompilationError::too_many_arguments);
+            }
         }
         virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg , bool last ) override {
             if (!arg->value->type) {
@@ -6107,6 +6126,10 @@ namespace das {
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
+            if ( call->arguments.size() >= DAS_MAX_FUNCTION_ARGUMENTS ) {
+                error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
+                    call->at, CompilationError::too_many_arguments);
+            }
         }
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
             Visitor::preVisitCallArg(call, arg, last);

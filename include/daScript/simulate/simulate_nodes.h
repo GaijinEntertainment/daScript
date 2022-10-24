@@ -700,7 +700,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_FastCall(const LineInfo& at) : SimNode_FastCallAny(at) {}
         virtual vec4f eval(Context& context) override {
             DAS_PROFILE_NODE
-            vec4f argValues[32];
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             auto aa = context.abiArg;
             context.abiArg = argValues;
@@ -712,7 +712,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override { \
                 DAS_PROFILE_NODE \
-                vec4f argValues[32]; \
+                vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
                 evalArgs(context, argValues); \
                 auto aa = context.abiArg; \
                 context.abiArg = argValues; \
@@ -757,14 +757,14 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Call ( const LineInfo & at ) : SimNode_CallAny(at) {}
         virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
-            vec4f argValues[32];
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             return context.call(fnPtr, argValues, &debugInfo);
         }
 #define EVAL_NODE(TYPE,CTYPE) \
         virtual CTYPE eval##TYPE ( Context & context ) override { \
                 DAS_PROFILE_NODE \
-                vec4f argValues[32]; \
+                vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
                 evalArgs(context, argValues); \
                 return cast<CTYPE>::to(context.call(fnPtr, argValues, &debugInfo)); \
         }
@@ -799,7 +799,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         __forceinline char* compute(Context& context) {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
-            vec4f argValues[32];
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             return cast<char*>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo));
         }
@@ -849,7 +849,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_InvokeAny(at) {}
         virtual vec4f eval(Context& context) override {
             DAS_PROFILE_NODE
-            vec4f argValues[32];
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             Block* block = cast<Block*>::to(argValues[0]);
             return context.invoke(*block, argValues + 1, nullptr, &debugInfo);
@@ -857,7 +857,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE) \
         virtual CTYPE eval##TYPE ( Context & context ) override { \
             DAS_PROFILE_NODE \
-            vec4f argValues[32]; \
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
             evalArgs(context, argValues); \
             Block * block = cast<Block *>::to(argValues[0]); \
             return cast<CTYPE>::to(context.invoke(*block, argValues + 1, nullptr, &debugInfo)); \
@@ -915,7 +915,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval(Context& context) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
-            vec4f argValues[32];
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             Block* block = cast<Block*>::to(argValues[0]);
             return context.invoke(*block, argValues + 1, cmres, &debugInfo);
@@ -924,7 +924,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context); \
-            vec4f argValues[32]; \
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
             evalArgs(context, argValues); \
             Block * block = cast<Block *>::to(argValues[0]);  \
             return cast<CTYPE>::to(context.invoke(*block, argValues + 1, cmres, &debugInfo)); \
@@ -977,7 +977,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InvokeFn(const LineInfo& at) : SimNode_InvokeFnAny(at) {}
         virtual vec4f eval(Context& context) override {
             DAS_PROFILE_NODE
-            vec4f argValues[32];
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             SimFunction* simFunc = cast<Func>::to(argValues[0]).PTR;
             if (!simFunc) context.throw_error_at(debugInfo, "invoke null function");
@@ -986,7 +986,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE) \
         virtual CTYPE eval##TYPE ( Context & context ) override { \
             DAS_PROFILE_NODE \
-            vec4f argValues[32]; \
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
             evalArgs(context, argValues); \
             SimFunction * simFunc = cast<Func>::to(argValues[0]).PTR; \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function"); \
@@ -1052,7 +1052,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InvokeFnByName(const LineInfo& at) : SimNode_InvokeFnByNameAny(at) {}
         virtual vec4f eval(Context& context) override {
             DAS_PROFILE_NODE
-            vec4f argValues[32];
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             bool unique = false;
             auto funcName = cast<char *>::to(argValues[0]);
@@ -1067,7 +1067,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE) \
         virtual CTYPE eval##TYPE ( Context & context ) override { \
             DAS_PROFILE_NODE \
-            vec4f argValues[32]; \
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
             evalArgs(context, argValues); \
             bool unique = false; \
             auto funcName = cast<char *>::to(argValues[0]); \
@@ -1124,7 +1124,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InvokeLambda(const LineInfo& at) : SimNode_InvokeLambdaAny(at) {}
         virtual vec4f eval(Context& context) override {
             DAS_PROFILE_NODE
-            vec4f argValues[32];
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             SimFunction ** funMnh = cast<SimFunction **>::to(argValues[0]);
             if (!funMnh) context.throw_error_at(debugInfo, "invoke null lambda");
@@ -1135,7 +1135,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 #define EVAL_NODE(TYPE,CTYPE) \
         virtual CTYPE eval##TYPE ( Context & context ) override { \
             DAS_PROFILE_NODE \
-            vec4f argValues[32]; \
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
             evalArgs(context, argValues); \
             SimFunction ** funMnh = cast<SimFunction **>::to(argValues[0]); \
             if (!funMnh) context.throw_error_at(debugInfo,"invoke null lambda"); \
@@ -1199,7 +1199,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval(Context& context) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
-            vec4f argValues[32];
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             SimFunction* simFunc = cast<Func>::to(argValues[0]).PTR;
             if (!simFunc) context.throw_error_at(debugInfo, "invoke null function");
@@ -1209,7 +1209,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context); \
-            vec4f argValues[32]; \
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
             evalArgs(context, argValues); \
             SimFunction * simFunc = cast<Func>::to(argValues[0]).PTR; \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function"); \
@@ -1266,7 +1266,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual vec4f eval(Context& context) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
-            vec4f argValues[32];
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
             SimFunction ** funMnh = cast<SimFunction **>::to(argValues[0]);
             if (!funMnh) context.throw_error_at(debugInfo, "invoke null lambda");
@@ -1278,7 +1278,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual CTYPE eval##TYPE ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context); \
-            vec4f argValues[32]; \
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
             evalArgs(context, argValues); \
             SimFunction ** funMnh = cast<SimFunction **>::to(argValues[0]); \
             if (!funMnh) context.throw_error_at(debugInfo,"invoke null lambda"); \
@@ -2305,7 +2305,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 ptr = (char*)das_aligned_alloc16(bytes);
             }
             if (ptr) {
-                vec4f argValues[32];
+                vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
                 evalArgs(context, argValues);
                 context.callWithCopyOnReturn(fnPtr, argValues, ptr, &debugInfo);
                 return ptr;

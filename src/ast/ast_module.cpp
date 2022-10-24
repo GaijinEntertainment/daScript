@@ -351,6 +351,9 @@ namespace das {
         fn->module = this;
         auto mangledName = fn->getMangledName();
         fn->module = nullptr;
+        if ( fn->builtIn && fn->arguments.size()>=DAS_MAX_FUNCTION_ARGUMENTS ) {
+            DAS_FATAL_ERROR("can't add function %s to module %s, too many arguments, DAS_MAX_FUNCTION_ARGUMENTS=%i\n", mangledName.c_str(), name.c_str(), DAS_MAX_FUNCTION_ARGUMENTS );
+        }
         if ( fn->builtIn && fn->sideEffectFlags==uint32_t(SideEffects::none) && fn->result->isVoid() ) {
             DAS_FATAL_ERROR("can't add function %s to module %s; it has no side effects and no return type\n", mangledName.c_str(), name.c_str() );
         }

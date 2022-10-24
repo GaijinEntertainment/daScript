@@ -2870,7 +2870,7 @@ namespace das {
         for ( auto t=0; t!=8; ++t ) {
             auto bits = bitset[t];
             while ( bits ) {
-                auto bit = 31-das_ctz(bits);
+                auto bit = das_ctz(bits);
                 if ( index==idx ) return t*32+bit;
                 bits ^= 1<<bit; index ++;
             }
