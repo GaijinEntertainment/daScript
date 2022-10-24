@@ -31,13 +31,13 @@ class SafeAddrMacro : AstFunctionAnnotation
         return [[ExpressionPtr]]
 
 // [tag_function(temp_addr_tag)]
-def public temp_ptr(x : auto(T)? = const) : T ? const #
+def public temp_ptr(x : auto(T)? implicit = const) : T ? const #
     //! returns temporary pointer from a given pointer
     unsafe
         return reinterpret<T? const #>(x)
 
 // [tag_function(temp_addr_tag)]
-def public temp_ptr(var x : auto(T)? = const) : T ?#
+def public temp_ptr(var x : auto(T)? implicit = const) : T ?#
     unsafe
         return reinterpret<T?#>(x)
 
