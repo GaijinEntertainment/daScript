@@ -1625,7 +1625,7 @@ namespace das {
             func = f;
             func->hasReturn = false;
             func->noAot |= disableAot;
-            if ( f->arguments.size() >= DAS_MAX_FUNCTION_ARGUMENTS ) {
+            if ( f->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS ) {
                 error("function has too many arguments, max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
                     f->at, CompilationError::too_many_arguments);
             }
@@ -3656,7 +3656,7 @@ namespace das {
         virtual void preVisit ( ExprNew * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
-            if ( call->func && call->func->arguments.size() >= DAS_MAX_FUNCTION_ARGUMENTS ) {
+            if ( call->func && call->func->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS ) {
                 error("too many arguments in new, max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
                     call->at, CompilationError::too_many_arguments);
             }
@@ -6004,7 +6004,7 @@ namespace das {
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
-            if ( call->arguments.size() >= DAS_MAX_FUNCTION_ARGUMENTS ) {
+            if ( call->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS ) {
                 error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
                     call->at, CompilationError::too_many_arguments);
             }
@@ -6044,7 +6044,7 @@ namespace das {
         virtual void preVisit ( ExprNamedCall * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
-            if ( call->arguments.size() >= DAS_MAX_FUNCTION_ARGUMENTS ) {
+            if ( call->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS ) {
                 error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
                     call->at, CompilationError::too_many_arguments);
             }
@@ -6126,7 +6126,7 @@ namespace das {
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
-            if ( call->arguments.size() >= DAS_MAX_FUNCTION_ARGUMENTS ) {
+            if ( call->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS ) {
                 error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
                     call->at, CompilationError::too_many_arguments);
             }
