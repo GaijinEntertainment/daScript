@@ -389,7 +389,7 @@ namespace das {
                         mark ( fld.type.get() );
                     }
                 }
-            } else if ( decl->baseType==Type::tEnumeration ) {
+            } else if ( decl->baseType==Type::tEnumeration || decl->baseType==Type::tEnumeration8 || decl->baseType==Type::tEnumeration16 ) {
                 DAS_ASSERT(decl->enumType);
                 useEnums.insert(decl->enumType);
             } else {
