@@ -935,7 +935,7 @@ int testTree() {
 
 uint32_t testMaxFrom1s(uint32_t x) {
     // from https://spiiin.github.io/blog/2385889062/
-    auto count1s = das_popcount(x);
+    uint32_t count1s = (uint32_t)das_popcount(x);
     uint32_t res = 0;
     for ( uint32_t i=0; i!=count1s; ++i) {
         res++;

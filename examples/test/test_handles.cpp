@@ -314,6 +314,7 @@ struct IntFieldsAnnotation : StructureTypeAnnotation {
 
 void testFields ( Context * ctx ) {
     int32_t t = 0;
+    (void)t;
     IntFields x;
     auto fx = ctx->findFunction("testFields");
     if (!fx) {

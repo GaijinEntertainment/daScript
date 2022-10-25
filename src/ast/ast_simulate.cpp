@@ -3141,7 +3141,7 @@ namespace das
         // find first late init
         InitSort initSort;
         int firstLateInit = -1;
-        for ( int i=0; i!=allInitFunctions.size(); ++i ) {
+        for ( int i=0; i!=(int)allInitFunctions.size(); ++i ) {
             auto initFn = allInitFunctions[i];
             if ( initFn->debugInfo->flags & FuncInfo::flag_late_init ) {
                 if ( firstLateInit==-1 ) firstLateInit = i;
@@ -3160,7 +3160,7 @@ namespace das
         }
         if ( firstLateInit!=-1 ) {
             auto sorted = initSort.sort();
-            for ( int i=0; i!=sorted.size(); ++i ) {
+            for ( int i=0; i!=(int)sorted.size(); ++i ) {
                 allInitFunctions[firstLateInit+i] = context.fnByMangledName(sorted[i]);
             }
         }
