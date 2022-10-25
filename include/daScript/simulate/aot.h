@@ -2531,32 +2531,32 @@ namespace das {
             block ( value );
         }
         template <typename TT, typename A1>
-        static __forceinline void use ( A1 a1, TT && block ) {
+        static __forceinline void use ( A1 && a1, TT && block ) {
             CType value ( a1 );
             block ( value );
         }
         template <typename TT, typename A1, typename A2>
-        static __forceinline void use ( A1 a1, A2 a2, TT && block ) {
+        static __forceinline void use ( A1 && a1, A2 && a2, TT && block ) {
             CType value ( a1, a2 );
             block ( value );
         }
         template <typename TT, typename A1, typename A2, typename A3>
-        static __forceinline void use ( A1 a1, A2 a2, A3 a3, TT && block ) {
+        static __forceinline void use ( A1 && a1, A2 && a2, A3 && a3, TT && block ) {
             CType value ( a1, a2, a3 );
             block ( value );
         }
         template <typename TT, typename A1, typename A2, typename A3, typename A4>
-        static __forceinline void use ( A1 a1, A2 a2, A3 a3, A4 a4, TT && block ) {
+        static __forceinline void use ( A1 && a1, A2 && a2, A3 && a3, A4 && a4, TT && block ) {
             CType value ( a1, a2, a3, a4 );
             block ( value );
         }
         template <typename TT, typename A1, typename A2, typename A3, typename A4, typename A5>
-        static __forceinline void use ( A1 a1, A2 a2, A3 a3, A4 a4, A5 a5, TT && block ) {
+        static __forceinline void use ( A1 && a1, A2 && a2, A3 && a3, A4 && a4, A5 && a5, TT && block ) {
             CType value ( a1, a2, a3, a4, a5 );
             block ( value );
         }
         template <typename TT, typename A1, typename A2, typename A3, typename A4, typename A5, typename A6>
-        static __forceinline void use ( A1 a1, A2 a2, A3 a3, A4 a4, A5 a5, A6 a6, TT && block ) {
+        static __forceinline void use ( A1 && a1, A2 && a2, A3 && a3, A4 && a4, A5 && a5, A6 && a6, TT && block ) {
             CType value ( a1, a2, a3, a4, a5, a6 );
             block ( value );
         }
