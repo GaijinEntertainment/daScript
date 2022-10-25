@@ -7101,7 +7101,7 @@ namespace das {
             auto resT = make_smart<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->structs.size());
             if ( resDim==0 ) {
-                resT->dim.clear();
+                // resT->dim.clear();
             } else if ( resDim!=1 ) {
                 resT->dim.resize(1);
                 resT->dim[0] = resDim;
