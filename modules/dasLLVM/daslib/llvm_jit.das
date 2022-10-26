@@ -1745,13 +1745,13 @@ class LlvmJitVisitor : AstVisitor
         let field_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset + field_offset), 0), "")
         if decl.value |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
-            val.extraOffset = uint(offset) + expr.extraOffset
+            val.extraOffset = uint(offset + field_offset) + expr.extraOffset
             if expr.makeFlags.useCMRES
                 pass
             elif expr.makeFlags.useStackRef
-                setE(decl.value, v_ptr)
+                setE(decl.value, field_ptr)
             else
-                setE(decl.value, v_ptr)
+                setE(decl.value, field_ptr)
         elif make_call_to_cmres ( decl.value, field_ptr )
             pass
     def override visitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr

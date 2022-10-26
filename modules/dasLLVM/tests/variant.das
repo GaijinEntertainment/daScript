@@ -33,15 +33,15 @@ def variant_as_panic ( var f : FooT )
     f = [[FooT b = 1.]]
     return f as a
 
-/*
 [jit]
 def make_variant_cmres : FooT
-    return [[auto 1, 0.0, "bar", 0]]
+    return [[FooT a = 13]]
 
 [jit]
 def make_variant_with_subvariant_cmres : BarT
-    return [[auto 1, [[auto 2, 3., "", 0]], 4]]
+    return [[BarT foo = [[FooT a = 13]]]]
 
+/*
 def FooT : FooT
     return [[auto 1234, 1234.0, "1234", 1234]]
 
@@ -63,7 +63,7 @@ def make_variant_with_subvariant_on_stack(which:bool) : BarT
 */
 
 [test]
-def test_tuple ( t:T? )
+def test_variant ( t:T? )
     t |> run("variant field") <| @ ( t : T? )
         var f : FooT
         t |> success ( is_jit_function(@@variant_field) )
@@ -88,23 +88,19 @@ def test_tuple ( t:T? )
         recover
             failed = true
         t |> success(failed)
-/*
-    t |> run("make tuple cmres") <| @ ( t : T? )
+
+    t |> run("make variant cmres") <| @ ( t : T? )
         var f = make_variant_cmres()
         t |> success ( is_jit_function(@@make_variant_cmres) )
-        t |> equal ( 1, f.a )
-        t |> equal ( 0.0, f.b )
-        t |> equal ( "bar", f.c )
-        t |> equal ( 0, f.d )
+        t |> success ( f is a )
+        t |> equal ( 13, f as a )
     t |> run("make struct with substruct cmres") <| @ ( t : T? )
         var f = make_variant_with_subvariant_cmres()
         t |> success ( is_jit_function(@@make_variant_with_subvariant_cmres) )
-        t |> equal ( 1, f.a )
-        t |> equal ( 2, f.foo.a )
-        t |> equal ( 3., f.foo.b )
-        t |> equal ( "", f.foo.c )
-        t |> equal ( 0, f.foo.d )
-        t |> equal ( 4, f.b )
+        t |> success ( f is foo )
+        t |> success ( f as foo is a )
+        t |> equal ( 13, f as foo as a )
+/*
     t |> run("make struct with substruct equal to call to cmres") <| @ ( t : T? )
         var f = make_variant_with_field_call_to_cmres()
         t |> success ( is_jit_function(@@make_variant_with_field_call_to_cmres) )
