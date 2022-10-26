@@ -467,7 +467,12 @@ class LlvmJitVisitor : AstVisitor
 
     def override preVisitExprCopyRight(expr:smart_ptr<ExprCopy>;right:ExpressionPtr): void
         var tdst = getE(expr.left)
-        make_call_to_cmres(expr.right, tdst)
+        if make_call_to_cmres(expr.right, tdst)
+            pass
+        elif expr.takeOverRightStack
+            assert(isMakeLocal(expr.right))
+            var mk_ptr = LLVMBuildPointerCast(g_builder, tdst, LLVMPointerType(LLVMInt8Type(),0u), "")
+            setE(expr.right, mk_ptr)
 
     def override visitExprCopy(expr:smart_ptr<ExprCopy>) : ExpressionPtr
         if isCall2CMRES(expr.right)
@@ -1062,6 +1067,18 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, res)
         return expr
 
+// is variant
+    def override visitExprIsVariant(expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
+        var field_index = find_argument_index(expr.value._type, string(expr.name))
+        if field_index==-1
+            failed_E(expr, "variant field {expr.name} not found")
+            return expr
+        var vptr = getE(expr.value)
+        var vint = LLVMBuildLoad2(g_builder, LLVMInt32Type(), vptr, "variant_index")
+        let cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, vint, LLVMConstInt(LLVMInt32Type(), uint64(field_index), 0), "is_variant")
+        setE(expr, cond)
+        return expr
+
 // function calls
 
     def build_array_of_arguments ( arguments:dasvector`smart_ptr`Expression ) : LLVMOpaqueValue?
@@ -1296,6 +1313,20 @@ class LlvmJitVisitor : AstVisitor
             let field_offset = get_tuple_field_offset(expr.value._type, expr.fieldIndex)
             var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
             let argName = tuple_field_name(expr.value._type,expr.fieldIndex)
+            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
+            if expr.fieldFlags.r2v
+                setE(expr, LLVMBuildLoad(g_builder, field_ptr, ""))
+            else
+                setE(expr, field_ptr)
+        elif expr.value._type.isVariant
+            assert(expr.fieldIndex!=-1)
+            var val_ptr = getE(expr.value)
+            if expr.value._type.isPointer && !expr.derefFlags.unsafeDeref
+                check_ptr_zero(val_ptr)
+            val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            let field_offset = get_variant_field_offset(expr.value._type, expr.fieldIndex)
+            var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+            let argName = variant_field_name(expr.value._type,expr.fieldIndex)
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
             if expr.fieldFlags.r2v
                 setE(expr, LLVMBuildLoad(g_builder, field_ptr, ""))
@@ -1614,6 +1645,11 @@ class LlvmJitVisitor : AstVisitor
             failed_T(t, "not a tuple {describe(t)}")
             return "!!not_a_tuple!!"
         return t.argNames.length!=0 ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
+    def variant_field_name ( t:TypeDeclPtr; index:int )
+        if !t.isVariant
+            failed_T(t, "not a variant {describe(t)}")
+            return "!!not_a_variant!!"
+        return t.argNames.length!=0 ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
     def override visitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
         let offset = get_tuple_field_offset(expr.makeType,index)
         var v_ptr = getE(expr)
@@ -1630,6 +1666,83 @@ class LlvmJitVisitor : AstVisitor
             else
                 failed_E(expr, "makeTuple: move is not supported")
         return init
+
+// make variant
+    def override preVisitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>) : void
+        var mkv_ptr : LLVMOpaqueValue?
+        if expr.makeFlags.useCMRES
+            mkv_ptr = get_cmres_param()
+            mkv_ptr = LLVMBuildPointerCast(g_builder, mkv_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            if expr.extraOffset != 0u
+                mkv_ptr = LLVMBuildGEP(g_builder, mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+        elif expr.makeFlags.useStackRef
+            mkv_ptr = getE(expr)
+            verify(mkv_ptr!=null && LLVMIsUndef(mkv_ptr)==0,"USE STACKREF, but no stackref")
+            if expr.extraOffset != 0u
+                mkv_ptr = LLVMBuildGEP(g_builder, mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+        else
+            mkv_ptr = tryE(expr) <|
+                var vtype = type_to_llvm_type(expr._type)
+                var s_ptr : LLVMOpaqueValue?
+                at_function_entry <|
+                    s_ptr = LLVMBuildAlloca(g_builder, vtype, "mkv_local_sp_{expr.stackTop}")
+                    LLVMSetAlignment(s_ptr, 16u)
+                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mkv_local_sp_{expr.stackTop}")
+                return s_ptr
+            if expr.extraOffset != 0u
+                mkv_ptr = LLVMBuildGEP(g_builder, mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mkv_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+        let stride = expr.makeType.stride
+        if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
+            let total = int(expr.variants.length)
+            let bytes = max(total,1) * stride
+            let align = uint(expr.makeType.alignOf)
+            LLVMBuildMemSet(g_builder, mkv_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
+        setE(expr, mkv_ptr)
+    def override preVisitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
+        var field_index = find_argument_index(expr.makeType, string(decl.name))
+        if field_index==-1
+            failed_E(expr, "variant field {decl.name} not found")
+            return
+        let field_offset = get_variant_field_offset(expr.makeType,field_index)
+        let stride = expr.makeType.stride
+        let offset =  index*stride
+        var v_ptr = getE(expr)
+        verify(v_ptr!=null && LLVMIsUndef(v_ptr)==0,"make variant field, but no pointer")
+        let index_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+        LLVMBuildStore2(g_builder, LLVMInt32Type(), LLVMConstInt(LLVMInt32Type(), uint64(field_index), 0), index_ptr)
+        let field_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset + field_offset), 0), "")
+        if decl.value |> isMakeLocal
+            var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
+            val.extraOffset = uint(offset) + expr.extraOffset
+            if expr.makeFlags.useCMRES
+                pass
+            elif expr.makeFlags.useStackRef
+                setE(decl.value, v_ptr)
+            else
+                setE(decl.value, v_ptr)
+        elif make_call_to_cmres ( decl.value, field_ptr )
+            pass
+    def override visitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
+        var field_index = find_argument_index(expr.makeType, string(decl.name))
+        if field_index==-1
+            failed_E(expr, "variant field {decl.name} not found")
+            return decl
+        let field_offset = get_variant_field_offset(expr.makeType,field_index)
+        let stride = expr.makeType.stride
+        let offset =  index*stride
+        var v_ptr = getE(expr)
+        v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset+field_offset), 0), "[{index}].{decl.name}")
+        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.makeType.argTypes[field_index]), "")
+        if decl.value |> isMakeLocal
+            pass // do nothign. we already taken care of makeLocal in preVisitExprMakeStructField
+        elif isCall2CMRES(decl.value)
+            pass // do nothing. we already handle this in preVisitExprMakeStructField
+        else
+            if decl.flags.moveSemantics
+                failed_E(expr, "makeStruct: move is not supported")
+            else
+                build_copy(v_ptr, decl.value)
+        return decl
 
 // make structure
     def override preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : void

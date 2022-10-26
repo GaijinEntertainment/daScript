@@ -280,6 +280,8 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
     elif t.isTuple
         res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
+    elif t.isVariant
+        res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
     elif t.baseType == Type tArray
         // array type
         var array_fields <- [[auto
