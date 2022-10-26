@@ -250,6 +250,9 @@ class LlvmJitVisitor : AstVisitor
             LLVMBuildMemSet(g_builder, v_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(vsize), 0), 16u)
         elif make_call_to_cmres(arg.init, v_ptr)
             pass    // do nothing
+        elif isMakeLocal(arg.init)
+            var lptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMInt8Type(),0u), "alias_make_local_{arg.name}")
+            setE(arg.init, lptr)
 
     def override visitExprLetVariableInit(blk:smart_ptr<ExprLet>;arg:VariablePtr;expr:ExpressionPtr) : ExpressionPtr
         var tdst = getV(arg)
@@ -1749,9 +1752,9 @@ class LlvmJitVisitor : AstVisitor
             if expr.makeFlags.useCMRES
                 pass
             elif expr.makeFlags.useStackRef
-                setE(decl.value, field_ptr)
+                setE(decl.value, v_ptr)
             else
-                setE(decl.value, field_ptr)
+                setE(decl.value, v_ptr)
         elif make_call_to_cmres ( decl.value, field_ptr )
             pass
     def override visitExprMakeVariantField(expr:smart_ptr<ExprMakeVariant>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr

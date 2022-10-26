@@ -41,26 +41,24 @@ def make_variant_cmres : FooT
 def make_variant_with_subvariant_cmres : BarT
     return [[BarT foo = [[FooT a = 13]]]]
 
-/*
 def FooT : FooT
-    return [[auto 1234, 1234.0, "1234", 1234]]
+    return [[FooT c="1234"]]
 
 [jit]
 def make_variant_with_field_call_to_cmres : BarT
-    return [[auto 1, FooT(), 4]]
+    return [[BarT foo=FooT()]]
 
 [jit]
 def make_variant_on_stack(which:bool) : FooT
-    var a = [[auto 1, 2.0, "3", 4]]
-    var b = [[auto 2, 3.0, "4", 5]]
+    var a = [[FooT a=1]]
+    var b = [[FooT b=2.]]
     return which ? a : b
 
 [jit]
 def make_variant_with_subvariant_on_stack(which:bool) : BarT
-    var a = [[auto 1, [[auto 2, 3., "", 0]], 4]]
-    var b = [[auto 2, [[auto 3, 4., "", 0]], 5]]
+    var a = [[BarT foo = [[FooT a = 1]] ]]
+    var b = [[BarT foo = [[FooT b = 2.]] ]]
     return which ? a : b
-*/
 
 [test]
 def test_variant ( t:T? )
@@ -100,42 +98,28 @@ def test_variant ( t:T? )
         t |> success ( f is foo )
         t |> success ( f as foo is a )
         t |> equal ( 13, f as foo as a )
-/*
     t |> run("make struct with substruct equal to call to cmres") <| @ ( t : T? )
         var f = make_variant_with_field_call_to_cmres()
         t |> success ( is_jit_function(@@make_variant_with_field_call_to_cmres) )
-        t |> equal ( 1, f.a )
-        t |> equal ( 1234,  f.foo.a )
-        t |> equal ( 1234., f.foo.b )
-        t |> equal ( "1234",f.foo.c )
-        t |> equal ( 1234,  f.foo.d )
-        t |> equal ( 4, f.b )
+        t |> success ( f is foo )
+        t |> success ( f as foo is c )
+        t |> equal ( "1234", f as foo as c )
     t |> run("make struct on stack") <| @ ( t : T? )
         var a = make_variant_on_stack(true)
         var b = make_variant_on_stack(false)
         t |> success ( is_jit_function(@@make_variant_on_stack) )
-        t |> equal ( 1,   a.a )
-        t |> equal ( 2.,  a.b )
-        t |> equal ( "3", a.c )
-        t |> equal ( 4,   a.d )
-        t |> equal ( 2,   b.a )
-        t |> equal ( 3.,  b.b )
-        t |> equal ( "4", b.c )
-        t |> equal ( 5,   b.d )
+        t |> success ( a is a )
+        t |> equal ( 1, a as a )
+        t |> success ( b is b )
+        t |> equal ( 2., b as b )
     t |> run("make struct with substruct on stack") <| @ ( t : T? )
         var a = make_variant_with_subvariant_on_stack(true)
         var b = make_variant_with_subvariant_on_stack(false)
         t |> success ( is_jit_function(@@make_variant_with_subvariant_on_stack) )
-        t |> equal ( 1,  a.a )
-        t |> equal ( 2,  a.foo.a )
-        t |> equal ( 3., a.foo.b )
-        t |> equal ( "", a.foo.c )
-        t |> equal ( 0,  a.foo.d )
-        t |> equal ( 4,  a.b )
-        t |> equal ( 2,  b.a )
-        t |> equal ( 3,  b.foo.a )
-        t |> equal ( 4., b.foo.b )
-        t |> equal ( "", b.foo.c )
-        t |> equal ( 0,  b.foo.d )
-        t |> equal ( 5,  b.b )
-*/
+        t |> success ( a is foo )
+        t |> success ( a as foo is a )
+        t |> equal ( 1, a as foo as a )
+        t |> success ( b is foo )
+        t |> success ( b as foo is b )
+        t |> equal ( 2., b as foo as b )
+
