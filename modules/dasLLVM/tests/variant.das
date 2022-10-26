@@ -28,6 +28,11 @@ def variant_as ( var f : FooT )
     f as b = 2.
     return f as b
 
+[jit]
+def variant_as_panic ( var f : FooT )
+    f = [[FooT b = 1.]]
+    return f as a
+
 /*
 [jit]
 def make_variant_cmres : FooT
@@ -74,6 +79,15 @@ def test_tuple ( t:T? )
         t |> success ( is_jit_function(@@variant_as) )
         t |> equal(2., variant_as(f) )
         t |> equal(2., f as b)
+    t |> run("variant as panic") <| @ ( t : T? )
+        var f : FooT
+        t |> success ( is_jit_function(@@variant_as_panic) )
+        var failed = false
+        try
+            t |> equal(2, variant_as_panic(f) )
+        recover
+            failed = true
+        t |> success(failed)
 /*
     t |> run("make tuple cmres") <| @ ( t : T? )
         var f = make_variant_cmres()
