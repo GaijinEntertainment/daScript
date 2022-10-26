@@ -261,6 +261,8 @@ class LlvmJitVisitor : AstVisitor
         elif arg._type.flags.ref
             var src = getE(expr)
             LLVMBuildStore(g_builder, src, tdst)
+        elif isMakeLocal(arg.init)
+            pass
         else
             build_copy(tdst, expr)
         return expr
@@ -1727,7 +1729,7 @@ class LlvmJitVisitor : AstVisitor
             if expr.extraOffset != 0u
                 mkv_ptr = LLVMBuildGEP(g_builder, mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mkv_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
         let stride = expr.makeType.stride
-        if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
+        if stride!=0 && length(expr.variants)==0
             let total = int(expr.variants.length)
             let bytes = max(total,1) * stride
             let align = uint(expr.makeType.alignOf)

@@ -21,6 +21,9 @@ let g_intrin_lookup <- {{
         "$::clz" => @@intrinsic_bit_nzp_op1;
         "$::ctz" => @@intrinsic_bit_nzp_op1;
         "$::popcnt" => @@intrinsic_bit_op1;
+    // variant
+        "$::set_variant_index" => @@intrinsic_builtin_set_variant_index;
+        "$::variant_index" => @@intrinsic_builtin_variant_index;
 // math
     "math::rcp" => @@intrinsic_math_rcp;
     "math::rcp_est"=> @@intrinsic_math_rcp;
@@ -36,6 +39,12 @@ def public lookup_intinsic(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpa
     return result
 
 // intrinsics, $ aka builtin
+
+def intrinsic_builtin_variant_index(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    return LLVMBuildLoad2(g_builder, LLVMInt32Type(), arguments[0], "$::variant_index")
+
+def intrinsic_builtin_set_variant_index(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    return LLVMBuildStore2(g_builder, LLVMInt32Type(), arguments[1], arguments[0])
 
 def intrinsic_builtin_length(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume argType = expr.arguments[0]._type

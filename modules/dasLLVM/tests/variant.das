@@ -60,6 +60,18 @@ def make_variant_with_subvariant_on_stack(which:bool) : BarT
     var b = [[BarT foo = [[FooT b = 2.]] ]]
     return which ? a : b
 
+[jit,sideeffects]
+def ask_variant_index
+    var f = [[FooT b=1.]]
+    return variant_index(f)
+
+[jit,sideeffects]
+def change_variant_index
+    var f = [[FooT b=1.]]
+    unsafe
+        set_variant_index(f,0)
+    return f as a
+
 [test]
 def test_variant ( t:T? )
     t |> run("variant field") <| @ ( t : T? )
@@ -122,4 +134,10 @@ def test_variant ( t:T? )
         t |> success ( b is foo )
         t |> success ( b as foo is b )
         t |> equal ( 2., b as foo as b )
+    t |> run("variant_index") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@ask_variant_index) )
+        t |> equal ( 1, ask_variant_index() )
+    t |> run("set_variant_index") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@change_variant_index) )
+        t |> equal ( int(0x3f800000), change_variant_index() )
 
