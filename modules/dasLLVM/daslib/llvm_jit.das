@@ -1079,6 +1079,38 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, cond)
         return expr
 
+    def check_variant_index ( tidx:LLVMOpaqueValue?; vidx:int; message:string )
+        var cmpIdx = LLVMConstInt(LLVMInt32Type(), uint64(vidx), 0)
+        var check_null_ptr = append_basic_block("check_variant_index")
+        var check_true = append_basic_block("check_true")
+        var check_end = append_basic_block("check_end")
+        LLVMBuildBr(g_builder, check_null_ptr)
+        position_at_end(check_null_ptr)
+        var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, tidx, cmpIdx, "index_check")
+        LLVMBuildCondBr(g_builder, cond, check_true, check_end)
+        position_at_end(check_true)
+        build_exception(message)
+        LLVMBuildBr(g_builder, check_end)
+        position_at_end(check_end)
+
+    def override visitExprAsVariant(expr:smart_ptr<ExprAsVariant>) : ExpressionPtr
+        var field_index = find_argument_index(expr.value._type, string(expr.name))
+        if field_index==-1
+            failed_E(expr, "variant field {expr.name} not found")
+            return expr
+        var vptr = getE(expr.value)
+        var vint = LLVMBuildLoad2(g_builder, LLVMInt32Type(), vptr, "variant_index")
+        check_variant_index(vint, field_index, "variant mismatch, expecting {expr.value._type.argNames[field_index]}")
+        let field_offset = get_variant_field_offset(expr.value._type,field_index)
+        var fptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+        fptr = LLVMBuildGEP(g_builder, fptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+        fptr = LLVMBuildPointerCast(g_builder, fptr, LLVMPointerType(type_to_llvm_type(expr._type), 0u), "variant_field_ptr")
+        if expr.fieldFlags.r2v
+            setE(expr, LLVMBuildLoad(g_builder, fptr, "variant_field"))
+        else
+            setE(expr, fptr)
+        return expr
+
 // function calls
 
     def build_array_of_arguments ( arguments:dasvector`smart_ptr`Expression ) : LLVMOpaqueValue?

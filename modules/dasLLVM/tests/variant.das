@@ -22,6 +22,12 @@ def variant_is ( var f : FooT )
     f = [[FooT b = 1.]]
     return f is b
 
+[jit]
+def variant_as ( var f : FooT )
+    f = [[FooT b = 1.]]
+    f as b = 2.
+    return f as b
+
 /*
 [jit]
 def make_variant_cmres : FooT
@@ -62,8 +68,12 @@ def test_tuple ( t:T? )
         var f : FooT
         t |> success ( is_jit_function(@@variant_is) )
         t |> success ( variant_is(f) )
-        debug(f)
         t |> equal(1., f as b)
+    t |> run("variant as") <| @ ( t : T? )
+        var f : FooT
+        t |> success ( is_jit_function(@@variant_as) )
+        t |> equal(2., variant_as(f) )
+        t |> equal(2., f as b)
 /*
     t |> run("make tuple cmres") <| @ ( t : T? )
         var f = make_variant_cmres()
