@@ -800,3 +800,9 @@ def public get_workhorse_types
         Type tFloat2;           Type tFloat3;           Type tFloat4;           Type tRange;
         Type tURange;           Type tString;           Type tDouble;           Type tPointer
     ]]
+
+def public find_argument_index ( typ:TypeDeclPtr; name:string )
+    for a,ai in typ.argNames,range(100500)
+        if a==name
+            return ai
+    return -1
