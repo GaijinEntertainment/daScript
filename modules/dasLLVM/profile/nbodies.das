@@ -96,10 +96,10 @@ def main
     // print("\ninitial energy {energy()}\n")
     energy(g_bodies)
     profile(10, "n-bodies jit")  <|
-        nbodies(500000)
+        nbodies(10000000)
     // print("\nresult energy {energy()}\n")
     energy(g_bodies)
     testNBodiesInit()
     profile(10, "n-bodies, C++")  <|
-        testNBodiesS(500000)
+        testNBodiesS(10000000)
 
