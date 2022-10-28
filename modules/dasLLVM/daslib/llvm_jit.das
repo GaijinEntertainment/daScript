@@ -278,7 +278,6 @@ class LlvmJitVisitor : AstVisitor
             if varType.flags.ref
                 var_ptr = LLVMBuildLoad(g_builder, var_ptr, "")
             if expr.varFlags.r2v
-                assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
                 setE(expr, LLVMBuildLoad(g_builder, var_ptr, "var_r2v_{expr.variable.name}"))
             else
                 setE(expr, var_ptr)
@@ -286,14 +285,12 @@ class LlvmJitVisitor : AstVisitor
             var tryV = tryGetV(expr.variable)
             if tryV != null
                 if expr.varFlags.r2v
-                    assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
                     setE(expr, LLVMBuildLoad(g_builder, tryV, "var_r2v_{expr.variable.name}"))
                 else
                     setE(expr, tryV)
                 return expr
             var arg = LLVMGetParam(ffunc, uint(expr.argumentIndex))
             if expr.varFlags.r2v
-                assert(expr._type.isWorkhorseType,"r2v only for workhorse types")
                 if varType.flags.ref
                     setE(expr, LLVMBuildLoad(g_builder, arg, "var_ref_r2v_{expr.variable.name}"))
                 else
@@ -1118,14 +1115,20 @@ class LlvmJitVisitor : AstVisitor
 
 // function calls
 
-    def build_array_of_arguments ( arguments:dasvector`smart_ptr`Expression ) : LLVMOpaqueValue?
-        let nargs = length(arguments)
+    def build_array_of_arguments ( arguments:dasvector`smart_ptr`Expression; skip0:bool = false ) : LLVMOpaqueValue?
+        var nargs = length(arguments)
+        var from_ai = 0
+        if skip0
+            nargs --
+            from_ai --
         var args : LLVMOpaqueValue?
         if nargs != 0
             args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), uint(nargs)), "args")
             LLVMSetAlignment(args, 16u)
             args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
-            for a,ai in arguments,range(100500)
+            for a,ai in arguments,range(from_ai,100500)
+                if ai<0
+                    continue
                 var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
                 var arg_val = getE(a)
                 var arg_cast_type = type_to_llvm_abi_type(a._type)
@@ -1277,6 +1280,64 @@ class LlvmJitVisitor : AstVisitor
         make_call(expr, expr.doesNotNeedSp)
         return expr
 
+// invoke
+
+    def isCopyOrMove ( expr:smart_ptr<ExprInvoke> )
+        assume blockT = expr.arguments[0]._type
+        return blockT.firstType!=null && blockT.firstType.isRefType && !blockT.firstType.flags.ref
+
+    def build_invoke_params ( expr:smart_ptr<ExprInvoke> )
+        assume blockT = expr.arguments[0]._type
+        var params : array<LLVMOpaqueValue?>
+        for a,ai in expr.arguments,range(100500)
+            if ai==0        // skip first argument
+                continue
+            if a._type.baseType==Type fakeContext
+                params |> push(LLVMGetParam(ffunc, uint(length(thisFunc.arguments))))
+            elif a._type.baseType==Type fakeLineInfo
+                params |> push(LLVMConstPointerNull(LLVMVoidType()))
+            elif a._type.baseType==Type tPointer
+                assume funcArg = blockT.argTypes[ai-1]
+                var ptrType = type_to_llvm_abi_type(funcArg)
+                var ptrValue = LLVMBuildPointerCast(g_builder, getE(a), ptrType, "arg_{ai-1}_ptr")
+                params |> push( ptrValue )
+            elif (a._type.baseType==Type tArray || a._type.baseType==Type tTable)
+                assume funcArg = blockT.argTypes[ai-1]
+                var destType = type_to_llvm_abi_type(funcArg)
+                var arg = LLVMBuildPointerCast(g_builder, getE(a), destType, "any_array_{ai}_ptr")
+                params |> push(arg)
+            else
+                params |> push(getE(a))
+        return <- params
+
+    def override visitExprInvoke(expr:smart_ptr<ExprInvoke>) : ExpressionPtr
+        assume blockT = expr.arguments[0]._type
+        var cmresEval = null    // TODO: support
+        if blockT.isGoodFunctionType
+            var args = build_array_of_arguments(expr.arguments, true)
+            var FUNC = getE(expr.arguments[0])
+            var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, JIT_FUNCTION_FIELD_SIM_FUNCTION, "SIMFUNCTION")
+            SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
+            var params : array<LLVMOpaqueValue?>
+            params |> push(SIMFUNCTION)
+            params |> push(args)
+            if cmresEval!=null
+                params |> push(cmresEval)
+            params |> push(LLVMGetParam(ffunc, uint(length(thisFunc.arguments))))   // context
+            var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
+            var ccall = LLVMBuildCall(g_builder, func, params, "invoke")
+            if cmresEval != null
+                setE(expr, cmresEval)
+            elif blockT.firstType.isVoid
+                setE(expr, ccall)
+            else
+                var cres = cast_from_vec4f(expr, expr._type, ccall)
+                setE(expr, cres)
+        else
+            failed_E(expr, "invoke({describe(blockT)},...) is not supported yet")
+        return expr
+
+// string builder
     def override visitExprStringBuilder(expr:smart_ptr<ExprStringBuilder>) : ExpressionPtr
         var args = build_array_of_arguments(expr.elements)
         var func = LLVMGetNamedFunction(g_mod, FN_JIT_STRING_BUILDER)

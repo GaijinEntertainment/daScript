@@ -50,6 +50,9 @@ var public g_builder : LLVMOpaqueBuilder?
 var public g_failed : bool = false
 var public g_errors : array<string>
 
+var public g_t_simFunction : LLVMOpaqueType?
+var public g_t_function : LLVMOpaqueType?
+
 var g_str2v : table<string; LLVMOpaqueValue?>
 
 let public JIT_ARRAY_FIELD_DATA = 0u
@@ -62,6 +65,17 @@ let public JIT_TABLE_FIELD_KEYS = 5u
 let public JIT_TABLE_FIELD_HASHES = 6u
 let public JIT_TABLE_FIELD_MAX_LOOKUPS = 7u
 let public JIT_TABLE_FIELD_SHIFT = 8u
+
+let public JIT_SIMFUNCTION_FIELD_NAME = 0u
+let public JIT_SIMFUNCTION_FIELD_MANGLED_NAME = 1u
+let public JIT_SIMFUNCTION_FIELD_CODE = 2u
+let public JIT_SIMFUNCTION_FIELD_DEBUG_INFO = 3u
+let public JIT_SIMFUNCTION_FIELD_MANGLED_NAME_HASH = 4u
+let public JIT_SIMFUNCTION_FIELD_AOT_FUNCTION = 5u
+let public JIT_SIMFUNCTION_FIELD_STACK_SIZE = 6u
+let public JIT_SIMFUNCTION_FIELD_FLAGS = 7u
+
+let public JIT_FUNCTION_FIELD_SIM_FUNCTION = 0u
 
 def public FN_JIT_TABLE_AT(t:Type)
     return "`jit`table_at`{t}`"
@@ -165,6 +179,25 @@ def public init_jit
             [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMInt8Type(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_str_cmp, get_jit_str_cmp())
 
+    // simfunction type
+    var simfunction_fields <- [[auto
+        LLVMPointerType(LLVMInt8Type(),0u); // char * name
+        LLVMPointerType(LLVMInt8Type(),0u); // char * mangledName
+        LLVMPointerType(LLVMVoidType(),0u); // SimNode * code               // note void *
+        LLVMPointerType(LLVMVoidType(),0u); // FuncInfo *  debugInfo        // note void *
+        LLVMInt64Type();                    // uint64_t    mangledNameHash
+        LLVMPointerType(LLVMVoidType(),0u); // void *      aotFunction
+        LLVMInt32Type();                    // uint32_t    stackSize
+        LLVMInt32Type()                     // uint32_t    flags
+    ]]
+    g_t_simFunction = LLVMStructType(unsafe(addr(simfunction_fields[0])), uint(length(simfunction_fields)), 0)
+
+    // function type
+    var function_fields <- [[auto[]
+        LLVMPointerType(g_t_simFunction,0u) // SimFunction * func
+    ]]
+    g_t_function = LLVMStructType(unsafe(addr(function_fields[0])), uint(length(function_fields)), 0)
+
 [macro_function]
 def public finalize_jit
     return if is_in_completion() || is_compiling_macros()
@@ -184,6 +217,8 @@ def private finalize_all_jit
     for je in g_all_engines
         LLVMDisposeExecutionEngine(je.engine); je.engine = null
         LLVMDisposeBuilder(je.builder); je.builder = null
+        g_t_function = null
+        g_t_simFunction = null
         // TODO: figure out why this crashes
         // LLVMDisposeModule(je.mod); je.mod = null
     delete g_all_engines
@@ -256,6 +291,8 @@ def public type_to_llvm_abi_type ( t:TypeDeclPtr )
         return get_type_pointer(t.firstType)
     elif t.isWorkhorseType
         return base_type_to_llvm_type(t.baseType)
+    elif t.baseType==Type tFunction // lambda? block?
+        return type_to_llvm_type(t)
     elif t.isVoid
         return LLVMVoidType()
     elif t.baseType==Type fakeContext || t.baseType==Type fakeLineInfo
@@ -282,6 +319,8 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
     elif t.isVariant
         res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
+    elif t.baseType == Type tFunction
+        res = g_t_function
     elif t.baseType == Type tArray
         // array type
         var array_fields <- [[auto
