@@ -225,6 +225,9 @@ class LlvmJitVisitor : AstVisitor
         if isCall2CMRES(expr)
             call2cmres[get_ptr(expr)] = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMVoidType(),0u), "call_result_{(expr as ExprCall).func.name}")
             return true
+        elif (expr is ExprInvoke) && isCMRESType(expr._type)
+            call2cmres[get_ptr(expr)] = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMVoidType(),0u), "invoke_result_{int(expr.at.line)}")
+            return true
         return false
 
     def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
@@ -1281,11 +1284,6 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // invoke
-
-    def isCopyOrMove ( expr:smart_ptr<ExprInvoke> )
-        assume blockT = expr.arguments[0]._type
-        return blockT.firstType!=null && blockT.firstType.isRefType && !blockT.firstType.flags.ref
-
     def build_invoke_params ( expr:smart_ptr<ExprInvoke> )
         assume blockT = expr.arguments[0]._type
         var params : array<LLVMOpaqueValue?>
@@ -1312,7 +1310,16 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitExprInvoke(expr:smart_ptr<ExprInvoke>) : ExpressionPtr
         assume blockT = expr.arguments[0]._type
-        var cmresEval = null    // TODO: support
+        var cmresEval : LLVMOpaqueValue?
+        if isCMRESType(expr._type)
+            if call2cmres |> key_exists(get_ptr(expr))
+                cmresEval = call2cmres[get_ptr(ExpressionPtr(expr))]
+            else
+                var vtype = type_to_llvm_type(expr._type)
+                at_function_entry <|
+                    cmresEval = LLVMBuildAlloca(g_builder, vtype, "invoke_cmres_eval_{int(expr.at.line)}_var")
+                    LLVMSetAlignment(cmresEval, 16u)
+                    cmresEval = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "invoke_cmres_eval_{int(expr.at.line)}_ptr")
         if blockT.isGoodFunctionType
             var args = build_array_of_arguments(expr.arguments, true)
             var FUNC = getE(expr.arguments[0])

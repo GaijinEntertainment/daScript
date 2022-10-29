@@ -14,6 +14,25 @@ def call_function ( a:int; b:float )
 def test_invoke_call(fun:function<(a:int;b:float):int>)
     return invoke(fun, 1, 2.0)
 
+struct Foo
+    a : int
+    b : float
+
+def call2cmres_function ( a:int; b:float )
+    g_A = a
+    g_B = b
+    return [[Foo a=a+10,b=b+10.]]
+
+[jit]
+def test_invoke_call2cmres(fun:function<(a:int;b:float):Foo>)
+    return invoke(fun, 1, 2.0)
+
+/*
+[jit]
+def test_invoke_lambda(lmb:lambda<(a:int;b:float):int>)
+    return invoke(lmb, 1, 2.0)
+*/
+
 [test]
 def test_ref ( t:T? )
     t |> run("invoke call") <| @ ( t : T? )
@@ -23,5 +42,25 @@ def test_ref ( t:T? )
         t |> equal(13, test_invoke_call(@@call_function))
         t |> equal(1, g_A)
         t |> equal(2.0, g_B)
-
-
+    t |> run("invoke call2cmres") <| @ ( t : T? )
+        t |> success(is_jit_function(@@test_invoke_call2cmres))
+        g_A = 0
+        g_B = 0.
+        let res = test_invoke_call2cmres(@@call2cmres_function)
+        t |> equal(11, res.a)
+        t |> equal(12., res.b)
+        t |> equal(1, g_A)
+        t |> equal(2.0, g_B)
+/*
+    t |> run("invoke lambda") <| @ ( t : T? )
+        t |> success(is_jit_function(@@test_invoke_lambda))
+        g_A = 0
+        g_B = 0.
+        let res = test_invoke_lambda <| @(a:int;b:float):int
+            g_A = a
+            g_B = b
+            return 13
+        t |> equal(13, res)
+        t |> equal(1, g_A)
+        t |> equal(2.0, g_B)
+*/
