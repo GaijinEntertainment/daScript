@@ -806,3 +806,6 @@ def public find_argument_index ( typ:TypeDeclPtr; name:string )
         if a==name
             return ai
     return -1
+
+def public isCMRESType ( blockT:TypeDeclPtr )
+    return blockT!=null && blockT.isRefType && !blockT.flags.ref
