@@ -52,6 +52,7 @@ var public g_errors : array<string>
 
 var public g_t_simFunction : LLVMOpaqueType?
 var public g_t_function : LLVMOpaqueType?
+var public g_t_lambda : LLVMOpaqueType?
 
 var g_str2v : table<string; LLVMOpaqueValue?>
 
@@ -76,6 +77,9 @@ let public JIT_SIMFUNCTION_FIELD_STACK_SIZE = 6u
 let public JIT_SIMFUNCTION_FIELD_FLAGS = 7u
 
 let public JIT_FUNCTION_FIELD_SIM_FUNCTION = 0u
+
+let public JIT_LAMBDA_FIELD_EVAL = 0u
+let public JIT_LAMBDA_FIELD_FINALIZER = 1u
 
 def public FN_JIT_TABLE_AT(t:Type)
     return "`jit`table_at`{t}`"
@@ -190,13 +194,20 @@ def public init_jit
         LLVMInt32Type();                    // uint32_t    stackSize
         LLVMInt32Type()                     // uint32_t    flags
     ]]
-    g_t_simFunction = LLVMStructType(unsafe(addr(simfunction_fields[0])), uint(length(simfunction_fields)), 0)
+    g_t_simFunction = LLVMStructType(simfunction_fields)
 
     // function type
     var function_fields <- [[auto[]
         LLVMPointerType(g_t_simFunction,0u) // SimFunction * func
     ]]
-    g_t_function = LLVMStructType(unsafe(addr(function_fields[0])), uint(length(function_fields)), 0)
+    g_t_function = LLVMStructType(function_fields)
+
+    // lambda type
+    var lambda_fields <- [[auto[]
+        LLVMPointerType(g_t_simFunction,0u);    // SimFunction * __lambda
+        LLVMPointerType(g_t_simFunction,0u)     // SimFunction * __finalize
+    ]]
+    g_t_lambda = LLVMStructType(lambda_fields)
 
 [macro_function]
 def public finalize_jit
@@ -291,7 +302,7 @@ def public type_to_llvm_abi_type ( t:TypeDeclPtr )
         return get_type_pointer(t.firstType)
     elif t.isWorkhorseType
         return base_type_to_llvm_type(t.baseType)
-    elif t.baseType==Type tFunction // lambda? block?
+    elif t.baseType==Type tFunction || t.baseType==Type tLambda // block?
         return type_to_llvm_type(t)
     elif t.isVoid
         return LLVMVoidType()
@@ -321,6 +332,8 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
     elif t.baseType == Type tFunction
         res = g_t_function
+    elif t.baseType == Type tLambda
+        res = LLVMPointerType(g_t_lambda,0u)
     elif t.baseType == Type tArray
         // array type
         var array_fields <- [[auto
@@ -332,7 +345,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         ]]
         if t.firstType!=null
             array_fields[JIT_ARRAY_FIELD_DATA] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
-        res = LLVMStructType(unsafe(addr(array_fields[0])), uint(length(array_fields)), 0)
+        res = LLVMStructType(array_fields)
     elif t.baseType == Type tTable
         // table type
         var table_fields <- [[auto
@@ -350,7 +363,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
             table_fields[JIT_TABLE_FIELD_KEYS] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
         if t.secondType!=null
             table_fields[JIT_ARRAY_FIELD_DATA] = LLVMPointerType(type_to_llvm_type(t.secondType),0u)
-        res = LLVMStructType(unsafe(addr(table_fields[0])), uint(length(table_fields)), 0)
+        res = LLVMStructType(table_fields)
     elif t.isVoid
         res = LLVMVoidType()
     else

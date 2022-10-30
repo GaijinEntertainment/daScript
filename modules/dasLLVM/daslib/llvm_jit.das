@@ -1340,6 +1340,27 @@ class LlvmJitVisitor : AstVisitor
             else
                 var cres = cast_from_vec4f(expr, expr._type, ccall)
                 setE(expr, cres)
+        elif blockT.isGoodLambdaType
+            var args = build_array_of_arguments(expr.arguments, false)
+            var LAMBDA = getE(expr.arguments[0])
+            LAMBDA = LLVMBuildLoad(g_builder, LAMBDA, "LAMBDA")
+            var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, JIT_LAMBDA_FIELD_EVAL, "EVAL")
+            SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
+            var params : array<LLVMOpaqueValue?>
+            params |> push(SIMFUNCTION)
+            params |> push(args)
+            if cmresEval!=null
+                params |> push(cmresEval)
+            params |> push(LLVMGetParam(ffunc, uint(length(thisFunc.arguments))))   // context
+            var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
+            var ccall = LLVMBuildCall(g_builder, func, params, "invoke")
+            if cmresEval != null
+                setE(expr, cmresEval)
+            elif blockT.firstType.isVoid
+                setE(expr, ccall)
+            else
+                var cres = cast_from_vec4f(expr, expr._type, ccall)
+                setE(expr, cres)
         else
             failed_E(expr, "invoke({describe(blockT)},...) is not supported yet")
         return expr
