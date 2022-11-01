@@ -446,6 +446,7 @@ class AstVisitor
     def abstract preVisitExprContinue(expr:smart_ptr<ExprContinue>) : void
     def abstract visitExprContinue(expr:smart_ptr<ExprContinue>) : ExpressionPtr
 // make block
+    def abstract canVisitMakeBlockBody(expr:smart_ptr<ExprMakeBlock>) : bool
     def abstract preVisitExprMakeBlock(expr:smart_ptr<ExprMakeBlock>) : void
     def abstract visitExprMakeBlock(expr:smart_ptr<ExprMakeBlock>) : ExpressionPtr
 // make generator

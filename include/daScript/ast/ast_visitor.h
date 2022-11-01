@@ -35,6 +35,7 @@ namespace das {
         virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) { return true; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) { return false; }
         virtual bool canVisitWithAliasSubexpression ( ExprAssume * ) { return false; }
+        virtual bool canVisitMakeBlockBody ( ExprMakeBlock * expr ) { return true; }
         // WHOLE PROGRAM
         virtual void preVisitProgram ( Program * prog ) {}
         virtual void visitProgram ( Program * prog ) {}

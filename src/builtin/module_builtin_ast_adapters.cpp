@@ -270,6 +270,7 @@ namespace das {
         IMPL_ADAPT(ExprConstFloat4);
         IMPL_ADAPT(ExprConstString);
         IMPL_ADAPT(ExprConstDouble);
+        fnCanVisitMakeBlockBody = adapt("canVisitMakeBlockBody",pClass,info);
         IMPL_ADAPT(ExprMakeBlock);
         IMPL_ADAPT(ExprMakeGenerator);
         IMPL_ADAPT(ExprMemZero);
@@ -308,7 +309,6 @@ namespace das {
             return true;
         }
     }
-
     void VisitorAdapter::preVisit ( Enumeration * expr )
         { IMPL_PREVISIT(Enumeration); }
     EnumerationPtr VisitorAdapter::visit ( Enumeration * expr )
@@ -650,6 +650,15 @@ namespace das {
     IMPL_BIND_EXPR(ExprConstFloat4);
     IMPL_BIND_EXPR(ExprConstString);
     IMPL_BIND_EXPR(ExprConstDouble);
+// make block
+    bool VisitorAdapter::canVisitMakeBlockBody ( ExprMakeBlock * expr ) {
+        if ( fnCanVisitMakeBlockBody ) {
+            return das_invoke_function<bool>::invoke<void *,smart_ptr<ExprMakeBlock>>
+                (context,nullptr,fnCanVisitMakeBlockBody,classPtr,expr);
+        } else {
+            return true;
+        }
+    }
     IMPL_BIND_EXPR(ExprMakeBlock);
     IMPL_BIND_EXPR(ExprMakeGenerator);
     IMPL_BIND_EXPR(ExprMemZero);

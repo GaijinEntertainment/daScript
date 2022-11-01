@@ -1197,7 +1197,7 @@ namespace das {
 
     ExpressionPtr ExprMakeBlock::visit(Visitor & vis) {
         vis.preVisit(this);
-        block = block->visit(vis);
+        if ( vis.canVisitMakeBlockBody(this) ) block = block->visit(vis);
         return vis.visit(this);
     }
 

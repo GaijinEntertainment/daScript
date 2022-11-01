@@ -175,6 +175,7 @@ namespace das {
         DECL_VISIT(ExprConstFloat4);
         DECL_VISIT(ExprConstString);
         DECL_VISIT(ExprConstDouble);
+        Func fnCanVisitMakeBlockBody;
         DECL_VISIT(ExprMakeBlock);
         DECL_VISIT(ExprMakeGenerator);
         DECL_VISIT(ExprMemZero);
@@ -406,6 +407,7 @@ namespace das {
         IMPL_BIND_EXPR(ExprConstFloat4);
         IMPL_BIND_EXPR(ExprConstString);
         IMPL_BIND_EXPR(ExprConstDouble);
+        bool canVisitMakeBlockBody ( ExprMakeBlock * expr ) override;
         IMPL_BIND_EXPR(ExprMakeBlock);
         IMPL_BIND_EXPR(ExprMakeGenerator);
         IMPL_BIND_EXPR(ExprMemZero);

@@ -565,6 +565,7 @@ namespace das {
         for ( const auto & opt : g_allOptions ) {
             if ( !isValidBuiltinName(opt.name) ) {
                 DAS_FATAL_ERROR("%s - invalid option. expecting snake_case\n", opt.name);
+                failed = true;
             }
         }
         DAS_ASSERTF(!failed, "verifyOptions failed");
