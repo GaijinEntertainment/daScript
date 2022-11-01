@@ -35,6 +35,14 @@ def test_invoke_lambda(lmb:lambda<(a:int;b:float):int>)
 def test_invoke_lambda2cmres(lmb:lambda<(a:int;b:float):Foo>)
     return invoke(lmb, 1, 2.0)
 
+[jit]
+def test_invoke_block(blk:block<(a:int;b:float):int>)
+    return invoke(blk, 1, 2.0)
+
+[jit]
+def test_invoke_block2cmres(blk:block<(a:int;b:float):Foo>)
+    return invoke(blk, 1, 2.0)
+
 [test]
 def test_ref ( t:T? )
     t |> run("invoke call") <| @ ( t : T? )
@@ -69,6 +77,29 @@ def test_ref ( t:T? )
         g_A = 0
         g_B = 0.
         let res = test_invoke_lambda2cmres <| @(a:int;b:float):Foo
+            g_A = a
+            g_B = b
+            return [[Foo a=a+10,b=b+10.]]
+        t |> equal(11, res.a)
+        t |> equal(12., res.b)
+        t |> equal(1, g_A)
+        t |> equal(2.0, g_B)
+    t |> run("invoke block") <| @ ( t : T? )
+        t |> success(is_jit_function(@@test_invoke_block))
+        g_A = 0
+        g_B = 0.
+        let res = test_invoke_block <| $(a:int;b:float):int
+            g_A = a
+            g_B = b
+            return 13
+        t |> equal(13, res)
+        t |> equal(1, g_A)
+        t |> equal(2.0, g_B)
+    t |> run("invoke block2cmres") <| @ ( t : T? )
+        t |> success(is_jit_function(@@test_invoke_block2cmres))
+        g_A = 0
+        g_B = 0.
+        let res = test_invoke_block2cmres <| $(a:int;b:float):Foo
             g_A = a
             g_B = b
             return [[Foo a=a+10,b=b+10.]]

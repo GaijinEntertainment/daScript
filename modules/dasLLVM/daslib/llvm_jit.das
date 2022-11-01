@@ -96,10 +96,10 @@ class LlvmJitVisitor : AstVisitor
             LLVMPointerType(LLVMVoidType(),0u)                  // cmres
         ]])
         wfunc = LLVMAddFunction(g_mod, fnmna, ret_type)
-        LLVMSetParamAlignment(LLVMGetParam(wfunc, 0u), 16u)
-        LLVMSetParamAlignment(LLVMGetParam(wfunc, 1u), 16u)
+        LLVMSetParamAlignment(LLVMGetParam(wfunc,0u), 16u)
+        LLVMSetParamAlignment(LLVMGetParam(wfunc,1u), 16u)
         if isCMRES(fun)
-            LLVMSetParamAlignment(LLVMGetParam(wfunc, 2u), uint(fun.result.alignOf))
+            LLVMSetParamAlignment(LLVMGetParam(wfunc,2u), uint(fun.result.alignOf))
 
     def append_basic_block ( name:string; add_to_phi:bool=false )
         var blk = LLVMAppendBasicBlock(ffunc,name)
@@ -157,7 +157,7 @@ class LlvmJitVisitor : AstVisitor
         var wentry = LLVMAppendBasicBlock(wfunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, wentry)
         var wargs : array<LLVMOpaqueValue?>
-        var args = LLVMGetParam(wfunc, 1u)
+        var args = LLVMGetParam(wfunc,1u)
         for a,ai in fun.arguments, range(100500)
             var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "arg_ptr_{ai}")
             var arg_v : LLVMOpaqueValue?
@@ -168,9 +168,9 @@ class LlvmJitVisitor : AstVisitor
             else
                 arg_v = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(a._type), arg_ptr, "arg_any_{ai}")
             wargs |> push(arg_v)
-        wargs |> push(LLVMGetParam(wfunc, 0u))  // context
+        wargs |> push(LLVMGetParam(wfunc,0u))  // context
         if isCMRES(fun)
-            wargs |> push(LLVMGetParam(wfunc, 2u))  // cmres
+            wargs |> push(LLVMGetParam(wfunc,2u))  // cmres
         var ret_v = LLVMBuildCall(g_builder, ffunc, wargs, "")
         if !fun.result.isVoid
             if isCMRES(fun)
@@ -191,7 +191,7 @@ class LlvmJitVisitor : AstVisitor
             if (a.access_flags.access_ref || a.access_flags.access_pass) && !a._type.isRef
                 var tryV = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(a._type), "var_{a.name}")
                 LLVMSetAlignment(tryV, 16u)
-                LLVMBuildStore(g_builder, LLVMGetParam(ffunc, uint(ai)), tryV)
+                LLVMBuildStore(g_builder, LLVMGetParam(ffunc,uint(ai)), tryV)
                 setV(a, tryV)
         // go through all used global variables, and access them
         get_use_global_variables(fun) <| $ ( variable )
@@ -200,7 +200,7 @@ class LlvmJitVisitor : AstVisitor
                 let MNH = hash(mangled_name)
                 var params = [[auto
                     LLVMConstInt(LLVMInt64Type(), MNH, 0);         // mnh
-                    get_context_param()     // context
+                    get_context_param()
                 ]]
                 var vptr = LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_GET_GLOBAL_MNH), params, "")
                 vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(variable._type), "global_var_{variable.name}")
@@ -292,7 +292,7 @@ class LlvmJitVisitor : AstVisitor
                 else
                     setE(expr, tryV)
                 return expr
-            var arg = LLVMGetParam(ffunc, uint(expr.argumentIndex))
+            var arg = LLVMGetParam(ffunc,uint(expr.argumentIndex))
             if expr.varFlags.r2v
                 if varType.flags.ref
                     setE(expr, LLVMBuildLoad(g_builder, arg, "var_ref_r2v_{expr.variable.name}"))
@@ -435,21 +435,21 @@ class LlvmJitVisitor : AstVisitor
     def build_exception ( message:string )
         var params = [[auto
             get_string_constant_ptr(message);   // message
-            get_context_param()                 // context
+            get_context_param()
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_EXCEPTION), params, "")
 
     def build_array_lock ( array_ptr:LLVMOpaqueValue? )
         var params = [[auto
             LLVMBuildPointerCast(g_builder, array_ptr, LLVMPointerType(LLVMVoidType(),0u), "");              // array
-            get_context_param()     // context
+            get_context_param()
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_LOCK), params, "")
 
     def build_array_unlock ( array_ptr:LLVMOpaqueValue? )
         var params = [[auto
             LLVMBuildPointerCast(g_builder, array_ptr, LLVMPointerType(LLVMVoidType(),0u), "");              // array
-            get_context_param()     // context
+            get_context_param()
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_UNLOCK), params, "")
 
@@ -530,7 +530,7 @@ class LlvmJitVisitor : AstVisitor
             tab;        // table                                        // table ptr
             key;                                                        // key
             LLVMConstInt(LLVMInt32Type(), uint64(valueTypeSize), 0);    // valueTypeSize
-            get_context_param()                                         // context
+            get_context_param()
         ]]
         var tab_fun = LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_AT(ttype))
         if tab_fun==null
@@ -1174,7 +1174,7 @@ class LlvmJitVisitor : AstVisitor
         var params : array<LLVMOpaqueValue?>
         for a,ai in expr.arguments,range(100500)
             if a._type.baseType==Type fakeContext
-                params |> push(LLVMGetParam(ffunc, uint(length(thisFunc.arguments))))
+                params |> push(get_context_param())
             elif a._type.baseType==Type fakeLineInfo
                 params |> push(LLVMConstPointerNull(LLVMVoidType()))
             elif a._type.baseType==Type tPointer
@@ -1222,7 +1222,7 @@ class LlvmJitVisitor : AstVisitor
                     failed_E(expr, "missing interop function node pointer for {expr.func.name}")
                 let NODE_ADDR = intptr(NODE_PTR)
                 var params <- [{LLVMOpaqueValue?
-                    LLVMGetParam(ffunc, uint(length(thisFunc.arguments)));  // Context *
+                    get_context_param();
                     LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), NODE_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)); // Node *
                     args                                                   // args
                 }]
@@ -1244,7 +1244,7 @@ class LlvmJitVisitor : AstVisitor
         else
             if expr.func.moreFlags.requestJit
                 var params <- build_call_params(expr)
-                params |> push(get_context_param()) // context
+                params |> push(get_context_param())
                 if cmresEval!=null
                     params |> push(cmresEval)       // cmres
                 let fmna = get_mangled_name(FunctionPtr(expr.func))
@@ -1268,7 +1268,7 @@ class LlvmJitVisitor : AstVisitor
                 params |> push(args)
                 if cmresEval!=null
                     params |> push(cmresEval)
-                params |> push(LLVMGetParam(ffunc, uint(length(thisFunc.arguments))))   // context
+                params |> push(get_context_param())
                 var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
                 if cmresEval != null
@@ -1291,7 +1291,7 @@ class LlvmJitVisitor : AstVisitor
             if ai==0        // skip first argument
                 continue
             if a._type.baseType==Type fakeContext
-                params |> push(LLVMGetParam(ffunc, uint(length(thisFunc.arguments))))
+                params |> push(get_context_param())
             elif a._type.baseType==Type fakeLineInfo
                 params |> push(LLVMConstPointerNull(LLVMVoidType()))
             elif a._type.baseType==Type tPointer
@@ -1330,7 +1330,7 @@ class LlvmJitVisitor : AstVisitor
             params |> push(args)
             if cmresEval!=null
                 params |> push(cmresEval)
-            params |> push(LLVMGetParam(ffunc, uint(length(thisFunc.arguments))))   // context
+            params |> push(get_context_param())
             var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
             var ccall = LLVMBuildCall(g_builder, func, params, "invoke")
             if cmresEval != null
@@ -1351,7 +1351,7 @@ class LlvmJitVisitor : AstVisitor
             params |> push(args)
             if cmresEval!=null
                 params |> push(cmresEval)
-            params |> push(LLVMGetParam(ffunc, uint(length(thisFunc.arguments))))   // context
+            params |> push(get_context_param())
             var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
             var ccall = LLVMBuildCall(g_builder, func, params, "invoke")
             if cmresEval != null
@@ -1361,6 +1361,25 @@ class LlvmJitVisitor : AstVisitor
             else
                 var cres = cast_from_vec4f(expr, expr._type, ccall)
                 setE(expr, cres)
+        elif blockT.isGoodBlockType
+            var args = build_array_of_arguments(expr.arguments, true)
+            var blk = getE(expr.arguments[0])
+            var params : array<LLVMOpaqueValue?>
+            params |> push(blk)
+            params |> push(args)
+            if cmresEval!=null
+                params |> push(cmresEval)
+            params |> push(get_context_param())
+            var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_INVOKE_BLOCK_WITH_CMRES : FN_JIT_INVOKE_BLOCK)
+            var ccall = LLVMBuildCall(g_builder, func, params, "invoke")
+            if cmresEval != null
+                setE(expr, cmresEval)
+            elif blockT.firstType.isVoid
+                setE(expr, ccall)
+            else
+                var cres = cast_from_vec4f(expr, expr._type, ccall)
+                setE(expr, cres)
+
         else
             failed_E(expr, "invoke({describe(blockT)},...) is not supported yet")
         return expr
@@ -1375,7 +1394,7 @@ class LlvmJitVisitor : AstVisitor
             failed_E(expr, "missing interop function node pointer for String Builder")
         let NODE_ADDR = intptr(NODE_PTR)
         var params <- [{LLVMOpaqueValue?
-            LLVMGetParam(ffunc, uint(length(thisFunc.arguments)));  // Context *
+            get_context_param();
             LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), NODE_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)); // Node *
             args                                                   // args
         }]
@@ -1947,7 +1966,7 @@ class LlvmJitVisitor : AstVisitor
     def build_alloc ( bytes:int; persistent:bool )
         var params = [[auto
             LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0);    // bytes
-            get_context_param()                                 // context
+            get_context_param()
         ]]
         return LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, persistent ? FN_JIT_ALLOC_PERSISTENT : FN_JIT_ALLOC_HEAP), params, "")
     def override preVisitExprNew(expr:smart_ptr<ExprNew>): void

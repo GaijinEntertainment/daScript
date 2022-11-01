@@ -27,6 +27,8 @@ let public LLVM_INLINE_THRESHOLD = 225u
 let public FN_JIT_EXCEPTION = "`jit`exception`"
 let public FN_JIT_CALL_OR_FASTCALL = "`jit`call_or_fastcall`"
 let public FN_JIT_CALL_WITH_CMRES = "`jit`call_with_cmres`"
+let public FN_JIT_INVOKE_BLOCK = "`jit`invoke_block`"
+let public FN_JIT_INVOKE_BLOCK_WITH_CMRES = "`jit`invoke_block_with_cmres`"
 let public FN_JIT_STRING_BUILDER = "`jit`string_builder`"
 let public FN_JIT_GET_GLOBAL_MNH = "`jit`get_global_mnh`"
 let public FN_JIT_ALLOC_HEAP = "`jit`alloc_heap`"
@@ -53,6 +55,7 @@ var public g_errors : array<string>
 var public g_t_simFunction : LLVMOpaqueType?
 var public g_t_function : LLVMOpaqueType?
 var public g_t_lambda : LLVMOpaqueType?
+var public g_t_block : LLVMOpaqueType?
 
 var g_str2v : table<string; LLVMOpaqueValue?>
 
@@ -81,6 +84,13 @@ let public JIT_FUNCTION_FIELD_SIM_FUNCTION = 0u
 let public JIT_LAMBDA_FIELD_EVAL = 0u
 let public JIT_LAMBDA_FIELD_FINALIZER = 1u
 
+let public JIT_BLOCK_FIELD_STACK_OFFSET = 0u
+let public JIT_BLOCK_FIELD_ARGUMENTS_OFFSET = 1u
+let public JIT_BLOCK_FIELD_BODY = 2u
+let public JIT_BLOCK_FIELD_AOT_FUNCTION = 3u
+let public JIT_BLOCK_FIELD_FUNCTION_ARGUMENTS = 4u
+let public JIT_BLOCK_FIELD_INFO = 5u
+
 def public FN_JIT_TABLE_AT(t:Type)
     return "`jit`table_at`{t}`"
 
@@ -107,6 +117,8 @@ def public init_jit
     var noreturn = LLVMGetEnumAttribute("noreturn")
     var readonly = LLVMGetEnumAttribute("readonly")
 
+    build_jit_types()
+
     // add default functions
     var jit_exception = LLVMAddFunction(g_mod, FN_JIT_EXCEPTION,    // jit_exception(text,context *)
         LLVMFunctionType(LLVMVoidType(),
@@ -123,6 +135,16 @@ def public init_jit
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_call_with_cmres, get_jit_call_with_cmres())
+
+    var jit_invoke_block = LLVMAddFunction(g_mod, FN_JIT_INVOKE_BLOCK, // vec4f jit_invoke_block ( const Block & blk, vec4f * args, Context * context )
+        LLVMFunctionType(LLVMFloat4Type(),
+            [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_invoke_block, get_jit_invoke_block())
+
+    var jit_invoke_block_with_cmres = LLVMAddFunction(g_mod, FN_JIT_INVOKE_BLOCK_WITH_CMRES, // vec4f jit_invoke_block_with_cmres ( const Block & blk, vec4f * args, void * cmres, Context * context )
+        LLVMFunctionType(LLVMFloat4Type(),
+            [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_invoke_block_with_cmres, get_jit_invoke_block_with_cmres())
 
     var jit_string_builder = LLVMAddFunction(g_mod, FN_JIT_STRING_BUILDER, // jit_string_builder ( context *, node *, args * )
         LLVMFunctionType(get_type_string(),
@@ -183,6 +205,7 @@ def public init_jit
             [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMInt8Type(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_str_cmp, get_jit_str_cmp())
 
+def private build_jit_types
     // simfunction type
     var simfunction_fields <- [[auto
         LLVMPointerType(LLVMInt8Type(),0u); // char * name
@@ -208,6 +231,17 @@ def public init_jit
         LLVMPointerType(g_t_simFunction,0u)     // SimFunction * __finalize
     ]]
     g_t_lambda = LLVMStructType(lambda_fields)
+
+    // block type
+    var block_fields <- [[auto[]
+        LLVMInt32Type();                        // uint32_t    stackOffset;
+        LLVMInt32Type();                        // uint32_t    argumentsOffset;
+        LLVMPointerType(LLVMVoidType(),0u);     // SimNode *   body;
+        LLVMPointerType(LLVMVoidType(),0u);     // void *      aotFunction;
+        LLVMPointerType(LLVMFloat4Type(),0u);   // vec4f *     functionArguments;
+        LLVMPointerType(LLVMVoidType(),0u)      // FuncInfo *  info;
+    ]]
+    g_t_block = LLVMStructType(block_fields)
 
 [macro_function]
 def public finalize_jit
@@ -296,13 +330,15 @@ def public base_type_to_llvm_type ( t:Type )
     return LLVMInt32Type()
 
 def public type_to_llvm_abi_type ( t:TypeDeclPtr )
-    if t.isRef
+    if t.baseType==Type tBlock
+        return LLVMPointerType(g_t_block, 0u)
+    elif t.isRef
         return LLVMPointerType(type_to_llvm_type(t), 0u)
     elif t.isPointer
         return get_type_pointer(t.firstType)
     elif t.isWorkhorseType
         return base_type_to_llvm_type(t.baseType)
-    elif t.baseType==Type tFunction || t.baseType==Type tLambda // block?
+    elif t.baseType==Type tFunction || t.baseType==Type tLambda
         return type_to_llvm_type(t)
     elif t.isVoid
         return LLVMVoidType()
@@ -334,6 +370,8 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         res = g_t_function
     elif t.baseType == Type tLambda
         res = LLVMPointerType(g_t_lambda,0u)
+    elif t.baseType == Type tBlock
+        res = LLVMPointerType(g_t_block,0u)
     elif t.baseType == Type tArray
         // array type
         var array_fields <- [[auto
