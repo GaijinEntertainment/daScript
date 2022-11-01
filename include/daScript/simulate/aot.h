@@ -2885,6 +2885,8 @@ namespace das {
     void * das_get_jit_exception ();
     void * das_get_jit_call_or_fastcall ();
     void * das_get_jit_call_with_cmres ( );
+    void * das_get_jit_invoke_block ( );
+    void * das_get_jit_invoke_block_with_cmres ( );
     void * das_get_jit_string_builder ();
     void * das_get_jit_get_global_mnh ();
     void * das_get_jit_alloc_heap ();

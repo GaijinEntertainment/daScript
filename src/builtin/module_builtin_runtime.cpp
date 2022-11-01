@@ -1044,6 +1044,22 @@ namespace das
         return (void *) &jit_call_or_fastcall;
     }
 
+    vec4f jit_invoke_block ( const Block & blk, vec4f * args, Context * context ) {
+        return context->invoke(blk, args, nullptr, nullptr);
+    }
+
+    void * das_get_jit_invoke_block ( ) {
+        return (void *) &jit_invoke_block;
+    }
+
+    vec4f jit_invoke_block_with_cmres ( const Block & blk, vec4f * args, void * cmres, Context * context ) {
+        return context->invoke(blk, args, cmres, nullptr);
+    }
+
+    void * das_get_jit_invoke_block_with_cmres ( ) {
+        return (void *) &jit_invoke_block_with_cmres;
+    }
+
     vec4f jit_call_with_cmres ( SimFunction * fn, vec4f * args, void * cmres, Context * context ) {
         return context->callWithCopyOnReturn(fn, args, cmres, nullptr);
     }
@@ -1544,6 +1560,10 @@ namespace das
             SideEffects::none, "das_get_jit_call_or_fastcall");
         addExtern<DAS_BIND_FUN(das_get_jit_call_with_cmres)>(*this, lib, "get_jit_call_with_cmres",
             SideEffects::none, "das_get_jit_call_with_cmres");
+        addExtern<DAS_BIND_FUN(das_get_jit_invoke_block)>(*this, lib, "get_jit_invoke_block",
+            SideEffects::none, "das_get_jit_invoke_block");
+        addExtern<DAS_BIND_FUN(das_get_jit_invoke_block_with_cmres)>(*this, lib, "get_jit_invoke_block_with_cmres",
+            SideEffects::none, "das_get_jit_invoke_block_with_cmres");
         addExtern<DAS_BIND_FUN(das_get_jit_string_builder)>(*this, lib, "get_jit_string_builder",
             SideEffects::none, "das_get_jit_string_builder");
         addExtern<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
