@@ -59,37 +59,48 @@ var public g_t_block : LLVMOpaqueType?
 
 var g_str2v : table<string; LLVMOpaqueValue?>
 
-let public JIT_ARRAY_FIELD_DATA = 0u
-let public JIT_ARRAY_FIELD_SIZE = 1u
-let public JIT_ARRAY_FIELD_CAPACITY = 2u
-let public JIT_ARRAY_FIELD_LOCK = 3u
-let public JIT_ARRAY_FIELD_FLAGS = 4u
+enum public JIT_ARRAY
+    DATA
+    SIZE
+    CAPACITY
+    LOOK
+    FLAGS
 
-let public JIT_TABLE_FIELD_KEYS = 5u
-let public JIT_TABLE_FIELD_HASHES = 6u
-let public JIT_TABLE_FIELD_MAX_LOOKUPS = 7u
-let public JIT_TABLE_FIELD_SHIFT = 8u
+enum public JIT_TABLE
+    DATA
+    SIZE
+    CAPACITY
+    LOOK
+    FLAGS
+    KEYS
+    HASHES
+    MAX_LOOKUPS
+    SHIFT
 
-let public JIT_SIMFUNCTION_FIELD_NAME = 0u
-let public JIT_SIMFUNCTION_FIELD_MANGLED_NAME = 1u
-let public JIT_SIMFUNCTION_FIELD_CODE = 2u
-let public JIT_SIMFUNCTION_FIELD_DEBUG_INFO = 3u
-let public JIT_SIMFUNCTION_FIELD_MANGLED_NAME_HASH = 4u
-let public JIT_SIMFUNCTION_FIELD_AOT_FUNCTION = 5u
-let public JIT_SIMFUNCTION_FIELD_STACK_SIZE = 6u
-let public JIT_SIMFUNCTION_FIELD_FLAGS = 7u
+enum public JIT_SIMFUNCTION
+    NAME
+    MANGLED_NAME
+    CODE
+    DEBUG_INFO
+    MANGLED_NAME_HASH
+    AOT_FUNCTION
+    STACK_SIZE
+    FLAGS
 
-let public JIT_FUNCTION_FIELD_SIM_FUNCTION = 0u
+enum public JIT_FUNCTION
+    SIM_FUNCTION
 
-let public JIT_LAMBDA_FIELD_EVAL = 0u
-let public JIT_LAMBDA_FIELD_FINALIZER = 1u
+enum public JIT_LAMBDA
+    EVAL
+    FINALIZER
 
-let public JIT_BLOCK_FIELD_STACK_OFFSET = 0u
-let public JIT_BLOCK_FIELD_ARGUMENTS_OFFSET = 1u
-let public JIT_BLOCK_FIELD_BODY = 2u
-let public JIT_BLOCK_FIELD_AOT_FUNCTION = 3u
-let public JIT_BLOCK_FIELD_FUNCTION_ARGUMENTS = 4u
-let public JIT_BLOCK_FIELD_INFO = 5u
+enum public JIT_BLOCK
+    STACK_OFFSET
+    ARGUMENTS_OFFSET
+    BODY
+    AOT_FUNCTION
+    FUNCTION_ARGUMENTS
+    INFO
 
 def public FN_JIT_TABLE_AT(t:Type)
     return "`jit`table_at`{t}`"
@@ -233,15 +244,18 @@ def private build_jit_types
     g_t_lambda = LLVMStructType(lambda_fields)
 
     // block type
-    var block_fields <- [[auto[]
+    var block_fields <- build_block_type()
+    g_t_block = LLVMStructType(block_fields)
+
+def public build_block_type
+    return <- [{auto[]
         LLVMInt32Type();                        // uint32_t    stackOffset;
         LLVMInt32Type();                        // uint32_t    argumentsOffset;
         LLVMPointerType(LLVMVoidType(),0u);     // SimNode *   body;
         LLVMPointerType(LLVMVoidType(),0u);     // void *      aotFunction;
         LLVMPointerType(LLVMFloat4Type(),0u);   // vec4f *     functionArguments;
         LLVMPointerType(LLVMVoidType(),0u)      // FuncInfo *  info;
-    ]]
-    g_t_block = LLVMStructType(block_fields)
+    }]
 
 [macro_function]
 def public finalize_jit
@@ -382,7 +396,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
             LLVMInt32Type()                     // uint32_t flags
         ]]
         if t.firstType!=null
-            array_fields[JIT_ARRAY_FIELD_DATA] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
+            array_fields[int(JIT_ARRAY DATA)] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
         res = LLVMStructType(array_fields)
     elif t.baseType == Type tTable
         // table type
@@ -398,9 +412,9 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
             LLVMInt32Type()                     // uint32_t shift
         ]]
         if t.firstType!=null
-            table_fields[JIT_TABLE_FIELD_KEYS] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
+            table_fields[int(JIT_TABLE KEYS)] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
         if t.secondType!=null
-            table_fields[JIT_ARRAY_FIELD_DATA] = LLVMPointerType(type_to_llvm_type(t.secondType),0u)
+            table_fields[int(JIT_ARRAY DATA)] = LLVMPointerType(type_to_llvm_type(t.secondType),0u)
         res = LLVMStructType(table_fields)
     elif t.isVoid
         res = LLVMVoidType()

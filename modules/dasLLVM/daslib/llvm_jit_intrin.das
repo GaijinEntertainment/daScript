@@ -50,7 +50,7 @@ def intrinsic_builtin_length(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMO
     assume argType = expr.arguments[0]._type
     if argType.isGoodArrayType
         var arr = LLVMBuildLoad(g_builder, arguments[0], "arr")
-        return LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_SIZE, "array.size")
+        return LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY SIZE), "array.size")
     else
         return null
 

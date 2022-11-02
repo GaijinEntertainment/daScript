@@ -15,8 +15,37 @@ require daslib/defer
 require daslib/fio
 require math
 
+[macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
+
+[macro]
+class LlvmJitCaptureBlock : AstVisitor
+    [[do_not_delete]] scope : table<Variable?>
+    [[do_not_delete]] capture : table<Variable?>
+    def override preVisitExprVar(expr:smart_ptr<ExprVar>) : void
+        if !(expr.varFlags.local || expr.varFlags.argument || expr.varFlags._block)
+            return
+        let vptr = get_ptr(expr.variable)
+        if !(scope |> key_exists(vptr))
+            capture |> insert(vptr)
+    def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
+        scope |> insert(get_ptr(arg))
+    def override preVisitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool) : void
+        scope |> insert(get_ptr(svar))
+    def override preVisitExprBlockArgument(blk:smart_ptr<ExprBlock>;arg:VariablePtr;lastArg:bool): void
+        scope |> insert(get_ptr(arg))
+
+[macro_function]
+def private capture_block(expr:ExpressionPtr) : array<Variable?>
+    var astVisitor = new LlvmJitCaptureBlock()
+    var adapter <- make_visitor(*astVisitor)
+    visit(expr, adapter)
+    var res <- [{for k in keys(astVisitor.capture); k}]
+    adapter := null
+    unsafe
+        delete astVisitor
+    return <- res
 
 struct private IteBlock
     [[do_not_delete]] if_true  : LLVMOpaqueBasicBlock?
@@ -30,6 +59,7 @@ struct private LoopBlock
     [[do_not_delete]] loop_body  : LLVMOpaqueBasicBlock?
     [[do_not_delete]] loop_end   : LLVMOpaqueBasicBlock?
 
+[macro]
 class LlvmJitVisitor : AstVisitor
     adapter : smart_ptr<VisitorAdapter>
     fnmna : string
@@ -566,9 +596,9 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, ptr_idx)
         elif subExprT.baseType == Type tArray
             var arr = LLVMBuildLoad(g_builder, tsrc, "arr")
-            var size = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_SIZE, "array.size")
+            var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY SIZE), "array.size")
             check_range(tidx, size, "array index out of range")
-            var data = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_DATA, "array.data")
+            var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY DATA), "array.data")
             var ptr_idx = LLVMBuildGEP(g_builder, data, tidx, "array_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "array_at_r2v")
@@ -580,7 +610,7 @@ class LlvmJitVisitor : AstVisitor
             var tab = LLVMBuildLoad(g_builder, tsrc, "tab")
             var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
             var at_tab = build_table_at(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
-            var data = LLVMBuildExtractValue(g_builder, tab, JIT_ARRAY_FIELD_DATA, "table.data")
+            var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
             var ptr_idx = LLVMBuildGEP(g_builder, data, at_tab, "table_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "array_at_r2v")
@@ -1323,7 +1353,7 @@ class LlvmJitVisitor : AstVisitor
         if blockT.isGoodFunctionType
             var args = build_array_of_arguments(expr.arguments, true)
             var FUNC = getE(expr.arguments[0])
-            var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, JIT_FUNCTION_FIELD_SIM_FUNCTION, "SIMFUNCTION")
+            var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION SIM_FUNCTION), "SIMFUNCTION")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
             var params : array<LLVMOpaqueValue?>
             params |> push(SIMFUNCTION)
@@ -1344,7 +1374,7 @@ class LlvmJitVisitor : AstVisitor
             var args = build_array_of_arguments(expr.arguments, false)
             var LAMBDA = getE(expr.arguments[0])
             LAMBDA = LLVMBuildLoad(g_builder, LAMBDA, "LAMBDA")
-            var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, JIT_LAMBDA_FIELD_EVAL, "EVAL")
+            var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA EVAL), "EVAL")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
             var params : array<LLVMOpaqueValue?>
             params |> push(SIMFUNCTION)
@@ -1581,13 +1611,13 @@ class LlvmJitVisitor : AstVisitor
             elif ssrc._type.isGoodArrayType
                 var element_type = type_to_llvm_type(svar._type)
                 var arr = LLVMBuildLoad(g_builder, getE(ssrc), "array")
-                var size = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_SIZE, "array.size")
+                var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY SIZE), "array.size")
                 var cmp_from_to = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, size, LLVMConstInt(LLVMInt32Type(),0ul,0), "")
                 var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_not_empty")
                 LLVMBuildCondBr(g_builder, cmp_from_to, okay, lblk.loop_end)
                 position_at_end(okay)
                 build_array_lock(getE(ssrc))
-                var data = LLVMBuildExtractValue(g_builder, arr, JIT_ARRAY_FIELD_DATA, "array.data")
+                var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY DATA), "array.data")
                 LLVMBuildStore(g_builder, data, getV(svar))
                 var sto = LLVMBuildGEP2(g_builder, element_type, data, size, "")
                 sto = LLVMBuildPtrToInt(g_builder, sto, LLVMIntPtrType(), "array_end")
@@ -2016,6 +2046,16 @@ class LlvmJitVisitor : AstVisitor
             failed_E(expr, "cast<{describe(expr.castType)} is not supported yet")
         setE(expr, res)
         return expr
+
+// make block
+    def override canVisitMakeBlockBody(expr:smart_ptr<ExprMakeBlock>) : bool
+        return false
+    def override preVisitExprMakeBlock(expr:smart_ptr<ExprMakeBlock>) : void
+        var capture <- capture_block(expr._block)
+        for c in capture
+            print("CAPTURED {c.name}\n")
+        failed_E(expr, "make block is not supported yet")
+        setE(expr, LLVMGetUndef(LLVMInt32Type()))
 
 // constants
     def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr

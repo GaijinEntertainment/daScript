@@ -13,6 +13,9 @@ require strings
 def LLVMStructType ( var fields:LLVMOpaqueType? [] )
     return LLVMStructType(unsafe(addr(fields[0])), uint(length(fields)), 0)
 
+def LLVMStructType ( var fields:array<LLVMOpaqueType?> )
+    return LLVMStructType(unsafe(addr(fields[0])), uint(length(fields)), 0)
+
 def LLVMGetEnumAttributeKindForName(attr_name:string)
     return LLVMGetEnumAttributeKindForName(attr_name,uint64(length(attr_name)))
 
