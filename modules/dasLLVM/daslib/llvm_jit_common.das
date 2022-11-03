@@ -46,13 +46,11 @@ let public FN_JIT_MAKE_BLOCK = "`jit`make_block`"
 struct JitEngine
     mod : LLVMOpaqueModule?
     engine : LLVMExecutionEngineRef
-    builder : LLVMOpaqueBuilder?
 
 var private g_all_engines : array<JitEngine>
 
 var public g_mod : LLVMOpaqueModule?
 var public g_engine : LLVMExecutionEngineRef
-var public g_builder : LLVMOpaqueBuilder?
 var public g_failed : bool = false
 var public g_errors : array<string>
 
@@ -113,10 +111,9 @@ def public FN_JIT_TABLE_AT(t:Type)
 [macro_function]
 def public init_jit
     return if is_in_completion() || is_compiling_macros()
-    return if g_builder != null    // prevent double init
+    return if g_mod != null    // prevent double init
     g_failed = false
     g_mod = LLVMModuleCreateWithName("llvm_jit_module")
-    g_builder = LLVMCreateBuilder()
     LLVMLinkInMCJIT()
     LLVMInitializeNativeTarget()
     LLVMInitializeNativeAsmPrinter()
@@ -287,14 +284,13 @@ def public build_block_type
 [macro_function]
 def public finalize_jit
     return if is_in_completion() || is_compiling_macros()
-    return if g_builder == null    // prevent double finalize
+    return if g_mod == null    // prevent double finalize
     if LLVM_LOG_RESULT
         LLVMDumpModule(g_mod)
         fflush(fstderr())
     g_all_engines |> push([[ JitEngine
         mod <- g_mod,
-        engine <- g_engine,
-        builder <- g_builder
+        engine <- g_engine
     ]])
     delete g_str2v
 
@@ -302,7 +298,6 @@ def public finalize_jit
 def private finalize_all_jit
     for je in g_all_engines
         LLVMDisposeExecutionEngine(je.engine); je.engine = null
-        LLVMDisposeBuilder(je.builder); je.builder = null
         g_t_function = null
         g_t_simFunction = null
         g_t_block = null
@@ -338,9 +333,9 @@ def public get_type_pointer ( t:TypeDeclPtr ) : LLVMOpaqueType?
 def public get_type_string : LLVMOpaqueType?
     return LLVMPointerType(LLVMInt8Type(), 0u)
 
-def public get_string_constant_ptr ( message:string )
+def public get_string_constant_ptr ( builder:LLVMOpaqueBuilder?; message:string )
     var str = build_string_constant(message)
-    return LLVMBuildPointerCast(g_builder, str, get_type_string(), "string_constant {message}")
+    return LLVMBuildPointerCast(builder, str, get_type_string(), "string_constant {message}")
 
 def public failed ( msg:string )
     g_errors |> push("{msg}")
@@ -459,11 +454,11 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         res = LLVMInt32Type()
     return res
 
-def public build_broadcast_vector ( opType:TypeDeclPtr; right:LLVMOpaqueValue? )
+def public build_broadcast_vector ( builder:LLVMOpaqueBuilder?; opType:TypeDeclPtr; right:LLVMOpaqueValue? )
     if opType.isVectorType
         var vres = LLVMGetUndef(type_to_llvm_type(opType))
         for i in range(opType.vectorDim)
-            vres = LLVMBuildInsertElement(g_builder, vres, right, LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+            vres = LLVMBuildInsertElement(builder, vres, right, LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
         return vres
     else
         return right

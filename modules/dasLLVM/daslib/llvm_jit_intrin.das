@@ -31,22 +31,22 @@ let g_intrin_lookup <- {{
     "math::sqrt" => @@intrinsic_math_float_op1
 }}
 
-def public lookup_intinsic(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def public lookup_intinsic(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var result :  LLVMOpaqueValue?
     let call_name = "{expr.func._module.name}::{expr.func.name}"
     g_intrin_lookup |> find_if_exists(call_name) <| $ ( pfun )
-        result = *pfun |> invoke(expr, arguments)
+        result = *pfun |> invoke(g_builder, expr, arguments)
     return result
 
 // intrinsics, $ aka builtin
 
-def intrinsic_builtin_variant_index(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def intrinsic_builtin_variant_index(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     return LLVMBuildLoad2(g_builder, LLVMInt32Type(), arguments[0], "$::variant_index")
 
-def intrinsic_builtin_set_variant_index(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def intrinsic_builtin_set_variant_index(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     return LLVMBuildStore2(g_builder, LLVMInt32Type(), arguments[1], arguments[0])
 
-def intrinsic_builtin_length(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def intrinsic_builtin_length(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume argType = expr.arguments[0]._type
     if argType.isGoodArrayType
         var arr = LLVMBuildLoad(g_builder, arguments[0], "arr")
@@ -54,7 +54,7 @@ def intrinsic_builtin_length(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMO
     else
         return null
 
-def intrinsic_builtin_float(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def intrinsic_builtin_float(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     if length(arguments)==0
         return LLVMConstReal(LLVMFloatType(), 0.0lf)
     assume argType = expr.arguments[0]._type
@@ -70,20 +70,20 @@ def intrinsic_builtin_float(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOp
         failed_E(expr, "float({describe(argType)}) is not supported (yet?)")
         return null
 
-def intrinsic_builtin_float4(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def intrinsic_builtin_float4(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume resType = expr._type
     if length(arguments) == 0
-        return build_broadcast_vector (resType, LLVMConstReal(LLVMFloatType(), 0.0lf))
+        return build_broadcast_vector (g_builder, resType, LLVMConstReal(LLVMFloatType(), 0.0lf))
     elif length(arguments) == 1
         assume argType = expr.arguments[0]._type
         if argType.baseType==Type tFloat
-            return build_broadcast_vector(resType,arguments[0])
+            return build_broadcast_vector(g_builder, resType,arguments[0])
         elif argType.baseType==Type tDouble
-            return build_broadcast_vector(resType,LLVMBuildFPTrunc(g_builder, arguments[0], LLVMFloatType(), "double_to_float"))
+            return build_broadcast_vector(g_builder, resType,LLVMBuildFPTrunc(g_builder, arguments[0], LLVMFloatType(), "double_to_float"))
         elif argType.isSignedInteger
-            return build_broadcast_vector(resType,LLVMBuildSIToFP(g_builder, arguments[0], LLVMFloatType(), "int_to_float"))
+            return build_broadcast_vector(g_builder, resType,LLVMBuildSIToFP(g_builder, arguments[0], LLVMFloatType(), "int_to_float"))
         elif argType.isUnsignedInteger
-            return build_broadcast_vector(resType,LLVMBuildUIToFP(g_builder, arguments[0], LLVMFloatType(), "uint_to_float"))
+            return build_broadcast_vector(g_builder, resType,LLVMBuildUIToFP(g_builder, arguments[0], LLVMFloatType(), "uint_to_float"))
         else
             failed_E(expr, "float4({describe(argType)}) is not supported (yet?)")
             return null
@@ -92,7 +92,7 @@ def intrinsic_builtin_float4(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMO
         return null
 
 
-def intrinsic_builtin_range(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def intrinsic_builtin_range(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var x, y : LLVMOpaqueValue?
     if expr.arguments.length==1
         x = LLVMConstInt(LLVMInt32Type(), 0ul, 0)
@@ -108,7 +108,7 @@ let private bit_op1_name <- {{
     "popcnt" => "ctpop"
 }}
 
-def intrinsic_bit_nzp_op1(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def intrinsic_bit_nzp_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
     var op_name : string
     bit_op1_name |> find_if_exists(string(expr.name)) <| $ ( pname )
@@ -132,7 +132,7 @@ def intrinsic_bit_nzp_op1(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaq
         return null
     return LLVMBuildCall(g_builder, decl, args, string(expr.name))
 
-def intrinsic_bit_op1(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def intrinsic_bit_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
     var op_name : string
     bit_op1_name |> find_if_exists(string(expr.name)) <| $ ( pname )
@@ -158,16 +158,16 @@ def intrinsic_bit_op1(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueVa
 
 // intrinsics, math
 
-def intrinsic_math_rcp(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def intrinsic_math_rcp(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume argType = expr.arguments[0]._type
     if argType.baseType==Type tFloat || (argType.isVectorType && argType.vectorBaseType==Type tFloat)
-        var one = build_broadcast_vector (argType, LLVMConstReal(LLVMFloatType(), 1.0lf))
+        var one = build_broadcast_vector (g_builder, argType, LLVMConstReal(LLVMFloatType(), 1.0lf))
         return LLVMBuildFDiv(g_builder, one, arguments[0], "rcp")
     else
         failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
         return null
 
-def intrinsic_math_float_op1(expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def intrinsic_math_float_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var sqrt_name = "llvm.{expr.name}.f32"
     assume opType = expr.arguments[0]._type
     if opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)

@@ -62,13 +62,13 @@ struct private LoopBlock
 [macro]
 class LlvmJitVisitor : AstVisitor
     adapter : smart_ptr<VisitorAdapter>
-    fnmna : string
     [[do_not_delete]] e2v : table<Expression?;LLVMOpaqueValue?>
     [[do_not_delete]] v2v : table<Variable?;LLVMOpaqueValue?>
     [[do_not_delete]] call2cmres : table<Expression?;LLVMOpaqueValue?>
     [[do_not_delete]] ffunc, wfunc : LLVMOpaqueValue?
     [[do_not_delete]] ite2blocks : table<Expression?; IteBlock>
     [[do_not_delete]] thisFunc : Function?
+    [[do_not_delete]] thisBlock : ExprBlock?
     [[do_not_delete]] subblocks : table<LLVMOpaqueBasicBlock?; LLVMOpaqueBasicBlock?>
     [[do_not_delete]] sbstack : array<LLVMOpaqueBasicBlock?>
     [[do_not_delete]] loop_stack : array<LoopBlock>
@@ -79,8 +79,14 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete]] monad2block : table<Expression?;LLVMOpaqueBasicBlock?>
     [[do_not_delete]] prologue : LLVMOpaqueValue?
 
+    g_builder : LLVMOpaqueBuilder?
+
     def LlvmJitVisitor ( ctx:Context? )
         jit_context = ctx
+        g_builder = LLVMCreateBuilder()
+
+    def finalize
+        LLVMDisposeBuilder(g_builder)
 
     def position_at_end ( blk:LLVMOpaqueBasicBlock? )
         current_block = blk
@@ -129,7 +135,7 @@ class LlvmJitVisitor : AstVisitor
 
     def add_llvm_functions ( var fun : FunctionPtr )
         thisFunc = get_ptr(fun)
-        fnmna = get_mangled_name(fun)
+        let fnmna = get_mangled_name(fun)
         build_llvm_function_pair(fnmna, isCMRES(fun), fun.arguments, fun.result)
         thisFunc = null
 
@@ -182,7 +188,6 @@ class LlvmJitVisitor : AstVisitor
             failed_V(e, "unresolved variable at line {int(e.at.line)}")
         return res
 
-
     def getV ( e : VariablePtr )
         var res : LLVMOpaqueValue?
         v2v |> find_if_exists(get_ptr(e)) <| $ ( val )
@@ -229,10 +234,25 @@ class LlvmJitVisitor : AstVisitor
         else
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
 
+    def pre_make_block ( var expr:smart_ptr<ExprBlock>)
+        thisBlock = get_ptr(expr)
+        let mna = get_mangled_name(expr)
+        let fnmna = "block_at_{int(expr.at.line)}_{mna}"
+        let isCmres = isCMRESType(expr._type)
+        build_llvm_function_pair(fnmna, isCmres, thisBlock.arguments, thisBlock.returnType)
+        // function pair
+        ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
+        wfunc = LLVMGetNamedFunction(g_mod, fnmna)
+        // build wrapper function
+        build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres)
+
+    def post_make_block ( var blk:smart_ptr<ExprBlock> )
+        thisBlock = null
+
     def override preVisitFunction(var fun:FunctionPtr) : void
         assert(g_builder!=null, "missing builder")
         thisFunc = get_ptr(fun)
-        fnmna = get_mangled_name(fun)
+        let fnmna = get_mangled_name(fun)
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
@@ -486,14 +506,26 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
     def get_context_param : LLVMOpaqueValue?
-        return LLVMGetParam(ffunc,uint(thisFunc.arguments.length))
+        if thisFunc!=null
+            return LLVMGetParam(ffunc,uint(thisFunc.arguments.length))
+        elif thisBlock!=null
+            return LLVMGetParam(ffunc,uint(thisBlock.arguments.length))
+        else
+            panic("not in block or function")
+            return null
 
     def get_cmres_param : LLVMOpaqueValue?
-        return LLVMGetParam(ffunc,uint(thisFunc.arguments.length+1))
+        if thisFunc!=null
+            return LLVMGetParam(ffunc,uint(thisFunc.arguments.length+1))
+        elif thisBlock!=null
+            return LLVMGetParam(ffunc,uint(thisBlock.arguments.length+1))
+        else
+            panic("not in block or function")
+            return null
 
     def build_exception ( message:string )
         var params = [[auto
-            get_string_constant_ptr(message);   // message
+            get_string_constant_ptr(g_builder, message);   // message
             get_context_param()
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_EXCEPTION), params, "")
@@ -561,7 +593,7 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>) : ExpressionPtr
         var tsrc = getE(expr.subexpr)
-        if !thisFunc.flags.unsafeDeref
+        if thisFunc!=null && !thisFunc.flags.unsafeDeref
             check_ptr_zero(tsrc)
         setE(expr, tsrc)
         return expr
@@ -602,7 +634,7 @@ class LlvmJitVisitor : AstVisitor
         var tidx = getE(expr.index)
         assume subExprT = expr.subexpr._type
         if subExprT.isPointer
-            if !thisFunc.flags.unsafeDeref
+            if thisFunc!=null && !thisFunc.flags.unsafeDeref
                 check_ptr_zero(tsrc)
             var element_type = type_to_llvm_type(subExprT.firstType)
             var ptr_idx = LLVMBuildGEP(g_builder, tsrc, tidx, "ptr_at")
@@ -766,7 +798,7 @@ class LlvmJitVisitor : AstVisitor
         // note: we need to handle shift operations
         // the way we do it, is we expand scalar up to vector type
         if expr.op=="<<" || expr.op==">>" || expr.op==">>>" || expr.op=="<<<" || expr.op=="<<=" || expr.op==">>=" || expr.op==">>>=" || expr.op=="<<<="
-            right = build_broadcast_vector(shiftType, right)
+            right = build_broadcast_vector(g_builder, shiftType, right)
 
         if expr.op=="+"
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
@@ -1252,7 +1284,7 @@ class LlvmJitVisitor : AstVisitor
 
     def make_call ( expr:smart_ptr<ExprCallFunc>; doesNotNeedSp:bool )
         // lookup intrinsics first
-        var intrin_call = lookup_intinsic(expr, [{for x in expr.arguments; getE(x)}])
+        var intrin_call = lookup_intinsic(g_builder, expr, [{for x in expr.arguments; getE(x)}])
         if intrin_call!=null
             setE(expr, intrin_call)
             return
@@ -2077,19 +2109,24 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // make block
-    def make_block_funcion(expr:smart_ptr<ExprMakeBlock>)
+    def make_block_funcion(expr:smart_ptr<ExprMakeBlock>) : void?
         var astVisitor = new LlvmJitVisitor(jit_context)
         unsafe
             astVisitor.adapter <- make_visitor(*astVisitor)
-        visit(expr._block, astVisitor.adapter)
+            (*astVisitor)->pre_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block)
+            // visit(expr._block, astVisitor.adapter)
+            (*astVisitor)->post_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block)
         astVisitor.adapter := null
         unsafe
             delete astVisitor
+        return null
 
     def override canVisitMakeBlockBody(expr:smart_ptr<ExprMakeBlock>) : bool
         return false
     def override preVisitExprMakeBlock(expr:smart_ptr<ExprMakeBlock>) : void
         var capture <- capture_block(expr._block)
+        // make block function
+        var blk_function = make_block_funcion(expr)
         // build block type
         var blk_fields <- build_block_type()
         blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 3u))
@@ -2099,6 +2136,7 @@ class LlvmJitVisitor : AstVisitor
         var this_block_type = LLVMStructType(blk_fields)
         // allocate block, set capture fields
         var blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}")
+        var blkv = LLVMBuildLoad(g_builder, blk, "")
         for c,idx in capture,range(100500)
             var v_ptr = getV_ptr(c.variable)
             if v_ptr == null
@@ -2106,7 +2144,8 @@ class LlvmJitVisitor : AstVisitor
             if v_ptr == null
                 failed_E(expr, "capture {c.variable.name} not found")
                 return
-            blk = LLVMBuildInsertValue(g_builder, blk, v_ptr, uint(idx + first_field_index), "capture_{c.variable.name}")
+            blkv = LLVMBuildInsertValue(g_builder, blkv, v_ptr, uint(idx + first_field_index), "capture_{c.variable.name}")
+        LLVMBuildStore(g_builder, blkv, blk)
         // call jit_make_block
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
         let argStackTop = (expr._block as ExprBlock).stackTop
@@ -2226,7 +2265,7 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, LLVMBuildFloat4_xyzw(g_builder, x, y, z, w, "float4"))
         return expr
     def override visitExprConstString(expr:smart_ptr<ExprConstString>) : ExpressionPtr
-        setE(expr, get_string_constant_ptr(string(expr.value)))
+        setE(expr, get_string_constant_ptr(g_builder, string(expr.value)))
         return expr
     def override visitExprConstDouble(expr:smart_ptr<ExprConstDouble>) : ExpressionPtr
         setE(expr, LLVMConstReal(LLVMDoubleType(), expr.value))
