@@ -208,6 +208,23 @@ namespace das {
         void * saved_aot_function = nullptr;
     };
 
+    struct SimNode_JitBlock;
+
+    struct JitBlock : Block {
+        vec4f   node[3];
+    };
+
+    typedef vec4f ( * JitBlockFunction ) ( Context * , vec4f *, void *, Block * );
+
+    struct SimNode_JitBlock : SimNode {
+        SimNode_JitBlock ( const LineInfo & at, JitBlockFunction eval )
+            : SimNode(at), func(eval) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        virtual vec4f eval ( Context & context ) override;
+        JitBlockFunction func = nullptr;
+    };
+    static_assert(sizeof(SimNode_JitBlock)<=(3*16),"jit block node must fit under 3 vec4f");
+
     struct SimNode_SourceBase : SimNode {
         SimNode_SourceBase ( const LineInfo & at ) : SimNode(at) {}
         virtual bool rtti_node_isSourceBase() const override { return true;  }

@@ -1184,6 +1184,50 @@ namespace das
         return (void *) &jit_str_cmp;
     }
 
+    struct JitStackState {
+        char * EP;
+        char * SP;
+    };
+
+    void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context ) {
+        if (!context->stack.push(stackSize, stackState->EP, stackState->SP)) {
+            context->throw_error("stack overflow");
+        }
+#if DAS_ENABLE_STACK_WALK
+        Prologue * pp = (Prologue *)context->stack.sp();
+        pp->info = nullptr;
+        pp->fileName = "`jit`";
+        pp->stackSize = stackSize;
+#endif
+    }
+
+    void * das_get_jit_prologue () {
+        return (void *) &jit_prologue;
+    }
+
+    void jit_epilogue ( JitStackState * stackState, Context * context ) {
+        context->stack.pop(stackState->EP, stackState->SP);
+    }
+
+    void * das_get_jit_epilogue () {
+        return (void *) &jit_epilogue;
+    }
+
+    void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * funcInfo, Context * context ) {
+        JitBlock * block = (JitBlock *) blk;
+        block->stackOffset = context->stack.spi();
+        block->argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
+        block->body = (SimNode *) block->node;
+        block->aotFunction = nullptr;
+        block->functionArguments = context->abiArguments();
+        block->info = (FuncInfo *) funcInfo;
+        new (block->node) SimNode_JitBlock(LineInfo(), (JitBlockFunction) bodyNode);
+    }
+
+    void * das_get_jit_make_block () {
+        return (void *) &jit_make_block;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1584,6 +1628,12 @@ namespace das
             SideEffects::none, "das_get_jit_table_at");
         addExtern<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
             SideEffects::none, "das_get_jit_str_cmp");
+        addExtern<DAS_BIND_FUN(das_get_jit_prologue)>(*this, lib, "get_jit_prologue",
+            SideEffects::none, "das_get_jit_prologue");
+        addExtern<DAS_BIND_FUN(das_get_jit_epilogue)>(*this, lib, "get_jit_epilogue",
+            SideEffects::none, "das_get_jit_epilogue");
+        addExtern<DAS_BIND_FUN(das_get_jit_make_block)>(*this, lib, "get_jit_make_block",
+            SideEffects::none, "das_get_jit_make_block");
         addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
