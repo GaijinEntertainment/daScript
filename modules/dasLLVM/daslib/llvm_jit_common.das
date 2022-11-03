@@ -348,8 +348,14 @@ def public failed ( msg:string )
 def public failed_E ( e:ExpressionPtr; msg:string )
     failed ( "{msg}. expr = {e.__rtti} at {describe(e.at)}")
 
+def public failed_E ( e:Expression?; msg:string )
+    failed ( "{msg}. expr = {e.__rtti} at {describe(e.at)}")
+
 def public failed_V ( v:VariablePtr; msg:string )
     failed ( "{msg}. var = {describe(v)} at {describe(v.at)}")
+
+def public failed_V ( v:Variable?; msg:string )
+    failed ( "{msg}. var = {v.name} at {describe(v.at)}")
 
 def public failed_T ( v:TypeDeclPtr; msg:string )
     failed ( "{msg}. var = {describe(v)} at {describe(v.at)}")
