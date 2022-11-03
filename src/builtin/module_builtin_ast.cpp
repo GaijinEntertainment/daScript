@@ -338,6 +338,11 @@ namespace das {
         return context->stringHeap->allocateString(var->getMangledName());
     }
 
+    char * get_mangled_name_b ( smart_ptr_raw<ExprBlock> expr, Context * context, LineInfoArg * at ) {
+        if ( !expr ) context->throw_error_at(at ? *at : LineInfo(),"expecting block");
+        return context->stringHeap->allocateString(expr->getMangledName());
+    }
+
     void get_use_global_variables ( smart_ptr_raw<Function> func, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at ) {
         if ( !func ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
         for ( auto & var : func->useGlobalVariables ) {
@@ -582,6 +587,9 @@ namespace das {
                 ->args({"type","context","line"});
         addExtern<DAS_BIND_FUN(get_mangled_name_v)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_v")
+                ->args({"variable","context","line"});
+        addExtern<DAS_BIND_FUN(get_mangled_name_b)>(*this, lib,  "get_mangled_name",
+            SideEffects::none, "get_mangled_name_b")
                 ->args({"variable","context","line"});
         // type conversion functions
         addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
