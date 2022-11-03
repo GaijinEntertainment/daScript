@@ -9,6 +9,7 @@ require daslib/ast_boost
 require daslib/strings
 require daslib/defer
 require daslib/fio
+require daslib/enum_trait
 
 let public LLVM_JIT_ENABLED = true
 
@@ -38,6 +39,9 @@ let public FN_JIT_FREE_PERSISTENT = "`jit`free_persistent`"
 let public FN_JIT_ARRAY_LOCK = "`jit`array_lock`"
 let public FN_JIT_ARRAY_UNLOCK = "`jit`array_unlock`"
 let public FN_JIT_STR_CMP = "`jit`str_cmp`"
+let public FN_JIT_PROLOGUE = "`jit`prologue`"
+let public FN_JIT_EPILOGUE = "`jit`epilogue`"
+let public FN_JIT_MAKE_BLOCK = "`jit`make_block`"
 
 struct JitEngine
     mod : LLVMOpaqueModule?
@@ -56,6 +60,7 @@ var public g_t_simFunction : LLVMOpaqueType?
 var public g_t_function : LLVMOpaqueType?
 var public g_t_lambda : LLVMOpaqueType?
 var public g_t_block : LLVMOpaqueType?
+var public g_t_stack_state : LLVMOpaqueType?
 
 var g_str2v : table<string; LLVMOpaqueValue?>
 
@@ -211,10 +216,25 @@ def public init_jit
                 ]]))
         LLVMAddGlobalMapping(g_engine, jit_table_at, get_jit_table_at(unsafe(reinterpret<int> t)))
 
-    var jit_str_cmp = LLVMAddFunction(g_mod, FN_JIT_STR_CMP,  // void jit_str_cmp ( char * a, char * b )
+    var jit_str_cmp = LLVMAddFunction(g_mod, FN_JIT_STR_CMP,  // int jit_str_cmp ( char * a, char * b )
         LLVMFunctionType(LLVMInt32Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMInt8Type(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_str_cmp, get_jit_str_cmp())
+
+    var jit_prologue = LLVMAddFunction(g_mod, FN_JIT_PROLOGUE,  // void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context )
+        LLVMFunctionType(LLVMVoidType(),
+            [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(g_t_stack_state,0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_prologue, get_jit_prologue())
+
+    var jit_epilogue = LLVMAddFunction(g_mod, FN_JIT_EPILOGUE,  // void jit_epilogue ( JitStackState * stackState, Context * context )
+        LLVMFunctionType(LLVMVoidType(),
+            [[LLVMTypeRef LLVMPointerType(g_t_stack_state,0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_epilogue, get_jit_epilogue())
+
+    var jit_make_block = LLVMAddFunction(g_mod, FN_JIT_MAKE_BLOCK,  // void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * funcInfo, Context * context )
+        LLVMFunctionType(LLVMVoidType(),
+            [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_make_block, get_jit_make_block())
 
 def private build_jit_types
     // simfunction type
@@ -247,6 +267,13 @@ def private build_jit_types
     var block_fields <- build_block_type()
     g_t_block = LLVMStructType(block_fields)
 
+    // prologue\epilogue storage for the stack
+    var stack_state_fields <- [[auto[]
+        LLVMPointerType(LLVMInt8Type(),0u);    // char * EP
+        LLVMPointerType(LLVMInt8Type(),0u)     // char * SP
+    ]]
+    g_t_stack_state = LLVMStructType(stack_state_fields)
+
 def public build_block_type
     return <- [{auto[]
         LLVMInt32Type();                        // uint32_t    stackOffset;
@@ -278,6 +305,9 @@ def private finalize_all_jit
         LLVMDisposeBuilder(je.builder); je.builder = null
         g_t_function = null
         g_t_simFunction = null
+        g_t_block = null
+        g_t_lambda = null
+        g_t_stack_state = null
         // TODO: figure out why this crashes
         // LLVMDisposeModule(je.mod); je.mod = null
     delete g_all_engines
