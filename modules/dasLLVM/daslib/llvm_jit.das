@@ -36,12 +36,16 @@ class LlvmJitCaptureBlock : AstVisitor
     def override preVisitExprBlockArgument(blk:smart_ptr<ExprBlock>;arg:VariablePtr;lastArg:bool): void
         scope |> insert(get_ptr(arg))
 
+struct CapturedVariable
+    variable : Variable?
+    expression : ExprVar?
+
 [macro_function]
-def private capture_block(expr:ExpressionPtr) : array<tuple<variable:Variable?;expression:ExprVar?>>
+def private capture_block(expr:ExpressionPtr) : array<CapturedVariable>
     var astVisitor = new LlvmJitCaptureBlock()
     var adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
-    var res <- [{for k,v in keys(astVisitor.capture),values(astVisitor.capture); [[auto k,v]] }]
+    var res <- [{for k,v in keys(astVisitor.capture),values(astVisitor.capture); [[CapturedVariable variable=k,expression=v]] }]
     adapter := null
     unsafe
         delete astVisitor
@@ -97,9 +101,17 @@ class LlvmJitVisitor : AstVisitor
         invoke(blk)
         LLVMPositionBuilderAtEnd(g_builder, current_block)
 
-    def build_llvm_function_pair ( fun_name:string; isCmres:bool; var arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr )
+    def before_function_entry
+        LLVMPositionBuilderAtEnd(g_builder, function_entry)
+
+    def after_function_entry
+        LLVMPositionBuilderAtEnd(g_builder, current_block)
+
+    def build_llvm_function_pair ( fun_name:string; isCmres:bool; var arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; captureType:LLVMOpaqueType? )
         // implementation function
         var fun_args <-  [{for a in arguments; type_to_llvm_abi_type(a._type)}]
+        if captureType!=null
+            fun_args |> push(LLVMPointerType(captureType,0u))  // capture
         fun_args |> push(LLVMPointerType(LLVMVoidType(), 0u))  // context
         var fun_type : LLVMOpaqueType?
         if isCmres
@@ -122,21 +134,32 @@ class LlvmJitVisitor : AstVisitor
         if isCmres
             LLVMSetParamAlignment(get_cmres_param(), uint(result.alignOf))
         // wrapper function
-        var ret_type = LLVMFunctionType(LLVMFloat4Type(),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // context
-            LLVMPointerType(LLVMFloat4Type(),0u);               // args
-            LLVMPointerType(LLVMVoidType(),0u)                  // cmres
-        ]])
+        var ret_type : LLVMOpaqueType?
+        if captureType!=null
+            ret_type = LLVMFunctionType(LLVMFloat4Type(),
+                [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // context
+                LLVMPointerType(LLVMFloat4Type(),0u);               // args
+                LLVMPointerType(LLVMVoidType(),0u);                 // cmres
+                LLVMPointerType(captureType,0u)                     // block
+            ]])
+        else
+            ret_type = LLVMFunctionType(LLVMFloat4Type(),
+                [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // context
+                LLVMPointerType(LLVMFloat4Type(),0u);               // args
+                LLVMPointerType(LLVMVoidType(),0u)                  // cmres
+            ]])
         wfunc = LLVMAddFunction(g_mod, fun_name, ret_type)
         LLVMSetParamAlignment(LLVMGetParam(wfunc,0u), 16u)
         LLVMSetParamAlignment(LLVMGetParam(wfunc,1u), 16u)
         if isCmres
             LLVMSetParamAlignment(LLVMGetParam(wfunc,2u), uint(result.alignOf))
+        if captureType!=null
+            LLVMSetParamAlignment(LLVMGetParam(wfunc,3u), 16u)
 
     def add_llvm_functions ( var fun : FunctionPtr )
         thisFunc = get_ptr(fun)
         let fnmna = get_mangled_name(fun)
-        build_llvm_function_pair(fnmna, isCMRES(fun), fun.arguments, fun.result)
+        build_llvm_function_pair(fnmna, isCMRES(fun), fun.arguments, fun.result, null)
         thisFunc = null
 
     def append_basic_block ( name:string; add_to_phi:bool=false )
@@ -179,6 +202,9 @@ class LlvmJitVisitor : AstVisitor
     def setV ( e : VariablePtr; ov:LLVMOpaqueValue? )
         v2v[get_ptr(e)] = ov
 
+    def setV_ptr ( e : Variable?; ov:LLVMOpaqueValue? )
+        v2v[e] = ov
+
     def getV_ptr ( e : Variable? )
         var res : LLVMOpaqueValue?
         v2v |> find_if_exists(e) <| $ ( val )
@@ -203,7 +229,7 @@ class LlvmJitVisitor : AstVisitor
             res = *val
         return res
 
-    def build_wrapper_funcion(var arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; isCmres:bool )
+    def build_wrapper_funcion(var arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; isCmres:bool; captureType:LLVMOpaqueType? )
         var wentry = LLVMAppendBasicBlock(wfunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, wentry)
         var wargs : array<LLVMOpaqueValue?>
@@ -218,6 +244,8 @@ class LlvmJitVisitor : AstVisitor
             else
                 arg_v = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(a._type), arg_ptr, "arg_any_{ai}")
             wargs |> push(arg_v)
+        if captureType!=null
+            wargs |> push(LLVMGetParam(wfunc,3u))   // block
         wargs |> push(LLVMGetParam(wfunc,0u))  // context
         if isCmres
             wargs |> push(LLVMGetParam(wfunc,2u))  // cmres
@@ -234,20 +262,54 @@ class LlvmJitVisitor : AstVisitor
         else
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
 
-    def pre_make_block ( var expr:smart_ptr<ExprBlock>)
+    def pre_make_block ( var expr:smart_ptr<ExprBlock>; func:Function?; captureType:LLVMOpaqueType? ) : string
+        thisFunc = func
         thisBlock = get_ptr(expr)
         let mna = get_mangled_name(expr)
         let fnmna = "block_at_{int(expr.at.line)}_{mna}"
         let isCmres = isCMRESType(expr._type)
-        build_llvm_function_pair(fnmna, isCmres, thisBlock.arguments, thisBlock.returnType)
+        build_llvm_function_pair(fnmna, isCmres, thisBlock.arguments, thisBlock.returnType, captureType)
         // function pair
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
-        build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres)
+        build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres, captureType)
+        build_function_entry(thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
+        return fnmna
 
     def post_make_block ( var blk:smart_ptr<ExprBlock> )
+        if !is_terminator_expression(unsafe(reinterpret<ExpressionPtr> thisBlock))
+            build_epilogue()
+            LLVMBuildRetVoid(g_builder)
+        LLVMPositionBuilderAtEnd(g_builder, function_entry)
+        LLVMBuildBr(g_builder, function_body)
         thisBlock = null
+        thisFunc = null
+
+    def build_function_entry(hasMakeBlock:bool; totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
+        // now write to regular function
+        function_entry = LLVMAppendBasicBlock(ffunc, "entry")
+        position_at_end(function_entry)
+        // allocate prologue if need be
+        if hasMakeBlock
+            prologue = LLVMBuildAlloca(g_builder, g_t_stack_state, "prologue")
+            prologue = LLVMBuildPointerCast(g_builder, prologue, LLVMPointerType(g_t_stack_state,0u), "")
+            var params = [[auto
+                LLVMConstInt(LLVMInt32Type(), uint64(totalStackSize), 0);
+                prologue;
+                get_context_param()
+            ]]
+            LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_PROLOGUE), params, "")
+        // allocate arguments, which need to be promoted to local variables
+        for a,ai in arguments,range(10050)
+            if (a.access_flags.access_ref || a.access_flags.access_pass) && !a._type.isRef
+                var tryV = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(a._type), "var_{a.name}")
+                LLVMSetAlignment(tryV, 16u)
+                LLVMBuildStore(g_builder, LLVMGetParam(ffunc,uint(ai)), tryV)
+                setV(a, tryV)
+        // function body
+        function_body = LLVMAppendBasicBlock(ffunc, "body")
+        position_at_end(function_body)
 
     def override preVisitFunction(var fun:FunctionPtr) : void
         assert(g_builder!=null, "missing builder")
@@ -256,30 +318,8 @@ class LlvmJitVisitor : AstVisitor
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
-        build_wrapper_funcion(fun.arguments, fun.result, isCMRES(fun))
-        // now write to regular function
-        function_entry = LLVMAppendBasicBlock(ffunc, "entry")
-        position_at_end(function_entry)
-        // allocate prologue if need be
-        if fun.flags.hasMakeBlock
-            prologue = LLVMBuildAlloca(g_builder, g_t_stack_state, "prologue")
-            prologue = LLVMBuildPointerCast(g_builder, prologue, LLVMPointerType(g_t_stack_state,0u), "")
-            var params = [[auto
-                LLVMConstInt(LLVMInt32Type(), uint64(fun.totalStackSize), 0);
-                prologue;
-                get_context_param()
-            ]]
-            LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_PROLOGUE), params, "")
-        // allocate arguments, which need to be promoted to local variables
-        for a,ai in fun.arguments,range(10050)
-            if (a.access_flags.access_ref || a.access_flags.access_pass) && !a._type.isRef
-                var tryV = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(a._type), "var_{a.name}")
-                LLVMSetAlignment(tryV, 16u)
-                LLVMBuildStore(g_builder, LLVMGetParam(ffunc,uint(ai)), tryV)
-                setV(a, tryV)
-
-        function_body = LLVMAppendBasicBlock(ffunc, "body")
-        position_at_end(function_body)
+        build_wrapper_funcion(fun.arguments, fun.result, isCMRES(fun), null)
+        build_function_entry(fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
 
     def build_epilogue
         if prologue != null
@@ -354,7 +394,21 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
         assume varType = expr.variable._type
         if expr.varFlags._block
-            failed_E(expr, "{expr.variable.name} support block variable")
+            var tryV = tryGetV(expr.variable)
+            if tryV != null
+                if expr.varFlags.r2v
+                    setE(expr, LLVMBuildLoad(g_builder, tryV, "var_block_r2v_{expr.variable.name}"))
+                else
+                    setE(expr, tryV)
+                return expr
+            var arg = LLVMGetParam(ffunc,uint(expr.argumentIndex))
+            if expr.varFlags.r2v
+                if varType.flags.ref
+                    setE(expr, LLVMBuildLoad(g_builder, arg, "var_block_ref_r2v_{expr.variable.name}"))
+                else
+                    setE(expr, arg)
+            else
+                setE(expr, arg)
         elif expr.varFlags.local    // local varaibels
             var var_ptr = getV(expr.variable)
             if expr.variable.flags.aliasCMRES
@@ -488,14 +542,19 @@ class LlvmJitVisitor : AstVisitor
             failed("unsupported cast_to_vec4f type {describe(etype)}")
         return tres
 
-    def override preVisitExprReturn(expr:smart_ptr<ExprReturn>)
-        if isCMRES(thisFunc) && expr.returnFlags.returnCallCMRES
+    def pre_visit_expr_return (expr:smart_ptr<ExprReturn>; isCmres:bool)
+        if isCmres && expr.returnFlags.returnCallCMRES
             make_call_to_cmres(expr.subexpr, get_cmres_param())
 
-    def override visitExprReturn(expr:smart_ptr<ExprReturn>) : ExpressionPtr
-        build_epilogue()
-        if !thisFunc.result.isVoid
-            if isCMRES(thisFunc)
+    def override preVisitExprReturn(expr:smart_ptr<ExprReturn>)
+        if thisBlock!=null
+            pre_visit_expr_return(expr, isCMRESType(thisBlock.returnType))
+        elif thisFunc!=null
+            pre_visit_expr_return(expr, isCMRES(thisFunc))
+
+    def visit_expr_return(expr:smart_ptr<ExprReturn>; returnType:TypeDeclPtr; isCmres:bool)
+        if !returnType.isVoid
+            if isCmres
                 if !expr.returnFlags.returnCMRES
                     build_copy(get_cmres_param(),expr.subexpr)
                 LLVMBuildRetVoid(g_builder)
@@ -503,22 +562,36 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildRet(g_builder, getE(expr.subexpr))
         else
             LLVMBuildRetVoid(g_builder)
+
+    def override visitExprReturn(expr:smart_ptr<ExprReturn>) : ExpressionPtr
+        build_epilogue()
+        if thisBlock!=null
+            visit_expr_return(expr, thisBlock.returnType, isCMRESType(thisBlock.returnType))
+        elif thisFunc!=null
+            visit_expr_return(expr, thisFunc.result, isCMRES(thisFunc))
         return expr
 
-    def get_context_param : LLVMOpaqueValue?
-        if thisFunc!=null
-            return LLVMGetParam(ffunc,uint(thisFunc.arguments.length))
-        elif thisBlock!=null
+    def get_capture_param : LLVMOpaqueValue?
+        if thisBlock!=null
             return LLVMGetParam(ffunc,uint(thisBlock.arguments.length))
+        else
+            panic("not in block")
+            return null
+
+    def get_context_param : LLVMOpaqueValue?
+        if thisBlock!=null
+            return LLVMGetParam(ffunc,uint(thisBlock.arguments.length+1))
+        elif thisFunc!=null
+            return LLVMGetParam(ffunc,uint(thisFunc.arguments.length))
         else
             panic("not in block or function")
             return null
 
     def get_cmres_param : LLVMOpaqueValue?
-        if thisFunc!=null
+        if thisBlock!=null
+            return LLVMGetParam(ffunc,uint(thisBlock.arguments.length+2))
+        elif thisFunc!=null
             return LLVMGetParam(ffunc,uint(thisFunc.arguments.length+1))
-        elif thisBlock!=null
-            return LLVMGetParam(ffunc,uint(thisBlock.arguments.length+1))
         else
             panic("not in block or function")
             return null
@@ -2109,24 +2182,31 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // make block
-    def make_block_funcion(expr:smart_ptr<ExprMakeBlock>) : void?
+    def make_block_funcion(expr:smart_ptr<ExprMakeBlock>; capture:array<CapturedVariable>; first_field_index:int; captureType:LLVMOpaqueType? ) : LLVMOpaqueValue?
         var astVisitor = new LlvmJitVisitor(jit_context)
+        var fmna : string
         unsafe
             astVisitor.adapter <- make_visitor(*astVisitor)
-            (*astVisitor)->pre_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block)
-            // visit(expr._block, astVisitor.adapter)
+            fmna = (*astVisitor)->pre_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block, thisFunc, captureType)
+            (*astVisitor)->before_function_entry()
+            var carg = (*astVisitor)->get_capture_param()
+            carg = LLVMBuildLoad(astVisitor.g_builder, carg, "capture")
+            for c,ai in capture,range(100500)
+                var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai+first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
+                (*astVisitor)->setV_ptr(c.variable, arg_i)
+            (*astVisitor)->after_function_entry()
+            visit(expr._block, astVisitor.adapter)
             (*astVisitor)->post_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block)
+        let result = LLVMGetNamedFunction(g_mod, fmna)
         astVisitor.adapter := null
         unsafe
             delete astVisitor
-        return null
+        return result
 
     def override canVisitMakeBlockBody(expr:smart_ptr<ExprMakeBlock>) : bool
         return false
     def override preVisitExprMakeBlock(expr:smart_ptr<ExprMakeBlock>) : void
         var capture <- capture_block(expr._block)
-        // make block function
-        var blk_function = make_block_funcion(expr)
         // build block type
         var blk_fields <- build_block_type()
         blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 3u))
@@ -2134,6 +2214,8 @@ class LlvmJitVisitor : AstVisitor
         for c in capture
             blk_fields |> push(LLVMPointerType(type_to_llvm_type(c.variable._type), 0u))
         var this_block_type = LLVMStructType(blk_fields)
+        // make block function
+        var blk_function = make_block_funcion(expr, capture,first_field_index, this_block_type)
         // allocate block, set capture fields
         var blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}")
         var blkv = LLVMBuildLoad(g_builder, blk, "")
@@ -2150,10 +2232,11 @@ class LlvmJitVisitor : AstVisitor
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
         let argStackTop = (expr._block as ExprBlock).stackTop
         let null_ptr = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
+        let func_ptr = LLVMBuildPointerCast(g_builder, blk_function, LLVMPointerType(LLVMVoidType(),0u), "")
         var params = [[auto
             blk_ptr;
             LLVMConstInt(LLVMInt32Type(), uint64(argStackTop), 0);
-            null_ptr;   // TODO: function pointer
+            func_ptr;
             null_ptr;   // TODO: function inf
             get_context_param()
         ]]
