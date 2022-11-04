@@ -404,6 +404,9 @@ namespace das {
             }
             if ( func ) {
                 func->hasMakeBlock = true;
+                for ( auto blk : blocks ) {
+                    blk->hasMakeBlock = true;
+                }
             }
         }
     // ExprAscend

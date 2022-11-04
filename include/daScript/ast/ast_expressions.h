@@ -189,6 +189,7 @@ namespace das
                 bool            aotDoNotSkipAnnotationData : 1;
                 bool            isCollapseable : 1;         // generated block which needs to be flattened
                 bool            needCollapse : 1;           // if this block needs collapse at all
+                bool            hasMakeBlock : 1;           // if this block has make block inside
             };
             uint32_t            blockFlags = 0;
         };
