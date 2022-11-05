@@ -173,11 +173,11 @@ class LlvmJitVisitor : AstVisitor
     def setE ( e : ExpressionPtr; ov:LLVMOpaqueValue? )
         e2v[get_ptr(e)] = ov
 
-    def getE_ptr ( e : Expression? )
+    def getE_ptr ( e : Expression?; canFail:bool = true )
         var res : LLVMOpaqueValue?
         e2v |> find_if_exists(e) <| $ ( val )
             res = *val
-        if res == null
+        if res == null && canFail
             res = LLVMGetUndef(LLVMInt32Type())
             failed_E(e, "unresolved expression at {describe(e.at)}")
         return res
@@ -205,11 +205,11 @@ class LlvmJitVisitor : AstVisitor
     def setV_ptr ( e : Variable?; ov:LLVMOpaqueValue? )
         v2v[e] = ov
 
-    def getV_ptr ( e : Variable? )
+    def getV_ptr ( e : Variable?; canFail:bool = true )
         var res : LLVMOpaqueValue?
         v2v |> find_if_exists(e) <| $ ( val )
             res = *val
-        if res == null
+        if res == null && canFail
             res = LLVMGetUndef(LLVMInt32Type())
             failed_V(e, "unresolved variable at line {int(e.at.line)}")
         return res
@@ -266,7 +266,7 @@ class LlvmJitVisitor : AstVisitor
         thisFunc = func
         thisBlock = get_ptr(expr)
         let mna = get_mangled_name(expr)
-        let fnmna = "block_at_{int(expr.at.line)}_{mna}"
+        let fnmna = "block_{intptr(expr)}_at_{int(expr.at.line)}{mna}"
         let isCmres = isCMRESType(expr._type)
         build_llvm_function_pair(fnmna, isCmres, thisBlock.arguments, thisBlock.returnType, captureType)
         // function pair
@@ -301,8 +301,18 @@ class LlvmJitVisitor : AstVisitor
             ]]
             LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_PROLOGUE), params, "")
         // allocate arguments, which need to be promoted to local variables
+
+        // NOTE:
+        //  thisFunc hasMakeBlock is here just in case we need to capture argument variables
+        //  in the future, we can optimize this out by checking, if particular variable is captured via block
+        //  additionally this causes every block variable to be promoted - which may not be ideal since it would clutter the optimizer (or not?)
+        var alwaysPromote = false
+        if thisBlock!=null && thisBlock.blockFlags.hasMakeBlock
+            alwaysPromote = true
+        elif thisFunc!=null && thisFunc.flags.hasMakeBlock
+            alwaysPromote = true
         for a,ai in arguments,range(10050)
-            if (a.access_flags.access_ref || a.access_flags.access_pass) && !a._type.isRef
+            if (alwaysPromote || a.access_flags.access_ref || a.access_flags.access_pass) && !a._type.isRef
                 var tryV = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(a._type), "var_{a.name}")
                 LLVMSetAlignment(tryV, 16u)
                 LLVMBuildStore(g_builder, LLVMGetParam(ffunc,uint(ai)), tryV)
@@ -2187,6 +2197,10 @@ class LlvmJitVisitor : AstVisitor
         return false
     def override preVisitExprMakeBlock(expr:smart_ptr<ExprMakeBlock>) : void
         var capture <- capture_block(expr._block)
+        print("CAPTURED:\n")
+        for c in capture
+            print("\t{c.variable.name} : {describe(c.variable._type)}\n")
+        print("\n")
         // build block type
         var blk_fields <- build_block_type()
         blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 3u))
@@ -2200,9 +2214,9 @@ class LlvmJitVisitor : AstVisitor
         var blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}")
         var blkv = LLVMBuildLoad(g_builder, blk, "")
         for c,idx in capture,range(100500)
-            var v_ptr = getV_ptr(c.variable)
+            var v_ptr = getV_ptr(c.variable, false)
             if v_ptr == null
-                v_ptr = getE_ptr(c.expression)
+                v_ptr = getE_ptr(c.expression, false)
             if v_ptr == null
                 failed_E(expr, "capture {c.variable.name} not found")
                 return

@@ -19,6 +19,9 @@ def test_invoke_block(lmb:block<(a:int;b:float):int>)
 def test_invoke_block_refval(lmb:block<(a:int;b:float):Foo>)
     return invoke(lmb, 1, 2.0)
 
+def test_invoke_block_void(lmb:block<(a:int;b:float):void> )
+    invoke(lmb, 1, 2.0)
+
 [jit]
 def test_make_block
     var local_C = 123
@@ -46,6 +49,25 @@ def test_make_block_return_refval
         g_B = b
         return [[Foo a=a, b=b]]
     return res
+
+[jit]
+def test_make_block_capture_refval
+    var f : Foo
+    test_invoke_block_void <| $(a:int;b:float):void
+        f.a = a
+        f.b = b
+    return f
+
+[jit]
+def test_make_block_nested(q:float)
+    var f : Foo
+    test_invoke_block_void <| $(a:int;b:float):void
+        f.a = a
+        f.b = b
+        test_invoke_block_void <| $(c:int;d:float):void
+            f.a = c + 10
+            f.b = b + q
+    return f
 
 [test]
 def test_block ( t:T? )
@@ -76,3 +98,13 @@ def test_block ( t:T? )
         t |> equal ( 2., res.b )
         t |> equal ( 1, g_A )
         t |> equal ( 2., g_B )
+    t |> run("make block capture refval") <| @ ( t : T? )
+        verify(is_jit_function(@@test_make_block_capture_refval))
+        var res = test_make_block_capture_refval()
+        t |> equal ( 1, res.a )
+        t |> equal ( 2., res.b )
+    t |> run("make block capture refval nested") <| @ ( t : T? )
+        verify(is_jit_function(@@test_make_block_nested))
+        var res = test_make_block_nested(10.)
+        t |> equal ( 11, res.a )
+        t |> equal ( 12., res.b )
