@@ -1845,11 +1845,6 @@ class LlvmJitVisitor : AstVisitor
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             if expr.extraOffset != 0u
                 mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
-        elif expr.makeFlags.useStackRef
-            mks_ptr = getE(expr)
-            verify(mks_ptr!=null && LLVMIsUndef(mks_ptr)==0,"USE STACKREF, but no stackref")
-            if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
             mks_ptr = tryE(expr) <|
                 var vtype = type_to_llvm_type(expr._type)
@@ -1908,11 +1903,6 @@ class LlvmJitVisitor : AstVisitor
         if expr.makeFlags.useCMRES
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-            if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
-        elif expr.makeFlags.useStackRef
-            mks_ptr = getE(expr)
-            verify(mks_ptr!=null && LLVMIsUndef(mks_ptr)==0,"USE STACKREF, but no stackref")
             if expr.extraOffset != 0u
                 mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
@@ -1982,11 +1972,6 @@ class LlvmJitVisitor : AstVisitor
         if expr.makeFlags.useCMRES
             mkv_ptr = get_cmres_param()
             mkv_ptr = LLVMBuildPointerCast(g_builder, mkv_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-            if expr.extraOffset != 0u
-                mkv_ptr = LLVMBuildGEP(g_builder, mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
-        elif expr.makeFlags.useStackRef
-            mkv_ptr = getE(expr)
-            verify(mkv_ptr!=null && LLVMIsUndef(mkv_ptr)==0,"USE STACKREF, but no stackref")
             if expr.extraOffset != 0u
                 mkv_ptr = LLVMBuildGEP(g_builder, mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
@@ -2059,11 +2044,6 @@ class LlvmJitVisitor : AstVisitor
         if expr.makeFlags.useCMRES
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-            if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
-        elif expr.makeFlags.useStackRef
-            mks_ptr = getE(expr)
-            verify(mks_ptr!=null && LLVMIsUndef(mks_ptr)==0,"USE STACKREF, but no stackref")
             if expr.extraOffset != 0u
                 mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
