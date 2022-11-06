@@ -1151,6 +1151,11 @@ expression_delete
     :   DAS_DELETE[loc] expr[subexpr] {
         $$ = new ExprDelete(tokAt(scanner,@loc), ExpressionPtr($subexpr));
     }
+    |   DAS_DELETE[loc] DAS_EXPLICIT expr[subexpr] {
+        auto delExpr = new ExprDelete(tokAt(scanner,@loc), ExpressionPtr($subexpr));
+        delExpr->native = true;
+        $$ = delExpr;
+    }
     ;
 
 expr_new
