@@ -28,7 +28,9 @@ let g_intrin_lookup <- {{
     "math::rcp" => @@intrinsic_math_rcp;
     "math::rcp_est"=> @@intrinsic_math_rcp;
     "math::exp" => @@intrinsic_math_float_op1;
-    "math::sqrt" => @@intrinsic_math_float_op1
+    "math::sqrt" => @@intrinsic_math_float_op1;
+    "math::min" => @@intrinsic_math_minmax;
+    "math::max" => @@intrinsic_math_minmax
 }}
 
 def public lookup_intinsic(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
@@ -108,20 +110,32 @@ let private bit_op1_name <- {{
     "popcnt" => "ctpop"
 }}
 
+def build_op_name ( op_name:string; opType:TypeDeclPtr ) : string
+    if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+        if opType.baseType==Type tInt64 || opType.baseType==Type tUInt64
+            return "llvm.{op_name}.i64"
+        else
+            return "llvm.{op_name}.i32"
+    elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+        if opType.baseType==Type tDouble
+            return "llvm.{op_name}.f64"
+        else
+            return "llvm.{op_name}.f32"
+    else
+        failed("{op_name}({describe(opType)}) is not supported (yet?)")
+    return ""
+
 def intrinsic_bit_nzp_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
     var op_name : string
     bit_op1_name |> find_if_exists(string(expr.name)) <| $ ( pname )
         op_name = *pname
     if op_name==""
-        failed_E(expr, "{expr.name}({describe(opType)}) is not supported (yet?)")
+        failed_E(expr, "intrinsic {expr.name}({describe(opType)}) is not supported (yet?)")
         return null
-    var sqrt_name = "llvm.{op_name}.i32"
-    if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-        if opType.baseType==Type tInt64 || opType.baseType==Type tUInt64
-            sqrt_name = "llvm.{op_name}.i64"
-    else
-        failed_E(expr, "{expr.name}({describe(opType)}) is not supported (yet?)")
+    var sqrt_name = build_op_name(op_name, opType)
+    if sqrt_name==""
+        failed_E(expr, "intrinsic type for {expr.name}({describe(opType)}) is not supported (yet?)")
         return null
     var args <- [{auto[] arguments[0]; LLVMConstInt(LLVMInt1Type(), 0ul, 0)}]
     var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
@@ -138,14 +152,11 @@ def intrinsic_bit_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>
     bit_op1_name |> find_if_exists(string(expr.name)) <| $ ( pname )
         op_name = *pname
     if op_name==""
-        failed_E(expr, "{expr.name}({describe(opType)}) is not supported (yet?)")
+        failed_E(expr, "intrinsic {expr.name}({describe(opType)}) is not supported (yet?)")
         return null
-    var sqrt_name = "llvm.{op_name}.i32"
-    if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-        if opType.baseType==Type tInt64 || opType.baseType==Type tUInt64
-            sqrt_name = "llvm.{op_name}.i64"
-    else
-        failed_E(expr, "{expr.name}({describe(opType)}) is not supported (yet?)")
+    var sqrt_name = build_op_name(op_name, opType)
+    if sqrt_name==""
+        failed_E(expr, "intrinsic type {expr.name}({describe(opType)}) is not supported (yet?)")
         return null
     var args <- [{auto[] arguments[0]}]
     var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
@@ -155,6 +166,58 @@ def intrinsic_bit_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
     return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+
+let private op2_name <- {{
+    "min" => "minimum";
+    "max" => "maximum"
+}}
+
+def intrinsic_op2(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    var op_name : string
+    op2_name |> find_if_exists(string(expr.name)) <| $ ( pname )
+        op_name = *pname
+    if op_name==""
+        failed_E(expr, "intrinsic {expr.name}({describe(opType)}) is not supported (yet?)")
+        return null
+    var sqrt_name = build_op_name(op_name, opType)
+    if sqrt_name==""
+        failed_E(expr, "intrinsic type {expr.name}({describe(opType)}) is not supported (yet?)")
+        return null
+    print("NAME: {sqrt_name}\n")
+    var args <- [{auto[] arguments[0]; arguments[1]}]
+    var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
+    var id = LLVMLookupIntrinsicID(sqrt_name)
+    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+    if decl==null
+        failed_E(expr, "missing intrinsic {sqrt_name}")
+        return null
+    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+
+def intrinsic_math_minmax(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    if opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+        return intrinsic_op2(g_builder, expr, arguments)
+    if opType.isInteger
+        var cond : LLVMOpaqueValue?
+        var pred : LLVMIntPredicate
+        if opType.baseType==Type tInt64 || opType.baseType==Type tInt
+            pred = LLVMIntPredicate LLVMIntSLT
+        elif opType.baseType==Type tUInt64 || opType.baseType==Type tUInt
+            pred = LLVMIntPredicate LLVMIntULT
+        else
+            failed_E(expr, "compare predicate for {expr.name} {describe(expr._type)} is not supported (yet?)")
+            return null
+        cond = LLVMBuildICmp(g_builder, pred, arguments[0], arguments[1], "")
+        if expr.name=="min"
+            return LLVMBuildSelect( g_builder, cond, arguments[0], arguments[1], "{expr.name}")
+        else
+            return LLVMBuildSelect( g_builder, cond, arguments[1], arguments[0], "{expr.name}")
+    elif opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt)
+        failed_E(expr, "{expr.name} {describe(expr._type)} is not supported (yet?)")
+        return null
+    else
+        return null
 
 // intrinsics, math
 

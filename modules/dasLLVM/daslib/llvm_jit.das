@@ -751,9 +751,9 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, ptr_idx)
             //  failed("array: unsupported visitExprAt {describe(tsrc)}[{describe(tidx)}] type {describe(subExprT)}")
         elif subExprT.baseType == Type tTable
-            var tab = LLVMBuildLoad(g_builder, tsrc, "tab")
             var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
             var at_tab = build_table_at(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+            var tab = LLVMBuildLoad(g_builder, tsrc, "tab")
             var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
             var ptr_idx = LLVMBuildGEP(g_builder, data, at_tab, "table_at")
             if expr.atFlags.r2v
@@ -1327,7 +1327,7 @@ class LlvmJitVisitor : AstVisitor
             ofunc = LLVMAddFunction(g_mod, mangled_name, LLVMFunctionType(res_type,arg_types))
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
-                failed_E(expr, "missing interop function pointer for {expr.func.name}")
+                failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
         return ofunc
 
@@ -1340,7 +1340,7 @@ class LlvmJitVisitor : AstVisitor
                     [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u)]]))
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
-                failed_E(expr, "missing interop function pointer for {expr.func.name}")
+                failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
         return ofunc
 
