@@ -19,6 +19,21 @@ struct Node
 var
     seed:int4 = int4(1,1,1,1)
 
+[jit]
+def private finalize ( var that:Node?& explicit -const )
+    unsafe
+	    if that != null
+		    finalize(*that)
+		    delete explicit that
+		    that = null
+
+[jit]
+def private finalize ( var that:Node explicit )
+    unsafe
+	    finalize(that.left)
+	    finalize(that.right)
+	    memzero(that)
+
 [jit,unsafe_deref]
 def merge(var lower, greater: Node?): Node?
     if lower == null
@@ -109,3 +124,4 @@ def main
         testTreeJit()
     profile(10, "tree C++")  <|
         testProfile::testTree()
+

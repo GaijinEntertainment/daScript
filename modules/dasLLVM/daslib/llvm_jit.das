@@ -2237,6 +2237,67 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_MAKE_BLOCK), params, "")
         setE(expr, blk_ptr)
 
+// memzero
+    def override visitExprMemZero(expr:smart_ptr<ExprMemZero>) : ExpressionPtr
+        assume subexpr = expr.arguments[0]
+        var ptr = getE(subexpr)
+        ptr = LLVMBuildPointerCast(g_builder, ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+        assume sizeOf = subexpr._type.sizeOf
+        assume alignOf = subexpr._type.alignOf
+        LLVMBuildMemSet(g_builder, ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(sizeOf), 0), uint(alignOf))
+        return expr
+
+// delete
+    def override visitExprDelete(expr:smart_ptr<ExprDelete>) : ExpressionPtr
+        assume subexpr = expr.subexpr
+        assume subT = expr.subexpr._type
+        let total = subT.countOf
+        if total != 1
+            failed_E(expr, "delete of multiple elements is not supported yet {describe(subT)} [{total}]")
+            return expr
+        var se = getE(subexpr)
+        if subT.isPointer
+            assume firstT = expr.subexpr._type.firstType
+            if firstT.isStructure
+                if !firstT.structType.flags.isClass
+                    var structSize = firstT.sizeOf
+                    let persistent = firstT.structType.flags.persistent
+                    let isLambda = firstT.structType.flags.isLambda
+                    var pps = LLVMBuildPointerCast(g_builder, se, LLVMPointerType(LLVMPointerType(LLVMVoidType(),0u),0u), "ppStruct")
+                    var ps = LLVMBuildLoad(g_builder, pps, "pStruct")
+                    if persistent
+                        var params = [[auto
+                            ps;
+                            get_context_param()
+                        ]]
+                        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_PERSISTENT), params, "")
+                    elif isLambda
+                        /*
+                        ps -= 16; // TODO:
+                        structSize += 16;
+                        var params = [[auto
+                            ps;
+                            LLVMConstInt(LLVMInt32Type(), uint64(structSize), 0);
+                            get_context_param()
+                        ]]
+                        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_HEAP), params, "")
+                        */
+                        failed_E(expr, "delete lambda is not supported yet {describe(subT)}")
+                    else
+                        var params = [[auto
+                            ps;
+                            LLVMConstInt(LLVMInt32Type(), uint64(structSize), 0);
+                            get_context_param()
+                        ]]
+                        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_HEAP), params, "")
+                else
+                    failed_E(expr, "delete class pointer is not supported yet {describe(subT)}")
+            else
+                failed_E(expr, "delete of pointer non-structure type is not supported yet {describe(subT)}")
+        else
+            failed_E(expr, "delete of non-pointer type is not supported yet {describe(subT)}")
+        return expr
+
 // constants
     def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr
         setE(expr, LLVMConstPointerNull(LLVMVoidType()))
