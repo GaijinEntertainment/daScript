@@ -184,7 +184,6 @@ def intrinsic_op2(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; ar
     if sqrt_name==""
         failed_E(expr, "intrinsic type {expr.name}({describe(opType)}) is not supported (yet?)")
         return null
-    print("NAME: {sqrt_name}\n")
     var args <- [{auto[] arguments[0]; arguments[1]}]
     var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
     var id = LLVMLookupIntrinsicID(sqrt_name)
@@ -196,28 +195,30 @@ def intrinsic_op2(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; ar
 
 def intrinsic_math_minmax(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
+    var op_name : string
     if opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
-        return intrinsic_op2(g_builder, expr, arguments)
-    if opType.isInteger
-        var cond : LLVMOpaqueValue?
-        var pred : LLVMIntPredicate
-        if opType.baseType==Type tInt64 || opType.baseType==Type tInt
-            pred = LLVMIntPredicate LLVMIntSLT
-        elif opType.baseType==Type tUInt64 || opType.baseType==Type tUInt
-            pred = LLVMIntPredicate LLVMIntULT
+        var pred = expr.name=="min" ? LLVMRealPredicate LLVMRealOLT : LLVMRealPredicate LLVMRealOGT
+        var cond = LLVMBuildFCmp(g_builder, pred, arguments[0], arguments[1], "")
+        return LLVMBuildSelect( g_builder, cond, arguments[0], arguments[1], "{expr.name}")
+    elif opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+        op_name = expr.name=="min" ? "min" : "max"
+        if opType.isSignedIntegerOrIntVec
+            op_name = "s{op_name}"
         else
-            failed_E(expr, "compare predicate for {expr.name} {describe(expr._type)} is not supported (yet?)")
-            return null
-        cond = LLVMBuildICmp(g_builder, pred, arguments[0], arguments[1], "")
-        if expr.name=="min"
-            return LLVMBuildSelect( g_builder, cond, arguments[0], arguments[1], "{expr.name}")
-        else
-            return LLVMBuildSelect( g_builder, cond, arguments[1], arguments[0], "{expr.name}")
-    elif opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt)
+            op_name = "u{op_name}"
+    else
         failed_E(expr, "{expr.name} {describe(expr._type)} is not supported (yet?)")
         return null
-    else
+    let sqrt_name = build_op_name(op_name, opType)
+    var args <- [{auto[] arguments[0]; arguments[1]}]
+    var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
+    var id = LLVMLookupIntrinsicID(sqrt_name)
+    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+    if decl==null
+        failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
+    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+
 
 // intrinsics, math
 

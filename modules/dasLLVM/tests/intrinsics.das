@@ -114,10 +114,39 @@ def jit_clz(x)
 
 def test_clz( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> jit_clz) )
-    t |> equal ( clz(a), jit_clz(a), "clz({a})" )
+    t |> equal ( clz(a), jit_clz(a), "clz(a)" )
 
 [test]
 def test_clz ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_all_unsigned_ints_op1(t,fake,"test_clz")
+
+[jit]
+def jit_min(a,b)
+    return min(a,b)
+
+def test_min( t:T?; a,b:auto(TT) )
+    t |> success ( is_jit_function(@@<(a,b:TT):void> jit_min) )
+    t |> strictEqual ( min(a,b), jit_min(a,b), "min(a,b)" )
+
+[test]
+def test_min ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_numeric_and_vector_op2_no_unint_vec(t,fake,"test_min")
+
+[jit]
+def jit_max(a,b)
+    return max(a,b)
+
+def test_max( t:T?; a,b:auto(TT) )
+    t |> success ( is_jit_function(@@<(a,b:TT):void> jit_max) )
+    t |> strictEqual ( max(a,b), jit_max(a,b), "max(a,b)" )
+
+[test]
+def test_max ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_numeric_and_vector_op2_no_unint_vec(t,fake,"test_max")
+
