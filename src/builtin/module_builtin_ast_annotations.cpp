@@ -925,6 +925,8 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isInteger)>("isInteger","isInteger");
             addProperty<DAS_BIND_MANAGED_PROP(isSignedInteger)>("isSignedInteger","isSignedInteger");
             addProperty<DAS_BIND_MANAGED_PROP(isUnsignedInteger)>("isUnsignedInteger","isUnsignedInteger");
+            addProperty<DAS_BIND_MANAGED_PROP(isSignedIntegerOrIntVec)>("isSignedIntegerOrIntVec","isSignedIntegerOrIntVec");
+            addProperty<DAS_BIND_MANAGED_PROP(isUnsignedIntegerOrIntVec)>("isUnsignedIntegerOrIntVec","isUnsignedIntegerOrIntVec");
             addProperty<DAS_BIND_MANAGED_PROP(isFloatOrDouble)>("isFloatOrDouble","isFloatOrDouble");
             addProperty<DAS_BIND_MANAGED_PROP(isNumeric)>("isNumeric","isNumeric");
             addProperty<DAS_BIND_MANAGED_PROP(isNumericComparable)>("isNumericComparable","isNumericComparable");

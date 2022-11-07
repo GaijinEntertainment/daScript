@@ -2089,6 +2089,40 @@ namespace das
         return false;
     }
 
+    bool TypeDecl::isSignedIntegerOrIntVec() const {
+        if (dim.size() != 0) return false;
+        switch (baseType) {
+        case Type::tInt:
+        case Type::tInt8:
+        case Type::tInt16:
+        case Type::tInt64:
+        case Type::tInt2:
+        case Type::tInt3:
+        case Type::tInt4:
+            return true;
+        default:;
+        }
+        return false;
+    }
+
+    bool TypeDecl::isUnsignedIntegerOrIntVec() const {
+        if (dim.size() != 0) return false;
+        switch (baseType) {
+        case Type::tUInt:
+        case Type::tBitfield:
+        case Type::tUInt8:
+        case Type::tUInt16:
+        case Type::tUInt64:
+        case Type::tUInt2:
+        case Type::tUInt3:
+        case Type::tUInt4:
+            return true;
+        default:;
+        }
+        return false;
+    }
+
+
     bool TypeDecl::isNumeric() const {
         if (dim.size() != 0) return false;
         switch (baseType) {

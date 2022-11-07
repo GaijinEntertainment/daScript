@@ -91,6 +91,8 @@ namespace das {
         bool isInteger() const;
         bool isSignedInteger() const;
         bool isUnsignedInteger() const;
+        bool isSignedIntegerOrIntVec() const;
+        bool isUnsignedIntegerOrIntVec() const;
         bool isFloatOrDouble() const;
         bool isNumeric() const;
         bool isNumericStorage() const;
