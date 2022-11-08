@@ -407,14 +407,14 @@ class LlvmJitVisitor : AstVisitor
             var tryV = tryGetV(expr.variable)
             if tryV != null
                 if expr.varFlags.r2v
-                    setE(expr, LLVMBuildLoad(g_builder, tryV, "var_block_r2v_{expr.variable.name}"))
+                    setE(expr, LLVMBuildLoadDataAligned(g_builder, tryV, uint(expr._type.alignOf), "var_block_r2v_{expr.variable.name}"))
                 else
                     setE(expr, tryV)
                 return expr
             var arg = LLVMGetParam(ffunc,uint(expr.argumentIndex))
             if expr.varFlags.r2v
                 if varType.flags.ref
-                    setE(expr, LLVMBuildLoad(g_builder, arg, "var_block_ref_r2v_{expr.variable.name}"))
+                    setE(expr, LLVMBuildLoadDataAligned(g_builder, arg, uint(expr._type.alignOf), "var_block_ref_r2v_{expr.variable.name}"))
                 else
                     setE(expr, arg)
             else
@@ -424,23 +424,23 @@ class LlvmJitVisitor : AstVisitor
             if expr.variable.flags.aliasCMRES
                 pass
             if varType.flags.ref
-                var_ptr = LLVMBuildLoad(g_builder, var_ptr, "")
+                var_ptr = LLVMBuildLoadDataAligned(g_builder, var_ptr, uint(expr._type.alignOf), "")
             if expr.varFlags.r2v
-                setE(expr, LLVMBuildLoad(g_builder, var_ptr, "var_r2v_{expr.variable.name}"))
+                setE(expr, LLVMBuildLoadDataAligned(g_builder, var_ptr, uint(expr._type.alignOf), "var_r2v_{expr.variable.name}"))
             else
                 setE(expr, var_ptr)
         elif expr.varFlags.argument // arguments
             var tryV = tryGetV(expr.variable)
             if tryV != null
                 if expr.varFlags.r2v
-                    setE(expr, LLVMBuildLoad(g_builder, tryV, "var_r2v_{expr.variable.name}"))
+                    setE(expr, LLVMBuildLoadDataAligned(g_builder, tryV, uint(expr._type.alignOf), "var_r2v_{expr.variable.name}"))
                 else
                     setE(expr, tryV)
                 return expr
             var arg = LLVMGetParam(ffunc,uint(expr.argumentIndex))
             if expr.varFlags.r2v
                 if varType.flags.ref
-                    setE(expr, LLVMBuildLoad(g_builder, arg, "var_ref_r2v_{expr.variable.name}"))
+                    setE(expr, LLVMBuildLoadDataAligned(g_builder, arg, uint(expr._type.alignOf), "var_ref_r2v_{expr.variable.name}"))
                 else
                     setE(expr, arg)
             else
@@ -453,7 +453,7 @@ class LlvmJitVisitor : AstVisitor
             vptr = LLVMBuildGEP(g_builder, global_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.variable.stackTop), 0), "")
             vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
             if expr.varFlags.r2v
-                setE(expr, LLVMBuildLoad(g_builder, vptr, "global_var_r2v_{expr.variable.name}"))
+                setE(expr, LLVMBuildLoadDataAligned(g_builder, vptr, uint(expr._type.alignOf), "global_var_r2v_{expr.variable.name}"))
             else
                 setE(expr, vptr)
         return expr
@@ -629,20 +629,20 @@ class LlvmJitVisitor : AstVisitor
 
     def build_copy ( tdst:LLVMOpaqueValue?; right:ExpressionPtr )
         var tsrc = getE(right)
+        var ralign = uint(right._type.alignOf)
         if right._type.isRef
             if right._type.isWorkhorseType
-                var temp = LLVMBuildLoad(g_builder, tsrc, "")
-                LLVMBuildStore(g_builder, temp, tdst)
+                var temp = LLVMBuildLoadDataAligned(g_builder, tsrc, ralign, "")
+                LLVMBuildStoreAligned(g_builder, temp, tdst, ralign)
             else
                 var rsize = LLVMConstInt(LLVMInt32Type(), uint64(right._type.sizeOf), 0)
-                var ralign = uint(right._type.alignOf)
                 LLVMBuildMemCpy(g_builder, tdst, ralign, tsrc, ralign, rsize)
         else
             if right is ExprConstPtr
                 let null_ptr = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
-                LLVMBuildStore2(g_builder, LLVMPointerType(LLVMVoidType(),0u), null_ptr, tdst)
+                LLVMBuildStore2Aligned(g_builder, LLVMPointerType(LLVMVoidType(),0u), null_ptr, tdst, ralign)
             else
-                LLVMBuildStore(g_builder, tsrc, tdst)
+                LLVMBuildStoreAligned(g_builder, tsrc, tdst, ralign)
 
     def override preVisitExprCopyRight(expr:smart_ptr<ExprCopy>;right:ExpressionPtr): void
         var tdst = getE(expr.left)
@@ -722,7 +722,7 @@ class LlvmJitVisitor : AstVisitor
             var element_type = type_to_llvm_type(subExprT.firstType)
             var ptr_idx = LLVMBuildGEP(g_builder, tsrc, tidx, "ptr_at")
             if expr.atFlags.r2v
-                var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "at_r2v")
+                var at_r2v = LLVMBuildLoadDataAligned(g_builder, ptr_idx, uint(expr._type.alignOf), "at_r2v")
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
@@ -734,7 +734,7 @@ class LlvmJitVisitor : AstVisitor
             check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0), "dim index out of range")
             var ptr_idx = LLVMBuildGEP2(g_builder, element_type, tsrc, tidx, "dim_at")
             if expr.atFlags.r2v
-                var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "dim_at_r2v")
+                var at_r2v = LLVMBuildLoadDataAligned(g_builder, ptr_idx, uint(expr._type.alignOf), "dim_at_r2v")
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
@@ -745,7 +745,7 @@ class LlvmJitVisitor : AstVisitor
             var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY DATA), "array.data")
             var ptr_idx = LLVMBuildGEP(g_builder, data, tidx, "array_at")
             if expr.atFlags.r2v
-                var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "array_at_r2v")
+                var at_r2v = LLVMBuildLoadDataAligned(g_builder, ptr_idx, uint(expr._type.alignOf), "array_at_r2v")
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
@@ -757,7 +757,7 @@ class LlvmJitVisitor : AstVisitor
             var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
             var ptr_idx = LLVMBuildGEP(g_builder, data, at_tab, "table_at")
             if expr.atFlags.r2v
-                var at_r2v = LLVMBuildLoad(g_builder, ptr_idx, "array_at_r2v")
+                var at_r2v = LLVMBuildLoadDataAligned(g_builder, ptr_idx, uint(expr._type.alignOf), "array_at_r2v")
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
@@ -775,7 +775,7 @@ class LlvmJitVisitor : AstVisitor
         assume opType = expr.subexpr._type
         if expr.op=="+++" || expr.op=="++"
             var expr_t = base_type_to_llvm_type(opType.baseType)
-            var sexpr_v = LLVMBuildLoad(g_builder, sexpr, "")
+            var sexpr_v = LLVMBuildLoadDataAligned(g_builder, sexpr, uint(expr.subexpr._type.alignOf), "")
             var res_v : LLVMOpaqueValue?
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 res_v = LLVMBuildAdd(g_builder, sexpr_v, LLVMConstInt(expr_t,1ul,0), "")
@@ -783,11 +783,11 @@ class LlvmJitVisitor : AstVisitor
                 res_v = LLVMBuildFAdd(g_builder, sexpr_v, LLVMConstReal(expr_t,1.lf), "")
             else
                 failed_E(expr, "unsupported ++ type {opType}")
-            LLVMBuildStore(g_builder, res_v, sexpr)
+            LLVMBuildStoreAligned(g_builder, res_v, sexpr, uint(expr.subexpr._type.alignOf))
             setE(expr, sexpr_v)
         elif expr.op=="---" || expr.op=="--"
             var expr_t = base_type_to_llvm_type(opType.baseType)
-            var sexpr_v = LLVMBuildLoad(g_builder, sexpr, "")
+            var sexpr_v = LLVMBuildLoadDataAligned(g_builder, sexpr, uint(expr.subexpr._type.alignOf), "")
             var res_v : LLVMOpaqueValue?
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 res_v = LLVMBuildSub(g_builder, sexpr_v, LLVMConstInt(expr_t,1ul,0), "")
@@ -795,7 +795,7 @@ class LlvmJitVisitor : AstVisitor
                 res_v = LLVMBuildFSub(g_builder, sexpr_v, LLVMConstReal(expr_t,1.lf), "")
             else
                 failed_E(expr, "unsupported -- type {opType}")
-            LLVMBuildStore(g_builder, res_v, sexpr)
+            LLVMBuildStoreAligned(g_builder, res_v, sexpr, uint(expr.subexpr._type.alignOf))
             setE(expr, sexpr_v)
         elif expr.op=="~"
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
@@ -866,7 +866,7 @@ class LlvmJitVisitor : AstVisitor
         var right = getE(expr.right)
         assume opType = expr.right._type
         assume shiftType = expr.left._type
-        var r2v_left = isReadModifyWriteOp2(expr.op) ? LLVMBuildLoad(g_builder, left, "") : null
+        var r2v_left = isReadModifyWriteOp2(expr.op) ? LLVMBuildLoadDataAligned(g_builder, left, uint(expr.left._type.alignOf), "") : null
 
         // note: we need to handle vector vs scalar operations here
         // the way we do it, is we expand scalar up to vector type
@@ -892,9 +892,9 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported + type {describe(opType)}")
         elif expr.op=="+="
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildAdd(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildAdd(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildFAdd(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFAdd(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported += type {describe(opType)}")
         elif expr.op=="-"
@@ -906,9 +906,9 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported - type {describe(opType)}")
         elif expr.op=="-="
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildSub(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildSub(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildFSub(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFSub(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported -= type {describe(opType)}")
         elif expr.op=="*"
@@ -920,9 +920,9 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported * type {describe(opType)}")
         elif expr.op=="*="
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildMul(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildMul(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildFMul(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFMul(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported *= type {describe(opType)}")
         elif expr.op=="/" || expr.op=="%" || expr.op=="/=" || expr.op=="%="
@@ -941,11 +941,11 @@ class LlvmJitVisitor : AstVisitor
                     failed_E(expr, "unsupported /= type {describe(opType)}")
             elif expr.op=="/="
                 if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
-                    setE(expr, LLVMBuildStore(g_builder, LLVMBuildSDiv(g_builder, r2v_left, right, ""), left))
+                    setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildSDiv(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
                 elif opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tUInt)
-                    setE(expr, LLVMBuildStore(g_builder, LLVMBuildUDiv(g_builder, r2v_left, right, ""), left))
+                    setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildUDiv(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
                 elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
-                    setE(expr, LLVMBuildStore(g_builder, LLVMBuildFDiv(g_builder, r2v_left, right, ""), left))
+                    setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFDiv(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
                 else
                     failed_E(expr, "unsupported /= type {describe(opType)}")
             elif expr.op=="%"
@@ -959,11 +959,11 @@ class LlvmJitVisitor : AstVisitor
                     failed_E(expr, "unsupported % type {describe(opType)}")
             elif expr.op=="%="
                 if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
-                    setE(expr, LLVMBuildStore(g_builder, LLVMBuildSRem(g_builder, r2v_left, right, ""), left))
+                    setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildSRem(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
                 elif opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tUInt)
-                    setE(expr, LLVMBuildStore(g_builder, LLVMBuildURem(g_builder, r2v_left, right, ""), left))
+                    setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildURem(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
                 elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
-                    setE(expr, LLVMBuildStore(g_builder, LLVMBuildFRem(g_builder, r2v_left, right, ""), left))
+                    setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFRem(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
                 else
                     failed_E(expr, "unsupported %= type {describe(opType)}")
             else
@@ -1002,7 +1002,7 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported << type {describe(shiftType)}")
         elif expr.op=="<<="
             if shiftType.isInteger || (shiftType.isVectorType && (shiftType.vectorBaseType==Type tInt || shiftType.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildShl(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildShl(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported <<= type {describe(shiftType)}")
         elif expr.op==">>"
@@ -1014,9 +1014,9 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported >> type {describe(shiftType)}")
         elif expr.op==">>="
             if shiftType.isSignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType==Type tInt)
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildAShr(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildAShr(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             elif shiftType.isUnsignedInteger || (shiftType.isVectorType && shiftType.vectorBaseType==Type tUInt)
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildLShr(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildLShr(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported >>= type {describe(shiftType)}")
         elif expr.op==">>>" || expr.op=="<<<"
@@ -1047,7 +1047,7 @@ class LlvmJitVisitor : AstVisitor
                     failed_E(expr, "failed to get intrinsic {fshr_name}")
                 else
                     var cll = LLVMBuildCall(g_builder, decl, args, string(expr.op))
-                    setE(expr, LLVMBuildStore(g_builder, cll, left))
+                    setE(expr, LLVMBuildStoreAligned(g_builder, cll, left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported >>> type {opType}")
         elif expr.op=="&"
@@ -1057,7 +1057,7 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported & type {opType}")
         elif expr.op=="&="
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildAnd(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildAnd(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported &= type {opType}")
         elif expr.op=="|"
@@ -1067,7 +1067,7 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported | type {opType}")
         elif expr.op=="|="
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildOr(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildOr(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported |= type {opType}")
         elif expr.op=="^"
@@ -1077,7 +1077,7 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported ^ type {opType}")
         elif expr.op=="^="
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildXor(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildXor(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported ^= type {opType}")
         elif expr.op=="^^"
@@ -1087,7 +1087,7 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported ^^ type {opType}")
         elif expr.op=="^^="
             if opType.isBool
-                setE(expr, LLVMBuildStore(g_builder, LLVMBuildXor(g_builder, r2v_left, right, ""), left))
+                setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildXor(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported ^^= type {opType}")
         else
@@ -1129,7 +1129,7 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
         assert(expr._type.isWorkhorseType)
-        setE(expr, LLVMBuildLoad(g_builder, getE(expr.subexpr), "r2v"))
+        setE(expr, LLVMBuildLoadDataAligned(g_builder, getE(expr.subexpr), uint(expr._type.alignOf), "r2v"))
         return expr
 
     def get_bool_compare_op ( e:ExpressionPtr; op:string )
@@ -1285,7 +1285,7 @@ class LlvmJitVisitor : AstVisitor
         fptr = LLVMBuildGEP(g_builder, fptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
         fptr = LLVMBuildPointerCast(g_builder, fptr, LLVMPointerType(type_to_llvm_type(expr._type), 0u), "variant_field_ptr")
         if expr.fieldFlags.r2v
-            setE(expr, LLVMBuildLoad(g_builder, fptr, "variant_field"))
+            setE(expr, LLVMBuildLoadDataAligned(g_builder, fptr, uint(expr._type.alignOf), "variant_field"))
         else
             setE(expr, fptr)
         return expr
@@ -1411,7 +1411,7 @@ class LlvmJitVisitor : AstVisitor
                 var func = register_extern_function(expr)
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
                 if cmresEval!=null
-                    LLVMBuildStore2(g_builder, type_to_llvm_type(expr.func.result), ccall, cmresEval)
+                    LLVMBuildStore2Aligned(g_builder, type_to_llvm_type(expr.func.result), ccall, cmresEval, uint(expr._type.alignOf))
                     setE(expr, cmresEval)
                 else
                     setE(expr, ccall)
@@ -1592,7 +1592,7 @@ class LlvmJitVisitor : AstVisitor
             if expr.value._type.flags.ref && isSequencial
                 var val_ptr = LLVMBuildBitCast(g_builder, val, get_basetype_pointer(expr.value._type.vectorBaseType), "")
                 val_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
-                setE(expr, LLVMBuildLoad2(g_builder, type_to_llvm_type(expr._type), val_ptr, "swizzle_{expr.fields}"))
+                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), val_ptr, uint(expr.value._type.alignOf), "swizzle_{expr.fields}"))
             else
                 failed_E(expr, "val.swizzle is not supported yet, sequencial: {isSequencial} ref:{expr.value._type.flags.ref}")
                 setE(expr, LLVMGetUndef(LLVMInt32Type()))
@@ -1634,7 +1634,7 @@ class LlvmJitVisitor : AstVisitor
             let argName = tuple_field_name(expr.value._type,expr.fieldIndex)
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
             if expr.fieldFlags.r2v
-                setE(expr, LLVMBuildLoad(g_builder, field_ptr, ""))
+                setE(expr, LLVMBuildLoadDataAligned(g_builder, field_ptr, uint(expr._type.alignOf), ""))
             else
                 setE(expr, field_ptr)
         elif expr.value._type.isVariant
@@ -1648,7 +1648,7 @@ class LlvmJitVisitor : AstVisitor
             let argName = variant_field_name(expr.value._type,expr.fieldIndex)
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
             if expr.fieldFlags.r2v
-                setE(expr, LLVMBuildLoad(g_builder, field_ptr, ""))
+                setE(expr, LLVMBuildLoadDataAligned(g_builder, field_ptr, uint(expr._type.alignOf), ""))
             else
                 setE(expr, field_ptr)
         else
@@ -1660,7 +1660,7 @@ class LlvmJitVisitor : AstVisitor
             var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.field.offset), 0), "")
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.field._type), "{describe(expr.value._type,false,false,false)}.{expr.field.name}")
             if expr.fieldFlags.r2v
-                setE(expr, LLVMBuildLoad(g_builder, field_ptr, ""))
+                setE(expr, LLVMBuildLoadDataAligned(g_builder, field_ptr, uint(expr._type.alignOf), ""))
             else
                 setE(expr, field_ptr)
         return expr
@@ -2462,6 +2462,7 @@ class JIT_LLVM : AstSimulateMacro
         return true if is_in_completion() || is_compiling_macros()
         if !LLVM_JIT_ENABLED
             return true
+        let totalTime = ref_time_ticks()
         init_jit()
         var funcs : array<FunctionPtr>
         var fake_visitor = new LlvmJitVisitor(ctx)
@@ -2486,5 +2487,8 @@ class JIT_LLVM : AstSimulateMacro
                 else
                     remove_jit(simfun)
         finalize_jit()
+        if LLVM_JIT_LOG
+            let totalDt = double(get_time_usec(totalTime)) /1000000.0lf
+            to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions in {totalDt} sec\n")
         return true
 

@@ -10,6 +10,49 @@ require daslib/safe_addr
 require daslib/defer
 require strings
 
+def LLVMIsVector3 ( typ:LLVMOpaqueType? ) : bool
+    return (LLVMGetTypeKind(typ)==LLVMTypeKind LLVMVectorTypeKind) && (LLVMGetVectorSize(typ)==3u)
+
+def LLVMBuildLoadVector3 ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; name:string )
+    var typ = LLVMGetElementType(LLVMTypeOf(ptr))
+    verify(LLVMGetVectorSize(typ)==3u)
+    let elemT = LLVMGetElementType(typ)
+    var ld = LLVMBuildLoad2(builder, LLVMVectorType(elemT, 4u), ptr, name)
+    LLVMSetAlignment(ld, 4u)
+    var x = LLVMBuildExtractElement(builder, ld, LLVMConstInt(LLVMInt32Type(),0ul,0), "")
+    var y = LLVMBuildExtractElement(builder, ld, LLVMConstInt(LLVMInt32Type(),1ul,0), "")
+    var z = LLVMBuildExtractElement(builder, ld, LLVMConstInt(LLVMInt32Type(),2ul,0), "")
+    var xyz = LLVMGetUndef(LLVMVectorType(elemT, 3u))
+    xyz = LLVMBuildInsertElement(builder, xyz, x, LLVMConstInt(LLVMInt32Type(),0ul,0), "")
+    xyz = LLVMBuildInsertElement(builder, xyz, y, LLVMConstInt(LLVMInt32Type(),1ul,0), "")
+    xyz = LLVMBuildInsertElement(builder, xyz, z, LLVMConstInt(LLVMInt32Type(),2ul,0), "")
+    return xyz
+
+def LLVMBuildLoadAligned ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; alignment:uint; name:string )
+    let ld = LLVMBuildLoad(builder, ptr, name)
+    LLVMSetAlignment(ld, alignment)
+    return ld
+
+def LLVMBuildLoad2Aligned ( builder:LLVMOpaqueBuilder?; typ:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; alignment:uint; name:string )
+    let ld = LLVMBuildLoad2(builder, typ, ptr, name)
+    LLVMSetAlignment(ld, alignment)
+    return ld
+
+def LLVMBuildStoreAligned(builder:LLVMOpaqueBuilder?; val, ptr:LLVMOpaqueValue?; alignment:uint)
+    let st = LLVMBuildStore(builder, val, ptr)
+    LLVMSetAlignment(st, alignment)
+    return st
+
+def LLVMBuildStore2 ( builder:LLVMOpaqueBuilder?; typ:LLVMOpaqueType?; val:LLVMOpaqueValue?; ptr:LLVMOpaqueValue?  )
+    let tptr = LLVMBuildPointerCast(builder, ptr, LLVMPointerType(typ,0u), "")
+    return LLVMBuildStore(builder, val, tptr)
+
+def LLVMBuildStore2Aligned ( builder:LLVMOpaqueBuilder?; typ:LLVMOpaqueType?; val:LLVMOpaqueValue?; ptr:LLVMOpaqueValue?; alignment:uint )
+    let tptr = LLVMBuildPointerCast(builder, ptr, LLVMPointerType(typ,0u), "")
+    let st = LLVMBuildStore(builder, val, tptr)
+    LLVMSetAlignment(st, alignment)
+    return st
+
 def LLVMStructType ( var fields:LLVMOpaqueType? [] )
     return LLVMStructType(unsafe(addr(fields[0])), uint(length(fields)), 0)
 
@@ -59,10 +102,6 @@ def LLVMBuildGEP ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; var index:L
 
 def LLVMBuildGEP2 ( builder:LLVMOpaqueBuilder?; ty:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string )
     return LLVMBuildGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)
-
-def LLVMBuildStore2 ( builder:LLVMOpaqueBuilder?; typ:LLVMOpaqueType?; val:LLVMOpaqueValue?; ptr:LLVMOpaqueValue?  )
-    var tptr = LLVMBuildPointerCast(builder, ptr, LLVMPointerType(typ,0u), "")
-    return LLVMBuildStore(builder, val, tptr)
 
 def LLVMFloat4Type
     return LLVMVectorType(LLVMFloatType(), 4u)

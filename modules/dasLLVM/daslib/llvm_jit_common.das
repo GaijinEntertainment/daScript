@@ -13,10 +13,13 @@ require daslib/enum_trait
 
 let public LLVM_JIT_ENABLED = true
 
+let public LLVM_JIT_LOG = true
+
 let public LLVM_DEBUG_RESULT = false
 let public LLVM_DEBUG_EVERYTHING = false
 
 let public LLVM_JIT_ALWAYS_SOLID = true
+let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = true
 
 let public LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let public LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
@@ -462,3 +465,16 @@ def public build_broadcast_vector ( builder:LLVMOpaqueBuilder?; opType:TypeDeclP
         return vres
     else
         return right
+
+def public LLVMBuildLoadDataAligned ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; alignment:uint; name:string )
+    var typ = LLVMGetElementType(LLVMTypeOf(ptr))
+    if LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && LLVMIsVector3(typ)
+        return LLVMBuildLoadVector3(builder, ptr, name)
+    else
+        return LLVMBuildLoadAligned(builder, ptr, alignment, name)
+
+def public LLVMBuildLoadData2Aligned ( builder:LLVMOpaqueBuilder?; typ:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; alignment:uint; name:string )
+    if LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && alignment!=16u && LLVMIsVector3(typ)
+        return LLVMBuildLoadVector3(builder, ptr, name)
+    else
+        return LLVMBuildLoad2Aligned(builder, typ, ptr, alignment, name)
