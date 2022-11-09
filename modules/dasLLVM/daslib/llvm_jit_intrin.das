@@ -15,9 +15,10 @@ let g_intrin_lookup <- {{
     // type c-tors
         "$::range" => @@intrinsic_builtin_range;
         "$::urange" => @@intrinsic_builtin_range;
-        "$::float" => @@intrinsic_builtin_float;
         "$::float4" => @@intrinsic_builtin_float4;
-    // integer type c-tor
+    // basic type c-tor
+            "$::float" => @@intrinsic_builtin_float;
+            "$::double" => @@intrinsic_builtin_float;
             "$::int8" => @@intrinsic_builtin_int;
             "$::uint8" => @@intrinsic_builtin_int;
             "$::int16" => @@intrinsic_builtin_int;
@@ -89,17 +90,21 @@ def intrinsic_builtin_int(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
         return null
 
 def intrinsic_builtin_float(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    let floatType = base_type_to_llvm_type(expr._type.baseType)
     if length(arguments)==0
-        return LLVMConstReal(LLVMFloatType(), 0.0lf)
+        return LLVMConstReal(floatType, 0.0lf)
     assume argType = expr.arguments[0]._type
-    if argType.baseType==Type tFloat
+    if argType.baseType==expr._type.baseType
         return arguments[0]
-    elif argType.baseType==Type tDouble
-        return LLVMBuildFPTrunc(g_builder, arguments[0], LLVMFloatType(), "double_to_float")
     elif argType.isSignedInteger
-        return LLVMBuildSIToFP(g_builder, arguments[0], LLVMFloatType(), "int_to_float")
+        return LLVMBuildSIToFP(g_builder, arguments[0], floatType, string(expr.name))
     elif argType.isUnsignedInteger
-        return LLVMBuildUIToFP(g_builder, arguments[0], LLVMFloatType(), "uint_to_float")
+        return LLVMBuildUIToFP(g_builder, arguments[0], floatType, string(expr.name))
+    elif argType.isFloatOrDouble
+        if argType.sizeOf > expr._type.sizeOf
+            return LLVMBuildFPTrunc(g_builder, arguments[0], floatType, string(expr.name))
+        else
+            return LLVMBuildFPExt(g_builder, arguments[0], floatType, string(expr.name))
     else
         failed_E(expr, "float({describe(argType)}) is not supported (yet?)")
         return null

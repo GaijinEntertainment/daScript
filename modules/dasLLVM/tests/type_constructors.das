@@ -22,6 +22,22 @@ def test_intrin_float ( t:T? )
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_float")
 
+// double
+
+[jit]
+def jit_double ( x )
+    return double(x)
+
+def test_double( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_double) )
+    t |> strictEqual ( double(a), jit_double(a), "double(a)" )
+
+[test]
+def test_intrin_double ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_numeric_and_storage_op1(t,fake,"test_double")
+
 // int
 
 [jit]
