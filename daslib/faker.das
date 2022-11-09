@@ -95,6 +95,30 @@ def public random_uint ( var faker:Faker )
     faker.rnd |> next(i)
     return i
 
+def public random_int8 ( var faker:Faker )
+    //! Generates random int8.
+    var i = 0u
+    faker.rnd |> next(i)
+    return int8(i)
+
+def public random_uint8 ( var faker:Faker )
+    //! Generates random uint8.
+    var i = 0u
+    faker.rnd |> next(i)
+    return uint8(i)
+
+def public random_int16 ( var faker:Faker )
+    //! Generates random int16.
+    var i = 0u
+    faker.rnd |> next(i)
+    return int16(i)
+
+def public random_uint16 ( var faker:Faker )
+    //! Generates random uint16.
+    var i = 0u
+    faker.rnd |> next(i)
+    return uint16(i)
+
 def public random_float ( var faker:Faker )
     //! Generates random float.
     var i = 0u
