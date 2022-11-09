@@ -17,8 +17,15 @@ let g_intrin_lookup <- {{
         "$::urange" => @@intrinsic_builtin_range;
         "$::float" => @@intrinsic_builtin_float;
         "$::float4" => @@intrinsic_builtin_float4;
-        "$::uint8" => @@intrinsic_builtin_uint8;
-        "$::int" => @@intrinsic_builtin_int;
+    // integer type c-tor
+            "$::int8" => @@intrinsic_builtin_int;
+            "$::uint8" => @@intrinsic_builtin_int;
+            "$::int16" => @@intrinsic_builtin_int;
+            "$::uint16" => @@intrinsic_builtin_int;
+            "$::int" => @@intrinsic_builtin_int;
+            "$::uint" => @@intrinsic_builtin_int;
+            "$::int64" => @@intrinsic_builtin_int;
+            "$::uint64" => @@intrinsic_builtin_int;
     // bits
         "$::clz" => @@intrinsic_bit_nzp_op1;
         "$::ctz" => @@intrinsic_bit_nzp_op1;
@@ -58,37 +65,28 @@ def intrinsic_builtin_length(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCa
     else
         return null
 
-def intrinsic_builtin_uint8(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
-    if length(arguments)==0
-        return LLVMConstInt(LLVMInt8Type(), 0ul, 0)
-    assume argType = expr.arguments[0]._type
-    if argType.baseType==Type tInt8 || argType.baseType==Type tUInt8
-        return arguments[0]
-    elif argType.baseType==Type tFloat || argType.baseType==Type tDouble
-        return LLVMBuildFPToUI(g_builder, arguments[0], LLVMInt8Type(), "fp_to_uint8")
-    elif argType.isInteger
-        return LLVMBuildTruncOrBitCast(g_builder, arguments[0], LLVMInt8Type(), "integer_to_uint8")
-    else
-        failed_E(expr, "uint8({describe(argType)}) is not supported (yet?)")
-        return null
-
 def intrinsic_builtin_int(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    let intType = base_type_to_llvm_type(expr._type.baseType)
     if length(arguments)==0
-        return LLVMConstInt(LLVMInt32Type(), 0ul, 0)
+        return LLVMConstInt(intType, 0ul, 0)
     assume argType = expr.arguments[0]._type
-    if argType.baseType==Type tInt || argType.baseType==Type tUInt
-        return arguments[0]
+    if argType.baseType==expr._type.baseType
+        return arguments[0] // ctor of the same type is the same value, i.e int(a:int) is a
     elif argType.baseType==Type tFloat || argType.baseType==Type tDouble
-        return LLVMBuildFPToSI(g_builder, arguments[0], LLVMInt32Type(), "fp_to_int")
-    elif argType.isInteger
-        if argType.sizeOf>=4
-            return LLVMBuildTruncOrBitCast(g_builder, arguments[0], LLVMInt32Type(), "trunc_integer_to_int")
+        if expr._type.isSignedInteger
+            return LLVMBuildFPToSI(g_builder, arguments[0], intType, string(expr.name))
         else
-            return LLVMBuildSExtOrBitCast(g_builder, arguments[0], LLVMInt32Type(), "sext_integer_to_int")
+            return LLVMBuildFPToUI(g_builder, arguments[0], intType, string(expr.name))
+    elif argType.isInteger
+        if argType.sizeOf>=expr._type.sizeOf
+            return LLVMBuildTruncOrBitCast(g_builder, arguments[0],intType, string(expr.name))
+        elif argType.isSignedInteger
+            return LLVMBuildSExtOrBitCast(g_builder, arguments[0], intType, string(expr.name))
+        else
+            return LLVMBuildZExtOrBitCast(g_builder, arguments[0], intType, string(expr.name))
     else
-        failed_E(expr, "uint8({describe(argType)}) is not supported (yet?)")
+        failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
         return null
-
 
 def intrinsic_builtin_float(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     if length(arguments)==0
