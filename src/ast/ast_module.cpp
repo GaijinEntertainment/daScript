@@ -884,5 +884,26 @@ namespace das {
         if ( objModule==this ) return true;
         return requireModule.find(objModule) != requireModule.end();
     }
+
+    using ModulesPullers = das::vector<module_pull_t>;
+
+    static ModulesPullers &get_pullers()
+    {
+        static ModulesPullers pullers;
+        return pullers;
+    }
+
+    ModulePullHelper::ModulePullHelper(module_pull_t pull)
+    {
+        get_pullers().push_back(pull);
+    }
+
+    void pull_all_auto_registered_modules()
+    {
+        for (module_pull_t pull : get_pullers())
+        {
+            das::ModuleKarma += unsigned(intptr_t(pull()));
+        }
+    }
 }
 
