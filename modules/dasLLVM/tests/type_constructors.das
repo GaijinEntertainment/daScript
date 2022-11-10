@@ -197,6 +197,14 @@ def jit_float4_2(a,b)
 def jit_float4_3(a,b,c)
     return float4(a,b,c)
 
+[jit]
+def jit_float4_4 ( x,y,z,w )
+    return float4(x,y,z,w)
+
+def test_float4_4( t:T?; x,y,z,w:auto(TT) )
+    t |> success ( is_jit_function(@@<(x,y,z,w:TT):void> jit_float4_4) )
+    t |> strictEqual ( float4(x,y,z,w), jit_float4_4(x,y,z,w), "float4({x},{y},{z},{w}) // {typeinfo(typename type<TT>)}" )
+
 [test]
 def test_intrin_float4 ( t:T? )
     t |> run("float4()") <| @ ( t : T? )
@@ -219,7 +227,7 @@ def test_intrin_float4 ( t:T? )
             let f1 = fake |> random_float3
             let f2 = fake |> random_float
             t |> strictEqual ( float4(f1,f2), jit_float4_2(f1,f2), "float4(x,y) // 3,1" )
-    t |> run("float4(x,y)") <| @ ( t : T? )
+    t |> run("float4(x,y,z)") <| @ ( t : T? )
         var fake <- Faker()
         fuzz <|
             let f1 = fake |> random_float
@@ -231,6 +239,11 @@ def test_intrin_float4 ( t:T? )
             let f2 = fake |> random_float2
             let f3 = fake |> random_float
             t |> strictEqual ( float4(f1,f2,f3), jit_float4_3(f1,f2,f3), "float4(x,y,z) // 1,2,1" )
+    t |> run("float4(x,y,z,w)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            fuzz_numeric_op4(t,fake,"test_float4_4")
+
 
 
 
