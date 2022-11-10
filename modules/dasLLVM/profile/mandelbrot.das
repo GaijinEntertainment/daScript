@@ -16,16 +16,15 @@ def read_char_from_input()
 def run(code: uint8?; lengthOfCode:int; var tape: uint8?; var codePos, tapePos: int&; skip: bool): bool
     unsafe
         while tapePos >= 0 && codePos < lengthOfCode
-            let sym1  = int(code[codePos])
-            if sym1 == '['
+            let sym  = int(code[codePos])
+            if sym == '['
                 ++codePos
                 let oldPos = codePos
                 while run(code, lengthOfCode, tape, codePos, tapePos, tape[tapePos] == uint8(0))
                     codePos = oldPos
-            elif sym1 == ']'
+            elif sym == ']'
                 return tape[tapePos] != uint8(0)
             elif !skip
-                let sym  = int(code[codePos])
                 if sym == '+' { tape[tapePos] = uint8(int(tape[tapePos]) + 1); }
                 elif sym == '-' { tape[tapePos] = uint8(int(tape[tapePos]) - 1); }
                 elif sym == '>' { ++tapePos; }
