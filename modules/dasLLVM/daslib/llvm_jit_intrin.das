@@ -13,9 +13,12 @@ let g_intrin_lookup <- {{
     // misc
         "$::length" => @@intrinsic_builtin_length;
     // type c-tors
+    // vector type c-tors
         "$::range" => @@intrinsic_builtin_range;
         "$::urange" => @@intrinsic_builtin_range;
-        "$::float4" => @@intrinsic_builtin_float4;
+        "$::float2" => @@intrinsic_builtin_float_vec;
+        "$::float3" => @@intrinsic_builtin_float_vec;
+        "$::float4" => @@intrinsic_builtin_float_vec;
     // basic type c-tor
             "$::float" => @@intrinsic_builtin_float;
             "$::double" => @@intrinsic_builtin_float;
@@ -89,6 +92,36 @@ def intrinsic_builtin_int(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
         failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
         return null
 
+def any2float ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; baseType:Type )
+    return val                                                      if baseType==Type tFloat
+    return LLVMBuildFPTrunc(g_builder, val, LLVMFloatType(), "")    if baseType==Type tDouble
+    return LLVMBuildSIToFP(g_builder, val, LLVMFloatType(), "")     if baseType==Type tInt8 || baseType==Type tInt16 || baseType==Type tInt || baseType==Type tInt64
+    return LLVMBuildUIToFP(g_builder, val, LLVMFloatType(), "")     if baseType==Type tUInt8 || baseType==Type tUInt16 || baseType==Type tUInt || baseType==Type tUInt64
+    panic("unsupported any2float base type {baseType}")
+    return null
+
+def intrinsic_builtin_float_vec(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume resType = expr._type
+    if length(arguments) == 0
+        return build_broadcast_vector (g_builder, resType, LLVMConstReal(LLVMFloatType(), 0.0lf))
+    if length(arguments) == 1
+        var val = any2float(g_builder, arguments[0], expr.arguments[0]._type.baseType)
+        return build_broadcast_vector (g_builder, resType, val)
+    var vres = LLVMGetUndef(LLVMVectorType(LLVMFloatType(), uint(expr._type.vectorDim)))
+    var elemIndex = 0
+    for earg,arg in expr.arguments,arguments
+        if earg._type.isVectorType
+            for ei in range(earg._type.vectorDim)
+                var eval = LLVMBuildExtractElement(g_builder, arg, LLVMConstInt(LLVMInt32Type(), uint64(ei), 0), "")
+                var val = any2float(g_builder, eval, earg._type.vectorBaseType)
+                vres = LLVMBuildInsertElement(g_builder, vres, val, LLVMConstInt(LLVMInt32Type(), uint64(elemIndex++), 0), "")
+        else
+            var val = any2float(g_builder, arg, earg._type.baseType)
+            vres = LLVMBuildInsertElement(g_builder, vres, val, LLVMConstInt(LLVMInt32Type(), uint64(elemIndex++), 0), "")
+    if elemIndex != resType.vectorDim
+        failed_E(expr, "vector ctor {expr.name}({describe(expr._type)}) has {elemIndex} elements, but {resType.vectorDim} are expected")
+    return vres
+
 def intrinsic_builtin_float(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     let floatType = base_type_to_llvm_type(expr._type.baseType)
     if length(arguments)==0
@@ -108,28 +141,6 @@ def intrinsic_builtin_float(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCal
     else
         failed_E(expr, "float({describe(argType)}) is not supported (yet?)")
         return null
-
-def intrinsic_builtin_float4(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
-    assume resType = expr._type
-    if length(arguments) == 0
-        return build_broadcast_vector (g_builder, resType, LLVMConstReal(LLVMFloatType(), 0.0lf))
-    elif length(arguments) == 1
-        assume argType = expr.arguments[0]._type
-        if argType.baseType==Type tFloat
-            return build_broadcast_vector(g_builder, resType,arguments[0])
-        elif argType.baseType==Type tDouble
-            return build_broadcast_vector(g_builder, resType,LLVMBuildFPTrunc(g_builder, arguments[0], LLVMFloatType(), "double_to_float"))
-        elif argType.isSignedInteger
-            return build_broadcast_vector(g_builder, resType,LLVMBuildSIToFP(g_builder, arguments[0], LLVMFloatType(), "int_to_float"))
-        elif argType.isUnsignedInteger
-            return build_broadcast_vector(g_builder, resType,LLVMBuildUIToFP(g_builder, arguments[0], LLVMFloatType(), "uint_to_float"))
-        else
-            failed_E(expr, "float4({describe(argType)}) is not supported (yet?)")
-            return null
-    else
-        failed_E(expr, "float4 of {length(arguments)} arguments is not supported (yet?)")
-        return null
-
 
 def intrinsic_builtin_range(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var x, y : LLVMOpaqueValue?

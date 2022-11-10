@@ -6,6 +6,9 @@ require daslib/faker
 require daslib/math
 require daslib/constant_expression
 
+////////////////////////////
+// floating point type ctors
+
 // float
 
 [jit]
@@ -37,6 +40,9 @@ def test_intrin_double ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_double")
+
+/////////////////////
+// integer type ctors
 
 // int
 
@@ -166,6 +172,10 @@ def test_intrin_uint64 ( t:T? )
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_uint64")
 
+///////////////
+// vector ctors
+
+// float4
 
 [jit]
 def jit_float4 ( x )
@@ -175,9 +185,53 @@ def test_float4( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> jit_float4) )
     t |> strictEqual ( float4(a), jit_float4(a), "float4(a)" )
 
+[jit,sideeffects]
+def jit_float4_0
+    return float4()
+
+[jit]
+def jit_float4_2(a,b)
+    return float4(a,b)
+
+[jit]
+def jit_float4_3(a,b,c)
+    return float4(a,b,c)
+
 [test]
 def test_intrin_float4 ( t:T? )
-    var fake <- Faker()
-    fuzz <|
-        fuzz_numeric_op1(t,fake,"test_float4")
+    t |> run("float4()") <| @ ( t : T? )
+        t |> strictEqual ( float4(), jit_float4_0(), "float4()" )
+    t |> run("float4(x)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            fuzz_numeric_op1(t,fake,"test_float4")
+    t |> run("float4(x,y)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            let f1 = fake |> random_float
+            let f2 = fake |> random_float3
+            t |> strictEqual ( float4(f1,f2), jit_float4_2(f1,f2), "float4(x,y) // 1,3" )
+        fuzz <|
+            let f1 = fake |> random_float2
+            let f2 = fake |> random_float2
+            t |> strictEqual ( float4(f1,f2), jit_float4_2(f1,f2), "float4(x,y) // 2,2" )
+        fuzz <|
+            let f1 = fake |> random_float3
+            let f2 = fake |> random_float
+            t |> strictEqual ( float4(f1,f2), jit_float4_2(f1,f2), "float4(x,y) // 3,1" )
+    t |> run("float4(x,y)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            let f1 = fake |> random_float
+            let f2 = fake |> random_float
+            let f3 = fake |> random_float2
+            t |> strictEqual ( float4(f1,f2,f3), jit_float4_3(f1,f2,f3), "float4(x,y) // 1,1,2" )
+        fuzz <|
+            let f1 = fake |> random_float
+            let f2 = fake |> random_float2
+            let f3 = fake |> random_float
+            t |> strictEqual ( float4(f1,f2,f3), jit_float4_3(f1,f2,f3), "float4(x,y,z) // 1,2,1" )
+
+
+
 
