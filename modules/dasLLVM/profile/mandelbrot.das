@@ -34,15 +34,22 @@ def run(code: uint8?; lengthOfCode:int; var tape: uint8?; var codePos, tapePos: 
                     let oldPos = codePos
                     while run(code, lengthOfCode, tape, codePos, tapePos, tape[tapePos] == uint8(0))
                         codePos = oldPos
+                    ++codePos
                 elif sym == ']'
                     return tape[tapePos] != uint8(0)
-                elif sym == '+' { tape[tapePos] = uint8(int(tape[tapePos]) + 1); }
-                elif sym == '-' { tape[tapePos] = uint8(int(tape[tapePos]) - 1); }
-                elif sym == '>' { ++tapePos; }
-                elif sym == '<' { --tapePos; }
-                else            { print(int(tape[tapePos]) |> to_char); }
-                // elif sym == '.' { print(int(tape[tapePos]) |> to_char); }
-                ++codePos
+                elif sym == '.'
+                    print(int(tape[tapePos]) |> to_char);
+                    ++codePos
+                else
+                    var rep = 1
+                    while int(code[codePos+rep])==sym
+                        ++rep
+                    if sym == '+' { tape[tapePos] = uint8(int(tape[tapePos]) + rep); }
+                    elif sym == '-' { tape[tapePos] = uint8(int(tape[tapePos]) - rep); }
+                    elif sym == '>' { tapePos += rep; }
+                    else  { tapePos -= rep; }
+                    // elif sym == '<' { tapePos -= rep; }
+                    codePos += rep
         return false
 
 def interpret(code: string)
