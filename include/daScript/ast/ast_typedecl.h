@@ -260,6 +260,9 @@ namespace das {
     template<> struct ToBasicType<long long int>      { enum { type = Type::tInt64 }; };
     template<> struct ToBasicType<unsigned long long int>     { enum { type = Type::tUInt64 }; };
 #endif
+#ifdef _EMSCRIPTEN_VER
+    template<> struct ToBasicType<unsigned long>    { enum { type = Type::tUInt }; };
+#endif
     template<> struct ToBasicType<float2>       { enum { type = Type::tFloat2 }; };
     template<> struct ToBasicType<float3>       { enum { type = Type::tFloat3 }; };
     template<> struct ToBasicType<float4>       { enum { type = Type::tFloat4 }; };
