@@ -293,12 +293,20 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, int3, int3>>("int3",lib,"int3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int3, float3>>("int3",lib,"cvt_int3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,int3, uint3>>("int3",lib,"cvt_pass",false) );
+        addExtern<DAS_BIND_FUN(int3_from_xy_z)> (*this, lib, "int3", SideEffects::none, "int3_from_xy_z");
+        addExtern<DAS_BIND_FUN(int3_from_x_yz)> (*this, lib, "int3", SideEffects::none, "int3_from_x_yz");
         // int4
         ADD_VEC_CTOR_1(int4,"int4");
         ADD_VEC_CTOR_4(int4,"int4");
         addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, int4, int4>>("int4",lib,"int4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int4, float4>>("int4",lib,"cvt_int4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,int4, uint4>>("int4",lib,"cvt_pass",false) );
+        addExtern<DAS_BIND_FUN(int4_from_xyz_w)>  (*this, lib, "int4", SideEffects::none, "int4_from_xyz_w");
+        addExtern<DAS_BIND_FUN(int4_from_x_yzw)>  (*this, lib, "int4", SideEffects::none, "int4_from_x_yzw");
+        addExtern<DAS_BIND_FUN(int4_from_xy_zw)>  (*this, lib, "int4", SideEffects::none, "int4_from_xy_zw");
+        addExtern<DAS_BIND_FUN(int4_from_xy_z_w)> (*this, lib, "int4", SideEffects::none, "int4_from_xy_z_w");
+        addExtern<DAS_BIND_FUN(int4_from_x_yz_w)> (*this, lib, "int4", SideEffects::none, "int4_from_x_yz_w");
+        addExtern<DAS_BIND_FUN(int4_from_x_y_zw)> (*this, lib, "int4", SideEffects::none, "int4_from_x_y_zw");
         // uint2
         ADD_VEC_CTOR_1(uint2,"uint2");
         ADD_VEC_CTOR_2(uint2,"uint2");
@@ -311,12 +319,20 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, uint3, uint3>>("uint3",lib,"uint3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint3,float3>>("uint3",lib,"cvt_uint3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,uint3, int3>>("uint3",lib,"cvt_pass",false) );
+        addExtern<DAS_BIND_FUN(uint3_from_xy_z)> (*this, lib, "uint3", SideEffects::none, "uint3_from_xy_z");
+        addExtern<DAS_BIND_FUN(uint3_from_x_yz)> (*this, lib, "uint3", SideEffects::none, "uint3_from_x_yz");
         // uint4
         ADD_VEC_CTOR_1(uint4,"uint4");
         ADD_VEC_CTOR_4(uint4,"uint4");
         addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, uint4, uint4>>("uint4",lib,"uint4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint4,float4>>("uint4",lib,"cvt_uint4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,uint4, int4>>("uint4",lib,"cvt_pass",false) );
+        addExtern<DAS_BIND_FUN(uint4_from_xyz_w)>  (*this, lib, "uint4", SideEffects::none, "uint4_from_xyz_w");
+        addExtern<DAS_BIND_FUN(uint4_from_x_yzw)>  (*this, lib, "uint4", SideEffects::none, "uint4_from_x_yzw");
+        addExtern<DAS_BIND_FUN(uint4_from_xy_zw)>  (*this, lib, "uint4", SideEffects::none, "uint4_from_xy_zw");
+        addExtern<DAS_BIND_FUN(uint4_from_xy_z_w)> (*this, lib, "uint4", SideEffects::none, "uint4_from_xy_z_w");
+        addExtern<DAS_BIND_FUN(uint4_from_x_yz_w)> (*this, lib, "uint4", SideEffects::none, "uint4_from_x_yz_w");
+        addExtern<DAS_BIND_FUN(uint4_from_x_y_zw)> (*this, lib, "uint4", SideEffects::none, "uint4_from_x_y_zw");
         // range
         ADD_RANGE_CTOR_1(range,"range");
         ADD_VEC_CTOR_2(range,"range");

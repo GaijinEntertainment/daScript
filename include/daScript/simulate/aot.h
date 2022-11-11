@@ -2839,6 +2839,26 @@ namespace das {
     __forceinline float4 float4_from_x_yz_w ( float x, float2 yz, float w ) { return float4(x, yz.x, yz.y, w); }
     __forceinline float4 float4_from_x_y_zw ( float x, float y, float2 zw ) { return float4(x, y, zw.x, zw.y); }
 
+    __forceinline int3 int3_from_xy_z ( int2 xy, int32_t z ) { return int3(xy.x, xy.y, z); }
+    __forceinline int3 int3_from_x_yz ( int32_t x, int2 yz ) { return int3(x, yz.x, yz.y); }
+
+    __forceinline int4 int4_from_xyz_w  ( int3 xyz, int32_t w ) { return int4(xyz.x, xyz.y, xyz.z, w); }
+    __forceinline int4 int4_from_x_yzw  ( int32_t x, int3 yzw ) { return int4(x, yzw.x, yzw.y, yzw.z); }
+    __forceinline int4 int4_from_xy_zw  ( int2 xy, int2 zw ) { return int4(xy.x, xy.y, zw.x, zw.y); }
+    __forceinline int4 int4_from_xy_z_w ( int2 xy, int32_t z, int32_t w ) { return int4(xy.x, xy.y, z, w); }
+    __forceinline int4 int4_from_x_yz_w ( int32_t x, int2 yz, int32_t w ) { return int4(x, yz.x, yz.y, w); }
+    __forceinline int4 int4_from_x_y_zw ( int32_t x, int32_t y, int2 zw ) { return int4(x, y, zw.x, zw.y); }
+
+    __forceinline uint3 uint3_from_xy_z ( uint2 xy, uint32_t z ) { return uint3(xy.x, xy.y, z); }
+    __forceinline uint3 uint3_from_x_yz ( uint32_t x, uint2 yz ) { return uint3(x, yz.x, yz.y); }
+
+    __forceinline uint4 uint4_from_xyz_w  ( uint3 xyz, uint32_t w ) { return uint4(xyz.x, xyz.y, xyz.z, w); }
+    __forceinline uint4 uint4_from_x_yzw  ( uint32_t x, uint3 yzw ) { return uint4(x, yzw.x, yzw.y, yzw.z); }
+    __forceinline uint4 uint4_from_xy_zw  ( uint2 xy, uint2 zw ) { return uint4(xy.x, xy.y, zw.x, zw.y); }
+    __forceinline uint4 uint4_from_xy_z_w ( uint2 xy, uint32_t z, uint32_t w ) { return uint4(xy.x, xy.y, z, w); }
+    __forceinline uint4 uint4_from_x_yz_w ( uint32_t x, uint2 yz, uint32_t w ) { return uint4(x, yz.x, yz.y, w); }
+    __forceinline uint4 uint4_from_x_y_zw ( uint32_t x, uint32_t y, uint2 zw ) { return uint4(x, y, zw.x, zw.y); }
+
 #define STR_DSTR_OP(OPNAME,EXPR) \
     __forceinline bool  OPNAME##_str_dstr ( const char * str, const string & dstr ) { return strcmp(to_rts(str), dstr.c_str()) EXPR 0; } \
     __forceinline bool  OPNAME##_dstr_str ( const string & dstr, const char * str ) { return strcmp(dstr.c_str(), to_rts(str)) EXPR 0; }

@@ -351,7 +351,7 @@ namespace  das {
         static __forceinline vec4f setAligned ( const int32_t *__restrict x ) { return v_cast_vec4f(v_ldi(x)); }
         static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return setAligned((const int32_t*)x); }
         static __forceinline vec4f setXY ( const float *__restrict x ) { return v_cast_vec4f(v_cvt_vec4i(v_ldu_half(x))); }
-        static __forceinline vec4f setXY ( const double *__restrict X ) { float x[2] = {float(X[0]),float(X[1])}; return v_cast_vec4f(v_cvt_vec4i(v_ldu_half(x))); }
+        static __forceinline vec4f setXY ( const double *__restrict X ) { int32_t x[2] = {int32_t(X[0]), int32_t(X[1])}; return setXY(x); }
         static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cast_vec4f(v_ldui_half(x)); }
         static __forceinline vec4f setXY ( const uint32_t *__restrict x ) { return setXY((const int32_t*)x); }
         static __forceinline vec4f splats ( float x ) { return v_cast_vec4f(v_splatsi((int)x)); }
