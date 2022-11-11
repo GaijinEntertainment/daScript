@@ -19,6 +19,12 @@ let g_intrin_lookup <- {{
         "$::float2" => @@intrinsic_builtin_float_vec;
         "$::float3" => @@intrinsic_builtin_float_vec;
         "$::float4" => @@intrinsic_builtin_float_vec;
+        "$::int2" => @@intrinsic_builtin_int_vec;
+        "$::int3" => @@intrinsic_builtin_int_vec;
+        "$::int4" => @@intrinsic_builtin_int_vec;
+        "$::uint2" => @@intrinsic_builtin_int_vec;
+        "$::uint3" => @@intrinsic_builtin_int_vec;
+        "$::uint4" => @@intrinsic_builtin_int_vec;
     // basic type c-tor
             "$::float" => @@intrinsic_builtin_float;
             "$::double" => @@intrinsic_builtin_float;
@@ -92,13 +98,61 @@ def intrinsic_builtin_int(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
         failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
         return null
 
-def any2float ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; baseType:Type; _outType:LLVMOpaqueType? = null )
+def any2int ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; argType:Type; _outType:LLVMOpaqueType?; inbytes:int; outSigned:bool ) : LLVMOpaqueValue?
+    var outType = _outType!=null ? _outType : LLVMInt32Type()
+    if argType==Type tFloat || argType==Type tDouble
+        if outSigned
+            return LLVMBuildFPToSI(g_builder, val, outType, "")
+        else
+            return LLVMBuildFPToUI(g_builder, val, outType, "")
+    else
+        let baseSInt = argType==Type tInt8 || argType==Type tInt16 || argType==Type tInt || argType==Type tInt64
+        let baseUInt = argType==Type tUInt8 || argType==Type tUInt16 || argType==Type tUInt || argType==Type tUInt64
+        if baseSInt || baseUInt
+            if inbytes>=4
+                return LLVMBuildTruncOrBitCast(g_builder, val, outType, "")
+            elif baseSInt
+                return LLVMBuildSExtOrBitCast(g_builder, val, outType, "")
+            else
+                return LLVMBuildZExtOrBitCast(g_builder, val, outType, "")
+        else
+            panic("unsupported any2int base type {argType}")
+            return null
+
+def intrinsic_builtin_int_vec(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume resType = expr._type
+    assume argType = expr.arguments[0]._type
+    if length(arguments) == 0
+        return build_broadcast_vector (g_builder, resType, LLVMConstInt(LLVMInt32Type(), 0ul, 0))
+    let outSigned = resType.vectorBaseType==Type tInt
+    if length(arguments) == 1
+        if argType.isVectorType
+            return any2int(g_builder, arguments[0], argType.vectorBaseType, type_to_llvm_type(expr._type), 4, outSigned)
+        else
+            var val = any2int(g_builder, arguments[0], argType.baseType, null, argType.sizeOf, outSigned)
+            return build_broadcast_vector (g_builder, resType, val)
+    var vres = LLVMGetUndef(LLVMVectorType(LLVMInt32Type(), uint(expr._type.vectorDim)))
+    var elemIndex = 0
+    for earg,arg in expr.arguments,arguments
+        if earg._type.isVectorType
+            for ei in range(earg._type.vectorDim)
+                var eval = LLVMBuildExtractElement(g_builder, arg, LLVMConstInt(LLVMInt32Type(), uint64(ei), 0), "")
+                var val = any2int(g_builder, eval, earg._type.vectorBaseType, null, 4, outSigned)
+                vres = LLVMBuildInsertElement(g_builder, vres, val, LLVMConstInt(LLVMInt32Type(), uint64(elemIndex++), 0), "")
+        else
+            var val = any2int(g_builder, arg, earg._type.baseType, null, earg._type.sizeOf, outSigned)
+            vres = LLVMBuildInsertElement(g_builder, vres, val, LLVMConstInt(LLVMInt32Type(), uint64(elemIndex++), 0), "")
+    if elemIndex != resType.vectorDim
+        failed_E(expr, "vector ctor {expr.name}({describe(expr._type)}) has {elemIndex} elements, but {resType.vectorDim} are expected")
+    return vres
+
+def any2float ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; argType:Type; _outType:LLVMOpaqueType? = null )
     let outType = _outType!=null ? _outType : LLVMFloatType()
-    return val                                              if baseType==Type tFloat
-    return LLVMBuildFPTrunc(g_builder, val, outType, "")    if baseType==Type tDouble
-    return LLVMBuildSIToFP(g_builder, val,outType, "")      if baseType==Type tInt8 || baseType==Type tInt16 || baseType==Type tInt || baseType==Type tInt64
-    return LLVMBuildUIToFP(g_builder, val, outType, "")     if baseType==Type tUInt8 || baseType==Type tUInt16 || baseType==Type tUInt || baseType==Type tUInt64
-    panic("unsupported any2float base type {baseType}")
+    return val                                              if argType==Type tFloat
+    return LLVMBuildFPTrunc(g_builder, val, outType, "")    if argType==Type tDouble
+    return LLVMBuildSIToFP(g_builder, val,outType, "")      if argType==Type tInt8 || argType==Type tInt16 || argType==Type tInt || argType==Type tInt64
+    return LLVMBuildUIToFP(g_builder, val, outType, "")     if argType==Type tUInt8 || argType==Type tUInt16 || argType==Type tUInt || argType==Type tUInt64
+    panic("unsupported any2float base type {argType}")
     return null
 
 def intrinsic_builtin_float_vec(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
