@@ -203,7 +203,7 @@ def jit_float4_4 ( x,y,z,w )
 
 def test_float4_4( t:T?; x,y,z,w:auto(TT) )
     t |> success ( is_jit_function(@@<(x,y,z,w:TT):void> jit_float4_4) )
-    t |> strictEqual ( float4(x,y,z,w), jit_float4_4(x,y,z,w), "float4({x},{y},{z},{w}) // {typeinfo(typename type<TT>)}" )
+    t |> strictEqual ( float4(x,y,z,w), jit_float4_4(x,y,z,w), "float4(x,y,z,w)" )
 
 [test]
 def test_intrin_float4 ( t:T? )
@@ -212,7 +212,13 @@ def test_intrin_float4 ( t:T? )
     t |> run("float4(x)") <| @ ( t : T? )
         var fake <- Faker()
         fuzz <|
-            fuzz_numeric_op1(t,fake,"test_float4")
+            test_float4( t, fake |> random_int )
+            test_float4( t, fake |> random_uint )
+            test_float4( t, fake |> random_float )
+            test_float4( t, fake |> random_double )
+            test_float4( t, fake |> random_float4 )
+            test_float4( t, fake |> random_int4 )
+            test_float4( t, fake |> random_uint4 )
     t |> run("float4(x,y)") <| @ ( t : T? )
         var fake <- Faker()
         fuzz <|
@@ -244,7 +250,101 @@ def test_intrin_float4 ( t:T? )
         fuzz <|
             fuzz_numeric_op4(t,fake,"test_float4_4")
 
+// float3
 
+[jit]
+def jit_float3 ( x )
+    return float3(x)
+
+def test_float3( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_float3) )
+    t |> strictEqual ( float3(a), jit_float3(a), "float3(a)" )
+
+[jit,sideeffects]
+def jit_float3_0
+    return float3()
+
+[jit]
+def jit_float3_2(a,b)
+    return float3(a,b)
+
+[jit]
+def jit_float3_3(a,b,c)
+    return float3(a,b,c)
+
+def test_float3_3( t:T?; x,y,z:auto(TT) )
+    t |> success ( is_jit_function(@@<(x,y,z:TT):void> jit_float3_3) )
+    t |> strictEqual ( float3(x,y,z), jit_float3_3(x,y,z), "float3(x,y,z)" )
+
+[test]
+def test_intrin_float3 ( t:T? )
+    t |> run("float3()") <| @ ( t : T? )
+        t |> strictEqual ( float3(), jit_float3_0(), "float3()" )
+    t |> run("float3(x)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            test_float3( t, fake |> random_int )
+            test_float3( t, fake |> random_uint )
+            test_float3( t, fake |> random_float )
+            test_float3( t, fake |> random_double )
+            test_float3( t, fake |> random_float3 )
+            test_float3( t, fake |> random_int3 )
+            test_float3( t, fake |> random_uint3 )
+    t |> run("float3(x,y)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            let f1 = fake |> random_float
+            let f2 = fake |> random_float2
+            t |> strictEqual ( float3(f1,f2), jit_float3_2(f1,f2), "float3(x,y) // 1,2" )
+        fuzz <|
+            let f1 = fake |> random_float2
+            let f2 = fake |> random_float
+            t |> strictEqual ( float3(f1,f2), jit_float3_2(f1,f2), "float3(x,y) // 2,1" )
+    t |> run("float3(x,y,z)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            fuzz_numeric_op3(t,fake,"test_float3_3")
+
+// float2
+
+[jit]
+def jit_float2 ( x )
+    return float2(x)
+
+def test_float2( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_float2) )
+    t |> strictEqual ( float2(a), jit_float2(a), "float2(a)" )
+
+[jit,sideeffects]
+def jit_float2_0
+    return float2()
+
+[jit]
+def jit_float2_2(a,b)
+    return float2(a,b)
+
+def test_float2_2( t:T?; x,y:auto(TT) )
+    t |> success ( is_jit_function(@@<(x,y:TT):void> jit_float2_2) )
+    t |> strictEqual ( float2(x,y), jit_float2_2(x,y), "float2(x,y)" )
+
+[test]
+def test_intrin_float2 ( t:T? )
+    t |> run("float2()") <| @ ( t : T? )
+        t |> strictEqual ( float2(), jit_float2_0(), "float2()" )
+    t |> run("float2(x)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            test_float2( t, fake |> random_int )
+            test_float2( t, fake |> random_uint )
+            test_float2( t, fake |> random_float )
+            test_float2( t, fake |> random_double )
+            test_float2( t, fake |> random_float2 )
+            test_float2( t, fake |> random_int2 )
+            test_float2( t, fake |> random_uint2 )
+    t |> run("float2(x,y,z)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            fuzz_numeric_op2(t,fake,"test_float2_2")
 
 
 

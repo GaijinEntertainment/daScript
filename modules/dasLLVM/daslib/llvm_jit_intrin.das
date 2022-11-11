@@ -92,11 +92,12 @@ def intrinsic_builtin_int(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
         failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
         return null
 
-def any2float ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; baseType:Type )
-    return val                                                      if baseType==Type tFloat
-    return LLVMBuildFPTrunc(g_builder, val, LLVMFloatType(), "")    if baseType==Type tDouble
-    return LLVMBuildSIToFP(g_builder, val, LLVMFloatType(), "")     if baseType==Type tInt8 || baseType==Type tInt16 || baseType==Type tInt || baseType==Type tInt64
-    return LLVMBuildUIToFP(g_builder, val, LLVMFloatType(), "")     if baseType==Type tUInt8 || baseType==Type tUInt16 || baseType==Type tUInt || baseType==Type tUInt64
+def any2float ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; baseType:Type; _outType:LLVMOpaqueType? = null )
+    let outType = _outType!=null ? _outType : LLVMFloatType()
+    return val                                              if baseType==Type tFloat
+    return LLVMBuildFPTrunc(g_builder, val, outType, "")    if baseType==Type tDouble
+    return LLVMBuildSIToFP(g_builder, val,outType, "")      if baseType==Type tInt8 || baseType==Type tInt16 || baseType==Type tInt || baseType==Type tInt64
+    return LLVMBuildUIToFP(g_builder, val, outType, "")     if baseType==Type tUInt8 || baseType==Type tUInt16 || baseType==Type tUInt || baseType==Type tUInt64
     panic("unsupported any2float base type {baseType}")
     return null
 
@@ -105,8 +106,12 @@ def intrinsic_builtin_float_vec(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<Exp
     if length(arguments) == 0
         return build_broadcast_vector (g_builder, resType, LLVMConstReal(LLVMFloatType(), 0.0lf))
     if length(arguments) == 1
-        var val = any2float(g_builder, arguments[0], expr.arguments[0]._type.baseType)
-        return build_broadcast_vector (g_builder, resType, val)
+        if expr.arguments[0]._type.isVectorType
+            let outType = type_to_llvm_type(expr._type)
+            return any2float(g_builder, arguments[0], expr.arguments[0]._type.vectorBaseType, outType)
+        else
+            var val = any2float(g_builder, arguments[0], expr.arguments[0]._type.baseType)
+            return build_broadcast_vector (g_builder, resType, val)
     var vres = LLVMGetUndef(LLVMVectorType(LLVMFloatType(), uint(expr._type.vectorDim)))
     var elemIndex = 0
     for earg,arg in expr.arguments,arguments
