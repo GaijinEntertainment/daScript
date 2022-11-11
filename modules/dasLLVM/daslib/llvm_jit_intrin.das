@@ -125,7 +125,9 @@ def intrinsic_builtin_int_vec(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprC
     if length(arguments) == 0
         return build_broadcast_vector (g_builder, resType, LLVMConstInt(LLVMInt32Type(), 0ul, 0))
     let outSigned = resType.vectorBaseType==Type tInt
-    if length(arguments) == 1
+    // this works around the bug of fp2ui not working correctly for vectors on some values
+    var isFloatToUintVec = argType.isVectorType && (argType.vectorBaseType==Type tFloat) && !outSigned
+    if length(arguments) == 1 && !isFloatToUintVec
         if argType.isVectorType
             return any2int(g_builder, arguments[0], argType.vectorBaseType, type_to_llvm_type(expr._type), 4, outSigned)
         else
