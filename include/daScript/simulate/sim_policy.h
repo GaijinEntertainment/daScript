@@ -500,6 +500,18 @@ namespace  das {
 
     template <typename TT, int mask>
     struct SimPolicy_uVec : SimPolicy_iVec<TT,mask> {
+        static __forceinline vec4f setAligned ( const float *__restrict x ) { return setXYZW(uint32_t(x[0]),uint32_t(x[1]),uint32_t(x[2]),uint32_t(x[3])); }
+        static __forceinline vec4f setAligned ( const double *__restrict x ) { return setXYZW(uint32_t(x[0]),uint32_t(x[1]),uint32_t(x[2]),uint32_t(x[3])); }
+        static __forceinline vec4f setAligned ( const int32_t *__restrict x ) { return v_cast_vec4f(v_ldi(x)); }
+        static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return setAligned((const int32_t*)x); }
+        static __forceinline vec4f setXY ( const float *__restrict X ) { uint32_t x[2] = {uint32_t(X[0]), uint32_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const double *__restrict X ) { uint32_t x[2] = {uint32_t(X[0]), uint32_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cast_vec4f(v_ldui_half(x)); }
+        static __forceinline vec4f setXY ( const uint32_t *__restrict x ) { return setXY((const int32_t*)x); }
+        static __forceinline vec4f splats ( float x ) { return v_cast_vec4f(v_splatsi((uint32_t)x)); }
+        static __forceinline vec4f splats ( double x ) { return v_cast_vec4f(v_splatsi((uint32_t)x)); }
+        static __forceinline vec4f splats ( int32_t  x ) { return v_cast_vec4f(v_splatsi(x)); }
+        static __forceinline vec4f splats ( uint32_t x ) { return v_cast_vec4f(v_splatsi(x)); }
         // swapping some numeric operations
         static __forceinline vec4f Mul ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return v_cast_vec4f(v_mulu(v_cast_vec4i(a), v_cast_vec4i(b)));
