@@ -228,3 +228,10 @@ def public fuzz_numeric_op4 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_uint, fake |> random_uint, fake |> random_uint, fake |> random_uint )
     invoke ( funcname, t, fake |> random_float, fake |> random_float, fake |> random_float, fake |> random_float )
     invoke ( funcname, t, fake |> random_double, fake |> random_double, fake |> random_double, fake |> random_double )
+
+[constant_expression(funcname)]
+def public fuzz_numeric_op3 ( t:T?; var fake:Faker; funcname:string )
+    invoke ( funcname, t, fake |> random_int, fake |> random_int, fake |> random_int )
+    invoke ( funcname, t, fake |> random_uint, fake |> random_uint, fake |> random_uint )
+    invoke ( funcname, t, fake |> random_float, fake |> random_float, fake |> random_float )
+    invoke ( funcname, t, fake |> random_double, fake |> random_double, fake |> random_double )

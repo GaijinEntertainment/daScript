@@ -126,6 +126,22 @@ namespace das
         }
     };
 
+    struct SimNode_VecPassThrough: SimNode_CallBase {
+        SimNode_VecPassThrough(const LineInfo & at) : SimNode_CallBase(at) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(VecPassThrough);
+            V_SUB(arguments[0]);
+            V_END();
+        }
+        virtual vec4f eval(Context & context) override {
+            DAS_PROFILE_NODE
+            vec4f argValue;
+            evalArgs(context, &argValue);
+            return argValue;
+        }
+    };
+
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
@@ -187,8 +203,10 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         }
         virtual vec4f eval(Context & context) override {
             DAS_PROFILE_NODE
+            uint32_t i4v[4];
             vec4f i4 = arguments[0]->eval(context);
-            return v_cvt_vec4f(v_cast_vec4i(i4));   // todo: replace wrong cast
+            memcpy ( i4v, &i4, sizeof(i4v) );
+            return v_make_vec4f(float(i4v[0]), float(i4v[1]), float(i4v[2]), float(i4v[3]));
         }
     };
 
@@ -240,12 +258,13 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         // float2
         ADD_VEC_CTOR_1(float2,"v_splats");
         ADD_VEC_CTOR_2(float2,"float2");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, float2, float2>>("float2",lib,"float2",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float2, int2>>("float2",lib,"cvt_ifloat2",false) );
         addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float2,uint2>>("float2",lib,"cvt_ufloat2",false) );
-
         // float3
         ADD_VEC_CTOR_1(float3,"v_splats");
         ADD_VEC_CTOR_3(float3,"float3");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, float3, float3>>("float3",lib,"float3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float3, int3>>("float3",lib,"cvt_ifloat3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float3,uint3>>("float3",lib,"cvt_ufloat3",false) );
         addExtern<DAS_BIND_FUN(float3_from_xy_z)> (*this, lib, "float3", SideEffects::none, "float3_from_xy_z");
@@ -253,53 +272,60 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         // float4
         ADD_VEC_CTOR_1(float4,"v_splats");
         ADD_VEC_CTOR_4(float4,"float4");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, float4, float4>>("float4",lib,"float4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Int4ToFloat4, float4, int4>>("float4",lib,"cvt_ifloat4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_UInt4ToFloat4,float4,uint4>>("float4",lib,"cvt_ufloat4",false) );
-
         addExtern<DAS_BIND_FUN(float4_from_xyz_w)>  (*this, lib, "float4", SideEffects::none, "float4_from_xyz_w");
         addExtern<DAS_BIND_FUN(float4_from_x_yzw)>  (*this, lib, "float4", SideEffects::none, "float4_from_x_yzw");
         addExtern<DAS_BIND_FUN(float4_from_xy_zw)>  (*this, lib, "float4", SideEffects::none, "float4_from_xy_zw");
         addExtern<DAS_BIND_FUN(float4_from_xy_z_w)> (*this, lib, "float4", SideEffects::none, "float4_from_xy_z_w");
         addExtern<DAS_BIND_FUN(float4_from_x_yz_w)> (*this, lib, "float4", SideEffects::none, "float4_from_x_yz_w");
         addExtern<DAS_BIND_FUN(float4_from_x_y_zw)> (*this, lib, "float4", SideEffects::none, "float4_from_x_y_zw");
-
         // int2
         ADD_VEC_CTOR_1(int2,"int2");
         ADD_VEC_CTOR_2(int2,"int2");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, int2, int2>>("int2",lib,"int2",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int2, float2>>("int2",lib,"cvt_int2",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,int2, uint2>>("int2",lib,"cvt_pass",false) );
         // int3
         ADD_VEC_CTOR_1(int3,"int3");
         ADD_VEC_CTOR_3(int3,"int3");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, int3, int3>>("int3",lib,"int3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int3, float3>>("int3",lib,"cvt_int3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,int3, uint3>>("int3",lib,"cvt_pass",false) );
         // int4
         ADD_VEC_CTOR_1(int4,"int4");
         ADD_VEC_CTOR_4(int4,"int4");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, int4, int4>>("int4",lib,"int4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Float4ToInt4, int4, float4>>("int4",lib,"cvt_int4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,int4, uint4>>("int4",lib,"cvt_pass",false) );
         // uint2
         ADD_VEC_CTOR_1(uint2,"uint2");
         ADD_VEC_CTOR_2(uint2,"uint2");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, uint2, uint2>>("uint2",lib,"uint2",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint2,float2>>("uint2",lib,"cvt_uint2",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,uint2, int2>>("uint2",lib,"cvt_pass",false) );
         // uint3
         ADD_VEC_CTOR_1(uint3,"uint3");
         ADD_VEC_CTOR_3(uint3,"uint3");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, uint3, uint3>>("uint3",lib,"uint3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint3,float3>>("uint3",lib,"cvt_uint3",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,uint3, int3>>("uint3",lib,"cvt_pass",false) );
         // uint4
         ADD_VEC_CTOR_1(uint4,"uint4");
         ADD_VEC_CTOR_4(uint4,"uint4");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, uint4, uint4>>("uint4",lib,"uint4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_Float4ToUInt4,uint4,float4>>("uint4",lib,"cvt_uint4",false) );
         addFunction( make_smart<BuiltInFn<SimNode_AnyIntToAnyInt,uint4, int4>>("uint4",lib,"cvt_pass",false) );
         // range
         ADD_RANGE_CTOR_1(range,"range");
         ADD_VEC_CTOR_2(range,"range");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, range, range>>("range",lib,"range",false) );
         addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int32_t,SimPolicy<range>,2>,range,int32_t,int32_t>>("interval",lib,"range",false) );
         // urange
         ADD_RANGE_CTOR_1(urange,"urange");
         ADD_VEC_CTOR_2(urange,"urange");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, urange, urange>>("urange",lib,"urange",false) );
         addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<urange>,2>,urange,uint32_t,uint32_t>>("interval",lib,"urange",false) );
     }
 }
