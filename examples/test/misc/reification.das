@@ -3,6 +3,15 @@ require daslib/ast_boost
 require daslib/strings
 require daslib/defer
 
+def test_block_to_array
+    var blk_array <- qmacro_block_to_array <|
+        a <- 1
+        b <- 2
+        c <- 3
+    for a in blk_array
+        print("{describe(a)}\n")
+    delete blk_array
+
 def test_addr
     let foobar = "FOO_BAR"
     var aaddr <- qmacro(@@ $i(foobar)); defer_delete(aaddr)
@@ -83,6 +92,7 @@ def test_regular
 
 [export]
 def main
+    test_block_to_array()
     test_addr()
     test_regular()
     test_fun()

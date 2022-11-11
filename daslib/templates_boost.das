@@ -632,6 +632,17 @@ def public apply_qblock ( var expr:smart_ptr<Expression>; blk:block<(var rules:T
     qblk.blockFlags ^= ExprBlockFlags isClosure
     return qblk
 
+def public apply_qblock_to_array ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : array<ExpressionPtr>
+    //! Implementation details for the expression reificaiton. This is a block reification.
+    var res <- apply_template(expr, blk)
+    assert(res is ExprMakeBlock)
+    var qblk <- move_unquote_block(res)
+    var arr : array<ExpressionPtr>
+    for e in qblk.list
+        arr |> emplace_new <| clone_expression(e)
+    qblk := null
+    return <- arr
+
 def public apply_qblock_expr ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : ExpressionPtr
     //! Implementation details for the expression reificaiton. This is a frist line of the block as expression reification.
     var res <- apply_template(expr, blk)
@@ -690,6 +701,11 @@ class private QMacro : AstQCallMacro {}
 class private QBlockMacro : AstQCallMacro
     override apply_call = "apply_qblock"
     override macro_call = "qmacro_block"
+
+[call_macro(name="qmacro_block_to_array")]
+class private QBlockToArrayMacro : AstQCallMacro
+    override apply_call = "apply_qblock_to_array"
+    override macro_call = "qmacro_block_to_array"
 
 [call_macro(name="qmacro_expr")]
 class private QBlockExprMacro : AstQCallMacro
