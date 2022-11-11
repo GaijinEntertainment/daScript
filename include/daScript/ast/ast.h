@@ -1033,6 +1033,22 @@ namespace das
             return module_##ClassName; \
         }
 
+    using module_pull_t = das::Module*(*)();
+    struct ModulePullHelper
+    {
+        ModulePullHelper(module_pull_t pull);
+    };
+
+    void pull_all_auto_registered_modules();
+
+    #define AUTO_REGISTER_MODULE(ClassName) \
+        REGISTER_MODULE(ClassName)          \
+        static das::ModulePullHelper ClassName##RegisterHelper(&register_##ClassName);
+
+    #define AUTO_REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
+        REGISTER_MODULE_IN_NAMESPACE(ClassName, Namespace)         \
+        static das::ModulePullHelper ClassName##RegisterHelper(&register_##ClassName);
+
     class ModuleDas : public Module {
     public:
         ModuleDas(const string & n = "") : Module(n) {}
