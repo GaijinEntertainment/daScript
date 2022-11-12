@@ -203,10 +203,8 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         }
         virtual vec4f eval(Context & context) override {
             DAS_PROFILE_NODE
-            uint32_t i4v[4];
             vec4f i4 = arguments[0]->eval(context);
-            memcpy ( i4v, &i4, sizeof(i4v) );
-            return v_make_vec4f(float(i4v[0]), float(i4v[1]), float(i4v[2]), float(i4v[3]));
+            return v_cvtu_vec4f(v_cast_vec4i(i4));
         }
     };
 
@@ -236,9 +234,7 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         virtual vec4f eval(Context & context) override {
             DAS_PROFILE_NODE
             vec4f f4 = arguments[0]->eval(context);
-            float ff4[4];
-            memcpy ( ff4, &f4, sizeof(ff4) );
-            return v_cast_vec4f(v_make_vec4i(uint32_t(ff4[0]), uint32_t(ff4[1]), uint32_t(ff4[2]), uint32_t(ff4[3])));
+            return v_cast_vec4f(v_cvtu_vec4i(f4));
         }
     };
 

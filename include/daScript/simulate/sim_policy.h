@@ -242,6 +242,26 @@ namespace  das {
         static __forceinline vec4f ATan2_est ( vec4f a, vec4f b, Context &, LineInfo * ) { return v_atan2_est(a, b); }
     };
 
+#if _TARGET_SIMD_SSE
+    // from https://stackoverflow.com/questions/34066228/how-to-perform-uint32-float-conversion-with-sse
+    __forceinline vec4f v_cvtu_vec4f(const vec4i v) {
+        __m128i msk_lo    = _mm_set1_epi32(0xFFFF);
+        __m128  cnst65536f= _mm_set1_ps(65536.0f);
+        __m128i v_lo      = _mm_and_si128(v,msk_lo);          /* extract the 16 lowest significant bits of v                                   */
+        __m128i v_hi      = _mm_srli_epi32(v,16);             /* 16 most significant bits of v                                                 */
+        __m128  v_lo_flt  = _mm_cvtepi32_ps(v_lo);            /* No rounding                                                                   */
+        __m128  v_hi_flt  = _mm_cvtepi32_ps(v_hi);            /* No rounding                                                                   */
+                v_hi_flt  = _mm_mul_ps(cnst65536f,v_hi_flt);  /* No rounding                                                                   */
+        return              _mm_add_ps(v_hi_flt,v_lo_flt);    /* Rounding may occur here, mul and add may fuse to fma for haswell and newer    */
+    }
+#else
+    __forceinline vec4f v_cvtu_vec4f(const vec4i v) {
+        alignas(16) uint32_t v4[4];
+        memcpy(v4, &v, sizeof(v4));
+        return v_make_vec4f(float(v4[0]), float(v4[1]), float(v4[2]), float(v4[3]));
+    }
+#endif
+
     template <typename TT, int mask>
     struct SimPolicy_Vec {
         static __forceinline void Set  ( char * a, vec4f b, Context &, LineInfo * ) {
@@ -255,11 +275,11 @@ namespace  das {
         static __forceinline vec4f setAligned ( const float *__restrict x ) { return v_ld(x); }
         static __forceinline vec4f setAligned ( const double *__restrict x ) { return setXYZW(float(x[0]),float(x[1]),float(x[2]),float(x[3])); }
         static __forceinline vec4f setAligned ( const int32_t  *__restrict x ) { return v_cvt_vec4f(v_ldi(x)); }
-        static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return setXYZW(float(x[0]),float(x[1]),float(x[2]),float(x[3])); }
+        static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return v_cvtu_vec4f(v_ldi((const int32_t *)x)); }
         static __forceinline vec4f setXY ( const float *__restrict x ) { return v_ldu_half(x); }
         static __forceinline vec4f setXY ( const double *__restrict X ) { float x[2] = {float(X[0]),float(X[1])}; return v_ldu_half(x); }
         static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cvt_vec4f(v_ldui_half(x)); }
-        static __forceinline vec4f setXY ( const uint32_t *__restrict X ) { float x[2] = {float(X[0]),float(X[1])}; return v_ldu_half(x); }
+        static __forceinline vec4f setXY ( const uint32_t *__restrict x ) { return v_cvtu_vec4f(v_ldui_half((const int32_t *)x)); }
         static __forceinline vec4f splats ( float x ) { return v_splats(x); }
         static __forceinline vec4f splats ( double x ) { return v_splats((float)x); }
         static __forceinline vec4f splats ( int32_t  x ) { return v_splats((float)x); }
@@ -498,13 +518,19 @@ namespace  das {
         }
     };
 
+    __forceinline vec4i v_cvtu_vec4i ( const vec4f v ) {
+        alignas(16) float f4[4];
+        memcpy(f4, &v, 16);
+        return v_make_vec4i((uint32_t)f4[0], (uint32_t)f4[1], (uint32_t)f4[2], (uint32_t)f4[3]);
+    }
+
     template <typename TT, int mask>
     struct SimPolicy_uVec : SimPolicy_iVec<TT,mask> {
-        static __forceinline vec4f setAligned ( const float *__restrict x ) { return setXYZW(uint32_t(x[0]),uint32_t(x[1]),uint32_t(x[2]),uint32_t(x[3])); }
+        static __forceinline vec4f setAligned ( const float *__restrict x ) { return v_cast_vec4f(v_cvtu_vec4i(v_ld(x))); }
         static __forceinline vec4f setAligned ( const double *__restrict x ) { return setXYZW(uint32_t(x[0]),uint32_t(x[1]),uint32_t(x[2]),uint32_t(x[3])); }
         static __forceinline vec4f setAligned ( const int32_t *__restrict x ) { return v_cast_vec4f(v_ldi(x)); }
         static __forceinline vec4f setAligned ( const uint32_t *__restrict x ) { return setAligned((const int32_t*)x); }
-        static __forceinline vec4f setXY ( const float *__restrict X ) { uint32_t x[2] = {uint32_t(X[0]), uint32_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const float *__restrict x ) { return v_cast_vec4f(v_cvtu_vec4i(v_ldu_half(x))); }
         static __forceinline vec4f setXY ( const double *__restrict X ) { uint32_t x[2] = {uint32_t(X[0]), uint32_t(X[1])}; return setXY(x); }
         static __forceinline vec4f setXY ( const int32_t  *__restrict x ) { return v_cast_vec4f(v_ldui_half(x)); }
         static __forceinline vec4f setXY ( const uint32_t *__restrict x ) { return setXY((const int32_t*)x); }
