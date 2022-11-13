@@ -66,11 +66,15 @@ namespace das
         return v_zero();
     }
 
-    void builtin_set_verify_array_locks ( Array & arr, bool value ) {
+    bool builtin_set_verify_array_locks ( Array & arr, bool value ) {
+        auto result = arr.forego_lock_check;
         arr.forego_lock_check = !value;
+        return result;
     }
 
-    void builtin_set_verify_table_locks ( Table & tab, bool value ) {
+    bool builtin_set_verify_table_locks ( Table & tab, bool value ) {
+        auto result = tab.forego_lock_check;
         tab.forego_lock_check = !value;
+        return result;
     }
 }
