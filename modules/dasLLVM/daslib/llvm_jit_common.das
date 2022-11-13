@@ -457,6 +457,14 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         res = LLVMInt32Type()
     return res
 
+def public dim_element_type_to_llvm_type ( typ:TypeDeclPtr )
+    if typ.dim.length == 0
+        return type_to_llvm_type(typ)
+    else
+        var ndt <- clone_type(typ); defer_delete(ndt)
+        ndt.dim |> clear()
+        return type_to_llvm_type(ndt)
+
 def public build_broadcast_vector ( builder:LLVMOpaqueBuilder?; opType:TypeDeclPtr; right:LLVMOpaqueValue? )
     if opType.isVectorType
         var vres = LLVMGetUndef(type_to_llvm_type(opType))

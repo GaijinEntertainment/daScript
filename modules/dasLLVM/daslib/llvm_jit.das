@@ -1376,14 +1376,14 @@ class LlvmJitVisitor : AstVisitor
         // get CMRES, if its local
         var cmresEval : LLVMOpaqueValue?
         if isCMRES(expr.func)
-            if !doesNotNeedSp && expr.stackTop!=0u
+            if call2cmres |> key_exists(get_ptr(expr))
+                cmresEval = call2cmres[get_ptr(ExpressionPtr(expr))]
+            elif !doesNotNeedSp && expr.stackTop!=0u
                 var vtype = type_to_llvm_type(expr._type)
                 at_function_entry <|
                     cmresEval = LLVMBuildAlloca(g_builder, vtype, "cmres_eval_{expr.name}")
                     LLVMSetAlignment(cmresEval, 16u)
                     cmresEval = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "cmres_eval_{expr.name}")
-            elif call2cmres |> key_exists(get_ptr(expr))
-                cmresEval = call2cmres[get_ptr(ExpressionPtr(expr))]
             else
                 cmresEval = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
                 failed_E(expr, "CMRES is not local, not supported yet")
@@ -2124,27 +2124,59 @@ class LlvmJitVisitor : AstVisitor
             get_context_param()
         ]]
         return LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, persistent ? FN_JIT_ALLOC_PERSISTENT : FN_JIT_ALLOC_HEAP), params, "")
-    def override preVisitExprNew(expr:smart_ptr<ExprNew>): void
+
+
+    def build_fixed_loop ( count:int; blk:block<(var index:LLVMOpaqueValue?):void> )
+        if count == 0
+            pass
+        if count == 1
+            invoke ( blk, LLVMConstInt(LLVMInt32Type(), 0ul, 0) )
+        else
+            var loop = LLVMBuildAlloca(g_builder, LLVMInt32Type(), "loop_var")
+            LLVMBuildStore(g_builder, LLVMConstInt(LLVMInt32Type(), 0ul, 0), loop)
+            var loop_bb = LLVMAppendBasicBlock(ffunc,"loop_begin")
+            var loop_end_bb = LLVMAppendBasicBlock(ffunc,"loop_end")
+            LLVMBuildBr(g_builder, loop_bb)
+            position_at_end(loop_bb)
+            invoke ( blk, LLVMBuildLoad(g_builder,loop,""))
+            LLVMBuildStore(g_builder, LLVMBuildAdd(g_builder, LLVMBuildLoad(g_builder,loop,""), LLVMConstInt(LLVMInt32Type(), 1ul, 0), ""), loop)
+            var loop_cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntULT, LLVMBuildLoad(g_builder,loop,""), LLVMConstInt(LLVMInt32Type(), uint64(count), 0), "")
+            LLVMBuildCondBr(g_builder, loop_cond, loop_bb, loop_end_bb)
+            position_at_end(loop_end_bb)
+
+    def new_entry(expr:smart_ptr<ExprNew>)
         var new_ptr : LLVMOpaqueValue?
+        var persistent = false
+        if expr.typeexpr.baseType == Type tStructure
+            persistent = expr.typeexpr.structType.flags.persistent
+        let bytes = expr.typeexpr.baseSizeOf
+        new_ptr = build_alloc(bytes, persistent)
+        check_ptr_zero(new_ptr, "new returned null")
+        if expr.initializer
+            call2cmres[get_ptr(ExpressionPtr(expr))] = new_ptr
+            make_call(expr, false)
+        else
+            LLVMBuildMemSet(g_builder, new_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
+        return LLVMBuildPointerCast(g_builder, new_ptr, dim_element_type_to_llvm_type(expr._type), "new")
+
+    def override preVisitExprNew(expr:smart_ptr<ExprNew>): void
         if expr.typeexpr.baseType==Type tHandle
             failed_E(expr, "new handle is not supported yet")
             return
         else
-            var persistent = false
-            if expr.typeexpr.baseType == Type tStructure
-                persistent = expr.typeexpr.structType.flags.persistent
-            let bytes = expr._type.firstType.sizeOf
-            new_ptr = build_alloc(bytes, persistent)
-            check_ptr_zero(new_ptr, "new returned null")
-            if expr.initializer
-                call2cmres[get_ptr(ExpressionPtr(expr))] = new_ptr
-                make_call(expr, false)
+            if expr.typeexpr.dim.length > 0
+                let count = expr.typeexpr.countOf
+                var arr : LLVMOpaqueValue?
+                at_function_entry <|
+                    arr = LLVMBuildAlloca(g_builder, type_to_llvm_type(expr._type), "new_arr")
+                build_fixed_loop ( count ) <| $ ( var index:LLVMOpaqueValue? )
+                    var elem_type = dim_element_type_to_llvm_type(expr._type)
+                    var elem = LLVMBuildGEP2(g_builder, elem_type, arr, index, "")
+                    var new_ptr = new_entry(expr)
+                    LLVMBuildStore(g_builder, new_ptr, elem)
+                setE(expr, arr)
             else
-                LLVMBuildMemSet(g_builder, new_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
-        new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, type_to_llvm_type(expr._type), "new")
-        if expr._type.dim.length != 0
-            failed_E(expr, "new [] is not supported yet")
-        setE(expr, new_ptr)
+                setE(expr, new_entry(expr))
 
 // ascend
     def override preVisitExprAscend(expr:smart_ptr<ExprAscend>) : void
@@ -2198,10 +2230,6 @@ class LlvmJitVisitor : AstVisitor
         return false
     def override preVisitExprMakeBlock(expr:smart_ptr<ExprMakeBlock>) : void
         var capture <- capture_block(expr._block)
-        print("CAPTURED:\n")
-        for c in capture
-            print("\t{c.variable.name} : {describe(c.variable._type)}\n")
-        print("\n")
         // build block type
         var blk_fields <- build_block_type()
         blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 3u))
