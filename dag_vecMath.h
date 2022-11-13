@@ -133,9 +133,13 @@ VECMATH_FINLINE vec4i VECTORCALL v_cast_vec4i(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_cast_vec4f(vec4i a);
 
 //! convert to integer using round-to-zero mode
-VECMATH_FINLINE vec4i VECTORCALL v_cvt_vec4i(vec4f a);
+VECMATH_FINLINE vec4i VECTORCALL v_cvti_vec4i(vec4f a);
+VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i(vec4f a);
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_vec4i(vec4f a){return v_cvti_vec4i(a);}
 //! convert to float
-VECMATH_FINLINE vec4f VECTORCALL v_cvt_vec4f(vec4i a);
+VECMATH_FINLINE vec4f VECTORCALL v_cvti_vec4f(vec4i a);
+VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f(vec4i a);
+VECMATH_FINLINE vec4f VECTORCALL v_cvt_vec4f(vec4i a) {return v_cvti_vec4f(a);}
 
 //! unpacks 4 unsigned shorts (in low 64 bits of vector, .xy) to 4 ints
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_ush_vec4i(vec4i a);
@@ -216,9 +220,11 @@ VECMATH_FINLINE vec4f VECTORCALL v_rcp_x(vec4f a);
 //! min(a,b)
 VECMATH_FINLINE vec4f VECTORCALL v_min(vec4f a, vec4f b);
 VECMATH_FINLINE vec4i VECTORCALL v_mini(vec4i a, vec4i b);
+VECMATH_FINLINE vec4i VECTORCALL v_minu(vec4i a, vec4i b);
 //! max(a,b)
 VECMATH_FINLINE vec4f VECTORCALL v_max(vec4f a, vec4f b);
 VECMATH_FINLINE vec4i VECTORCALL v_maxi(vec4i a, vec4i b);
+VECMATH_FINLINE vec4i VECTORCALL v_maxu(vec4i a, vec4i b);
 //! -a
 VECMATH_FINLINE vec4f VECTORCALL v_neg(vec4f a);
 VECMATH_FINLINE vec4i VECTORCALL v_negi(vec4i a);
@@ -563,14 +569,20 @@ VECMATH_FINLINE void VECTORCALL v_mat44_orthonormalize33(mat44f &dest, mat44f_cr
 VECMATH_FINLINE void VECTORCALL v_mat33_orthonormalize(mat33f &dest, mat33f_cref m);
 //! 1/m
 VECMATH_FINLINE void VECTORCALL v_mat44_inverse(mat44f &dest, mat44f_cref m);
-//! 1/m, assuming col1.w=col2.w=col0.w=0, col3=0,0,0,1
+//! 1/m, assuming col1.w=col2.w=col0.w=0, col3=0,0,0,1. Resulting matrix will not conform same assumption (i.e. it will be 43 matrix, not 44)!
+VECMATH_FINLINE void VECTORCALL v_mat44_inverse43(mat44f &dest, mat44f_cref m);
+//! 1/m, assuming col1.w=col2.w=col0.w=0, col3=0,0,0,1. Resulting matrix is correct 4x4 matrix, col0.w = col1.w = col2.w = 0; col3.w = 1
 VECMATH_FINLINE void VECTORCALL v_mat44_inverse43(mat44f &dest, mat44f_cref m);
 //! 1/m
 VECMATH_FINLINE void VECTORCALL v_mat33_inverse(mat33f &dest, mat33f_cref m);
-//! 1/m == T(m), with m being orthonormal
+//! 1/m == T33(m), col3 = -T33(m)*col3, with m assumed being orthonormal 43 matrix (i.e. col0.w=col1.w=col2.w = 0; col3.w = 1). Resulting matrix will not be 44 matrix, having garbage in col3.w!
 VECMATH_FINLINE void VECTORCALL v_mat44_orthonormal_inverse43(mat44f &dest, mat44f_cref m);
+//! 1/m == T33(m), col3 = -T33(m)*col3, with m assumed being orthonormal 43 matrix (i.e. col0.w=col1.w=col2.w = 0; col3.w = 1). Resulting matrix will be valid 44 matrix, with col3.w == 1.
+VECMATH_FINLINE void VECTORCALL v_mat44_orthonormal_inverse43_to44(mat44f &dest, mat44f_cref m);
+
 //! 1/m == T(m), with m being orthonormal
 VECMATH_FINLINE void VECTORCALL v_mat33_orthonormal_inverse(mat33f &dest, mat33f_cref m);
+
 //! Determinant(m)
 VECMATH_FINLINE vec4f VECTORCALL v_mat44_det(mat44f_cref m);
 //! Determinant(m), assuming col1.w=col2.w=col0.w=0, col3=0,0,0,1
@@ -620,6 +632,8 @@ VECMATH_FINLINE vec3f VECTORCALL v_bbox3_size(bbox3f b);
 VECMATH_FINLINE bbox3f v_bbox3_scale(bbox3f b, vec4f size_factor);
 //! .xyz = bbox center
 VECMATH_FINLINE vec3f VECTORCALL v_bbox3_center(bbox3f b);
+// get bbox vertex by index [0;7]
+VECMATH_FINLINE vec3f VECTORCALL v_bbox3_point(bbox3f b, int idx);
 //! .x = radius of outer sphere
 VECMATH_FINLINE vec4f VECTORCALL v_bbox3_outer_rad(vec3f bmin, vec3f bmax);
 VECMATH_FINLINE vec4f VECTORCALL v_bbox3_outer_rad(bbox3f b);
@@ -701,6 +715,25 @@ VECMATH_FINLINE vec4f VECTORCALL distance_to_seg_x(vec3f point, vec3f a, vec3f b
 //get closest to c bbox point. return c, if c is inside bbox. undefined for empty boxes
 VECMATH_FINLINE vec3f VECTORCALL v_closest_bbox_point(vec3f bmin, vec3f bmax, vec3f c);
 
+//returns 1 if segment with start, start + dir*tmax intersects box
+VECMATH_INLINE int VECTORCALL v_test_segment_box_intersection_dir(vec3f start, vec3f dir, bbox3f box, vec3f tmax);
+VECMATH_INLINE int VECTORCALL v_test_segment_box_intersection_dir(vec3f start, vec3f dir, bbox3f box);//tmax == 1
+//returns 1 if segment with start, start + dir*tmax intersects box, tmax will contain distance along ray. If <= 0, ray originated from box
+VECMATH_INLINE int VECTORCALL v_test_segment_box_intersection_dir_t(vec3f start, vec3f dir, bbox3f box, vec3f &tmax);
+//returns 1 if segment with start, start + end intersects box
+VECMATH_FINLINE int VECTORCALL v_test_segment_box_intersection(vec3f start, vec3f end, bbox3f box);
+
+//returns distance to box intersection
+//.x - closest dist (tmin), .y farthest dist (tmax)
+// both can be negative
+// ray intersects box if tmax >= max(ray.tmin, tmin) && tmin <= ray.tmax
+VECMATH_INLINE vec4f VECTORCALL v_ray_box_intersect_dist(vec3f bmin, vec3f bmax, vec3f rayOrigin, vec3f rayDir);
+//approximate distance to box intersection (uses v_rcp_est instead of 1/rayDir). A bit faster, v_rcp_est error is < 1e-12
+VECMATH_INLINE vec4f VECTORCALL v_ray_box_intersect_dist_est(vec3f bmin, vec3f bmax, vec3f rayOrigin, vec3f rayDir);
+
+// return -1 if no intersection found, or box side index in [0; 5] and output param 'at' in range [0.0; 1.0]
+inline int VECTORCALL v_test_segment_box_intersection_side(vec3f start, vec3f end, bbox3f box, float& out_at);
+
 //visibility
 ///construct 6 planes from worldviewproj matrix, with reversed z-buffer camPlanes5 far, camPlanes4 near
 VECMATH_FINLINE void VECTORCALL v_construct_camplanes(mat44f_cref clip,
@@ -752,6 +785,10 @@ VECMATH_FINLINE vec4f VECTORCALL v_is_visible(vec3f bmin, vec3f bmax, mat44f_cre
 
 ///for branching: (~v_test_vec_x_eqi_0( v_is_visible(bmin, bmax, clip)))&1 will be 1 if visible, zero otherwise;
 VECMATH_FINLINE int VECTORCALL v_is_visible_b(vec3f bmin, vec3f bmax, mat44f_cref clip);
+
+//! returns triangle vs sphere intersection
+// last parameter is squared radius!
+VECMATH_INLINE int VECTORCALL v_test_triangle_sphere_intersection(vec3f A, vec3f B, vec3f C, vec4f sph_c, vec4f sph_r2);
 
 //! gets perfect triangle bounding sphere center.
 // Warning - can work incorrectly on degenerative triangles (can produce nans)

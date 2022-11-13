@@ -108,8 +108,10 @@ VECMATH_FINLINE int VECTORCALL v_check_xyz_non_zero(vec4f a)
   return vget_lane_u32(m_and, 0);
 }
 
-VECMATH_FINLINE vec4i VECTORCALL v_cvt_vec4i(vec4f a) { return vcvtq_s32_f32(a); }
-VECMATH_FINLINE vec4f VECTORCALL v_cvt_vec4f(vec4i a) { return vcvtq_f32_s32(a); }
+VECMATH_FINLINE vec4i VECTORCALL v_cvti_vec4i(vec4f a) { return vcvtq_s32_f32(a); }
+VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i(vec4f a) { return vcvtq_u32_f32(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f(vec4i a) { return vcvtq_f32_u32(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_cvti_vec4f(vec4i a) { return vcvtq_f32_s32(a); }
 
 VECMATH_FINLINE vec4i VECTORCALL v_cast_vec4i(vec4f a) { return vreinterpretq_s32_f32(a); }
 VECMATH_FINLINE vec4f VECTORCALL v_cast_vec4f(vec4i a) { return vreinterpretq_f32_s32(a); }
@@ -211,6 +213,8 @@ VECMATH_FINLINE vec4f VECTORCALL v_abs(vec4f a) { return vabsq_f32(a); }
 VECMATH_FINLINE vec4i VECTORCALL v_absi(vec4i a) { return vabsq_s32(a); }
 VECMATH_FINLINE vec4i VECTORCALL v_maxi(vec4i a, vec4i b) { return vmaxq_s32(a, b); }
 VECMATH_FINLINE vec4i VECTORCALL v_mini(vec4i a, vec4i b) { return vminq_s32(a, b); }
+VECMATH_FINLINE vec4i VECTORCALL v_maxu(vec4i a, vec4i b) { return vmaxq_u32(a, b); }
+VECMATH_FINLINE vec4i VECTORCALL v_minu(vec4i a, vec4i b) { return vminq_u32(a, b); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_rsqrt4_fast(vec4f a) { return vrsqrteq_f32(a); }
 VECMATH_FINLINE vec4f VECTORCALL v_rsqrt4(vec4f a)

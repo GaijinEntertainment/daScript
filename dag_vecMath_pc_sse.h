@@ -173,8 +173,37 @@ VECMATH_FINLINE vec4i VECTORCALL v_btseli(vec4i a, vec4i b, vec4i c)
 VECMATH_FINLINE vec4i VECTORCALL v_cast_vec4i(vec4f a) {return _mm_castps_si128(a);}//no instruction
 VECMATH_FINLINE vec4f VECTORCALL v_cast_vec4f(vec4i a) {return _mm_castsi128_ps(a);}//no instruction
 
-VECMATH_FINLINE vec4i VECTORCALL v_cvt_vec4i(vec4f a) { return _mm_cvttps_epi32(a); }
-VECMATH_FINLINE vec4f VECTORCALL v_cvt_vec4f(vec4i a) { return _mm_cvtepi32_ps(a); }
+VECMATH_FINLINE vec4i VECTORCALL v_cvti_vec4i(vec4f a) { return _mm_cvttps_epi32(a); }
+VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i(vec4f a)
+{
+#if defined(__AVX512F_)//only works on clang/gcc
+  return _mm_cvtepu32_ps(v);
+#elif _TARGET_64BIT //_mm_cvtss_si64 is x64 instruction
+  return v_make_vec4i(_mm_cvtss_si64(a),
+                      _mm_cvtss_si64(v_splat_y(a)),
+                      _mm_cvtss_si64(v_splat_z(a)),
+                      _mm_cvtss_si64(v_splat_w(a)));
+#else
+  return v_make_vec4i(int(v_extract_x(a)),
+                      int(v_extract_y(a)),
+                      int(v_extract_z(a)),
+                      int(v_extract_w(a)));
+#endif
+}
+VECMATH_FINLINE vec4f VECTORCALL v_cvti_vec4f(vec4i a) { return _mm_cvtepi32_ps(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f(vec4i v) 
+{
+#if defined(__AVX512F_)//only works on clang/gcc
+  return _mm_cvtepu32_ps(v);
+#else
+  __m128i v2 = _mm_srli_epi32(v, 1);                 // v2 = v / 2
+  __m128i v1 = _mm_and_si128(v, _mm_set1_epi32(1));  // v1 = v & 1
+  __m128 v2f = _mm_cvtepi32_ps(v2);
+  __m128 v1f = _mm_cvtepi32_ps(v1);
+  return _mm_add_ps(_mm_add_ps(v2f, v2f), v1f);      // return 2 * v2 + v1
+#endif
+}
+
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_roundi(vec4f a)  { return _mm_cvtps_epi32(a); }
 
 VECMATH_FINLINE vec4i VECTORCALL sse2_cvt_floori(vec4f a)
@@ -372,6 +401,17 @@ VECMATH_FINLINE vec4i VECTORCALL sse2_maxi(vec4i a, vec4i b)
   return v_ori(v_andnoti(cond, a), v_andi(cond, b));
 }
 
+VECMATH_FINLINE vec4i VECTORCALL sse2_minu(vec4i a, vec4i b)
+{
+  vec4i cond = v_cmp_gti(v_subi(a, V_CI_SIGN_MASK), v_subi(b, V_CI_SIGN_MASK));
+  return v_ori(v_andnoti(cond, a), v_andi(cond, b));
+}
+VECMATH_FINLINE vec4i VECTORCALL sse2_maxu(vec4i a, vec4i b)
+{
+  vec4i cond = v_cmp_lti(v_subi(a, V_CI_SIGN_MASK), v_subi(b, V_CI_SIGN_MASK));
+  return v_ori(v_andnoti(cond, a), v_andi(cond, b));
+}
+
 VECMATH_FINLINE vec4i VECTORCALL sse2_absi (vec4i a)
 {
   vec4i mask = v_cmp_lti( a, _mm_setzero_si128() ); // FFFF   where a < 0
@@ -390,9 +430,13 @@ VECMATH_FINLINE vec4i VECTORCALL sse3_absi(vec4i a) {return sse2_absi(a);}
 #if _TARGET_SIMD_SSE >= 4 || defined(_DAGOR_PROJECT_OPTIONAL_SSE4) || defined(__SSE4_1__)
 VECMATH_FINLINE vec4i VECTORCALL sse4_mini(vec4i a, vec4i b) {return _mm_min_epi32(a, b);}
 VECMATH_FINLINE vec4i VECTORCALL sse4_maxi(vec4i a, vec4i b) {return _mm_max_epi32(a, b);}
+VECMATH_FINLINE vec4i VECTORCALL sse4_maxu(vec4i a, vec4i b) { return _mm_max_epu32(a,b); }
+VECMATH_FINLINE vec4i VECTORCALL sse4_minu(vec4i a, vec4i b) { return _mm_min_epu32(a,b); }
 #else // fallback to SSE2
 VECMATH_FINLINE vec4i VECTORCALL sse4_mini(vec4i a, vec4i b) {return sse2_mini(a, b);}
 VECMATH_FINLINE vec4i VECTORCALL sse4_maxi(vec4i a, vec4i b) {return sse2_maxi(a, b);}
+VECMATH_FINLINE vec4i VECTORCALL sse4_maxu(vec4i a, vec4i b) { return sse2_maxu(a,b); }
+VECMATH_FINLINE vec4i VECTORCALL sse4_minu(vec4i a, vec4i b) { return sse2_minu(a,b); }
 #endif
 
 VECMATH_FINLINE vec4f VECTORCALL v_min(vec4f a, vec4f b) { return _mm_min_ps(a, b); }
@@ -400,10 +444,14 @@ VECMATH_FINLINE vec4f VECTORCALL v_max(vec4f a, vec4f b) { return _mm_max_ps(a, 
 #if _TARGET_SIMD_SSE >= 4
 VECMATH_FINLINE vec4i VECTORCALL v_mini(vec4i a, vec4i b) {return sse4_mini(a, b);}
 VECMATH_FINLINE vec4i VECTORCALL v_maxi(vec4i a, vec4i b) {return sse4_maxi(a, b);}
+VECMATH_FINLINE vec4i VECTORCALL v_minu(vec4i a, vec4i b) {return sse4_minu(a, b);}
+VECMATH_FINLINE vec4i VECTORCALL v_maxu(vec4i a, vec4i b) {return sse4_maxu(a, b);}
 VECMATH_FINLINE vec4i VECTORCALL v_absi(vec4i a) {return sse3_absi(a);}
 #else
 VECMATH_FINLINE vec4i VECTORCALL v_mini(vec4i a, vec4i b) {return sse2_mini(a, b);}
 VECMATH_FINLINE vec4i VECTORCALL v_maxi(vec4i a, vec4i b) {return sse2_maxi(a, b);}
+VECMATH_FINLINE vec4i VECTORCALL v_minu(vec4i a, vec4i b) {return sse2_minu(a, b);}
+VECMATH_FINLINE vec4i VECTORCALL v_maxu(vec4i a, vec4i b) {return sse2_maxu(a, b);}
 VECMATH_FINLINE vec4i VECTORCALL v_absi(vec4i a) {return sse2_absi(a);}
 #endif
 
