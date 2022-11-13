@@ -1473,7 +1473,7 @@ namespace das
         if ( typeexpr->baseType == Type::tHandle ) {
             DAS_ASSERT(typeexpr->annotation->canNew() && "how???");
             if ( initializer ) {
-                int32_t bytes = type->firstType->getSizeOf();
+                int32_t bytes = type->firstType->getBaseSizeOf();
                 auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context,arguments));
                 ExprCall::simulateCall(func, this, context, pCall);
                 pCall->cmresEval = context.code->makeNode<SimNode_New>(at,bytes,true);
@@ -1490,7 +1490,7 @@ namespace das
             if ( typeexpr->baseType == Type::tStructure ) {
                 persistent = typeexpr->structType->persistent;
             }
-            int32_t bytes = type->firstType->getSizeOf();
+            int32_t bytes = type->firstType->getBaseSizeOf();
             if ( initializer ) {
                 auto pCall = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_NewWithInitializer>(
                     int(arguments.size()),at,bytes,persistent);
