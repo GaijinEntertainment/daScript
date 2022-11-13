@@ -526,6 +526,9 @@ namespace  das {
 
     template <typename TT, int mask>
     struct SimPolicy_uVec : SimPolicy_iVec<TT,mask> {
+        static __forceinline vec4f setXYZW ( uint32_t x, uint32_t y, uint32_t z, uint32_t w ) {
+            return v_cast_vec4f(v_make_vec4i(x, y, z, w));
+        }
         static __forceinline vec4f setAligned ( const float *__restrict x ) { return v_cast_vec4f(v_cvtu_vec4i(v_ld(x))); }
         static __forceinline vec4f setAligned ( const double *__restrict x ) { return setXYZW(uint32_t(x[0]),uint32_t(x[1]),uint32_t(x[2]),uint32_t(x[3])); }
         static __forceinline vec4f setAligned ( const int32_t *__restrict x ) { return v_cast_vec4f(v_ldi(x)); }
