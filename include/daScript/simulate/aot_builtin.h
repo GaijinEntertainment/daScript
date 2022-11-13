@@ -56,6 +56,8 @@ namespace das {
     void toLog ( int level, const char * text );
 
     vec4f builtin_verify_locks ( Context & context, SimNode_CallBase * node, vec4f * args );
+    void builtin_set_verify_array_locks ( Array & arr, bool value );
+    void builtin_set_verify_table_locks ( Table & tab, bool value );
 
     bool builtin_iterator_first ( const Sequence & it, void * data, Context * context );
     bool builtin_iterator_next  ( const Sequence & it, void * data, Context * context );

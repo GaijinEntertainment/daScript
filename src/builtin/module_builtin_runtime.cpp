@@ -1410,6 +1410,12 @@ namespace das
         addInterop<builtin_verify_locks,void,vec4f>(*this, lib, "_builtin_verify_locks",
             SideEffects::modifyArgumentAndExternal, "builtin_verify_locks")
                 ->arg("anything");
+        addExtern<DAS_BIND_FUN(builtin_set_verify_array_locks)>(*this, lib, "set_verify_array_locks",
+            SideEffects::modifyArgument, "builtin_set_verify_array_locks")
+                ->args({"array","check"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(builtin_set_verify_table_locks)>(*this, lib, "set_verify_table_locks",
+            SideEffects::modifyArgument, "builtin_set_verify_table_locks")
+                ->args({"table","check"})->unsafeOperation = true;
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear",
             SideEffects::modifyArgument, "builtin_table_clear")

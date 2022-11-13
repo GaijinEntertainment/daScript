@@ -94,7 +94,8 @@ namespace das
         union {
             struct {
                 bool    shared : 1;
-                bool    hopeless : 1;   // needs to be deleted without fuss (exceptions)
+                bool    hopeless : 1;           // needs to be deleted without fuss (exceptions)
+                bool    forego_lock_check : 1;  // don't need to check if elements are locked
             };
             uint32_t    flags;
         };

@@ -10,8 +10,14 @@ namespace das
 {
     struct LockDataWalker : DataWalker {
         bool locked = false;
+        virtual bool canVisitArray ( Array * ar, TypeInfo * ) override {
+            return !ar->forego_lock_check;
+        }
         virtual bool canVisitArrayData ( TypeInfo * ti ) override {
             return (ti->flags & TypeInfo::flag_lockCheck) == TypeInfo::flag_lockCheck;
+        }
+        virtual bool canVisitTable ( char * pa, TypeInfo * ) override {
+            return !((Table *)pa)->forego_lock_check;
         }
         virtual bool canVisitTableData ( TypeInfo * ti ) override {
             if ( ti->secondType ) {
@@ -60,4 +66,11 @@ namespace das
         return v_zero();
     }
 
+    void builtin_set_verify_array_locks ( Array & arr, bool value ) {
+        arr.forego_lock_check = !value;
+    }
+
+    void builtin_set_verify_table_locks ( Table & tab, bool value ) {
+        tab.forego_lock_check = !value;
+    }
 }
