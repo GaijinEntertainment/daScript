@@ -3793,7 +3793,7 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 if ( seT->secondType && seT->secondType->lockCheck() ) {
-                    if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
+                    if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !(func && func->skipLockCheck)) {
                         reportAstChanged(); // we promote tab[index] into _at_with_lockcheck(tab,index)
                         auto pCall = make_smart<ExprCall>(expr->at, "_at_with_lockcheck");
                         pCall->arguments.push_back(expr->subexpr->clone());
@@ -5050,7 +5050,7 @@ namespace das {
                 error("moving classes requires unsafe"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::unsafe);
             } else if ( expr->left->type->lockCheck() || expr->right->type->lockCheck()) {
-                if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
+                if ( !expr->skipLockCheck && !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !(func && func->skipLockCheck) ) {
                     reportAstChanged();
                     auto pCall = make_smart<ExprCall>(expr->at,"_move_with_lockcheck");
                     pCall->arguments.push_back(expr->left->clone());
@@ -5361,7 +5361,7 @@ namespace das {
                         auto ccall = static_pointer_cast<ExprCall>(expr->subexpr);
                         if ( ccall->name=="_return_with_lockcheck" || ccall->name=="__::builtin`_return_with_lockcheck" ) checkIt = false;
                     }
-                    if ( checkIt ) {
+                    if ( checkIt && !expr->skipLockCheck && !(func && func->skipLockCheck) ) {
                         reportAstChanged();
                         auto pCall = make_smart<ExprCall>(expr->at,"_return_with_lockcheck");
                         pCall->arguments.push_back(expr->subexpr->clone());

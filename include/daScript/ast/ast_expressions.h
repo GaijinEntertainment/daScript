@@ -442,6 +442,12 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        union {
+            struct {
+                bool skipLockCheck : 1;
+            };
+            uint32_t moveFlags = 0;
+        };
     };
 
     // this clones one object to the other
@@ -512,6 +518,8 @@ namespace das
                 bool returnCallCMRES    : 1;
                 bool returnCMRES        : 1;
                 bool fromYield          : 1;
+                bool fromComprehension  : 1;
+                bool skipLockCheck      : 1;
             };
             uint32_t    returnFlags = 0;
         };
@@ -938,6 +946,7 @@ namespace das
         union {
             struct {
                 bool moveSemantics      : 1;
+                bool skipLockCheck      : 1;
             };
             uint32_t    returnFlags = 0;
         };

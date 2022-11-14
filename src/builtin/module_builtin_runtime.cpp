@@ -87,6 +87,14 @@ namespace das
         };
     };
 
+    struct SkipLockCheckFunctionAnnotation : MarkFunctionAnnotation {
+        SkipLockCheckFunctionAnnotation() : MarkFunctionAnnotation("skip_lock_check") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->skipLockCheck = true;
+            return true;
+        };
+    };
+
     struct GenericFunctionAnnotation : MarkFunctionAnnotation {
         GenericFunctionAnnotation() : MarkFunctionAnnotation("generic") { }
         virtual bool isGeneric() const override {
@@ -1253,6 +1261,7 @@ namespace das
         addAnnotation(make_smart<FinalizeFunctionAnnotation>());
         addAnnotation(make_smart<HybridFunctionAnnotation>());
         addAnnotation(make_smart<UnsafeDerefFunctionAnnotation>());
+        addAnnotation(make_smart<SkipLockCheckFunctionAnnotation>());
         addAnnotation(make_smart<MarkUsedFunctionAnnotation>());
         addAnnotation(make_smart<LocalOnlyFunctionAnnotation>());
         addAnnotation(make_smart<PersistentStructureAnnotation>());
@@ -1417,7 +1426,7 @@ namespace das
             SideEffects::modifyArgument, "builtin_set_verify_table_locks")
                 ->args({"table","check"})->unsafeOperation = true;
         // table functions
-        addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "clear",
+        addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "_builtin_table_clear",
             SideEffects::modifyArgument, "builtin_table_clear")
                 ->args({"table","context"});
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length",

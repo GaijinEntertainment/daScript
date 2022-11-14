@@ -120,15 +120,15 @@ namespace das {
     TypeDeclPtr makeExprYieldFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprYieldFlags";
-        ft->argNames = { "moveSemantics" };
+        ft->argNames = { "moveSemantics", "skipLockCheck" };
         return ft;
     }
 
     TypeDeclPtr makeExprReturnFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprReturnFlags";
-        ft->argNames = { "moveSemantics", "returnReference", "returnInBlock",
-            "takeOverRightStack", "returnCallCMRES", "returnCMRES", "fromYield" };
+        ft->argNames = { "moveSemantics", "returnReference", "returnInBlock", "takeOverRightStack",
+        "returnCallCMRES", "returnCMRES", "fromYield", "fromComprehension", "skipLockCheck" };
         return ft;
     }
 
@@ -182,7 +182,7 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "MoreFunctionFlags";
         ft->argNames = {
-            "macroFunction", "needStringCast", "aotHashDeppendsOnArguments", "lateInit", "requestJit", "unsafeOutsideOfFor"
+            "macroFunction", "needStringCast", "aotHashDeppendsOnArguments", "lateInit", "requestJit", "unsafeOutsideOfFor", "skipLockCheck"
         };
         return ft;
     }

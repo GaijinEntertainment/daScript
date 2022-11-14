@@ -780,6 +780,7 @@ namespace das
                 bool    lateInit : 1;
                 bool    requestJit : 1;
                 bool    unsafeOutsideOfFor : 1;
+                bool    skipLockCheck : 1;
             };
             uint32_t moreFlags = 0;
 

@@ -1972,9 +1972,9 @@ namespace das {
     ExpressionPtr ExprMove::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprMove>(expr);
         ExprOp2::clone(cexpr);
+        cexpr->moveFlags = moveFlags;
         return cexpr;
     }
-
 
     // ExprClone
 
