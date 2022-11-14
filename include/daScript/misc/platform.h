@@ -73,6 +73,12 @@
 #include <float.h>
 #include <daScript/das_config.h>
 
+#if defined(_MSC_VER)
+    #define DAS_EVAL_ABI __vectorcall
+#else
+    #define DAS_EVAL_ABI
+#endif
+
 #ifndef _MSC_VER
     #define __forceinline inline __attribute__((always_inline))
     #define ___noinline __attribute__((noinline))

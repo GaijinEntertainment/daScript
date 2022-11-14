@@ -216,7 +216,7 @@ namespace das
         SimNode_ExtFuncCall ( const LineInfo & at, const char * fnName )
             : SimNode_ExtFuncCallBase(at,fnName) { }
 #endif
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return ImplCallStaticFunction<FuncT>::call(*fn, context, arguments);
         }
@@ -246,7 +246,7 @@ namespace das
         SimNode_ExtFuncCallAndCopyOrMove ( const LineInfo & at, const char * fnName )
             : SimNode_ExtFuncCallBase(at,fnName) { }
 #endif
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             void * cmres = cmresEval->evalPtr(context);
             ImplCallStaticFunctionAndCopy<FuncT>::call(*fn, context, cmres, arguments);
@@ -270,7 +270,7 @@ namespace das
             (void)args;     // to avoid compiler warning when no arguments
             new (cmres) CType(cast_arg<Args>::to(ctx,args[I])...);
         }
-        virtual vec4f eval(Context & context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context & context) override {
             auto cmres = cmresEval->evalPtr(context);
             CallPlacementNew(cmres,context,arguments,make_index_sequence<sizeof...(Args)>());
             return cast<void *>::from(cmres);
@@ -289,7 +289,7 @@ namespace das
             bargs[0] = cast<CType *>::from(&value);
             ctx.invoke(blk,bargs,nullptr,&debugInfo);
         }
-        virtual vec4f eval(Context & context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context & context) override {
             DAS_ASSERT(nArguments == (sizeof...(Args) + 1) );
             auto pblock = cast_arg<const Block *>::to(context,arguments[nArguments-1]);
             CallUsing(*pblock,context,arguments,make_index_sequence<sizeof...(Args)>());
@@ -335,7 +335,7 @@ namespace das
     struct SimNode_InteropFuncCall : SimNode_ExtFuncCallBase {
         SimNode_InteropFuncCall ( const LineInfo & at, const char * fnName )
             : SimNode_ExtFuncCallBase(at,fnName) { }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
             evalArgs(context, args);

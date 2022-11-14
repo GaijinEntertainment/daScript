@@ -18,7 +18,7 @@ namespace das
         SimNode_RangeIterator ( const LineInfo & at, SimNode * rng, bool s )
             : SimNode(at), subexpr(rng), isSigned(s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode * subexpr;
         bool isSigned;
     };
@@ -40,28 +40,28 @@ namespace das
         SimNode_ForRange ( const LineInfo & at, bool s )
             : SimNode_ForRangeBase(at,s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNode_ForRangeNF : SimNode_ForRangeBase  {
         SimNode_ForRangeNF ( const LineInfo & at, bool s )
             : SimNode_ForRangeBase(at,s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNode_ForRange1 : SimNode_ForRangeBase  {
         SimNode_ForRange1 ( const LineInfo & at, bool s )
             : SimNode_ForRangeBase(at,s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNode_ForRangeNF1 : SimNode_ForRangeBase  {
         SimNode_ForRangeNF1 ( const LineInfo & at, bool s )
             : SimNode_ForRangeBase(at,s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     //////////////////
@@ -73,25 +73,25 @@ namespace das
     struct SimNodeDebug_ForRange : SimNode_ForRange  {
         SimNodeDebug_ForRange ( const LineInfo & at, bool s )
             : SimNode_ForRange(at,s) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNodeDebug_ForRangeNF : SimNode_ForRangeNF  {
         SimNodeDebug_ForRangeNF ( const LineInfo & at, bool s )
             : SimNode_ForRangeNF(at,s) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNodeDebug_ForRange1 : SimNode_ForRange1  {
         SimNodeDebug_ForRange1 ( const LineInfo & at, bool s )
             : SimNode_ForRange1(at,s) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNodeDebug_ForRangeNF1 : SimNode_ForRangeNF1  {
         SimNodeDebug_ForRangeNF1 ( const LineInfo & at, bool s )
             : SimNode_ForRangeNF1(at,s) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
 #endif

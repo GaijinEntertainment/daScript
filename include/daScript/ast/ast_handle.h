@@ -368,7 +368,7 @@ namespace das
                 V_ARG_THIS(range);
                 V_END();
             }
-            virtual vec4f eval ( Context & context ) override {
+            virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
                 OOT * pR = (OOT *) SimNode_AtStdVector::compute(context);
                 DAS_ASSERT(pR);
                 return cast<OOT>::from(*pR);

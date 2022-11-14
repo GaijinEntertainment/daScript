@@ -199,7 +199,7 @@ namespace das {
         SimNode_Jit ( const LineInfo & at, JitFunction eval )
             : SimNode(at), func(eval) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         virtual bool rtti_node_isJit() const override { return true; }
         JitFunction func = nullptr;
         // saved original node
@@ -220,7 +220,7 @@ namespace das {
         SimNode_JitBlock ( const LineInfo & at, JitBlockFunction eval )
             : SimNode(at), func(eval) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         JitBlockFunction func = nullptr;
     };
     static_assert(sizeof(SimNode_JitBlock)<=(3*16),"jit block node must fit under 3 vec4f");
@@ -235,7 +235,7 @@ namespace das {
 
     struct SimNode_NOP : SimNode {
         SimNode_NOP ( const LineInfo & s ) : SimNode(s) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         virtual SimNode * visit ( SimVisitor & vis ) override;
     };
 
@@ -243,7 +243,7 @@ namespace das {
     struct SimNode_DeleteStructPtr : SimNode_Delete {
         SimNode_DeleteStructPtr ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t ss, bool ps, bool isL )
             : SimNode_Delete(a,s,t), structSize(ss), persistent(ps), isLambda(isL) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         virtual SimNode * visit ( SimVisitor & vis ) override;
         uint32_t    structSize;
         bool        persistent;
@@ -253,7 +253,7 @@ namespace das {
     struct SimNode_DeleteClassPtr : SimNode_Delete {
         SimNode_DeleteClassPtr ( const LineInfo & a, SimNode * s, uint32_t t, SimNode * se )
             : SimNode_Delete(a,s,t), sizeexpr(se) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         virtual SimNode * visit ( SimVisitor & vis ) override;
         SimNode * sizeexpr;
     };
@@ -262,7 +262,7 @@ namespace das {
     struct SimNode_DeleteLambda : SimNode_Delete {
         SimNode_DeleteLambda ( const LineInfo & a, SimNode * s, uint32_t t )
             : SimNode_Delete(a,s,t) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         virtual SimNode * visit ( SimVisitor & vis ) override;
     };
 
@@ -315,7 +315,7 @@ namespace das {
         SimNode_DeleteHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t )
             : SimNode_Delete(a,s,t) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto pH = (TT **) subexpr->evalPtr(context);
             for ( uint32_t i=0; i!=total; ++i, pH++ ) {
@@ -333,7 +333,7 @@ namespace das {
         SimNode_DeleteHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t )
             : SimNode_Delete(a,s,t) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto pH = (TT **) subexpr->evalPtr(context);
             for ( uint32_t i=0; i!=total; ++i, pH++ ) {
@@ -351,7 +351,7 @@ namespace das {
         SimNode_MakeBlock ( const LineInfo & at, SimNode * s, uint32_t a, uint32_t spp, FuncInfo * fi )
             : SimNode(at), subexpr(s), argStackTop(a), stackTop(spp), info(fi) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode *       subexpr;
         uint32_t        argStackTop;
         uint32_t        stackTop;
@@ -363,7 +363,7 @@ namespace das {
         SimNode_Assert ( const LineInfo & at, SimNode * s, const char * m )
             : SimNode(at), subexpr(s), message(m) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode *       subexpr;
         const char *    message;
     };
@@ -379,7 +379,7 @@ namespace das {
                 fields[3] = fi[3];
             }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode *   value;
         uint8_t     fields[4];
     };
@@ -403,7 +403,7 @@ namespace das {
         SimNode_FieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of )
             : SimNode_FieldDeref(at,rv,of) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto prv = value->evalPtr(context);
             TT * pR = (TT *)( prv + offset );
@@ -471,7 +471,7 @@ namespace das {
         SimNode_VariantFieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
             : SimNode_VariantFieldDeref(at,rv,of,v) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto prv = value->evalPtr(context);
             int32_t cv = *(int *)prv;
@@ -517,7 +517,7 @@ namespace das {
         SimNode_PtrFieldDerefR2V(const LineInfo & at, SimNode * rv, uint32_t of)
             : SimNode_PtrFieldDeref(at, rv, of) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval(Context & context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context & context) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -594,7 +594,7 @@ namespace das {
         SimNode_AtR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
             : SimNode_At(at,rv,idx,strd,o,rng) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *) compute(context);
             return cast<TT>::from(*pR);
         }
@@ -685,7 +685,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <int argCount>
     struct SimNode_FastCall : SimNode_FastCallAny {
         SimNode_FastCall ( const LineInfo & at ) : SimNode_FastCallAny(at) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -715,7 +715,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <>
     struct SimNode_FastCall<-1> : SimNode_FastCallAny {
         SimNode_FastCall(const LineInfo& at) : SimNode_FastCallAny(at) {}
-        virtual vec4f eval(Context& context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context& context) override {
             DAS_PROFILE_NODE
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
@@ -752,7 +752,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <int argCount>
     struct SimNode_Call : SimNode_CallAny {
         SimNode_Call ( const LineInfo & at ) : SimNode_CallAny(at) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -772,7 +772,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <>
     struct SimNode_Call<-1> : SimNode_CallAny {
         SimNode_Call ( const LineInfo & at ) : SimNode_CallAny(at) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
@@ -833,7 +833,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_Invoke : SimNode_InvokeAny {
         SimNode_Invoke ( const LineInfo & at)
             : SimNode_InvokeAny(at) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -864,7 +864,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_Invoke<-1> : SimNode_InvokeAny {
         SimNode_Invoke(const LineInfo& at)
             : SimNode_InvokeAny(at) {}
-        virtual vec4f eval(Context& context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context& context) override {
             DAS_PROFILE_NODE
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
@@ -894,7 +894,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_InvokeAndCopyOrMove : SimNode_InvokeAndCopyOrMoveAny {
         SimNode_InvokeAndCopyOrMove ( const LineInfo & at, SimNode * spCMRES )
             : SimNode_InvokeAndCopyOrMoveAny(at) { cmresEval = spCMRES; }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount ? argCount : 1];
@@ -929,7 +929,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_InvokeAndCopyOrMoveAny(at) {
             cmresEval = spCMRES;
         }
-        virtual vec4f eval(Context& context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context& context) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
@@ -960,7 +960,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <int argCount>
     struct SimNode_InvokeFn : SimNode_InvokeFnAny {
         SimNode_InvokeFn ( const LineInfo & at ) : SimNode_InvokeFnAny(at) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -992,7 +992,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <>
     struct SimNode_InvokeFn<-1> : SimNode_InvokeFnAny {
         SimNode_InvokeFn(const LineInfo& at) : SimNode_InvokeFnAny(at) {}
-        virtual vec4f eval(Context& context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context& context) override {
             DAS_PROFILE_NODE
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
@@ -1023,7 +1023,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <int argCount>
     struct SimNode_InvokeFnByName : SimNode_InvokeFnByNameAny {
         SimNode_InvokeFnByName ( const LineInfo & at ) : SimNode_InvokeFnByNameAny(at) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -1067,7 +1067,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <>
     struct SimNode_InvokeFnByName<-1> : SimNode_InvokeFnByNameAny {
         SimNode_InvokeFnByName(const LineInfo& at) : SimNode_InvokeFnByNameAny(at) {}
-        virtual vec4f eval(Context& context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context& context) override {
             DAS_PROFILE_NODE
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
@@ -1111,7 +1111,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <int argCount>
     struct SimNode_InvokeLambda : SimNode_InvokeLambdaAny {
         SimNode_InvokeLambda ( const LineInfo & at ) : SimNode_InvokeLambdaAny(at) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
@@ -1139,7 +1139,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <>
     struct SimNode_InvokeLambda<-1> : SimNode_InvokeLambdaAny {
         SimNode_InvokeLambda(const LineInfo& at) : SimNode_InvokeLambdaAny(at) {}
-        virtual vec4f eval(Context& context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context& context) override {
             DAS_PROFILE_NODE
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
             evalArgs(context, argValues);
@@ -1176,7 +1176,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_InvokeAndCopyOrMoveFn : SimNode_InvokeAndCopyOrMoveFnAny {
         SimNode_InvokeAndCopyOrMoveFn ( const LineInfo & at, SimNode * spEval )
             : SimNode_InvokeAndCopyOrMoveFnAny(at) { cmresEval = spEval; }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount ? argCount : 1];
@@ -1213,7 +1213,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_InvokeAndCopyOrMoveFnAny(at) {
             cmresEval = spEval;
         }
-        virtual vec4f eval(Context& context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context& context) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
@@ -1247,7 +1247,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_InvokeAndCopyOrMoveLambda : SimNode_InvokeAndCopyOrMoveLambdaAny {
         SimNode_InvokeAndCopyOrMoveLambda ( const LineInfo & at, SimNode * spEval )
             : SimNode_InvokeAndCopyOrMoveLambdaAny(at) { cmresEval = spEval; }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[argCount ? argCount : 1];
@@ -1280,7 +1280,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode_InvokeAndCopyOrMoveLambdaAny(at) {
             cmresEval = spEval;
         }
-        virtual vec4f eval(Context& context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context& context) override {
             DAS_PROFILE_NODE
             auto cmres = cmresEval->evalPtr(context);
             vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
@@ -1311,7 +1311,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_StringBuilder : SimNode_CallBase {
         SimNode_StringBuilder ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     // CAST
@@ -1319,7 +1319,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_Cast : SimNode_CallBase {
         SimNode_Cast ( const LineInfo & at ) : SimNode_CallBase(at) { }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f res = arguments[0]->eval(context);
             CastTo value = (CastTo) cast<CastFrom>::to(res);
@@ -1332,7 +1332,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_LexicalCast : SimNode_CallBase {
         SimNode_LexicalCast ( const LineInfo & at ) : SimNode_CallBase(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f res = arguments[0]->eval(context);
             auto str = to_string ( cast<CastFrom>::to(res) );
@@ -1350,7 +1350,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Debug ( const LineInfo & at, SimNode * s, TypeInfo * ti, char * msg )
             : SimNode(at), subexpr(s), typeInfo(ti), message(msg) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode *       subexpr;
         TypeInfo *      typeInfo;
         const char *    message;
@@ -1388,7 +1388,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetCMResOfsR2V(const LineInfo & at, uint32_t o)
             : SimNode_GetCMResOfs(at,o)  {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1433,7 +1433,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetLocalR2V(const LineInfo & at, uint32_t sp)
             : SimNode_GetLocal(at,sp)  {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1464,7 +1464,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetLocalRefOffR2V(const LineInfo & at, uint32_t sp, uint32_t o)
             : SimNode_GetLocalRefOff(at,sp,o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *) compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1499,7 +1499,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_MemZero(const LineInfo & at, SimNode * se, uint32_t sz)
             : SimNode(at), subexpr(se), size(sz) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto refV = subexpr->evalPtr(context);
             memset(refV, 0, size);
@@ -1514,7 +1514,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InitLocal(const LineInfo & at, uint32_t sp, uint32_t sz)
             : SimNode(at), stackTop(sp), size(sz) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             memset(context.stack.sp() + stackTop, 0, size);
             return v_zero();
@@ -1527,7 +1527,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InitLocalCMRes(const LineInfo & at, uint32_t o, uint32_t sz)
             : SimNode(at), offset(o), size(sz) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             memset(context.abiCopyOrMoveResult() + offset, 0, size);
             return v_zero();
@@ -1539,7 +1539,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_InitLocalCMResN : SimNode_InitLocalCMRes {
         SimNode_InitLocalCMResN(const LineInfo & at, uint32_t o)
             : SimNode_InitLocalCMRes(at, o, SIB) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             memset(context.abiCopyOrMoveResult() + offset, 0, SIB);
             return v_zero();
@@ -1551,7 +1551,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_InitLocalRef(const LineInfo & at, uint32_t sp, uint32_t o, uint32_t sz)
             : SimNode(at), stackTop(sp), offset(o), size(sz) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             char * pI = *((char **)(context.stack.sp() + stackTop)) + offset;
             memset(pI, 0, size);
@@ -1571,7 +1571,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             return subexpr.computeArgument(context);
         }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             return *(vec4f *)compute(context);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -1600,7 +1600,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             return subexpr.computeArgumentRef(context);
         }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1630,7 +1630,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetArgumentRefOffR2V ( const LineInfo & at, int32_t i, uint32_t o )
             : SimNode_GetArgumentRefOff(at,i, o) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1653,7 +1653,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             return subexpr.computeBlockArgument(context);
         }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             return *(vec4f *)compute(context);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -1682,7 +1682,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             return subexpr.computeBlockArgumentRef(context);
         }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1705,7 +1705,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             return subexpr.computeThisBlockArgument(context);
         }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             return *(vec4f *)compute(context);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
@@ -1734,7 +1734,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             return subexpr.computeThisBlockArgumentRef(context);
         }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1765,7 +1765,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetGlobalR2V ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_GetGlobal(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1796,7 +1796,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetGlobalMnhR2V ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_GetGlobalMnh(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1827,7 +1827,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetSharedR2V ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_GetShared(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1858,7 +1858,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_GetSharedMnhR2V ( const LineInfo & at, uint32_t o, uint64_t mnh )
             : SimNode_GetSharedMnh(at,o,mnh) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             TT * pR = (TT *)compute(context);
             return cast<TT>::from(*pR);
         }
@@ -1875,7 +1875,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_TryCatch ( const LineInfo & at, SimNode * t, SimNode * c )
             : SimNode(at), try_block(t), catch_block(c) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode * try_block, * catch_block;
     };
 
@@ -1883,7 +1883,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNodeDebug_TryCatch : SimNode_TryCatch {
         SimNodeDebug_TryCatch ( const LineInfo & at, SimNode * t, SimNode * c )
             : SimNode_TryCatch(at,t,c) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 #endif
 
@@ -1892,7 +1892,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Return ( const LineInfo & at, SimNode * s )
             : SimNode(at), subexpr(s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode * subexpr;
     };
 
@@ -1902,7 +1902,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ReturnAndMoveR2V ( const LineInfo & at, SimNode * s )
             : SimNode_Return(at,s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             TT * pR = (TT *) subexpr->evalPtr(context);
             context.abiResult() = cast<TT>::from(*pR);
@@ -1916,14 +1916,14 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ReturnNothing ( const LineInfo & at )
             : SimNode(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNode_ReturnConst : SimNode {
         SimNode_ReturnConst ( const LineInfo & at, vec4f v )
         : SimNode(at), value(v) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         vec4f value;
     };
 
@@ -1931,7 +1931,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ReturnConstString ( const LineInfo & at, char * v )
         : SimNode(at), value(v) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         char * value;
     };
 
@@ -1939,7 +1939,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ReturnAndCopy ( const LineInfo & at, SimNode * s, uint32_t sz )
             : SimNode_Return(at,s), size(sz) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         uint32_t size;
     };
 
@@ -1947,7 +1947,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ReturnRefAndEval ( const LineInfo & at, SimNode * s, uint32_t sp )
             : SimNode_Return(at,s), stackTop(sp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         uint32_t stackTop;
     };
 
@@ -1955,21 +1955,21 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ReturnAndMove ( const LineInfo & at, SimNode * s, uint32_t sz )
             : SimNode_ReturnAndCopy(at,s,sz) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNode_ReturnReference : SimNode_Return {
         SimNode_ReturnReference ( const LineInfo & at, SimNode * s )
             : SimNode_Return(at,s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNode_ReturnRefAndEvalFromBlock : SimNode_Return {
         SimNode_ReturnRefAndEvalFromBlock ( const LineInfo & at, SimNode * s, uint32_t sp, uint32_t asp )
             : SimNode_Return(at,s), stackTop(sp), argStackTop(asp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         uint32_t stackTop, argStackTop;
     };
 
@@ -1977,7 +1977,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ReturnAndCopyFromBlock ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t asp )
             : SimNode_ReturnAndCopy(at,s,sz), argStackTop(asp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         uint32_t argStackTop;
     };
 
@@ -1985,21 +1985,21 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ReturnAndMoveFromBlock ( const LineInfo & at, SimNode * s, uint32_t sz, uint32_t asp )
             : SimNode_ReturnAndCopyFromBlock(at,s,sz, asp) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNode_ReturnReferenceFromBlock : SimNode_Return {
         SimNode_ReturnReferenceFromBlock ( const LineInfo & at, SimNode * s )
             : SimNode_Return(at,s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     // GOTO LABEL
     struct SimNode_GotoLabel : SimNode {
         SimNode_GotoLabel ( const LineInfo & at, uint32_t lab ) : SimNode(at), label(lab) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             context.stopFlags |= EvalFlags::jumpToLabel;
             context.gotoLabel = label;
@@ -2012,7 +2012,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_Goto : SimNode {
         SimNode_Goto ( const LineInfo & at, SimNode * lab ) : SimNode(at), subexpr(lab) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             context.gotoLabel = subexpr->evalInt(context);
             context.stopFlags |= EvalFlags::jumpToLabel;
@@ -2025,7 +2025,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_Break : SimNode {
         SimNode_Break ( const LineInfo & at ) : SimNode(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             context.stopFlags |= EvalFlags::stopForBreak;
             return v_zero();
@@ -2036,7 +2036,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_Continue : SimNode {
         SimNode_Continue ( const LineInfo & at ) : SimNode(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             context.stopFlags |= EvalFlags::stopForContinue;
             return v_zero();
@@ -2049,7 +2049,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Ref2Value ( const LineInfo & at, SimNode * s )
             : SimNode(at), subexpr(s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             TT * pR = (TT *) subexpr->evalPtr(context);
             return cast<TT>::from(*pR);
@@ -2113,7 +2113,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_NullCoalescing ( const LineInfo & at, SimNode * s, SimNode * dv )
             : SimNode_Ptr2Ref(at,s), value(dv) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             TT * pR = (TT *) subexpr->evalPtr(context);
             return pR ? cast<TT>::from(*pR) : value->eval(context);
@@ -2365,7 +2365,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             subexpr.setConstValuePtr(c);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f       eval ( Context & context )      override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context )      override {
             DAS_PROFILE_NODE
             return subexpr.value;
         }
@@ -2382,7 +2382,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             subexpr.setConstValue(c);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f       eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return subexpr.value;
         }
@@ -2427,7 +2427,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             subexpr.setConstValue(c);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f       eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             DAS_ASSERTF(subexpr.valueU<uint32_t(context.totalFunctions),
                 "Function address index is out of range. "
@@ -2451,7 +2451,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             subexpr.setConstValue(c);
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f       eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             SimFunction * fun = context.fnByMangledName(subexpr.valueU64);
             DAS_ASSERT(fun==nullptr || fun->mangledNameHash==subexpr.valueU64);
@@ -2470,7 +2470,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_Zero : SimNode_CallBase {
         SimNode_Zero(const LineInfo & at) : SimNode_CallBase(at) { }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return v_zero();
         }
@@ -2491,7 +2491,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_CopyReference(const LineInfo & at, SimNode * ll, SimNode * rr)
             : SimNode(at), l(ll), r(rr) {};
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             char  ** pl = (char **) l->evalPtr(context);
             char * pr = r->evalPtr(context);
@@ -2507,7 +2507,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_Set(const LineInfo & at, SimNode * ll, SimNode * rr)
             : SimNode(at), l(ll), r(rr) {};
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             TT * pl = (TT *) l->evalPtr(context);
             *pl = EvalTT<TT>::eval(context, r);
@@ -2521,7 +2521,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, size_t sz)
             : SimNode(at), l(ll), r(rr), size(uint32_t(sz)) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode * l, * r;
         uint32_t size;
     };
@@ -2531,7 +2531,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_CloneRefValueT(const LineInfo & at, SimNode * ll, SimNode * rr)
             : SimNode(at), l(ll), r(rr) {};
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             TT * pl = (TT *) l->evalPtr(context);
             TT * pr = (TT *) r->evalPtr(context);
@@ -2546,7 +2546,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_MoveRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, uint32_t sz)
             : SimNode(at), l(ll), r(rr), size(sz) {};
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode * l, * r;
         uint32_t size;
     };
@@ -2590,14 +2590,14 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_ReturnLocalCMRes ( const LineInfo & at )
             : SimNode_Block(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     // LET
     struct SimNode_Let : SimNode_Block {
         SimNode_Let ( const LineInfo & at ) : SimNode_Block(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     struct SimNode_IfTheElseAny : SimNode {
@@ -2611,7 +2611,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode_IfTheElseAny(at,c,t,f) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             bool cmp = cond->evalBool(context);
             if ( cmp ) {
@@ -2641,7 +2641,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), subexpr(se) {}
         virtual bool rtti_node_isInstrument() const override { return true; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             context.instrumentCallback(subexpr->debugInfo);
             return subexpr->eval(context);
@@ -2662,7 +2662,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             : SimNode(at), func(simF), fnMnh(mnh), subexpr(se), userData(ud) {}
         virtual bool rtti_node_isInstrumentFunction() const override { return true; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             context.instrumentFunctionCallback(func, true, userData);
             auto res = subexpr->eval(context);
@@ -2689,7 +2689,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNodeDebug_IfThenElse : SimNode_IfThenElse {
         SimNodeDebug_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode_IfThenElse(at,c,t,f) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             DAS_SINGLE_STEP(context,cond->debugInfo,false);
             bool cmp = cond->evalBool(context);
@@ -2725,7 +2725,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_IfZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode_IfTheElseAny(at,c,t,f) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res == 0 ) {
@@ -2754,7 +2754,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNodeDebug_IfZeroThenElse : SimNode_IfZeroThenElse<TT> {
         SimNodeDebug_IfZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode_IfZeroThenElse<TT>(at,c,t,f) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             DAS_SINGLE_STEP(context,this->cond->debugInfo,false);
             auto res = EvalTT<TT>::eval(context,this->cond);
@@ -2790,7 +2790,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_IfNotZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode_IfTheElseAny(at,c,t,f) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res != 0 ) {
@@ -2822,7 +2822,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNodeDebug_IfNotZeroThenElse : SimNode_IfNotZeroThenElse<TT> {
         SimNodeDebug_IfNotZeroThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode_IfNotZeroThenElse<TT>(at,c,t,f) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             DAS_SINGLE_STEP(context,this->cond->debugInfo,false);
             auto res = EvalTT<TT>::eval(context,this->cond);
@@ -2858,7 +2858,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_IfThen ( const LineInfo & at, SimNode * c, SimNode * t )
             : SimNode_IfTheElseAny(at,c,t,nullptr) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             bool cmp = cond->evalBool(context);
             if ( cmp ) {
@@ -2874,7 +2874,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNodeDebug_IfThen : SimNode_IfThen {
         SimNodeDebug_IfThen ( const LineInfo & at, SimNode * c, SimNode * t )
             : SimNode_IfThen(at,c,t) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             DAS_SINGLE_STEP(context,cond->debugInfo,false);
             bool cmp = cond->evalBool(context);
@@ -2894,7 +2894,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_IfZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
             : SimNode_IfTheElseAny(at,c,t,nullptr) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res==0 ) {
@@ -2911,7 +2911,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNodeDebug_IfZeroThen : SimNode_IfZeroThen<TT> {
         SimNodeDebug_IfZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
             : SimNode_IfZeroThen<TT>(at,c,t) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             DAS_SINGLE_STEP(context,this->cond->debugInfo,false);
             auto res = EvalTT<TT>::eval(context,this->cond);
@@ -2931,7 +2931,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_IfNotZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
             : SimNode_IfTheElseAny(at,c,t,nullptr) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto res = EvalTT<TT>::eval(context,cond);
             if ( res != 0 ) {
@@ -2948,7 +2948,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNodeDebug_IfNotZeroThen : SimNode_IfNotZeroThen<TT> {
         SimNodeDebug_IfNotZeroThen ( const LineInfo & at, SimNode * c, SimNode * t )
             : SimNode_IfNotZeroThen<TT>(at,c,t) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             DAS_SINGLE_STEP(context,this->cond->debugInfo,false);
             auto res = EvalTT<TT>::eval(context,this->cond);
@@ -2968,7 +2968,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_While ( const LineInfo & at, SimNode * c )
             : SimNode_Block(at), cond(c) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode * cond;
     };
 
@@ -2977,7 +2977,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNodeDebug_While : SimNode_While {
         SimNodeDebug_While ( const LineInfo & at, SimNode * c )
             : SimNode_While(at,c) {}
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
 #endif
@@ -2987,7 +2987,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_PropertyImpl(const LineInfo & a, SimNode * se)
             : SimNode(a), subexpr(se) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto pv = (OT *) subexpr->evalPtr(context);
             if ( !pv ) {
@@ -3105,7 +3105,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         SimNode * visitFor ( SimVisitor & vis, int total );
         virtual SimNode * visit ( SimVisitor & vis ) override;
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         SimNode **  source_iterators = nullptr;
         uint32_t *  stackTop = nullptr;
         uint32_t    size = 0;
@@ -3123,7 +3123,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {
             return visitFor(vis, totalCount);
         }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             char * pi[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
@@ -3174,7 +3174,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             V_FINAL();
             V_END();
         }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             evalFinal(context);
             return v_zero();
@@ -3188,7 +3188,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {
             return visitFor(vis, 1);
         }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             char * pi = (context.stack.sp() + stackTop[0]);
             Iterator * sources;
@@ -3226,14 +3226,14 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNodeDebug_ForWithIteratorBase : SimNode_ForWithIteratorBase {
         SimNodeDebug_ForWithIteratorBase ( const LineInfo & at )
             : SimNode_ForWithIteratorBase(at) { }
-        virtual vec4f eval ( Context & context ) override;
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
     };
 
     template <int totalCount>
     struct SimNodeDebug_ForWithIterator : SimNode_ForWithIterator<totalCount> {
         SimNodeDebug_ForWithIterator ( const LineInfo & at )
             : SimNode_ForWithIterator<totalCount>(at) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             char * pi[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
@@ -3285,7 +3285,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNodeDebug_ForWithIterator<1> : SimNode_ForWithIterator<1> {
         SimNodeDebug_ForWithIterator ( const LineInfo & at )
             : SimNode_ForWithIterator<1>(at) {}
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             char * pi = (context.stack.sp() + stackTop[0]);
             Iterator * sources;
@@ -3323,7 +3323,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_AnyIterator : SimNode {
         SimNode_AnyIterator ( const LineInfo & at, SimNode * s )
             : SimNode(at), source(s) { }
-        virtual vec4f eval ( Context & context ) override {
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f ll = source->eval(context);
             TT * array = cast<TT *>::to(ll);
@@ -3521,7 +3521,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
             return visitOp1(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
-        virtual vec4f eval ( Context & context ) override {             \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {             \
             DAS_PROFILE_NODE \
             auto val = x->eval(context);                                \
             return cast_result(SimPolicy<CTYPE>::CALL(val,context,&debugInfo)); \
@@ -3535,7 +3535,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
             return visitOp1(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
-        virtual vec4f eval ( Context & context ) override {             \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {             \
             DAS_PROFILE_NODE \
             auto val = arguments[0]->eval(context);                     \
             return cast_result(SimPolicy<CTYPE>::CALL(val,context,&debugInfo)); \
@@ -3640,7 +3640,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
-        virtual vec4f eval ( Context & context ) override {             \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {             \
             DAS_PROFILE_NODE \
             auto lv = l->eval(context);                                 \
             auto rv = r->eval(context);                                 \
@@ -3655,7 +3655,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
-        virtual vec4f eval ( Context & context ) override {             \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {             \
             DAS_PROFILE_NODE \
             auto lv = arguments[0]->eval(context);                      \
             auto rv = arguments[1]->eval(context);                      \
@@ -3670,7 +3670,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {         \
             return visitOp2(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                               \
-        virtual vec4f eval ( Context & context ) override {             \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {             \
             DAS_PROFILE_NODE \
             auto lv = l->evalPtr(context);                              \
             auto rv = r->eval(context);                                 \
@@ -3807,7 +3807,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         virtual SimNode * visit ( SimVisitor & vis ) override {             \
             return visitOp3(vis, #CALL, sizeof(CTYPE), typeName<CTYPE>::name());    \
         }                                                                   \
-        virtual vec4f eval ( Context & context ) override {                 \
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {                 \
             DAS_PROFILE_NODE \
             auto a0 = arguments[0]->eval(context);                          \
             auto a1 = arguments[1]->eval(context);                          \

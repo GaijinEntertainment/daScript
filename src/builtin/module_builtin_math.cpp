@@ -414,7 +414,7 @@ namespace das {
             V_CALL();
             V_END();
         }
-        virtual vec4f eval(Context & context) override {
+        virtual vec4f DAS_EVAL_ABI eval(Context & context) override {
             auto cmres = cmresEval->evalPtr(context);
             memset ( cmres, 0, sizeof(MatT) );
             return cast<void *>::from(cmres);
