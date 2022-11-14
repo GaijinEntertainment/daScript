@@ -910,6 +910,7 @@ namespace das
         if ( baseType==Type::tStructure ) {
             if ( structType ) {
                 if (dep.find(structType) != dep.end()) return false;
+                if ( structType->skipLockCheck ) return false;
                 dep.insert(structType);
                 for ( auto fld : structType->fields ) {
                     if ( fld.type->lockCheck(dep) ) {

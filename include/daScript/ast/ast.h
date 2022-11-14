@@ -252,6 +252,7 @@ namespace das
                 bool    privateStructure : 1;
                 bool    macroInterface : 1;
                 bool    sealed : 1;
+                bool    skipLockCheck : 1;
             };
             uint32_t    flags = 0;
         };
