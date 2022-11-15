@@ -1239,7 +1239,7 @@ namespace das
         JitBlock * block = (JitBlock *) blk;
         block->stackOffset = context->stack.spi();
         block->argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
-        block->body = (SimNode *) block->node;
+        block->body = (SimNode *)(void*) block->node;
         block->aotFunction = nullptr;
         block->functionArguments = context->abiArguments();
         block->info = (FuncInfo *) funcInfo;
