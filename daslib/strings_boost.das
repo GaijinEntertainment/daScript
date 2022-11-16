@@ -33,6 +33,26 @@ def join(it; separator:string implicit)
                     write(writer, elem)
         return st
 
+def private join_implement ( iterable; separator:string; blk ) : string
+    let st = build_string() <| $ (var writer)
+        var skip_first = true
+        for elem in iterable
+            if skip_first
+                skip_first = false
+            else
+                write(writer, separator)
+            blk |> invoke(writer, elem)
+    return st
+
+def join ( iterable:array<auto(TT)>; separator:string; blk:block<(var writer:StringBuilderWriter; elem:TT):void> ) : string
+    return join_implement(iterable, separator, blk)
+
+def join ( iterable:iterator<auto(TT)>; separator:string; blk:block<(var writer:StringBuilderWriter; elem:TT):void> ) : string
+    return join_implement(iterable, separator, blk)
+
+def join ( iterable:auto(TT)[]; separator:string; blk:block<(var writer:StringBuilderWriter; elem:TT):void> ) : string
+    return join_implement(iterable, separator, blk)
+
 def split ( text, delim : string implicit; blk : block< (arg:array<string>#) > )
     builtin_string_split ( text, delim, blk )
 
