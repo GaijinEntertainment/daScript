@@ -15,6 +15,9 @@
 .. |method-ast_boost-TagStructureAnnotation.apply| replace:: Implements [tag_structure] annotation.
     Internally this just verifies if tag has a name, i.e. bool argument without value (set to true).
 
+.. |class-ast_boost-SetupSimulateMacro| replace:: This is base class for a simulate macro.
+    Internally this just verifies if tag has a name, i.e. bool argument without value (set to true).
+
 .. |class-ast_boost-SetupAnyAnnotation| replace:: This is base class for any annotation or macro setup.
 
 .. |method-ast_boost-SetupAnyAnnotation.apply| replace:: Implements macro registration setup.
@@ -164,3 +167,20 @@
 .. |structure_macro-ast_boost-lint_macro| replace:: Turns AstPassMacro into a macro with the specified 'name', which is called during the `lint` pass.
 
 .. |structure_macro-ast_boost-global_lint_macro| replace:: Turns AstPassMacro into a macro with the specified 'name', which is called during the `global lint` pass.
+
+.. |structure_macro-ast_boost-simulate_macro| replace:: Turns AstSimulateMacro into a macro with the specified `name`.
+
+.. |function-ast_boost-isCMRES| replace:: Returns true if function returns result by copy-or-move on the stack, as oppose to through the register ABI.
+
+.. |function-ast_boost-isMakeLocal| replace:: Returns true if Expression is inherited from ExprMakeLocal, i.e. ExprMakeArray, ExprMakeStruct, ExprMakeTuple, or ExprMakeVariant.
+
+.. |function-ast_boost-get_workhorse_types| replace:: Returns array which contains all `workhorse` base types.
+
+.. |function-ast_boost-find_argument_index| replace:: Returns index of the specific argument name, or -1 if its not found.
+
+.. |function-ast_boost-isCMRESType| replace:: Returns true if type is copy-or-move on the stack, as oppose to through the register ABI.
+
+.. |function-ast_boost-function_to_type| replace:: Returns TypeDeclPtr of the tFunction type, based on the provided function.
+
+.. |function-ast_boost-visit_finally| replace:: Calls visitor on the `finally` section of the block.
+

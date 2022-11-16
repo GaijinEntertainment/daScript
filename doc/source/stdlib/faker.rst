@@ -26,6 +26,10 @@ Type aliases
 +---+-------+
 +d  +double +
 +---+-------+
++i64+int64  +
++---+-------+
++u64+uint64 +
++---+-------+
 
 
 64-bit representation of a float
@@ -78,13 +82,25 @@ Random values
 
   *  :ref:`random_int (faker:faker::Faker -const) : int <function-_at_faker_c__c_random_int_S_ls_Faker_gr_>` 
   *  :ref:`random_uint (faker:faker::Faker -const) : uint <function-_at_faker_c__c_random_uint_S_ls_Faker_gr_>` 
+  *  :ref:`random_int8 (faker:faker::Faker -const) : int8 <function-_at_faker_c__c_random_int8_S_ls_Faker_gr_>` 
+  *  :ref:`random_uint8 (faker:faker::Faker -const) : uint8 <function-_at_faker_c__c_random_uint8_S_ls_Faker_gr_>` 
+  *  :ref:`random_int16 (faker:faker::Faker -const) : int16 <function-_at_faker_c__c_random_int16_S_ls_Faker_gr_>` 
+  *  :ref:`random_uint16 (faker:faker::Faker -const) : uint16 <function-_at_faker_c__c_random_uint16_S_ls_Faker_gr_>` 
   *  :ref:`random_float (faker:faker::Faker -const) : float <function-_at_faker_c__c_random_float_S_ls_Faker_gr_>` 
+  *  :ref:`random_int2 (faker:faker::Faker -const) : int2 <function-_at_faker_c__c_random_int2_S_ls_Faker_gr_>` 
+  *  :ref:`random_int3 (faker:faker::Faker -const) : int3 <function-_at_faker_c__c_random_int3_S_ls_Faker_gr_>` 
+  *  :ref:`random_int4 (faker:faker::Faker -const) : int4 <function-_at_faker_c__c_random_int4_S_ls_Faker_gr_>` 
+  *  :ref:`random_uint2 (faker:faker::Faker -const) : uint2 <function-_at_faker_c__c_random_uint2_S_ls_Faker_gr_>` 
+  *  :ref:`random_uint3 (faker:faker::Faker -const) : uint3 <function-_at_faker_c__c_random_uint3_S_ls_Faker_gr_>` 
+  *  :ref:`random_uint4 (faker:faker::Faker -const) : uint4 <function-_at_faker_c__c_random_uint4_S_ls_Faker_gr_>` 
   *  :ref:`random_float2 (faker:faker::Faker -const) : float2 <function-_at_faker_c__c_random_float2_S_ls_Faker_gr_>` 
   *  :ref:`random_float3 (faker:faker::Faker -const) : float3 <function-_at_faker_c__c_random_float3_S_ls_Faker_gr_>` 
   *  :ref:`random_float4 (faker:faker::Faker -const) : float4 <function-_at_faker_c__c_random_float4_S_ls_Faker_gr_>` 
   *  :ref:`random_float3x3 (faker:faker::Faker -const) : math::float3x3 <function-_at_faker_c__c_random_float3x3_S_ls_Faker_gr_>` 
   *  :ref:`random_float3x4 (faker:faker::Faker -const) : math::float3x4 <function-_at_faker_c__c_random_float3x4_S_ls_Faker_gr_>` 
   *  :ref:`random_float4x4 (faker:faker::Faker -const) : math::float4x4 <function-_at_faker_c__c_random_float4x4_S_ls_Faker_gr_>` 
+  *  :ref:`random_int64 (faker:faker::Faker -const) : int64 <function-_at_faker_c__c_random_int64_S_ls_Faker_gr_>` 
+  *  :ref:`random_uint64 (faker:faker::Faker -const) : uint64 <function-_at_faker_c__c_random_uint64_S_ls_Faker_gr_>` 
   *  :ref:`random_double (faker:faker::Faker -const) : double <function-_at_faker_c__c_random_double_S_ls_Faker_gr_>` 
 
 .. _function-_at_faker_c__c_random_int_S_ls_Faker_gr_:
@@ -117,6 +133,66 @@ random_uint returns uint
 
 Generates random unsigned integer.
 
+.. _function-_at_faker_c__c_random_int8_S_ls_Faker_gr_:
+
+.. das:function:: random_int8(faker: Faker)
+
+random_int8 returns int8
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random int8.
+
+.. _function-_at_faker_c__c_random_uint8_S_ls_Faker_gr_:
+
+.. das:function:: random_uint8(faker: Faker)
+
+random_uint8 returns uint8
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random uint8.
+
+.. _function-_at_faker_c__c_random_int16_S_ls_Faker_gr_:
+
+.. das:function:: random_int16(faker: Faker)
+
+random_int16 returns int16
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random int16.
+
+.. _function-_at_faker_c__c_random_uint16_S_ls_Faker_gr_:
+
+.. das:function:: random_uint16(faker: Faker)
+
+random_uint16 returns uint16
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random uint16.
+
 .. _function-_at_faker_c__c_random_float_S_ls_Faker_gr_:
 
 .. das:function:: random_float(faker: Faker)
@@ -131,6 +207,96 @@ random_float returns float
 
 
 Generates random float.
+
+.. _function-_at_faker_c__c_random_int2_S_ls_Faker_gr_:
+
+.. das:function:: random_int2(faker: Faker)
+
+random_int2 returns int2
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random int2.
+
+.. _function-_at_faker_c__c_random_int3_S_ls_Faker_gr_:
+
+.. das:function:: random_int3(faker: Faker)
+
+random_int3 returns int3
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random int3.
+
+.. _function-_at_faker_c__c_random_int4_S_ls_Faker_gr_:
+
+.. das:function:: random_int4(faker: Faker)
+
+random_int4 returns int4
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random int4.
+
+.. _function-_at_faker_c__c_random_uint2_S_ls_Faker_gr_:
+
+.. das:function:: random_uint2(faker: Faker)
+
+random_uint2 returns uint2
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random uint2.
+
+.. _function-_at_faker_c__c_random_uint3_S_ls_Faker_gr_:
+
+.. das:function:: random_uint3(faker: Faker)
+
+random_uint3 returns uint3
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random uint3.
+
+.. _function-_at_faker_c__c_random_uint4_S_ls_Faker_gr_:
+
+.. das:function:: random_uint4(faker: Faker)
+
+random_uint4 returns uint4
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random uint4.
 
 .. _function-_at_faker_c__c_random_float2_S_ls_Faker_gr_:
 
@@ -221,6 +387,36 @@ random_float4x4 returns  :ref:`math::float4x4 <handle-math-float4x4>`
 
 
 Generates random float4x4.
+
+.. _function-_at_faker_c__c_random_int64_S_ls_Faker_gr_:
+
+.. das:function:: random_int64(faker: Faker)
+
+random_int64 returns int64
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random int64
+
+.. _function-_at_faker_c__c_random_uint64_S_ls_Faker_gr_:
+
+.. das:function:: random_uint64(faker: Faker)
+
+random_uint64 returns uint64
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random uint64
 
 .. _function-_at_faker_c__c_random_double_S_ls_Faker_gr_:
 

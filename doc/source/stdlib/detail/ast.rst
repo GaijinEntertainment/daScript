@@ -84,6 +84,8 @@
 
 .. |typedef-ast-TypeInfoMacroPtr| replace:: Smart pointer to `TypeInfoMacro` object.
 
+.. |typedef-ast-SimulateMacroPtr| replace:: Smart pointer to `SimulateMacro` object.
+
 .. |enumeration-ast-SideEffects| replace:: Enumeration with all possible side effects of expression or function.
 
 .. |enumeration-ast-CaptureMode| replace:: Enumeration with lambda variables capture modes.
@@ -95,6 +97,8 @@
 .. |method-ast-AstFunctionAnnotation.verifyCall| replace:: This callback occurs during the `lint` pass of the compilation. If call has lint errors it should return `false` and `errors` is filled with the lint errors.
 
 .. |method-ast-AstFunctionAnnotation.apply| replace:: This callback occurs during the `parse` pass of the compilation on the function itself. If function has application errors it should return `false` and `errors` field.
+
+.. |method-ast-AstFunctionAnnotation.generic_apply| replace:: This call occurs during the `infer` pass of the compilation, when generic function is instanced on the instance of the function. If function has application errors it should return `false` and `errors` field.
 
 .. |method-ast-AstFunctionAnnotation.finish| replace:: This callback occurs during the `finalize allocations` pass of the compilation, after the stack is allocated, on the function itself. If function has finalization errors it should return `false` and `errors` field.
 
@@ -129,6 +133,12 @@
     If the `astChanged` flag is set, `infer` pass will be repeated. This allows to fix up the function after the `infer` pass with all the type information fully available.
 
 .. |method-ast-AstStructureAnnotation.complete| replace:: This callback occurs as the final stage of `Context` simulation.
+
+.. |method-ast-AstStructureAnnotation.aotPrefix| replace:: This callback occurs during the `AOT`.  It is used to generate CPP code before the structure declaration.
+
+.. |method-ast-AstStructureAnnotation.aotBody| replace:: This callback occurs during the `AOT`.  It is used to generate CPP code in the body of the structure.
+
+.. |method-ast-AstStructureAnnotation.aotSuffix| replace:: This callback occurs during the `AOT`.  It is used to generate CPP code after the structure declaration.
 
 .. |class-ast-AstPassMacro| replace:: This macro is used to implement custom `infer` passes.
 
@@ -241,6 +251,8 @@
 .. |method-ast-AstVisitor.preVisitAlias| replace:: before `TypeDecl`
 
 .. |method-ast-AstVisitor.visitAlias| replace:: after `TypeDecl`
+
+.. |method-ast-AstVisitor.canVisitMakeBlockBody| replace:: before the body of the `makeBlock` expression is visited. If true `body` will be visited
 
 .. |method-ast-AstVisitor.canVisitEnumeration| replace:: if true `Enumeration` will be visited
 
@@ -1293,3 +1305,34 @@
 
 .. |structure_annotation-ast-CaptureMacro| replace:: Adapter for the `AstCaptureMacro`.
 
+.. |class-ast-AstSimulateMacro| replace:: Macro which is attached to the context simulation.
+
+.. |method-ast-AstSimulateMacro.preSimulate| replace:: This callback occurs before the context simulation.
+
+.. |method-ast-AstSimulateMacro.simulate| replace:: This callback occurs after the context simulation.
+
+.. |structure_annotation-ast-SimulateMacro| replace:: Adapter for the `AstSimulateMacro`.
+
+.. |function-ast-visit_finally| replace:: Calls visit on the `finally` section of the block.
+
+.. |function-ast-make_simulate_macro| replace:: Creates adapter for the 'AstSimulateMacro' interface.
+
+.. |function-ast-add_simulate_macro| replace:: Adds `AstSimulateMacro` to the specific module.
+
+.. |function-ast-add_new_simulate_macro| replace:: Makes adapter to the `AstSimulateMacro` and adds it to the current module.
+
+.. |function-ast-make_interop_node| replace:: Makes interop node for the jit function. Those are used for the addInterop calls, or the StringBuilder.
+
+.. |function-ast-find_structure_field| replace:: Returns `FieldDeclaration` for the specific field of the structure type, or `null` if not found.
+
+.. |function-ast-for_each_module| replace:: Iterates through each module in the program.
+
+.. |function-ast-is_terminator_expression| replace:: Returns `true` if the expression ends with a terminator expression, i.e. `return`.
+
+.. |function-ast-is_terminator_or_break_expression| replace:: Returns `true` if the expression ends with a terminator expression `return` or a `break` expression.
+
+.. |function-ast-get_use_global_variables| replace:: Provides invoked block with the list of all global variables, used by a function.
+
+.. |function-ast-get_use_functions| replace:: Provides invoked block with the list of all functions, used by a function.
+
+.. |function-ast-get_builtin_function_address| replace:: Returns pointer to a builtin function.

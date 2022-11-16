@@ -332,6 +332,8 @@
 
 .. |function-builtin-ctz| replace:: count trailing zeros
 
+.. |function-builtin-popcnt| replace:: count number of set bits
+
 .. |structure_macro-builtin-comment| replace:: [comment] macro, which does absolutely nothing but holds arguments.
 
 .. |structure_macro-builtin-macro_interface| replace:: [macro_interface] specifies that class and its inherited children are used as a macro interfaces, and would not be exported by default.
@@ -339,3 +341,68 @@
 .. |structure_macro-builtin-cpp_layout| replace:: [cpp_layout] specifies that structure uses C++ memory layout rules, as oppose to native daScript memory layout rules.
 
 .. |structure_macro-builtin-persistent| replace:: [persistent] annotation specifies that structure is allocated (via new) on the C++ heap, as oppose to daScript context heap.
+
+.. |variable-builtin-SIZE_OF_PROLOGUE| replace:: size of the Prologue structure on the call stack.
+
+.. |variable-builtin-CONTEXT_OFFSET_OF_EVAL_TOP| replace:: offset of the eval stack top pointer in the `Context`.
+
+.. |variable-builtin-CONTEXT_OFFSET_OF_GLOBALS| replace:: offset of the global variables in the `Context`.
+
+.. |function_annotation-builtin-jit| replace:: Explicitly marks (forces) function to be compiled with JIT compiler.
+
+.. |function_annotation-builtin-unsafe_outside_of_for| replace:: Marks function as unsafe to be called outside of the sources `for` loop.
+
+.. |function_annotation-builtin-skip_lock_check| replace:: optimization, which indicates that lock checks are not needed in this function.
+
+.. |structure_macro-builtin-skip_field_lock_check| replace:: optimization, which indicates that the structure does not need lock checks.
+
+.. |function-builtin-set_verify_array_locks| replace:: runtime optimization, which indicates that the array does not need lock checks.
+
+.. |function-builtin-set_verify_table_locks| replace:: runtime optimization, which indicates that the table does not need lock checks.
+
+.. |function-builtin-invoke_code| replace:: Invokes function, declared as `vec4f(*)(Context *, vec4f *, void *)`.
+
+.. |function-builtin-instrument_jit| replace:: Replaces function simulation node with 'SimNode_Jit', which will call function pointer directly. Function pointer format is `vec4f(*)(Context *, vec4f *, void *)`
+
+.. |function-builtin-remove_jit| replace:: Restores original function simulation nodes.
+
+.. |function-builtin-is_jit_function| replace:: Returns true if function is instrumented with JIT.
+
+.. |function-builtin-get_jit_exception| replace:: Returns pointer to `void jit_exception ( const char * text, Context * context )`
+
+.. |function-builtin-get_jit_call_or_fastcall| replace:: Returns pointer to `vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context )`
+
+.. |function-builtin-get_jit_call_with_cmres| replace:: Returns pointer to `vec4f jit_call_with_cmres ( SimFunction * fn, vec4f * args, void * cmres, Context * context )`
+
+.. |function-builtin-get_jit_invoke_block| replace:: Returns pointer to `vec4f jit_invoke_block ( const Block & blk, vec4f * args, Context * context )`
+
+.. |function-builtin-get_jit_invoke_block_with_cmres| replace:: Returns pointer to `vec4f jit_invoke_block_with_cmres ( const Block & blk, vec4f * args, void * cmres, Context * context )`
+
+.. |function-builtin-get_jit_string_builder| replace:: Returns pointer to `char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args )`
+
+.. |function-builtin-get_jit_get_global_mnh| replace:: Returns pointer to `void * jit_get_global_mnh ( uint64_t mnh, Context & context )`
+
+.. |function-builtin-get_jit_alloc_heap| replace:: Returns pointer to `void * jit_alloc_heap ( uint32_t bytes, Context * context )`
+
+.. |function-builtin-get_jit_alloc_persistent| replace:: Returns pointer to `void * jit_alloc_persistent ( uint32_t bytes, Context * )`
+
+.. |function-builtin-get_jit_free_heap| replace:: Returns pointer to `void jit_free_heap ( void * bytes, uint32_t size, Context * context )`
+
+.. |function-builtin-get_jit_free_persistent| replace:: Returns pointer to `void jit_free_persistent ( void * bytes, Context * )`
+
+.. |function-builtin-get_jit_array_lock| replace:: Returns pointer to `void builtin_array_lock ( const Array & arr, Context * context )`
+
+.. |function-builtin-get_jit_array_unlock| replace:: Returns pointer to `void builtin_array_unlock ( const Array & arr, Context * context )`
+
+.. |function-builtin-get_jit_table_at| replace:: Returns pointer to `template <typename KeyType> int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )`
+
+.. |function-builtin-get_jit_str_cmp| replace:: Returns pointer to `int32_t jit_str_cmp ( char * a, char * b )`
+
+.. |function-builtin-get_jit_prologue| replace:: Returns pointer to `void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context )`
+
+.. |function-builtin-get_jit_epilogue| replace:: Returns pointer to `void jit_epilogue ( JitStackState * stackState, Context * context )`
+
+.. |function-builtin-get_jit_make_block| replace:: Returns pointer to `void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * funcInfo, Context * context )`
+
+.. |function-builtin-using| replace:: Creates temporary das_string.
+

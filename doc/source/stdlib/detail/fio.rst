@@ -71,3 +71,6 @@
 .. |variable-fio-seek_end| replace:: constant for `fseek` which sets the file pointer to the end of the file plus the offset.
 
 .. |function-fio-remove| replace:: deletes file specified by name
+
+.. |function-fio-fflush| replace:: equivalent to C `fflush`. Flushes FILE buffers.
+

@@ -133,6 +133,27 @@ Type aliases
 
 |typedef-rtti-StructInfoFlags|
 
+.. _alias-ModuleFlags:
+
+.. das:attribute:: ModuleFlags is a bitfield
+
++--------------+---+-----+
++field         +bit+value+
++==============+===+=====+
++builtIn       +0  +1    +
++--------------+---+-----+
++promoted      +1  +2    +
++--------------+---+-----+
++isPublic      +2  +4    +
++--------------+---+-----+
++isModule      +3  +8    +
++--------------+---+-----+
++isSolidContext+4  +16   +
++--------------+---+-----+
+
+
+|typedef-rtti-ModuleFlags|
+
 .. _alias-RttiValue:
 
 .. das:attribute:: RttiValue is a variant type
@@ -193,6 +214,12 @@ Constants
 .. das:attribute:: FUNCINFO_SHUTDOWN = 0x8
 
 |variable-rtti-FUNCINFO_SHUTDOWN|
+
+.. _global-rtti-FUNCINFO_LATE_INIT:
+
+.. das:attribute:: FUNCINFO_LATE_INIT = 0x20
+
+|variable-rtti-FUNCINFO_LATE_INIT|
 
 ++++++++++++
 Enumerations
@@ -666,9 +693,11 @@ Error fields are
 
 Module fields are
 
-+----+--------------------------------------------------------+
-+name+ :ref:`builtin::das_string <handle-builtin-das_string>` +
-+----+--------------------------------------------------------+
++-----------+--------------------------------------------------------+
++moduleFlags+ :ref:`ModuleFlags <alias-ModuleFlags>`                 +
++-----------+--------------------------------------------------------+
++name       + :ref:`builtin::das_string <handle-builtin-das_string>` +
++-----------+--------------------------------------------------------+
 
 
 |structure_annotation-rtti-Module|
@@ -789,9 +818,51 @@ TypeAnnotation fields are
 
 TypeAnnotation properties are
 
-+-------------+----+
-+is_any_vector+bool+
-+-------------+----+
++----------------------+------+
++alignOf               +uint64+
++----------------------+------+
++isRawPod              +bool  +
++----------------------+------+
++hasNonTrivialCopy     +bool  +
++----------------------+------+
++canNew                +bool  +
++----------------------+------+
++canBePlacedInContainer+bool  +
++----------------------+------+
++hasNonTrivialDtor     +bool  +
++----------------------+------+
++isLocal               +bool  +
++----------------------+------+
++hasNonTrivialCtor     +bool  +
++----------------------+------+
++is_any_vector         +bool  +
++----------------------+------+
++canDelete             +bool  +
++----------------------+------+
++isIterable            +bool  +
++----------------------+------+
++isRefType             +bool  +
++----------------------+------+
++needDelete            +bool  +
++----------------------+------+
++isPod                 +bool  +
++----------------------+------+
++canMove               +bool  +
++----------------------+------+
++canDeletePtr          +bool  +
++----------------------+------+
++isShareable           +bool  +
++----------------------+------+
++sizeOf                +uint64+
++----------------------+------+
++isSmart               +bool  +
++----------------------+------+
++canCopy               +bool  +
++----------------------+------+
++avoidNullPtr          +bool  +
++----------------------+------+
++canClone              +bool  +
++----------------------+------+
 
 
 |structure_annotation-rtti-TypeAnnotation|
@@ -2358,7 +2429,9 @@ Function and mangled name hash
 ++++++++++++++++++++++++++++++
 
   *  :ref:`get_function_by_mangled_name_hash (src:uint64 const;context:__context const) : function\<\> <function-_at_rtti_c__c_get_function_by_mangled_name_hash_Cu64_C_c>` 
+  *  :ref:`get_function_by_mangled_name_hash (src:uint64 const;context:rtti::Context implicit) : function\<\> <function-_at_rtti_c__c_get_function_by_mangled_name_hash_Cu64_IH_ls_rtti_c__c_Context_gr_>` 
   *  :ref:`get_function_mangled_name_hash (src:function\<\> const;context:__context const) : uint64 <function-_at_rtti_c__c_get_function_mangled_name_hash_C_at__at__C_c>` 
+  *  :ref:`get_function_address (MNH:uint64 const;at:rtti::Context implicit) : uint64 <function-_at_rtti_c__c_get_function_address_Cu64_IH_ls_rtti_c__c_Context_gr_>` 
 
 .. _function-_at_rtti_c__c_get_function_by_mangled_name_hash_Cu64_C_c:
 
@@ -2371,6 +2444,23 @@ get_function_by_mangled_name_hash returns function<>
 +========+=============+
 +src     +uint64 const +
 +--------+-------------+
+
+
+|function-rtti-get_function_by_mangled_name_hash|
+
+.. _function-_at_rtti_c__c_get_function_by_mangled_name_hash_Cu64_IH_ls_rtti_c__c_Context_gr_:
+
+.. das:function:: get_function_by_mangled_name_hash(src: uint64 const; context: Context implicit)
+
+get_function_by_mangled_name_hash returns function<>
+
++--------+-----------------------------------------------------+
++argument+argument type                                        +
++========+=====================================================+
++src     +uint64 const                                         +
++--------+-----------------------------------------------------+
++context + :ref:`rtti::Context <handle-rtti-Context>`  implicit+
++--------+-----------------------------------------------------+
 
 
 |function-rtti-get_function_by_mangled_name_hash|
@@ -2390,9 +2480,30 @@ get_function_mangled_name_hash returns uint64
 
 |function-rtti-get_function_mangled_name_hash|
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+.. _function-_at_rtti_c__c_get_function_address_Cu64_IH_ls_rtti_c__c_Context_gr_:
+
+.. das:function:: get_function_address(MNH: uint64 const; at: Context implicit)
+
+get_function_address returns uint64
+
++--------+-----------------------------------------------------+
++argument+argument type                                        +
++========+=====================================================+
++MNH     +uint64 const                                         +
++--------+-----------------------------------------------------+
++at      + :ref:`rtti::Context <handle-rtti-Context>`  implicit+
++--------+-----------------------------------------------------+
+
+
+|function-rtti-get_function_address|
+
++++++++++++++++++++++++++
+Context and mutex locking
++++++++++++++++++++++++++
+
+  *  :ref:`lock_this_context (block:block\<void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_lock_this_context_CI1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`lock_context (lock_context:rtti::Context implicit;block:block\<void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_lock_context_IH_ls_rtti_c__c_Context_gr__CI1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`lock_mutex (mutex:rtti::recursive_mutex implicit;block:block\<void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_rtti_c__c_lock_mutex_IH_ls_rtti_c__c_recursive_mutex_gr__CI1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at_rtti_c__c_lock_this_context_CI1_ls_v_gr__builtin__C_c_C_l:
 

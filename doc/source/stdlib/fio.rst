@@ -120,6 +120,7 @@ File manipulation
   *  :ref:`remove (name:string const implicit) : bool <function-_at_fio_c__c_remove_CIs>` 
   *  :ref:`fopen (name:string const implicit;mode:string const implicit) : fio::FILE const? const <function-_at_fio_c__c_fopen_CIs_CIs>` 
   *  :ref:`fclose (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fclose_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C_c_C_l>` 
+  *  :ref:`fflush (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fflush_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C_c_C_l>` 
   *  :ref:`fprint (file:fio::FILE const? const implicit;text:string const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fprint_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CIs_C_c_C_l>` 
   *  :ref:`fread (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : string <function-_at_fio_c__c_fread_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C_c_C_l>` 
   *  :ref:`fmap (file:fio::FILE const? const implicit;block:block\<(array\<uint8\>#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fmap_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
@@ -190,6 +191,19 @@ fopen returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 
 |function-fio-fclose|
+
+.. _function-_at_fio_c__c_fflush_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C_c_C_l:
+
+.. das:function:: fflush(file: fio::FILE const? const implicit)
+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
++--------+----------------------------------------------------------+
+
+
+|function-fio-fflush|
 
 .. _function-_at_fio_c__c_fprint_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CIs_C_c_C_l:
 

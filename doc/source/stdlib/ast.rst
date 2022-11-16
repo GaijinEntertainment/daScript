@@ -115,6 +115,8 @@ Type aliases
 +----------------+---+-----+
 +sealed          +9  +512  +
 +----------------+---+-----+
++skipLockCheck   +10 +1024 +
++----------------+---+-----+
 
 
 |typedef-ast-StructureFlags|
@@ -148,6 +150,10 @@ Type aliases
 +noSideEffects      +1  +2    +
 +-------------------+---+-----+
 +noNativeSideEffects+2  +4    +
++-------------------+---+-----+
++isForLoopSource    +3  +8    +
++-------------------+---+-----+
++isCallArgument     +4  +16   +
 +-------------------+---+-----+
 
 
@@ -257,6 +263,14 @@ Type aliases
 +needStringCast            +1  +2    +
 +--------------------------+---+-----+
 +aotHashDeppendsOnArguments+2  +4    +
++--------------------------+---+-----+
++lateInit                  +3  +8    +
++--------------------------+---+-----+
++requestJit                +4  +16   +
++--------------------------+---+-----+
++unsafeOutsideOfFor        +5  +32   +
++--------------------------+---+-----+
++skipLockCheck             +6  +64   +
 +--------------------------+---+-----+
 
 
@@ -369,6 +383,8 @@ Type aliases
 +isCollapseable            +9  +512  +
 +--------------------------+---+-----+
 +needCollapse              +10 +1024 +
++--------------------------+---+-----+
++hasMakeBlock              +11 +2048 +
 +--------------------------+---+-----+
 
 
@@ -559,6 +575,8 @@ Type aliases
 +=============+===+=====+
 +moveSemantics+0  +1    +
 +-------------+---+-----+
++skipLockCheck+1  +2    +
++-------------+---+-----+
 
 
 |typedef-ast-ExprYieldFlags|
@@ -583,6 +601,10 @@ Type aliases
 +returnCMRES       +5  +32   +
 +------------------+---+-----+
 +fromYield         +6  +64   +
++------------------+---+-----+
++fromComprehension +7  +128  +
++------------------+---+-----+
++skipLockCheck     +8  +256  +
 +------------------+---+-----+
 
 
@@ -723,6 +745,12 @@ Type aliases
 
 |typedef-ast-CaptureMacroPtr|
 
+.. _alias-SimulateMacroPtr:
+
+.. das:attribute:: SimulateMacroPtr = smart_ptr<ast::SimulateMacro>
+
+|typedef-ast-SimulateMacroPtr|
+
 ++++++++++++
 Enumerations
 ++++++++++++
@@ -849,159 +877,171 @@ TypeDecl fields are
 
 TypeDecl properties are
 
-+----------------------+------------------------------------+
-+isPointer             +bool                                +
-+----------------------+------------------------------------+
-+isCtorType            +bool                                +
-+----------------------+------------------------------------+
-+isVoidPointer         +bool                                +
-+----------------------+------------------------------------+
-+isStructure           +bool                                +
-+----------------------+------------------------------------+
-+isConst               +bool                                +
-+----------------------+------------------------------------+
-+alignOf               +int                                 +
-+----------------------+------------------------------------+
-+isGoodArrayType       +bool                                +
-+----------------------+------------------------------------+
-+rangeBaseType         + :ref:`rtti::Type <enum-rtti-Type>` +
-+----------------------+------------------------------------+
-+isVariant             +bool                                +
-+----------------------+------------------------------------+
-+isNoHeapType          +bool                                +
-+----------------------+------------------------------------+
-+isRawPod              +bool                                +
-+----------------------+------------------------------------+
-+canAot                +bool                                +
-+----------------------+------------------------------------+
-+canWrite              +bool                                +
-+----------------------+------------------------------------+
-+isFoldable            +bool                                +
-+----------------------+------------------------------------+
-+isNumericComparable   +bool                                +
-+----------------------+------------------------------------+
-+isEnum                +bool                                +
-+----------------------+------------------------------------+
-+canNew                +bool                                +
-+----------------------+------------------------------------+
-+hasNonTrivialCopy     +bool                                +
-+----------------------+------------------------------------+
-+isPolicyType          +bool                                +
-+----------------------+------------------------------------+
-+vectorBaseType        + :ref:`rtti::Type <enum-rtti-Type>` +
-+----------------------+------------------------------------+
-+isFunction            +bool                                +
-+----------------------+------------------------------------+
-+isAutoOrAlias         +bool                                +
-+----------------------+------------------------------------+
-+vectorDim             +int                                 +
-+----------------------+------------------------------------+
-+tupleAlign            +int                                 +
-+----------------------+------------------------------------+
-+canBePlacedInContainer+bool                                +
-+----------------------+------------------------------------+
-+isRef                 +bool                                +
-+----------------------+------------------------------------+
-+variantSize           +int                                 +
-+----------------------+------------------------------------+
-+hasNonTrivialDtor     +bool                                +
-+----------------------+------------------------------------+
-+isLocal               +bool                                +
-+----------------------+------------------------------------+
-+isBitfield            +bool                                +
-+----------------------+------------------------------------+
-+hasNonTrivialCtor     +bool                                +
-+----------------------+------------------------------------+
-+hasClasses            +bool                                +
-+----------------------+------------------------------------+
-+isGoodLambdaType      +bool                                +
-+----------------------+------------------------------------+
-+isTuple               +bool                                +
-+----------------------+------------------------------------+
-+isAutoArrayResolved   +bool                                +
-+----------------------+------------------------------------+
-+isGoodTupleType       +bool                                +
-+----------------------+------------------------------------+
-+isVectorType          +bool                                +
-+----------------------+------------------------------------+
-+isClass               +bool                                +
-+----------------------+------------------------------------+
-+isVoid                +bool                                +
-+----------------------+------------------------------------+
-+canDelete             +bool                                +
-+----------------------+------------------------------------+
-+isSimpleType          +bool                                +
-+----------------------+------------------------------------+
-+isRefType             +bool                                +
-+----------------------+------------------------------------+
-+isAuto                +bool                                +
-+----------------------+------------------------------------+
-+isGoodTableType       +bool                                +
-+----------------------+------------------------------------+
-+needDelete            +bool                                +
-+----------------------+------------------------------------+
-+isArray               +bool                                +
-+----------------------+------------------------------------+
-+isPod                 +bool                                +
-+----------------------+------------------------------------+
-+isHandle              +bool                                +
-+----------------------+------------------------------------+
-+isEnumT               +bool                                +
-+----------------------+------------------------------------+
-+canInitWithZero       +bool                                +
-+----------------------+------------------------------------+
-+canMove               +bool                                +
-+----------------------+------------------------------------+
-+tupleSize             +int                                 +
-+----------------------+------------------------------------+
-+isExprType            +bool                                +
-+----------------------+------------------------------------+
-+canDeletePtr          +bool                                +
-+----------------------+------------------------------------+
-+isAotAlias            +bool                                +
-+----------------------+------------------------------------+
-+isShareable           +bool                                +
-+----------------------+------------------------------------+
-+isIndex               +bool                                +
-+----------------------+------------------------------------+
-+isRange               +bool                                +
-+----------------------+------------------------------------+
-+isGoodBlockType       +bool                                +
-+----------------------+------------------------------------+
-+sizeOf                +int                                 +
-+----------------------+------------------------------------+
-+isInteger             +bool                                +
-+----------------------+------------------------------------+
-+isVecPolicyType       +bool                                +
-+----------------------+------------------------------------+
-+isAlias               +bool                                +
-+----------------------+------------------------------------+
-+isReturnType          +bool                                +
-+----------------------+------------------------------------+
-+baseSizeOf            +int                                 +
-+----------------------+------------------------------------+
-+stride                +int                                 +
-+----------------------+------------------------------------+
-+isString              +bool                                +
-+----------------------+------------------------------------+
-+isGoodFunctionType    +bool                                +
-+----------------------+------------------------------------+
-+isGoodVariantType     +bool                                +
-+----------------------+------------------------------------+
-+canCopy               +bool                                +
-+----------------------+------------------------------------+
-+isNumeric             +bool                                +
-+----------------------+------------------------------------+
-+countOf               +int                                 +
-+----------------------+------------------------------------+
-+variantAlign          +int                                 +
-+----------------------+------------------------------------+
-+isWorkhorseType       +bool                                +
-+----------------------+------------------------------------+
-+isIterator            +bool                                +
-+----------------------+------------------------------------+
-+canClone              +bool                                +
-+----------------------+------------------------------------+
++-------------------------+------------------------------------+
++isPointer                +bool                                +
++-------------------------+------------------------------------+
++isCtorType               +bool                                +
++-------------------------+------------------------------------+
++isFloatOrDouble          +bool                                +
++-------------------------+------------------------------------+
++isVoidPointer            +bool                                +
++-------------------------+------------------------------------+
++isStructure              +bool                                +
++-------------------------+------------------------------------+
++isConst                  +bool                                +
++-------------------------+------------------------------------+
++alignOf                  +int                                 +
++-------------------------+------------------------------------+
++isGoodArrayType          +bool                                +
++-------------------------+------------------------------------+
++rangeBaseType            + :ref:`rtti::Type <enum-rtti-Type>` +
++-------------------------+------------------------------------+
++isVariant                +bool                                +
++-------------------------+------------------------------------+
++isNoHeapType             +bool                                +
++-------------------------+------------------------------------+
++isRawPod                 +bool                                +
++-------------------------+------------------------------------+
++canAot                   +bool                                +
++-------------------------+------------------------------------+
++canWrite                 +bool                                +
++-------------------------+------------------------------------+
++isFoldable               +bool                                +
++-------------------------+------------------------------------+
++isNumericComparable      +bool                                +
++-------------------------+------------------------------------+
++isEnum                   +bool                                +
++-------------------------+------------------------------------+
++canNew                   +bool                                +
++-------------------------+------------------------------------+
++hasNonTrivialCopy        +bool                                +
++-------------------------+------------------------------------+
++isPolicyType             +bool                                +
++-------------------------+------------------------------------+
++vectorBaseType           + :ref:`rtti::Type <enum-rtti-Type>` +
++-------------------------+------------------------------------+
++isFunction               +bool                                +
++-------------------------+------------------------------------+
++isAutoOrAlias            +bool                                +
++-------------------------+------------------------------------+
++vectorDim                +int                                 +
++-------------------------+------------------------------------+
++tupleAlign               +int                                 +
++-------------------------+------------------------------------+
++canBePlacedInContainer   +bool                                +
++-------------------------+------------------------------------+
++isRef                    +bool                                +
++-------------------------+------------------------------------+
++variantSize              +int                                 +
++-------------------------+------------------------------------+
++hasNonTrivialDtor        +bool                                +
++-------------------------+------------------------------------+
++isLocal                  +bool                                +
++-------------------------+------------------------------------+
++isBitfield               +bool                                +
++-------------------------+------------------------------------+
++hasNonTrivialCtor        +bool                                +
++-------------------------+------------------------------------+
++hasClasses               +bool                                +
++-------------------------+------------------------------------+
++isGoodLambdaType         +bool                                +
++-------------------------+------------------------------------+
++isTuple                  +bool                                +
++-------------------------+------------------------------------+
++isAutoArrayResolved      +bool                                +
++-------------------------+------------------------------------+
++isGoodTupleType          +bool                                +
++-------------------------+------------------------------------+
++isVectorType             +bool                                +
++-------------------------+------------------------------------+
++isClass                  +bool                                +
++-------------------------+------------------------------------+
++isVoid                   +bool                                +
++-------------------------+------------------------------------+
++canDelete                +bool                                +
++-------------------------+------------------------------------+
++isSimpleType             +bool                                +
++-------------------------+------------------------------------+
++isUnsignedInteger        +bool                                +
++-------------------------+------------------------------------+
++isRefType                +bool                                +
++-------------------------+------------------------------------+
++isAuto                   +bool                                +
++-------------------------+------------------------------------+
++isGoodTableType          +bool                                +
++-------------------------+------------------------------------+
++needDelete               +bool                                +
++-------------------------+------------------------------------+
++isArray                  +bool                                +
++-------------------------+------------------------------------+
++isPod                    +bool                                +
++-------------------------+------------------------------------+
++isHandle                 +bool                                +
++-------------------------+------------------------------------+
++isUnsignedIntegerOrIntVec+bool                                +
++-------------------------+------------------------------------+
++isSignedInteger          +bool                                +
++-------------------------+------------------------------------+
++isEnumT                  +bool                                +
++-------------------------+------------------------------------+
++canInitWithZero          +bool                                +
++-------------------------+------------------------------------+
++canMove                  +bool                                +
++-------------------------+------------------------------------+
++isBool                   +bool                                +
++-------------------------+------------------------------------+
++tupleSize                +int                                 +
++-------------------------+------------------------------------+
++isExprType               +bool                                +
++-------------------------+------------------------------------+
++canDeletePtr             +bool                                +
++-------------------------+------------------------------------+
++isAotAlias               +bool                                +
++-------------------------+------------------------------------+
++isShareable              +bool                                +
++-------------------------+------------------------------------+
++isIndex                  +bool                                +
++-------------------------+------------------------------------+
++isRange                  +bool                                +
++-------------------------+------------------------------------+
++isGoodBlockType          +bool                                +
++-------------------------+------------------------------------+
++sizeOf                   +int                                 +
++-------------------------+------------------------------------+
++isSignedIntegerOrIntVec  +bool                                +
++-------------------------+------------------------------------+
++isInteger                +bool                                +
++-------------------------+------------------------------------+
++isVecPolicyType          +bool                                +
++-------------------------+------------------------------------+
++isAlias                  +bool                                +
++-------------------------+------------------------------------+
++isReturnType             +bool                                +
++-------------------------+------------------------------------+
++baseSizeOf               +int                                 +
++-------------------------+------------------------------------+
++stride                   +int                                 +
++-------------------------+------------------------------------+
++isString                 +bool                                +
++-------------------------+------------------------------------+
++isGoodFunctionType       +bool                                +
++-------------------------+------------------------------------+
++isGoodVariantType        +bool                                +
++-------------------------+------------------------------------+
++canCopy                  +bool                                +
++-------------------------+------------------------------------+
++isNumeric                +bool                                +
++-------------------------+------------------------------------+
++countOf                  +int                                 +
++-------------------------+------------------------------------+
++variantAlign             +int                                 +
++-------------------------+------------------------------------+
++isWorkhorseType          +bool                                +
++-------------------------+------------------------------------+
++isIterator               +bool                                +
++-------------------------+------------------------------------+
++canClone                 +bool                                +
++-------------------------+------------------------------------+
 
 
 |structure_annotation-ast-TypeDecl|
@@ -1151,9 +1191,11 @@ Function fields are
 
 Function properties are
 
-+------+---------------------------------------------+
-+origin+ :ref:`ast::Function <handle-ast-Function>` ?+
-+------+---------------------------------------------+
++---------+---------------------------------------------+
++origin   + :ref:`ast::Function <handle-ast-Function>` ?+
++---------+---------------------------------------------+
++isGeneric+bool                                         +
++---------+---------------------------------------------+
 
 
 |structure_annotation-ast-Function|
@@ -4244,6 +4286,19 @@ CaptureMacro fields are
 
 |structure_annotation-ast-CaptureMacro|
 
+.. _handle-ast-SimulateMacro:
+
+.. das:attribute:: SimulateMacro
+
+SimulateMacro fields are
+
++----+--------------------------------------------------------+
++name+ :ref:`builtin::das_string <handle-builtin-das_string>` +
++----+--------------------------------------------------------+
+
+
+|structure_annotation-ast-SimulateMacro|
+
 .. _handle-ast-ExprReader:
 
 .. das:attribute:: ExprReader
@@ -4411,6 +4466,27 @@ apply returns bool
 
 
 |method-ast-AstFunctionAnnotation.apply|
+
+.. das:function:: AstFunctionAnnotation.generic_apply(self: AstFunctionAnnotation; func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
+
+generic_apply returns bool
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstFunctionAnnotation <struct-ast-AstFunctionAnnotation>`           +
++--------+--------------------------------------------------------------------------------+
++func    + :ref:`FunctionPtr <alias-FunctionPtr>`                                         +
++--------+--------------------------------------------------------------------------------+
++group   + :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>`                             +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++errors  + :ref:`builtin::das_string <handle-builtin-das_string>`                         +
++--------+--------------------------------------------------------------------------------+
+
+
+|method-ast-AstFunctionAnnotation.generic_apply|
 
 .. das:function:: AstFunctionAnnotation.finish(self: AstFunctionAnnotation; func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList const; progArgs: AnnotationArgumentList const; errors: das_string)
 
@@ -4707,6 +4783,57 @@ patch returns bool
 
 |method-ast-AstStructureAnnotation.complete|
 
+.. das:function:: AstStructureAnnotation.aotPrefix(self: AstStructureAnnotation; st: StructurePtr; args: AnnotationArgumentList const; writer: StringBuilderWriter)
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`       +
++--------+--------------------------------------------------------------------------------+
+
+
+|method-ast-AstStructureAnnotation.aotPrefix|
+
+.. das:function:: AstStructureAnnotation.aotBody(self: AstStructureAnnotation; st: StructurePtr; args: AnnotationArgumentList const; writer: StringBuilderWriter)
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`       +
++--------+--------------------------------------------------------------------------------+
+
+
+|method-ast-AstStructureAnnotation.aotBody|
+
+.. das:function:: AstStructureAnnotation.aotSuffix(self: AstStructureAnnotation; st: StructurePtr; args: AnnotationArgumentList const; writer: StringBuilderWriter)
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++self    + :ref:`ast::AstStructureAnnotation <struct-ast-AstStructureAnnotation>`         +
++--------+--------------------------------------------------------------------------------+
++st      + :ref:`StructurePtr <alias-StructurePtr>`                                       +
++--------+--------------------------------------------------------------------------------+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`       +
++--------+--------------------------------------------------------------------------------+
+
+
+|method-ast-AstStructureAnnotation.aotSuffix|
+
 .. _struct-ast-AstPassMacro:
 
 .. das:attribute:: AstPassMacro
@@ -4875,6 +5002,49 @@ captureExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 
 |method-ast-AstCaptureMacro.captureFunction|
+
+.. _struct-ast-AstSimulateMacro:
+
+.. das:attribute:: AstSimulateMacro
+
+|class-ast-AstSimulateMacro|
+
+it defines as follows
+
+
+.. das:function:: AstSimulateMacro.preSimulate(self: AstSimulateMacro; prog: rtti::Program? const; ctx: rtti::Context? const)
+
+preSimulate returns bool
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstSimulateMacro <struct-ast-AstSimulateMacro>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`rtti::Program <handle-rtti-Program>` ? const         +
++--------+------------------------------------------------------------+
++ctx     + :ref:`rtti::Context <handle-rtti-Context>` ? const         +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstSimulateMacro.preSimulate|
+
+.. das:function:: AstSimulateMacro.simulate(self: AstSimulateMacro; prog: rtti::Program? const; ctx: rtti::Context? const)
+
+simulate returns bool
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstSimulateMacro <struct-ast-AstSimulateMacro>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`rtti::Program <handle-rtti-Program>` ? const         +
++--------+------------------------------------------------------------+
++ctx     + :ref:`rtti::Context <handle-rtti-Context>` ? const         +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstSimulateMacro.simulate|
 
 .. _struct-ast-AstReaderMacro:
 
@@ -8661,6 +8831,21 @@ visitExprContinue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprContinue|
 
+.. das:function:: AstVisitor.canVisitMakeBlockBody(self: AstVisitor; expr: smart_ptr<ast::ExprMakeBlock> const)
+
+canVisitMakeBlockBody returns bool
+
++--------+-----------------------------------------------------------------------+
++argument+argument type                                                          +
++========+=======================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                        +
++--------+-----------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeBlock <handle-ast-ExprMakeBlock>` > const+
++--------+-----------------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.canVisitMakeBlockBody|
+
 .. das:function:: AstVisitor.preVisitExprMakeBlock(self: AstVisitor; expr: smart_ptr<ast::ExprMakeBlock> const)
 
 +--------+-----------------------------------------------------------------------+
@@ -9672,6 +9857,7 @@ Visitor pattern
   *  :ref:`visit_modules (program:smart_ptr\<rtti::Program\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_modules_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l>` 
   *  :ref:`visit (function:smart_ptr\<ast::Function\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l>` 
   *  :ref:`visit (expression:smart_ptr\<ast::Expression\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : smart_ptr\<ast::Expression\> <function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l>` 
+  *  :ref:`visit_finally (expression:smart_ptr\<ast::ExprBlock\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_finally_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l>` 
 
 .. _function-_at_ast_c__c_visit_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
 
@@ -9735,6 +9921,21 @@ visit returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
 
 |function-ast-visit|
 
+.. _function-_at_ast_c__c_visit_finally_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
+
+.. das:function:: visit_finally(expression: smart_ptr<ast::ExprBlock> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
+
++----------+----------------------------------------------------------------------------------+
++argument  +argument type                                                                     +
++==========+==================================================================================+
++expression+smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const implicit          +
++----------+----------------------------------------------------------------------------------+
++adapter   +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` > const implicit+
++----------+----------------------------------------------------------------------------------+
+
+
+|function-ast-visit_finally|
+
 ++++++++++++++++++
 Adapter generation
 ++++++++++++++++++
@@ -9752,7 +9953,10 @@ Adapter generation
   *  :ref:`make_variant_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::VariantMacro\> <function-_at_ast_c__c_make_variant_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>` 
   *  :ref:`make_for_loop_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::ForLoopMacro\> <function-_at_ast_c__c_make_for_loop_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>` 
   *  :ref:`make_capture_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::CaptureMacro\> <function-_at_ast_c__c_make_capture_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>` 
+  *  :ref:`make_simulate_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::SimulateMacro\> <function-_at_ast_c__c_make_simulate_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>` 
   *  :ref:`make_clone_structure (structure:ast::Structure? const implicit) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_make_clone_structure_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?>` 
+  *  :ref:`make_interop_node (ctx:rtti::Context implicit;call:ast::ExprCallFunc? const implicit;context:__context const;at:__lineInfo const) : void? <function-_at_ast_c__c_make_interop_node_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_ExprCallFunc_gr__gr_?_C_c_C_l>` 
+  *  :ref:`make_interop_node (ctx:rtti::Context implicit;builder:ast::ExprStringBuilder? const implicit;context:__context const;at:__lineInfo const) : void? <function-_at_ast_c__c_make_interop_node_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_ExprStringBuilder_gr__gr_?_C_c_C_l>` 
   *  :ref:`make_function_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_function_annotation_Cs_C.>` 
   *  :ref:`make_block_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_block_annotation_Cs_C.>` 
   *  :ref:`make_structure_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::StructureAnnotation\> <function-_at_ast_c__c_make_structure_annotation_Cs_C.>` 
@@ -9766,6 +9970,7 @@ Adapter generation
   *  :ref:`make_variant_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::VariantMacro\> <function-_at_ast_c__c_make_variant_macro_Cs_C.>` 
   *  :ref:`make_for_loop_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::ForLoopMacro\> <function-_at_ast_c__c_make_for_loop_macro_Cs_C.>` 
   *  :ref:`make_capture_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::CaptureMacro\> <function-_at_ast_c__c_make_capture_macro_Cs_C.>` 
+  *  :ref:`make_simulate_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::SimulateMacro\> <function-_at_ast_c__c_make_simulate_macro_Cs_C.>` 
 
 .. _function-_at_ast_c__c_make_visitor_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
 
@@ -10010,6 +10215,25 @@ make_capture_macro returns smart_ptr< :ref:`ast::CaptureMacro <handle-ast-Captur
 
 |function-ast-make_capture_macro|
 
+.. _function-_at_ast_c__c_make_simulate_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+
+.. das:function:: make_simulate_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+
+make_simulate_macro returns smart_ptr< :ref:`ast::SimulateMacro <handle-ast-SimulateMacro>` >
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++name    +string const implicit                                                   +
++--------+------------------------------------------------------------------------+
++class   +void? const implicit                                                    +
++--------+------------------------------------------------------------------------+
++info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-make_simulate_macro|
+
 .. _function-_at_ast_c__c_make_clone_structure_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?:
 
 .. das:function:: make_clone_structure(structure: ast::Structure? const implicit)
@@ -10024,6 +10248,40 @@ make_clone_structure returns smart_ptr< :ref:`ast::Function <handle-ast-Function
 
 
 |function-ast-make_clone_structure|
+
+.. _function-_at_ast_c__c_make_interop_node_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_ExprCallFunc_gr__gr_?_C_c_C_l:
+
+.. das:function:: make_interop_node(ctx: Context implicit; call: ast::ExprCallFunc? const implicit)
+
+make_interop_node returns void?
+
++--------+--------------------------------------------------------------------+
++argument+argument type                                                       +
++========+====================================================================+
++ctx     + :ref:`rtti::Context <handle-rtti-Context>`  implicit               +
++--------+--------------------------------------------------------------------+
++call    + :ref:`ast::ExprCallFunc <handle-ast-ExprCallFunc>` ? const implicit+
++--------+--------------------------------------------------------------------+
+
+
+|function-ast-make_interop_node|
+
+.. _function-_at_ast_c__c_make_interop_node_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_ExprStringBuilder_gr__gr_?_C_c_C_l:
+
+.. das:function:: make_interop_node(ctx: Context implicit; builder: ast::ExprStringBuilder? const implicit)
+
+make_interop_node returns void?
+
++--------+------------------------------------------------------------------------------+
++argument+argument type                                                                 +
++========+==============================================================================+
++ctx     + :ref:`rtti::Context <handle-rtti-Context>`  implicit                         +
++--------+------------------------------------------------------------------------------+
++builder + :ref:`ast::ExprStringBuilder <handle-ast-ExprStringBuilder>` ? const implicit+
++--------+------------------------------------------------------------------------------+
+
+
+|function-ast-make_interop_node|
 
 .. _function-_at_ast_c__c_make_function_annotation_Cs_C.:
 
@@ -10244,6 +10502,23 @@ make_capture_macro returns  :ref:`CaptureMacroPtr <alias-CaptureMacroPtr>`
 
 |function-ast-make_capture_macro|
 
+.. _function-_at_ast_c__c_make_simulate_macro_Cs_C.:
+
+.. das:function:: make_simulate_macro(name: string const; someClassPtr: auto const)
+
+make_simulate_macro returns  :ref:`SimulateMacroPtr <alias-SimulateMacroPtr>` 
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-make_simulate_macro|
+
 +++++++++++++++++++
 Adapter application
 +++++++++++++++++++
@@ -10255,6 +10530,7 @@ Adapter application
   *  :ref:`add_block_annotation (block:smart_ptr\<ast::ExprBlock\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c>` 
   *  :ref:`add_structure_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::StructureAnnotation\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c>` 
   *  :ref:`add_structure_annotation (structure:smart_ptr\<ast::Structure\> const implicit;annotation:smart_ptr\<ast::StructureAnnotation\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c>` 
+  *  :ref:`add_structure_annotation (structure:smart_ptr\<ast::Structure\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c>` 
   *  :ref:`add_enumeration_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::EnumerationAnnotation\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_enumeration_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_EnumerationAnnotation_gr__gr_?W_C_c>` 
   *  :ref:`add_infer_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_dirty_infer_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_dirty_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>` 
@@ -10268,6 +10544,7 @@ Adapter application
   *  :ref:`add_variant_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::VariantMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_for_loop_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::ForLoopMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_capture_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::CaptureMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_capture_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CaptureMacro_gr__gr_?W_C_c>` 
+  *  :ref:`add_simulate_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::SimulateMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_simulate_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_SimulateMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_new_block_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_block_annotation_Cs_C.>` 
   *  :ref:`add_new_function_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_function_annotation_Cs_C.>` 
   *  :ref:`add_new_contract_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_contract_annotation_Cs_C.>` 
@@ -10276,6 +10553,7 @@ Adapter application
   *  :ref:`add_new_variant_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_variant_macro_Cs_C.>` 
   *  :ref:`add_new_for_loop_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_for_loop_macro_Cs_C.>` 
   *  :ref:`add_new_capture_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_capture_macro_Cs_C.>` 
+  *  :ref:`add_new_simulate_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_simulate_macro_Cs_C.>` 
   *  :ref:`add_new_reader_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_reader_macro_Cs_C.>` 
   *  :ref:`add_new_comment_reader (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_comment_reader_Cs_C.>` 
   *  :ref:`add_new_call_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_call_macro_Cs_C.>` 
@@ -10387,6 +10665,21 @@ Adapter application
 +----------+---------------------------------------------------------------------------------------+
 +annotation+smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` >& implicit+
 +----------+---------------------------------------------------------------------------------------+
+
+
+|function-ast-add_structure_annotation|
+
+.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c:
+
+.. das:function:: add_structure_annotation(structure: smart_ptr<ast::Structure> const implicit; annotation: smart_ptr<rtti::AnnotationDeclaration>& implicit)
+
++----------+---------------------------------------------------------------------------------------------+
++argument  +argument type                                                                                +
++==========+=============================================================================================+
++structure +smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` > const implicit                     +
++----------+---------------------------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`rtti::AnnotationDeclaration <handle-rtti-AnnotationDeclaration>` >& implicit+
++----------+---------------------------------------------------------------------------------------------+
 
 
 |function-ast-add_structure_annotation|
@@ -10586,6 +10879,21 @@ Adapter application
 
 |function-ast-add_capture_macro|
 
+.. _function-_at_ast_c__c_add_simulate_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_SimulateMacro_gr__gr_?W_C_c:
+
+.. das:function:: add_simulate_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::SimulateMacro>& implicit)
+
++----------+---------------------------------------------------------------------------+
++argument  +argument type                                                              +
++==========+===========================================================================+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                 +
++----------+---------------------------------------------------------------------------+
++annotation+smart_ptr< :ref:`ast::SimulateMacro <handle-ast-SimulateMacro>` >& implicit+
++----------+---------------------------------------------------------------------------+
+
+
+|function-ast-add_simulate_macro|
+
 .. _function-_at_ast_c__c_add_new_block_annotation_Cs_C.:
 
 .. das:function:: add_new_block_annotation(name: string const; someClassPtr: auto const)
@@ -10721,6 +11029,23 @@ add_new_capture_macro returns auto
 
 
 |function-ast-add_new_capture_macro|
+
+.. _function-_at_ast_c__c_add_new_simulate_macro_Cs_C.:
+
+.. das:function:: add_new_simulate_macro(name: string const; someClassPtr: auto const)
+
+add_new_simulate_macro returns auto
+
++------------+-------------+
++argument    +argument type+
++============+=============+
++name        +string const +
++------------+-------------+
++someClassPtr+auto const   +
++------------+-------------+
+
+
+|function-ast-add_new_simulate_macro|
 
 .. _function-_at_ast_c__c_add_new_reader_macro_Cs_C.:
 
@@ -11033,17 +11358,17 @@ compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 Textual descriptions of the objects
 +++++++++++++++++++++++++++++++++++
 
-  *  :ref:`describe_typedecl (type:smart_ptr\<ast::TypeDecl\> const implicit;extra:bool const;contracts:bool const;module:bool const;context:__context const) : string <function-_at_ast_c__c_describe_typedecl_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_C_c>` 
-  *  :ref:`describe_typedecl_cpp (type:smart_ptr\<ast::TypeDecl\> const implicit;substitueRef:bool const;skipRef:bool const;skipConst:bool const;redundantConst:bool const;context:__context const) : string <function-_at_ast_c__c_describe_typedecl_cpp_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_Cb_C_c>` 
-  *  :ref:`describe_expression (expression:smart_ptr\<ast::Expression\> const implicit;context:__context const) : string <function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_C_c>` 
-  *  :ref:`describe_function (function:smart_ptr\<ast::Function\> const implicit;context:__context const) : string <function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c>` 
+  *  :ref:`describe_typedecl (type:smart_ptr\<ast::TypeDecl\> const implicit;extra:bool const;contracts:bool const;module:bool const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_typedecl_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_C_c_C_l>` 
+  *  :ref:`describe_typedecl_cpp (type:smart_ptr\<ast::TypeDecl\> const implicit;substitueRef:bool const;skipRef:bool const;skipConst:bool const;redundantConst:bool const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_typedecl_cpp_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_Cb_C_c_C_l>` 
+  *  :ref:`describe_expression (expression:smart_ptr\<ast::Expression\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_C_c_C_l>` 
+  *  :ref:`describe_function (function:smart_ptr\<ast::Function\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c_C_l>` 
   *  :ref:`das_to_string (type:rtti::Type const;context:__context const) : string <function-_at_ast_c__c_das_to_string_CE_ls_rtti_c__c_Type_gr__C_c>` 
   *  :ref:`describe (decl:smart_ptr\<ast::TypeDecl\> const;extra:bool const;contracts:bool const;modules:bool const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb>` 
   *  :ref:`describe_cpp (decl:smart_ptr\<ast::TypeDecl\> const;substitureRef:bool const;skipRef:bool const;skipConst:bool const;redundantConst:bool const) : auto <function-_at_ast_c__c_describe_cpp_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_Cb>` 
   *  :ref:`describe (expr:smart_ptr\<ast::Expression\> const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
   *  :ref:`describe (expr:smart_ptr\<ast::Function\> const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Function_gr__gr_?M>` 
 
-.. _function-_at_ast_c__c_describe_typedecl_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_C_c:
+.. _function-_at_ast_c__c_describe_typedecl_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_C_c_C_l:
 
 .. das:function:: describe_typedecl(type: smart_ptr<ast::TypeDecl> const implicit; extra: bool const; contracts: bool const; module: bool const)
 
@@ -11064,7 +11389,7 @@ describe_typedecl returns string
 
 |function-ast-describe_typedecl|
 
-.. _function-_at_ast_c__c_describe_typedecl_cpp_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_Cb_C_c:
+.. _function-_at_ast_c__c_describe_typedecl_cpp_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_Cb_C_c_C_l:
 
 .. das:function:: describe_typedecl_cpp(type: smart_ptr<ast::TypeDecl> const implicit; substitueRef: bool const; skipRef: bool const; skipConst: bool const; redundantConst: bool const)
 
@@ -11087,7 +11412,7 @@ describe_typedecl_cpp returns string
 
 |function-ast-describe_typedecl_cpp|
 
-.. _function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_C_c:
+.. _function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_C_c_C_l:
 
 .. das:function:: describe_expression(expression: smart_ptr<ast::Expression> const implicit)
 
@@ -11102,7 +11427,7 @@ describe_expression returns string
 
 |function-ast-describe_expression|
 
-.. _function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c:
+.. _function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c_C_l:
 
 .. das:function:: describe_function(function: smart_ptr<ast::Function> const implicit)
 
@@ -11213,8 +11538,9 @@ Searching
   *  :ref:`find_module_via_rtti (program:smart_ptr\<rtti::Program\> const implicit;name:string const implicit;context:__context const;lineinfo:__lineInfo const) : rtti::Module? <function-_at_ast_c__c_find_module_via_rtti_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CIs_C_c_C_l>` 
   *  :ref:`find_module_function_via_rtti (module:rtti::Module? const implicit;function:function\<\> const;context:__context const;lineinfo:__lineInfo const) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_find_module_function_via_rtti_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C_at__at__C_c_C_l>` 
   *  :ref:`find_variable (module:rtti::Module? const implicit;variable:string const implicit) : smart_ptr\<ast::Variable\> <function-_at_ast_c__c_find_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs>` 
-  *  :ref:`find_bitfield_name (bit:smart_ptr\<ast::TypeDecl\> const implicit;value:bitfield const;context:__context const) : string <function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ct_C_c>` 
+  *  :ref:`find_bitfield_name (bit:smart_ptr\<ast::TypeDecl\> const implicit;value:bitfield const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ct_C_c_C_l>` 
   *  :ref:`find_enum_value (enum:smart_ptr\<ast::Enumeration\> const implicit;value:string const implicit) : int64 <function-_at_ast_c__c_find_enum_value_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_CIs>` 
+  *  :ref:`find_structure_field (structPtr:ast::Structure? const implicit;field:string const implicit;context:__context const;lineinfo:__lineInfo const) : ast::FieldDeclaration? <function-_at_ast_c__c_find_structure_field_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?_CIs_C_c_C_l>` 
   *  :ref:`find_unique_structure (program:smart_ptr\<rtti::Program\> const implicit;name:string const implicit;context:__context const;at:__lineInfo const) : ast::Structure? <function-_at_ast_c__c_find_unique_structure_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CIs_C_c_C_l>` 
   *  :ref:`find_module (prog:smart_ptr\<rtti::Program\> const;name:string const) : rtti::Module? <function-_at_ast_c__c_find_module_C1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_Cs>` 
   *  :ref:`find_module (name:string const) : rtti::Module? <function-_at_ast_c__c_find_module_Cs>` 
@@ -11271,7 +11597,7 @@ find_variable returns smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >
 
 |function-ast-find_variable|
 
-.. _function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ct_C_c:
+.. _function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ct_C_c_C_l:
 
 .. das:function:: find_bitfield_name(bit: smart_ptr<ast::TypeDecl> const implicit; value: bitfield const)
 
@@ -11304,6 +11630,23 @@ find_enum_value returns int64
 
 
 |function-ast-find_enum_value|
+
+.. _function-_at_ast_c__c_find_structure_field_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?_CIs_C_c_C_l:
+
+.. das:function:: find_structure_field(structPtr: ast::Structure? const implicit; field: string const implicit)
+
+find_structure_field returns  :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>` ?
+
++---------+--------------------------------------------------------------+
++argument +argument type                                                 +
++=========+==============================================================+
++structPtr+ :ref:`ast::Structure <handle-ast-Structure>` ? const implicit+
++---------+--------------------------------------------------------------+
++field    +string const implicit                                         +
++---------+--------------------------------------------------------------+
+
+
+|function-ast-find_structure_field|
 
 .. _function-_at_ast_c__c_find_unique_structure_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CIs_C_c_C_l:
 
@@ -11373,6 +11716,7 @@ find_compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 Iterating
 +++++++++
 
+  *  :ref:`for_each_module (program:rtti::Program? const implicit;block:block\<(rtti::Module?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`for_each_function (module:rtti::Module? const implicit;name:string const implicit;block:block\<(smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`for_each_generic (module:rtti::Module? const implicit;name:string const implicit;block:block\<(smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`any_table_foreach (table:void? const implicit;keyStride:int const;valueStride:int const;block:block\<(void?;void?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_any_table_foreach_CI?_Ci_Ci_CI0_ls_?;?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
@@ -11388,6 +11732,21 @@ Iterating
   *  :ref:`for_each_for_loop_macro (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::ForLoopMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`for_each_typeinfo_macro (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::TypeInfoMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`for_each_field (annotation:rtti::BasicStructureAnnotation const implicit;block:block\<(string;string;smart_ptr\<ast::TypeDecl\>;uint):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W;u_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+
+.. _function-_at_ast_c__c_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: for_each_module(program: rtti::Program? const implicit; block: block<(rtti::Module?):void> const implicit)
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++program + :ref:`rtti::Program <handle-rtti-Program>` ? const implicit            +
++--------+------------------------------------------------------------------------+
++block   +block<( :ref:`rtti::Module <handle-rtti-Module>` ?):void> const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-for_each_module|
 
 .. _function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
@@ -11714,8 +12073,10 @@ Mangled name
 ++++++++++++
 
   *  :ref:`parse_mangled_name (txt:string const implicit;lib:rtti::ModuleGroup implicit;thisModule:rtti::Module? const implicit;context:__context const;line:__lineInfo const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_parse_mangled_name_CIs_IH_ls_rtti_c__c_ModuleGroup_gr__CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C_c_C_l>` 
-  *  :ref:`get_mangled_name (function:smart_ptr\<ast::Function\> const implicit;context:__context const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c>` 
-  *  :ref:`get_mangled_name (type:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_C_c>` 
+  *  :ref:`get_mangled_name (function:smart_ptr\<ast::Function\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c_C_l>` 
+  *  :ref:`get_mangled_name (type:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_C_c_C_l>` 
+  *  :ref:`get_mangled_name (variable:smart_ptr\<ast::Variable\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Variable_gr__gr_?M_C_c_C_l>` 
+  *  :ref:`get_mangled_name (variable:smart_ptr\<ast::ExprBlock\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_C_c_C_l>` 
 
 .. _function-_at_ast_c__c_parse_mangled_name_CIs_IH_ls_rtti_c__c_ModuleGroup_gr__CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C_c_C_l:
 
@@ -11736,7 +12097,7 @@ parse_mangled_name returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>`
 
 |function-ast-parse_mangled_name|
 
-.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c:
+.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c_C_l:
 
 .. das:function:: get_mangled_name(function: smart_ptr<ast::Function> const implicit)
 
@@ -11751,7 +12112,7 @@ get_mangled_name returns string
 
 |function-ast-get_mangled_name|
 
-.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_C_c:
+.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_C_c_C_l:
 
 .. das:function:: get_mangled_name(type: smart_ptr<ast::TypeDecl> const implicit)
 
@@ -11766,16 +12127,46 @@ get_mangled_name returns string
 
 |function-ast-get_mangled_name|
 
+.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Variable_gr__gr_?M_C_c_C_l:
+
+.. das:function:: get_mangled_name(variable: smart_ptr<ast::Variable> const implicit)
+
+get_mangled_name returns string
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++variable+smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` > const implicit+
++--------+----------------------------------------------------------------------+
+
+
+|function-ast-get_mangled_name|
+
+.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_C_c_C_l:
+
+.. das:function:: get_mangled_name(variable: smart_ptr<ast::ExprBlock> const implicit)
+
+get_mangled_name returns string
+
++--------+------------------------------------------------------------------------+
++argument+argument type                                                           +
++========+========================================================================+
++variable+smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` > const implicit+
++--------+------------------------------------------------------------------------+
+
+
+|function-ast-get_mangled_name|
+
 +++++++++++++++
 Size and offset
 +++++++++++++++
 
-  *  :ref:`get_variant_field_offset (variant:smart_ptr\<ast::TypeDecl\> const implicit;index:int const) : int <function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci>` 
-  *  :ref:`get_tuple_field_offset (typle:smart_ptr\<ast::TypeDecl\> const implicit;index:int const) : int <function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci>` 
+  *  :ref:`get_variant_field_offset (variant:smart_ptr\<ast::TypeDecl\> const implicit;index:int const;context:__context const;at:__lineInfo const) : int <function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci_C_c_C_l>` 
+  *  :ref:`get_tuple_field_offset (typle:smart_ptr\<ast::TypeDecl\> const implicit;index:int const;context:__context const;at:__lineInfo const) : int <function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci_C_c_C_l>` 
   *  :ref:`any_array_size (array:void? const implicit) : int <function-_at_ast_c__c_any_array_size_CI?>` 
   *  :ref:`any_table_size (table:void? const implicit) : int <function-_at_ast_c__c_any_table_size_CI?>` 
 
-.. _function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci:
+.. _function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci_C_c_C_l:
 
 .. das:function:: get_variant_field_offset(variant: smart_ptr<ast::TypeDecl> const implicit; index: int const)
 
@@ -11792,7 +12183,7 @@ get_variant_field_offset returns int
 
 |function-ast-get_variant_field_offset|
 
-.. _function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci:
+.. _function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci_C_c_C_l:
 
 .. das:function:: get_tuple_field_offset(typle: smart_ptr<ast::TypeDecl> const implicit; index: int const)
 
@@ -11849,6 +12240,8 @@ Properties
   *  :ref:`is_visible_directly (from_module:rtti::Module? const implicit;which_module:rtti::Module? const implicit) : bool <function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?>` 
   *  :ref:`is_expr_like_call (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
   *  :ref:`is_expr_const (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
+  *  :ref:`is_terminator_expression (expr:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_terminator_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
+  *  :ref:`is_terminator_or_break_expression (expr:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_terminator_or_break_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
 
 .. _function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb:
 
@@ -11955,6 +12348,36 @@ is_expr_const returns bool
 
 
 |function-ast-is_expr_const|
+
+.. _function-_at_ast_c__c_is_terminator_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+
+.. das:function:: is_terminator_expression(expr: smart_ptr<ast::Expression> const& implicit)
+
+is_terminator_expression returns bool
+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
++--------+---------------------------------------------------------------------------+
+
+
+|function-ast-is_terminator_expression|
+
+.. _function-_at_ast_c__c_is_terminator_or_break_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+
+.. das:function:: is_terminator_or_break_expression(expr: smart_ptr<ast::Expression> const& implicit)
+
+is_terminator_or_break_expression returns bool
+
++--------+---------------------------------------------------------------------------+
++argument+argument type                                                              +
++========+===========================================================================+
++expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
++--------+---------------------------------------------------------------------------+
+
+
+|function-ast-is_terminator_or_break_expression|
 
 ++++++++++++++++++
 Pointer conversion
@@ -12113,9 +12536,48 @@ Location and context
 
 |function-ast-get_ast_context|
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++
+Use queries
++++++++++++
+
+  *  :ref:`get_use_global_variables (func:smart_ptr\<ast::Function\> const implicit;block:block\<(smart_ptr\<ast::Variable\>):void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_get_use_global_variables_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`get_use_functions (func:smart_ptr\<ast::Function\> const implicit;block:block\<(smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_get_use_functions_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+
+.. _function-_at_ast_c__c_get_use_global_variables_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: get_use_global_variables(func: smart_ptr<ast::Function> const implicit; block: block<(smart_ptr<ast::Variable>):void> const implicit)
+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++func    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit              +
++--------+------------------------------------------------------------------------------------+
++block   +block<(smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------+
+
+
+|function-ast-get_use_global_variables|
+
+.. _function-_at_ast_c__c_get_use_functions_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: get_use_functions(func: smart_ptr<ast::Function> const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++func    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > const implicit              +
++--------+------------------------------------------------------------------------------------+
++block   +block<(smart_ptr< :ref:`ast::Function <handle-ast-Function>` >):void> const implicit+
++--------+------------------------------------------------------------------------------------+
+
+
+|function-ast-get_use_functions|
+
++++++++
+Removal
++++++++
+
+  *  :ref:`remove_structure (module:rtti::Module? const implicit;structure:smart_ptr\<ast::Structure\>& implicit) : bool <function-_at_ast_c__c_remove_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Structure_gr__gr_?W>` 
 
 .. _function-_at_ast_c__c_remove_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Structure_gr__gr_?W:
 

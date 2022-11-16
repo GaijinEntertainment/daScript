@@ -39,3 +39,7 @@
 .. |function-jobque-notify_and_release| replace:: Notify channel or job status that entry is completed (decrease entry count) and decrease reference count of the job status or channel.
     Object is delete when reference count reaches 0.
 
+.. |function-jobque-channel_create| replace:: Creates channel.
+
+.. |function-jobque-channel_remove| replace:: Destroys channel.
+

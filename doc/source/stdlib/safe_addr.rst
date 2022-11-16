@@ -62,4 +62,41 @@ safe_addr returns T? const#
 
 returns temporary pointer to the given expression
 
+++++++++++++++++++
+Temporary pointers
+++++++++++++++++++
+
+  *  :ref:`temp_ptr (x:auto(T)? const implicit =const) : T? const# <function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr_?>` 
+  *  :ref:`temp_ptr (x:auto(T)? implicit =const -const) : T?# <function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr_?>` 
+
+.. _function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr_?:
+
+.. das:function:: temp_ptr(x: auto(T)? const implicit =const)
+
+temp_ptr returns T? const#
+
++--------+------------------------+
++argument+argument type           +
++========+========================+
++x       +auto(T)? const implicit!+
++--------+------------------------+
+
+
+returns temporary pointer from a given pointer
+
+.. _function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr_?:
+
+.. das:function:: temp_ptr(x: auto(T)? implicit =const)
+
+temp_ptr returns T?#
+
++--------+------------------+
++argument+argument type     +
++========+==================+
++x       +auto(T)? implicit!+
++--------+------------------+
+
+
+returns temporary pointer from a given pointer
+
 

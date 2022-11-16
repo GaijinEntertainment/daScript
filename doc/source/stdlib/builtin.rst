@@ -143,6 +143,24 @@ Constants
 
 |variable-builtin-VEC_SEP|
 
+.. _global-builtin-SIZE_OF_PROLOGUE:
+
+.. das:attribute:: SIZE_OF_PROLOGUE = 0x20
+
+|variable-builtin-SIZE_OF_PROLOGUE|
+
+.. _global-builtin-CONTEXT_OFFSET_OF_EVAL_TOP:
+
+.. das:attribute:: CONTEXT_OFFSET_OF_EVAL_TOP = 0x90
+
+|variable-builtin-CONTEXT_OFFSET_OF_EVAL_TOP|
+
+.. _global-builtin-CONTEXT_OFFSET_OF_GLOBALS:
+
+.. das:attribute:: CONTEXT_OFFSET_OF_GLOBALS = 0x40
+
+|variable-builtin-CONTEXT_OFFSET_OF_GLOBALS|
+
 .. _global-builtin-print_flags_debugger:
 
 .. das:attribute:: print_flags_debugger = bitfield(0x1f)
@@ -177,6 +195,12 @@ Function annotations
 
 |function_annotation-builtin-macro_function|
 
+.. _handle-builtin-jit:
+
+.. das:attribute:: jit
+
+|function_annotation-builtin-jit|
+
 .. _handle-builtin-export:
 
 .. das:attribute:: export
@@ -207,6 +231,12 @@ Function annotations
 
 |function_annotation-builtin-unsafe_operation|
 
+.. _handle-builtin-unsafe_outside_of_for:
+
+.. das:attribute:: unsafe_outside_of_for
+
+|function_annotation-builtin-unsafe_outside_of_for|
+
 .. _handle-builtin-no_aot:
 
 .. das:attribute:: no_aot
@@ -236,6 +266,12 @@ Function annotations
 .. das:attribute:: unsafe_deref
 
 |function_annotation-builtin-unsafe_deref|
+
+.. _handle-builtin-skip_lock_check:
+
+.. das:attribute:: skip_lock_check
+
+|function_annotation-builtin-skip_lock_check|
 
 .. _handle-builtin-unused_argument:
 
@@ -383,6 +419,12 @@ Structure macros
 
 |structure_macro-builtin-macro_interface|
 
+.. _handle-builtin-skip_field_lock_check:
+
+.. das:attribute:: skip_field_lock_check
+
+|structure_macro-builtin-skip_field_lock_check|
+
 .. _handle-builtin-cpp_layout:
 
 .. das:attribute:: cpp_layout
@@ -403,7 +445,6 @@ Containers
   *  :ref:`length (array:array const implicit) : int <function-_at__builtin__c__c_length_CIA>` 
   *  :ref:`capacity (array:array const implicit) : int <function-_at__builtin__c__c_capacity_CIA>` 
   *  :ref:`empty (iterator:iterator const implicit) : bool <function-_at__builtin__c__c_empty_CIG>` 
-  *  :ref:`clear (table:table implicit;context:__context const) : void <function-_at__builtin__c__c_clear_IT_C_c>` 
   *  :ref:`length (table:table const implicit) : int <function-_at__builtin__c__c_length_CIT>` 
   *  :ref:`capacity (table:table const implicit) : int <function-_at__builtin__c__c_capacity_CIT>` 
   *  :ref:`resize (Arr:array\<auto(numT)\> -const;newSize:int const) : auto <function-_at__builtin__c__c_resize_1_ls_Y_ls_numT_gr_._gr_A_Ci>` 
@@ -444,6 +485,7 @@ Containers
   *  :ref:`find_for_edit (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const implicit) : valT? <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L>` 
   *  :ref:`find_for_edit (Tab:table\<auto(keyT);void\> -const;at:keyT const implicit) : void? <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L>` 
   *  :ref:`erase (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const implicit) : bool <function-_at__builtin__c__c_erase_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L>` 
+  *  :ref:`insert (Tab:table\<auto(keyT);void\> -const;at:keyT const implicit) : auto <function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L>` 
   *  :ref:`key_exists (Tab:table\<auto(keyT);auto(valT)\> const;at:keyT const implicit) : bool <function-_at__builtin__c__c_key_exists_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L>` 
   *  :ref:`keys (a:table\<auto(keyT);auto(valT)\> const implicit) : iterator\<keyT const&\> <function-_at__builtin__c__c_keys_CI1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T>` 
   *  :ref:`values (a:table\<auto(keyT);void\> const implicit =const) : auto <function-_at__builtin__c__c_values_CI_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T>` 
@@ -488,6 +530,8 @@ Containers
   *  :ref:`subarray (a:auto(TT) const[-1];r:urange const) : auto <function-_at__builtin__c__c_subarray_C[-1]Y_ls_TT_gr_._Cz>` 
   *  :ref:`subarray (a:array\<auto(TT)\> const;r:range const) : auto <function-_at__builtin__c__c_subarray_C1_ls_Y_ls_TT_gr_._gr_A_Cr>` 
   *  :ref:`subarray (a:array\<auto(TT)\> const;r:urange const) : auto <function-_at__builtin__c__c_subarray_C1_ls_Y_ls_TT_gr_._gr_A_Cz>` 
+  *  :ref:`move_to_ref (a:auto& -const;b:auto -const) : auto <function-_at__builtin__c__c_move_to_ref_&._.>` 
+  *  :ref:`clear (t:table\<auto(KT);auto(VT)\> -const) : auto <function-_at__builtin__c__c_clear_1_ls_Y_ls_KT_gr_._gr_2_ls_Y_ls_VT_gr_._gr_T>` 
 
 .. _function-_at__builtin__c__c_clear_IA_C_c:
 
@@ -546,19 +590,6 @@ empty returns bool
 
 
 |function-builtin-empty|
-
-.. _function-_at__builtin__c__c_clear_IT_C_c:
-
-.. das:function:: clear(table: table implicit)
-
-+--------+--------------+
-+argument+argument type +
-+========+==============+
-+table   +table implicit+
-+--------+--------------+
-
-
-|function-builtin-clear|
 
 .. _function-_at__builtin__c__c_length_CIT:
 
@@ -1256,6 +1287,23 @@ erase returns bool
 
 |function-builtin-erase|
 
+.. _function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L:
+
+.. das:function:: insert(Tab: table<auto(keyT);void>; at: keyT const implicit)
+
+insert returns auto
+
++--------+----------------------+
++argument+argument type         +
++========+======================+
++Tab     +table<auto(keyT);void>+
++--------+----------------------+
++at      +keyT const implicit   +
++--------+----------------------+
+
+
+|function-builtin-insert|
+
 .. _function-_at__builtin__c__c_key_exists_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L:
 
 .. das:function:: key_exists(Tab: table<auto(keyT);auto(valT)> const; at: keyT const implicit)
@@ -1450,9 +1498,6 @@ each returns iterator<int>
 
 each returns iterator<int>
 
-.. warning:: 
-  This is unsafe operation.
-
 +--------+-------------+
 +argument+argument type+
 +========+=============+
@@ -1468,9 +1513,6 @@ each returns iterator<int>
 
 each returns iterator<TT&>
 
-.. warning:: 
-  This is unsafe operation.
-
 +--------+------------------+
 +argument+argument type     +
 +========+==================+
@@ -1485,9 +1527,6 @@ each returns iterator<TT&>
 .. das:function:: each(a: array<auto(TT)> const)
 
 each returns iterator<TT&>
-
-.. warning:: 
-  This is unsafe operation.
 
 +--------+---------------------+
 +argument+argument type        +
@@ -1963,6 +2002,38 @@ subarray returns auto
 
 |function-builtin-subarray|
 
+.. _function-_at__builtin__c__c_move_to_ref_&._.:
+
+.. das:function:: move_to_ref(a: auto&; b: auto)
+
+move_to_ref returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto&        +
++--------+-------------+
++b       +auto         +
++--------+-------------+
+
+
+|function-builtin-move_to_ref|
+
+.. _function-_at__builtin__c__c_clear_1_ls_Y_ls_KT_gr_._gr_2_ls_Y_ls_VT_gr_._gr_T:
+
+.. das:function:: clear(t: table<auto(KT);auto(VT)>)
+
+clear returns auto
+
++--------+------------------------+
++argument+argument type           +
++========+========================+
++t       +table<auto(KT);auto(VT)>+
++--------+------------------------+
+
+
+|function-builtin-clear|
+
 ++++++++++++++++++++++++
 das::string manipulation
 ++++++++++++++++++++++++
@@ -2174,6 +2245,7 @@ Smart ptr infrastructure
   *  :ref:`smart_ptr_use_count (ptr:smart_ptr\<void\> const implicit) : uint <function-_at__builtin__c__c_smart_ptr_use_count_CI1_ls_v_gr_?M>` 
   *  :ref:`get_ptr (src:smart_ptr\<auto(TT)\> const) : TT? <function-_at__builtin__c__c_get_ptr_C1_ls_Y_ls_TT_gr_._gr_?M>` 
   *  :ref:`get_const_ptr (src:smart_ptr\<auto(TT)\> const) : TT? const <function-_at__builtin__c__c_get_const_ptr_C1_ls_Y_ls_TT_gr_._gr_?M>` 
+  *  :ref:`add_ptr_ref (src:smart_ptr\<auto(TT)\> const) : smart_ptr\<TT\> <function-_at__builtin__c__c_add_ptr_ref_C1_ls_Y_ls_TT_gr_._gr_?M>` 
 
 .. _function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI?:
 
@@ -2250,6 +2322,21 @@ get_const_ptr returns TT? const
 
 |function-builtin-get_const_ptr|
 
+.. _function-_at__builtin__c__c_add_ptr_ref_C1_ls_Y_ls_TT_gr_._gr_?M:
+
+.. das:function:: add_ptr_ref(src: smart_ptr<auto(TT)> const)
+
+add_ptr_ref returns smart_ptr<TT>
+
++--------+-------------------------+
++argument+argument type            +
++========+=========================+
++src     +smart_ptr<auto(TT)> const+
++--------+-------------------------+
+
+
+|function-builtin-add_ptr_ref|
+
 ++++++++++++++++++++
 Macro infrastructure
 ++++++++++++++++++++
@@ -2257,6 +2344,7 @@ Macro infrastructure
   *  :ref:`is_compiling (context:__context const) : bool <function-_at__builtin__c__c_is_compiling_C_c>` 
   *  :ref:`is_compiling_macros (context:__context const) : bool <function-_at__builtin__c__c_is_compiling_macros_C_c>` 
   *  :ref:`is_compiling_macros_in_module (name:string const implicit;context:__context const) : bool <function-_at__builtin__c__c_is_compiling_macros_in_module_CIs_C_c>` 
+  *  :ref:`is_in_completion () : bool <function-_at__builtin__c__c_is_in_completion>` 
 
 .. _function-_at__builtin__c__c_is_compiling_C_c:
 
@@ -2288,6 +2376,14 @@ is_compiling_macros_in_module returns bool
 
 
 |function-builtin-is_compiling_macros_in_module|
+
+.. _function-_at__builtin__c__c_is_in_completion:
+
+.. das:function:: is_in_completion()
+
+is_in_completion returns bool
+
+|function-builtin-is_in_completion|
 
 ++++++++
 Profiler
@@ -2774,82 +2870,13 @@ get_time_usec returns int
 
 |function-builtin-get_time_usec|
 
-++++++++++
-Algorithms
-++++++++++
-
-  *  :ref:`iter_range (foo:auto const) : auto <function-_at__builtin__c__c_iter_range_C.>` 
-  *  :ref:`swap (a:auto(TT)& -const;b:auto(TT)& -const) : auto <function-_at__builtin__c__c_swap_&Y_ls_TT_gr_._&Y_ls_TT_gr_.>` 
-
-.. _function-_at__builtin__c__c_iter_range_C.:
-
-.. das:function:: iter_range(foo: auto const)
-
-iter_range returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+foo     +auto const   +
-+--------+-------------+
-
-
-|function-builtin-iter_range|
-
-.. _function-_at__builtin__c__c_swap_&Y_ls_TT_gr_._&Y_ls_TT_gr_.:
-
-.. das:function:: swap(a: auto(TT)&; b: auto(TT)&)
-
-swap returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto(TT)&    +
-+--------+-------------+
-+b       +auto(TT)&    +
-+--------+-------------+
-
-
-|function-builtin-swap|
-
 +++++++++++++
-Uncategorized
+Lock checking
 +++++++++++++
 
-.. _function-_at__builtin__c__c_interval_Ci_Ci:
-
-.. das:function:: interval(arg0: int const; arg1: int const)
-
-interval returns range
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg0    +int const    +
-+--------+-------------+
-+arg1    +int const    +
-+--------+-------------+
-
-
-|function-builtin-interval|
-
-.. _function-_at__builtin__c__c_interval_Cu_Cu:
-
-.. das:function:: interval(arg0: uint const; arg1: uint const)
-
-interval returns urange
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg0    +uint const   +
-+--------+-------------+
-+arg1    +uint const   +
-+--------+-------------+
-
-
-|function-builtin-interval|
+  *  :ref:`lock_count (array:array const implicit) : int <function-_at__builtin__c__c_lock_count_CIA>` 
+  *  :ref:`set_verify_array_locks (array:array implicit;check:bool const) : bool <function-_at__builtin__c__c_set_verify_array_locks_IA_Cb>` 
+  *  :ref:`set_verify_table_locks (table:table implicit;check:bool const) : bool <function-_at__builtin__c__c_set_verify_table_locks_IT_Cb>` 
 
 .. _function-_at__builtin__c__c_lock_count_CIA:
 
@@ -2866,58 +2893,54 @@ lock_count returns int
 
 |function-builtin-lock_count|
 
-.. _function-_at__builtin__c__c_class_rtti_size_CI?:
+.. _function-_at__builtin__c__c_set_verify_array_locks_IA_Cb:
 
-.. das:function:: class_rtti_size(ptr: void? const implicit)
+.. das:function:: set_verify_array_locks(array: array implicit; check: bool const)
 
-class_rtti_size returns int
+set_verify_array_locks returns bool
 
-+--------+--------------------+
-+argument+argument type       +
-+========+====================+
-+ptr     +void? const implicit+
-+--------+--------------------+
+.. warning:: 
+  This is unsafe operation.
 
-
-|function-builtin-class_rtti_size|
-
-.. _function-_at__builtin__c__c_is_in_completion:
-
-.. das:function:: is_in_completion()
-
-is_in_completion returns bool
-
-|function-builtin-is_in_completion|
-
-.. _function-_at__builtin__c__c_clz_Cu:
-
-.. das:function:: clz(bits: uint const)
-
-clz returns uint
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+bits    +uint const   +
-+--------+-------------+
++--------+--------------+
++argument+argument type +
++========+==============+
++array   +array implicit+
++--------+--------------+
++check   +bool const    +
++--------+--------------+
 
 
-|function-builtin-clz|
+|function-builtin-set_verify_array_locks|
 
-.. _function-_at__builtin__c__c_ctz_Cu:
+.. _function-_at__builtin__c__c_set_verify_table_locks_IT_Cb:
 
-.. das:function:: ctz(bits: uint const)
+.. das:function:: set_verify_table_locks(table: table implicit; check: bool const)
 
-ctz returns uint
+set_verify_table_locks returns bool
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+bits    +uint const   +
-+--------+-------------+
+.. warning:: 
+  This is unsafe operation.
+
++--------+--------------+
++argument+argument type +
++========+==============+
++table   +table implicit+
++--------+--------------+
++check   +bool const    +
++--------+--------------+
 
 
-|function-builtin-ctz|
+|function-builtin-set_verify_table_locks|
+
++++++++++++++++++++++++
+Lock checking internals
++++++++++++++++++++++++
+
+  *  :ref:`_move_with_lockcheck (a:auto(valA)& -const;b:auto(valB)& -const) : auto <function-_at__builtin__c__c__move_with_lockcheck_&Y_ls_valA_gr_._&Y_ls_valB_gr_.>` 
+  *  :ref:`_return_with_lockcheck (a:auto(valT)& =const -const) : valT& <function-_at__builtin__c__c__return_with_lockcheck_&_eq_Y_ls_valT_gr_.>` 
+  *  :ref:`_return_with_lockcheck (a:auto(valT) const& =const) : valT& <function-_at__builtin__c__c__return_with_lockcheck_C&_eq_Y_ls_valT_gr_.>` 
+  *  :ref:`_at_with_lockcheck (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const implicit) : valT& <function-_at__builtin__c__c__at_with_lockcheck_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L>` 
 
 .. _function-_at__builtin__c__c__move_with_lockcheck_&Y_ls_valA_gr_._&Y_ls_valB_gr_.:
 
@@ -2983,53 +3006,223 @@ _at_with_lockcheck returns valT&
 
 |function-builtin-_at_with_lockcheck|
 
-.. _function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L:
+++++++++++++++
+Bit operations
+++++++++++++++
 
-.. das:function:: insert(Tab: table<auto(keyT);void>; at: keyT const implicit)
+  *  :ref:`clz (bits:uint const) : uint <function-_at__builtin__c__c_clz_Cu>` 
+  *  :ref:`clz (bits:uint64 const) : uint64 <function-_at__builtin__c__c_clz_Cu64>` 
+  *  :ref:`ctz (bits:uint const) : uint <function-_at__builtin__c__c_ctz_Cu>` 
+  *  :ref:`ctz (bits:uint64 const) : uint64 <function-_at__builtin__c__c_ctz_Cu64>` 
+  *  :ref:`popcnt (bits:uint const) : uint <function-_at__builtin__c__c_popcnt_Cu>` 
+  *  :ref:`popcnt (bits:uint64 const) : uint64 <function-_at__builtin__c__c_popcnt_Cu64>` 
 
-insert returns auto
+.. _function-_at__builtin__c__c_clz_Cu:
 
-+--------+----------------------+
-+argument+argument type         +
-+========+======================+
-+Tab     +table<auto(keyT);void>+
-+--------+----------------------+
-+at      +keyT const implicit   +
-+--------+----------------------+
+.. das:function:: clz(bits: uint const)
 
-
-|function-builtin-insert|
-
-.. _function-_at__builtin__c__c_add_ptr_ref_C1_ls_Y_ls_TT_gr_._gr_?M:
-
-.. das:function:: add_ptr_ref(src: smart_ptr<auto(TT)> const)
-
-add_ptr_ref returns smart_ptr<TT>
-
-+--------+-------------------------+
-+argument+argument type            +
-+========+=========================+
-+src     +smart_ptr<auto(TT)> const+
-+--------+-------------------------+
-
-
-|function-builtin-add_ptr_ref|
-
-.. _function-_at__builtin__c__c_move_to_ref_&._.:
-
-.. das:function:: move_to_ref(a: auto&; b: auto)
-
-move_to_ref returns auto
+clz returns uint
 
 +--------+-------------+
 +argument+argument type+
 +========+=============+
-+a       +auto&        +
-+--------+-------------+
-+b       +auto         +
++bits    +uint const   +
 +--------+-------------+
 
 
-|function-builtin-move_to_ref|
+|function-builtin-clz|
+
+.. _function-_at__builtin__c__c_clz_Cu64:
+
+.. das:function:: clz(bits: uint64 const)
+
+clz returns uint64
+
++--------+-------------+
++argument+argument type+
++========+=============+
++bits    +uint64 const +
++--------+-------------+
+
+
+|function-builtin-clz|
+
+.. _function-_at__builtin__c__c_ctz_Cu:
+
+.. das:function:: ctz(bits: uint const)
+
+ctz returns uint
+
++--------+-------------+
++argument+argument type+
++========+=============+
++bits    +uint const   +
++--------+-------------+
+
+
+|function-builtin-ctz|
+
+.. _function-_at__builtin__c__c_ctz_Cu64:
+
+.. das:function:: ctz(bits: uint64 const)
+
+ctz returns uint64
+
++--------+-------------+
++argument+argument type+
++========+=============+
++bits    +uint64 const +
++--------+-------------+
+
+
+|function-builtin-ctz|
+
+.. _function-_at__builtin__c__c_popcnt_Cu:
+
+.. das:function:: popcnt(bits: uint const)
+
+popcnt returns uint
+
++--------+-------------+
++argument+argument type+
++========+=============+
++bits    +uint const   +
++--------+-------------+
+
+
+|function-builtin-popcnt|
+
+.. _function-_at__builtin__c__c_popcnt_Cu64:
+
+.. das:function:: popcnt(bits: uint64 const)
+
+popcnt returns uint64
+
++--------+-------------+
++argument+argument type+
++========+=============+
++bits    +uint64 const +
++--------+-------------+
+
+
+|function-builtin-popcnt|
+
++++++++++
+Intervals
++++++++++
+
+  *  :ref:`interval (arg0:int const;arg1:int const) : range <function-_at__builtin__c__c_interval_Ci_Ci>` 
+  *  :ref:`interval (arg0:uint const;arg1:uint const) : urange <function-_at__builtin__c__c_interval_Cu_Cu>` 
+
+.. _function-_at__builtin__c__c_interval_Ci_Ci:
+
+.. das:function:: interval(arg0: int const; arg1: int const)
+
+interval returns range
+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +int const    +
++--------+-------------+
++arg1    +int const    +
++--------+-------------+
+
+
+|function-builtin-interval|
+
+.. _function-_at__builtin__c__c_interval_Cu_Cu:
+
+.. das:function:: interval(arg0: uint const; arg1: uint const)
+
+interval returns urange
+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +uint const   +
++--------+-------------+
++arg1    +uint const   +
++--------+-------------+
+
+
+|function-builtin-interval|
+
+++++
+RTTI
+++++
+
+  *  :ref:`class_rtti_size (ptr:void? const implicit) : int <function-_at__builtin__c__c_class_rtti_size_CI?>` 
+
+.. _function-_at__builtin__c__c_class_rtti_size_CI?:
+
+.. das:function:: class_rtti_size(ptr: void? const implicit)
+
+class_rtti_size returns int
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++ptr     +void? const implicit+
++--------+--------------------+
+
+
+|function-builtin-class_rtti_size|
+
+++++++++++
+Algorithms
+++++++++++
+
+  *  :ref:`iter_range (foo:auto const) : auto <function-_at__builtin__c__c_iter_range_C.>` 
+  *  :ref:`swap (a:auto(TT)& -const;b:auto(TT)& -const) : auto <function-_at__builtin__c__c_swap_&Y_ls_TT_gr_._&Y_ls_TT_gr_.>` 
+
+.. _function-_at__builtin__c__c_iter_range_C.:
+
+.. das:function:: iter_range(foo: auto const)
+
+iter_range returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++foo     +auto const   +
++--------+-------------+
+
+
+|function-builtin-iter_range|
+
+.. _function-_at__builtin__c__c_swap_&Y_ls_TT_gr_._&Y_ls_TT_gr_.:
+
+.. das:function:: swap(a: auto(TT)&; b: auto(TT)&)
+
+swap returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto(TT)&    +
++--------+-------------+
++b       +auto(TT)&    +
++--------+-------------+
+
+
+|function-builtin-swap|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at__builtin__c__c_using_CI0_ls__hh_XH_ls__builtin__c__c_das_string_gr__gr_1_ls_v_gr__builtin_:
+
+.. das:function:: using(arg0: block<(das_string# explicit):void> const implicit)
+
++--------+--------------------------------------------------------------------------------------+
++argument+argument type                                                                         +
++========+======================================================================================+
++arg0    +block<( :ref:`builtin::das_string <handle-builtin-das_string>` #):void> const implicit+
++--------+--------------------------------------------------------------------------------------+
+
+
+|function-builtin-using|
 
 

@@ -63,6 +63,12 @@ This macro implements `qmacro_expr` expression reification. Expected input is a 
 .. das:attribute:: qmacro_variable
 
 This macro implements `qmacro_variable` expression reification. Expected input is are variable name and type expression (type<...>). Result is a new VariablePtr with the matching name and type.
+.. _call-macro-templates_boost-qmacro_block_to_array:
+
+.. das:attribute:: qmacro_block_to_array
+
+This macro implements `qmacro_block_to_array` expression reification. Expected input is a block expression (ExprMakeBlock over ExprBlock). It applies reification rules to the expression, and returns array with contents of the 'list' section of the block.
+
 .. _call-macro-templates_boost-qmacro_function:
 
 .. das:attribute:: qmacro_function
@@ -700,6 +706,21 @@ make_expression_block returns smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBl
 
 Create ExprBlock and move all expressions from expr to the list of the block.
 
+.. _function-_at_templates_boost_c__c_make_expression_block_H_ls__builtin__c__c_dasvector_rq_smart_ptr_rq_Expression_gr_:
+
+.. das:function:: make_expression_block(exprs: dasvector`smart_ptr`Expression)
+
+make_expression_block returns smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` >
+
++--------+------------------------------------------------------------------------------------------------+
++argument+argument type                                                                                   +
++========+================================================================================================+
++exprs   + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
++--------+------------------------------------------------------------------------------------------------+
+
+
+Create ExprBlock and move all expressions from expr to the list of the block.
+
 .. _function-_at_templates_boost_c__c_add_type_ptr_ref_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M:
 
 .. das:function:: add_type_ptr_ref(a: TypeDeclPtr)
@@ -752,6 +773,23 @@ Implementation details for the expression reificaiton. This is a generat express
 .. das:function:: apply_qblock(expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)
 
 apply_qblock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+----------------------------------------------------------------------------------------------+
++argument+argument type                                                                                 +
++========+==============================================================================================+
++expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >                                   +
++--------+----------------------------------------------------------------------------------------------+
++blk     +block<(rules: :ref:`templates_boost::Template <struct-templates_boost-Template>` ):void> const+
++--------+----------------------------------------------------------------------------------------------+
+
+
+Implementation details for the expression reificaiton. This is a block reification.
+
+.. _function-_at_templates_boost_c__c_apply_qblock_to_array_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
+
+.. das:function:: apply_qblock_to_array(expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)
+
+apply_qblock_to_array returns array< :ref:`ExpressionPtr <alias-ExpressionPtr>` >
 
 +--------+----------------------------------------------------------------------------------------------+
 +argument+argument type                                                                                 +

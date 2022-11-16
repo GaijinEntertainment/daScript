@@ -470,4 +470,43 @@ combine returns auto
 
 Returns array of the elements of a and then b.
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_algorithm_c__c_erase_all_._C._%_ls_IsAnyArrayMacro_c_expect_any_array(arr_eq_true)_gr_:
+
+.. das:function:: erase_all(arr: auto; value: auto const)
+
+erase_all returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++arr     +auto         +
++--------+-------------+
++value   +auto const   +
++--------+-------------+
+
+
+Erase all elements equal to value from arr
+
+.. _function-_at_algorithm_c__c_topological_sort_C1_ls_Y_ls_Node_gr_._gr_A:
+
+.. das:function:: topological_sort(nodes: array<auto(Node)> const)
+
+topological_sort returns auto
+
++--------+-----------------------+
++argument+argument type          +
++========+=======================+
++nodes   +array<auto(Node)> const+
++--------+-----------------------+
+
+
+Topological sort of a graph.
+Each node has an id, and set (table with no values) of dependencies.
+Dependency `before` represents a link from a node, which should appear in the sorted list before the node.
+Returns a sorted list of nodes.
+
 

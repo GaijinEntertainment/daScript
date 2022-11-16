@@ -30,6 +30,12 @@ Constants
 
 |variable-math-FLT_EPSILON|
 
+.. _global-math-DBL_EPSILON:
+
+.. das:attribute:: DBL_EPSILON = 2.22045e-16lf
+
+|variable-math-DBL_EPSILON|
+
 +++++++++++++
 Handled types
 +++++++++++++

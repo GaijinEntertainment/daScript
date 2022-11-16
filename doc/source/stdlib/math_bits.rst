@@ -282,4 +282,73 @@ float_bits_to_uint returns uint4
 
 bit representation of x is interpreted as a uint
 
+++++++++++++++++++++++
+int64,uint64 in double
+++++++++++++++++++++++
+
+  *  :ref:`int64_bits_to_double (x:int64 const) : double <function-_at_math_bits_c__c_int64_bits_to_double_Ci64>` 
+  *  :ref:`uint64_bits_to_double (x:uint64 const) : double <function-_at_math_bits_c__c_uint64_bits_to_double_Cu64>` 
+  *  :ref:`double_bits_to_int64 (x:double const) : int64 <function-_at_math_bits_c__c_double_bits_to_int64_Cd>` 
+  *  :ref:`double_bits_to_uint64 (x:double const) : uint64 <function-_at_math_bits_c__c_double_bits_to_uint64_Cd>` 
+
+.. _function-_at_math_bits_c__c_int64_bits_to_double_Ci64:
+
+.. das:function:: int64_bits_to_double(x: int64 const)
+
+int64_bits_to_double returns double
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int64 const  +
++--------+-------------+
+
+
+bit representation of x is interpreted as a double
+
+.. _function-_at_math_bits_c__c_uint64_bits_to_double_Cu64:
+
+.. das:function:: uint64_bits_to_double(x: uint64 const)
+
+uint64_bits_to_double returns double
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint64 const +
++--------+-------------+
+
+
+bit representation of x is interpreted as a double
+
+.. _function-_at_math_bits_c__c_double_bits_to_int64_Cd:
+
+.. das:function:: double_bits_to_int64(x: double const)
+
+double_bits_to_int64 returns int64
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
+
+
+bit representation of x is interpreted as a int64
+
+.. _function-_at_math_bits_c__c_double_bits_to_uint64_Cd:
+
+.. das:function:: double_bits_to_uint64(x: double const)
+
+double_bits_to_uint64 returns uint64
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
+
+
+bit representation of x is interpreted as a uint64
+
 

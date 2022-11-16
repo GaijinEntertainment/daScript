@@ -84,21 +84,27 @@ def document_module_builtin(root:string)
         group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|reserve|each|emplace|erase|find|
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|lock|each_enum|each_ref|
 find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_clone|back|sort|to_array|to_table|to_array_move|
-to_table_move|empty|subarray)$%%);
+to_table_move|empty|subarray|insert|move_to_ref)$%%);
         group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%);
         group_by_regex("das::string manipulation", mod, %regex~(peek|set)$%%);
         group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%);
         group_by_regex("Heap reporting", mod, %regex~(heap|string_heap|memory_report)%%);
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%);
         group_by_regex("GC0 infrastructure", mod, %regex~gc0%%);
-        group_by_regex("Smart ptr infrastructure", mod, %regex~(smart_ptr|get_const_ptr|get_ptr$)%%);
-        group_by_regex("Macro infrastructure", mod, %regex~is_compiling%%);
+        group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|get_ptr$)%%);
+        group_by_regex("Macro infrastructure", mod, %regex~(is_compiling|is_in_completion)%%);
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%);
         group_by_regex("System infastructure", mod, %regex~(panic|print|sprint|to_log|error|terminate|breakpoint|stackwalk|get_das_root|is_in_aot)$%%);
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%);
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%);
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments)$%%);
         group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock)$%%);
+        group_by_regex("Lock checking", mod, %regex~(lock_count|set_verify_array_locks|set_verify_table_locks)$%%);
+        group_by_regex("Lock checking internals", mod, %regex~(_move_with_lockcheck|_return_with_lockcheck|_at_with_lockcheck)$%%);
+        group_by_regex("Bit operations", mod, %regex~(popcnt|clz|ctz)$%%);
+        group_by_regex("Intervals", mod, %regex~(interval)$%%);
+        group_by_regex("RTTI", mod, %regex~(class_rtti_size)$%%);
+        hide_group(group_by_regex("Jit",mod,%regex~(invoke_code|.*jit.*)$%%));
         group_by_regex("Algorithms", mod, %regex~(swap|iter_range)$%%)
     }]
     document("Built-in runtime",mod,"{root}/builtin.rst","{root}/detail/builtin.rst",groups)
@@ -154,8 +160,8 @@ def document_module_rtti(root:string)
         group_by_regex("File access", mod, %regex~(make_file_access|set_file_source|add_file_access_root)$%%);
         group_by_regex("Structure access", mod, %regex~(rtti_builtin_structure_for_each_annotation|basic_struct_for_each_field|structure_for_each_annotation)$%%);
         group_by_regex("Data walking and printing", mod, %regex~(sprint_data|describe|get_mangled_name)$%%);
-        group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash|get_function_address)$%%);
+        group_by_regex("Context and mutex locking", mod, %regex~(lock_this_context|lock_context|lock_mutex)$%%)
     }]
     document("Runtime type information library",mod,"{root}/rtti.rst","{root}/detail/rtti.rst",groups)
 
@@ -179,6 +185,9 @@ def document_module_ast(root:string)
         group_by_regex("Evaluations", mod, %regex~(eval_single_expression)%%);
         group_by_regex("Error reporting", mod, %regex~(macro_error)%%);
         group_by_regex("Location and context", mod, %regex~(force_at|collect_dependencies|get_ast_context)%%);
+        hide_group(group_by_regex("Jit support",mod,%regex~(make_interop_node|get_builtin_function_address)%%));
+        group_by_regex("Use queries", mod, %regex~(get_use_global_variables|get_use_functions)%%);
+        group_by_regex("Removal", mod, %regex~(remove.*)%%);
         hide_group(group_by_regex("Internal ast infrastructure", mod, %regex~(builtin_ast_.*)%%))
     }]
     document("AST manipulation library",mod,"{root}/ast.rst","{root}/detail/ast.rst",groups)
@@ -191,6 +200,9 @@ def document_module_ast_boost(root:string)
         group_by_regex("Queries", mod, %regex~(is.*|find.*|get.*)%%);
         group_by_regex("Annotations", mod, %regex~(append.*|add.*)%%);
         group_by_regex("Expression generation", mod, %regex~(override_method|panic_expr_as|make_static_assert_false|convert_to_expression)%%);
+        group_by_regex("Visitors", mod, %regex~(visit.*)%%);
+        group_by_regex("Type generation", mod, %regex~(function_to_type)%%);
+        hide_group(group_by_regex("Clonning", mod, %regex~(clone)%%));
         group_by_regex("Setup", mod, %regex~setup.*$%%)
     }]
     document("Boost package for the AST",mod,"{root}/ast_boost.rst","{root}/detail/ast_boost.rst",groups)
@@ -220,7 +232,7 @@ def document_module_strings_boost(root:string)
         group_by_regex("Split and join", mod, %regex~(split|split_by_chars|join)$%%);
         group_by_regex("Formatting", mod, %regex~(wide)$%%);
         group_by_regex("Queries and comparisons", mod, %regex~(is_character_at|eq)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Levenshtein distance", mod, %regex~(levenshtein_distance)$%%)
     }]
     document("Boost package for string manipulation library",mod,"{root}/strings_boost.rst","{root}/detail/strings_boost.rst",groups)
 
@@ -291,7 +303,7 @@ def document_module_apply(root:string)
 def document_module_jobque(root:string)
     var mod = find_module("jobque")
     var groups <- [{DocGroup
-        group_by_regex("Channel and JobStatus", mod, %regex~(append|notify|join)$%%);
+        group_by_regex("Channel and JobStatus", mod, %regex~(append|notify|join|channel_create|channel_remove|add_ref|release|notify_and_release)$%%);
         group_by_regex("Queries", mod, %regex~(get_total_hw_jobs|get_total_hw_threads|is_job_que_shutting_down)$%%);
         group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke)$%%);
         group_by_regex("Construction", mod, %regex~(with_channel|with_job_status|with_job_que)$%%)
@@ -386,7 +398,7 @@ def document_module_safe_addr(root:string)
     var mod = find_module("safe_addr")
     var groups <- [{DocGroup
         group_by_regex("Safe temporary address", mod, %regex~(safe_addr)$%%);
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Temporary pointers", mod, %regex~(temp_ptr)$%%)
     }]
     document("safe_addr macro",mod,"{root}/safe_addr.rst","{root}/detail/safe_addr.rst",groups)
 
@@ -410,7 +422,8 @@ def document_module_math_bits(root:string)
     var mod = find_module("math_bits")
     var groups <- [{DocGroup
         group_by_regex("float in int,uint", mod, %regex~(int_bits_to_float|uint_bits_to_float)$%%);
-        group_by_regex("int,uint in float", mod, %regex~(float_bits_to_int|float_bits_to_uint)$%%)
+        group_by_regex("int,uint in float", mod, %regex~(float_bits_to_int|float_bits_to_uint)$%%);
+        group_by_regex("int64,uint64 in double", mod, %regex~(int64_bits_to_double|uint64_bits_to_double|double_bits_to_int64|double_bits_to_uint64)$%%)
     }]
     document("Math bit helpers",mod,"{root}/math_bits.rst","{root}/detail/math_bits.rst",groups)
 

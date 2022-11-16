@@ -1,5 +1,7 @@
 .. |typedef-rtti-FileAccessPtr| replace:: smart_ptr<FileAccess>, i.e pointer to the `FileAccess` object.
 
+.. |typedef-rtti-ModuleFlags| replace:: Flags which represent the module's state.
+
 .. |typedef-rtti-ProgramFlags| replace:: Flags which represent state of the `Program` object, both during and after compilation.
 
 .. |typedef-rtti-RttiValue| replace:: Variant type which represents value of any annotation arguments and variable annotations.
@@ -142,6 +144,8 @@
 
 .. |variable-rtti-FUNCINFO_SHUTDOWN| replace:: Function flag which indicates that function is called during the `Context` shutdown.
 
+.. |variable-rtti-FUNCINFO_LATE_INIT| replace:: Function flag which indicates that function initialization is ordered via custom init order.
+
 .. |typedef-rtti-context_category_flags| replace:: Flags which specify type of the `Context`.
 
 .. |typedef-rtti-TypeInfoFlags| replace:: Flags which specify properties of the `TypeInfo` object (any rtti type).
@@ -193,3 +197,5 @@
 .. |function-rtti-lock_context| replace:: Makes recursive critical section of the given `Context` object.
 
 .. |function-rtti-lock_mutex| replace:: Makes recursive critical section of the given recursive_mutex object.
+
+.. |function-rtti-get_function_address| replace:: Return function pointer `SimFunction *` given mangled name hash.
