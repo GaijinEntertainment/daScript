@@ -34,5 +34,6 @@
    language/generic_programming.rst
    language/macros.rst
    language/reification.rst
+   language/contexts.rst
 
 
