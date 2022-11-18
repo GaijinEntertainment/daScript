@@ -464,6 +464,20 @@ There is additionally the ``[comment_reader]`` annotation, which essentially aut
 
 ``beforeAlias`` and ``afterAlias`` occur before and after each alias type declaration, regardless or if it has comments.
 
+----------------
+AstSimulateMacro
+----------------
+
+`AstSimulateMacro` is designed to customize the simulation of the program::
+
+    class AstSimulateMacro
+        def abstract preSimulate ( prog:Program?; ctx:Context? ) : bool
+        def abstract simulate ( prog:Program?; ctx:Context? ) : bool
+
+``preSimulate`` occurs after the context has been simulated, but before all the structure and function annotation simulations.
+
+``simulate`` occurs after all the structure and function annotation simulations.
+
 ----------
 AstVisitor
 ----------
