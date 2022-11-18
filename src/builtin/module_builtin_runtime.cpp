@@ -1440,6 +1440,9 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_set_verify_table_locks)>(*this, lib, "set_verify_table_locks",
             SideEffects::modifyArgument, "builtin_set_verify_table_locks")
                 ->args({"table","check"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(builtin_set_verify_context)>(*this, lib, "set_verify_context_locks",
+            SideEffects::modifyExternal, "builtin_set_verify_context")
+                ->args({"slc","context"})->unsafeOperation = true;
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "_builtin_table_clear",
             SideEffects::modifyArgument, "builtin_table_clear")

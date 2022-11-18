@@ -557,7 +557,9 @@ namespace das {
         "max_infer_passes",             Type::tInt,
         "indenting",                    Type::tInt,
     // debugger
-        "debugger",                     Type::tBool
+        "debugger",                     Type::tBool,
+    // runtime checks
+        "skip_lock_checks",             Type::tBool
     };
 
     void verifyOptions() {

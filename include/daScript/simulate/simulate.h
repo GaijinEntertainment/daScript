@@ -687,6 +687,8 @@ namespace das
         SimNode * aotInitScript = nullptr;
         SimFunction ** initFunctions = nullptr;
         int totalInitFunctions = 0;
+    public:
+        bool skipLockChecks = false;
     protected:
         bool            debugger = false;
         volatile bool   singleStepMode = false;

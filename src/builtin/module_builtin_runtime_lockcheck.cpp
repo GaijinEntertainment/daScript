@@ -57,6 +57,7 @@ namespace das
     LineInfo rtti_get_line_info ( int depth, Context * context, LineInfoArg * at );
 
     vec4f builtin_verify_locks ( Context & context, SimNode_CallBase * node, vec4f * args ) {
+        if ( context.skipLockChecks ) return v_zero();
         auto typeInfo = node->types[0];
         auto value = args[0];
         LockDataWalker walker;
@@ -64,6 +65,12 @@ namespace das
         LineInfo atProblem = rtti_get_line_info(2,&context,(LineInfoArg *) &node->debugInfo);
         if ( walker.locked ) context.throw_error_at(atProblem, "object contains locked elements and can't be resized");
         return v_zero();
+    }
+
+    bool builtin_set_verify_context ( bool slc, Context * context ) {
+        bool result = context->skipLockChecks;
+        context->skipLockChecks = slc;
+        return result;
     }
 
     bool builtin_set_verify_array_locks ( Array & arr, bool value ) {

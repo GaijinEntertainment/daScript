@@ -34,6 +34,13 @@
    language/generic_programming.rst
    language/macros.rst
    language/reification.rst
+
+*****************************
+ The Runtime
+ *****************************
+
+.. toctree::
    language/contexts.rst
+   language/locks.rst
 
 

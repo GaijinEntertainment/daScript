@@ -3167,6 +3167,8 @@ namespace das
         context.totalInitFunctions = (uint32_t) allInitFunctions.size();
         context.initFunctions = (SimFunction **) context.code->allocate(allInitFunctions.size()*sizeof(SimFunction *));
         memcpy ( context.initFunctions, allInitFunctions.data(), allInitFunctions.size()*sizeof(SimFunction *) );
+        // lockchecking
+        context.skipLockChecks = options.getBoolOption("skip_lock_checks",false);
         // run init script and restart
         if ( !folding ) {
             auto time1 = ref_time_ticks();

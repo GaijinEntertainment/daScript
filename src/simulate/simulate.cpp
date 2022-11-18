@@ -1149,6 +1149,8 @@ namespace das
         tabMnLookup = ctx.tabMnLookup;
         tabGMnLookup = ctx.tabGMnLookup;
         tabAdLookup = ctx.tabAdLookup;
+        // lockcheck
+        skipLockChecks = ctx.skipLockChecks;
         // register
         announceCreation();
         // now, make it good to go
