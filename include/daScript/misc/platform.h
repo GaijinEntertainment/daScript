@@ -125,19 +125,46 @@
     }
     __forceinline uint64_t das_clz64(uint64_t x) {
         unsigned long r = 0;
+    #if defined(__i386__) || defined(_M_IX86)
+        if ( x >> 32 ) {
+            _BitScanReverse(&r, (unsigned long)(x >> 32));
+            r += 32;
+        } else {
+            _BitScanReverse(&r, (unsigned long)x);
+        }
+    #else
         _BitScanReverse64(&r, x);
+    #endif
         return uint64_t(63 - r);
     }
     __forceinline uint64_t das_ctz64(uint64_t x) {
         unsigned long r = 0;
+    #if defined(__i386__) || defined(_M_IX86)
+        if ((uint32_t)x != 0) {
+            _BitScanForward(&r, (unsigned long)x);
+        } else {
+            _BitScanForward(&r, (unsigned long)(x >> 32));
+            r += 32;
+        }
+    #else
         _BitScanForward64(&r, x);
+    #endif
         return uint64_t(r);
     }
     __forceinline uint32_t das_popcount(uint32_t x) {
         return uint32_t(__popcnt(x));
     }
     __forceinline uint64_t das_popcount64(uint64_t x) {
+    #if defined(__i386__) || defined(_M_IX86)
+        unsigned int count = 0;
+        while (x != 0) {
+            count += 1;
+            x &= x - 1;
+        }
+        return count;
+    #else
         return uint64_t(__popcnt64(x));
+    #endif
     }
 #else
     #define das_clz __builtin_clz

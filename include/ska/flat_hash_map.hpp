@@ -33,12 +33,12 @@ struct functor_storage : Functor
     template<typename... Args>
     Result operator()(Args &&... args)
     {
-        return static_cast<Functor &>(*this)(das::forward<Args>(args)...);
+        return (Result) static_cast<Functor &>(*this)(das::forward<Args>(args)...);
     }
     template<typename... Args>
     Result operator()(Args &&... args) const
     {
-        return static_cast<const Functor &>(*this)(das::forward<Args>(args)...);
+        return (Result) static_cast<const Functor &>(*this)(das::forward<Args>(args)...);
     }
 };
 template<typename Result, typename... Args>
