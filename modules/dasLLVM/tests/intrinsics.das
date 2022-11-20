@@ -18,7 +18,7 @@ def test_sqrt( t:T?; a:auto(TT) )
 def test_intrin_sqrt ( t:T? )
     var fake <- Faker()
     fuzz <|
-        fuzz_float_double_or_float_vec(t,fake,"test_sqrt")
+        fuzz_float_double_or_float_vec_op1(t,fake,"test_sqrt")
 
 [sideeffects,jit]
 def jit_rcp ( x )
@@ -34,7 +34,7 @@ def test_rcp( t:T?; a:auto(TT) )
 def test_intrin_rcp ( t:T? )
     var fake <- Faker()
     fuzz <|
-        fuzz_float_or_float_vec(t,fake,"test_rcp")
+        fuzz_float_or_float_vec_op1(t,fake,"test_rcp")
 
 [sideeffects,jit]
 def jit_exp ( x )
@@ -50,7 +50,7 @@ def test_exp( t:T?; a:auto(TT) )
 def test_intrin_exp ( t:T? )
     var fake <- Faker()
     fuzz <|
-        fuzz_float_double_or_float_vec(t,fake,"test_exp")
+        fuzz_float_double_or_float_vec_op1(t,fake,"test_exp")
 
 [jit]
 def jit_popcount(x)

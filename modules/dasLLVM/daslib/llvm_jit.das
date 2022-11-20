@@ -107,7 +107,29 @@ class LlvmJitVisitor : AstVisitor
     def after_function_entry
         LLVMPositionBuilderAtEnd(g_builder, current_block)
 
-    def build_llvm_function_pair ( fun_name:string; isCmres:bool; var arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; captureType:LLVMOpaqueType? )
+    def build_noalias_list ( annotations:AnnotationList )
+        var noalias : table<string>
+        for ann in annotations
+            if ann.annotation.name=="hint"
+                for arg in ann.arguments
+                    if arg.name=="noalias"
+                        if arg.basicType == Type tString
+                            noalias |> insert(string(arg.sValue))
+        return <- noalias
+
+    def process_function_hints ( annotations:AnnotationList )
+        var alwaysInline = false
+        for ann in annotations
+            if ann.annotation.name=="hint"
+                for arg in ann.arguments
+                    if arg.name=="alwaysinline"
+                        alwaysInline = true
+        if alwaysInline
+            var alwaysinline = LLVMGetEnumAttribute("alwaysinline")
+            LLVMAddAttributeToFunction(ffunc, alwaysinline)
+
+    def build_llvm_function_pair ( fun_name:string; isCmres:bool; var arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; captureType:LLVMOpaqueType?; annotations:AnnotationList )
+        var nat <- build_noalias_list(annotations); defer_delete(nat)
         // implementation function
         var fun_args <-  [{for a in arguments; type_to_llvm_abi_type(a._type)}]
         if captureType!=null
@@ -122,6 +144,7 @@ class LlvmJitVisitor : AstVisitor
         ffunc = LLVMAddFunction(g_mod, "{fun_name} implementation", fun_type)
         // setup parameter alignment
         var readonly_attr = LLVMGetEnumAttribute("readonly")
+        var noalias_attr = LLVMGetEnumAttribute("noalias")
         for a,ai in arguments,urange(100500)
             if a._type.isRef
                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.alignOf))
@@ -129,6 +152,8 @@ class LlvmJitVisitor : AstVisitor
                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.firstType.alignOf))
             if (a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant
                 LLVMAddAttributeToFunctionArgument(ffunc, ai, readonly_attr)
+            if nat |> key_exists(string(a.name))
+                LLVMAddAttributeToFunctionArgument(ffunc, ai, noalias_attr)
             // todo: noalias?
         LLVMSetParamAlignment(get_context_param(), 16u)
         if isCmres
@@ -159,7 +184,7 @@ class LlvmJitVisitor : AstVisitor
     def add_llvm_functions ( var fun : FunctionPtr )
         thisFunc = get_ptr(fun)
         let fnmna = get_mangled_name(fun)
-        build_llvm_function_pair(fnmna, isCMRES(fun), fun.arguments, fun.result, null)
+        build_llvm_function_pair(fnmna, isCMRES(fun), fun.arguments, fun.result, null, fun.annotations)
         thisFunc = null
 
     def append_basic_block ( name:string; add_to_phi:bool=false )
@@ -269,13 +294,14 @@ class LlvmJitVisitor : AstVisitor
         let mna = get_mangled_name(expr)
         let fnmna = "block_{intptr(expr)}_at_{int(expr.at.line)}{mna}"
         let isCmres = isCMRESType(expr._type)
-        build_llvm_function_pair(fnmna, isCmres, thisBlock.arguments, thisBlock.returnType, captureType)
+        build_llvm_function_pair(fnmna, isCmres, thisBlock.arguments, thisBlock.returnType, captureType, expr.annotations)
         // function pair
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
         build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres, captureType)
         build_function_entry(thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
+        process_function_hints(thisBlock.annotations)
         return fnmna
 
     def post_make_block ( var blk:smart_ptr<ExprBlock> )
@@ -331,6 +357,7 @@ class LlvmJitVisitor : AstVisitor
         // build wrapper function
         build_wrapper_funcion(fun.arguments, fun.result, isCMRES(fun), null)
         build_function_entry(fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
+        process_function_hints(fun.annotations)
 
     def build_epilogue
         if prologue != null
