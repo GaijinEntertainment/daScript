@@ -79,6 +79,23 @@ namespace das
         };
     };
 
+    // dummy annotation for optimization hints on functions or blocks
+    struct HintFunctionAnnotation : FunctionAnnotation {
+        HintFunctionAnnotation() : FunctionAnnotation("hint") { }
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            return true;
+        };
+        virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
+            return true;
+        }
+        virtual bool finalize(ExprBlock *, ModuleGroup &,const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+            return true;
+        }
+        virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
+            return true;
+        }
+    };
+
     struct UnsafeDerefFunctionAnnotation : MarkFunctionAnnotation {
         UnsafeDerefFunctionAnnotation() : MarkFunctionAnnotation("unsafe_deref") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -1264,6 +1281,7 @@ namespace das
         addAnnotation(make_smart<GenericFunctionAnnotation>());
         addAnnotation(make_smart<MacroFunctionAnnotation>());
         addAnnotation(make_smart<MacroFnFunctionAnnotation>());
+        addAnnotation(make_smart<HintFunctionAnnotation>());
         addAnnotation(make_smart<RequestJitFunctionAnnotation>());
         addAnnotation(make_smart<ExportFunctionAnnotation>());
         addAnnotation(make_smart<NoLintFunctionAnnotation>());
