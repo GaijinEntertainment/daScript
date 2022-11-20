@@ -12,41 +12,41 @@ def read_char_from_input()
 	unsafe
 		return uint8(character_uat(s, 0))
 
-[jit,unsafe_deref,hint(noalias=code,noalias=tape,noalias=codePos,noalias=tapePos)]
+[jit,unsafe_deref,hint(hot,noalias=code,noalias=tape,noalias=codePos,noalias=tapePos)]
 def run(code: uint8?; lengthOfCode:int; var tape: uint8?; var codePos, tapePos: int&; skip: bool): bool
     unsafe
         if skip
             while tapePos >= 0 && codePos < lengthOfCode
-                let sym  = int(code[codePos])
-                if sym == '['
+                let sym  = code[codePos]
+                if sym == uint8('[')
                     ++codePos
                     let oldPos = codePos
                     while run(code, lengthOfCode, tape, codePos, tapePos, tape[tapePos] == uint8(0))
                         codePos = oldPos
-                elif sym == ']'
+                elif sym == uint8(']')
                     return tape[tapePos] != uint8(0)
                 ++codePos
         else
             while tapePos >= 0 && codePos < lengthOfCode
-                let sym  = int(code[codePos])
-                if sym == '['
+                let sym  = code[codePos]
+                if sym == uint8('[')
                     ++codePos
                     let oldPos = codePos
                     while run(code, lengthOfCode, tape, codePos, tapePos, tape[tapePos] == uint8(0))
                         codePos = oldPos
                     ++codePos
-                elif sym == ']'
+                elif sym == uint8(']')
                     return tape[tapePos] != uint8(0)
-                elif sym == '.'
+                elif sym == uint8('.')
                     print(int(tape[tapePos]) |> to_char);
                     ++codePos
                 else
                     var rep = 1
-                    while int(code[codePos+rep])==sym
+                    while code[codePos+rep]==sym
                         ++rep
-                    if sym == '+' { tape[tapePos] = uint8(int(tape[tapePos]) + rep); }
-                    elif sym == '-' { tape[tapePos] = uint8(int(tape[tapePos]) - rep); }
-                    elif sym == '>' { tapePos += rep; }
+                    if sym == uint8('+') { tape[tapePos] = uint8(int(tape[tapePos]) + rep); }
+                    elif sym == uint8('-') { tape[tapePos] = uint8(int(tape[tapePos]) - rep); }
+                    elif sym == uint8('>') { tapePos += rep; }
                     else  { tapePos -= rep; }
                     // elif sym == '<' { tapePos -= rep; }
                     codePos += rep

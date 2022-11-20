@@ -34,7 +34,7 @@ def private finalize ( var that:Node explicit )
 	    finalize(that.right)
 	    memzero(that)
 
-[jit,unsafe_deref]
+[jit,unsafe_deref,hint(hot)]
 def merge(var lower, greater: Node?): Node?
     if lower == null
     	return greater
@@ -47,11 +47,11 @@ def merge(var lower, greater: Node?): Node?
         greater.left = merge(lower, greater.left)
         return greater
 
-[jit]
+[jit,hint(alwaysinline,hot)]
 def merge(var lower,equal,greater: Node?): Node?
     return merge(merge(lower, equal), greater)
 
-[jit,unsafe_deref]
+[jit,unsafe_deref,hint(hot)]
 def split(var orig:Node?; var lower:Node?&; var greaterOrEqual:Node?&; value: int)
     if orig == null
     	lower = null
@@ -63,13 +63,13 @@ def split(var orig:Node?; var lower:Node?&; var greaterOrEqual:Node?&; value: in
 		greaterOrEqual = orig
 		split(greaterOrEqual.left,lower,greaterOrEqual.left,value)
 
-[jit]
+[jit,hint(alwaysinline,hot)]
 def split(var orig: Node?; var lower:Node?&; var equal:Node?&; var greater:Node?&; value: int)
 	var equalOrGreater : Node?
     split(orig, lower, equalOrGreater, value)
     split(equalOrGreater, equal, greater, value + 1)
 
-[jit]
+[jit,hint(alwaysinline,hot)]
 def hasValue(var mRoot:Node? &; x: int): bool
 	var lower, equal, greater : Node?
     split(mRoot, lower, equal, greater, x)
@@ -77,13 +77,13 @@ def hasValue(var mRoot:Node? &; x: int): bool
     mRoot = merge(lower, equal, greater)
     return res
 
-[jit]
+[jit,hint(alwaysinline,hot)]
 def random_int_jit ( var seed:int4& )
     //! random integer 0..32767 (LCG_RAND_MAX)
     seed.x = 214013*seed.x+2531011
     return (seed.x>>16) & LCG_RAND_MAX
 
-[jit]
+[jit,hint(alwaysinline,hot)]
 def insert(var mRoot:Node? &; x: int)
     var lower, equal, greater : Node?
     split(mRoot, lower, equal, greater, x)
@@ -91,7 +91,7 @@ def insert(var mRoot:Node? &; x: int)
     	equal = new [[Node x=x, y=random_int_jit(seed)]]
     mRoot = merge(lower, equal, greater)
 
-[jit]
+[jit,hint(alwaysinline,hot)]
 def erase_raw(var mRoot:Node? &; x: int)
     var lower, equal, greater : Node?
     split(mRoot, lower, equal, greater, x)

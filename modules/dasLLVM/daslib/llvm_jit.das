@@ -119,14 +119,18 @@ class LlvmJitVisitor : AstVisitor
 
     def process_function_hints ( annotations:AnnotationList )
         var alwaysInline = false
+        var hot = false
         for ann in annotations
             if ann.annotation.name=="hint"
                 for arg in ann.arguments
                     if arg.name=="alwaysinline"
                         alwaysInline = true
+                    elif arg.name=="hot"
+                        hot = true
         if alwaysInline
-            var alwaysinline = LLVMGetEnumAttribute("alwaysinline")
-            LLVMAddAttributeToFunction(ffunc, alwaysinline)
+            LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("alwaysinline"))
+        if hot
+            LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("hot"))
 
     def build_llvm_function_pair ( fun_name:string; isCmres:bool; var arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; captureType:LLVMOpaqueType?; annotations:AnnotationList )
         var nat <- build_noalias_list(annotations); defer_delete(nat)
@@ -2518,33 +2522,35 @@ class JIT_LLVM : AstSimulateMacro
         return true if is_in_completion() || is_compiling_macros()
         if !LLVM_JIT_ENABLED
             return true
-        let totalTime = ref_time_ticks()
-        init_jit()
         var funcs : array<FunctionPtr>
-        var fake_visitor = new LlvmJitVisitor(ctx)
         prog |> for_each_module <| $ ( mod )
             mod |> for_each_function("") <| $ ( fun )
                 if fun.moreFlags.requestJit
-                    fake_visitor->add_llvm_functions(fun)
                     funcs |> emplace(fun)
-        unsafe
-            delete fake_visitor
-        for fun in funcs
-            generate_llvm(ctx, fun)
-        optimize_llvm_module()
-        for fun in funcs
-            var mangled_name = get_mangled_name(fun)
-            let MNH = hash(mangled_name)
-            var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
-            var gen = generate_llvm_code(mangled_name)
+        if !empty(funcs)
+            let totalTime = ref_time_ticks()
+            init_jit()
+            var fake_visitor = new LlvmJitVisitor(ctx)
+            for fun in funcs
+                fake_visitor->add_llvm_functions(fun)
             unsafe
-                if gen != null
-                    gen |> instrument_jit(simfun)
-                else
-                    remove_jit(simfun)
-        finalize_jit()
-        if LLVM_JIT_LOG
-            let totalDt = double(get_time_usec(totalTime)) /1000000.0lf
-            to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions in {totalDt} sec\n")
+                delete fake_visitor
+            for fun in funcs
+                generate_llvm(ctx, fun)
+            optimize_llvm_module()
+            for fun in funcs
+                var mangled_name = get_mangled_name(fun)
+                let MNH = hash(mangled_name)
+                var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
+                var gen = generate_llvm_code(mangled_name)
+                unsafe
+                    if gen != null
+                        gen |> instrument_jit(simfun)
+                    else
+                        remove_jit(simfun)
+            finalize_jit()
+            if LLVM_JIT_LOG
+                let totalDt = double(get_time_usec(totalTime)) /1000000.0lf
+                to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions in {totalDt} sec\n")
         return true
 

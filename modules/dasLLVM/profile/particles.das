@@ -9,14 +9,10 @@ struct NObject
     velocity : float3
 
 [jit]
-def testSimI(var objects:array<NObject>)
-    for obj in objects
-        obj.position += obj.velocity
-
-[jit]
 def testSim2I(var objects:array<NObject>; count:int)
     for i in range(count)
-        testSimI(objects)
+        for obj in objects
+            obj.position += obj.velocity
 
 def init(var objects:array<NObject>)
     resize(objects, 50000)

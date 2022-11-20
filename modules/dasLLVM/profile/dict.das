@@ -11,7 +11,7 @@ def makeRandomSequence(var src:array<string>)
         let num = (271828183u ^ uint(i*119))%mod
         src[i] = "{num}"
 
-[jit]
+[jit,hint(hot)]
 def dict(var tab:table<string;int>; src:array<string>)
     clear(tab)
     var maxOcc = 0

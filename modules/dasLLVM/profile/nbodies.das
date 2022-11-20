@@ -51,7 +51,7 @@ def offset_momentum(var bodies:body[5])
 def inv_length_jit(var r:float3)
     return 1.0 / sqrt(r.x*r.x + r.y*r.y + r.z*r.z)
 
-[jit]
+[jit,hint(alwaysinline,hot,noalias=bodies)]
 def advance(var bodies:body[5])
     var i = 0
     for b in bodies
