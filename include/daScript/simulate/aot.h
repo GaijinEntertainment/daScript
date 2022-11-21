@@ -2414,6 +2414,14 @@ namespace das {
         vec.insert(vec.begin() + at, value);
     }
 
+    template <typename TT>
+    __forceinline void das_vector_push_empty ( TT & vec, int32_t at, Context * context ) {
+        if ( uint32_t(at)>vec.size() ) {
+            context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
+        }
+        vec.emplace(vec.begin() + at);
+    }
+
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_emplace ( TT & vec, QQ & value, int32_t at ) {
         vec.emplace(vec.begin()+at, move(value));
@@ -2427,6 +2435,11 @@ namespace das {
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_push_back_value ( TT & vec, QQ value ) {
         vec.push_back(value);
+    }
+
+    template <typename TT>
+    __forceinline void das_vector_push_back_empty ( TT & vec ) {
+        vec.emplace_back();
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
