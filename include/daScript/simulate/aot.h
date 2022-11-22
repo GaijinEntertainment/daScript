@@ -191,6 +191,12 @@ namespace das {
         static __forceinline TT & pass ( TT & a ) {
             return a;
         }
+        static __forceinline const TT & pass ( const TT && a ) {
+            return *((const TT *)&a);
+        }
+        static __forceinline const TT & pass ( const TT & a ) {
+            return a;
+        }
     };
 
     template <typename TT>
