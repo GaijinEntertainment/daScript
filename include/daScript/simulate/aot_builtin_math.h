@@ -128,7 +128,7 @@ namespace das {
     //     outRefracted = nint*(v-n*dt)-n*sqrt(discr)
     //     return true
     // return false
-    __forceinline float3 refract(vec4f v, vec4f n, float nint) {
+    __forceinline vec4f refract(vec4f v, vec4f n, float nint) {
         vec4f dtv = v_dot3(v, n);
         float dt = v_extract_x(dtv);
         float discr = 1.0f - nint*nint*(1.0f - dt*dt);
@@ -137,7 +137,7 @@ namespace das {
             vec4f sqrt_discr = v_perm_xxxx(v_sqrt_x(v_set_x(discr)));
             return v_sub(v_mul(nintv, v_sub(v, v_mul(n, dtv))), v_mul(n, sqrt_discr));
         } else {
-            return float3(0.);
+            return v_zero();
         }
     }
 

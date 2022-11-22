@@ -61,6 +61,20 @@ def public fuzz_numeric_and_vector_op1 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_float4 )
 
 [constant_expression(funcname)]
+def public fuzz_numeric_and_vector_signed_op1 ( t:T?; var fake:Faker; funcname:string )
+    //! fuzzes generic function that takes single numeric or vector argument.
+    //! arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3, uint4, float2, float3, float4
+    invoke ( funcname, t, fake |> random_int )
+    invoke ( funcname, t, fake |> random_float )
+    invoke ( funcname, t, fake |> random_double )
+    invoke ( funcname, t, fake |> random_int2 )
+    invoke ( funcname, t, fake |> random_int3 )
+    invoke ( funcname, t, fake |> random_int4 )
+    invoke ( funcname, t, fake |> random_float2 )
+    invoke ( funcname, t, fake |> random_float3 )
+    invoke ( funcname, t, fake |> random_float4 )
+
+[constant_expression(funcname)]
 def public fuzz_numeric_op1 ( t:T?; var fake:Faker; funcname:string )
     //! fuzzes generic function that takes single numeric or vector argument.
     //! arguments are: int, uint, float, double
@@ -264,6 +278,23 @@ def public fuzz_numeric_op3 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_uint, fake |> random_uint, fake |> random_uint )
     invoke ( funcname, t, fake |> random_float, fake |> random_float, fake |> random_float )
     invoke ( funcname, t, fake |> random_double, fake |> random_double, fake |> random_double )
+
+[constant_expression(funcname)]
+def public fuzz_float_or_float_vec_op3 ( t:T?; var fake:Faker; funcname:string )
+    //! fuzzes generic function that takes three numeric or vector arguments.
+    //! arguments are: float2, float3, float4
+    invoke ( funcname, t, fake |> random_float,  fake |> random_float,  fake |> random_float  )
+    invoke ( funcname, t, fake |> random_float2, fake |> random_float2, fake |> random_float2 )
+    invoke ( funcname, t, fake |> random_float3, fake |> random_float3, fake |> random_float3 )
+    invoke ( funcname, t, fake |> random_float4, fake |> random_float4, fake |> random_float4 )
+
+[constant_expression(funcname)]
+def public fuzz_float_or_float_vec_mad_op3 ( t:T?; var fake:Faker; funcname:string )
+    //! fuzzes generic function that takes three numeric or vector arguments.
+    //! arguments are: float2, float3, float4. second argument is float.
+    invoke ( funcname, t, fake |> random_float2, fake |> random_float, fake |> random_float2 )
+    invoke ( funcname, t, fake |> random_float3, fake |> random_float, fake |> random_float3 )
+    invoke ( funcname, t, fake |> random_float4, fake |> random_float, fake |> random_float4 )
 
 [constant_expression(funcname)]
 def public fuzz_numeric_op4 ( t:T?; var fake:Faker; funcname:string )
