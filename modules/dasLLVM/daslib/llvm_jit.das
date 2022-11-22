@@ -511,6 +511,15 @@ class LlvmJitVisitor : AstVisitor
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
             elif bt == Type tFloat4
                 return v4f
+            elif bt == Type tFloat3
+                var vec = LLVMGetUndef(LLVMFloat3Type())
+                var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+                var z = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
+                vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+                vec = LLVMBuildInsertElement(g_builder, vec, z, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "vec4f_to_float3")
+                return vec
             elif bt == Type tBool
                 var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
@@ -864,13 +873,6 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildBr(g_builder, check_end)
         position_at_end(check_end)
 
-    def expand_scalar ( scalar:LLVMOpaqueValue?; vecType:TypeDeclPtr )
-        var vec = LLVMGetUndef(type_to_llvm_type(vecType))
-        for d in range(vecType.vectorDim)
-            var idx = LLVMConstInt(LLVMInt32Type(), uint64(d), 0)
-            vec = LLVMBuildInsertElement(g_builder, vec, scalar, idx, "")
-        return vec
-
     def isExprIntNZ ( expr:ExpressionPtr )
         return true     if (expr is ExprConstInt) && (expr as ExprConstInt).value!=0
         return true     if (expr is ExprConstUInt) && (expr as ExprConstUInt).value!=0u
@@ -906,9 +908,9 @@ class LlvmJitVisitor : AstVisitor
             if expr.left._type.baseType != expr.right._type.baseType // vec * scalar || scalar * vec, and so on
                 if opType.isVectorType
                     assert(expr.op=="*" || expr.op=="/")    // scalar * vec || scalar / vec only
-                    left = expand_scalar(left, opType)
+                    left = expand_scalar(g_builder, left, opType)
                 else
-                    right = expand_scalar(right, expr.left._type)
+                    right = expand_scalar(g_builder, right, expr.left._type)
 
         // note: we need to handle shift operations
         // the way we do it, is we expand scalar up to vector type

@@ -486,3 +486,10 @@ def public LLVMBuildLoadData2Aligned ( builder:LLVMOpaqueBuilder?; typ:LLVMOpaqu
         return LLVMBuildLoadVector3(builder, ptr, name)
     else
         return LLVMBuildLoad2Aligned(builder, typ, ptr, alignment, name)
+
+def public expand_scalar ( builder:LLVMOpaqueBuilder?; scalar:LLVMOpaqueValue?; vecType:TypeDeclPtr )
+    var vec = LLVMGetUndef(type_to_llvm_type(vecType))
+    for d in range(vecType.vectorDim)
+        var idx = LLVMConstInt(LLVMInt32Type(), uint64(d), 0)
+        vec = LLVMBuildInsertElement(builder, vec, scalar, idx, "")
+    return vec

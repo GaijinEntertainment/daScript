@@ -44,10 +44,16 @@ let g_intrin_lookup <- {{
         "$::set_variant_index" => @@intrinsic_builtin_set_variant_index;
         "$::variant_index" => @@intrinsic_builtin_variant_index;
 // math
+    "math::mad" => @@intrinsic_math_mad_op3;
+    "math::lerp" => @@intrinsic_math_lerp_op3;
     "math::rcp" => @@intrinsic_math_rcp;
     "math::rcp_est"=> @@intrinsic_math_rcp;
     "math::exp" => @@intrinsic_math_float_op1;
     "math::sqrt" => @@intrinsic_math_float_op1;
+    "math::tan" => @@intrinsic_math_tan;
+    "math::sin" => @@intrinsic_math_float_op1;
+    "math::cos" => @@intrinsic_math_float_op1;
+    "math::pow" => @@intrinsic_op2;
     "math::min" => @@intrinsic_math_minmax;
     "math::max" => @@intrinsic_math_minmax
 }}
@@ -278,7 +284,8 @@ def intrinsic_bit_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>
 
 let private op2_name <- {{
     "min" => "minimum";
-    "max" => "maximum"
+    "max" => "maximum";
+    "pow" => "pow"
 }}
 
 def intrinsic_op2(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
@@ -340,14 +347,14 @@ def intrinsic_math_rcp(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc
         failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
         return null
 
-def intrinsic_math_float_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
-    var sqrt_name = "llvm.{expr.name}.f32"
+def intrinsic_math_any_float_op1(expr_name:string; g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var sqrt_name = "llvm.{expr_name}.f32"
     assume opType = expr.arguments[0]._type
     if opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
         if opType.baseType==Type tDouble
-            sqrt_name = "llvm.{expr.name}.f64"
+            sqrt_name = "llvm.{expr_name}.f64"
     else
-        failed_E(expr, "{expr.name}({describe(opType)}) is not supported (yet?)")
+        failed_E(expr, "{expr_name}({describe(opType)}) is not supported (yet?)")
         return null
     var args <- [{auto[] arguments[0]}]
     var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
@@ -356,5 +363,32 @@ def intrinsic_math_float_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCa
     if decl==null
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
-    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+    return LLVMBuildCall(g_builder, decl, args, expr_name)
+
+def intrinsic_math_float_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    return intrinsic_math_any_float_op1(string(expr.name), g_builder, expr, arguments)
+
+def intrinsic_math_tan(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var sin_a = intrinsic_math_any_float_op1("sin", g_builder, expr, arguments)
+    var cos_a = intrinsic_math_any_float_op1("cos", g_builder, expr, arguments)
+    return LLVMBuildFDiv(g_builder, sin_a, cos_a, "tan")
+
+def intrinsic_math_lerp_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    // v_madd(v_sub(b,a),t,a);
+    var a = arguments[0]
+    var b = arguments[1]
+    var t = arguments[2]
+    var b_sub_a = LLVMBuildFSub(g_builder, b, a, "")
+    var b_a_mul_t = LLVMBuildFMul(g_builder, b_sub_a, t, "")
+    return LLVMBuildFAdd(g_builder, b_a_mul_t, a, "lerp")
+
+def intrinsic_math_mad_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    // v_madd(a,b,c);
+    var a = arguments[0]
+    var b = arguments[1]
+    if expr.arguments[0]._type.isVectorType && expr.arguments[1]._type.isFloatOrDouble
+        b = expand_scalar(g_builder, b, expr.arguments[0]._type)
+    var c = arguments[2]
+    var a_mul_b = LLVMBuildFMul(g_builder, a, b, "")
+    return LLVMBuildFAdd(g_builder, a_mul_b, c, "mad")
 
