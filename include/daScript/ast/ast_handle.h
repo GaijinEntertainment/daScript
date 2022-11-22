@@ -504,8 +504,7 @@ namespace das
                 addExtern<DAS_BIND_FUN((das_vector_push_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
                     SideEffects::modifyArgument, "das_vector_push_back")->generated = true;
             }
-            if constexpr ( std::is_default_constructible_v<typename TT::value_type> )
-            {
+            if constexpr ( std::is_default_constructible_v<typename TT::value_type> ) {
                 addExtern<DAS_BIND_FUN((das_vector_push_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
                     SideEffects::modifyArgument, "das_vector_push_empty")->generated = true;
                 addExtern<DAS_BIND_FUN((das_vector_push_back_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
@@ -547,8 +546,7 @@ namespace das
                     SideEffects::modifyArgument, "das_vector_push_back_value")
                         ->args({"vec","value"})->generated = true;
             }
-            if constexpr ( std::is_default_constructible_v<typename TT::value_type> )
-            {
+            if constexpr ( std::is_default_constructible_v<typename TT::value_type> ) {
               addExtern<DAS_BIND_FUN((das_vector_push_empty<TT>))>(*mod, lib, "push_empty",
                   SideEffects::modifyArgument, "das_vector_push_empty")
                       ->args({"vec","at","context"})->generated = true;
