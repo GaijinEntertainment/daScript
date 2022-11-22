@@ -520,6 +520,8 @@ class LlvmJitVisitor : AstVisitor
                 vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
                 vec = LLVMBuildInsertElement(g_builder, vec, z, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "vec4f_to_float3")
                 return vec
+            elif bt == Type tFloat
+                return LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "vec4f_to_float")
             elif bt == Type tBool
                 var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
@@ -1004,7 +1006,7 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported division type operator {expr.op}")
         elif expr.op=="<" || expr.op==">" || expr.op=="<=" || expr.op==">=" || expr.op=="==" || expr.op=="!="
             var opR : LLVMOpaqueValue?
-            if expr.left._type.isSignedInteger || (expr.left._type.isVectorType && expr.left._type.vectorBaseType==Type tInt)
+            if expr.left._type.isSignedInteger || (expr.left._type.isVectorType && expr.left._type.vectorBaseType==Type tInt) || expr.left._type.isEnum
                 opR = LLVMBuildICmp(g_builder, get_int_compare_op(expr,string(expr.op)), left, right, "")
                 if expr.left._type.isVectorType
                     opR = reduce_bit_vector(opR, expr.left._type.vectorDim, string(expr.op))
@@ -2365,7 +2367,8 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, LLVMConstPointerNull(LLVMVoidType()))
         return expr
     def override visitExprConstEnumeration(expr:smart_ptr<ExprConstEnumeration>) : ExpressionPtr
-        // TODO: implement
+        var value = find_enum_value(unsafe(reinterpret<EnumerationPtr> expr._type.enumType), string(expr.value))
+        setE(expr, LLVMConstInt(base_type_to_llvm_type(expr._type.enumType.baseType), uint64(value), 0))
         return expr
     def override visitExprConstBitfield(expr:smart_ptr<ExprConstBitfield>) : ExpressionPtr
         setE(expr, LLVMConstInt(LLVMInt32Type(), uint64(expr.value), 0))

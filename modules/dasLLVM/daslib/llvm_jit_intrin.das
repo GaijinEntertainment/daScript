@@ -44,6 +44,8 @@ let g_intrin_lookup <- {{
         "$::set_variant_index" => @@intrinsic_builtin_set_variant_index;
         "$::variant_index" => @@intrinsic_builtin_variant_index;
 // math
+    "math::saturate" => @@intrinsic_math_saturate;
+    "math::abs" => @@intrinsic_math_abs;
     "math::mad" => @@intrinsic_math_mad_op3;
     "math::lerp" => @@intrinsic_math_lerp_op3;
     "math::rcp" => @@intrinsic_math_rcp;
@@ -383,6 +385,20 @@ def intrinsic_math_lerp_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCal
     return LLVMBuildFAdd(g_builder, b_a_mul_t, a, "lerp")
 
 def intrinsic_math_mad_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+/*
+    var b = arguments[1]
+    if expr.arguments[0]._type.isVectorType && expr.arguments[1]._type.isFloatOrDouble
+        b = expand_scalar(g_builder, b, expr.arguments[0]._type)
+    var args <- [{auto[] arguments[0]; b; arguments[2]}]
+    var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
+    var id = LLVMLookupIntrinsicID("llvm.fma.f32")
+    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+    if decl==null
+        failed_E(expr, "missing intrinsic llvm.fma.32")
+        return null
+    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+*/
+
     // v_madd(a,b,c);
     var a = arguments[0]
     var b = arguments[1]
@@ -391,4 +407,51 @@ def intrinsic_math_mad_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCall
     var c = arguments[2]
     var a_mul_b = LLVMBuildFMul(g_builder, a, b, "")
     return LLVMBuildFAdd(g_builder, a_mul_b, c, "mad")
+
+
+def intrinsic_math_abs(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    var sqrt_name = ""
+    var int_abs = false
+    if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
+        int_abs = true
+        if opType.baseType==Type tInt64 || opType.baseType==Type tUInt64
+            sqrt_name = "llvm.abs.i64"
+        else
+            sqrt_name = "llvm.abs.i32"
+    elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+        if opType.baseType==Type tDouble
+            sqrt_name = "llvm.fabs.f64"
+        else
+            sqrt_name = "llvm.fabs.f32"
+    else
+        failed("abs({describe(opType)}) is not supported (yet?)")
+        return null
+    var args <- [{auto[] arguments[0]}]
+    if int_abs
+        args |> push <| LLVMConstInt(LLVMInt1Type(), 0ul, 0)
+    var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
+    var id = LLVMLookupIntrinsicID(sqrt_name)
+    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+    if decl==null
+        failed_E(expr, "missing intrinsic {sqrt_name}")
+        return null
+    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+
+def intrinsic_math_saturate(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    if opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
+        var v_0 = LLVMConstReal(LLVMFloatType(), double(0.))
+        var v_1 = LLVMConstReal(LLVMFloatType(), double(1.))
+        if !opType.isFloatOrDouble
+            v_0 = expand_scalar(g_builder, v_0, opType)
+            v_1 = expand_scalar(g_builder, v_1, opType)
+        var cond_max = LLVMBuildFCmp(g_builder, LLVMRealPredicate LLVMRealOGT, arguments[0], v_0, "")
+        var val_max  = LLVMBuildSelect( g_builder, cond_max, arguments[0], v_0, "")
+        var cond_min = LLVMBuildFCmp(g_builder, LLVMRealPredicate LLVMRealOLT, val_max, v_1, "")
+        return LLVMBuildSelect( g_builder, cond_min, val_max, v_1, "saturate")
+    else
+        failed_E(expr, "missing intrinsic {expr.name}({describe(opType)})")
+        return null
+
 

@@ -122,3 +122,46 @@ def test_max ( t:T? )
     fuzz <|
         fuzz_numeric_and_vector_op2_no_unint_vec(t,fake,"test_max")
 
+[jit]
+def jit_abs(a)
+    return abs(a)
+
+def test_abs( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):TT> jit_abs) )
+    t |> strictEqual ( abs(a), jit_abs(a), "abs(a)" )
+
+[test]
+def test_abs ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_numeric_and_vector_signed_op1(t,fake,"test_abs")
+
+[jit]
+def jit_saturate(a)
+    return saturate(a)
+
+def test_saturate( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):TT> jit_saturate) )
+    t |> strictEqual ( saturate(a), jit_saturate(a), "saturate(a)" )
+
+[test]
+def test_saturate ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_float_or_float_vec_op1(t,fake,"test_saturate")
+
+[jit]
+def jit_mad(a,b,c)
+    return mad(a,b,c)
+
+def test_mad( t:T?; a:auto(TT); b:auto(QQ); c:TT )
+    t |> success ( is_jit_function(@@<(a:TT;b:QQ;c:TT):TT> jit_mad) )
+    t |> strictEqual ( mad(a,b,c), jit_mad(a,b,c), "mad({a},{b},{c})" )
+
+[test]
+def test_mad ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_float_or_float_vec_op3(t,fake,"test_mad")
+    fuzz <|
+        fuzz_float_or_float_vec_mad_op3(t,fake,"test_mad")
