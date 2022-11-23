@@ -1667,9 +1667,9 @@ def private getGlobalVariableDefinitions(var ctx: Context)
                 if vinfo.flags.ref
                     unsafe
                         let pref = unsafe(reinterpret<void??> arg)
-                        var cvinfo = vinfo
+                        var cvinfo = *vinfo
                         cvinfo.flags &= ~TypeInfoFlags ref
-                        st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} = * reinterpret<{describe(type_info(*cvinfo))}?> {*pref}ul // already ref\n")
+                        st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} = * reinterpret<{describe(type_info(cvinfo))}?> {*pref}ul // already ref\n")
                 elif vinfo.dimSize > 0u
                     st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} = * reinterpret<{describe(type_info(*vinfo))}?> {arg}ul\n")
                 else

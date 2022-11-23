@@ -4437,7 +4437,8 @@ namespace das {
                     expr->field = valT->firstType->structType->findField(expr->name);
                 } else if ( valT->firstType->isHandle() ) {
                     expr->annotation = valT->firstType->annotation;
-                    expr->type = expr->annotation->makeFieldType(expr->name, expr->value->type->constant);
+                    expr->type = expr->annotation->makeFieldType(expr->name, valT->constant | valT->firstType->constant);
+                    expr->type->constant |= valT->constant | valT->firstType->constant;
                 } else if ( valT->firstType->isGoodTupleType() ) {
                     int index = expr->tupleFieldIndex();
                     if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
