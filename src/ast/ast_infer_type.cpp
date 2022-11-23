@@ -6366,7 +6366,7 @@ namespace das {
         bool reportOp2Errors ( ExprLooksLikeCall * expr ) {
             auto expr_left = expr->arguments[0].get();
             auto expr_right = expr->arguments[1].get();
-            auto expr_op = expr->name.substr(2);
+            auto expr_op = expr->name.substr(3);
             if (expr_left->type->isNumeric() && expr_right->type->isNumeric()) {
                 if ( isAssignmentOperator(expr_op) ) {
                     if ( !expr_left->type->ref ) {
