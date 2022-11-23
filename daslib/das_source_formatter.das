@@ -620,7 +620,7 @@ def remove_space_before(var ctx: FormatterCtx; i)
 
 
 let tokens_before_unary <- [[auto "("; "["; "?["; "\{"; "auto"; "int"; "float"; "int16"; "int32"; "int8"; ";"; ",";
-    "if"; "while"; "switch"; "return"; "yield"; "in"; "="; "!"
+    "if"; "elif"; "while"; "switch"; "return"; "yield"; "in"; "="; "!"
     ]]
 
 def is_unary(ctx: FormatterCtx; index: int): bool
