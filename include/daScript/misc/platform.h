@@ -169,10 +169,10 @@
 #else
     #define das_clz __builtin_clz
     #define das_ctz __builtin_ctz
-    #define das_clz64 __builtin_clz
-    #define das_ctz64 __builtin_ctz
+    #define das_clz64 __builtin_clzll
+    #define das_ctz64 __builtin_ctzll
     #define das_popcount __builtin_popcount
-    #define das_popcount64 __builtin_popcount
+    #define das_popcount64 __builtin_popcountll
 #endif
 
 #ifdef _MSC_VER
