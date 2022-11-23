@@ -532,8 +532,8 @@ def fmt_function_arguments(var ctx: FormatterCtx)
 
                 elif ctx.tokens[i].newLines > 0
                     lastNewLineToken = i
-                    ctx.tokens[i].spaces = firstBracketColumn
-                    ctx.tokens[i].column = firstBracketColumn
+                    ctx.tokens[i].spaces = firstBracketColumn + (ctx.tokens[i].isInType ? 2 : 0)
+                    ctx.tokens[i].column = firstBracketColumn + (ctx.tokens[i].isInType ? 2 : 0)
 
                 i++
         i++
