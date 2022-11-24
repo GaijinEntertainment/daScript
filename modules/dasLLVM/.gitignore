@@ -30,5 +30,4 @@
 *.exe
 *.out
 *.app
-profile/pathtracer.das
 profile/path_tracer.png
