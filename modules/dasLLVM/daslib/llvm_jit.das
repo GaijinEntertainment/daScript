@@ -493,13 +493,13 @@ class LlvmJitVisitor : AstVisitor
     def cast_from_vec4f_ptr ( v4f:LLVMOpaqueValue?; ptr_type:LLVMOpaqueType? ) : LLVMOpaqueValue?
         var tres : LLVMOpaqueValue?
         if typeinfo(sizeof type<void?>)==8
-            var v2 = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "ptr_vec")
-            var tbit = LLVMBuildExtractElement(g_builder, v2, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "ptr_bits")
-            tres = LLVMBuildIntToPtr(g_builder, tbit, ptr_type, "cast_from_vec4f_ptr")
+            var v2 = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "")
+            var tbit = LLVMBuildExtractElement(g_builder, v2, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            tres = LLVMBuildIntToPtr(g_builder, tbit, ptr_type, "vec4f_to_ptr")
         else
-            var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
-            tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "ptr_bits")
-            tres = LLVMBuildIntToPtr(g_builder, tres, ptr_type, "cast_from_vec4f_ptr")
+            var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "")
+            tres = LLVMBuildIntToPtr(g_builder, tres, ptr_type, "vec4f_to_ptr")
         return tres
 
     def cast_from_vec4f ( expr:ExpressionPtr; etype:TypeDeclPtr; v4f:LLVMOpaqueValue? )
@@ -507,8 +507,8 @@ class LlvmJitVisitor : AstVisitor
         if etype.isWorkhorseType
             let bt = etype.baseType
             if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
-                var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
-                tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
+                var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
             elif bt == Type tFloat4
                 return v4f
             elif bt == Type tFloat3
@@ -522,10 +522,12 @@ class LlvmJitVisitor : AstVisitor
                 return vec
             elif bt == Type tFloat
                 return LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "vec4f_to_float")
+            elif bt == Type tInt4
+                return LLVMBuildBitCast(g_builder, v4f, LLVMInt4Type(), "vec4f_to_int4")
             elif bt == Type tBool
-                var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "cast_from_vec4f_bits")
-                tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "cast_from_vec4f")
-                tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt1Type(), "down_to_1_bit")
+                var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "")
+                tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt1Type(), "vec4f_to_bool")
             elif bt == Type tString || bt == Type tPointer
                 var ptr_type = bt==Type tString ? get_type_string() : type_to_llvm_type(etype)
                 tres = cast_from_vec4f_ptr(v4f, ptr_type)
@@ -755,6 +757,17 @@ class LlvmJitVisitor : AstVisitor
             return LLVMGetUndef(LLVMInt32Type())
         return LLVMBuildCall(g_builder, tab_fun, params, "")
 
+    def build_array_index(var data,tidx:LLVMOpaqueValue?; elemType:TypeDeclPtr; name:string)
+        var ptr_idx : LLVMOpaqueValue?
+        if elemType.isVectorType && elemType.vectorDim==3
+            var data_bytes = LLVMBuildPointerCast(g_builder, data, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            var data_idx = LLVMBuildMul(g_builder, tidx, LLVMConstInt(LLVMInt32Type(), 12ul, 0), "")
+            ptr_idx = LLVMBuildGEP(g_builder, data_bytes, data_idx, "")
+            ptr_idx = LLVMBuildPointerCast(g_builder, ptr_idx, LLVMPointerType(type_to_llvm_type(elemType), 0u), name)
+        else
+            ptr_idx = LLVMBuildGEP2(g_builder, type_to_llvm_type(elemType), data, tidx, name)
+        return ptr_idx
+
     def override visitExprAt(expr:smart_ptr<ExprAt>) : ExpressionPtr
         var tsrc = getE(expr.subexpr)
         var tidx = getE(expr.index)
@@ -762,8 +775,7 @@ class LlvmJitVisitor : AstVisitor
         if subExprT.isPointer
             if thisFunc!=null && !thisFunc.flags.unsafeDeref
                 check_ptr_zero(tsrc)
-            var element_type = type_to_llvm_type(subExprT.firstType)
-            var ptr_idx = LLVMBuildGEP(g_builder, tsrc, tidx, "ptr_at")
+            var ptr_idx = build_array_index(tsrc, tidx, subExprT.firstType, "ptr_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoadDataAligned(g_builder, ptr_idx, uint(expr._type.alignOf), "at_r2v")
                 setE(expr, at_r2v)
@@ -773,9 +785,8 @@ class LlvmJitVisitor : AstVisitor
             var etype <- clone_type(subExprT); defer_delete(etype)
             let maxIndex = etype.dim[etype.dim.length-1]
             etype.dim |> pop()
-            var element_type = type_to_llvm_type(etype)
             check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0), "dim index out of range")
-            var ptr_idx = LLVMBuildGEP2(g_builder, element_type, tsrc, tidx, "dim_at")
+            var ptr_idx = build_array_index(tsrc, tidx, etype, "dim_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoadDataAligned(g_builder, ptr_idx, uint(expr._type.alignOf), "dim_at_r2v")
                 setE(expr, at_r2v)
@@ -786,7 +797,7 @@ class LlvmJitVisitor : AstVisitor
             var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY SIZE), "array.size")
             check_range(tidx, size, "array index out of range")
             var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY DATA), "array.data")
-            var ptr_idx = LLVMBuildGEP(g_builder, data, tidx, "array_at")
+            var ptr_idx = build_array_index(data, tidx, subExprT.firstType, "array_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoadDataAligned(g_builder, ptr_idx, uint(expr._type.alignOf), "array_at_r2v")
                 setE(expr, at_r2v)
@@ -1336,9 +1347,10 @@ class LlvmJitVisitor : AstVisitor
             from_ai --
         var args : LLVMOpaqueValue?
         if nargs != 0
-            args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), uint(nargs)), "args")
-            LLVMSetAlignment(args, 16u)
-            args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
+            at_function_entry <|
+                args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), uint(nargs)), "args")
+                LLVMSetAlignment(args, 16u)
+                args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
             for a,ai in arguments,range(from_ai,100500)
                 if ai<0
                     continue
@@ -1415,10 +1427,11 @@ class LlvmJitVisitor : AstVisitor
                 cmresEval = call2cmres[get_ptr(ExpressionPtr(expr))]
             elif !doesNotNeedSp && expr.stackTop!=0u
                 var vtype = type_to_llvm_type(expr._type)
+                var v_ptr_type = get_type_pointer(expr._type)
                 at_function_entry <|
                     cmresEval = LLVMBuildAlloca(g_builder, vtype, "cmres_eval_{expr.name}")
                     LLVMSetAlignment(cmresEval, 16u)
-                    cmresEval = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "cmres_eval_{expr.name}")
+                    cmresEval = LLVMBuildPointerCast(g_builder, cmresEval, v_ptr_type, "")
             else
                 cmresEval = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
                 failed_E(expr, "CMRES is not local, not supported yet")
@@ -1456,7 +1469,7 @@ class LlvmJitVisitor : AstVisitor
                 var params <- build_call_params(expr)
                 params |> push(get_context_param())
                 if cmresEval!=null
-                    params |> push(cmresEval)       // cmres
+                    params |> push(LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), ""))
                 let fmna = get_mangled_name(FunctionPtr(expr.func))
                 var func = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
@@ -1477,7 +1490,7 @@ class LlvmJitVisitor : AstVisitor
                 params |> push(LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)))  // mnh
                 params |> push(args)
                 if cmresEval!=null
-                    params |> push(cmresEval)
+                    params |> push(LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), ""))
                 params |> push(get_context_param())
                 var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
                 var ccall = LLVMBuildCall(g_builder, func, params, "")
@@ -1612,7 +1625,6 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // swizzle
-
     def override visitExprSwizzle(expr:smart_ptr<ExprSwizzle>) : ExpressionPtr
         var val = getE(expr.value)
         if expr._type.flags.ref
@@ -1630,8 +1642,12 @@ class LlvmJitVisitor : AstVisitor
                 val_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), val_ptr, uint(expr.value._type.alignOf), "swizzle_{expr.fields}"))
             else
-                failed_E(expr, "val.swizzle is not supported yet, sequencial: {isSequencial} ref:{expr.value._type.flags.ref}")
-                setE(expr, LLVMGetUndef(LLVMInt32Type()))
+                assert(expr.fields.length!=1)
+                var res = LLVMGetUndef(type_to_llvm_type(expr._type))
+                for i,fi in range(100500),expr.fields
+                    var f = LLVMBuildExtractElement(g_builder, val, LLVMConstInt(LLVMInt32Type(), uint64(fi), 0), "")
+                    res = LLVMBuildInsertElement(g_builder, res, f, LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+                setE(expr, res)
         return expr
 
 // field
