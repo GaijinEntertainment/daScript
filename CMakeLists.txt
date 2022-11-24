@@ -663,6 +663,11 @@ if (NOT ${DAS_BUILD_TEST} MATCHES NO)
   include(examples/test/CMakeLists.txt)
 endif()
 
+# Test
+if (NOT ${DAS_BUILD_TEST} MATCHES NO)
+  include(examples/pathTracer/CMakeLists.txt)
+endif()
+
 # Profile module
 
 SET(PROFILE_MAIN_LIB_SRC
