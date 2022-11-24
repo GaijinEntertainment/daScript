@@ -10,6 +10,7 @@ luajit2_1_0beta3\luajit.exe -joff nbodies.lua
 luajit2_1_0beta3\luajit.exe -joff sha1.lua
 luajit2_1_0beta3\luajit.exe -joff tree.lua
 luajit2_1_0beta3\luajit.exe -joff table-sort.lua
+luajit2_1_0beta3\luajit.exe -joff table-sort-cmp.lua
 
 echo "LuaJIT, JIT"
 luajit2_1_0beta3\luajit.exe fibI.lua
@@ -23,6 +24,7 @@ luajit2_1_0beta3\luajit.exe nbodies.lua
 luajit2_1_0beta3\luajit.exe sha1.lua
 luajit2_1_0beta3\luajit.exe tree.lua
 luajit2_1_0beta3\luajit.exe table-sort.lua
+luajit2_1_0beta3\luajit.exe table-sort-cmp.lua
 
 echo "Lua (low res timer, no addOne)"
 lua.exe fibI.lua

@@ -24,18 +24,22 @@ rand = create_rng(12345)
 n = tonumber(arg and arg[1]) or 2000000
 t = {}
 for i = 1,n do
-	t[i] = rand()
+	t[i] = { x = rand() % 10000, y = rand() % 10000 }
+end
+
+function cmp(lhs, rhs)
+	if lhs.x ~= rhs.x then
+		return lhs.x > rhs.x
+	else
+		return lhs.y > rhs.y
+	end
 end
 
 loadfile("profile.lua")()
 
-io.write(string.format("table-sort: %.8f\n", profile_it(1, function () table.sort(t) end)))
+io.write(string.format("table-sort-cmp: %.8f\n", profile_it(1, function () table.sort(t, cmp) end)))
 
 for i = 1,n-1 do
-	assert(t[i] <= t[i+1])
+	assert(not cmp(t[i+1], t[i]))
 end
-
---for i = 1,n do
---	print(t[i])
---end
 

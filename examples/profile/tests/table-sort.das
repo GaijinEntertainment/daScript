@@ -14,10 +14,10 @@ def makeRandomSequence(var src:array<int>)
 def test
     var tab : array<int>
     makeRandomSequence(tab)
-	profile(1,"sort") <|
+	profile(1,"table-sort") <|
         sort(tab)
     makeRandomSequence(tab)
-	profile(1,"sort_cmp") <|
+	profile(1,"table-sort-cmp") <|
         sort ( tab, $(a,b) => !(a < b) )
     return true
 
