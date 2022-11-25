@@ -595,7 +595,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_bbox_isempty(bbox3f bbox) {return v_cmp_gt(bb
 
 VECMATH_FINLINE vec3f VECTORCALL v_bbox3_point(bbox3f b, int idx)
 {
-  return v_sel(b.bmin, b.bmax, v_make_vec4f_mask(idx));
+  return v_sel(b.bmin, b.bmax, v_make_vec4f_mask(uint8_t(idx)));
 }
 
 VECMATH_FINLINE void VECTORCALL v_bbox3_add_pt(bbox3f &b, vec3f p)

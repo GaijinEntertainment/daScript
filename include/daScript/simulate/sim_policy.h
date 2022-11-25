@@ -242,26 +242,6 @@ namespace  das {
         static __forceinline vec4f ATan2_est ( vec4f a, vec4f b, Context &, LineInfo * ) { return v_atan2_est(a, b); }
     };
 
-#if _TARGET_SIMD_SSE
-    // from https://stackoverflow.com/questions/34066228/how-to-perform-uint32-float-conversion-with-sse
-    __forceinline vec4f v_cvtu_vec4f(const vec4i v) {
-        __m128i msk_lo    = _mm_set1_epi32(0xFFFF);
-        __m128  cnst65536f= _mm_set1_ps(65536.0f);
-        __m128i v_lo      = _mm_and_si128(v,msk_lo);          /* extract the 16 lowest significant bits of v                                   */
-        __m128i v_hi      = _mm_srli_epi32(v,16);             /* 16 most significant bits of v                                                 */
-        __m128  v_lo_flt  = _mm_cvtepi32_ps(v_lo);            /* No rounding                                                                   */
-        __m128  v_hi_flt  = _mm_cvtepi32_ps(v_hi);            /* No rounding                                                                   */
-                v_hi_flt  = _mm_mul_ps(cnst65536f,v_hi_flt);  /* No rounding                                                                   */
-        return              _mm_add_ps(v_hi_flt,v_lo_flt);    /* Rounding may occur here, mul and add may fuse to fma for haswell and newer    */
-    }
-#else
-    __forceinline vec4f v_cvtu_vec4f(const vec4i v) {
-        alignas(16) uint32_t v4[4];
-        memcpy(v4, &v, sizeof(v4));
-        return v_make_vec4f(float(v4[0]), float(v4[1]), float(v4[2]), float(v4[3]));
-    }
-#endif
-
     template <typename TT, int mask>
     struct SimPolicy_Vec {
         static __forceinline void Set  ( char * a, vec4f b, Context &, LineInfo * ) {
@@ -517,12 +497,6 @@ namespace  das {
             else                    *pa = cast<TT>::to (v_cast_vec4f(v_divi4(v_cast_vec4i(cast<TT>::from(*pa)),v_splat_xi(v_cast_vec4i(b)))));
         }
     };
-
-    __forceinline vec4i v_cvtu_vec4i ( const vec4f v ) {
-        alignas(16) float f4[4];
-        memcpy(f4, &v, 16);
-        return v_make_vec4i((uint32_t)f4[0], (uint32_t)f4[1], (uint32_t)f4[2], (uint32_t)f4[3]);
-    }
 
     template <typename TT, int mask>
     struct SimPolicy_uVec : SimPolicy_iVec<TT,mask> {
