@@ -214,8 +214,6 @@ namespace das {
         vec4f   node[3];
     };
 
-    typedef vec4f ( * JitBlockFunction ) ( Context * , vec4f *, void *, Block * );
-
     struct SimNode_JitBlock : SimNode {
         SimNode_JitBlock ( const LineInfo & at, JitBlockFunction eval )
             : SimNode(at), func(eval) {}

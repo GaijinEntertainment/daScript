@@ -11,6 +11,7 @@ namespace das
         uint32_t    argumentsOffset;
         SimNode *   body;
         void *      aotFunction;
+        void *      jitFunction;
         vec4f *     functionArguments;
         FuncInfo *  info;
         __forceinline bool operator == ( const Block & b ) const {
@@ -18,6 +19,10 @@ namespace das
                 && b.body==body && b.functionArguments==functionArguments;
         }
     };
+
+    class Context;
+
+    typedef vec4f ( * JitBlockFunction ) ( Context * , vec4f *, void *, Block * );
 
     template <typename Result, typename ...Args>
     struct TBlock : Block {

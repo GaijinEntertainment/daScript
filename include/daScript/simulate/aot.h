@@ -1749,6 +1749,7 @@ namespace das {
             stackOffset = context->stack.spi();
             argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
             body = this;
+            jitFunction = nullptr;
             functionArguments = context->abiArguments();
             info = fi;
         }
@@ -2747,15 +2748,22 @@ namespace das {
 
     template <typename TT>
     void builtin_sort_cblock ( vec4f arr, int32_t, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
-        vec4f bargs[2];
         auto data = cast<TT *>::to(arr);
-        context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+        if ( cmp.jitFunction ) {
+            auto cmpFn = (bool (*)(TT,TT,const Block &,Context *)) cmp.jitFunction;
             sort ( data, data+length, [&](TT x, TT y) -> bool {
-                bargs[0] = cast<TT>::from(x);
-                bargs[1] = cast<TT>::from(y);
-                return code->evalBool(*context);
+                return cmpFn(x,y,cmp,context);
             });
-        },lineinfo);
+        } else {
+            vec4f bargs[2];
+            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                sort ( data, data+length, [&](TT x, TT y) -> bool {
+                    bargs[0] = cast<TT>::from(x);
+                    bargs[1] = cast<TT>::from(y);
+                    return code->evalBool(*context);
+                });
+            },lineinfo);
+        }
     }
 
     template <typename CompareFn, typename TT>
@@ -2779,30 +2787,44 @@ namespace das {
     struct scblk_array < const Block &,TT > {
         static __forceinline void srtr ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
             if ( arr.size<=1 ) return;
-            vec4f bargs[2];
             auto data = (TT *) arr.data;
             array_lock(*context, arr);
-            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+            if ( cmp.jitFunction ) {
+                auto cmpFn = (bool (*)(TT,TT,const Block &,Context *)) cmp.jitFunction;
                 das::sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
-                    bargs[0] = cast<TT>::from(x);
-                    bargs[1] = cast<TT>::from(y);
-                    return code->evalBool(*context);
+                    return cmpFn(x,y,cmp,context);
                 });
-            },lineinfo);
+            } else {
+                vec4f bargs[2];
+                context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                    das::sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
+                        bargs[0] = cast<TT>::from(x);
+                        bargs[1] = cast<TT>::from(y);
+                        return code->evalBool(*context);
+                    });
+                },lineinfo);
+            }
             array_unlock(*context, arr);
         }
         static __forceinline void srt ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
             if ( arr.size<=1 ) return;
-            vec4f bargs[2];
             auto data = (TT *) arr.data;
             array_lock(*context, arr);
-            context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
-                das::sort ( data, data+arr.size, [&](const TT & x, const TT & y) -> bool {
-                    bargs[0] = cast<const TT &>::from(x);
-                    bargs[1] = cast<const TT &>::from(y);
-                    return code->evalBool(*context);
+            if ( cmp.jitFunction ) {
+                auto cmpFn = (bool (*)(const TT &,const TT &,const Block &,Context *)) cmp.jitFunction;
+                das::sort ( data, data+arr.size, [&](const TT & x,const TT & y) -> bool {
+                    return cmpFn(x,y,cmp,context);
                 });
-            },lineinfo);
+            } else {
+                vec4f bargs[2];
+                context->invokeEx(cmp, bargs, nullptr, [&](SimNode * code) {
+                    das::sort ( data, data+arr.size, [&](const TT & x, const TT & y) -> bool {
+                        bargs[0] = cast<const TT &>::from(x);
+                        bargs[1] = cast<const TT &>::from(y);
+                        return code->evalBool(*context);
+                    });
+                },lineinfo);
+            }
             array_unlock(*context, arr);
         }
     };

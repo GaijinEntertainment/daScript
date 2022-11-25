@@ -1252,12 +1252,13 @@ namespace das
         return (void *) &jit_epilogue;
     }
 
-    void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * funcInfo, Context * context ) {
+    void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * jitImpl, void * funcInfo, Context * context ) {
         JitBlock * block = (JitBlock *) blk;
         block->stackOffset = context->stack.spi();
         block->argumentsOffset = argStackTop ? (context->stack.spi() + argStackTop) : 0;
         block->body = (SimNode *)(void*) block->node;
         block->aotFunction = nullptr;
+        block->jitFunction = jitImpl;
         block->functionArguments = context->abiArguments();
         block->info = (FuncInfo *) funcInfo;
         new (block->node) SimNode_JitBlock(LineInfo(), (JitBlockFunction) bodyNode);
