@@ -2293,7 +2293,7 @@ class LlvmJitVisitor : AstVisitor
         var blk_make = make_block_funcion(expr, capture,first_field_index, this_block_type)
         // allocate block, set capture fields
         var blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}")
-        var blkv = LLVMBuildLoad(g_builder, blk, "")
+        var blkv = LLVMGetUndef(this_block_type)
         for c,idx in capture,range(100500)
             var v_ptr = getV_ptr(c.variable, false)
             if v_ptr == null
