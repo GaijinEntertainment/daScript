@@ -2256,7 +2256,7 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // make block
-    def make_block_funcion(expr:smart_ptr<ExprMakeBlock>; capture:array<CapturedVariable>; first_field_index:int; captureType:LLVMOpaqueType? ) : LLVMOpaqueValue?
+    def make_block_funcion(expr:smart_ptr<ExprMakeBlock>; capture:array<CapturedVariable>; first_field_index:int; captureType:LLVMOpaqueType? ) : tuple<func:LLVMOpaqueValue?;impl:LLVMOpaqueValue?>
         var astVisitor = new LlvmJitVisitor(jit_context)
         var fmna : string
         unsafe
@@ -2272,10 +2272,11 @@ class LlvmJitVisitor : AstVisitor
             visit(expr._block, astVisitor.adapter)
             (*astVisitor)->post_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block)
         let result = LLVMGetNamedFunction(g_mod, fmna)
+        let impl = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
         astVisitor.adapter := null
         unsafe
             delete astVisitor
-        return result
+        return [[auto result,impl]]
 
     def override canVisitMakeBlockBody(expr:smart_ptr<ExprMakeBlock>) : bool
         return false
@@ -2289,7 +2290,7 @@ class LlvmJitVisitor : AstVisitor
             blk_fields |> push(LLVMPointerType(type_to_llvm_type(c.variable._type), 0u))
         var this_block_type = LLVMStructType(blk_fields)
         // make block function
-        var blk_function = make_block_funcion(expr, capture,first_field_index, this_block_type)
+        var blk_make = make_block_funcion(expr, capture,first_field_index, this_block_type)
         // allocate block, set capture fields
         var blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}")
         var blkv = LLVMBuildLoad(g_builder, blk, "")
@@ -2306,13 +2307,15 @@ class LlvmJitVisitor : AstVisitor
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
         let argStackTop = (expr._block as ExprBlock).stackTop
         let null_ptr = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
-        let func_ptr = LLVMBuildPointerCast(g_builder, blk_function, LLVMPointerType(LLVMVoidType(),0u), "")
+        let func_ptr = LLVMBuildPointerCast(g_builder, blk_make.func, LLVMPointerType(LLVMVoidType(),0u), "")
+        let impl_ptr = LLVMBuildPointerCast(g_builder, blk_make.impl, LLVMPointerType(LLVMVoidType(),0u), "")
         var params = [[auto
-            blk_ptr;
-            LLVMConstInt(LLVMInt32Type(), uint64(argStackTop), 0);
-            func_ptr;
-            null_ptr;   // TODO: function inf
-            get_context_param()
+            blk_ptr;                                                    // blk
+            LLVMConstInt(LLVMInt32Type(), uint64(argStackTop), 0);      // argStackTop
+            func_ptr;                                                   // bodyNode
+            impl_ptr;                                                   // jitImpl
+            null_ptr;                                                   // TODO: funcInfo
+            get_context_param()                                         // Context
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_MAKE_BLOCK), params, "")
         setE(expr, blk_ptr)

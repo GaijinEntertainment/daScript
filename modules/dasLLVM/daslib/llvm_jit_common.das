@@ -105,6 +105,7 @@ enum public JIT_BLOCK
     ARGUMENTS_OFFSET
     BODY
     AOT_FUNCTION
+    JIT_FUNCTION
     FUNCTION_ARGUMENTS
     INFO
 
@@ -231,9 +232,10 @@ def public init_jit
             [[LLVMTypeRef LLVMPointerType(g_t_stack_state,0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_epilogue, get_jit_epilogue())
 
-    var jit_make_block = LLVMAddFunction(g_mod, FN_JIT_MAKE_BLOCK,  // void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * funcInfo, Context * context )
+    var jit_make_block = LLVMAddFunction(g_mod, FN_JIT_MAKE_BLOCK,  // void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * jitImpl, void * funcInfo, Context * context )
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+            [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u);
+                LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_make_block, get_jit_make_block())
 
 def private build_jit_types
@@ -280,6 +282,7 @@ def public build_block_type
         LLVMInt32Type();                        // uint32_t    argumentsOffset;
         LLVMPointerType(LLVMVoidType(),0u);     // SimNode *   body;
         LLVMPointerType(LLVMVoidType(),0u);     // void *      aotFunction;
+        LLVMPointerType(LLVMVoidType(),0u);     // void *      jitFunction;
         LLVMPointerType(LLVMFloat4Type(),0u);   // vec4f *     functionArguments;
         LLVMPointerType(LLVMVoidType(),0u)      // FuncInfo *  info;
     }]
