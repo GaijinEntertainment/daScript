@@ -1398,7 +1398,7 @@ class LlvmJitVisitor : AstVisitor
             if a._type.baseType==Type fakeContext
                 params |> push(get_context_param())
             elif a._type.baseType==Type fakeLineInfo
-                params |> push(LLVMConstPointerNull(LLVMVoidType()))
+                params |> push(LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u)))
             elif a._type.baseType==Type tPointer
                 assume funcArg = expr.func.arguments[ai]
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
