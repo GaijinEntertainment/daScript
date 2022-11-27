@@ -109,8 +109,10 @@ VECMATH_FINLINE int VECTORCALL v_check_xyz_non_zero(vec4f a)
 }
 
 VECMATH_FINLINE vec4i VECTORCALL v_cvti_vec4i(vec4f a) { return vcvtq_s32_f32(a); }
-VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i(vec4f a) { return vcvtq_u32_f32(a); }
-VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f(vec4i a) { return vcvtq_f32_u32(a); }
+VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i_ieee(vec4f a) { return vcvtq_u32_f32(a); }
+VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i(vec4f a) { return v_cvtu_vec4i_ieee(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f_ieee(vec4i a) { return vcvtq_f32_u32(a); }
+VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f(vec4i a) { return v_cvtu_vec4f_ieee(a); }
 VECMATH_FINLINE vec4f VECTORCALL v_cvti_vec4f(vec4i a) { return vcvtq_f32_s32(a); }
 
 VECMATH_FINLINE vec4i VECTORCALL v_cast_vec4i(vec4f a) { return vreinterpretq_s32_f32(a); }
@@ -485,7 +487,10 @@ VECMATH_FINLINE vec4f VECTORCALL v_perm_ywyw(vec4f xyzw)
 {
   return __builtin_shufflevector(xyzw, xyzw, 1, 3, 1, 3);
 }
-
+VECMATH_FINLINE vec4f VECTORCALL v_perm_xyzz(vec4f xyzw)
+{
+  return __builtin_shufflevector(xyzw, xyzw, 0, 1, 2, 2);
+}
 VECMATH_FINLINE vec4f VECTORCALL v_perm_xxyy(vec4f xyzw)
 {
   return __builtin_shufflevector(xyzw, xyzw, 0, 0, 1, 1);
@@ -802,6 +807,9 @@ VECMATH_FINLINE void VECTORCALL v_mat44_inverse(mat44f &dest, mat44f_cref m)
   vec4f OPMN = v_perm_zwcd(inA3, inA2); // KLOP, IJMN
   vec4f NOPM = v_rot_3(OPMN);
   vec4f PMNO = v_rot_1(OPMN);
+  vec4f KLIJ = v_perm_xyab(inA3, inA2); // KLOP, IJMN
+  vec4f JKLI = v_rot_3(KLIJ);
+  vec4f LIJK = v_rot_1(KLIJ);
 
   vec4f KP_LO_IP_LM_IN_JM_KN_JO = v_nmsub(LLJJ, OMMO, KP_IP_IN_KN);
   vec4f JP_LN_IO_KM_LN_JP_KM_IO = v_nmsub(LKJI, NMPO, JP_IO_LN_KM);
@@ -819,6 +827,9 @@ VECMATH_FINLINE void VECTORCALL v_mat44_inverse(mat44f &dest, mat44f_cref m)
   vec4f tmpA3 = v_mul(NOPM, CH_DG_AH_DE_AF_BE_CF_BG);
   vec4f tmpB3 = v_nmsub(OPMN, BH_DF_AG_CE_DF_BH_CE_AG, tmpA3);
   vec4f out3 = v_nmsub(PMNO, CF_BG_CH_DG_AH_DE_AF_BE, tmpB3);
+  vec4f tmpB4 = v_mul(KLIJ, BH_DF_AG_CE_DF_BH_CE_AG);
+  vec4f tmpA4 = v_nmsub(JKLI, CH_DG_AH_DE_AF_BE_CF_BG, tmpB4);
+  vec4f out4 = v_madd(LIJK, CF_BG_CH_DG_AH_DE_AF_BE, tmpA4);
 
   //det
   vec4f AF_BE_AG_CE_CF_BG_BH_DF = v_perm_zbwa(CH_DG_AH_DE_AF_BE_CF_BG, BH_DF_AG_CE_DF_BH_CE_AG);
@@ -836,9 +847,9 @@ VECMATH_FINLINE void VECTORCALL v_mat44_inverse(mat44f &dest, mat44f_cref m)
   /* Multiply the cofactors by the reciprocal of the determinant.
   */
   dest.col0 = v_mul(out1, invdet);
-  dest.col1 = v_mul(out1, invdet);
-  dest.col2 = v_mul(out2, invdet);
-  dest.col3 = v_mul(out3, invdet);
+  dest.col1 = v_mul(out2, invdet);
+  dest.col2 = v_mul(out3, invdet);
+  dest.col3 = v_mul(out4, invdet);
 }
 VECMATH_FINLINE void VECTORCALL v_mat33_inverse(mat33f &dest, mat33f_cref m)
 {
