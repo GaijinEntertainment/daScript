@@ -14,23 +14,23 @@
 namespace das {
 #define MATH_FUN_OP1(fun)\
       DEFINE_POLICY(fun);\
-      IMPLEMENT_OP1_FUNCTION_POLICY(fun,Float,float);\
-      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float2);     \
-      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float3);     \
+      IMPLEMENT_OP1_FUNCTION_POLICY(fun,Float,float);  \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float2); \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float3); \
       IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float4);
 
 #define MATH_FUN_OP1_INT(fun)\
       DEFINE_POLICY(fun);\
       IMPLEMENT_OP1_FUNCTION_POLICY_EX(fun,Int,int32_t,Float,float);\
-      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float2);     \
-      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float3);     \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float2); \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float3); \
       IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, float4);
 
 #define MATH_FUN_OP2(fun)\
       DEFINE_POLICY(fun);\
-      IMPLEMENT_OP2_FUNCTION_POLICY(fun,Float,float);\
-      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, float2);     \
-      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, float3);     \
+      IMPLEMENT_OP2_FUNCTION_POLICY(fun,Float,float);  \
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, float2); \
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, float3); \
       IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, float4);
 
 #define MATH_FUN_OP1I(fun)\
@@ -38,25 +38,34 @@ namespace das {
       IMPLEMENT_OP1_FUNCTION_POLICY(fun,Int,int32_t); \
       IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, int2);  \
       IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, int3);  \
-      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, int4);
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, int4);  \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, uint2); \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, uint3); \
+      IMPLEMENT_OP1_EVAL_FUNCTION_POLICY(fun, uint4);
 
 #define MATH_FUN_OP2I(fun)\
-      IMPLEMENT_OP2_FUNCTION_POLICY(fun,Int,int32_t);\
-      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int2);     \
-      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int3);     \
-      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int4);
+      IMPLEMENT_OP2_FUNCTION_POLICY(fun,Int,int32_t); \
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int2);  \
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int3);  \
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, int4);  \
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, uint2); \
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, uint3); \
+      IMPLEMENT_OP2_EVAL_FUNCTION_POLICY(fun, uint4);
 
 #define MATH_FUN_OP3I(fun)\
-      IMPLEMENT_OP3_FUNCTION_POLICY(fun,Int,int32_t);\
-      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, int2);     \
-      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, int3);     \
-      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, int4);
+      IMPLEMENT_OP3_FUNCTION_POLICY(fun,Int,int32_t); \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, int2);  \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, int3);  \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, int4);  \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, uint2); \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, uint3); \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, uint4);
 
 #define MATH_FUN_OP3(fun)\
       DEFINE_POLICY(fun);\
-      IMPLEMENT_OP3_FUNCTION_POLICY(fun,Float,float);\
-      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float2);     \
-      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float3);     \
+      IMPLEMENT_OP3_FUNCTION_POLICY(fun,Float,float);  \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float2); \
+      IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float3); \
       IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(fun, float4);
 
 #define MATH_FUN_OP1A(fun)                               \
@@ -647,9 +656,9 @@ namespace das {
             addFunctionCommonTyped<int3>(*this, lib);
             addFunctionCommonTyped<int4>(*this, lib);
             addFunctionCommonTyped<uint32_t>(*this, lib);
-            //addFunctionCommonTyped<uint2>(*this, lib);
-            //addFunctionCommonTyped<uint3>(*this, lib);
-            //addFunctionCommonTyped<uint4>(*this, lib);
+            addFunctionCommonTyped<uint2>(*this, lib);
+            addFunctionCommonTyped<uint3>(*this, lib);
+            addFunctionCommonTyped<uint4>(*this, lib);
             addFunctionCommonTyped<float>(*this, lib);
             addFunctionCommonTyped<float2>(*this, lib);
             addFunctionCommonTyped<float3>(*this, lib);

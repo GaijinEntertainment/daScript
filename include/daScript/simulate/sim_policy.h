@@ -149,12 +149,22 @@ namespace  das {
         }
         static __forceinline vec4f Clamp ( vec4f t, vec4f a, vec4f b, Context & ctx, LineInfo * at ) { return Max(a, Min(t, b, ctx, at), ctx, at); }
         static __forceinline vec4f Abs   ( vec4f a, Context &, LineInfo * ) { return v_cast_vec4f(v_absi(v_cast_vec4i(a))); }
-
         static __forceinline vec4f Sign  ( vec4f a, Context &, LineInfo * ) {
             vec4i positive = v_andi(v_splatsi(1), v_cmp_gti(v_cast_vec4i(a), v_zeroi()));
             vec4i negative = v_andi(v_splatsi(-1), v_cmp_lti(v_cast_vec4i(a), v_zeroi()));
             return v_cast_vec4f(v_ori(positive, negative));
         }
+    };
+
+    struct SimPolicy_MathVecU {
+        static __forceinline vec4f Min   ( vec4f a, vec4f b, Context &, LineInfo * ) { return v_cast_vec4f(v_minu(v_cast_vec4i(a),v_cast_vec4i(b))); }
+        static __forceinline vec4f Max   ( vec4f a, vec4f b, Context &, LineInfo * ) { return v_cast_vec4f(v_maxu(v_cast_vec4i(a),v_cast_vec4i(b))); }
+        static __forceinline vec4f Sat   ( vec4f a, Context &, LineInfo * ) {
+            return v_cast_vec4f(v_minu(v_cast_vec4i(a),v_splatsi(1)));
+        }
+        static __forceinline vec4f Clamp ( vec4f t, vec4f a, vec4f b, Context & ctx, LineInfo * at ) { return Max(a, Min(t, b, ctx, at), ctx, at); }
+        static __forceinline vec4f Abs   ( vec4f a, Context &, LineInfo * ) { return a; }
+        static __forceinline vec4f Sign  ( vec4f, Context &, LineInfo * ) { return v_zero(); }
     };
 
     struct SimPolicy_MathFloat {
@@ -648,9 +658,9 @@ namespace  das {
     template <> struct SimPolicy<int2> : SimPolicy_iVec<int2,1+2>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
     template <> struct SimPolicy<int3> : SimPolicy_iVec<int3,1+2+4>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
     template <> struct SimPolicy<int4> : SimPolicy_iVec<int4,1+2+4+8>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
-    template <> struct SimPolicy<uint2> : SimPolicy_uVec<uint2,1+2>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
-    template <> struct SimPolicy<uint3> : SimPolicy_uVec<uint3,1+2+4>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
-    template <> struct SimPolicy<uint4> : SimPolicy_uVec<uint4,1+2+4+8>, SimPolicy_MathVecI, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<uint2> : SimPolicy_uVec<uint2,1+2>, SimPolicy_MathVecU, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<uint3> : SimPolicy_uVec<uint3,1+2+4>, SimPolicy_MathVecU, SimPolicy_F2IVec {};
+    template <> struct SimPolicy<uint4> : SimPolicy_uVec<uint4,1+2+4+8>, SimPolicy_MathVecU, SimPolicy_F2IVec {};
     template <> struct SimPolicy<range> : SimPolicy_Range {};
     template <> struct SimPolicy<urange> : SimPolicy_URange {};
     template <> struct SimPolicy<char *> : SimPolicy_String {};
