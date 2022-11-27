@@ -34,10 +34,20 @@ namespace das {
     __forceinline float invlengthSq3(vec4f a){return v_extract_x(v_rcp_x(v_length3_sq_x(a)));}
     __forceinline float invlengthSq4(vec4f a){return v_extract_x(v_rcp_x(v_length4_sq_x(a)));}
 
+    __forceinline float distance2     (vec4f a, vec4f b){return length2(v_sub(a,b));}
+    __forceinline float invdistance2  (vec4f a, vec4f b){return invlength2(v_sub(a,b));}
+    __forceinline float distanceSq2   (vec4f a, vec4f b){return lengthSq2(v_sub(a,b));}
+    __forceinline float invdistanceSq2(vec4f a, vec4f b){return invlengthSq2(v_sub(a,b));}
+
     __forceinline float distance3     (vec4f a, vec4f b){return v_extract_x(v_length3_x(v_sub(a, b)));}
     __forceinline float invdistance3  (vec4f a, vec4f b){return v_extract_x(v_rcp_x(v_length3_x(v_sub(a, b))));}
     __forceinline float distanceSq3   (vec4f a, vec4f b){return v_extract_x(v_length3_sq_x(v_sub(a, b)));}
     __forceinline float invdistanceSq3(vec4f a, vec4f b){return v_extract_x(v_rcp_x(v_length3_sq_x(v_sub(a,b))));}
+
+    __forceinline float distance4     (vec4f a, vec4f b){return v_extract_x(v_length4_x(v_sub(a, b)));}
+    __forceinline float invdistance4  (vec4f a, vec4f b){return v_extract_x(v_rcp_x(v_length4_x(v_sub(a, b))));}
+    __forceinline float distanceSq4   (vec4f a, vec4f b){return v_extract_x(v_length4_sq_x(v_sub(a, b)));}
+    __forceinline float invdistanceSq4(vec4f a, vec4f b){return v_extract_x(v_rcp_x(v_length4_sq_x(v_sub(a,b))));}
 
     __forceinline float dot2(vec4f a, vec4f b){vec4f v = v_mul(a, b); return v_extract_x(v_add_x(v, v_rot_1(v)));}
     __forceinline float dot3(vec4f a, vec4f b){return v_extract_x(v_dot3_x(a, b));}

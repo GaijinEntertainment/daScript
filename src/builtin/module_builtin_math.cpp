@@ -692,10 +692,18 @@ namespace das {
             addExternEx<float(float2),DAS_BIND_FUN(lengthSq2)>(*this, lib, "length_sq", SideEffects::none, "lengthSq2")->arg("x");
             addExternEx<float(float3),DAS_BIND_FUN(lengthSq3)>(*this, lib, "length_sq", SideEffects::none, "lengthSq3")->arg("x");
             addExternEx<float(float4),DAS_BIND_FUN(lengthSq4)>(*this, lib, "length_sq", SideEffects::none, "lengthSq4")->arg("x");
+            addExternEx<float(float2,float2),DAS_BIND_FUN(distance2)>(*this, lib, "distance", SideEffects::none, "distance2")->args({"x","y"});
+            addExternEx<float(float2,float2),DAS_BIND_FUN(distanceSq2)>(*this, lib, "distance_sq", SideEffects::none, "distanceSq2")->args({"x","y"});
+            addExternEx<float(float2,float2),DAS_BIND_FUN(invdistance2)>(*this, lib, "inv_distance", SideEffects::none, "invdistance2")->args({"x","y"});
+            addExternEx<float(float2,float2),DAS_BIND_FUN(invdistanceSq2)>(*this, lib, "inv_distance_sq", SideEffects::none, "invdistanceSq2")->args({"x","y"});
             addExternEx<float(float3,float3),DAS_BIND_FUN(distance3)>(*this, lib, "distance", SideEffects::none, "distance3")->args({"x","y"});
             addExternEx<float(float3,float3),DAS_BIND_FUN(distanceSq3)>(*this, lib, "distance_sq", SideEffects::none, "distanceSq3")->args({"x","y"});
             addExternEx<float(float3,float3),DAS_BIND_FUN(invdistance3)>(*this, lib, "inv_distance", SideEffects::none, "invdistance3")->args({"x","y"});
             addExternEx<float(float3,float3),DAS_BIND_FUN(invdistanceSq3)>(*this, lib, "inv_distance_sq", SideEffects::none, "invdistanceSq3")->args({"x","y"});
+            addExternEx<float(float4,float4),DAS_BIND_FUN(distance4)>(*this, lib, "distance", SideEffects::none, "distance4")->args({"x","y"});
+            addExternEx<float(float4,float4),DAS_BIND_FUN(distanceSq4)>(*this, lib, "distance_sq", SideEffects::none, "distanceSq4")->args({"x","y"});
+            addExternEx<float(float4,float4),DAS_BIND_FUN(invdistance4)>(*this, lib, "inv_distance", SideEffects::none, "invdistance4")->args({"x","y"});
+            addExternEx<float(float4,float4),DAS_BIND_FUN(invdistanceSq4)>(*this, lib, "inv_distance_sq", SideEffects::none, "invdistanceSq4")->args({"x","y"});
             // unique float functions
             addExtern<DAS_BIND_FUN(fisnan)>(*this, lib, "is_nan", SideEffects::none, "fisnan")->arg("x");
             addExtern<DAS_BIND_FUN(fisfinite)>(*this, lib, "is_finite", SideEffects::none, "fisfinite")->arg("x");

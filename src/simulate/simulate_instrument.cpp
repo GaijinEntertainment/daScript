@@ -102,7 +102,7 @@ namespace das {
     }
 #else
     void Context::instrumentFunction ( SimFunction *, bool, uint64_t ) {}
-    void Context::instrumentContextNode ( const Block & blk, bool, Context * context, LineInfo * line ) {}
+    void Context::instrumentContextNode ( const Block &, bool, Context *, LineInfo * ) {}
     void Context::clearInstruments() {}
 #endif
 
