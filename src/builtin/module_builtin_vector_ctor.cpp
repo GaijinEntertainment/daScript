@@ -204,7 +204,7 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         virtual vec4f DAS_EVAL_ABI eval(Context & context) override {
             DAS_PROFILE_NODE
             vec4f i4 = arguments[0]->eval(context);
-            return v_cvtu_vec4f(v_cast_vec4i(i4));
+            return v_cvtu_vec4f_ieee(v_cast_vec4i(i4));
         }
     };
 
@@ -234,7 +234,7 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         virtual vec4f DAS_EVAL_ABI eval(Context & context) override {
             DAS_PROFILE_NODE
             vec4f f4 = arguments[0]->eval(context);
-            return v_cast_vec4f(v_cvtu_vec4i(f4));
+            return v_cast_vec4f(v_cvtu_vec4i_ieee(f4));
         }
     };
 
