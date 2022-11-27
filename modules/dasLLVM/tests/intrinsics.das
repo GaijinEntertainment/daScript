@@ -106,7 +106,7 @@ def test_min( t:T?; a,b:auto(TT) )
 def test_min ( t:T? )
     var fake <- Faker()
     fuzz <|
-        fuzz_numeric_and_vector_op2_no_unint_vec(t,fake,"test_min")
+        fuzz_numeric_and_vector_op2(t,fake,"test_min")
 
 [jit]
 def jit_max(a,b)
@@ -120,7 +120,7 @@ def test_max( t:T?; a,b:auto(TT) )
 def test_max ( t:T? )
     var fake <- Faker()
     fuzz <|
-        fuzz_numeric_and_vector_op2_no_unint_vec(t,fake,"test_max")
+        fuzz_numeric_and_vector_op2(t,fake,"test_max")
 
 [jit]
 def jit_abs(a)
