@@ -37,7 +37,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_make_vec4f_mask(uint8_t bitmask)
 {
   vec4i lookup = v_make_vec4i(1 << 0, 1 << 1, 1 << 2, 1 << 3);
   vec4i isolated = v_andi(v_splatsi(bitmask), lookup);
-  return v_cvt_vec4f(v_cmp_eqi(isolated, lookup));
+  return v_cast_vec4f(v_cmp_eqi(isolated, lookup));
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_le(vec4f a, vec4f b) { return v_cmp_ge(b, a); }
@@ -620,6 +620,13 @@ VECMATH_FINLINE void VECTORCALL v_bbox3_add_transformed_box(bbox3f &b, mat44f_cr
 }
 
 VECMATH_FINLINE vec3f VECTORCALL v_bbox3_size(bbox3f b) { return v_sub(b.bmax, b.bmin); }
+
+VECMATH_FINLINE vec3f VECTORCALL v_bbox3_max_size(bbox3f b)
+{
+  vec4f size = v_perm_xyzz(v_bbox3_size(b));
+  vec4f maxSize = v_max(size, v_rot_1(size));
+  return v_max(maxSize, v_rot_2(maxSize));
+}
 VECMATH_FINLINE bbox3f v_bbox3_scale(bbox3f b, vec4f size_factor)
 {
   vec3f center = v_bbox3_center(b);

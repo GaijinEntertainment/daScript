@@ -134,11 +134,13 @@ VECMATH_FINLINE vec4f VECTORCALL v_cast_vec4f(vec4i a);
 
 //! convert to integer using round-to-zero mode
 VECMATH_FINLINE vec4i VECTORCALL v_cvti_vec4i(vec4f a);
-VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i(vec4f a);
+VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i(vec4f a);//works correctly on all correct values (positive). on negative - implementation defined
+VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i_ieee(vec4f a);//works same as scalar operations on all values
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_vec4i(vec4f a){return v_cvti_vec4i(a);}
 //! convert to float
 VECMATH_FINLINE vec4f VECTORCALL v_cvti_vec4f(vec4i a);
-VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f(vec4i a);
+VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f(vec4i a);//works correctly on all accurately representable values (< 1<<24). on others - implementation defined
+VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f_ieee(vec4i a);//works same as scalar operations on all values
 VECMATH_FINLINE vec4f VECTORCALL v_cvt_vec4f(vec4i a) {return v_cvti_vec4f(a);}
 
 //! unpacks 4 unsigned shorts (in low 64 bits of vector, .xy) to 4 ints
@@ -628,6 +630,8 @@ VECMATH_FINLINE void VECTORCALL v_bbox3_add_transformed_box(bbox3f &b, mat44f_cr
 
 //! .xyz = bbox dimensions; for empty bbox dimensions will be invalid (negative)
 VECMATH_FINLINE vec3f VECTORCALL v_bbox3_size(bbox3f b);
+//! .xyzw = bbox max dimension
+VECMATH_FINLINE vec3f VECTORCALL v_bbox3_max_size(bbox3f b);
 //! scale bbox by size_factor
 VECMATH_FINLINE bbox3f v_bbox3_scale(bbox3f b, vec4f size_factor);
 //! .xyz = bbox center

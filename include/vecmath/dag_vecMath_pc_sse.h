@@ -24,9 +24,7 @@
 #endif
 
 #include <math.h> //for fabsf, which is used once, and not wise
-#ifdef _EMSCRIPTEN_VER
-#include <emmintrin.h>
-#elif _TARGET_PC_LINUX
+#if _TARGET_PC_LINUX
 #include <x86intrin.h> // MAC doesn't have it in GCC frontend, but it exist in CLANG one
 #elif _TARGET_SIMD_SSE >= 4 || defined(_DAGOR_PROJECT_OPTIONAL_SSE4)
 #include <smmintrin.h>
@@ -179,7 +177,12 @@ VECMATH_FINLINE vec4i VECTORCALL v_cvti_vec4i(vec4f a) { return _mm_cvttps_epi32
 VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i(vec4f a)
 {
 #if defined(__AVX512F_)//only works on clang/gcc
-  return _mm_cvtepu32_ps(v);
+  return _mm_cvtps_epu32(v);
+#elif _TARGET_64BIT //_mm_cvtss_si64 is x64 instruction
+  return v_make_vec4i(uint32_t(_mm_cvtss_si64(a)),
+                      uint32_t(_mm_cvtss_si64(v_splat_y(a))),
+                      uint32_t(_mm_cvtss_si64(v_splat_z(a))),
+                      uint32_t(_mm_cvtss_si64(v_splat_w(a))));
 #else
   return v_make_vec4i(uint32_t(v_extract_x(a)),
                       uint32_t(v_extract_y(a)),
@@ -187,14 +190,41 @@ VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i(vec4f a)
                       uint32_t(v_extract_w(a)));
 #endif
 }
+
+VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i_ieee(vec4f a)
+{
+#if defined(__AVX512F_)//only works on clang/gcc
+  return _mm_cvtps_epu32(v);
+#else
+  return v_make_vec4i(uint32_t(v_extract_x(a)),
+                      uint32_t(v_extract_y(a)),
+                      uint32_t(v_extract_z(a)),
+                      uint32_t(v_extract_w(a)));
+#endif
+}
+
 VECMATH_FINLINE vec4f VECTORCALL v_cvti_vec4f(vec4i a) { return _mm_cvtepi32_ps(a); }
 VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f(vec4i v)
 {
 #if defined(__AVX512F_)//only works on clang/gcc
   return _mm_cvtepu32_ps(v);
 #else
+  __m128i v2 = _mm_srli_epi32(v, 1);                 // v2 = v / 2
+  __m128i v1 = _mm_and_si128(v, _mm_set1_epi32(1));  // v1 = v & 1
+  __m128 v2f = _mm_cvtepi32_ps(v2);
+  __m128 v1f = _mm_cvtepi32_ps(v1);
+  return _mm_add_ps(_mm_add_ps(v2f, v2f), v1f);      // return 2 * v2 + v1
+#endif
+}
+
+VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f_ieee(vec4i v)
+{
+#if defined(__AVX512F_)//only works on clang/gcc
+  return _mm_cvtepu32_ps(v);
+#else
   __m128i msk_lo    = _mm_set1_epi32(0xFFFF);
   __m128  cnst65536f= _mm_set1_ps(65536.0f);
+
   __m128i v_lo      = _mm_and_si128(v,msk_lo);          /* extract the 16 lowest significant bits of v                                   */
   __m128i v_hi      = _mm_srli_epi32(v,16);             /* 16 most significant bits of v                                                 */
   __m128  v_lo_flt  = _mm_cvtepi32_ps(v_lo);            /* No rounding                                                                   */
