@@ -7,6 +7,7 @@ module llvm_jit_intrin shared private
 require llvm/llvm_boost
 require llvm/llvm_jit_common
 require daslib/ast_boost
+require strings
 
 let g_intrin_lookup <- {{
 // $, aka builtin
@@ -57,7 +58,12 @@ let g_intrin_lookup <- {{
     "math::cos" => @@intrinsic_math_float_op1;
     "math::pow" => @@intrinsic_op2;
     "math::min" => @@intrinsic_math_minmax;
-    "math::max" => @@intrinsic_math_minmax
+    "math::max" => @@intrinsic_math_minmax;
+    "math::length_sq" => @@intrinsic_math_length_sq;
+    "math::dot" => @@intrinsic_math_dot;
+    "math::cross" => @@intrinsic_math_cross;
+    "math::inv_distance_sq" => @@intrinsic_math_inv_distance_sq;
+    "math::normalize" => @@intrinsic_math_normalize
 }}
 
 def public lookup_intinsic(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
@@ -376,7 +382,6 @@ def intrinsic_math_tan(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc
     return LLVMBuildFDiv(g_builder, sin_a, cos_a, "tan")
 
 def intrinsic_math_lerp_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
-    // v_madd(v_sub(b,a),t,a);
     var a = arguments[0]
     var b = arguments[1]
     var t = arguments[2]
@@ -385,21 +390,6 @@ def intrinsic_math_lerp_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCal
     return LLVMBuildFAdd(g_builder, b_a_mul_t, a, "lerp")
 
 def intrinsic_math_mad_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
-/*
-    var b = arguments[1]
-    if expr.arguments[0]._type.isVectorType && expr.arguments[1]._type.isFloatOrDouble
-        b = expand_scalar(g_builder, b, expr.arguments[0]._type)
-    var args <- [{auto[] arguments[0]; b; arguments[2]}]
-    var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
-    var id = LLVMLookupIntrinsicID("llvm.fma.f32")
-    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
-    if decl==null
-        failed_E(expr, "missing intrinsic llvm.fma.32")
-        return null
-    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
-*/
-
-    // v_madd(a,b,c);
     var a = arguments[0]
     var b = arguments[1]
     if expr.arguments[0]._type.isVectorType && expr.arguments[1]._type.isFloatOrDouble
@@ -407,7 +397,6 @@ def intrinsic_math_mad_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCall
     var c = arguments[2]
     var a_mul_b = LLVMBuildFMul(g_builder, a, b, "")
     return LLVMBuildFAdd(g_builder, a_mul_b, c, "mad")
-
 
 def intrinsic_math_abs(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
@@ -454,4 +443,75 @@ def intrinsic_math_saturate(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCal
         failed_E(expr, "missing intrinsic {expr.name}({describe(opType)})")
         return null
 
+def build_fadd ( g_builder:LLVMOpaqueBuilder?; opType:TypeDeclPtr; v2:LLVMOpaqueValue?; name:string ) : LLVMOpaqueValue?
+    let fadd_name = "llvm.vector.reduce.fadd.v{opType.vectorDim}f32"
+    let neg_0 = LLVMConstReal(LLVMFloatType(), -double(0.))
+    var args_fadd <- [{auto[] neg_0; v2}]
+    var argTypes_fadd <- [{auto type_to_llvm_abi_type(opType)}]
+    var id = LLVMLookupIntrinsicID(fadd_name)
+    var decl_fadd = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes_fadd)
+    if decl_fadd==null
+        failed("missing intrinsic {fadd_name}")
+        return null
+    return LLVMBuildCall(g_builder, decl_fadd, args_fadd, name)
 
+def build_fsqrt ( g_builder:LLVMOpaqueBuilder?; v2:LLVMOpaqueValue?; name:string ) : LLVMOpaqueValue?
+    let fsqrt_name = "llvm.sqrt.f32"
+    var args_fsqrt <- [{auto[] v2}]
+    var argTypes_fsqrt <- [{auto LLVMFloatType()}]
+    var id = LLVMLookupIntrinsicID(fsqrt_name)
+    var decl_fsqrt = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes_fsqrt)
+    if decl_fsqrt==null
+        failed("missing intrinsic {fsqrt_name}")
+        return null
+    return LLVMBuildCall(g_builder, decl_fsqrt, args_fsqrt, name)
+
+def build_frcp ( g_builder:LLVMOpaqueBuilder?; v2:LLVMOpaqueValue?; name:string ) : LLVMOpaqueValue?
+    var one = LLVMConstReal(LLVMFloatType(), 1.0lf)
+    var fdiv = LLVMBuildFDiv(g_builder, one, v2, "")
+    return fdiv
+
+def intrinsic_math_length_sq(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    assert(opType.isVectorType)
+    let v2 = LLVMBuildFMul(g_builder, arguments[0], arguments[0], "")
+    return build_fadd(g_builder, opType, v2, "length_sq")
+
+def intrinsic_math_dot(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    assert(opType.isVectorType)
+    let v2 = LLVMBuildFMul(g_builder, arguments[0], arguments[1], "")
+    return build_fadd(g_builder, opType, v2, "dot")
+
+def intrinsic_math_normalize(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    assert(opType.isVectorType)
+    let v2 = LLVMBuildFMul(g_builder, arguments[0], arguments[0], "")
+    let len_sq = build_fadd(g_builder, opType, v2, "")
+    let len = build_fsqrt(g_builder, len_sq, "")
+    let ilen = build_frcp(g_builder, len, "")
+    let vilen = build_broadcast_vector(g_builder, opType, ilen)
+    return LLVMBuildFMul(g_builder, arguments[0], vilen, "normalize")
+
+def intrinsic_math_cross(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    //! a.yzx * b.zxy - a.zxy * b.yzx
+    assume opType = expr.arguments[0]._type
+    assert(opType.isVectorType && opType.vectorDim==3)
+    let a = arguments[0]
+    let b = arguments[1]
+    var a_yzx = LLVMBuildShuffleVector(g_builder, a, a, [{auto 1;2;0;-1}], "a_yzx")
+    var b_zxy = LLVMBuildShuffleVector(g_builder, b, b, [{auto 2;0;1;-1}], "b_zxy")
+    var a_yzx_b_zxy = LLVMBuildFMul(g_builder, a_yzx, b_zxy, "a_yzx_b_zxy")
+    var a_zxy = LLVMBuildShuffleVector(g_builder, a, a, [{auto 2;0;1;-1}], "a_zxy")
+    var b_yzx = LLVMBuildShuffleVector(g_builder, b, b, [{auto 1;2;0;-1}], "b_yzx")
+    var a_zxy_b_yzx = LLVMBuildFMul(g_builder, a_zxy, b_yzx, "a_zxy_b_yzx")
+    var cross = LLVMBuildFSub(g_builder, a_yzx_b_zxy, a_zxy_b_yzx, "cross")
+    return LLVMBuildShuffleVector(g_builder, cross, cross, [{auto 0;1;2}], "cross")
+
+def intrinsic_math_inv_distance_sq(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    assert(opType.isVectorType)
+    let v = LLVMBuildFSub(g_builder, arguments[0], arguments[1], "")
+    let v2 = LLVMBuildFMul(g_builder, v, v, "")
+    let distance_sq = build_fadd(g_builder, opType, v2, "")
+    return LLVMBuildFDiv(g_builder, LLVMConstReal(LLVMFloatType(), 1.0lf), distance_sq, "inv_distance_sq")

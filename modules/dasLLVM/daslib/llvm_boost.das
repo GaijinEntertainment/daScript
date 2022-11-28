@@ -86,7 +86,7 @@ def LLVMBuildShuffleVector(builder:LLVMOpaqueBuilder?; v1, v2:LLVMOpaqueValue?; 
         else
             elem |> push(LLVMGetUndef(LLVMInt32Type()))
     defer_delete(elem)
-    return LLVMBuildShuffleVector(builder, v1, v2, LLVMConstVector(unsafe(addr(elem[0])), 4u), name)
+    return LLVMBuildShuffleVector(builder, v1, v2, LLVMConstVector(unsafe(addr(elem[0])), uint(length(elem))), name)
 
 def LLVMAddIncoming(phi:LLVMOpaqueValue?; var phi_vals:LLVMOpaqueValue? []; var phi_blocks:LLVMOpaqueBasicBlock? [])
     static_if typeinfo(dim phi_vals) != typeinfo(dim phi_blocks)
