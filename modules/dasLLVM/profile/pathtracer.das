@@ -8,6 +8,18 @@ require strings
 require stbimage
 require llvm/llvm_jit
 
+/*
+[jit]
+def reflect_jit(i,n:float3)
+    return i - 2.0 * n * dot(n,i)
+
+[jit]
+def refract_jit( i,n:float3; eta:float )
+    let cosi = dot(-i, n)
+    let cost2 = 1.0f - eta * eta * (1.0f - cosi*cosi)
+    let t = eta*i + ((eta*cosi - sqrt(abs(cost2))) * n)
+    return cost2>0. ? t : float3(0.)
+*/
 
 // random
 
@@ -104,7 +116,7 @@ struct Ray
     dir  : float3
     pad2 : float
 
-[jit]
+[jit,hint(alwaysinline)]
 def pointAt(ray:Ray const;t:float)
     return ray.orig + ray.dir*t
 
@@ -122,7 +134,7 @@ struct Camera
     u, v, w         : float3
     lensRadius      : float
 
-[jit]
+[jit,hint(alwaysinline)]
 def Camera(lookFrom,lookAt,vup:float3;vfov,aspect,aperture,focusDist:float)
     var that : Camera
     let theta = vfov * PI / 180.
@@ -139,7 +151,7 @@ def Camera(lookFrom,lookAt,vup:float3;vfov,aspect,aperture,focusDist:float)
         vertical = 2. * halfHeight * focusDist * v
     return that
 
-[jit]
+[jit,hint(alwaysinline)]
 def getRay(that:Camera;s,t:float)
     with that
         let rd = lensRadius * random_in_unit_disk(RAND_SEED)
@@ -184,7 +196,7 @@ def init_path_tracer
     s_SphereMats[7] = [[Material mtype = Type Dielectric, albedo = float3(0.4, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 1.5]]
     s_SphereMats[8] = [[Material mtype = Type Lambert,    albedo = float3(0.8, 0.6, 0.2), emissive = float3(30,25,15),  roughness = 0.,  ri = 0.]]
 
-[jit]
+[jit,hint(unsafe_range_check)]
 def hitSpheres(r:Ray const;tMin,tMax:float;var outHit:Hit)
     var hitT = tMax
     var id = -1
@@ -209,12 +221,12 @@ def hitSpheres(r:Ray const;tMin,tMax:float;var outHit:Hit)
         t = hitT]]
     return id
 
-[jit]
+[jit,hint(alwaysinline)]
 def hitWorld(r:Ray const;tMin,tMax:float;var outHit:Hit;var outID:int&)
     outID = r|>hitSpheres(tMin,tMax,outHit)
     return outID != -1
 
-[jit]
+[jit,hint(unsafe_range_check)]
 def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&; var scattered:Ray; var outLightE:float3&; var inoutRayCount:int&)
     outLightE = float3(0)
     if mat.mtype==Type Lambert
@@ -273,7 +285,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
         return false
     return true
 
-[jit]
+[jit,hint(unsafe_range_check)]
 def trace(r:Ray;var inoutRayCount:int&)
     var ray = r
     var col = float3(0.)
@@ -305,7 +317,7 @@ def trace(r:Ray;var inoutRayCount:int&)
             break
     return col
 
-[jit]
+[jit,hint(unsafe_range_check)]
 def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;var backbuffer:array<float3>;cam:Camera)
     let invWH = float(1) / float2(screenWidth, screenHeight)
     let lerpFac = float3(float(frameCount) / float(frameCount + 1))

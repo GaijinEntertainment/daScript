@@ -12,7 +12,7 @@ def read_char_from_input()
 	unsafe
 		return uint8(character_uat(s, 0))
 
-[jit,unsafe_deref,hint(hot,noalias=code,noalias=tape,noalias=codePos,noalias=tapePos)]
+[jit,unsafe_deref,hint(hot,unsafe_alias)]
 def run(code: uint8?; lengthOfCode:int; var tape: uint8?; var codePos, tapePos: int&; skip: bool): bool
     unsafe
         if skip

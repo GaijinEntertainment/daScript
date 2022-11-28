@@ -47,11 +47,7 @@ def offset_momentum(var bodies:body[5])
         px -= b.v * b.mass
     bodies[0].v = px / SOLAR_MASS
 
-[jit,export]
-def inv_length_jit(var r:float3)
-    return 1.0 / sqrt(r.x*r.x + r.y*r.y + r.z*r.z)
-
-[jit,hint(alwaysinline,hot,noalias=bodies)]
+[jit,hint(alwaysinline,hot,noalias=bodies,unsafe_range_check)]
 def advance(var bodies:body[5])
     var i = 0
     for b in bodies
@@ -59,7 +55,7 @@ def advance(var bodies:body[5])
         for j in range(i, nbodies)
             var b2:body& = unsafe(bodies[j])
             let dx = b.x - b2.x
-            let inv_distance = inv_length_jit(dx)
+            let inv_distance = inv_length(dx)
             let mag = inv_distance * inv_distance * inv_distance
             b.v -= dx * (b2.mass*mag)
             b2.v += dx * (b.mass*mag)
@@ -96,10 +92,10 @@ def main
     // print("\ninitial energy {energy()}\n")
     energy(g_bodies)
     profile(10, "n-bodies jit")  <|
-        nbodies(10000000)
+        nbodies(500000)
     // print("\nresult energy {energy()}\n")
     energy(g_bodies)
     testNBodiesInit()
     profile(10, "n-bodies, C++")  <|
-        testNBodiesS(10000000)
+        testNBodiesS(500000)
 

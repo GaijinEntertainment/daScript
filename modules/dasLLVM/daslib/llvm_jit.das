@@ -85,6 +85,9 @@ class LlvmJitVisitor : AstVisitor
 
     g_builder : LLVMOpaqueBuilder?
 
+    option_no_range_check : bool = false
+    option_no_alias : bool = false
+
     def LlvmJitVisitor ( ctx:Context? )
         jit_context = ctx
         g_builder = LLVMCreateBuilder()
@@ -120,6 +123,8 @@ class LlvmJitVisitor : AstVisitor
     def process_function_hints ( annotations:AnnotationList )
         var alwaysInline = false
         var hot = false
+        option_no_range_check = false
+        option_no_alias = false
         for ann in annotations
             if ann.annotation.name=="hint"
                 for arg in ann.arguments
@@ -127,6 +132,10 @@ class LlvmJitVisitor : AstVisitor
                         alwaysInline = true
                     elif arg.name=="hot"
                         hot = true
+                    elif arg.name=="unsafe_range_check"
+                        option_no_range_check = true
+                    elif arg.name=="unsafe_alias"
+                        option_no_alias = true
         if alwaysInline
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("alwaysinline"))
         if hot
@@ -156,9 +165,16 @@ class LlvmJitVisitor : AstVisitor
                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.firstType.alignOf))
             if (a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant
                 LLVMAddAttributeToFunctionArgument(ffunc, ai, readonly_attr)
-            if nat |> key_exists(string(a.name))
+            if option_no_alias || nat |> key_exists(string(a.name))
                 LLVMAddAttributeToFunctionArgument(ffunc, ai, noalias_attr)
-            // todo: noalias?
+        // noalias of the capture target, context, result
+        var nai = uint(length(arguments))
+        if captureType!=null
+            LLVMAddAttributeToFunctionArgument(ffunc, nai++, noalias_attr)  // capture target
+        LLVMAddAttributeToFunctionArgument(ffunc, nai++, noalias_attr)      // context
+        if isCmres
+            LLVMAddAttributeToFunctionArgument(ffunc, nai++, noalias_attr)  // cmres
+        // alignment of the context and the result
         LLVMSetParamAlignment(get_context_param(), 16u)
         if isCmres
             LLVMSetParamAlignment(get_cmres_param(), uint(result.alignOf))
@@ -478,16 +494,19 @@ class LlvmJitVisitor : AstVisitor
             else
                 setE(expr, arg)
         else
-            var vptr : LLVMOpaqueValue?
-            var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(LLVMInt8Type(),0u), "")
-            var global_ptr = LLVMBuildGEP(g_builder, ctx_ptr, LLVMConstInt(LLVMInt32Type(), uint64(CONTEXT_OFFSET_OF_GLOBALS), 0), "")
-            global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMInt8Type(),0u), global_ptr, "")
-            vptr = LLVMBuildGEP(g_builder, global_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.variable.stackTop), 0), "")
-            vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
+            var tryV = tryGetV(expr.variable)
+            if tryV == null
+                at_function_entry <|
+                    var vptr : LLVMOpaqueValue?
+                    var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(LLVMInt8Type(),0u), "")
+                    var global_ptr = LLVMBuildGEP(g_builder, ctx_ptr, LLVMConstInt(LLVMInt32Type(), uint64(CONTEXT_OFFSET_OF_GLOBALS), 0), "")
+                    global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMInt8Type(),0u), global_ptr, "")
+                    vptr = LLVMBuildGEP(g_builder, global_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.variable.stackTop), 0), "")
+                    tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
             if expr.varFlags.r2v
-                setE(expr, LLVMBuildLoadDataAligned(g_builder, vptr, uint(expr._type.alignOf), "global_var_r2v_{expr.variable.name}"))
+                setE(expr, LLVMBuildLoadDataAligned(g_builder, tryV, uint(expr._type.alignOf), "global_var_r2v_{expr.variable.name}"))
             else
-                setE(expr, vptr)
+                setE(expr, tryV)
         return expr
 
     def cast_from_vec4f_ptr ( v4f:LLVMOpaqueValue?; ptr_type:LLVMOpaqueType? ) : LLVMOpaqueValue?
@@ -732,6 +751,8 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
     def check_range ( tidx, maxIdx:LLVMOpaqueValue?; message:string )
+        if option_no_range_check
+            return
         var check_null_ptr = append_basic_block("check_dim_range")
         var check_true = append_basic_block("check_true")
         var check_end = append_basic_block("check_end")

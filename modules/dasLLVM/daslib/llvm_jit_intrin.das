@@ -63,6 +63,7 @@ let g_intrin_lookup <- {{
     "math::dot" => @@intrinsic_math_dot;
     "math::cross" => @@intrinsic_math_cross;
     "math::inv_distance_sq" => @@intrinsic_math_inv_distance_sq;
+    "math::inv_length" => @@intrinsic_math_inv_length;
     "math::normalize" => @@intrinsic_math_normalize
 }}
 
@@ -515,3 +516,11 @@ def intrinsic_math_inv_distance_sq(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<
     let v2 = LLVMBuildFMul(g_builder, v, v, "")
     let distance_sq = build_fadd(g_builder, opType, v2, "")
     return LLVMBuildFDiv(g_builder, LLVMConstReal(LLVMFloatType(), 1.0lf), distance_sq, "inv_distance_sq")
+
+def intrinsic_math_inv_length(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    assert(opType.isVectorType)
+    let v2 = LLVMBuildFMul(g_builder, arguments[0], arguments[0], "")
+    let len_sq = build_fadd(g_builder, opType, v2, "")
+    let len = build_fsqrt(g_builder, len_sq, "")
+    return build_frcp(g_builder, len, "inv_length")
