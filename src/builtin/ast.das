@@ -195,8 +195,8 @@ class AstVisitor
     def abstract visitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;lastArg:bool) : VariablePtr
     def abstract preVisitFunctionArgumentInit(fun:FunctionPtr;arg:VariablePtr;value:ExpressionPtr) : void
     def abstract visitFunctionArgumentInit(fun:FunctionPtr;arg:VariablePtr;value:ExpressionPtr) : ExpressionPtr
-    def abstract preVisitFunctionBody(fun:FunctionPtr) : void
-    def abstract visitFunctionBody(fun:FunctionPtr) : void
+    def abstract preVisitFunctionBody(fun:FunctionPtr; expr:ExpressionPtr) : void
+    def abstract visitFunctionBody(fun:FunctionPtr; expr:ExpressionPtr) : void
 // any expression there is
     def abstract preVisitExpression(expr:ExpressionPtr) : void
     def abstract visitExpression(expr:ExpressionPtr) : ExpressionPtr
