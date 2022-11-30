@@ -95,13 +95,13 @@ class PrintVisitor : AstVisitor
         print("def {fun.name}")
         if fun.arguments.length != 0
             print(" ( ")
-    def override preVisitFunctionBody(fun:FunctionPtr)
+    def override preVisitFunctionBody(fun:FunctionPtr; expr:ExpressionPtr)
         if fun.arguments.length != 0
             print(" ) ")
         if fun.result != null && !fun.result.isVoid
             print(" : {describe([decl=fun.result,extra=extraTypeInfo])}")
         print("\n")
-    def override visitFunction(fun:FunctionPtr) : FunctionPtr
+    def override visitFunction(fun:FunctionPtr; expr:ExpressionPtr) : FunctionPtr
         print("\n")
         return fun
     def override preVisitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;last:bool)
