@@ -652,7 +652,7 @@ class GlslExport : AstVisitor
         *writer |> write("{self->describe_glsl_type(fun.result)} ")
         var fnName = isMain ? "main" : self->glsl_function_name(fun)
         *writer |> write("{fnName}(")
-    def override preVisitFunctionBody(fun:FunctionPtr)
+    def override preVisitFunctionBody(fun:FunctionPtr; expr:ExpressionPtr)
         *writer |> write(")")
         for ann in fun.annotations
             if ann.annotation.name=="pixel_shader" // TODO: other ann
