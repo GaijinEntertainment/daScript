@@ -479,6 +479,14 @@ namespace das {
         return node;
     }
 
+    void das_comp_log ( const char * text, Context * context, LineInfoArg * at ) {
+        if ( !text ) return;
+        if ( !daScriptEnvironment::bound || !daScriptEnvironment::bound->g_compilerLog ) {
+             context->throw_error_at(at ? *at:LineInfo(), "compiler log is not set. its only available for the macros during compilation");
+        }
+        (*daScriptEnvironment::bound->g_compilerLog) << text;
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -739,6 +747,10 @@ namespace das {
         addExtern<DAS_BIND_FUN(das_sb_make_interop_node)>(*this, lib,  "make_interop_node",
             SideEffects::none, "das_sb_make_interop_node")
                 ->args({"ctx","builder","context","at"});
+        // compilation log
+        addExtern<DAS_BIND_FUN(das_comp_log)>(*this, lib,  "to_compilation_log",
+            SideEffects::modifyExternal, "das_comp_log")
+                ->args({"text","context","at"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {

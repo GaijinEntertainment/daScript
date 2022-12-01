@@ -295,6 +295,7 @@ namespace das {
         int err;
         auto program = make_smart<Program>();
         daScriptEnvironment::bound->g_Program = program;
+        daScriptEnvironment::bound->g_compilerLog = &logs;
         program->promoteToBuiltin = false;
         program->isCompiling = true;
         program->isDependency = isDep;
@@ -332,6 +333,7 @@ namespace das {
             program->error(fileName + " not found", "","",LineInfo());
             program->isCompiling = false;
             daScriptEnvironment::bound->g_Program.reset();
+            daScriptEnvironment::bound->g_compilerLog = nullptr;
             return program;
         }
         err = das_yyparse(scanner);
@@ -340,6 +342,7 @@ namespace das {
         totParse += get_time_usec(time0);
         if ( err || program->failed() ) {
             daScriptEnvironment::bound->g_Program.reset();
+            daScriptEnvironment::bound->g_compilerLog = nullptr;
             sort(program->errors.begin(),program->errors.end());
             program->isCompiling = false;
             return program;
@@ -393,6 +396,7 @@ namespace das {
                 }
             }
             daScriptEnvironment::bound->g_Program.reset();
+            daScriptEnvironment::bound->g_compilerLog = nullptr;
             sort(program->errors.begin(), program->errors.end());
             program->isCompiling = false;
             if ( !program->failed() ) {

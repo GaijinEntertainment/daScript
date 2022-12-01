@@ -1438,6 +1438,7 @@ namespace das
         Module *        modules = nullptr;
         int             das_def_tab_size = 4;
         bool            g_resolve_annotations = true;
+        TextWriter *    g_compilerLog = nullptr;
         static DAS_THREAD_LOCAL daScriptEnvironment * bound;
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;
         static void ensure();
