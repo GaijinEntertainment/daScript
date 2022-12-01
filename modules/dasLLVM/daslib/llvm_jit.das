@@ -9,6 +9,7 @@ require llvm/llvm_jit_intrin
 require llvm/llvm_jit_common
 require daslib/ast_boost
 require daslib/templates_boost
+require daslib/capture_block
 require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
@@ -18,38 +19,6 @@ require math
 [macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
-
-[macro]
-class LlvmJitCaptureBlock : AstVisitor
-    [[do_not_delete]] scope : table<Variable?>
-    [[do_not_delete]] capture : table<Variable?; ExprVar?>
-    def override preVisitExprVar(expr:smart_ptr<ExprVar>) : void
-        if !(expr.varFlags.local || expr.varFlags.argument || expr.varFlags._block)
-            return
-        let vptr = get_ptr(expr.variable)
-        if !(scope |> key_exists(vptr))
-            capture[vptr] = get_ptr(expr)
-    def override preVisitExprLetVariable(expr:smart_ptr<ExprLet>;arg:VariablePtr;lastArg:bool) : void
-        scope |> insert(get_ptr(arg))
-    def override preVisitExprForVariable(expr:smart_ptr<ExprFor>;svar:VariablePtr;last:bool) : void
-        scope |> insert(get_ptr(svar))
-    def override preVisitExprBlockArgument(blk:smart_ptr<ExprBlock>;arg:VariablePtr;lastArg:bool): void
-        scope |> insert(get_ptr(arg))
-
-struct CapturedVariable
-    variable : Variable?
-    expression : ExprVar?
-
-[macro_function]
-def private capture_block(expr:ExpressionPtr) : array<CapturedVariable>
-    var astVisitor = new LlvmJitCaptureBlock()
-    var adapter <- make_visitor(*astVisitor)
-    visit(expr, adapter)
-    var res <- [{for k,v in keys(astVisitor.capture),values(astVisitor.capture); [[CapturedVariable variable=k,expression=v]] }]
-    adapter := null
-    unsafe
-        delete astVisitor
-    return <- res
 
 struct private IteBlock
     [[do_not_delete]] if_true  : LLVMOpaqueBasicBlock?
