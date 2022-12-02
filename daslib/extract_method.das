@@ -17,6 +17,10 @@ let LOG_REFACTOR = 100500
 def public extract_method ( method_name:string; blk:block )
     invoke(blk)
 
+[tag_function(extract_method_tag),sideeffects]
+def public extract_expression ( method_name:string; expr )
+    return expr
+
 def log_range ( at:LineInfo )
     return "{describe(at)}-{int(at.last_line)}:{int(at.last_column)}"
 
@@ -90,8 +94,8 @@ class AssertOnceMacro : AstFunctionAnnotation
             call_at = atCall,
             function_body_at = atBlock
         ]])
-        unsafe
-            defer_delete(jv)
         to_compilation_log("!!!extract_method\n{write_json(jv)}\n!!!\n")
+        unsafe
+            delete jv
         return true
 
