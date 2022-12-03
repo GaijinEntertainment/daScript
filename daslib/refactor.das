@@ -109,28 +109,33 @@ struct ExtractVariableDesc
     variable_init_at : LineInfo
 
 [tag_function(extract_variable_tag),sideeffects]
-def public extract_variable ( method_name:string; expr )
+def public extract_variable_nonref ( method_name:string; expr )
     return expr
 
 [tag_function(extract_variable_tag),sideeffects]
-def public extract_variable_ref ( method_name:string; expr:auto(TT)& =const ) : TT&
+def public extract_variable ( method_name:string; expr:auto(TT)& =const ) : TT&
     unsafe
         return expr
 
 [tag_function(extract_variable_tag),sideeffects]
-def public extract_variable_ref ( method_name:string; var expr:auto(TT)& =const ) : TT&
+def public extract_variable ( method_name:string; var expr:auto(TT)& =const ) : TT&
     unsafe
         return expr
+
+[tag_function(extract_variable_tag),sideeffects]
+def public extract_variable ( method_name:string; expr:auto(TT) )
+    return expr
 
 [tag_function_macro(tag="extract_variable_tag")]
 class ExtractVariableMacro : AstFunctionAnnotation
     method_tag = "!!!extract_variable"
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         assume cffg = call.func.fromGeneric
-        if call.func!=null && cffg!=null && cffg.name=="extract_variable_ref"
-            if call.arguments[1]._type.isConst
+        assume varType = call.arguments[1]._type
+        if call.func!=null && cffg!=null && cffg.name=="extract_variable"
+            if varType.isConst || !varType.isRef
                 var ccall <- clone_expression(call)
-                (ccall as ExprCall).name := "extract_variable"
+                (ccall as ExprCall).name := "extract_variable_nonref"
                 return <- ccall
         return [[ExpressionPtr]]
     def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
