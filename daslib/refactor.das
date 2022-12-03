@@ -113,21 +113,28 @@ def public extract_variable_nonref ( method_name:string; expr )
     return expr
 
 [tag_function(extract_variable_tag),sideeffects]
-def public extract_variable ( method_name:string; expr:auto(TT)& =const ) : TT&
+def public extract_variable_ref ( method_name:string; var expr:auto(TT)& =const ) : TT&
     unsafe
         return expr
 
-[tag_function(extract_variable_tag),sideeffects]
-def public extract_variable ( method_name:string; var expr:auto(TT)& =const ) : TT&
-    unsafe
-        return expr
-
-[tag_function(extract_variable_tag),sideeffects]
-def public extract_variable ( method_name:string; expr:auto(TT) )
-    return expr
+[call_macro(name="extract_variable")]
+class ExtractVariableMacro : AstCallMacro
+    def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+        if !(expr.arguments[0] is ExprConstString)
+            macro_error(prog,expr.at,"extract_variable: first argument must be a string literal")
+            return [[ExpressionPtr]]
+        assume varType = expr.arguments[1]._type
+        if varType==null || varType.isAutoOrAlias
+            macro_error(prog,expr.at,"extract_variable: unresolve expression type")
+            return [[ExpressionPtr]]
+        var ccall <- new [[ExprCall() at=expr.at]]
+        ccall.name := (varType.isRef && !varType.isConst) ? "extract_variable_ref" : "extract_variable_nonref"
+        ccall.arguments |> emplace_new <| clone_expression(expr.arguments[0])
+        ccall.arguments |> emplace_new <| clone_expression(expr.arguments[1])
+        return <- ccall
 
 [tag_function_macro(tag="extract_variable_tag")]
-class ExtractVariableMacro : AstFunctionAnnotation
+class ExtractVariableFunction : AstFunctionAnnotation
     method_tag = "!!!extract_variable"
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         assume cffg = call.func.fromGeneric

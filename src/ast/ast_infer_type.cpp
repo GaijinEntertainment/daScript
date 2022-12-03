@@ -6241,10 +6241,6 @@ namespace das {
                     return d1 ? 1 : -1;
                 }
             }
-        // 3.5. one with ref is more specialized, than one without
-            if ( t1->ref!=t2->ref ) {
-                return t1->ref ? 1 : -1;
-            }
         // 4. the one with base type of auto\alias is less specialized
         //      if both are auto\alias - we assume its the same level of specialization
             bool ba1 = t1->baseType==Type::autoinfer || t1->baseType==Type::alias;
