@@ -1,4 +1,4 @@
-require daslib/extract_method
+require daslib/refactor
 
 [export]
 def main
@@ -10,3 +10,7 @@ def main
     print("upsipe\n")
     var x = extract_expression("expression",q*3+27)
     print("x = {x}\n")
+    var vv = extract_variable_ref("variable",t[3])++
+    print("vv = {vv}\n")
+
+options log

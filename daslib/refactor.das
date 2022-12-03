@@ -2,7 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
-module extract_method shared private
+module refactor shared private
 
 require daslib/ast_boost
 require daslib/templates_boost
@@ -45,7 +45,8 @@ def JV ( li:LineInfo )
     return JV(kv)
 
 [tag_function_macro(tag="extract_method_tag")]
-class AssertOnceMacro : AstFunctionAnnotation
+class ExtractMethodMacro : AstFunctionAnnotation
+    method_tag = "!!!extract_method"
     def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         if !(call.arguments[0] is ExprConstString)
             print("extract_method: first argument must be a string literal")
@@ -94,7 +95,49 @@ class AssertOnceMacro : AstFunctionAnnotation
             call_at = atCall,
             function_body_at = atBlock
         ]])
-        to_compilation_log("!!!extract_method\n{write_json(jv)}\n!!!\n")
+        to_compilation_log("{method_tag}\n{write_json(jv)}\n!!!\n")
+        unsafe
+            delete jv
+        return true
+
+struct ExtractVariableDesc
+    variable_name : string
+    variable_type : string
+    call_at : LineInfo
+    variable_init_at : LineInfo
+
+[tag_function(extract_variable_tag),sideeffects]
+def public extract_variable ( method_name:string; expr )
+    return expr
+
+[tag_function(extract_variable_tag),sideeffects]
+def public extract_variable_ref ( method_name:string; expr:auto(TT)& =const ) : TT&
+    unsafe
+        return expr
+
+[tag_function(extract_variable_tag),sideeffects]
+def public extract_variable_ref ( method_name:string; var expr:auto(TT)& =const ) : TT&
+    unsafe
+        return expr
+
+[tag_function_macro(tag="extract_variable_tag")]
+class ExtractVariableMacro : AstFunctionAnnotation
+    method_tag = "!!!extract_variable"
+    def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        if !(call.arguments[0] is ExprConstString)
+            print("extract_variable: first argument must be a string literal")
+            return false
+        var variable_name = string((call.arguments[0] as ExprConstString).value)
+        var variable_type = describe(call.arguments[1]._type)
+        assume atCall = call.atEnclosure
+        assume atBlock = call.arguments[1].at
+        var jv <- JV([[ExtractVariableDesc
+            variable_name = variable_name,
+            call_at = atCall,
+            variable_type = variable_type,
+            variable_init_at = atBlock
+        ]])
+        to_compilation_log("{method_tag}\n{write_json(jv)}\n!!!\n")
         unsafe
             delete jv
         return true
