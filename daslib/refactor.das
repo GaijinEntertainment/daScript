@@ -103,6 +103,8 @@ class ExtractMethodMacro : AstFunctionAnnotation
 struct ExtractVariableDesc
     variable_name : string
     variable_type : string
+    variable_keyword : string
+    is_reference : bool
     call_at : LineInfo
     variable_init_at : LineInfo
 
@@ -123,18 +125,28 @@ def public extract_variable_ref ( method_name:string; var expr:auto(TT)& =const 
 [tag_function_macro(tag="extract_variable_tag")]
 class ExtractVariableMacro : AstFunctionAnnotation
     method_tag = "!!!extract_variable"
+    def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
+        assume cffg = call.func.fromGeneric
+        if call.func!=null && cffg!=null && cffg.name=="extract_variable_ref"
+            if call.arguments[1]._type.isConst
+                var ccall <- clone_expression(call)
+                (ccall as ExprCall).name := "extract_variable"
+                return <- ccall
+        return [[ExpressionPtr]]
     def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         if !(call.arguments[0] is ExprConstString)
             print("extract_variable: first argument must be a string literal")
             return false
+        assume varType = call.arguments[1]._type
         var variable_name = string((call.arguments[0] as ExprConstString).value)
-        var variable_type = describe(call.arguments[1]._type)
         assume atCall = call.atEnclosure
         assume atBlock = call.arguments[1].at
         var jv <- JV([[ExtractVariableDesc
             variable_name = variable_name,
             call_at = atCall,
-            variable_type = variable_type,
+            variable_type = describe(varType),
+            variable_keyword = varType.isConst ? "let" : "var",
+            is_reference = varType.isRef && !varType.isConst,
             variable_init_at = atBlock
         ]])
         to_compilation_log("{method_tag}\n{write_json(jv)}\n!!!\n")
