@@ -37,14 +37,20 @@ void Module_dasLLVM::initFunctions_38() {
 	addExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueDIBuilder *,LLVMOpaqueMetadata *,LLVMOpaqueMetadata *,LLVMOpaqueMetadata *,unsigned int) , LLVMDIBuilderCreateImportedModuleFromNamespace >(*this,lib,"LLVMDIBuilderCreateImportedModuleFromNamespace",SideEffects::worstDefault,"LLVMDIBuilderCreateImportedModuleFromNamespace")
 		->args({"Builder","Scope","NS","File","Line"});
 // from D:\Work\libclang\include\llvm-c/DebugInfo.h:394:1
+	/* from LLVM13
 	addExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueDIBuilder *,LLVMOpaqueMetadata *,LLVMOpaqueMetadata *,LLVMOpaqueMetadata *,unsigned int) , LLVMDIBuilderCreateImportedModuleFromAlias >(*this,lib,"LLVMDIBuilderCreateImportedModuleFromAlias",SideEffects::worstDefault,"LLVMDIBuilderCreateImportedModuleFromAlias")
 		->args({"Builder","Scope","ImportedEntity","File","Line"});
+	*/
 // from D:\Work\libclang\include\llvm-c/DebugInfo.h:409:1
+	/* from LLVM13
 	addExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueDIBuilder *,LLVMOpaqueMetadata *,LLVMOpaqueMetadata *,LLVMOpaqueMetadata *,unsigned int) , LLVMDIBuilderCreateImportedModuleFromModule >(*this,lib,"LLVMDIBuilderCreateImportedModuleFromModule",SideEffects::worstDefault,"LLVMDIBuilderCreateImportedModuleFromModule")
 		->args({"Builder","Scope","M","File","Line"});
+	*/
 // from D:\Work\libclang\include\llvm-c/DebugInfo.h:428:1
+	/* from LLVM13
 	addExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueDIBuilder *,LLVMOpaqueMetadata *,LLVMOpaqueMetadata *,LLVMOpaqueMetadata *,unsigned int,const char *,size_t) , LLVMDIBuilderCreateImportedDeclaration >(*this,lib,"LLVMDIBuilderCreateImportedDeclaration",SideEffects::worstDefault,"LLVMDIBuilderCreateImportedDeclaration")
 		->args({"Builder","Scope","Decl","File","Line","Name","NameLen"});
+	*/
 // from D:\Work\libclang\include\llvm-c/DebugInfo.h:446:1
 	addExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueContext *,unsigned int,unsigned int,LLVMOpaqueMetadata *,LLVMOpaqueMetadata *) , LLVMDIBuilderCreateDebugLocation >(*this,lib,"LLVMDIBuilderCreateDebugLocation",SideEffects::worstDefault,"LLVMDIBuilderCreateDebugLocation")
 		->args({"Ctx","Line","Column","Scope","InlinedAt"});

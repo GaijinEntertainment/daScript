@@ -64,11 +64,15 @@ void Module_dasLLVM::initFunctions_40() {
 	addExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueDIBuilder *,LLVMOpaqueMetadata **,size_t) , LLVMDIBuilderGetOrCreateArray >(*this,lib,"LLVMDIBuilderGetOrCreateArray",SideEffects::worstDefault,"LLVMDIBuilderGetOrCreateArray")
 		->args({"Builder","Data","NumElements"});
 // from D:\Work\libclang\include\llvm-c/DebugInfo.h:1090:17
+/* from LLVM13
 	addExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueDIBuilder *,long long *,size_t) , LLVMDIBuilderCreateExpression >(*this,lib,"LLVMDIBuilderCreateExpression",SideEffects::worstDefault,"LLVMDIBuilderCreateExpression")
 		->args({"Builder","Addr","Length"});
+*/
 // from D:\Work\libclang\include\llvm-c/DebugInfo.h:1100:1
+/* from LLVM 13
 	addExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueDIBuilder *,int64_t) , LLVMDIBuilderCreateConstantValueExpression >(*this,lib,"LLVMDIBuilderCreateConstantValueExpression",SideEffects::worstDefault,"LLVMDIBuilderCreateConstantValueExpression")
 		->args({"Builder","Value"});
+	*/
 // from D:\Work\libclang\include\llvm-c/DebugInfo.h:1122:17
 	addExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueDIBuilder *,LLVMOpaqueMetadata *,const char *,size_t,const char *,size_t,LLVMOpaqueMetadata *,unsigned int,LLVMOpaqueMetadata *,int,LLVMOpaqueMetadata *,LLVMOpaqueMetadata *,unsigned int) , LLVMDIBuilderCreateGlobalVariableExpression >(*this,lib,"LLVMDIBuilderCreateGlobalVariableExpression",SideEffects::worstDefault,"LLVMDIBuilderCreateGlobalVariableExpression")
 		->args({"Builder","Scope","Name","NameLen","Linkage","LinkLen","File","LineNo","Ty","LocalToUnit","Expr","Decl","AlignInBits"});
