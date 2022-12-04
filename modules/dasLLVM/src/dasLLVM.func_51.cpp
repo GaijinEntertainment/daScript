@@ -39,8 +39,10 @@ void Module_dasLLVM::initFunctions_51() {
 	addExtern< const char * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetTripleString >(*this,lib,"LLVMOrcLLJITGetTripleString",SideEffects::worstDefault,"LLVMOrcLLJITGetTripleString")
 		->args({"J"});
 // from D:\Work\libclang\include\llvm-c/LLJIT.h:142:6
+#ifndef __APPLE__
 	addExtern< char (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetGlobalPrefix >(*this,lib,"LLVMOrcLLJITGetGlobalPrefix",SideEffects::worstDefault,"LLVMOrcLLJITGetGlobalPrefix")
 		->args({"J"});
+#endif
 // from D:\Work\libclang\include\llvm-c/LLJIT.h:152:1
 	addExtern< LLVMOrcOpaqueSymbolStringPoolEntry * (*)(LLVMOrcOpaqueLLJIT *,const char *) , LLVMOrcLLJITMangleAndIntern >(*this,lib,"LLVMOrcLLJITMangleAndIntern",SideEffects::worstDefault,"LLVMOrcLLJITMangleAndIntern")
 		->args({"J","UnmangledName"});
