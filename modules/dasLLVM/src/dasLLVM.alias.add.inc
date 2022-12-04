@@ -1,41 +1,6 @@
 // this file is generated via daScript automatic C++ binder
 // all user modifications will be lost after this file is re-generated
 
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\inttypes.h:35:18
-auto alias_imaxdiv_t = typeFactory<_Lldiv_t>::make(lib);
-alias_imaxdiv_t->alias = "imaxdiv_t";
-addAlias(alias_imaxdiv_t);
-
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:19:28
-auto alias__ino_t = typeFactory<unsigned short>::make(lib);
-alias__ino_t->alias = "_ino_t";
-addAlias(alias__ino_t);
-
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:22:24
-auto alias_ino_t = typeFactory<unsigned short>::make(lib);
-alias_ino_t->alias = "ino_t";
-addAlias(alias_ino_t);
-
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:31:26
-auto alias__dev_t = typeFactory<unsigned int>::make(lib);
-alias__dev_t->alias = "_dev_t";
-addAlias(alias__dev_t);
-
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:34:24
-auto alias_dev_t = typeFactory<unsigned int>::make(lib);
-alias_dev_t->alias = "dev_t";
-addAlias(alias_dev_t);
-
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:43:18
-auto alias__off_t = typeFactory<long>::make(lib);
-alias__off_t->alias = "_off_t";
-addAlias(alias__off_t);
-
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:46:24
-auto alias_off_t = typeFactory<long>::make(lib);
-alias_off_t->alias = "off_t";
-addAlias(alias_off_t);
-
 // from D:\Work\libclang\include\llvm-c/DataTypes.h:62:24
 auto alias_ssize_t = typeFactory<long long>::make(lib);
 alias_ssize_t->alias = "ssize_t";
