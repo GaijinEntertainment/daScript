@@ -1485,8 +1485,8 @@ namespace das {
             }
             verifyType(decl.type);
         }
-        virtual StructurePtr visit ( Structure * var ) override {
-            if ( !var->genCtor && var->hasAnyInitializers() ) {
+        void tryMakeStructureCtor ( Structure * var ) {
+            if ( !var->genCtor  ) {
                 if ( !hasUserConstructor(var->name) ) {
                     auto ctor = makeConstructor(var);
                     ctor->exports = program->options.getBoolOption("always_export_initializer", false);
@@ -1497,6 +1497,11 @@ namespace das {
                     error("structure already has user defined initializer", "", "",
                           var->at, CompilationError::structure_already_has_initializer);
                 }
+            }
+        }
+        virtual StructurePtr visit ( Structure * var ) override {
+            if ( !var->genCtor && var->hasAnyInitializers() ) {
+                tryMakeStructureCtor(var);
             }
             auto tt = make_smart<TypeDecl>(Type::tStructure);
             tt->structType = var;
@@ -6636,6 +6641,7 @@ namespace das {
                             reportAstChanged();
                         } else if ( aliasT->isStructure() ) {
                             expr->name = aliasT->structType->name;
+                            tryMakeStructureCtor (aliasT->structType);
                             reportAstChanged();
                         } else {
                             if ( cerr==InferCallError::operatorOp2 ) {

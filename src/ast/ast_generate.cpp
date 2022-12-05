@@ -121,6 +121,7 @@ namespace das {
         auto pClosure = make_smart<ExprBlock>();
         pClosure->at = expr->subexpr->at;
         pClosure->returnType = make_smart<TypeDecl>(Type::autoinfer);
+        pClosure->generated = true;
         // temp : Array<expr->subexpr->type>
         auto pVar = make_smart<Variable>();
         pVar->generated = true;
@@ -295,7 +296,13 @@ namespace das {
         auto block = make_smart<ExprBlock>();
         block->at = str->at;
         auto makeT = make_smart<ExprMakeStruct>(str->at);
-        makeT->useInitializer = true;
+        makeT->useInitializer = false;
+        for ( auto & f : str->fields ) {
+            if ( f.init ) {
+                makeT->useInitializer = true;
+                break;
+            }
+        }
         makeT->makeType = make_smart<TypeDecl>(str);
         makeT->structs.push_back(make_smart<MakeStruct>());
         auto returnDecl = make_smart<ExprReturn>(str->at,makeT);
