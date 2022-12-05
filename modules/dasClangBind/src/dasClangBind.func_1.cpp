@@ -29,16 +29,20 @@ void Module_dasClangBind::initFunctions_1() {
 		->args({"","Path"});
 	addExtern< CXString (*)(void *) , clang_getFileName ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getFileName",SideEffects::worstDefault,"clang_getFileName")
 		->args({"SFile"});
+	/* LLVM-13
 	addExtern< long long (*)(void *) , clang_getFileTime >(*this,lib,"clang_getFileTime",SideEffects::worstDefault,"clang_getFileTime")
 		->args({"SFile"});
+	*/
 	addExtern< int (*)(void *,CXFileUniqueID *) , clang_getFileUniqueID >(*this,lib,"clang_getFileUniqueID",SideEffects::worstDefault,"clang_getFileUniqueID")
 		->args({"file","outID"});
 	addExtern< unsigned int (*)(CXTranslationUnitImpl *,void *) , clang_isFileMultipleIncludeGuarded >(*this,lib,"clang_isFileMultipleIncludeGuarded",SideEffects::worstDefault,"clang_isFileMultipleIncludeGuarded")
 		->args({"tu","file"});
 	addExtern< void * (*)(CXTranslationUnitImpl *,const char *) , clang_getFile >(*this,lib,"clang_getFile",SideEffects::worstDefault,"clang_getFile")
 		->args({"tu","file_name"});
+	/* LLVM-13
 	addExtern< const char * (*)(CXTranslationUnitImpl *,void *,unsigned long long *) , clang_getFileContents >(*this,lib,"clang_getFileContents",SideEffects::worstDefault,"clang_getFileContents")
 		->args({"tu","file","size"});
+	*/
 	addExtern< int (*)(void *,void *) , clang_File_isEqual >(*this,lib,"clang_File_isEqual",SideEffects::worstDefault,"clang_File_isEqual")
 		->args({"file1","file2"});
 	addExtern< CXString (*)(void *) , clang_File_tryGetRealPathName ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_File_tryGetRealPathName",SideEffects::worstDefault,"clang_File_tryGetRealPathName")
