@@ -179,6 +179,7 @@ namespace das {
         FN_PREVISIT(ExprMoveRight) = adapt("preVisitExprMoveRight",pClass,info);
         IMPL_ADAPT(ExprClone);
         FN_PREVISIT(ExprCloneRight) = adapt("preVisitExprCloneRight",pClass,info);
+        fnCanVisitWithAliasSubexpression = adapt("canVisitWithAliasSubexpression",pClass,info);
         IMPL_ADAPT(ExprAssume);
         IMPL_ADAPT(ExprWith);
         FN_PREVISIT(ExprWithBody) = adapt("preVisitExprWithBody",pClass,info);
@@ -503,6 +504,14 @@ namespace das {
         { IMPL_PREVISIT2(ExprCloneRight,ExprClone,ExpressionPtr,right); }
 // assume
     IMPL_BIND_EXPR(ExprAssume);
+    bool VisitorAdapter::canVisitWithAliasSubexpression ( ExprAssume * expr) {
+        if ( fnCanVisitWithAliasSubexpression ) {
+            return das_invoke_function<bool>::invoke<void *,ExprAssume *>
+                (context,nullptr,fnCanVisitWithAliasSubexpression,classPtr,expr);
+        } else {
+            return Visitor::canVisitWithAliasSubexpression(expr);
+        }
+     }
 // with
     IMPL_BIND_EXPR(ExprWith);
     void VisitorAdapter::preVisitWithBody ( ExprWith * expr, Expression * body )
