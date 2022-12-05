@@ -83,6 +83,7 @@ namespace das {
         Func FN_PREVISIT(ExprMoveRight);
         DECL_VISIT(ExprClone);
         Func FN_PREVISIT(ExprCloneRight);
+        Func fnCanVisitWithAliasSubexpression;
         DECL_VISIT(ExprAssume);
         DECL_VISIT(ExprWith);
         Func FN_PREVISIT(ExprWithBody);
@@ -296,7 +297,8 @@ namespace das {
     // clone
         IMPL_BIND_EXPR(ExprClone);
         virtual void preVisitRight ( ExprClone * expr, Expression * right ) override;
-    // with
+    // assume
+        virtual bool canVisitWithAliasSubexpression ( ExprAssume * expr) override;
         IMPL_BIND_EXPR(ExprAssume);
     // with
         IMPL_BIND_EXPR(ExprWith);
