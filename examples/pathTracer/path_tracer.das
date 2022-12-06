@@ -62,8 +62,8 @@ def Camera(lookFrom,lookAt,vup:float3;vfov,aspect,aperture,focusDist:float)
     with that
         lensRadius = aperture / 2.
         origin = lookFrom
-        w = normalize(lookFrom - lookAt)
-        u = normalize(cross(vup, w))
+        w = fast_normalize(lookFrom - lookAt)
+        u = fast_normalize(cross(vup, w))
         v = cross(w, u)
         lowerLeftCorner = origin - halfWidth*focusDist*u - halfHeight*focusDist*v - focusDist*w
         horizontal = 2. * halfWidth * focusDist * u
@@ -75,7 +75,7 @@ def getRay(that:Camera;s,t:float)
         let rd = lensRadius * random_in_unit_disk(RAND_SEED)
         let offset = mad(u,rd.x,v*rd.y)
         return [[Ray orig = origin + offset,
-            dir = normalize(mad(vertical,t,mad(horizontal,s,lowerLeftCorner)) - origin - offset) ]]
+            dir = fast_normalize(mad(vertical,t,mad(horizontal,s,lowerLeftCorner)) - origin - offset) ]]
 
 enum Type
     Lambert
@@ -146,11 +146,11 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
     outLightE = float3(0)
     if mat.mtype==Type Lambert
         let target = rec.pos + rec.normal + random_unit_vector(RAND_SEED)
-        scattered = [[Ray orig=rec.pos, dir=normalize(target - rec.pos)]]
+        scattered = [[Ray orig=rec.pos, dir=fast_normalize(target - rec.pos)]]
         attenuation = mat.albedo
         let sc = s_Spheres[LIGHT_SPHERE_ID].center
-        let sw = normalize(sc-rec.pos)
-        let su = normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
+        let sw = fast_normalize(sc-rec.pos)
+        let su = fast_normalize(cross(abs(sw.x)>0.01 ? float3(0,1,0) : float3(1,0,0),sw))
         let sv = cross(sw,su)
         let sr = s_Spheres[LIGHT_SPHERE_ID].radius
         let cosAMax = sqrt(saturate(1.-sr*sr*inv_distance_sq(rec.pos,sc)))
@@ -170,7 +170,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
         return true
     elif mat.mtype == Type Metal
         let refl = reflect(r_in.dir,rec.normal)
-        scattered = [[Ray orig=rec.pos, dir=normalize(mad(random_in_unit_sphere(RAND_SEED),mat.roughness,refl))]]
+        scattered = [[Ray orig=rec.pos, dir=fast_normalize(mad(random_in_unit_sphere(RAND_SEED),mat.roughness,refl))]]
         attenuation = mat.albedo
         return dot(scattered.dir,rec.normal) > 0.
     elif mat.mtype == Type Dielectric
@@ -190,9 +190,9 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
             else
                 reflProb = 1.
         if random_float(RAND_SEED) < reflProb
-            scattered = [[Ray orig=rec.pos, dir=normalize(reflect(r_in.dir, rec.normal))]]
+            scattered = [[Ray orig=rec.pos, dir=fast_normalize(reflect(r_in.dir, rec.normal))]]
         else
-            scattered = [[Ray orig=rec.pos, dir=normalize(refr)]]
+            scattered = [[Ray orig=rec.pos, dir=fast_normalize(refr)]]
     else
         attenuation = float3(1,0,1)
         scattered = [[Ray orig=float3(0.), dir=float3(0.)]]
