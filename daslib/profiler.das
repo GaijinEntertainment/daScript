@@ -49,8 +49,8 @@ var g_us0 = 0l
 
 struct PerfEvent
     fun : SimFunction?
-    entering : bool
     ts : int64
+    entering : bool
 
 [skip_field_lock_check]
 struct PerfContext
@@ -69,8 +69,6 @@ class ProfilerDebugAgent : DapiDebugAgent
         delete g_events[tid]
     def override onInstrumentFunction ( var ctx:Context; fun:SimFunction?; entering:bool; userData:uint64 ) : void
         let tid = intptr(unsafe(addr(ctx)))
-        if tid==intptr(unsafe(addr(this_context())))
-            return
         g_events[tid].events |> push([[PerfEvent
             fun = fun,
             entering = entering,
