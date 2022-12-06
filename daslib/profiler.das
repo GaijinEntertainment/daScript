@@ -62,7 +62,7 @@ var [[do_not_delete]] g_debug_agent : ProfilerDebugAgent?
 
 class ProfilerDebugAgent : DapiDebugAgent
     def override onCreateContext ( var ctx:Context ) : void
-        if ctx.category.debug_context
+        if ctx.category.debug_context || ctx.category.macro_context
             return
         instrument_all_functions(ctx)
     def override onDestroyContext ( var ctx:Context ) : void
