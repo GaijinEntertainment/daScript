@@ -906,6 +906,7 @@ namespace das {
             helper.rtti = program->options.getBoolOption("rtti",false);
             prologue = program->options.getBoolOption("aot_prologue",false) ||
                 program->getDebugger();
+            solidContext = program->policies.solid_context || program->options.getBoolOption("solid_context",false);
         }
         string str() const {
             return "\n" + helper.str() + sti.str()  + stg.str() + ss.str();
@@ -922,6 +923,7 @@ namespace das {
         das_set<string>       aotPrefix;
         vector<ExprBlock *>         scopes;
         bool                        prologue = false;
+        bool                        solidContext = false;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -1092,8 +1094,15 @@ namespace das {
             } else {
                 ss << (var->init ? "das_global" : "das_global_zero");
             }
+            if ( solidContext ) ss << "_solid";
             ss << "<" << describeCppType(var->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes)
-                << ",0x" << HEX << var->getMangledNameHash() << DEC << ">(__context__)";
+                << ",";
+            if ( solidContext ) {
+                ss << var->stackTop;
+            } else {
+                ss << "0x" << HEX << var->getMangledNameHash() << DEC;
+            }
+            ss << ">(__context__)";
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
             ss << ";";
