@@ -58,8 +58,6 @@ struct PerfContext
 
 var g_events : table<uint64;PerfContext>
 
-var [[do_not_delete]] g_debug_agent : ProfilerDebugAgent?
-
 class ProfilerDebugAgent : DapiDebugAgent
     def override onCreateContext ( var ctx:Context ) : void
         if ctx.category.debug_context || ctx.category.macro_context
@@ -82,9 +80,7 @@ def debug_agent ( ctx : Context )
     assert(this_context().category.debug_context)
     dump_prefix()
     g_us0 = ref_time_ticks()
-    assert(g_debug_agent==null)
-    g_debug_agent = new ProfilerDebugAgent()
-    install_new_debug_agent(g_debug_agent, "profiler")
+    install_new_debug_agent(new ProfilerDebugAgent(), "profiler")
 
 [finalize]
 def shutdown_profiler
@@ -95,6 +91,3 @@ def shutdown_profiler
 def installing
     if is_compiling_macros_in_module("profiler")
         fork_debug_agent_context(@@debug_agent)
-
-
-
