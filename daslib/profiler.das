@@ -31,7 +31,45 @@ def dump_event(ev:PerfEvent; tid:uint64)
     let fnName = ev.fun.mangledName |> escape()
     dump("\{\"name\": \"{fnName}\", \"cat\": \"PERF\", \"ph\": \"{phase}\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": {ev.ts}\}")
 
-def dump_context ( tid:uint64 )
+struct PerfNode
+    fun : SimFunction?
+    count : uint64
+    total_time : int64
+    enter_time : int64
+    children : table<SimFunction?;PerfNode?>
+
+def dump_node ( node:PerfNode?; tab:int = -1 )
+    if node==null
+        return
+    if node.fun!=null
+        let tabs = repeat("  ",tab)
+        to_log(LOG_INFO,"{tabs}{node.fun.mangledName} {int64(node.count)} {node.total_time}ns\n")
+    for ch in values(node.children)
+        dump_node(ch, tab+1)
+
+def dump_context_stack ( var ctx:Context; tid:uint64 )
+    // print("context: {tid} // {ctx.name} {ctx.category}\n")
+    var root = new PerfNode()
+    var stack : array<PerfNode?>
+    var sp = root
+    for ev in g_events[tid].events
+        if ev.entering
+            stack |> push(sp)
+            if !sp.children |> key_exists(ev.fun)
+                sp.children[ev.fun] = new [[PerfNode fun=ev.fun]]
+            sp = sp.children[ev.fun]
+            sp.count ++
+            sp.enter_time = ev.ts
+        else
+            stack |> pop()
+            sp = length(stack)!=0 ? stack |> back() : root
+            sp.total_time += ev.ts - sp.enter_time
+    dump_node(root)
+    unsafe
+        delete root
+
+def dump_context ( var ctx:Context; tid:uint64 )
+    dump_context_stack(ctx, tid)
     for ev in g_events[tid].events
         dump_event(ev, tid)
     delete g_events[tid].events
@@ -57,7 +95,7 @@ class ProfilerDebugAgent : DapiDebugAgent
         instrument_all_functions(ctx)
     def override onDestroyContext ( var ctx:Context ) : void
         let tid = intptr(unsafe(addr(ctx)))
-        dump_context(tid)
+        dump_context(ctx, tid)
         delete g_events[tid]
     def override onInstrumentFunction ( var ctx:Context; fun:SimFunction?; entering:bool; userData:uint64 ) : void
         let tid = intptr(unsafe(addr(ctx)))
