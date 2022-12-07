@@ -12,21 +12,24 @@ var g_out : FILE const?
 var g_firstRecord = true
 
 def dump(text)
+    if g_firstRecord
+        g_firstRecord = false
+    else
+        write(",\n")
+    write(text)
+
+def write(text)
     g_out |> fprint(text)
 
 def dump_prefix
     g_out = fopen("perf.json", "wb")
-    dump("[")
+    write("[")
 
 def dump_suffix
-    dump("]")
+    write("]")
     g_out |> fclose()
 
 def dump_event(ev:PerfEvent; tid:uint64)
-    if g_firstRecord
-        g_firstRecord = false
-    else
-        dump(",\n")
     let phase = ev.entering ? "B" : "E"
     let fnName = ev.fun.mangledName |> escape()
     dump("\{\"name\": \"{fnName}\", \"cat\": \"PERF\", \"ph\": \"{phase}\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": {ev.ts/1000l}\}")
@@ -48,7 +51,7 @@ def dump_node ( node:PerfNode?; tab:int = -1 )
     for ch in values(node.children)
         dump_node(ch, tab+1)
 
-def dump_context_stack ( var ctx:Context; tid:uint64 )
+def dump_context_stack ( tid:uint64 )
     // print("context: {tid} // {ctx.name} {ctx.category}\n")
     var root = new PerfNode()
     var stack : array<PerfNode?>
@@ -69,8 +72,18 @@ def dump_context_stack ( var ctx:Context; tid:uint64 )
     unsafe
         delete root
 
+def dump_meta ( var ctx:Context; tid:uint64 )
+    let ctxName = empty(ctx.name) ? "" : " '{ctx.name}'"
+    let wasDead = (ctx.category & context_category_flags dead) == context_category_flags dead
+    ctx.category &= ~context_category_flags dead
+    let ctxDesc = "{tid}{ctxName} cat:{ctx.category}" |> escape()
+    dump("\{\"args\": \{ \"name\": \"{ctxDesc}\" \}, \"name\": \"thread_name\", \"cat\": \"__metadata\", \"ph\": \"M\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": 0 \}")
+    if wasDead { ctx.category |= context_category_flags dead; }
+    // dump("\{\"args\": \{ \"value\" : \"ns\" \}, \"name\": \"displayTimeUnit\", \"cat\": \"__metadata\", \"ph\": \"M\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": 0 \}")
+
 def dump_context ( var ctx:Context; tid:uint64 )
-    dump_context_stack(ctx, tid)
+    dump_context_stack(tid)
+    dump_meta(ctx, tid)
     for ev in g_events[tid].events
         dump_event(ev, tid)
     delete g_events[tid].events
@@ -96,8 +109,9 @@ class ProfilerDebugAgent : DapiDebugAgent
         instrument_all_functions(ctx)
     def override onDestroyContext ( var ctx:Context ) : void
         let tid = intptr(unsafe(addr(ctx)))
-        dump_context(ctx, tid)
-        delete g_events[tid]
+        if g_events |> key_exists(tid)
+            dump_context(ctx, tid)
+            delete g_events[tid]
     def override onInstrumentFunction ( var ctx:Context; fun:SimFunction?; entering:bool; userData:uint64 ) : void
         let tid = intptr(unsafe(addr(ctx)))
         g_events[tid].events |> push([[PerfEvent
