@@ -31,6 +31,7 @@ def dump_event(ev:PerfEvent; tid:uint64)
     let fnName = ev.fun.mangledName |> escape()
     dump("\{\"name\": \"{fnName}\", \"cat\": \"PERF\", \"ph\": \"{phase}\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": {ev.ts}\}")
 
+[skip_field_lock_check]
 struct PerfNode
     fun : SimFunction?
     count : uint64
@@ -119,3 +120,4 @@ def shutdown_profiler
 def installing
     if is_compiling_macros_in_module("profiler")
         fork_debug_agent_context(@@debug_agent)
+
