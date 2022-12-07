@@ -6,6 +6,7 @@ module profiler shared private
 
 require debugapi
 require fio
+require strings
 
 var g_out : FILE const?
 var g_firstRecord = true
@@ -15,20 +16,10 @@ def dump(text)
 
 def dump_prefix
     g_out = fopen("perf.json", "wb")
-    dump("
-\{
-  \"traceEvents\": [
-")
+    dump("[")
 
 def dump_suffix
-    dump("
-  ],
-  \"displayTimeUnit\": \"ns\",
-  \"systemTraceEvents\": \"SystemTraceData\",
-  \"otherData\": \{
-    \"version\": \"daScript (wip)\"
-  \}
-\}")
+    dump("]")
     g_out |> fclose()
 
 def dump_event(ev:PerfEvent; tid:uint64)
@@ -37,7 +28,8 @@ def dump_event(ev:PerfEvent; tid:uint64)
     else
         dump(",\n")
     let phase = ev.entering ? "B" : "E"
-    dump("    \{\"name\": \"{ev.fun.mangledName}\", \"cat\": \"PERF\", \"ph\": \"{phase}\", \"pid\": 0, \"tid\": {int(tid)}, \"ts\": {ev.ts}\}")
+    let fnName = ev.fun.mangledName |> escape()
+    dump("\{\"name\": \"{fnName}\", \"cat\": \"PERF\", \"ph\": \"{phase}\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": {ev.ts}\}")
 
 def dump_context ( tid:uint64 )
     for ev in g_events[tid].events
