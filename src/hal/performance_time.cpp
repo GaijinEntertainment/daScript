@@ -30,7 +30,13 @@ extern "C" int get_time_usec ( int64_t reft ) {
     int64_t t0 = ref_time_ticks();
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
-    return (int)(((t0-reft)*1000000) / freq.QuadPart);
+    return int(double(t0-reft)*1000000./freq.QuadPart);
+}
+
+extern "C" int64_t get_delta_time_nsec ( int64_t t0, int64_t reft ) {
+    LARGE_INTEGER freq;
+    QueryPerformanceFrequency(&freq);
+    return  int64_t(double(t0-reft)*100000000./freq.QuadPart);
 }
 
 #elif __linux__ || defined(_EMSCRIPTEN_VER)
@@ -50,8 +56,13 @@ extern "C" int64_t ref_time_ticks () {
 }
 
 extern "C" int get_time_usec ( int64_t reft ) {
-    return (int) ((ref_time_ticks() - reft) / (NSEC_IN_SEC/1000000));
+    return int(double(ref_time_ticks() - reft) / (NSEC_IN_SEC/1000000.));
 }
+
+extern "C" int64_t get_delta_time_nsec ( int64_t t0, int64_t reft ) {
+    return t0 - reft;
+}
+
 
 #else // osx
 
@@ -63,10 +74,17 @@ extern "C" int64_t ref_time_ticks() {
 }
 
 extern "C" int get_time_usec ( int64_t reft ) {
-    int64_t relt = ref_time_ticks() - reft;
+    double relt = ref_time_ticks() - reft;
     mach_timebase_info_data_t s_timebase_info;
     mach_timebase_info(&s_timebase_info);
-    return relt * s_timebase_info.numer/s_timebase_info.denom/1000;
+    return int(relt * s_timebase_info.numer/s_timebase_info.denom/1000.0);
+}
+
+extern "C" int64_t get_delta_time_nsec ( int64_t t0, int64_t reft ) {
+    double relt = t0 - reft;
+    mach_timebase_info_data_t s_timebase_info;
+    mach_timebase_info(&s_timebase_info);
+    return int64_t(relt * s_timebase_info.numer/s_timebase_info.denom);
 }
 
 #endif

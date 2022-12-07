@@ -4,6 +4,7 @@
 
 extern "C" int64_t ref_time_ticks ();
 extern "C" int get_time_usec ( int64_t reft );
+extern "C" int64_t get_delta_time_nsec ( int64_t t0, int64_t reft );
 
 #if DAS_PROFILE_SECTIONS
 

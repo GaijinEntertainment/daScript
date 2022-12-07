@@ -1,15 +1,18 @@
-require daslib/refactor
+require daslib/profiler
+
+require daslib/rtti
+
+[sideeffects]
+def fibR(n:int)
+    if (n < 2)
+        return n
+    return fibR(n - 1) + fibR(n - 2)
 
 [export]
-def main
-    var t <- [{for x in 3..7; x*x}]
-    var q = 13
-    extract_method("method") <|
-        q ++
-        print("{q} {t}\n")
-    print("upsipe\n")
-    var x = extract_expression("expression",q*3+27)
-    print("x = {x}\n")
-    var vv = extract_variable("somevar",t[3])
-    print("vv = {vv}\n")
+def main()
+    print("this context is {intptr(unsafe(addr(this_context())))}\n")
+    let t0 = ref_time_ticks()
+    let f = fibR(13)
+    let dt = get_time_usec(t0)
+    print("hello, world {dt}usec\n")
 

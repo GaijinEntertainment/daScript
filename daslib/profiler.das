@@ -29,7 +29,7 @@ def dump_event(ev:PerfEvent; tid:uint64)
         dump(",\n")
     let phase = ev.entering ? "B" : "E"
     let fnName = ev.fun.mangledName |> escape()
-    dump("\{\"name\": \"{fnName}\", \"cat\": \"PERF\", \"ph\": \"{phase}\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": {ev.ts}\}")
+    dump("\{\"name\": \"{fnName}\", \"cat\": \"PERF\", \"ph\": \"{phase}\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": {ev.ts/1000l}\}")
 
 [skip_field_lock_check]
 struct PerfNode
@@ -103,7 +103,7 @@ class ProfilerDebugAgent : DapiDebugAgent
         g_events[tid].events |> push([[PerfEvent
             fun = fun,
             entering = entering,
-            ts = ref_time_ticks() - g_us0]])
+            ts = get_delta_time_nsec(ref_time_ticks(),g_us0)]])
 
 def debug_agent ( ctx : Context )
     assert(this_context().category.debug_context)
