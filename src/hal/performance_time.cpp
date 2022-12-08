@@ -77,14 +77,14 @@ extern "C" int get_time_usec ( int64_t reft ) {
     int64_t relt = ref_time_ticks() - reft;
     mach_timebase_info_data_t s_timebase_info;
     mach_timebase_info(&s_timebase_info);
-    return int(relt * s_timebase_info.numer/s_timebase_info.denom/1000);
+    return int(relt * s_timebase_info.numer/s_timebase_info.denom/1000LL);
 }
 
 extern "C" int64_t get_delta_time_nsec ( int64_t t0, int64_t reft ) {
     int64_t relt = t0 - reft;
     mach_timebase_info_data_t s_timebase_info;
     mach_timebase_info(&s_timebase_info);
-    return int64_t(relt * s_timebase_info.numer/s_timebase_info.denom);
+    return relt * s_timebase_info.numer / s_timebase_info.denom;
 }
 
 #endif

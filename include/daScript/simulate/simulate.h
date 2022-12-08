@@ -52,6 +52,7 @@ namespace das
     ,   debugger_tick =     (1<<5)
     ,   debugger_attached = (1<<6)
     ,   macro_context     = (1<<7)
+    ,   folding_context =   (1<<8)
     };
 
     struct GlobalVariable {

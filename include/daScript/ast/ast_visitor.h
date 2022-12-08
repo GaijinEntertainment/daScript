@@ -309,6 +309,7 @@ namespace das {
             ctx.thisHelper = &helper;
             ctx.heap = make_smart<LinearHeapAllocator>();
             ctx.stringHeap = make_smart<LinearStringAllocator>();
+            ctx.category = uint32_t(ContextCategory::folding_context);
             helper.rtti = true;
         }
     protected:

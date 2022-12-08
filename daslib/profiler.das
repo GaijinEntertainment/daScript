@@ -62,9 +62,9 @@ def dump_context_stack ( var ctx:Context; tid:uint64 )
             sp.count ++
             sp.enter_time = ev.ts
         else
+            sp.total_time += ev.ts - sp.enter_time
             stack |> pop()
             sp = length(stack)!=0 ? stack |> back() : root
-            sp.total_time += ev.ts - sp.enter_time
     dump_node(root)
     unsafe
         delete root
@@ -90,11 +90,16 @@ struct PerfContext
 var g_events : table<uint64;PerfContext>
 
 class ProfilerDebugAgent : DapiDebugAgent
+    def isProfileable ( var ctx:Context )
+        return !(ctx.category.debug_context || ctx.category.macro_context || ctx.category.folding_context ||
+            ctx.category.debugger_tick || ctx.category.debugger_attached)
     def override onCreateContext ( var ctx:Context ) : void
-        if ctx.category.debug_context || ctx.category.macro_context
+        if !isProfileable(ctx)
             return
         instrument_all_functions(ctx)
     def override onDestroyContext ( var ctx:Context ) : void
+        if !isProfileable(ctx)
+            return
         let tid = intptr(unsafe(addr(ctx)))
         dump_context(ctx, tid)
         delete g_events[tid]
