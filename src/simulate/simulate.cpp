@@ -2084,6 +2084,8 @@ namespace das
             if ( fn.code ) fn.code->visit(*vis);
         }
     }
+
+    const LineInfo * SimFunction::getLineInfo() const { return &code->debugInfo; }
 }
 
 //workaround compiler bug in MSVC 32 bit

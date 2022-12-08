@@ -309,6 +309,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(debugInfo)>("debugInfo");
             addField<DAS_BIND_MANAGED_FIELD(stackSize)>("stackSize");
             addField<DAS_BIND_MANAGED_FIELD(mangledNameHash)>("mangledNameHash");
+            addProperty<DAS_BIND_MANAGED_PROP(getLineInfo)>("lineInfo","getLineInfo");
             addFieldEx ( "flags", "flags", offsetof(SimFunction, flags), makeSimFunctionFlags() );
         }
     };

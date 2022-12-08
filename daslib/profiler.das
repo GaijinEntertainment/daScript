@@ -7,6 +7,7 @@ module profiler shared private
 require debugapi
 require fio
 require strings
+require uriparser
 
 var g_out : FILE const?
 var g_firstRecord = true
@@ -33,6 +34,40 @@ def dump_event(ev:PerfEvent; tid:uint64)
     let phase = ev.entering ? "B" : "E"
     let fnName = ev.fun.mangledName |> escape()
     dump("\{\"name\": \"{fnName}\", \"cat\": \"PERF\", \"ph\": \"{phase}\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": {ev.ts/1000l}\}")
+
+def dump_event_pair(ev_b,ev_e:PerfEvent; tid:uint64)
+    let fnName = ev_b.fun.mangledName |> escape()
+    let ts = ev_b.ts // /1000l
+    let tdur = (ev_e.ts - ev_b.ts) // /1000l
+    let lineNumber = int(ev_b.fun.lineInfo.line)
+    let columnNumber = int(ev_b.fun.lineInfo.column)
+    var url = ""
+    var fn2uri : table<string;string>
+    if ev_b.fun.lineInfo.fileInfo!=null
+        let fname = string(ev_b.fun.lineInfo.fileInfo.name)
+        url = fn2uri[fname]
+        if url == ""
+            let furi = file_name_to_uri(fname)
+            fn2uri[fname] = furi
+            url = furi
+    dump("\{
+    \"args\": \{
+        \"data\": \{
+            \"columnNumber\": {columnNumber},
+            \"functionName\": \"{ev_b.fun.mangledName}\",
+            \"lineNumber\": {lineNumber},
+            \"url\": \"{url}\"
+        \}
+    \},
+    \"cat\": \"devtools.timeline\",
+    \"dur\": {tdur},
+    \"name\": \"FunctionCall\",
+    \"ph\": \"X\",
+    \"pid\": 0,
+    \"tdur\": {tdur},
+    \"tid\": {int64(tid)},
+    \"ts\": {ts}
+\}")
 
 [skip_field_lock_check]
 struct PerfNode
@@ -84,8 +119,15 @@ def dump_meta ( var ctx:Context; tid:uint64 )
 def dump_context ( var ctx:Context; tid:uint64 )
     dump_context_stack(tid)
     dump_meta(ctx, tid)
+    var stack : array<PerfEvent?>
     for ev in g_events[tid].events
-        dump_event(ev, tid)
+        if ev.entering
+            stack |> push(unsafe(addr(ev)))
+        else
+            let ev_b = stack |> back()
+            stack |> pop()
+            dump_event_pair(*ev_b, ev, tid)
+        // dump_event(ev, tid)
     delete g_events[tid].events
     g_events |> erase(tid)
 

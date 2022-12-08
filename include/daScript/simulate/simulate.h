@@ -89,6 +89,7 @@ namespace das
                 bool    cmres : 1;
             };
         };
+        const LineInfo * getLineInfo() const;
     };
 
     struct SimNode {
