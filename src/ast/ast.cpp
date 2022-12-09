@@ -3003,6 +3003,10 @@ namespace das {
         return policies.debugger || options.getBoolOption("debugger",false);
     }
 
+    bool Program::getProfiler() const {
+        return policies.profiler || options.getBoolOption("profiler",false);
+    }
+
     void Program::optimize(TextWriter & logs, ModuleGroup & libGroup) {
         const bool log = options.getBoolOption("log_optimization_passes",false);
         bool any, last;

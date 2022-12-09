@@ -425,6 +425,36 @@ namespace das {
         }
     }
 
+    void addExtraDependency(
+        string modName,
+        string modFile,
+        vector<string> & missing,
+        vector<string> & circular,
+        vector<string> & notAllowed,
+        vector<ModuleInfo> & req,
+        das_set<string> & dependencies,
+        const FileAccessPtr & access,
+        ModuleGroup & libGroup,
+        CodeOfPolicies policies ) {
+        bool hasModule = false;
+        for ( auto & mod : req ) {
+            if ( mod.moduleName==modName) {
+                hasModule = true;
+                break;
+            }
+        }
+        if ( !hasModule && !modFile.empty() ) {
+            getPrerequisits(modFile, access, req, missing, circular, notAllowed,
+                dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules);
+            auto finfo = access->getFileInfo(modFile);
+            ModuleInfo info;
+            info.fileName = finfo->name;
+            info.importName = "";
+            info.moduleName = modName;
+            req.push_back(info);
+        }
+    }
+
     ProgramPtr compileDaScript ( const string & fileName,
                                 const FileAccessPtr & access,
                                 TextWriter & logs,
@@ -442,23 +472,10 @@ namespace das {
                 dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
             preqT = get_time_usec(time0);
             if ( policies.debugger ) {
-                bool hasDebugger = false;
-                for ( auto & mod : req ) {
-                    if ( mod.moduleName=="debug") {
-                        hasDebugger = true;
-                        break;
-                    }
-                }
-                if ( !hasDebugger && !policies.debug_module.empty() ) {
-                    getPrerequisits(policies.debug_module, access, req, missing, circular, notAllowed,
-                        dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules);
-                    auto finfo = access->getFileInfo(policies.debug_module);
-                    ModuleInfo info;
-                    info.fileName = finfo->name;
-                    info.importName = "";
-                    info.moduleName = "debug";
-                    req.push_back(info);
-                }
+                addExtraDependency("debug", policies.debug_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
+            }
+            if ( policies.profiler ) {
+                addExtraDependency("profiler", policies.profile_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
             }
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod.moduleName) ) {

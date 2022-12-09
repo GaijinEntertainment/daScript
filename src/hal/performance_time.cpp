@@ -33,7 +33,8 @@ extern "C" int get_time_usec ( int64_t reft ) {
     return int((t0-reft)*1000000LL/freq.QuadPart);
 }
 
-extern "C" int64_t get_delta_time_nsec ( int64_t t0, int64_t reft ) {
+extern "C" int64_t get_time_nsec ( int64_t reft ) {
+    int64_t t0 = ref_time_ticks();
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
     return  int64_t((t0-reft)*1000000000LL/freq.QuadPart);
@@ -59,8 +60,8 @@ extern "C" int get_time_usec ( int64_t reft ) {
     return int((ref_time_ticks() - reft) / (NSEC_IN_SEC/1000000LL));
 }
 
-extern "C" int64_t get_delta_time_nsec ( int64_t t0, int64_t reft ) {
-    return t0 - reft;
+extern "C" int64_t get_time_nsec ( int64_t reft ) {
+    return  ref_time_ticks() - reft;
 }
 
 
@@ -80,8 +81,8 @@ extern "C" int get_time_usec ( int64_t reft ) {
     return int(relt * s_timebase_info.numer/s_timebase_info.denom/1000LL);
 }
 
-extern "C" int64_t get_delta_time_nsec ( int64_t t0, int64_t reft ) {
-    int64_t relt = t0 - reft;
+extern "C" int64_t get_time_nsec ( int64_t reft ) {
+    int64_t relt = ref_time_ticks() - reft;
     mach_timebase_info_data_t s_timebase_info;
     mach_timebase_info(&s_timebase_info);
     return relt * s_timebase_info.numer / s_timebase_info.denom;

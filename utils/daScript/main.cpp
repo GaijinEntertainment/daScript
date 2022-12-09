@@ -8,6 +8,7 @@ das::FileAccessPtr get_file_access( char * pak );//link time resolved dependenci
 
 TextPrinter tout;
 
+static bool profilerRequired = false;
 static bool debuggerRequired = false;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
@@ -253,6 +254,10 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     if ( debuggerRequired ) {
         policies.debug_module = getDasRoot() + "/daslib/debug.das";
     }
+    if ( !policies.debugger && profilerRequired ) {
+        policies.profiler = true;
+        policies.profile_module = getDasRoot() + "/daslib/profiler.das";
+    }
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
@@ -373,6 +378,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 pauseAfterDone = true;
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
+            } else if ( cmd=="-das-profiler") {
+                profilerRequired = true;
             } else if ( !scriptArgs) {
                 print_help();
                 return -1;

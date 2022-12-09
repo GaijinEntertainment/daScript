@@ -558,6 +558,8 @@ namespace das {
         "indenting",                    Type::tInt,
     // debugger
         "debugger",                     Type::tBool,
+    // profiler
+        "profiler",                     Type::tBool,
     // runtime checks
         "skip_lock_checks",             Type::tBool
     };

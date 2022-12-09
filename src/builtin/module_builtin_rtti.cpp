@@ -339,6 +339,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(thisModuleName)>("thisModuleName");
             addFieldEx ( "flags", "flags", offsetof(Program, flags), makeProgramFlags() );
             addField<DAS_BIND_MANAGED_FIELD(errors)>("errors");
+            addField<DAS_BIND_MANAGED_FIELD(options)>("_options","options");
         }
     };
 
@@ -664,6 +665,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(fail_on_lack_of_aot_export)>("fail_on_lack_of_aot_export");
         // debugger
             addField<DAS_BIND_MANAGED_FIELD(debugger)>("debugger");
+        // profiler
+            addField<DAS_BIND_MANAGED_FIELD(profiler)>("profiler");
         }
         virtual bool isLocal() const override { return true; }
     };
@@ -1225,11 +1228,11 @@ namespace das {
             addAnnotation(make_smart<FileAccessAnnotation>(lib));
             addAnnotation(make_smart<ModuleAnnotation>(lib));
             addAnnotation(make_smart<AstModuleGroupAnnotation>(lib));
-            addAnnotation(make_smart<ProgramAnnotation>(lib));
             addEnumeration(make_smart<EnumerationType>());
             addAnnotation(make_smart<AnnotationArgumentAnnotation>(lib));
             addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationArguments>>("AnnotationArguments",lib));
             addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationArgumentList>>("AnnotationArgumentList",lib));
+            addAnnotation(make_smart<ProgramAnnotation>(lib));
             addAnnotation(make_smart<AnnotationAnnotation>(lib));
             addAnnotation(make_smart<AnnotationDeclarationAnnotation>(lib));
             addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationList>>("AnnotationList",lib));

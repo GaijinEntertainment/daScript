@@ -1227,6 +1227,12 @@ namespace das
         //      2. invoke of blocks will have extra prologue overhead
         bool debugger = false;
         string debug_module;
+    // profiler
+        // only enabled if profiler is disabled
+        // when enabled
+        //      1. disables [fastcall]
+        bool profiler = false;
+        string profile_module;
     };
 
     struct CommentReader : public ptr_ref_count {
@@ -1318,6 +1324,7 @@ namespace das
         void buildADLookup ( Context & context, TextWriter & logs );
         bool getOptimize() const;
         bool getDebugger() const;
+        bool getProfiler() const;
         void makeMacroModule( TextWriter & logs );
         vector<ReaderMacroPtr> getReaderMacro ( const string & markup ) const;
     protected:
