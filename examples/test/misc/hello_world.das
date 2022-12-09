@@ -11,7 +11,9 @@ def fibR(n:int)
 
 [sideeffects]
 def wait_100th_of_a_sec
-    sleep(10u)
+    let t0 = ref_time_ticks()
+    while get_time_usec(t0) < 1000
+        pass
 
 [export]
 def main()

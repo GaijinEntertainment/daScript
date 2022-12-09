@@ -35,12 +35,6 @@ def dump_event(ev:PerfEvent; tid:uint64)
     let fnName = ev.fun.mangledName |> escape()
     dump("\{\"name\":\"{fnName}\",\"cat\": \"PERF\",\"ph\":\"{phase}\",\"pid\": 0,\"tid\":{int64(tid)},\"ts\":{ev.ts/1000l}\}")
 
-def dump_event_pair(ev_b,ev_e:PerfEvent; tid:uint64)
-    let fnName = ev_b.fun.mangledName |> escape()
-    let ts = ev_b.ts /100l
-    let tdur = (ev_e.ts - ev_b.ts) / 100l
-    dump("\{\"name\":\"{fnName}\",\"cat\":\"PERF\",\"ph\":\"X\",\"pid\":0,\"tid\":{int64(tid)},\"ts\":{ts},\"tdur\":{tdur},\"dur\":{tdur}\}")
-
 [skip_field_lock_check]
 struct PerfNode
     fun : SimFunction?
@@ -88,18 +82,14 @@ def dump_meta ( var ctx:Context; tid:uint64 )
     if wasDead { ctx.category |= context_category_flags dead; }
     // dump("\{\"args\": \{ \"value\" : \"ns\" \}, \"name\": \"displayTimeUnit\", \"cat\": \"__metadata\", \"ph\": \"M\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": 0 \}")
 
+def dump_events ( tid:uint64 )
+    for ev in g_events[tid].events
+        dump_event(ev, tid)
+
 def dump_context ( var ctx:Context; tid:uint64 )
     dump_context_stack(tid)
     dump_meta(ctx, tid)
-    var stack : array<PerfEvent?>
-    for ev in g_events[tid].events
-        if ev.entering
-            stack |> push(unsafe(addr(ev)))
-        else
-            let ev_b = stack |> back()
-            stack |> pop()
-            dump_event_pair(*ev_b, ev, tid)
-        // dump_event(ev, tid)
+    dump_events(tid)
     delete g_events[tid].events
     g_events |> erase(tid)
 

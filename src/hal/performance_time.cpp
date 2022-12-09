@@ -36,7 +36,7 @@ extern "C" int get_time_usec ( int64_t reft ) {
 extern "C" int64_t get_delta_time_nsec ( int64_t t0, int64_t reft ) {
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
-    return  int64_t((t0-reft)*100000000LL/freq.QuadPart);
+    return  int64_t((t0-reft)*1000000000LL/freq.QuadPart);
 }
 
 #elif __linux__ || defined(_EMSCRIPTEN_VER)
