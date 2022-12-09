@@ -2,7 +2,7 @@ cmake_minimum_required (VERSION 3.16)
 project (DAS)
 
 option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" OFF)
-option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" OFF)
+option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
 option(DAS_QUIRREL_DISABLED "Disable dasQuirrel (quirrel bindings)" ON)
 option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" ON)
