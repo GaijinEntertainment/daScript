@@ -126,7 +126,7 @@ class ProfilerDebugAgent : DapiDebugAgent
         g_events[tid].events |> push([[PerfEvent
             fun = fun,
             entering = entering,
-            ts = get_delta_time_nsec(ref_time_ticks(),g_us0)]])
+            ts = (ref_time_ticks() - g_us0) * 1000_000_000l / ref_ticks_frequency()]])
 
 def debug_agent ( ctx : Context )
     assert(this_context().category.debug_context)

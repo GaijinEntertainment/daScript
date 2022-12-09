@@ -75,8 +75,8 @@ namespace das {
             SideEffects::accessExternal, "get_time_usec");
         addExtern<DAS_BIND_FUN(cast_int64)>(*this, lib, "int64",
             SideEffects::none, "cast_int64");
-        addExtern<DAS_BIND_FUN(get_delta_time_nsec)>(*this, lib, "get_delta_time_nsec",
-            SideEffects::accessExternal, "get_delta_time_nsec");
+        addExtern<DAS_BIND_FUN(ref_ticks_frequency)>(*this, lib, "ref_ticks_frequency",
+            SideEffects::accessExternal, "ref_ticks_frequency");
     }
 }
 
