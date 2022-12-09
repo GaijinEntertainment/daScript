@@ -380,7 +380,14 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 debuggerRequired = true;
             } else if ( cmd=="-das-profiler") {
                 profilerRequired = true;
+            } else if ( cmd=="-das-profiler-log-file") {
+                if ( i+1 > argc ) { // script will pick up next argument by itself
+                    print_help();
+                    return -1;
+                }
+                i += 1;
             } else if ( !scriptArgs) {
+                printf("unnknown command line option: %s\n", cmd.c_str());
                 print_help();
                 return -1;
             }
