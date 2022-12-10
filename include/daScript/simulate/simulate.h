@@ -623,6 +623,8 @@ namespace das
         void instrumentFunctionCallback ( SimFunction * sim, bool entering, uint64_t userData );
         void instrumentCallback ( const LineInfo & at );
 
+        uint64_t getCodeAllocatorId() { return (uint64_t) code.get(); }
+
 #define DAS_SINGLE_STEP(context,at,forceStep) \
     context.singleStep(at,forceStep);
 

@@ -26,56 +26,74 @@ struct PerfEvent
 [skip_field_lock_check]
 struct PerfContext
     events : array<PerfEvent>
+    enabled : bool
+
+var [[do_not_delete]] g_d_agent : ProfilerDebugAgent?
+
+def public set_enable_profiler ( var ctxId:uint64; enabled:bool )
+    if g_d_agent!=null
+        g_d_agent->enable_profiler(ctxId, enabled)
 
 class ProfilerDebugAgent : DapiDebugAgent
-    g_us0 : int64 = 0l
-    g_events : table<uint64;PerfContext>
-    g_out : FILE const?
-    g_firstRecord : bool = true
+    us0 : int64 = 0l
+    events : table<uint64;PerfContext>
+    out : FILE const?
+    firstRecord : bool = true
+    manual : bool = false
+    instrumented : table<uint64>
+    def dependency
+        return @@set_enable_profiler
     def override onInstall ( agent:DebugAgent? ) : void
+        this_context().name := "__PROFILER__"
         var args <- get_command_line_arguments()
         for argv,i in args,range(100500)
-            if argv=="--das-profiler-log-file"
-                if i+1<length(args)
-                    g_out = fopen(args[i+1], "wb")
-                    break
-                break
+            if argv=="--das-profiler-log-file" && out==null && ((i+1)<length(args))
+                out = fopen(args[i+1], "wb")
+            elif argv=="--das-profiler-manual"
+                manual = true
         write("[")
-        g_us0 = ref_time_ticks()
+        g_d_agent = unsafe(addr(self))
+        us0 = ref_time_ticks()
     def override onUninstall ( agent:DebugAgent? ) : void
-        if g_out!=null
+        if out!=null
             write("]")
-            g_out |> fclose()
-            g_out = null
+            out |> fclose()
+            out = null
     def isProfileable ( var ctx:Context )
         return !(ctx.category.debug_context || ctx.category.macro_context || ctx.category.folding_context ||
             ctx.category.debugger_tick || ctx.category.debugger_attached)
     def override onCreateContext ( var ctx:Context ) : void
-        if !isProfileable(ctx)
+        if !isProfileable(ctx) || (instrumented |> key_exists(ctx.getCodeAllocatorId))
             return
+        instrumented |> insert(ctx.getCodeAllocatorId)
+        events[intptr(unsafe(addr(ctx)))].enabled = !manual
         instrument_all_functions(ctx)
+    def enable_profiler ( ctxId:uint64; enabled:bool ) : void
+        events[ctxId].enabled = enabled
     def override onDestroyContext ( var ctx:Context ) : void
         if !isProfileable(ctx)
             return
         let tid = intptr(unsafe(addr(ctx)))
-        if g_events |> key_exists(tid)
+        if events |> key_exists(tid)
             dump_context(ctx, tid)
-            delete g_events[tid]
+            delete events[tid]
+        instrumented |> erase(ctx.getCodeAllocatorId)
     def override onInstrumentFunction ( var ctx:Context; fun:SimFunction?; entering:bool; userData:uint64 ) : void
         let tid = intptr(unsafe(addr(ctx)))
-        g_events[tid].events |> push([[PerfEvent
-            fun = fun,
-            entering = entering,
-            ts = get_time_nsec(g_us0)]])
+        if events[tid].enabled
+            events[tid].events |> push([[PerfEvent
+                fun = fun,
+                entering = entering,
+                ts = get_time_nsec(us0)]])
     def dump(text:string)
-        if g_firstRecord
-            g_firstRecord = false
+        if firstRecord
+            firstRecord = false
         else
             write(",\n")
         write(text)
     def write(text:string)
-        if g_out != null
-            g_out |> fprint(text)
+        if out != null
+            out |> fprint(text)
     def dump_event(ev:PerfEvent; tid:uint64)
         let phase = ev.entering ? "B" : "E"
         let fnName = ev.fun.mangledName |> escape()
@@ -93,7 +111,9 @@ class ProfilerDebugAgent : DapiDebugAgent
         var root = new PerfNode()
         var stack : array<PerfNode?>
         var sp = root
-        for ev in g_events[tid].events
+        for ev in events[tid].events
+            if manual && ev.fun.mangledName |> starts_with("@profiler_boost::")
+                continue
             if ev.entering
                 stack |> push(sp)
                 if !sp.children |> key_exists(ev.fun)
@@ -103,7 +123,8 @@ class ProfilerDebugAgent : DapiDebugAgent
                 sp.enter_time = ev.ts
             else
                 sp.total_time += ev.ts - sp.enter_time
-                stack |> pop()
+                if length(stack)>0 // protection for mismatching enable\disable
+                    stack |> pop()
                 sp = length(stack)!=0 ? stack |> back() : root
         dump_node(root)
         unsafe
@@ -117,14 +138,14 @@ class ProfilerDebugAgent : DapiDebugAgent
         if wasDead { ctx.category |= context_category_flags dead; }
         // dump("\{\"args\": \{ \"value\" : \"ns\" \}, \"name\": \"displayTimeUnit\", \"cat\": \"__metadata\", \"ph\": \"M\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": 0 \}")
     def dump_events ( tid:uint64 )
-        for ev in g_events[tid].events
+        for ev in events[tid].events
             dump_event(ev, tid)
     def dump_context ( var ctx:Context; tid:uint64 )
         dump_context_stack(tid)
         dump_meta(ctx, tid)
         dump_events(tid)
-        delete g_events[tid].events
-        g_events |> erase(tid)
+        delete events[tid].events
+        events |> erase(tid)
 
 
 
@@ -136,4 +157,3 @@ def debug_agent ( ctx : Context )
 def installing
     if is_compiling_macros_in_module("profiler")
         fork_debug_agent_context(@@debug_agent)
-

@@ -356,6 +356,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
             }
             if ( cmd=="main" ) {
                 if ( i+1 > argc ) {
+                    printf("main requires argument\n");
                     print_help();
                     return -1;
                 }
@@ -363,6 +364,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
             } else if ( cmd=="dasroot" ) {
                 if ( i+1 > argc ) {
+                    printf("dasroot requires argument\n");
                     print_help();
                     return -1;
                 }
@@ -381,13 +383,18 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
             } else if ( cmd=="-das-profiler") {
                 profilerRequired = true;
             } else if ( cmd=="-das-profiler-log-file") {
-                if ( i+1 > argc ) { // script will pick up next argument by itself
+                // script will pick up next argument by itself
+                if ( i+1 > argc ) {
+                    printf("expecting profiler log file name\n");
                     print_help();
                     return -1;
                 }
                 i += 1;
+
+            } else if ( cmd=="-das-profiler-manual" ) {
+                // do nohting, script handles it
             } else if ( !scriptArgs) {
-                printf("unnknown command line option: %s\n", cmd.c_str());
+                printf("unknown command line option %s\n", cmd.c_str());
                 print_help();
                 return -1;
             }

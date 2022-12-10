@@ -281,6 +281,8 @@ namespace das {
                 "getTotalFunctions");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalVariables)>("totalVariables",
                 "getTotalVariables");
+            addProperty<DAS_BIND_MANAGED_PROP(getCodeAllocatorId)>("getCodeAllocatorId",
+                "getCodeAllocatorId");
         }
         virtual void walk ( das::DataWalker & walker, void * data ) override {
             if ( !walker.reading ) {
