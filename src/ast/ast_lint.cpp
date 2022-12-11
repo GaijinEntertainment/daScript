@@ -572,7 +572,7 @@ namespace das {
                 failed = true;
             }
         }
-        DAS_ASSERTF(!failed, "verifyOptions failed");
+        DAS_VERIFYF(!failed, "verifyOptions failed");
     }
 
     void Program::lint ( ModuleGroup & libGroup ) {

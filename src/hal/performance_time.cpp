@@ -67,25 +67,18 @@ extern "C" int64_t get_time_nsec ( int64_t reft ) {
 
 #else // osx
 
-#include <mach/mach.h>
-#include <mach/mach_time.h>
+#include <time.h>
 
 extern "C" int64_t ref_time_ticks() {
-    return mach_absolute_time();
+    return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
 }
 
 extern "C" int get_time_usec ( int64_t reft ) {
-    int64_t relt = ref_time_ticks() - reft;
-    mach_timebase_info_data_t s_timebase_info;
-    mach_timebase_info(&s_timebase_info);
-    return int(relt * s_timebase_info.numer/s_timebase_info.denom/1000LL);
+    return (clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) - reft)/1000LL;
 }
 
 extern "C" int64_t get_time_nsec ( int64_t reft ) {
-    int64_t relt = ref_time_ticks() - reft;
-    mach_timebase_info_data_t s_timebase_info;
-    mach_timebase_info(&s_timebase_info);
-    return relt * s_timebase_info.numer / s_timebase_info.denom;
+    return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) - reft;
 }
 
 #endif
