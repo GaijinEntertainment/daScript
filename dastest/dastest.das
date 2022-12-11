@@ -12,7 +12,7 @@ require suite
 require log
 
 
-let jsonResultPrefix = "##dastest##\n"
+let private jsonResultPrefix = "##dastest##\n"
 
 
 def private collect_input_paths(args: array<string>; var paths: array<string>)
@@ -52,7 +52,7 @@ def main()
         return
 
     var res: SuiteResult
-    let totalTime = ref_time_ticks()
+    let startTime = ref_time_ticks()
 
     let timeout = args |> get_float_arg("--timeout", 600.) // 10min
     if timeout > 0.
@@ -61,7 +61,7 @@ def main()
             new_thread <| @[[&res, &mainCtx]]
                 fio::sleep(uint(timeout * 1000.))
                 unsafe
-                    mainCtx |> invoke_in_context("timeout_tests", res, totalTime, timeout)
+                    mainCtx |> invoke_in_context("timeout_tests", res, startTime, timeout)
 
     var inputPaths: array<string>
     collect_input_paths(args, inputPaths)
@@ -72,10 +72,10 @@ def main()
         return
 
     let isolatedMode = args |> has_value("--isolated-mode")
+    let ctx <- SuiteCtx(args)
     if !isolatedMode
-        let ctx <- SuiteCtx(args)
         for file in files
-            let uri = uriPaths ? file_name_to_uri(file) : file
+            let uri = ctx.uriPaths ? file_name_to_uri(file) : file
             let fileTime = ref_time_ticks()
             let status = suite::test_file(file, ctx)
             let fileDt = get_time_usec(fileTime)
@@ -87,7 +87,7 @@ def main()
             res += status
     else
         for file in files
-            let uri = uriPaths ? file_name_to_uri(file) : file
+            let uri = ctx.uriPaths ? file_name_to_uri(file) : file
             let singleTest = "{args[0]} {args[1]} -- --run {file} {log::useTtyColors ? " --color" : ""}"
             var exitCode = 0
             var parsedResult = false
@@ -129,21 +129,21 @@ def main()
                     res.errors += 1
                     log::red("`{uri}` execution was interrupted, crashed for example")
                     log::info("to get more information, run the test manually\n> {singleTest}")
-    finish_tests(res, totalTime)
+    finish_tests(res, startTime)
 
 
 [export]
-def timeout_tests(var res: SuiteResult; totalTime: int64; timeout: float)
+def timeout_tests(var res: SuiteResult; start_time: int64; timeout_sec: float)
     res.errors += 1
     res.total += 1
-    log::error("Test timed out after {timeout}s")
-    finish_tests(res, totalTime)
+    log::error("Test timed out after {timeout_sec}s")
+    finish_tests(res, start_time)
 
 
-def finish_tests(res: SuiteResult; totalTime: int64)
+def finish_tests(res: SuiteResult; start_time: int64)
     let resCode = res.failed + res.errors
-    let totalDt = get_time_usec(totalTime)
-    log::info("\n{res.total} tests, {res.passed} passed, {res.failed} failed, {res.errors} errors, {res.skipped} skipped")
+    let totalDt = get_time_usec(start_time)
+    log::info("\n{to_string(res)}")
     if resCode == 0
         log::green("SUCCESS! {time_dt_hr(totalDt)}")
     else

@@ -7,8 +7,8 @@ require uriparser
 require strings
 
 
-let verbose = false
-let uriPaths = false
+let private verbose = false
+let private uriPaths = false
 
 var useTtyColors = false
 
@@ -64,14 +64,14 @@ def file_info_hr(at: LineInfo; uri_path: bool)
     )
 
 
-def red_str(str: string)
-    return useTtyColors ? "\x1B[31m{str}\x1B[0m\n" : str
-def green_str(str: string)
-    return useTtyColors ? "\x1B[32m{str}\x1B[0m\n" : str
-def yellow_str(str: string)
-    return useTtyColors ? "\x1B[33m{str}\x1B[0m\n" : str
-def blue_str(str: string)
-    return useTtyColors ? "\x1B[34m{str}\x1B[0m\n" : str
+def private red_str(str: string)
+    return useTtyColors ? "\x1B[31m{str}\x1B[0m" : str
+def private green_str(str: string)
+    return useTtyColors ? "\x1B[32m{str}\x1B[0m" : str
+def private yellow_str(str: string)
+    return useTtyColors ? "\x1B[33m{str}\x1B[0m" : str
+def private blue_str(str: string)
+    return useTtyColors ? "\x1B[34m{str}\x1B[0m" : str
 
 def time_dt_hr(dt: int): string
     return build_string <| $(str)

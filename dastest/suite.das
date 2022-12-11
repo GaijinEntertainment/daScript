@@ -15,6 +15,7 @@ require suite_result public
 
 struct SuiteCtx
     dastestRoot: string
+    projectPath: string
     uriPaths: bool = false
     testNames: array<string>
     verbose: bool = false
@@ -30,17 +31,23 @@ def private collect_tests_names(args: array<string>; var names: array<string>)
             names |> push <| args[i + 1]
 
 
+def get_str_arg(args : array<string>; name : string; def_val : string) : string
+    let idx = find_index(args, name)
+    return idx >= 0 && idx + 1 < length(args) ? args[idx + 1] : def_val
+
+
 def SuiteCtx(args: array<string>): SuiteCtx
     var ctx <- SuiteCtx()
     let at = get_line_info()
     ctx.dastestRoot = dir_name(at.fileInfo != null ? string(at.fileInfo.name) : args[1])
     ctx.verbose = args |> has_value("--verbose")
     ctx.uriPaths = args |> has_value("--uri-paths")
+    ctx.projectPath = args |> get_str_arg("--test-project", "")
     collect_tests_names(args, ctx.testNames)
     return <- ctx
 
 
-struct SuiteFileCtx
+struct FileCtx
     [[do_not_delete]] context: rtti::Context?
     uriPaths: bool = false
     indenting: string = ""
@@ -49,15 +56,15 @@ struct SuiteFileCtx
     expectFailure: bool = false
 
 
-def SuiteFileCtx(ctx: SuiteCtx): SuiteFileCtx
-    var res <- internalSuiteFileCtx(ctx)
+def FileCtx(ctx: SuiteCtx): FileCtx
+    var res <- internalFileCtx(ctx)
     unsafe
         res.context = addr(this_context())
     return <- res
 
 
-def private internalSuiteFileCtx(ctx: SuiteCtx): SuiteFileCtx
-    return <- [[SuiteFileCtx uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
+def private internalFileCtx(ctx: SuiteCtx): FileCtx
+    return <- [[FileCtx uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
 
 
 def private match_test_name(name: string; ctx: SuiteCtx)
@@ -70,15 +77,15 @@ def private match_test_name(name: string; ctx: SuiteCtx)
 
 
 def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
-    var fileCtx <- internalSuiteFileCtx(ctx)
+    var fileCtx <- internalFileCtx(ctx)
     var res = test_file(file_name, ctx, fileCtx)
     delete fileCtx
     return res
 
 
-def test_file(file_name: string; ctx: SuiteCtx; file_ctx: SuiteFileCtx): SuiteResult
+def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
     var res: SuiteResult
-    var access := make_file_access("")
+    var access := make_file_access(ctx.projectPath)
     access |> add_file_access_root("dastest", ctx.dastestRoot)
     using <| $(var mg:ModuleGroup#)
         using <| $(var cop:CodeOfPolicies#)
@@ -132,69 +139,94 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: SuiteFileCtx): SuiteRe
                     if !sok
                         res.total += 1
                         res.errors += 1
-                        log::error("Failed to compile {file_name}\n{serrors}")
+                        log::error("Failed to simulate {file_name}\n{serrors}")
                         return
-                    var fileCtx := file_ctx
-                    unsafe
-                        fileCtx.context = reinterpret<Context?> context
-                    let mod = program |> get_this_module()
-                    mod |> module_for_each_function <| $(f)
-                        if f.hash == 0ul
-                            return
-                        let func = *context |> get_function_by_mnh(f.hash)
-                        let fn <- mod |> find_module_function_via_rtti(func)
-                        if fn == null
-                            return
-                        for ann in fn.annotations
-                            if ann.annotation.name == "test"
-                                var name = "{fn.name}"
-                                for arg in ann.arguments
-                                    if arg.name == "name"
-                                        name = "{arg.sValue}"
-                                if match_test_name(name, ctx)
-                                    test_any(name, func, length(fn.arguments), fileCtx, res)
-                                return
-                    delete fileCtx
+                    var mod = program |> get_this_module()
+                    if mod != null && context != null
+                        res += test_module(*mod, *context, ctx, file_ctx)
+                    else
+                        res.errors += 1
+                        res.total += 1
+                        var msg = "Failed to execute {file_name}"
+                        if mod == null
+                            msg = "{msg}. Current module is null."
+                        if context == null
+                            msg = "{msg}. Current context is null."
+                        log::error(msg)
     access := null
     return res
 
 
-def test_func(name: string; var context: SuiteFileCtx; func: function<(t: T?): void>): SuiteResult
+def test_module(var mod: rtti::Module; var context: rtti::Context; suite_ctx: SuiteCtx): SuiteResult
+    var fileCtx <- internalFileCtx(suite_ctx)
+    var res = test_module(mod, context, suite_ctx, fileCtx)
+    delete fileCtx
+    return res
+
+
+def test_module(var mod: rtti::Module; var context: rtti::Context; suite_ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
+    var res: SuiteResult
+    var fileCtx := file_ctx
+    var modPtr: Module?
+    unsafe
+        fileCtx.context = addr(context)
+        modPtr = addr(mod)
+    modPtr |> module_for_each_function <| $(f)
+        if f.hash == 0ul
+            return
+        let func = context |> get_function_by_mnh(f.hash)
+        let fn <- modPtr |> find_module_function_via_rtti(func)
+        if fn == null
+            return
+        for ann in fn.annotations
+            if ann.annotation.name == "test"
+                var name = "{fn.name}"
+                for arg in ann.arguments
+                    if arg.name == "name"
+                        name = "{arg.sValue}"
+                if match_test_name(name, suite_ctx)
+                    test_any(name, func, length(fn.arguments), fileCtx, res)
+                return
+    delete fileCtx
+    return res
+
+
+def test_func(name: string; var context: FileCtx; func: function<(t: T?): void>): SuiteResult
     var res: SuiteResult
     test_any(name, func, 1, context, res)
     return res
 
 
-def test_func(name: string; var context: SuiteFileCtx; func: function<(): void>): SuiteResult
+def test_func(name: string; var context: FileCtx; func: function<(): void>): SuiteResult
     var res: SuiteResult
     test_any(name, func, 0, context, res)
     return res
 
 
-def test_func(name: string; var context: SuiteFileCtx; func: lambda<(t: T?): void>): SuiteResult
+def test_func(name: string; var context: FileCtx; func: lambda<(t: T?): void>): SuiteResult
     var res: SuiteResult
     test_any(name, func, 1, context, res)
     return res
 
 
-def test_func(name: string; var context: SuiteFileCtx; func: lambda<(): void>): SuiteResult
+def test_func(name: string; var context: FileCtx; func: lambda<(): void>): SuiteResult
     var res: SuiteResult
     test_any(name, func, 0, context, res)
     return res
 
 
 [export]
-def private test_any_func(name: string; func: function; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+def private test_any_func(name: string; func: function; args_num: int; var context: FileCtx; var res: SuiteResult&)
     test_any(name, func, args_num, context, res)
 
 
 [export]
-def private test_any_lambda(name: string; func: lambda; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+def private test_any_lambda(name: string; func: lambda; args_num: int; var context: FileCtx; var res: SuiteResult&)
     test_any(name, func, args_num, context, res)
 
 
 [export]
-def private sub_test_any_func(name: string; func: function; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+def private sub_test_any_func(name: string; func: function; args_num: int; var context: FileCtx; var res: SuiteResult&)
     var subContext := context
     subContext.indenting = "\t" + subContext.indenting
     test_any(name, func, args_num, subContext, res)
@@ -202,14 +234,14 @@ def private sub_test_any_func(name: string; func: function; args_num: int; var c
 
 
 [export]
-def private sub_test_any_lambda(name: string; func: lambda; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+def private sub_test_any_lambda(name: string; func: lambda; args_num: int; var context: FileCtx; var res: SuiteResult&)
     var subContext := context
     subContext.indenting = "\t" + subContext.indenting
     test_any(name, func, args_num, subContext, res)
     delete subContext
 
 
-def private test_any(name: string; func; args_num: int; var context: SuiteFileCtx; var res: SuiteResult&)
+def private test_any(name: string; func; args_num: int; var context: FileCtx; var res: SuiteResult&)
     log::info("{context.indenting}=== RUN '{name}'")
     let beforeFailed = res.failed
     res.total += 1
@@ -287,7 +319,7 @@ def private test_any(name: string; func; args_num: int; var context: SuiteFileCt
         log::green("{context.indenting}--- PASS '{name}' {time_dt_hr(dt)}")
 
 
-def errorOrBlue(expectFailure: bool; msg: string)
+def private errorOrBlue(expectFailure: bool; msg: string)
     if expectFailure
         log::blue(msg)
     else
