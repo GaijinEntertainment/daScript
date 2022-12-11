@@ -79,12 +79,14 @@ class ProfilerDebugAgent : DapiDebugAgent
             delete events[tid]
         instrumented |> erase(ctx.getCodeAllocatorId)
     def override onInstrumentFunction ( var ctx:Context; fun:SimFunction?; entering:bool; userData:uint64 ) : void
-        let tid = intptr(unsafe(addr(ctx)))
-        if events[tid].enabled
-            events[tid].events |> push([[PerfEvent
-                fun = fun,
-                entering = entering,
-                ts = get_time_nsec(us0)]])
+        unsafe
+            let tid = intptr(addr(ctx))
+            var ev & = events[tid]
+            if ev.enabled
+                ev.events |> push([[PerfEvent
+                    fun = fun,
+                    entering = entering,
+                    ts = get_time_nsec(us0)]])
     def dump(text:string)
         if firstRecord
             firstRecord = false
