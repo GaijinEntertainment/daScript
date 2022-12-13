@@ -3,8 +3,6 @@
 require daslib/rtti
 require fio
 
-require daslib/profiler_boost
-
 [sideeffects]
 def fibR(n:int)
     if (n < 2)
