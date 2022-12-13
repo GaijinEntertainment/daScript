@@ -16,12 +16,18 @@ struct PerfNode
     count : uint64
     total_time : int64
     enter_time : int64
+    total_heap_bytes : uint64
+    enter_heap_bytes : uint64
+    total_string_heap_bytes : uint64
+    enter_string_heap_bytes : uint64
     children : table<SimFunction?;PerfNode?>
 
 struct PerfEvent
     fun : SimFunction?
     ts : int64
     entering : bool
+    heapBytes : uint64
+    stringHeapBytes : uint64
 
 [skip_field_lock_check]
 struct PerfContext
@@ -40,6 +46,7 @@ class ProfilerDebugAgent : DapiDebugAgent
     out : FILE const?
     firstRecord : bool = true
     manual : bool = false
+    report_memory : bool = false
     instrumented : table<uint64>
     def dependency
         return @@set_enable_profiler
@@ -51,6 +58,12 @@ class ProfilerDebugAgent : DapiDebugAgent
                 out = fopen(args[i+1], "wb")
             elif argv=="--das-profiler-manual"
                 manual = true
+            elif argv=="--das-profiler-memory"
+                report_memory = true
+                unsafe
+                    self.onInstrumentFunction = reinterpret<function<(var agent:DapiDebugAgent;var ctx:Context;fn:SimFunction?;entering:bool;userData:uint64):void>> self.onInstrumentFunctionWithMemory
+            elif argv=="--" // user arguments after
+                break
         write("[")
         g_d_agent = unsafe(addr(self))
         us0 = ref_time_ticks()
@@ -78,6 +91,19 @@ class ProfilerDebugAgent : DapiDebugAgent
             dump_context(ctx, tid)
             delete events[tid]
         instrumented |> erase(ctx.getCodeAllocatorId)
+    def onInstrumentFunctionWithMemory ( var ctx:Context; fun:SimFunction?; entering:bool; userData:uint64 ) : void
+        unsafe
+            let tid = intptr(addr(ctx))
+            var ev & = events[tid]
+            if ev.enabled
+                var hb_shb : uint64[2]
+                unsafe(get_heap_stats(ctx, unsafe(addr(hb_shb[0]))))
+                ev.events |> push([[PerfEvent
+                    fun = fun,
+                    entering = entering,
+                    ts = get_time_nsec(us0),
+                    heapBytes = hb_shb[0],
+                    stringHeapBytes = hb_shb[1] ]])
     def override onInstrumentFunction ( var ctx:Context; fun:SimFunction?; entering:bool; userData:uint64 ) : void
         unsafe
             let tid = intptr(addr(ctx))
@@ -105,7 +131,15 @@ class ProfilerDebugAgent : DapiDebugAgent
             return
         if node.fun!=null
             let tabs = repeat("  ",tab)
-            to_log(LOG_INFO,"{tabs}{node.fun.mangledName} {int64(node.count)} {node.total_time}ns\n")
+            if report_memory
+                var hb = node.total_heap_bytes
+                var shb = node.total_string_heap_bytes
+                for ch in values(node.children)
+                    hb -= ch.total_heap_bytes
+                    shb -= ch.total_string_heap_bytes
+                to_log(LOG_INFO,"{tabs}{node.fun.mangledName} {int64(node.count)} {node.total_time}ns heap={int64(hb)} string_heap={int64(shb)}\n")
+            else
+                to_log(LOG_INFO,"{tabs}{node.fun.mangledName} {int64(node.count)} {node.total_time}ns\n")
         for ch in values(node.children)
             dump_node(ch, tab+1)
     def dump_context_stack ( tid:uint64 )
@@ -123,11 +157,15 @@ class ProfilerDebugAgent : DapiDebugAgent
                 sp = sp.children[ev.fun]
                 sp.count ++
                 sp.enter_time = ev.ts
+                sp.enter_heap_bytes = ev.heapBytes
+                sp.enter_string_heap_bytes = ev.stringHeapBytes
             else
                 sp.total_time += ev.ts - sp.enter_time
+                sp.total_heap_bytes += ev.heapBytes - sp.enter_heap_bytes
+                sp.total_string_heap_bytes += ev.stringHeapBytes - sp.enter_string_heap_bytes
+                sp = length(stack)!=0 ? stack |> back() : root
                 if length(stack)>0 // protection for mismatching enable\disable
                     stack |> pop()
-                sp = length(stack)!=0 ? stack |> back() : root
         dump_node(root)
         unsafe
             delete root

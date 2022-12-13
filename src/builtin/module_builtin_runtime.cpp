@@ -480,6 +480,11 @@ namespace das
         return cast<uint64_t>::from(uhash);
     }
 
+    void heap_stats ( Context & ctx, uint64_t * bytes ) {
+        bytes[0] = ctx.heap->bytesAllocated();
+        bytes[1] = ctx.stringHeap->bytesAllocated();
+    }
+
     uint64_t heap_bytes_allocated ( Context * context ) {
         return context->heap->bytesAllocated();
     }

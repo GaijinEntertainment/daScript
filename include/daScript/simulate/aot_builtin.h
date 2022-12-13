@@ -25,6 +25,7 @@ namespace das {
     int builtin_table_capacity ( const Table & arr );
     void builtin_table_clear ( Table & arr, Context * context );
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args );
+    void heap_stats ( Context & context, uint64_t * bytes );
     uint64_t heap_bytes_allocated ( Context * context );
     int32_t heap_depth ( Context * context );
     uint64_t string_heap_bytes_allocated ( Context * context );

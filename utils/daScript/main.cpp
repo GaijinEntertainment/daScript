@@ -393,6 +393,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
 
             } else if ( cmd=="-das-profiler-manual" ) {
                 // do nohting, script handles it
+            } else if ( cmd=="-das-profiler-memory" ) {
+                // do nohting, script handles it
             } else if ( !scriptArgs) {
                 printf("unknown command line option %s\n", cmd.c_str());
                 print_help();

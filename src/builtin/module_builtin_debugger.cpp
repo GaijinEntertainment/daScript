@@ -1091,6 +1091,10 @@ namespace debugapi {
                     ->args({"context","address","size","writeOnly"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(clear_hw_breakpoint)>(*this, lib,  "clear_hw_breakpoint",
                 SideEffects::modifyExternal, "clear_hw_breakpoint")->unsafeOperation = true;
+            // heap
+            addExtern<DAS_BIND_FUN(heap_stats)>(*this, lib, "get_heap_stats",
+                SideEffects::modifyArgumentAndAccessExternal, "heap_stats")
+                    ->args({"context","bytes"})->unsafeOperation = true;
             // add builtin module
             compileBuiltinModule("debugger.das",debugger_das,sizeof(debugger_das));
             // lets make sure its all aot ready
