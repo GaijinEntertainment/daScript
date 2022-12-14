@@ -10,6 +10,8 @@ require rtti
 require daslib/ast_boost
 require daslib/templates_boost
 
+// require daslib/debug
+
 [tag_function(debug_function)]
 def public debug_print ( message:string="" )
     print(message)
@@ -19,6 +21,7 @@ class TestDebugMacro : AstFunctionAnnotation
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         var qb <- qmacro_expr() <|
             print($e(call.arguments[0]))
+        qb |> force_at(call.at)
         return qb
 
 
