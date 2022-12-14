@@ -1178,7 +1178,7 @@ namespace das {
                 DAS_ASSERT(0 && "we should not be here. we need stacktop for the name");
                 stackTop = (expr->at.line<<16) + expr->at.column;
             }
-            return "_temp_make_local_" + to_string(expr->at.line) + "_" + to_string(stackTop);
+            return "_temp_make_local_" + to_string(expr->at.line) + "_" + to_string(expr->at.column) + "_" + to_string(stackTop);
         }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
