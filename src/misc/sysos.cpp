@@ -354,10 +354,10 @@
             thread_t mythread = mach_thread_self();
             struct x86_debug_state dr;
             mach_msg_type_number_t dr_count = x86_DEBUG_STATE_COUNT;
-            kern_return_t rc = thread_get_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, &dr_count);
+            thread_get_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, &dr_count);
             setBits(dr.uds.ds64.__dr7, bp_index*2, 1, 0);
             dr_count = x86_DEBUG_STATE_COUNT;
-            rc = thread_set_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, dr_count);
+            thread_set_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, dr_count);
             return true;
         #elif defined(__arm64__)
             thread_t mythread = mach_thread_self();
