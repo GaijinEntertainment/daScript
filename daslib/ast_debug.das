@@ -65,12 +65,12 @@ class ContextStateAgent : DapiDebugAgent
         walk_stack(walker_adapter,ctx,at)
 
 
-def decs_state_agent ( ctx : Context )
+def state_agent ( ctx : Context )
     install_new_debug_agent(new ContextStateAgent(), "ast_debug")
 
 [_macro]
-def private auto_start_decs_state()
+def private auto_start_state()
     if is_compiling_macros_in_module("ast_debug")
         if !is_in_debug_agent_creation()
             if !has_debug_agent_context("ast_debug")
-                fork_debug_agent_context(@@decs_state_agent)
+                fork_debug_agent_context(@@state_agent)
