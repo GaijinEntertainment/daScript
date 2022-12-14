@@ -121,6 +121,7 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 	ADD_MODULE_LIB(libDasModuleLlvm)
 	ADD_MODULE_CPP(dasLLVM)
 	ADD_MODULE_DAS(llvm daslib llvm_boost)
+	ADD_MODULE_DAS(llvm daslib llvm_debug)
 	ADD_MODULE_DAS(llvm daslib llvm_jit)
 	ADD_MODULE_DAS(llvm daslib llvm_jit_intrin)
 	ADD_MODULE_DAS(llvm daslib llvm_jit_common)
