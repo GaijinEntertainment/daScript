@@ -6640,9 +6640,14 @@ namespace das {
                             }
                             reportAstChanged();
                         } else if ( aliasT->isStructure() ) {
-                            expr->name = aliasT->structType->name;
-                            tryMakeStructureCtor (aliasT->structType);
-                            reportAstChanged();
+                            if ( expr->arguments.size()==0 ) {
+                                expr->name = aliasT->structType->name;
+                                tryMakeStructureCtor (aliasT->structType);
+                                reportAstChanged();
+                            } else {
+                                error("can only generate default structure constructor without arguments",
+                                    "", "", expr->at, CompilationError::invalid_argument_count);
+                            }
                         } else {
                             if ( cerr==InferCallError::operatorOp2 ) {
                                 if ( !reportOp2Errors(expr) ) {
