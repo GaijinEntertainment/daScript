@@ -62,8 +62,6 @@ class ProfilerDebugAgent : DapiDebugAgent
                 report_memory = true
                 unsafe
                     self.onInstrumentFunction = reinterpret<function<(var agent:DapiDebugAgent;var ctx:Context;fn:SimFunction?;entering:bool;userData:uint64):void>> self.onInstrumentFunctionWithMemory
-            elif argv=="--" // user arguments after
-                break
         write("[")
         g_d_agent = unsafe(addr(self))
         us0 = ref_time_ticks()
