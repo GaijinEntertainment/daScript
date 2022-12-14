@@ -126,10 +126,10 @@ namespace debugapi {
                 context->unlock();
             }
         }
-        virtual void onCollect ( Context * ctx ) override {
+        virtual void onCollect ( Context * ctx, const LineInfo & at ) override {
             if ( auto fnOnCollect = get_onCollect(classPtr) ) {
                 context->lock();
-                invoke_onCollect(context,fnOnCollect,classPtr,*ctx);
+                invoke_onCollect(context,fnOnCollect,classPtr,*ctx,at);
                 context->unlock();
             }
         }

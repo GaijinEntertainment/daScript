@@ -916,11 +916,11 @@ public:
   __forceinline Func get_onCollect ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onCollect]);
   }
-  __forceinline void invoke_onCollect ( Context * __context__, Func __funcCall__, void * self, Context & ctx ) const {
+  __forceinline void invoke_onCollect ( Context * __context__, Func __funcCall__, void * self, Context & ctx, LineInfo const  & at ) const {
     das_invoke_function<void>::invoke
-      <void *,Context &>
+      <void *,Context &,LineInfo const  &>
         (__context__,nullptr,__funcCall__,
-          self,ctx);
+          self,ctx,at);
   }
   __forceinline Func get_onLog ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onLog]);

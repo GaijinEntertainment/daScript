@@ -240,7 +240,7 @@ class ContextStateAgent : DapiDebugAgent
         delete msg_logs
 
 
-    def override onCollect(var ctx:Context)
+    def override onCollect(var ctx:Context; at:LineInfo)
         if !ctx.category.opengl
             return
         // error

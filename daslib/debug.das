@@ -929,7 +929,7 @@ class private DAgent: DapiDebugAgent
 
             if !collectingAgentData
                 collectingAgentData = true
-                collect_debug_agent_state(ctx)
+                collect_debug_agent_state(ctx, at)
                 collectingAgentData = false
 
     def override onVariable(var ctx: Context; category, name: string; info: TypeInfo; data: void?): void

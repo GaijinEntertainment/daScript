@@ -34,7 +34,7 @@ struct EcsArchetypeView
     components  : array<EcsComponentView>
 
 class ContextStateAgent : DapiDebugAgent
-    def override onCollect(var ctx:Context)
+    def override onCollect(var ctx:Context; at:LineInfo)
         let pState = unsafe(get_context_global_variable(ctx, "decsState"))
         if pState == null
             return

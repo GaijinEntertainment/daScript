@@ -6,6 +6,7 @@ options no_aot = true
 module debug_macro shared private
 
 require daslib/debug
+require daslib/ast_debug
 
 require ast
 require rtti

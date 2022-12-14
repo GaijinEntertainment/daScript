@@ -1524,9 +1524,9 @@ namespace das
         });
     }
 
-    void collectDebugAgentState ( Context & ctx ) {
+    void collectDebugAgentState ( Context & ctx, const LineInfo & at ) {
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-            pAgent->onCollect( &ctx );
+            pAgent->onCollect( &ctx, at );
         });
     }
 

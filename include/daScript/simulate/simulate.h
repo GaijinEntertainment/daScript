@@ -217,7 +217,7 @@ namespace das
         virtual void onBreakpoint ( Context *, const LineInfo &, const char *, const char * ) {}
         virtual void onVariable ( Context *, const char *, const char *, TypeInfo *, void * ) {}
         virtual void onTick () {}
-        virtual void onCollect ( Context * ) {}
+        virtual void onCollect ( Context *, const LineInfo & ) {}
         virtual bool onLog ( int /*level*/, const char * /*text*/ ) { return false; }
         virtual void onBreakpointsReset ( const char * /*file*/, int /*breakpointsNum*/ ) {}
         virtual bool isCppOnlyAgent() const { return false; }
@@ -719,7 +719,7 @@ namespace das
     };
 
     void tickDebugAgent ( );
-    void collectDebugAgentState ( Context & ctx );
+    void collectDebugAgentState ( Context & ctx, const LineInfo & at );
     void onBreakpointsReset ( const char * file, int breakpointsNum );
     void tickSpecificDebugAgent ( const char * name );
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
