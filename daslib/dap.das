@@ -289,6 +289,16 @@ def JV(data: EvaluateResponse)
     }})
 
 
+// https://microsoft.github.io/debug-adapter-protocol/specification#Events_Breakpoint
+struct BreakpointEvent
+    reason : string // 'changed' | 'new' | 'removed' | string;
+    breakpoint : Breakpoint
+
+// https://microsoft.github.io/debug-adapter-protocol/specification#Events_Thread
+struct ThreadEvent
+    reason : string // 'started' | 'exited' | string;
+    threadId : double
+
 
 def joj(val : JsonValue?; id : string) : JsonValue?
     var res : JsonValue? = null

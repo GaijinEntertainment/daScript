@@ -571,10 +571,17 @@ class private DAStackWalker: DapiStackWalker
 
             frame.arguments |> emplace(variable)
 
+enum DABreakpointState
+    Uninitialized = 0
+    Initialized
+    Instrumented
 
 struct private DABreakpoint
     id: uint64
     line: uint
+
+    prevState: DABreakpointState
+    state: DABreakpointState
 
 typedef
     DABreakpoints = table<string; array<DABreakpoint>>
@@ -654,8 +661,6 @@ class private DAgent: DapiDebugAgent
 
     hwBreakpoints: array<int>
 
-    dirtyContext : bool = false
-
     def initAgent(var ctx: Context)
         waitConnection = wait_debugger()
         withInstruments = use_instruments()
@@ -724,13 +729,13 @@ class private DAgent: DapiDebugAgent
 
         if withInstruments
             for c in contexts
-                if !c.ctx.category.debug_context && !ctx.ctx.category.debugger_tick && !c.ctx.category.macro_context
+                if !c.ctx.category.debug_context && !ctx.ctx.category.debugger_tick
                     *c.ctx |> set_single_step(true)
 
     def reqResume(var exclude: DAContext)
         if withInstruments
             for ctx in contexts
-                if ctx.id != exclude.id && !ctx.ctx.category.debug_context && !ctx.ctx.category.macro_context
+                if ctx.id != exclude.id && !ctx.ctx.category.debug_context
                     *ctx.ctx |> set_single_step(false)
 
     def onBreakpointsChanged(ini: SetBreakpointsArguments): SetBreakpointsResponse
@@ -761,7 +766,7 @@ class private DAgent: DapiDebugAgent
             resBr.message = "{path}: instrumentation wasn't initined"
 
         for ctx in contexts
-            if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick || ctx.ctx.category.macro_context
+            if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick
                 continue
             *ctx.ctx |> clear_instruments()
             *ctx.ctx |> instrument_node(true) <| $(ati)
@@ -776,11 +781,15 @@ class private DAgent: DapiDebugAgent
                 for fileBr, brs in keys(breakpoints), values(breakpoints)
                     if compare_path(fileBr, file)
                         for br in brs
+                            if br.state == DABreakpointState Uninitialized
+                                br.state = DABreakpointState Initialized
+                        for br in brs
                             if br.line == ati.line
                                 if currentPath
                                     for resBr in res.breakpoints
                                         resBr.verified ||= uint(resBr.line) == br.line
                                         if resBr.verified
+                                            br.state = DABreakpointState Instrumented
                                             resBr.message = ""
                                 return true
                         break
@@ -960,8 +969,6 @@ class private DAgent: DapiDebugAgent
                     delete server
                 self->startServer()
 
-        self->invalidateBreakpoints()
-
         var alloc = string_heap_bytes_allocated()
         if alloc > strLimit
             // string_heap_report()
@@ -982,37 +989,62 @@ class private DAgent: DapiDebugAgent
                 if logStrMemory
                     to_log(LOG_DEBUG, "dap: DOWN string heap limit: {bytes_hr(strLimit)}\n")
 
-    def invalidateBreakpoints() : void
-        if !dirtyContext
+    def invalidateBreakpoints(var ctx: Context) : void
+        if !withInstruments
             return
-        dirtyContext = false
-        for ctx in contexts
-            if ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick || ctx.ctx.category.macro_context
-                continue
-            *ctx.ctx |> clear_instruments()
-            *ctx.ctx |> instrument_node(true) <| $(ati)
+        if server == null || !server.configurationDone
+            return
+        if ctx.category.debug_context || ctx.category.debugger_tick
+            return
+
+        for brs in values(breakpoints)
+            for br in brs
+                br.prevState = br.state
+
+        self->getContextDataFor(ctx) <| $(var ctxData: DAContext) // TODO: speedup getContextDataFor
+            *ctxData.ctx |> clear_instruments()
+            *ctxData.ctx |> instrument_node(true) <| $(ati)
                 if ati.fileInfo == null
                     return false
                 let file = string(ati.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
                 for fileBr, brs in keys(breakpoints), values(breakpoints)
                     if compare_path(fileBr, file)
                         for br in brs
+                            if br.state == DABreakpointState Uninitialized
+                                br.state = DABreakpointState Initialized
+                        for br in brs
                             if br.line == ati.line
-                                print("dap: reset breakpoint {file}:{int(br.line)}\n")
+                                br.state = DABreakpointState Instrumented
+                                // print("dap: reset breakpoint {file}:{int(br.line)}\n")
                                 return true
                         break
                 return false
 
+        for fileBr, brs in keys(breakpoints), values(breakpoints)
+            for br in brs
+                let wasVerified = br.prevState == DABreakpointState Instrumented
+                let isVerified = br.state == DABreakpointState Instrumented
+                if wasVerified != isVerified
+                    server->sendEvent("breakpoint", JV([[BreakpointEvent
+                        reason="changed",
+                        breakpoint=[[Breakpoint
+                            id=double(br.id),
+                            verified=br.state == DABreakpointState Instrumented,
+                            source=[[ Source path=fileBr, name=fileBr |> base_name()]],
+                            line=double(br.line),
+                            message=br.state == DABreakpointState Uninitialized ? "{fileBr}: instrumentation wasn't initined" : br.state == DABreakpointState Initialized ? "{fileBr}: instumentation is inited, but this line is without instructions" : ""
+                        ]]
+                    ]]))
+
     def override onCreateContext(var ctx: Context): void
         // unsafe
-        //     print("dap: context created {intptr(addr(ctx))} `{ctx.name}`")
+        //     print("dap: context created {intptr(addr(ctx))} {ctx.category} `{ctx.name}`")
         self->addContext(ctx)
-        if length(breakpoints) > 0
-            dirtyContext = true
+        invalidateBreakpoints(ctx)
 
     def override onDestroyContext(var ctx: Context): void
         // unsafe
-        //     print("dap: context destroyed {intptr(addr(ctx))} `{ctx.name}`")
+        //     print("dap: context destroyed {intptr(addr(ctx))} {ctx.category} `{ctx.name}`\n")
         self->removeContext(ctx)
 
     def getContextDataFor(var ctx: Context; cb: block<(var ctx: DAContext): void>): bool
@@ -1779,25 +1811,31 @@ def private tick_debugger()
 
 var private g```dAgent : DAgent?
 
-[export,unused_argument(ctx)]
+[apply_in_context(name="~debug")]
+def wait_for_debugger() : bool
+    while (g```dAgent == null || g```dAgent.server == null
+       || (g```dAgent.waitConnection && (!g```dAgent.server.configurationDone || !g```dAgent.server.threadsDone)))
+        sleep(10u)
+    return true
+
+[unused_argument(ctx)]
 def private start_debug_agent(var ctx: Context)
     g```dAgent = new DAgent()
     g```dAgent->initAgent(ctx)
     install_new_debug_agent(g```dAgent, "~debug")
 
-[export]
-def private start_agent(force:bool = false): bool
+def private start_agent(force:bool = false)
     if force || !has_debug_agent_context("~debug")
         fork_debug_agent_context(@@start_debug_agent)
-        to_log(LOG_INFO, use_instruments() ? "dap: install debug agent (with instruments)\n" : "dap: install debug agent\n")
+        print(use_instruments() ? "dap: install debug agent (with instruments)\n" : "dap: install debug agent\n")
     else
-        to_log(LOG_WARNING, "dap: debug agent already exists\n")
+        print("dap: debug agent already exists\n")
     set_single_step(this_context(), !use_instruments() || wait_debugger())
     return true
 
-[init,export]
+[_macro]
 def private auto_start_debug()
-    if (is_in_aot() && loads_itself()) || is_in_debug_agent_creation() || is_compiling_macros()
+    if (is_in_aot() && loads_itself()) || is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug")
         return
     this_context().category |= context_category_flags debugger_attached
     set_single_step(this_context(), !use_instruments() || wait_debugger())
@@ -1810,6 +1848,8 @@ def private auto_start_debug()
                 this_context().name := "tick thread"
                 while !is_job_que_shutting_down()
                     tick_debugger()
+            if wait_debugger()
+                wait_for_debugger()
 
 
 def private use_instruments() // or stepping debugger

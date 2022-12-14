@@ -42,6 +42,8 @@ class AppendCondAnnotation : AstFunctionAnnotation
       let val = get_annotation_argument_value(argv)
       if val is tBool
         contextName = "{argv.name}"
+      elif val is tString
+        contextName = val as tString
       else
         errors := "invalid argument type {argv.name}"
         return false
