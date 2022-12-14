@@ -21,6 +21,8 @@ add_compile_options(-msimd128)
 add_compile_options(-msse2)
 add_compile_options(-mnontrapping-fptoint)
 
+add_compile_options(-fwasm-exceptions)
+add_link_options(-fwasm-exceptions)
 
 add_compile_definitions(DAS_ENABLE_EXCEPTIONS)
 add_compile_definitions(_EMSCRIPTEN_VER)
