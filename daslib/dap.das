@@ -210,9 +210,10 @@ struct Variable
     indexedVariables: double
 
 def JV(data: Variable)
+    let valStr = data.value |> replace("\\n", "\n")
     return JV({{
         "name"=>JV(data.name);
-        "value"=>JV(data.value);
+        "value"=>JV(valStr);
         "variablesReference"=>JV(data.variablesReference);
         "indexedVariables"=>data.indexedVariables > 0lf ? JV(data.indexedVariables) : JVNull();
         "type"=>JV(data._type)
