@@ -193,7 +193,7 @@ def debug_agent ( ctx : Context )
 
 [_macro]
 def installing
-    if is_compiling_macros_in_module("profiler")
+    if is_compiling_macros_in_module("profiler") && !is_in_completion()
         if !is_in_debug_agent_creation()
             if !has_debug_agent_context("profiler")
                 fork_debug_agent_context(@@debug_agent)
