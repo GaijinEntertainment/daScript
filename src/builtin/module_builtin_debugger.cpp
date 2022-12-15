@@ -938,7 +938,7 @@ namespace debugapi {
                     ->arg("agent");
             addExtern<DAS_BIND_FUN(collectDebugAgentState)>(*this, lib,  "collect_debug_agent_state",
                 SideEffects::modifyExternal, "collectDebugAgentState")
-                    ->arg("context");
+                    ->args({"context","at"});
             addExtern<DAS_BIND_FUN(onBreakpointsReset)>(*this, lib,  "on_breakpoints_reset",
                 SideEffects::modifyExternal, "onBreakpointsReset")
                 ->args({"file", "breakpointsNum"});
