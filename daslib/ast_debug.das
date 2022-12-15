@@ -24,22 +24,65 @@ def isExpressionType ( _vinfo )
         return false
     return true
 
+def isModulePtrType ( _vinfo; mod, what:string )
+    if _vinfo.basicType != Type tPointer || _vinfo.firstType == null
+        return false
+    let vinfo = _vinfo.firstType
+    if vinfo.basicType != Type tHandle
+        return false
+    if vinfo.annotation._module.name!=mod
+        return false
+    if vinfo.annotation.name!=what
+        return false
+    return true
+
+def isAstPtrType ( _vinfo; what:string )
+    return isModulePtrType(_vinfo,"ast",what)
+
+def isRttiPtrType ( _vinfo; what:string )
+    return isModulePtrType(_vinfo,"rtti",what)
+
+def isRttiType ( vinfo; what:string )
+    if vinfo.basicType != Type tHandle
+        return false
+    if vinfo.annotation._module.name!="rtti"
+        return false
+    if vinfo.annotation.name!=what
+        return false
+    return true
+
+def describe_arg ( var ctxid:Context; vinfo; arg:void? ) : void
+    unsafe
+        if isRttiType(vinfo,"AnnotationList")
+            report_to_debugger(ctxid, "ast_debug", vinfo.name, describe(*reinterpret<AnnotationList?> arg))
+            return
+        elif isRttiType(vinfo,"AnnotationArgumentList")
+            report_to_debugger(ctxid, "ast_debug", vinfo.name, describe(*reinterpret<AnnotationArgumentList?> arg))
+            return
+        if *reinterpret<void??> arg == null
+            report_to_debugger(ctxid, "ast_debug", vinfo.name, null)
+            return
+        if isExpressionType(vinfo)
+            report_to_debugger(ctxid, "ast_debug", vinfo.name, describe(*reinterpret<ExpressionPtr?> arg))
+        elif isAstPtrType(vinfo,"TypeDecl")
+            report_to_debugger(ctxid, "ast_debug", vinfo.name, describe(*reinterpret<TypeDeclPtr?> arg))
+        elif isAstPtrType(vinfo,"Function")
+            report_to_debugger(ctxid, "ast_debug", vinfo.name, describe(*reinterpret<FunctionPtr?> arg))
+        elif isAstPtrType(vinfo,"Variable")
+            report_to_debugger(ctxid, "ast_debug", vinfo.name, describe(*reinterpret<VariablePtr?> arg))
+        elif isRttiPtrType(vinfo,"AnnotationDeclaration")
+            report_to_debugger(ctxid, "ast_debug", vinfo.name, describe(**reinterpret<AnnotationDeclarationPtr?> arg))
+
 class SampleStackWalker : DapiStackWalker
     ctxid : Context?
     def override onArgument ( info:FuncInfo; index:int; vinfo:VarInfo; arg:float4 ) : void
-        if !isExpressionType(vinfo)
-            return
-        unsafe
-            let pexpression = reinterpret<ExpressionPtr?> addr(arg)
-            if *pexpression != null
-                report_to_debugger(*ctxid, "ast_debug", vinfo.name, describe(*pexpression))
+        if vinfo.flags.ref || vinfo.flags.refType
+            unsafe
+                describe_arg(*ctxid,vinfo,* reinterpret<void??>(addr(arg)))
+        else
+            describe_arg(*ctxid,vinfo,unsafe(addr(arg)))
     def override onVariable ( inf:FuncInfo; vinfo:LocalVariableInfo; arg:void?; inScope:bool ) : void
-        if !isExpressionType(vinfo)
-            return
-        unsafe
-            let pexpression = reinterpret<ExpressionPtr?> arg
-            if *pexpression != null
-                report_to_debugger(*ctxid, "ast_debug", vinfo.name, describe(*pexpression))
+        describe_arg(*ctxid,vinfo,arg)
     def override onAfterCall ( pp:Prologue ) : bool
         return false    // only stack top
 

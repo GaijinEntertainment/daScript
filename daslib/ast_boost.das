@@ -10,6 +10,8 @@ require ast public
 require strings
 require daslib/strings_boost
 
+typedef AnnotationDeclarationPtr = smart_ptr<AnnotationDeclaration>
+
 def clone ( var args : dasvector`das_string; var nargs:array<string> )
     let tot = length(nargs)
     args |> resize ( tot )

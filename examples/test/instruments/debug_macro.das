@@ -21,10 +21,36 @@ def public debug_print ( message:string="" )
 
 [tag_function_macro(tag="debug_function")]
 class TestDebugMacro : AstFunctionAnnotation
+
+    def show_AnnotationList ( list:AnnotationList )
+        print("AnnotationList is {list}\n")
+        show_AnnotationDeclaration(list[0])
+        show_AnnotationDeclaration([[AnnotationDeclarationPtr]])
+
+    def show_AnnotationDeclaration ( decl:smart_ptr<AnnotationDeclaration> )
+        print("AnnotationList is {decl}\n")
+        if decl != null
+            show_AnnotationArgument(decl.arguments)
+
+    def show_AnnotationArgument ( arg:AnnotationArgumentList )
+        print("AnnotationArgumentList is {arg}\n")
+
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
-        var qb <- qmacro_expr() <|
+        // TypeDeclPtr
+        var t : TypeDeclPtr <- call._type
+        print("TypeDeclPtr is {t}\n")
+        // FunctionPtr
+        var fn = call.func
+        print("FunctionPtr is {fn}\n")
+        // VariablePtr
+        var vptr : Variable? = get_ptr(call.func.arguments[0])
+        print("VariablePtr is {vptr}\n")
+        // AnnotationList
+        show_AnnotationList(call.func.annotations)
+        // ExpressionPtr
+        var expr <- qmacro_expr() <|
             print($e(call.arguments[0]))
-        qb |> force_at(call.at)
-        return qb
+        expr |> force_at(call.at)
+        return expr
 
 
