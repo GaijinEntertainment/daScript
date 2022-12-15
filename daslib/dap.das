@@ -210,12 +210,7 @@ struct Variable
     indexedVariables: double
 
 def JV(data: Variable)
-    var vals <- data.value |> split("\\\\n")
-    for v in vals
-        v = v |> replace("\\n", "\n")
-        v = v |> replace("\\t", "\t")
-    let valStr = join(vals, "")
-    delete vals
+    let valStr = unescape(data.value)
     return JV({{
         "name"=>JV(data.name);
         "value"=>JV(valStr);
