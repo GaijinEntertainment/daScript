@@ -5,7 +5,7 @@ module dap shared
 
 require daslib/json
 require daslib/json_boost
-require strings
+require daslib/strings_boost
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Initialize
@@ -210,7 +210,12 @@ struct Variable
     indexedVariables: double
 
 def JV(data: Variable)
-    let valStr = data.value |> replace("\\n", "\n")
+    var vals <- data.value |> split("\\\\n")
+    for v in vals
+        v = v |> replace("\\n", "\n")
+        v = v |> replace("\\t", "\t")
+    let valStr = join(vals, "")
+    delete vals
     return JV({{
         "name"=>JV(data.name);
         "value"=>JV(valStr);
