@@ -1835,7 +1835,7 @@ def private start_agent(force:bool = false)
 
 [_macro]
 def private auto_start_debug()
-    if (is_in_aot() && loads_itself()) || is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug")
+    if (is_in_aot() && loads_itself()) || is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug") || is_in_completion()
         return
     this_context().category |= context_category_flags debugger_attached
     set_single_step(this_context(), !use_instruments() || wait_debugger())
