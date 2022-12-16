@@ -9,6 +9,34 @@ require ast public
 require rtti
 require daslib/ast_boost
 
+def is_shared_expr ( expr:ExpressionPtr )
+    //! Returns true if the expression is local to the current scope.
+    if expr is ExprVar
+        let evar = expr as ExprVar
+        if evar.variable.flags.global_shared
+            return true
+        if evar.variable.source!=null
+            return is_shared_expr(evar.variable.source)
+        return false
+    elif expr is ExprCall
+        let ecall = expr as ExprCall
+        print("ecall `{ecall.func.name}` `{ecall.func._module.name}`\n")
+        if (ecall.func!=null && ecall.func._module!=null &&
+            (ecall.func.name=="builtin`keys" || ecall.func.name=="builtin`values"))
+            return is_shared_expr(ecall.arguments[0])
+        return false
+    elif expr is ExprAt
+        let ea = expr as ExprAt
+        if ea.subexpr._type!=null && ea.subexpr._type.dim.length!=0
+            return is_shared_expr(ea.subexpr)
+    elif expr is ExprField
+        let ef = expr as ExprField
+        if !(ef.value._type.baseType==Type tHandle) || (ef.value._type.isLocal)
+            return is_shared_expr(ef.value)
+    elif expr is ExprSwizzle
+        return is_shared_expr((expr as ExprSwizzle).value)
+    return false
+
 def is_local_expr ( expr:ExpressionPtr )
     //! Returns true if the expression is local to the current scope.
     if expr is ExprVar

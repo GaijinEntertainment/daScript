@@ -41,6 +41,27 @@ def public temp_ptr(var x : auto(T)? implicit = const) : T ?#
     unsafe
         return reinterpret<T?#>(x)
 
+[tag_function(shared_addr_tag)]
+def public shared_addr ( tab:table<auto(KEY); auto(VAL)>; k:KEY )
+    var pVal : VAL?
+    find_if_exists(tab, k) <| $ ( val )
+        pVal = val
+    return pVal
+
+[tag_function(shared_addr_tag)]
+def public shared_addr ( val:auto(VALUE)& )
+    return unsafe(addr(val))
+
+[tag_function_macro(tag="shared_addr_tag")]
+class SharedAddrMacro : AstFunctionAnnotation
+    //! This macro reports an error if shared_addr is attempted on anything other that shared global variables.
+    def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        if is_shared_expr(ExpressionPtr(call.arguments[0]))
+            return true
+        compiling_program() |> macro_error(call.at,"{call.name} can only be used with shared global variables")
+        return false
+
+
 /*
 
 // this breaks safety. i.e. a:array<FOO>; temp_addr(a[0]); resize(a,100500)
