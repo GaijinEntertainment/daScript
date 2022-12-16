@@ -395,7 +395,6 @@ namespace das {
                     logs << *program;
                 }
             }
-            daScriptEnvironment::bound->g_Program.reset();
             daScriptEnvironment::bound->g_compilerLog = nullptr;
             sort(program->errors.begin(), program->errors.end());
             program->isCompiling = false;
@@ -416,6 +415,7 @@ namespace das {
                     totM += get_time_usec(timeM);
                 }
             }
+            daScriptEnvironment::bound->g_Program.reset();
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             if ( program->options.getBoolOption("log_compile_time",false) ) {
                 auto dt = get_time_usec(time0) / 1000000.;
