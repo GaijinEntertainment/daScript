@@ -232,3 +232,6 @@ def describe ( typ:LLVMOpaqueValue? )
     var stc = clone_string(st)
     LLVMDisposeMessage(st)
     return stc
+
+def LLVMSetFunctionCallConv(ofunc:LLVMOpaqueValue?; conv:LLVMCallConv)
+    LLVMSetFunctionCallConv(ofunc, uint(conv))

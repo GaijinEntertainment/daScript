@@ -18,6 +18,8 @@ let public LLVM_JIT_LOG = true
 let public LLVM_DEBUG_RESULT = false
 let public LLVM_DEBUG_EVERYTHING = false
 
+let public LLVM_REPLACE_NATIVE_VECTORS = true  // float2,float3,float4 etc go through vectors
+
 let public LLVM_JIT_ALWAYS_SOLID = true
 let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = true
 
@@ -62,6 +64,12 @@ var public g_t_function : LLVMOpaqueType?
 var public g_t_lambda : LLVMOpaqueType?
 var public g_t_block : LLVMOpaqueType?
 var public g_t_stack_state : LLVMOpaqueType?
+var public g_t_float2_abi : LLVMOpaqueType?
+var public g_t_float3_abi : LLVMOpaqueType?
+var public g_t_float4_abi : LLVMOpaqueType?
+var public g_t_int2_abi : LLVMOpaqueType?
+var public g_t_int3_abi : LLVMOpaqueType?
+var public g_t_int4_abi : LLVMOpaqueType?
 
 var g_str2v : table<string; LLVMOpaqueValue?>
 
@@ -276,6 +284,54 @@ def private build_jit_types
     ]]
     g_t_stack_state = LLVMStructType(stack_state_fields)
 
+    // float2 abi
+    var float2_abi_fields <- [[auto[]
+        LLVMFloatType();    // x
+        LLVMFloatType()     // y
+    ]]
+    g_t_float2_abi = LLVMStructType(float2_abi_fields)
+
+    // float3 abi
+    var float3_abi_fields <- [[auto[]
+        LLVMFloatType();    // x
+        LLVMFloatType();    // y
+        LLVMFloatType()     // z
+    ]]
+    g_t_float3_abi = LLVMStructType(float3_abi_fields)
+
+    // float4 abi
+    var float4_abi_fields <- [[auto[]
+        LLVMFloatType();    // x
+        LLVMFloatType();    // y
+        LLVMFloatType();    // z
+        LLVMFloatType()     // w
+    ]]
+    g_t_float4_abi = LLVMStructType(float4_abi_fields)
+
+    // int2 abi
+    var int2_abi_fields <- [[auto[]
+        LLVMInt32Type();    // x
+        LLVMInt32Type()     // y
+    ]]
+    g_t_int2_abi = LLVMStructType(int2_abi_fields)
+
+    // int3 abi
+    var int3_abi_fields <- [[auto[]
+        LLVMInt32Type();    // x
+        LLVMInt32Type();    // y
+        LLVMInt32Type()     // z
+    ]]
+    g_t_int3_abi = LLVMStructType(int3_abi_fields)
+
+    // int4 abi
+    var int4_abi_fields <- [[auto[]
+        LLVMInt32Type();    // x
+        LLVMInt32Type();    // y
+        LLVMInt32Type();    // z
+        LLVMInt32Type()     // w
+    ]]
+    g_t_int4_abi = LLVMStructType(int4_abi_fields)
+
 def public build_block_type
     return <- [{auto[]
         LLVMInt32Type();                        // uint32_t    stackOffset;
@@ -309,6 +365,12 @@ def private finalize_all_jit
         g_t_block = null
         g_t_lambda = null
         g_t_stack_state = null
+        g_t_float2_abi = null
+        g_t_float3_abi = null
+        g_t_float4_abi = null
+        g_t_int2_abi = null
+        g_t_int3_abi = null
+        g_t_int4_abi = null
         // TODO: figure out why this crashes
         // LLVMDisposeModule(je.mod); je.mod = null
     delete g_all_engines
@@ -379,6 +441,32 @@ def public base_type_to_llvm_type ( t:Type )
     return LLVMPointerType(LLVMVoidType(),0u) if t == Type tPointer
     failed("base_type_to_llvm_type: unsupported type {t}")
     return LLVMInt32Type()
+
+def public type_to_llvm_type_extern ( t:TypeDeclPtr )
+    if t.isVectorType
+        return g_t_float2_abi if t.baseType==Type tFloat2
+        return g_t_float3_abi if t.baseType==Type tFloat3
+        return g_t_float4_abi if t.baseType==Type tFloat4
+        return g_t_int2_abi   if t.baseType==Type tInt2 || t.baseType==Type tUInt2 || t.baseType==Type tRange || t.baseType==Type tURange
+        return g_t_int3_abi   if t.baseType==Type tInt3 || t.baseType==Type tUInt3
+        return g_t_int4_abi   if t.baseType==Type tInt4 || t.baseType==Type tUInt4
+        panic("type_to_llvm_abi_type_extern: unsupported vector type {describe(t)}")
+        return LLVMVoidType()
+    else
+        return type_to_llvm_type(t)
+
+def public type_to_llvm_abi_type_extern ( t:TypeDeclPtr )
+    if t.isVectorType
+        return LLVMPointerType(g_t_float2_abi,0u) if t.baseType==Type tFloat2
+        return LLVMPointerType(g_t_float3_abi,0u) if t.baseType==Type tFloat3
+        return LLVMPointerType(g_t_float4_abi,0u) if t.baseType==Type tFloat4
+        return LLVMPointerType(g_t_int2_abi,0u)   if t.baseType==Type tInt2 || t.baseType==Type tUInt2 || t.baseType==Type tRange || t.baseType==Type tURange
+        return LLVMPointerType(g_t_int3_abi,0u)   if t.baseType==Type tInt3 || t.baseType==Type tUInt3
+        return LLVMPointerType(g_t_int4_abi,0u)   if t.baseType==Type tInt4 || t.baseType==Type tUInt4
+        panic("type_to_llvm_abi_type_extern: unsupported vector type {describe(t)}")
+        return LLVMVoidType()
+    else
+        return type_to_llvm_abi_type(t)
 
 def public type_to_llvm_abi_type ( t:TypeDeclPtr )
     if t.baseType==Type tBlock
@@ -495,4 +583,21 @@ def public expand_scalar ( builder:LLVMOpaqueBuilder?; scalar:LLVMOpaqueValue?; 
     for d in range(vecType.vectorDim)
         var idx = LLVMConstInt(LLVMInt32Type(), uint64(d), 0)
         vec = LLVMBuildInsertElement(builder, vec, scalar, idx, "")
+    return vec
+
+def public vector_to_extern_abi ( builder:LLVMOpaqueBuilder?; vec:LLVMOpaqueValue?; vecType:TypeDeclPtr )
+    var stype = type_to_llvm_type_extern(vecType)
+    var s = LLVMGetUndef(stype)
+    for d in range(vecType.vectorDim)
+        var idx = LLVMConstInt(LLVMInt32Type(), uint64(d), 0)
+        var elem = LLVMBuildExtractElement(builder, vec, idx, "")
+        s = LLVMBuildInsertValue(builder, s, elem, uint(d), "")
+    return s
+
+def public extern_abi_to_vector ( builder:LLVMOpaqueBuilder?; s:LLVMOpaqueValue?; vecType:TypeDeclPtr )
+    var vec = LLVMGetUndef(type_to_llvm_type(vecType))
+    for d in range(vecType.vectorDim)
+        var elem = LLVMBuildExtractValue(builder, s, uint(d), "")
+        var idx = LLVMConstInt(LLVMInt32Type(), uint64(d), 0)
+        vec = LLVMBuildInsertElement(builder, vec, elem, idx, "")
     return vec

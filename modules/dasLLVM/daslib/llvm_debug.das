@@ -18,7 +18,6 @@ def isLLVMOpaquePtr ( _vinfo; what:string )
     if _vinfo.basicType != Type tPointer || _vinfo.firstType == null
         return false
     let vinfo = _vinfo.firstType
-    print("{vinfo.annotation._module.name} {vinfo.annotation.name} {what}\n")
     if vinfo.annotation._module.name!="llvm"
         return false
     if vinfo.annotation.name!=what
