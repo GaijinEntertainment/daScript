@@ -59,7 +59,8 @@ def describe_arg ( var ctxid:Context; vinfo; arg:void? ) : void
         elif isRttiType(vinfo,"AnnotationArgumentList")
             report_to_debugger(ctxid, "ast_debug", vinfo.name, describe(*reinterpret<AnnotationArgumentList?> arg))
             return
-        if *reinterpret<void??> arg == null
+        let parg = reinterpret<void??> arg
+        if parg==null || *parg==null
             report_to_debugger(ctxid, "ast_debug", vinfo.name, null)
             return
         if isExpressionType(vinfo)

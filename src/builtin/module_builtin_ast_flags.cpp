@@ -182,7 +182,8 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "MoreFunctionFlags";
         ft->argNames = {
-            "macroFunction", "needStringCast", "aotHashDeppendsOnArguments", "lateInit", "requestJit", "unsafeOutsideOfFor", "skipLockCheck"
+            "macroFunction", "needStringCast", "aotHashDeppendsOnArguments", "lateInit", "requestJit",
+            "unsafeOutsideOfFor", "skipLockCheck", "nativeVectorsAbi"
         };
         return ft;
     }
