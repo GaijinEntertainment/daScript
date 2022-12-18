@@ -717,10 +717,6 @@ namespace das
             result = td;
             return this;
         }
-        FunctionPtr nativeVectors() {
-            nativeVectorsAbi = true;
-            return this;
-        }
         Function * getOrigin() const;
     public:
         AnnotationList      annotations;
@@ -786,7 +782,6 @@ namespace das
                 bool    requestJit : 1;
                 bool    unsafeOutsideOfFor : 1;
                 bool    skipLockCheck : 1;
-                bool    nativeVectorsAbi : 1;
             };
             uint32_t moreFlags = 0;
 

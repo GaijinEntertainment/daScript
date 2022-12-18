@@ -183,7 +183,7 @@ namespace das {
         ft->alias = "MoreFunctionFlags";
         ft->argNames = {
             "macroFunction", "needStringCast", "aotHashDeppendsOnArguments", "lateInit", "requestJit",
-            "unsafeOutsideOfFor", "skipLockCheck", "nativeVectorsAbi"
+            "unsafeOutsideOfFor", "skipLockCheck"
         };
         return ft;
     }

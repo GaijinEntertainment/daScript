@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/simulate/interop.h"
+#include "daScript/simulate/jit_abi.h"
 #include "daScript/simulate/aot.h"
 
 namespace das
@@ -52,7 +53,9 @@ namespace das
             return context.code->makeNode<SimNodeT>(at, fnName);
 #endif
         }
-        virtual void * getBuiltinAddress() const override { return (void *) fn; }
+        virtual void * getBuiltinAddress() const override {
+            return ImplWrapCall<NeedVectorWrap<FuncT>::value, FuncT, fn>::get_builtin_address();
+        }
     };
 
     template  <InteropFunction func, typename RetT, typename ...Args>
