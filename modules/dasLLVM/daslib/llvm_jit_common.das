@@ -18,8 +18,6 @@ let public LLVM_JIT_LOG = true
 let public LLVM_DEBUG_RESULT = false
 let public LLVM_DEBUG_EVERYTHING = false
 
-let public LLVM_REPLACE_NATIVE_VECTORS = true  // float2,float3,float4 etc go through vectors
-
 let public LLVM_JIT_ALWAYS_SOLID = true
 let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = true
 

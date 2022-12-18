@@ -1360,19 +1360,8 @@ class LlvmJitVisitor : AstVisitor
         if ofunc == null
             var arg_types : array<LLVMOpaqueType?>
             for arg in expr.func.arguments
-                if LLVM_REPLACE_NATIVE_VECTORS && !expr.func.moreFlags.nativeVectorsAbi && arg._type.isVectorType
-                    arg_types |> push(type_to_llvm_abi_type_extern(arg._type))
-                else
-                    arg_types |> push(type_to_llvm_abi_type(arg._type))
-            var res_type : LLVMOpaqueType?
-            if LLVM_REPLACE_NATIVE_VECTORS && !expr.func.moreFlags.nativeVectorsAbi
-                if expr.func.result.isVectorType
-                    res_type = LLVMVoidType()
-                    arg_types |> push(type_to_llvm_abi_type_extern(expr.func.result), 0)
-                else
-                    res_type = type_to_llvm_type(expr.func.result)
-            else
-                res_type = type_to_llvm_type(expr.func.result)
+                arg_types |> push(type_to_llvm_abi_type(arg._type))
+            var res_type = type_to_llvm_type(expr.func.result)
             ofunc = LLVMAddFunction(g_mod, mangled_name, LLVMFunctionType(res_type,arg_types))
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
@@ -1459,26 +1448,7 @@ class LlvmJitVisitor : AstVisitor
             else
                 var params <- build_call_params(expr, expr.func)
                 var func = register_extern_function(expr)
-                var ccall : LLVMOpaqueValue?
-                var nvres : LLVMOpaqueValue?
-                if LLVM_REPLACE_NATIVE_VECTORS && !expr.func.moreFlags.nativeVectorsAbi
-                    for a,ai in expr.arguments,range(100500)
-                        if a._type.isVectorType
-                            let vtype = type_to_llvm_type_extern(a._type)
-                            var arg_a : LLVMOpaqueValue?
-                            at_function_entry <|
-                                arg_a = LLVMBuildAlloca(g_builder, vtype, "arg_{expr.func.arguments[ai].name}_replace_vector")
-                            var arg_v = vector_to_extern_abi(g_builder, params[ai], a._type)
-                            LLVMBuildStore(g_builder, arg_v, arg_a)
-                            params[ai] = arg_a
-                    if expr.func.result.isVectorType
-                        at_function_entry <|
-                            nvres = LLVMBuildAlloca(g_builder, type_to_llvm_type_extern(expr.func.result), "result_replace_vector")
-                        params |> push(nvres, 0)
-                ccall = LLVMBuildCall(g_builder, func, params, "")
-                if LLVM_REPLACE_NATIVE_VECTORS && !expr.func.moreFlags.nativeVectorsAbi && expr.func.result.isVectorType
-                    var nvval = LLVMBuildLoad(g_builder, nvres, "")
-                    ccall = extern_abi_to_vector(g_builder, nvval, expr.func.result)
+                var ccall = LLVMBuildCall(g_builder, func, params, "")
                 if cmresEval!=null
                     LLVMBuildStore2Aligned(g_builder, type_to_llvm_type(expr.func.result), ccall, cmresEval, uint(expr._type.alignOf))
                     setE(expr, cmresEval)
