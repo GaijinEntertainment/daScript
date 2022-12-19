@@ -15,12 +15,15 @@ LLVMDisasmContextRef das_LLVMCreateDisasm (const char *TripleName, void *DisInfo
     return LLVMCreateDisasm(TripleName,DisInfo,TagType,nullptr,nullptr);
 }
 
-___noinline float3 test_abi_mad ( float3 a, float3 b, float3 c ) {
-    /*
-    printf("a = %f,%f,%f\n", v_extract_x(a), v_extract_y(a), v_extract_z(a));
-    printf("b = %f,%f,%f\n", v_extract_x(b), v_extract_y(b), v_extract_z(b));
-    printf("c = %f,%f,%f\n", v_extract_x(c), v_extract_y(c), v_extract_z(c));
-    */
+float2 test_abi_mad2 ( float2 a, float2 b, float2 c ) {
+    return v_add(v_mul(a,b),c);
+}
+
+float3 test_abi_mad3 ( float3 a, float3 b, float3 c ) {
+    return v_add(v_mul(a,b),c);
+}
+
+float4 test_abi_mad4 ( float4 a, float4 b, float4 c ) {
     return v_add(v_mul(a,b),c);
 }
 
@@ -31,7 +34,11 @@ void Module_dasLLVM::initMain() {
 	addExtern<DAS_BIND_FUN(das_LLVMCreateDisasm) >(*this,lib,"LLVMCreateDisasm",SideEffects::worstDefault,"das_LLVMCreateDisasm")
 		->args({"TripleName","DisInfo","TagType"});
     // abi tests
-	addExtern<DAS_BIND_FUN(test_abi_mad) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad")
+	addExtern<DAS_BIND_FUN(test_abi_mad2) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad2")
+		->args({"a","b","c"});
+	addExtern<DAS_BIND_FUN(test_abi_mad3) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad3")
+		->args({"a","b","c"});
+	addExtern<DAS_BIND_FUN(test_abi_mad4) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad4")
 		->args({"a","b","c"});
 }
 
