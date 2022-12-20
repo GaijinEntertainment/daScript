@@ -1632,8 +1632,26 @@ class LlvmJitVisitor : AstVisitor
         unsupported(expr, "addr")
 
 // ExprAssert
-    def override preVisitExprAssert(expr:smart_ptr<ExprAssert>) : void
-        unsupported(expr, "assert")
+    def override visitExprAssert(expr:smart_ptr<ExprAssert>) : ExpressionPtr
+        var cond = getE(expr.arguments[0])
+        var message = "assert failed"
+        if length(expr.arguments) > 1
+            message = string((expr.arguments[1] as ExprConstString).value)
+        var params = [[auto
+            get_string_constant_ptr(g_builder,message);
+            get_context_param()
+        ]]
+        var check_assert = append_basic_block("assert")
+        var assert_ok = append_basic_block("assert_ok")
+        var assert_failed = append_basic_block("assert_failed")
+        LLVMBuildBr(g_builder, check_assert)
+        position_at_end(check_assert)
+        LLVMBuildCondBr(g_builder, cond, assert_ok, assert_failed)
+        position_at_end(assert_failed)
+        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_EXCEPTION), params, "")
+        LLVMBuildBr(g_builder, assert_ok)
+        position_at_end(assert_ok)
+        return expr
 
 // ExprDebug
     def override preVisitExprDebug(expr:smart_ptr<ExprDebug>) : void
@@ -2716,7 +2734,6 @@ class JIT_LLVM : AstSimulateMacro
 //      * ExprLabel
 //      * ExprGoto
 //      * ExprAddr // function addr
-//      * ExprAssert
 //      * ExprDebug
 //   table extra access
 //      * ExprErase
