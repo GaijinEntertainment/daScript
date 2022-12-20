@@ -30,3 +30,13 @@ def test_vec_abi ( t:T? )
         let tt = test_abi_mad(a,b,c)
         let jt = jit_test_abi_mad(a,b,c)
         t |> equal(tt,jt)
+
+[sideeffects]
+def dummy
+    assert(false)
+
+[test]
+def test_func_abi ( t:T? )
+    let fnA = @@dummy
+    let fnB = test_abi_func(fnA)
+    t |> equal ( fnA, fnB )

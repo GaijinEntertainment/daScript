@@ -27,6 +27,18 @@ float4 test_abi_mad4 ( float4 a, float4 b, float4 c ) {
     return v_add(v_mul(a,b),c);
 }
 
+Func test_abi_func ( Func a, Context * ctx ) {
+    bool found = false;
+    for ( int i=0; i!=ctx->getTotalFunctions(); ++i ) {
+        if ( ctx->getFunction(i)==a.PTR ) {
+            found = true;
+            break;
+        }
+    }
+    if ( !found ) ctx->throw_error("function not found");
+    return a;
+}
+
 void Module_dasLLVM::initMain() {
 	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeCore >(*this,lib,"LLVMInitializeCore",SideEffects::worstDefault,"LLVMInitializeCore")
 		->args({"R"});
@@ -40,6 +52,8 @@ void Module_dasLLVM::initMain() {
 		->args({"a","b","c"});
 	addExtern<DAS_BIND_FUN(test_abi_mad4) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad4")
 		->args({"a","b","c"});
+	addExtern<DAS_BIND_FUN(test_abi_func) >(*this,lib,"test_abi_func",SideEffects::worstDefault,"test_abi_func")
+		->args({"fn","context"});
 }
 
 ModuleAotType Module_dasLLVM::aotRequire ( TextWriter & tw ) const {

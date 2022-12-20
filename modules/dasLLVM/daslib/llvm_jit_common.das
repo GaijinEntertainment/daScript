@@ -62,12 +62,6 @@ var public g_t_function : LLVMOpaqueType?
 var public g_t_lambda : LLVMOpaqueType?
 var public g_t_block : LLVMOpaqueType?
 var public g_t_stack_state : LLVMOpaqueType?
-var public g_t_float2_abi : LLVMOpaqueType?
-var public g_t_float3_abi : LLVMOpaqueType?
-var public g_t_float4_abi : LLVMOpaqueType?
-var public g_t_int2_abi : LLVMOpaqueType?
-var public g_t_int3_abi : LLVMOpaqueType?
-var public g_t_int4_abi : LLVMOpaqueType?
 
 var g_str2v : table<string; LLVMOpaqueValue?>
 
@@ -129,92 +123,88 @@ def public init_jit
     LLVMInitializeNativeAsmPrinter()
     LLVMInitializeNativeAsmParser()
     LLVMCreateJITCompilerForModule(g_engine, g_mod, LLVM_JIT_OPT_LEVEL)
-
     static_if LLVM_DEBUG_EVERYTHING
         let hostcpu = LLVMGetHostCPUName()
         let features = LLVMGetHostCPUFeatures()
         print("LLVM host cpu: {hostcpu}\nLLVM host cpu features: {features}\n")
         LLVMDisposeMessage(hostcpu)
         LLVMDisposeMessage(features)
-
     var noreturn = LLVMGetEnumAttribute("noreturn")
     var readonly = LLVMGetEnumAttribute("readonly")
-
     build_jit_types()
-
     // add default functions
     var jit_exception = LLVMAddFunction(g_mod, FN_JIT_EXCEPTION,    // jit_exception(text,context *)
         LLVMFunctionType(LLVMVoidType(),
             [[LLVMTypeRef get_type_string(); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_exception, get_jit_exception())
     LLVMAddAttributeToFunction(jit_exception, noreturn)
-
-    var jit_call_or_fastcall = LLVMAddFunction(g_mod, FN_JIT_CALL_OR_FASTCALL, // jit_call_or_fastcall(func,args *,context *)
+    // jit_call_or_fastcall(func,args *,context *)
+    var jit_call_or_fastcall = LLVMAddFunction(g_mod, FN_JIT_CALL_OR_FASTCALL,
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_call_or_fastcall, get_jit_call_or_fastcall())
-
-    var jit_call_with_cmres = LLVMAddFunction(g_mod, FN_JIT_CALL_WITH_CMRES, // jit_call_with_cmres(func,args *,cmres *,context *)
+    // jit_call_with_cmres(func,args *,cmres *,context *)
+    var jit_call_with_cmres = LLVMAddFunction(g_mod, FN_JIT_CALL_WITH_CMRES,
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_call_with_cmres, get_jit_call_with_cmres())
-
-    var jit_invoke_block = LLVMAddFunction(g_mod, FN_JIT_INVOKE_BLOCK, // vec4f jit_invoke_block ( const Block & blk, vec4f * args, Context * context )
+    // vec4f jit_invoke_block ( const Block & blk, vec4f * args, Context * context )
+    var jit_invoke_block = LLVMAddFunction(g_mod, FN_JIT_INVOKE_BLOCK,
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_invoke_block, get_jit_invoke_block())
-
-    var jit_invoke_block_with_cmres = LLVMAddFunction(g_mod, FN_JIT_INVOKE_BLOCK_WITH_CMRES, // vec4f jit_invoke_block_with_cmres ( const Block & blk, vec4f * args, void * cmres, Context * context )
+    // vec4f jit_invoke_block_with_cmres ( const Block & blk, vec4f * args, void * cmres, Context * context )
+    var jit_invoke_block_with_cmres = LLVMAddFunction(g_mod, FN_JIT_INVOKE_BLOCK_WITH_CMRES,
         LLVMFunctionType(LLVMFloat4Type(),
             [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_invoke_block_with_cmres, get_jit_invoke_block_with_cmres())
-
-    var jit_string_builder = LLVMAddFunction(g_mod, FN_JIT_STRING_BUILDER, // jit_string_builder ( context *, node *, args * )
+    // jit_string_builder ( context *, node *, args * )
+    var jit_string_builder = LLVMAddFunction(g_mod, FN_JIT_STRING_BUILDER,
         LLVMFunctionType(get_type_string(),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_string_builder, get_jit_string_builder())
     LLVMAddAttributeToFunction(jit_string_builder, readonly)
-
-    var jit_get_global_mnh = LLVMAddFunction(g_mod, FN_JIT_GET_GLOBAL_MNH,  // jit_get_global_mnh ( uint64_t mnh, context * )
+    // jit_get_global_mnh ( uint64_t mnh, context * )
+    var jit_get_global_mnh = LLVMAddFunction(g_mod, FN_JIT_GET_GLOBAL_MNH,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_get_global_mnh, get_jit_get_global_mnh())
     LLVMAddAttributeToFunction(jit_get_global_mnh, readonly)
-
-    var jit_alloc_heap = LLVMAddFunction(g_mod, FN_JIT_ALLOC_HEAP,  // jit_alloc_heap ( uint64_t mnh, context * )
+    // jit_alloc_heap ( uint64_t mnh, context * )
+    var jit_alloc_heap = LLVMAddFunction(g_mod, FN_JIT_ALLOC_HEAP,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_alloc_heap, get_jit_alloc_heap())
     LLVMAddAttributeToFunction(jit_alloc_heap, readonly)
-
-    var jit_alloc_persistent = LLVMAddFunction(g_mod, FN_JIT_ALLOC_PERSISTENT,  // jit_alloc_persistent ( uint64_t mnh, context * )
+    // jit_alloc_persistent ( uint64_t mnh, context * )
+    var jit_alloc_persistent = LLVMAddFunction(g_mod, FN_JIT_ALLOC_PERSISTENT,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_alloc_persistent, get_jit_alloc_persistent())
     LLVMAddAttributeToFunction(jit_alloc_persistent, readonly)
-
-    var jit_free_heap = LLVMAddFunction(g_mod, FN_JIT_FREE_HEAP,  // void jit_free_heap ( void * bytes, uint32_t size, Context * context )
+    // void jit_free_heap ( void * bytes, uint32_t size, Context * context )
+    var jit_free_heap = LLVMAddFunction(g_mod, FN_JIT_FREE_HEAP,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_free_heap, get_jit_free_heap())
-
-    var jit_free_persistent = LLVMAddFunction(g_mod, FN_JIT_FREE_PERSISTENT,  // void jit_free_persistent ( void * bytes, Context * context )
+    // void jit_free_persistent ( void * bytes, Context * context )
+    var jit_free_persistent = LLVMAddFunction(g_mod, FN_JIT_FREE_PERSISTENT,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_free_persistent, get_jit_free_persistent())
-
-    var jit_array_lock = LLVMAddFunction(g_mod, FN_JIT_ARRAY_LOCK,  // void jit_array_lock ( Array & array, Context * context )
+    // void jit_array_lock ( Array & array, Context * context )
+    var jit_array_lock = LLVMAddFunction(g_mod, FN_JIT_ARRAY_LOCK,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_array_lock, get_jit_array_lock())
-
-    var jit_array_unlock = LLVMAddFunction(g_mod, FN_JIT_ARRAY_UNLOCK,  // void jit_array_unlock ( Array & array, Context * context )
+    // void jit_array_unlock ( Array & array, Context * context )
+    var jit_array_unlock = LLVMAddFunction(g_mod, FN_JIT_ARRAY_UNLOCK,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_array_unlock, get_jit_array_unlock())
-
+    // int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
     for t in get_workhorse_types()
-        var jit_table_at = LLVMAddFunction(g_mod, FN_JIT_TABLE_AT(t),  // int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
+        var jit_table_at = LLVMAddFunction(g_mod, FN_JIT_TABLE_AT(t),
             LLVMFunctionType(LLVMInt32Type(),   // int32_t result
                 [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // table ptr
                 base_type_to_llvm_type(t);                          // key
@@ -222,23 +212,23 @@ def public init_jit
                 LLVMPointerType(LLVMVoidType(),0u)                  // context
                 ]]))
         LLVMAddGlobalMapping(g_engine, jit_table_at, get_jit_table_at(unsafe(reinterpret<int> t)))
-
-    var jit_str_cmp = LLVMAddFunction(g_mod, FN_JIT_STR_CMP,  // int jit_str_cmp ( char * a, char * b )
+    // int jit_str_cmp ( char * a, char * b )
+    var jit_str_cmp = LLVMAddFunction(g_mod, FN_JIT_STR_CMP,
         LLVMFunctionType(LLVMInt32Type(),
             [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMInt8Type(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_str_cmp, get_jit_str_cmp())
-
-    var jit_prologue = LLVMAddFunction(g_mod, FN_JIT_PROLOGUE,  // void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context )
+    // void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context )
+    var jit_prologue = LLVMAddFunction(g_mod, FN_JIT_PROLOGUE,
         LLVMFunctionType(LLVMVoidType(),
             [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(g_t_stack_state,0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_prologue, get_jit_prologue())
-
-    var jit_epilogue = LLVMAddFunction(g_mod, FN_JIT_EPILOGUE,  // void jit_epilogue ( JitStackState * stackState, Context * context )
+    // void jit_epilogue ( JitStackState * stackState, Context * context )
+    var jit_epilogue = LLVMAddFunction(g_mod, FN_JIT_EPILOGUE,
         LLVMFunctionType(LLVMVoidType(),
             [[LLVMTypeRef LLVMPointerType(g_t_stack_state,0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_epilogue, get_jit_epilogue())
-
-    var jit_make_block = LLVMAddFunction(g_mod, FN_JIT_MAKE_BLOCK,  // void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * jitImpl, void * funcInfo, Context * context )
+    // void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * jitImpl, void * funcInfo, Context * context )
+    var jit_make_block = LLVMAddFunction(g_mod, FN_JIT_MAKE_BLOCK,
         LLVMFunctionType(LLVMVoidType(),
             [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u);
                 LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
@@ -257,78 +247,26 @@ def private build_jit_types
         LLVMInt32Type()                     // uint32_t    flags
     ]]
     g_t_simFunction = LLVMStructType(simfunction_fields)
-
     // function type
     var function_fields <- [[auto[]
         LLVMPointerType(g_t_simFunction,0u) // SimFunction * func
     ]]
     g_t_function = LLVMStructType(function_fields)
-
     // lambda type
     var lambda_fields <- [[auto[]
         LLVMPointerType(g_t_simFunction,0u);    // SimFunction * __lambda
         LLVMPointerType(g_t_simFunction,0u)     // SimFunction * __finalize
     ]]
     g_t_lambda = LLVMStructType(lambda_fields)
-
     // block type
     var block_fields <- build_block_type()
     g_t_block = LLVMStructType(block_fields)
-
     // prologue\epilogue storage for the stack
     var stack_state_fields <- [[auto[]
         LLVMPointerType(LLVMInt8Type(),0u);    // char * EP
         LLVMPointerType(LLVMInt8Type(),0u)     // char * SP
     ]]
     g_t_stack_state = LLVMStructType(stack_state_fields)
-
-    // float2 abi
-    var float2_abi_fields <- [[auto[]
-        LLVMFloatType();    // x
-        LLVMFloatType()     // y
-    ]]
-    g_t_float2_abi = LLVMStructType(float2_abi_fields)
-
-    // float3 abi
-    var float3_abi_fields <- [[auto[]
-        LLVMFloatType();    // x
-        LLVMFloatType();    // y
-        LLVMFloatType()     // z
-    ]]
-    g_t_float3_abi = LLVMStructType(float3_abi_fields)
-
-    // float4 abi
-    var float4_abi_fields <- [[auto[]
-        LLVMFloatType();    // x
-        LLVMFloatType();    // y
-        LLVMFloatType();    // z
-        LLVMFloatType()     // w
-    ]]
-    g_t_float4_abi = LLVMStructType(float4_abi_fields)
-
-    // int2 abi
-    var int2_abi_fields <- [[auto[]
-        LLVMInt32Type();    // x
-        LLVMInt32Type()     // y
-    ]]
-    g_t_int2_abi = LLVMStructType(int2_abi_fields)
-
-    // int3 abi
-    var int3_abi_fields <- [[auto[]
-        LLVMInt32Type();    // x
-        LLVMInt32Type();    // y
-        LLVMInt32Type()     // z
-    ]]
-    g_t_int3_abi = LLVMStructType(int3_abi_fields)
-
-    // int4 abi
-    var int4_abi_fields <- [[auto[]
-        LLVMInt32Type();    // x
-        LLVMInt32Type();    // y
-        LLVMInt32Type();    // z
-        LLVMInt32Type()     // w
-    ]]
-    g_t_int4_abi = LLVMStructType(int4_abi_fields)
 
 def public build_block_type
     return <- [{auto[]
@@ -363,12 +301,6 @@ def private finalize_all_jit
         g_t_block = null
         g_t_lambda = null
         g_t_stack_state = null
-        g_t_float2_abi = null
-        g_t_float3_abi = null
-        g_t_float4_abi = null
-        g_t_int2_abi = null
-        g_t_int3_abi = null
-        g_t_int4_abi = null
         // TODO: figure out why this crashes
         // LLVMDisposeModule(je.mod); je.mod = null
     delete g_all_engines
@@ -439,32 +371,6 @@ def public base_type_to_llvm_type ( t:Type )
     return LLVMPointerType(LLVMVoidType(),0u) if t == Type tPointer
     failed("base_type_to_llvm_type: unsupported type {t}")
     return LLVMInt32Type()
-
-def public type_to_llvm_type_extern ( t:TypeDeclPtr )
-    if t.isVectorType
-        return g_t_float2_abi if t.baseType==Type tFloat2
-        return g_t_float3_abi if t.baseType==Type tFloat3
-        return g_t_float4_abi if t.baseType==Type tFloat4
-        return g_t_int2_abi   if t.baseType==Type tInt2 || t.baseType==Type tUInt2 || t.baseType==Type tRange || t.baseType==Type tURange
-        return g_t_int3_abi   if t.baseType==Type tInt3 || t.baseType==Type tUInt3
-        return g_t_int4_abi   if t.baseType==Type tInt4 || t.baseType==Type tUInt4
-        panic("type_to_llvm_abi_type_extern: unsupported vector type {describe(t)}")
-        return LLVMVoidType()
-    else
-        return type_to_llvm_type(t)
-
-def public type_to_llvm_abi_type_extern ( t:TypeDeclPtr )
-    if t.isVectorType
-        return LLVMPointerType(g_t_float2_abi,0u) if t.baseType==Type tFloat2
-        return LLVMPointerType(g_t_float3_abi,0u) if t.baseType==Type tFloat3
-        return LLVMPointerType(g_t_float4_abi,0u) if t.baseType==Type tFloat4
-        return LLVMPointerType(g_t_int2_abi,0u)   if t.baseType==Type tInt2 || t.baseType==Type tUInt2 || t.baseType==Type tRange || t.baseType==Type tURange
-        return LLVMPointerType(g_t_int3_abi,0u)   if t.baseType==Type tInt3 || t.baseType==Type tUInt3
-        return LLVMPointerType(g_t_int4_abi,0u)   if t.baseType==Type tInt4 || t.baseType==Type tUInt4
-        panic("type_to_llvm_abi_type_extern: unsupported vector type {describe(t)}")
-        return LLVMVoidType()
-    else
-        return type_to_llvm_abi_type(t)
 
 def public type_to_llvm_abi_type ( t:TypeDeclPtr )
     if t.baseType==Type tBlock
@@ -583,19 +489,3 @@ def public expand_scalar ( builder:LLVMOpaqueBuilder?; scalar:LLVMOpaqueValue?; 
         vec = LLVMBuildInsertElement(builder, vec, scalar, idx, "")
     return vec
 
-def public vector_to_extern_abi ( builder:LLVMOpaqueBuilder?; vec:LLVMOpaqueValue?; vecType:TypeDeclPtr )
-    var stype = type_to_llvm_type_extern(vecType)
-    var s = LLVMGetUndef(stype)
-    for d in range(vecType.vectorDim)
-        var idx = LLVMConstInt(LLVMInt32Type(), uint64(d), 0)
-        var elem = LLVMBuildExtractElement(builder, vec, idx, "")
-        s = LLVMBuildInsertValue(builder, s, elem, uint(d), "")
-    return s
-
-def public extern_abi_to_vector ( builder:LLVMOpaqueBuilder?; s:LLVMOpaqueValue?; vecType:TypeDeclPtr )
-    var vec = LLVMGetUndef(type_to_llvm_type(vecType))
-    for d in range(vecType.vectorDim)
-        var elem = LLVMBuildExtractValue(builder, s, uint(d), "")
-        var idx = LLVMConstInt(LLVMInt32Type(), uint64(d), 0)
-        vec = LLVMBuildInsertElement(builder, vec, elem, idx, "")
-    return vec

@@ -491,6 +491,14 @@ class LlvmJitVisitor : AstVisitor
                 params |> push(getE(a))
         return <- params
 
+    def get_function_addr ( func:Function? )
+        var MNH_ADDR : uint64
+        unsafe
+            let mangled_name = get_mangled_name(FunctionPtr(func))
+            let MNH = hash(mangled_name)
+            MNH_ADDR = get_function_address(MNH,*jit_context)
+        return MNH_ADDR
+
     def make_call ( expr:smart_ptr<ExprCallFunc>; doesNotNeedSp:bool )
         // lookup intrinsics first
         var intrin_call = lookup_intinsic(g_builder, expr, [{for x in expr.arguments; getE(x)}])
@@ -555,11 +563,7 @@ class LlvmJitVisitor : AstVisitor
                     setE(expr, ccall)
             else
                 var args = build_array_of_arguments(expr.arguments)
-                var MNH_ADDR : uint64
-                unsafe
-                    let mangled_name = get_mangled_name(FunctionPtr(expr.func))
-                    let MNH = hash(mangled_name)
-                    MNH_ADDR = get_function_address(MNH,*jit_context)
+                var MNH_ADDR = get_function_addr(expr.func)
                 if MNH_ADDR==0ul
                     failed_E(expr, "missing function pointer for {expr.func.name}")
                 var params : array<LLVMOpaqueValue?>
@@ -1629,7 +1633,12 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprAddr
     def override preVisitExprAddr(expr:smart_ptr<ExprAddr>) : void
-        unsupported(expr, "addr")
+        var MNH_ADDR = get_function_addr(expr.func)
+        if MNH_ADDR==0ul
+            failed_E(expr, "missing function pointer for {expr.func.name}")
+        var rfun = LLVMGetUndef(g_t_function)
+        rfun = LLVMBuildInsertValue(g_builder, rfun, LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0), 0u, "")
+        setE(expr, rfun)
 
 // ExprAssert
     def override visitExprAssert(expr:smart_ptr<ExprAssert>) : ExpressionPtr
@@ -2519,6 +2528,13 @@ class LlvmJitVisitor : AstVisitor
                 tres = cast_ptr_to_vec4f(tsrc)
             else
                 failed("unsupported workhorse cast_to_vec4f cast {describe(etype)}")
+        elif etype.isFunction
+            assert(typeinfo(sizeof type<void?>)==8)
+            var vvec = LLVMGetUndef(LLVMVectorType(LLVMInt64Type(), 2u))
+            var tbits = LLVMBuildExtractValue(g_builder, tsrc, 0u, "")
+            tbits = LLVMBuildPtrToInt(g_builder, tbits, LLVMInt64Type(), "")
+            var vsrc = LLVMBuildInsertElement(g_builder, vvec, tbits, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "function")
+            tres = LLVMBuildBitCast(g_builder, vsrc, LLVMFloat4Type(), "return_result")
         else
             failed("unsupported cast_to_vec4f type {describe(etype)}")
         return tres
