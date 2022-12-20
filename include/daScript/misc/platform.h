@@ -156,12 +156,7 @@
     }
     __forceinline uint64_t das_popcount64(uint64_t x) {
     #if defined(__i386__) || defined(_M_IX86)
-        unsigned int count = 0;
-        while (x != 0) {
-            count += 1;
-            x &= x - 1;
-        }
-        return count;
+        return uint64_t(__popcnt(uint32_t(x)) + __popcnt(uint32_t(x >> 32)));
     #else
         return uint64_t(__popcnt64(x));
     #endif
