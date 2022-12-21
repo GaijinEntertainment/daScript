@@ -2981,6 +2981,7 @@ namespace das {
     void * das_get_jit_prologue ();
     void * das_get_jit_epilogue ();
     void * das_get_jit_make_block ();
+    void * das_get_jit_debug ();
 }
 
 #if defined(_MSC_VER)

@@ -462,6 +462,12 @@ namespace das {
         return node;
     }
 
+    TypeInfo * das_make_type_info_structure ( Context & ctx, TypeDeclPtr ptr, Context * context, LineInfoArg * at ) {
+        if ( !ptr ) context->throw_error_at(at ? *at : LineInfo(), "expecting type");
+        if ( !ctx.thisHelper ) context->throw_error_at(at ? *at : LineInfo(), "missing type-info helper. context allready fully compiled");
+        return ctx.thisHelper->makeTypeInfo(nullptr, ptr);
+    }
+
     void * das_sb_make_interop_node ( Context & ctx, ExprStringBuilder * call, Context * context, LineInfoArg * at ) {
         if ( !call ) context->throw_error_at(*at, "expecting string builder");
         if ( !ctx.thisHelper ) context->throw_error_at(*at, "missing debug info helper. get_aot_interop_node can only be called in the SimulateMacro");
@@ -747,6 +753,10 @@ namespace das {
         addExtern<DAS_BIND_FUN(das_sb_make_interop_node)>(*this, lib,  "make_interop_node",
             SideEffects::none, "das_sb_make_interop_node")
                 ->args({"ctx","builder","context","at"});
+        // typeinfo
+        addExtern<DAS_BIND_FUN(das_make_type_info_structure)>(*this, lib,  "make_type_info_structure",
+            SideEffects::none, "das_make_type_info_structure")
+                ->args({"ctx","type","context","at"});
         // compilation log
         addExtern<DAS_BIND_FUN(das_comp_log)>(*this, lib,  "to_compilation_log",
             SideEffects::modifyExternal, "das_comp_log")

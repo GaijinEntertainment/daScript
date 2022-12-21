@@ -15,6 +15,8 @@
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/interop.h"
 #include "daScript/misc/sysos.h"
+#include "daScript/misc/fpe.h"
+#include "daScript/simulate/debug_print.h"
 
 namespace das
 {
@@ -1273,6 +1275,18 @@ namespace das
         return (void *) &jit_make_block;
     }
 
+    void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * context ) {
+        FPE_DISABLE;
+        TextWriter ssw;
+        if ( message ) ssw << message << " ";
+        ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags::debugger) << "\n";
+        context->to_out(ssw.str().c_str());
+    }
+
+    void * das_get_jit_debug () {
+        return (void *) &jit_debug;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1691,6 +1705,8 @@ namespace das
             SideEffects::none, "das_get_jit_epilogue");
         addExtern<DAS_BIND_FUN(das_get_jit_make_block)>(*this, lib, "get_jit_make_block",
             SideEffects::none, "das_get_jit_make_block");
+        addExtern<DAS_BIND_FUN(das_get_jit_debug)>(*this, lib, "get_jit_debug",
+            SideEffects::none, "das_get_jit_debug");
         addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
