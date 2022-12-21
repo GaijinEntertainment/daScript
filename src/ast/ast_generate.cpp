@@ -1551,9 +1551,44 @@ namespace das {
         LineInfo    newAt;
     };
 
+    class SetGeneratedVisitor : public Visitor {
+    public:
+        SetGeneratedVisitor( bool setGenerated )
+            : Visitor(), generated(setGenerated) {
+        }
+    protected:
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            expr->generated = generated;
+        }
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
+            Visitor::preVisitArgument(fn, var, lastArg);
+            var->generated = generated;
+        }
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitLet(let, var, last);
+            var->generated = generated;
+        }
+        virtual void preVisitGlobalLet ( const VariablePtr & var) override {
+            Visitor::preVisitGlobalLet(var);
+            var->generated = generated;
+        }
+        virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override {
+            Visitor::preVisitFor(expr, var, last);
+            var->generated = generated;
+        }
+    protected:
+        bool    generated;
+    };
+
     ExpressionPtr forceAt ( const ExpressionPtr & expr, const LineInfo & at ) {
         LocationSwapVisitor swapAt(at);
         return expr->visit(swapAt);
+    }
+
+    ExpressionPtr forceGenerated ( const ExpressionPtr & expr, bool setGenerated ) {
+        SetGeneratedVisitor setGen(setGenerated);
+        return expr->visit(setGen);
     }
 
     void minPoint ( uint32_t & line, uint32_t & column, uint32_t LINE, uint32_t COLUMN ) {
