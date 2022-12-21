@@ -21,3 +21,20 @@ def test_assert ( t:T? )
     recover
         fail = true
     t |> success(fail)
+
+[jit,sideeffects]
+def debug_me(value)
+    debug(value,"value=")
+
+struct Foo
+    a : int
+    b : float
+
+[test]
+def test_debug ( t:T? )
+    t |> success(is_jit_function(@@<(arg:int):void>debug_me))
+    debug_me(13)
+    t |> success(is_jit_function(@@<(arg:Foo):void>debug_me))
+    debug_me([[Foo a=1,b=2.0]])
+
+

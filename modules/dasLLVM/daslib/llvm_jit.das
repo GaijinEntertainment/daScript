@@ -1663,8 +1663,22 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprDebug
-    def override preVisitExprDebug(expr:smart_ptr<ExprDebug>) : void
-        unsupported(expr, "debug")
+    def override visitExprDebug(expr:smart_ptr<ExprDebug>) : ExpressionPtr
+        // // void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * )
+        var message = ""
+        if length(expr.arguments) > 1
+            message = string((expr.arguments[1] as ExprConstString).value)
+        var tinfo = make_type_info_structure(*jit_context,expr.arguments[0]._type)
+        var tptr = LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), intptr(tinfo), 0), LLVMPointerType(LLVMVoidType(), 0u))
+        var params <- [[auto
+            cast_to_vec4f(expr.arguments[0]._type, getE(expr.arguments[0]));
+            tptr;
+            get_string_constant_ptr(g_builder,message);
+            get_context_param()
+        ]]
+        var dbg = LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod,FN_JIT_DEBUG), params, "")
+        setE(expr, dbg)
+        return expr
 
 // ExprInvoke
     def build_invoke_params ( expr:smart_ptr<ExprInvoke> )
@@ -2749,8 +2763,6 @@ class JIT_LLVM : AstSimulateMacro
 //      * ExprArrayComprehension
 //      * ExprLabel
 //      * ExprGoto
-//      * ExprAddr // function addr
-//      * ExprDebug
 //   table extra access
 //      * ExprErase
 //      * ExprSetInsert

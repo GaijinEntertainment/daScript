@@ -45,6 +45,7 @@ let public FN_JIT_STR_CMP = "`jit`str_cmp`"
 let public FN_JIT_PROLOGUE = "`jit`prologue`"
 let public FN_JIT_EPILOGUE = "`jit`epilogue`"
 let public FN_JIT_MAKE_BLOCK = "`jit`make_block`"
+let public FN_JIT_DEBUG = "`jit`debug`"
 
 struct JitEngine
     mod : LLVMOpaqueModule?
@@ -233,6 +234,11 @@ def public init_jit
             [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u);
                 LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_make_block, get_jit_make_block())
+    // void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * )
+    var jit_debug = LLVMAddFunction(g_mod, FN_JIT_DEBUG,
+        LLVMFunctionType(LLVMVoidType(),
+            [[LLVMTypeRef LLVMFloat4Type(); LLVMPointerType(LLVMVoidType(),0u); get_type_string(); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_debug, get_jit_debug())
 
 def private build_jit_types
     // simfunction type
