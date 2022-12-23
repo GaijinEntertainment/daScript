@@ -1084,7 +1084,7 @@ class LlvmJitVisitor : AstVisitor
                 var temp = LLVMBuildLoadDataAligned(g_builder, tsrc, ralign, "")
                 LLVMBuildStoreAligned(g_builder, temp, tdst, ralign)
             else
-                var rsize = LLVMConstInt(LLVMInt32Type(), uint64(right._type.sizeOf), 0)
+                let rsize = LLVMConstInt(LLVMInt32Type(), uint64(right._type.sizeOf), 0)
                 LLVMBuildMemCpy(g_builder, tdst, ralign, tsrc, ralign, rsize)
         else
             if right is ExprConstPtr
@@ -1097,7 +1097,7 @@ class LlvmJitVisitor : AstVisitor
         var tdst = getE(expr.left)
         if make_call_to_cmres(expr.right, tdst)
             pass
-        elif expr.takeOverRightStack
+        elif expr.copy_flags.takeOverRightStack
             assert(isMakeLocal(expr.right))
             var mk_ptr = LLVMBuildPointerCast(g_builder, tdst, LLVMPointerType(LLVMInt8Type(),0u), "")
             setE(expr.right, mk_ptr)
@@ -1111,8 +1111,42 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprMove
-    def override preVisitExprMove(expr:smart_ptr<ExprMove>): void
-        unsupported(expr, "move")
+
+    def build_move ( tdst:LLVMOpaqueValue?; right:ExpressionPtr )
+        var tsrc = getE(right)
+        var ralign = uint(right._type.alignOf)
+        if right._type.isRef
+            /*
+            if right._type.isWorkhorseType
+                var temp = LLVMBuildLoadDataAligned(g_builder, tsrc, ralign, "")
+                LLVMBuildStoreAligned(g_builder, temp, tdst, ralign)
+            */
+            let rsize = LLVMConstInt(LLVMInt32Type(), uint64(right._type.sizeOf), 0)
+            LLVMBuildMemCpy(g_builder, tdst, ralign, tsrc, ralign, rsize)
+            LLVMBuildMemSet(g_builder, tsrc, LLVMConstInt(LLVMInt8Type(), 0ul, 0), rsize, ralign)
+        else
+            if right is ExprConstPtr
+                let null_ptr = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
+                LLVMBuildStore2Aligned(g_builder, LLVMPointerType(LLVMVoidType(),0u), null_ptr, tdst, ralign)
+            else
+                LLVMBuildStoreAligned(g_builder, tsrc, tdst, ralign)
+
+    def override preVisitExprMoveRight(expr:smart_ptr<ExprMove>;right:ExpressionPtr): void
+        var tdst = getE(expr.left)
+        if make_call_to_cmres(expr.right, tdst)
+            pass
+        elif expr.move_flags.takeOverRightStack
+            assert(isMakeLocal(expr.right))
+            var mk_ptr = LLVMBuildPointerCast(g_builder, tdst, LLVMPointerType(LLVMInt8Type(),0u), "")
+            setE(expr.right, mk_ptr)
+
+    def override visitExprMove(expr:smart_ptr<ExprMove>) : ExpressionPtr
+        if isCall2CMRES(expr.right)
+            pass    // already a call to cmres, no need to copy
+        else
+            var tdst = getE(expr.left)
+            build_move(tdst, expr.right)
+        return expr
 
 // ExprWhile
     def override preVisitExprWhile(expr:smart_ptr<ExprWhile>) : void
