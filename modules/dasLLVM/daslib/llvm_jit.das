@@ -10,6 +10,7 @@ require llvm/llvm_jit_common
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/capture_block
+require daslib/collect_labels
 require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
@@ -32,6 +33,10 @@ struct private LoopBlock
     [[do_not_delete]] loop_body  : LLVMOpaqueBasicBlock?
     [[do_not_delete]] loop_end   : LLVMOpaqueBasicBlock?
 
+struct SLabel
+    index : int
+    [[do_not_deletel]] blk : LLVMOpaqueBasicBlock?
+
 [macro]
 class LlvmJitVisitor : AstVisitor
     adapter : smart_ptr<VisitorAdapter>
@@ -51,6 +56,8 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete]] current_block : LLVMOpaqueBasicBlock?
     [[do_not_delete]] monad2block : table<Expression?;LLVMOpaqueBasicBlock?>
     [[do_not_delete]] prologue : LLVMOpaqueValue?
+    [[do_not_delete]] labels : table<int;LLVMOpaqueBasicBlock?>
+    [[do_not_delete]] sortedLabels : array<SLabel>
 
     g_builder : LLVMOpaqueBuilder?
 
@@ -95,6 +102,16 @@ class LlvmJitVisitor : AstVisitor
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("alwaysinline"))
         if hot
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("hot"))
+
+    def process_labels ( expr:ExpressionPtr )
+        var lls <- collect_labels(expr)
+        for ll in lls
+            labels[ll] = LLVMAppendBasicBlock(ffunc, "label_{ll}")
+        sortedLabels |> reserve(length(labels))
+        for k,v in keys(labels),values(labels)
+            sortedLabels |> push([[SLabel index=k,blk=v]])
+        sort ( sortedLabels ) <| $ (a, b)
+            return a.index < b.index
 
     def build_llvm_function_pair ( fun_name:string; isCmres:bool; var arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; captureType:LLVMOpaqueType?; annotations:AnnotationList )
         var nat <- build_noalias_list(annotations); defer_delete(nat)
@@ -240,6 +257,7 @@ class LlvmJitVisitor : AstVisitor
         build_wrapper_funcion(fun.arguments, fun.result, isCMRES(fun), null)
         build_function_entry(fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
         process_function_hints(fun.annotations)
+        process_labels(fun.body)
 
     def build_epilogue
         if prologue != null
@@ -249,8 +267,11 @@ class LlvmJitVisitor : AstVisitor
             ]]
             LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_EPILOGUE), params, "")
 
+    def current_block_terminates
+        return current_block==null || LLVMGetBasicBlockTerminator(current_block)!=null
+
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
-        if fun.body != null && !is_terminator_expression(fun.body)
+        if !current_block_terminates()
             build_epilogue()
             LLVMBuildRetVoid(g_builder)
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
@@ -1647,11 +1668,32 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprLabel
     def override preVisitExprLabel(expr:smart_ptr<ExprLabel>) : void
-        unsupported(expr, "label")
+        var lab = labels[expr.labelName]
+        if lab==null
+            failed_E(expr, "label '{expr.labelName}' not found")
+            return
+        if !current_block_terminates()
+            LLVMBuildBr(g_builder, lab)
+        append_label_block(lab)
+        position_at_end(lab)
 
 // ExprGoto
-    def override preVisitExprGoto(expr:smart_ptr<ExprGoto>) : void
-        unsupported(expr, "goto")
+    def override visitExprGoto(expr:smart_ptr<ExprGoto>) : ExpressionPtr
+        if expr.subexpr!=null
+            var labI = getE(expr.subexpr)
+            for kv in sortedLabels
+                var nextLab = append_basic_block("not_label_{kv.index}")
+                let isL = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, labI, LLVMConstInt(LLVMInt32Type(), uint64(kv.index), 0), "")
+                LLVMBuildCondBr(g_builder, isL, kv.blk, nextLab)
+                position_at_end(nextLab)
+            build_exception("invalid label index")
+        else
+            var lab = labels[expr.labelName]
+            if lab==null
+                failed_E(expr, "goto '{expr.labelName}', label not found")
+            else
+                LLVMBuildBr(g_builder, lab)
+        return expr
 
 // ExprRef2Value
     def override visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
@@ -2207,6 +2249,7 @@ class LlvmJitVisitor : AstVisitor
         build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres, captureType)
         build_function_entry(thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
         process_function_hints(thisBlock.annotations)
+        process_labels(expr)
         return fnmna
 
     def post_make_block ( var blk:smart_ptr<ExprBlock> )
@@ -2634,6 +2677,10 @@ class LlvmJitVisitor : AstVisitor
     def after_function_entry
         LLVMPositionBuilderAtEnd(g_builder, current_block)
 
+    def append_label_block ( blk:LLVMOpaqueBasicBlock? )
+        subblocks[blk] = blk
+        return blk
+
     def append_basic_block ( name:string; add_to_phi:bool=false )
         var blk = LLVMAppendBasicBlock(ffunc,name)
         subblocks[blk] = blk
@@ -2792,11 +2839,8 @@ class JIT_LLVM : AstSimulateMacro
 //  Expressions:
 //      * ExprMakeGenerator
 //      * ExprIs
-//      * ExprMove
 //      * ExprTryCatch
 //      * ExprArrayComprehension
-//      * ExprLabel
-//      * ExprGoto
 //   table extra access
 //      * ExprErase
 //      * ExprSetInsert
