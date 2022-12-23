@@ -2005,7 +2005,7 @@ namespace das {
     ExpressionPtr ExprCopy::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprCopy>(expr);
         ExprOp2::clone(cexpr);
-        cexpr->allowCopyTemp = allowCopyTemp;
+        cexpr->copyFlags = copyFlags;
         return cexpr;
     }
 

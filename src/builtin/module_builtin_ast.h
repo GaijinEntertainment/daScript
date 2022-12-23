@@ -167,5 +167,6 @@ namespace das {
     TypeDeclPtr makeFunctionSideEffectFlags();
     TypeDeclPtr makeVariableFlags();
     TypeDeclPtr makeVariableAccessFlags();
-
+    TypeDeclPtr makeExprCopyFlags();
+    TypeDeclPtr makeExprMoveFlags();
 }

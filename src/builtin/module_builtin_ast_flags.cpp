@@ -214,6 +214,20 @@ namespace das {
         return ft;
     }
 
+    TypeDeclPtr makeExprCopyFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "CopyFlags";
+        ft->argNames = { "allowCopyTemp", "takeOverRightStack" };
+        return ft;
+    }
+
+    TypeDeclPtr makeExprMoveFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "MoveFlags";
+        ft->argNames = { "skipLockCheck", "takeOverRightStack" };
+        return ft;
+    }
+
     void Module_Ast::registerFlags(ModuleLibrary & ) {
         // FLAGS?
         addAlias(makeTypeDeclFlags());
@@ -241,5 +255,7 @@ namespace das {
         addAlias(makeExprYieldFlags());
         addAlias(makeExprReturnFlags());
         addAlias(makeExprMakeBlockFlags());
+        addAlias(makeExprCopyFlags());
+        addAlias(makeExprMoveFlags());
     }
 }

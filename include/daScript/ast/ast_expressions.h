@@ -430,8 +430,13 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        bool        takeOverRightStack = false;
-        bool        allowCopyTemp = false;
+        union {
+            struct {
+                bool allowCopyTemp : 1;
+                bool takeOverRightStack : 1;
+            };
+            uint32_t copyFlags = 0;
+        };
     };
 
     // this moves one object to the other
@@ -445,6 +450,7 @@ namespace das
         union {
             struct {
                 bool skipLockCheck : 1;
+                bool takeOverRightStack : 1;
             };
             uint32_t moveFlags = 0;
         };

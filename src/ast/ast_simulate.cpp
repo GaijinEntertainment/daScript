@@ -2224,11 +2224,17 @@ namespace das
     }
 
     SimNode * ExprMove::simulate (Context & context) const {
-        auto retN = makeMove(at,context,left,right);
-        if ( !retN ) {
-            context.thisProgram->error("internal compilation error, can't generate move", "", "", at);
+        if ( takeOverRightStack ) {
+            auto sl = left->simulate(context);
+            auto sr = right->simulate(context);
+            return context.code->makeNode<SimNode_SetLocalRefAndEval>(at, sl, sr, stackTop);
+        } else {
+            auto retN = makeMove(at,context,left,right);
+            if ( !retN ) {
+                context.thisProgram->error("internal compilation error, can't generate move", "", "", at);
+            }
+            return retN;
         }
-        return retN;
     }
 
     SimNode * ExprClone::simulate (Context & context) const {

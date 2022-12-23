@@ -372,7 +372,14 @@ namespace das {
     struct AstExprCopyAnnotation : AstExprOp2Annotation<ExprCopy> {
         AstExprCopyAnnotation(ModuleLibrary & ml)
             :  AstExprOp2Annotation<ExprCopy> ("ExprCopy", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(takeOverRightStack)>("takeOverRightStack");
+            addFieldEx ( "copy_flags", "copyFlags", offsetof(ExprCopy, copyFlags), makeExprCopyFlags() );
+        }
+    };
+
+    struct AstExprMoveAnnotation : AstExprOp2Annotation<ExprMove> {
+        AstExprMoveAnnotation(ModuleLibrary & ml)
+            :  AstExprOp2Annotation<ExprMove> ("ExprMove", ml) {
+            addFieldEx ( "move_flags", "moveFlags", offsetof(ExprMove, moveFlags), makeExprMoveFlags() );
         }
     };
 
@@ -1246,7 +1253,7 @@ namespace das {
         addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprOp2>>("ExprOp2",lib))->from("ExprOp");
         addExpressionAnnotation(make_smart<AstExprOp3Annotation>(lib))->from("ExprOp");
         addExpressionAnnotation(make_smart<AstExprCopyAnnotation>(lib))->from("ExprOp2");
-        addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprMove>>("ExprMove",lib))->from("ExprOp2");
+        addExpressionAnnotation(make_smart<AstExprMoveAnnotation>(lib))->from("ExprOp2");
         addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprClone>>("ExprClone",lib))->from("ExprOp2");
         addExpressionAnnotation(make_smart<AstExprWithAnnotation>(lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprAssumeAnnotation>(lib))->from("Expression");
