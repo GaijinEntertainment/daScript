@@ -27,17 +27,31 @@ namespace das {
         return g_cpp_keywords.find(str) != g_cpp_keywords.end();
     }
 
+    bool hasLabels ( const smart_ptr<ExprBlock> & block ) {
+        for ( auto & be : block->list ) {
+            if ( be->rtti_isLabel() ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool exprReturns ( const ExpressionPtr & expr ) {
         if ( expr->rtti_isReturn() ) {
             return true;
         } else if ( expr->rtti_isBlock() ) {
             auto block = static_pointer_cast<ExprBlock>(expr);
-            for ( auto & be : block->list ) {
-                if ( be->rtti_isBreak() || be->rtti_isContinue() ) {
-                    break;
-                }
-                if ( exprReturns(be) ) {
-                    return true;
+            if ( hasLabels(block) ) {
+                // NOTE: block with labels assumed to always return for now. real world analysis is hard
+                return true;
+            } else {
+                for ( auto & be : block->list ) {
+                    if ( be->rtti_isBreak() || be->rtti_isContinue() || be->rtti_isGoto() ) {
+                        break;
+                    }
+                    if ( exprReturns(be) ) {
+                        return true;
+                    }
                 }
             }
         } else if ( expr->rtti_isIfThenElse() ) {
@@ -66,12 +80,17 @@ namespace das {
             return true;
         } else if ( expr->rtti_isBlock() ) {
             auto block = static_pointer_cast<ExprBlock>(expr);
-            for ( auto & be : block->list ) {
-                if ( be->rtti_isBreak() || be->rtti_isContinue() ) {
-                    return true;
-                }
-                if ( exprReturnsOrBreaks(be) ) {
-                    return true;
+            if ( hasLabels(block) ) {
+                // NOTE: block with labels assumed to always return for now. real world analysis is hard
+                return true;
+            } else {
+                for ( auto & be : block->list ) {
+                    if ( be->rtti_isBreak() || be->rtti_isContinue() || be->rtti_isGoto() ) {
+                        return true;
+                    }
+                    if ( exprReturnsOrBreaks(be) ) {
+                        return true;
+                    }
                 }
             }
         } else if ( expr->rtti_isIfThenElse() ) {
