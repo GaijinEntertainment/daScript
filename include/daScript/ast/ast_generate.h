@@ -182,9 +182,13 @@ namespace das {
             with THIS
                 ...block_body...    // with finally section removed
      */
+    enum {
+        generator_needYield = (1<<0),
+        generator_jit = (1<<1)
+    };
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, const safe_var_set & capt,
-                                        const vector<CaptureEntry> & capture, bool needYield, Program * thisProgram );
+                                        const vector<CaptureEntry> & capture, uint32_t genFlags, Program * thisProgram );
 
     /*
         local function, i.e.

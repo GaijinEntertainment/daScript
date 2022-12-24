@@ -567,7 +567,7 @@ namespace das {
 
     FunctionPtr generateLambdaFunction ( const string & lambdaName, ExprBlock * block,
                                         const StructurePtr & ls, const safe_var_set & capt,
-                                        const vector<CaptureEntry> & capture, bool needYield, Program * thisProgram ) {
+                                        const vector<CaptureEntry> & capture, uint32_t genFlags, Program * thisProgram ) {
         auto lfn = lambdaName + "`function";
         auto pFunc = make_smart<Function>();
         pFunc->lambda = true;
@@ -575,6 +575,7 @@ namespace das {
         pFunc->at = pFunc->atDecl = block->at;
         pFunc->name = lfn;
         pFunc->privateFunction = true;
+        pFunc->requestJit = (genFlags & generator_jit)!=0;
         auto fb = make_smart<ExprBlock>();
         fb->at = block->at;
         auto with = make_smart<ExprWith>(block->at);
@@ -582,7 +583,7 @@ namespace das {
         with->with->generated = true;
         with->body = block->clone();
         static_pointer_cast<ExprBlock>(with->body)->finalList.clear();
-        if ( needYield ) {
+        if ( genFlags & generator_needYield ) {
             pFunc->generator = true;
             auto bbl = static_pointer_cast<ExprBlock>(with->body);
             // goto __yeild
