@@ -63,6 +63,8 @@ var public g_t_function : LLVMOpaqueType?
 var public g_t_lambda : LLVMOpaqueType?
 var public g_t_block : LLVMOpaqueType?
 var public g_t_stack_state : LLVMOpaqueType?
+var public g_t_iterator : LLVMOpaqueType?
+var public g_t_sequence : LLVMOpaqueType?
 
 var g_str2v : table<string; LLVMOpaqueValue?>
 
@@ -273,6 +275,17 @@ def private build_jit_types
         LLVMPointerType(LLVMInt8Type(),0u)     // char * SP
     ]]
     g_t_stack_state = LLVMStructType(stack_state_fields)
+    // iterator
+    var iterator_fields <- [[auto[]
+        LLVMPointerType(g_t_simFunction,0u);    // __vtable
+        LLVMInt1Type()                          // bool isOpen
+    ]]
+    g_t_iterator = LLVMStructType(iterator_fields)
+    // sequence
+    var sequence_fields <- [[auto[]
+        LLVMPointerType(g_t_iterator,0u)        // iterator * iter
+    ]]
+    g_t_sequence = LLVMStructType(sequence_fields)
 
 def public build_block_type
     return <- [{auto[]
@@ -307,6 +320,8 @@ def private finalize_all_jit
         g_t_block = null
         g_t_lambda = null
         g_t_stack_state = null
+        g_t_iterator = null
+        g_t_sequence = null
         // TODO: figure out why this crashes
         // LLVMDisposeModule(je.mod); je.mod = null
     delete g_all_engines
@@ -419,6 +434,8 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         res = g_t_function
     elif t.baseType == Type tLambda
         res = LLVMPointerType(g_t_lambda,0u)
+    elif t.baseType == Type tIterator
+        res = LLVMPointerType(g_t_sequence,0u)
     elif t.baseType == Type tBlock
         res = LLVMPointerType(g_t_block,0u)
     elif t.baseType == Type tArray

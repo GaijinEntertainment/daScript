@@ -2326,10 +2326,6 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_MAKE_BLOCK), params, "")
         setE(expr, blk_ptr)
 
-// ExprMakeGenerator
-    def override preVisitExprMakeGenerator(expr:smart_ptr<ExprMakeGenerator>) : void
-        unsupported(expr, "make generator")
-
 // ExprMemZero
     def override visitExprMemZero(expr:smart_ptr<ExprMemZero>) : ExpressionPtr
         assume subexpr = expr.arguments[0]
@@ -2835,9 +2831,8 @@ class JIT_LLVM : AstSimulateMacro
 //  Topics:
 //      * handled types
 //      * block structure (finally + ???)
-//      * iterators (???)
+//      * iterators (???) // some? need for loop?
 //  Expressions:
-//      * ExprMakeGenerator
 //      * ExprIs
 //      * ExprTryCatch
 //      * ExprArrayComprehension
