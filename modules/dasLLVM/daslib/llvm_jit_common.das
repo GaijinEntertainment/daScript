@@ -46,6 +46,9 @@ let public FN_JIT_PROLOGUE = "`jit`prologue`"
 let public FN_JIT_EPILOGUE = "`jit`epilogue`"
 let public FN_JIT_MAKE_BLOCK = "`jit`make_block`"
 let public FN_JIT_DEBUG = "`jit`debug`"
+let public FN_JIT_ITERATOR_ITERATE = "`jit`iterator_iterate`"
+let public FN_JIT_ITERATOR_DELETE = "`jit`iterator_delete`"
+let public FN_JIT_ITERATOR_CLOSE = "`jit`iterator_close`"
 
 struct JitEngine
     mod : LLVMOpaqueModule?
@@ -111,6 +114,9 @@ enum public JIT_BLOCK
     JIT_FUNCTION
     FUNCTION_ARGUMENTS
     INFO
+
+enum public JIT_SEQUENCE
+    ITERATOR
 
 def public FN_JIT_TABLE_AT(t:Type)
     return "`jit`table_at`{t}`"
@@ -241,6 +247,21 @@ def public init_jit
         LLVMFunctionType(LLVMVoidType(),
             [[LLVMTypeRef LLVMFloat4Type(); LLVMPointerType(LLVMVoidType(),0u); get_type_string(); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_debug, get_jit_debug())
+    // bool builtin_iterator_iterate ( const Sequence & it, void * data, Context * context ) {
+    var jit_iterator_iterate = LLVMAddFunction(g_mod, FN_JIT_ITERATOR_ITERATE,
+        LLVMFunctionType(LLVMInt1Type(),
+            [[LLVMTypeRef LLVMPointerType(g_t_sequence,0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_iterator_iterate, get_jit_iterator_iterate())
+    // void builtin_iterator_delete ( const Sequence & it, Context * context ) {
+    var jit_iterator_delete = LLVMAddFunction(g_mod, FN_JIT_ITERATOR_DELETE,
+        LLVMFunctionType(LLVMInt1Type(),
+            [[LLVMTypeRef LLVMPointerType(g_t_sequence,0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_iterator_delete, get_jit_iterator_delete())
+    // void builtin_iterator_close ( const Sequence & it, void * data, Context * context ) {
+    var jit_iterator_close = LLVMAddFunction(g_mod, FN_JIT_ITERATOR_CLOSE,
+        LLVMFunctionType(LLVMVoidType(),
+            [[LLVMTypeRef LLVMPointerType(g_t_sequence,0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_iterator_close, get_jit_iterator_close())
 
 def private build_jit_types
     // simfunction type
@@ -277,8 +298,8 @@ def private build_jit_types
     g_t_stack_state = LLVMStructType(stack_state_fields)
     // iterator
     var iterator_fields <- [[auto[]
-        LLVMPointerType(g_t_simFunction,0u);    // __vtable
-        LLVMInt1Type()                          // bool isOpen
+        LLVMPointerType(LLVMVoidType(),0u);    // __vtable
+        LLVMInt1Type()                         // bool isOpen
     ]]
     g_t_iterator = LLVMStructType(iterator_fields)
     // sequence
@@ -435,7 +456,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
     elif t.baseType == Type tLambda
         res = LLVMPointerType(g_t_lambda,0u)
     elif t.baseType == Type tIterator
-        res = LLVMPointerType(g_t_sequence,0u)
+        res = g_t_sequence
     elif t.baseType == Type tBlock
         res = LLVMPointerType(g_t_block,0u)
     elif t.baseType == Type tArray

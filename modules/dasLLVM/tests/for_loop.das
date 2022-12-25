@@ -1,7 +1,6 @@
 require dastest/testing_boost
 require llvm/llvm_jit
 
-
 [jit]
 def range_for ( value:int )
     var i = 0
@@ -22,7 +21,6 @@ def range_for_range_extra ( value:range )
     for a,b in value,range(13,100500)
         i ++
     return i
-
 
 [jit]
 def range_for_with_break ( value,max_value:int )
@@ -86,6 +84,26 @@ def array_and_range_for ( var a:array<int> )
         count ++
     return count
 
+def gen_range ( value:int )
+    return <- generator<int>() <|
+        for i in range(value)
+            yield i
+        return false
+
+[jit]
+def iterator_for ( value:int )
+    var i = 0
+    for _ in gen_range(value)
+        i ++
+    return i
+
+[jit]
+def hybrid_for ( value:int )
+    var i = 0
+    for a,b in gen_range(value),range(7)
+        i ++
+    return i
+
 [test]
 def test_for_loop ( t:T? )
     t |> run("range for") <| @ ( t : T? )
@@ -111,7 +129,6 @@ def test_for_loop ( t:T? )
         t |> equal ( dim_and_range_for(a), 5 )
         for i,j in a,range(10)
             t |> equal ( i, j<5 ? j : 13 )
-
     t |> run("array for") <| @ ( t : T? )
         t |> success ( is_jit_function ( @@array_for ) )
         t |> success ( is_jit_function ( @@array_and_range_for ) )
@@ -123,4 +140,10 @@ def test_for_loop ( t:T? )
         t |> equal ( array_and_range_for(a), 5 )
         for i,j in a,range(10)
             t |> equal ( i, j<5 ? j : 13 )
-
+    t |> run("iterator for") <| @ ( t : T? )
+        t |> success ( is_jit_function ( @@iterator_for ) )
+        t |> equal ( iterator_for(10), 10 )
+    t |> run("hybrid for") <| @ ( t : T? )
+        t |> success ( is_jit_function ( @@hybrid_for ) )
+        t |> equal ( 7, hybrid_for(10) )
+        t |> equal ( 5, hybrid_for(5) )
