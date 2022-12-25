@@ -2876,7 +2876,6 @@ class JIT_LLVM : AstSimulateMacro
 //  Expressions:
 //      * ExprIs
 //      * ExprTryCatch
-//      * ExprArrayComprehension
 //   table extra access
 //      * ExprErase
 //      * ExprSetInsert

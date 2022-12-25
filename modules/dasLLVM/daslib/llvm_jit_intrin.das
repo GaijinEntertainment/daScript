@@ -17,6 +17,7 @@ let g_intrin_lookup <- {{
     // vector type c-tors
         "$::range" => @@intrinsic_builtin_range;
         "$::urange" => @@intrinsic_builtin_range;
+        "$::interval" => @@intrinsic_builtin_range;
         "$::float2" => @@intrinsic_builtin_float_vec;
         "$::float3" => @@intrinsic_builtin_float_vec;
         "$::float4" => @@intrinsic_builtin_float_vec;
@@ -121,6 +122,7 @@ def any2int ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; argType:Type; 
         else
             return LLVMBuildFPToUI(g_builder, val, outType, "")
     else
+        return val  if argType==Type tInt
         let baseSInt = argType==Type tInt8 || argType==Type tInt16 || argType==Type tInt || argType==Type tInt64
         let baseUInt = argType==Type tUInt8 || argType==Type tUInt16 || argType==Type tUInt || argType==Type tUInt64
         if baseSInt || baseUInt
@@ -220,12 +222,17 @@ def intrinsic_builtin_float(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCal
 
 def intrinsic_builtin_range(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var x, y : LLVMOpaqueValue?
+    assume argType = expr.arguments[0]._type
+    let outSigned = expr._type.baseType==Type tRange
     if expr.arguments.length==1
-        x = LLVMConstInt(LLVMInt32Type(), 0ul, 0)
-        y = arguments[0]
+        if argType.isVectorType
+            return any2int(g_builder, arguments[0], argType.vectorBaseType, type_to_llvm_type(expr._type), 4, outSigned)
+        else
+            x = LLVMConstInt(LLVMInt32Type(), 0ul, 0)
+            y = any2int(g_builder, arguments[0], argType.baseType, null, argType.sizeOf, outSigned)
     else
-        x = arguments[0]
-        y = arguments[1]
+        x = any2int(g_builder, arguments[0], argType.baseType, null, argType.sizeOf, outSigned)
+        y = any2int(g_builder, arguments[1], argType.baseType, null, argType.sizeOf, outSigned)
     return LLVMBuildInt2_xy(g_builder, x, y, string(expr.name))
 
 let private bit_op1_name <- {{

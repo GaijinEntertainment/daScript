@@ -496,7 +496,7 @@ def jit_int2_2(a,b)
 
 def test_int2_2( t:T?; x,y:auto(TT) )
     t |> success ( is_jit_function(@@<(x,y:TT):void> jit_int2_2) )
-    t |> strictEqual ( int2(x,y), jit_int2_2(x,y), "int2(x},y)" )
+    t |> strictEqual ( int2(x,y), jit_int2_2(x,y), "int2(x,y)" )
 
 [test]
 def test_intrin_int2 ( t:T? )
@@ -512,7 +512,7 @@ def test_intrin_int2 ( t:T? )
             test_int2( t, fake |> random_float2 )
             test_int2( t, fake |> random_int2 )
             test_int2( t, fake |> random_uint2 )
-    t |> run("int2(x,y,z)") <| @ ( t : T? )
+    t |> run("int2(x,y)") <| @ ( t : T? )
         var fake <- Faker()
         fuzz <|
             fuzz_numeric_op2(t,fake,"test_int2_2")
@@ -683,7 +683,103 @@ def test_intrin_uint2 ( t:T? )
             test_uint2( t, fake |> random_float2 )
             test_uint2( t, fake |> random_int2 )
             test_uint2( t, fake |> random_uint2 )
-    t |> run("uint2(x,y,z)") <| @ ( t : T? )
+    t |> run("uint2(x,y)") <| @ ( t : T? )
         var fake <- Faker()
         fuzz <|
             fuzz_numeric_op2(t,fake,"test_uint2_2")
+
+
+// range
+
+[jit]
+def jit_range ( x )
+    return range(x)
+
+def test_range( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_range) )
+    t |> strictEqual ( range(a), jit_range(a), "range(a)" )
+
+[jit,sideeffects]
+def jit_range_0
+    return range()
+
+[jit]
+def jit_range_2(a,b)
+    return range(a,b)
+
+def test_range_2( t:T?; x,y:auto(TT) )
+    t |> success ( is_jit_function(@@<(x,y:TT):void> jit_range_2) )
+    t |> strictEqual ( range(x,y), jit_range_2(x,y), "range(x,y)" )
+
+[jit]
+def jit_interval_2(a,b)
+    return a..b
+
+def test_interval_2( t:T?; x,y:auto(TT) )
+    t |> success ( is_jit_function(@@<(x,y:TT):void> jit_interval_2) )
+    t |> strictEqual ( x..y, jit_interval_2(x,y), "x..y" )
+
+[test]
+def test_intrin_range ( t:T? )
+    t |> run("range()") <| @ ( t : T? )
+        t |> strictEqual ( range(), jit_range_0(), "range()" )
+    t |> run("range(x)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            test_range( t, fake |> random_int )
+            test_range( t, fake |> random_uint )
+            test_range( t, fake |> random_float )
+            test_range( t, fake |> random_double )
+            test_range( t, fake |> random_range )
+    t |> run("range(x,y)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            fuzz_numeric_op2(t,fake,"test_range_2")
+    t |> run("x..y") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            test_interval_2( t, fake |> random_int, fake |> random_int )
+
+// urange
+
+[jit]
+def jit_urange ( x )
+    return urange(x)
+
+def test_urange( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_urange) )
+    t |> strictEqual ( urange(a), jit_urange(a), "urange(a)" )
+
+[jit,sideeffects]
+def jit_urange_0
+    return urange()
+
+[jit]
+def jit_urange_2(a,b)
+    return urange(a,b)
+
+def test_urange_2( t:T?; x,y:auto(TT) )
+    t |> success ( is_jit_function(@@<(x,y:TT):void> jit_urange_2) )
+    t |> strictEqual ( urange(x,y), jit_urange_2(x,y), "urange(x,y)" )
+
+[test]
+def test_intrin_urange ( t:T? )
+    t |> run("urange()") <| @ ( t : T? )
+        t |> strictEqual ( urange(), jit_urange_0(), "urange()" )
+    t |> run("urange(x)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            test_urange( t, fake |> random_int )
+            test_urange( t, fake |> random_uint )
+            test_urange( t, fake |> random_float )
+            test_urange( t, fake |> random_double )
+            test_urange( t, fake |> random_urange )
+    t |> run("urange(x,y)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            fuzz_numeric_op2(t,fake,"test_urange_2")
+    t |> run("x..y") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            test_interval_2( t, fake |> random_uint, fake |> random_uint )
+

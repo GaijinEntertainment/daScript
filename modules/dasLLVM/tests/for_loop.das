@@ -104,6 +104,18 @@ def hybrid_for ( value:int )
         i ++
     return i
 
+[jit]
+def array_comp ( value:int )
+    return <- [{for x in range(0,value); x}]
+
+[test]
+def test_comprehension ( t:T? )
+    t |> run("comprehension") <| @ ( t : T? )
+        t |> success ( is_jit_function ( @@array_comp ) )
+        var a <- array_comp(10)
+        for x,y in a,range(10)
+            t |> equal ( x, y )
+
 [test]
 def test_for_loop ( t:T? )
     t |> run("range for") <| @ ( t : T? )
