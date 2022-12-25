@@ -562,8 +562,10 @@ namespace das
     }
 
     void builtin_iterator_delete ( const Sequence & it, Context * context ) {
-        if ( it.iter ) it.iter->close(*context, nullptr);
-        ((Sequence&)it).iter = nullptr;
+        if ( it.iter ) {
+            it.iter->close(*context, nullptr);
+            ((Sequence&)it).iter = nullptr;
+        }
     }
 
     bool builtin_iterator_iterate ( const Sequence & it, void * value, Context * context ) {
@@ -1287,6 +1289,18 @@ namespace das
         return (void *) &jit_debug;
     }
 
+    void * das_get_jit_iterator_iterate() {
+        return (void *) &builtin_iterator_iterate;
+    }
+
+    void * das_get_jit_iterator_delete() {
+        return (void *) &builtin_iterator_delete;
+    }
+
+    void * das_get_jit_iterator_close() {
+        return (void *) &builtin_iterator_close;
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -1707,6 +1721,12 @@ namespace das
             SideEffects::none, "das_get_jit_make_block");
         addExtern<DAS_BIND_FUN(das_get_jit_debug)>(*this, lib, "get_jit_debug",
             SideEffects::none, "das_get_jit_debug");
+        addExtern<DAS_BIND_FUN(das_get_jit_iterator_iterate)>(*this, lib, "get_jit_iterator_iterate",
+            SideEffects::none, "das_get_jit_iterator_iterate");
+        addExtern<DAS_BIND_FUN(das_get_jit_iterator_delete)>(*this, lib, "get_jit_iterator_delete",
+            SideEffects::none, "das_get_jit_iterator_delete");
+        addExtern<DAS_BIND_FUN(das_get_jit_iterator_close)>(*this, lib, "get_jit_iterator_close",
+            SideEffects::none, "das_get_jit_iterator_close");
         addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
         addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
