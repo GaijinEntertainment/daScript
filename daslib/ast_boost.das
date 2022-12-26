@@ -652,6 +652,35 @@ def append_annotation ( mod_name,ann_name:string; args:array< tuple<argname:stri
             panic("Invalid rtti value")
     return <- decl
 
+def append_annotation ( mod_name,ann_name:string )
+    var ann = find_annotation(mod_name, ann_name)
+    assert(ann!=null)
+    var decl <- new [[AnnotationDeclaration()]]
+    unsafe
+        decl.annotation := reinterpret<smart_ptr<Annotation>> ann
+    return <- decl
+
+def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string )
+    var ann = find_annotation(mod_name, ann_name)
+    assert(ann!=null)
+    var decl <- append_annotation(mod_name, ann_name)
+    add_function_annotation(func, decl)
+    decl := null
+
+def append_annotation ( var blk:smart_ptr<ExprBlock>; mod_name,ann_name:string )
+    var ann = find_annotation(mod_name, ann_name)
+    assert(ann!=null)
+    var decl <- append_annotation(mod_name, ann_name)
+    add_block_annotation(blk, decl)
+    decl := null
+
+def append_annotation ( var st:smart_ptr<Structure>; mod_name,ann_name:string )
+    var ann = find_annotation(mod_name, ann_name)
+    assert(ann!=null)
+    var decl <- append_annotation(mod_name, ann_name)
+    add_structure_annotation(st, decl)
+    decl := null
+
 def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
