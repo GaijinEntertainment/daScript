@@ -28,6 +28,10 @@ def test_table_jit ( var tab:table<int; string> )
 def tab_erase ( var tab:table<int;string>; key:int )
     __builtin_table_erase(tab,key)
 
+[jit]
+def tab_set_insert ( var tab:table<int>; key:int )
+    __builtin_table_set_insert(tab,key)
+
 [test]
 def test_table ( t:T? )
     t |> run("make_table") <| @ ( t : T? )
@@ -48,3 +52,14 @@ def test_table ( t:T? )
         t |> success ( key_exists(tab, 1) )
         t |> success ( !key_exists(tab, 2) )
         t |> success ( key_exists(tab, 3) )
+    t |> run("set insert") <| @ ( t : T? )
+        var tab <- {{ 1; 2; 4 }}
+        t |> success ( key_exists(tab, 1) )
+        t |> success ( key_exists(tab, 2) )
+        t |> success ( !key_exists(tab, 3) )
+        t |> success ( key_exists(tab, 4) )
+        tab_set_insert(tab, 3)
+        t |> success ( key_exists(tab, 1) )
+        t |> success ( key_exists(tab, 2) )
+        t |> success ( key_exists(tab, 3) )
+        t |> success ( key_exists(tab, 4) )

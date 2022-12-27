@@ -629,7 +629,7 @@ class LlvmJitVisitor : AstVisitor
 
     def build_table_at ( ttype:Type; tab:LLVMOpaqueValue?; key:LLVMOpaqueValue?; valueTypeSize:int ) : LLVMOpaqueValue?
         var params = [[auto
-            tab;        // table                                        // table ptr
+            tab;                                                        // table ptr
             key;                                                        // key
             LLVMConstInt(LLVMInt32Type(), uint64(valueTypeSize), 0);    // valueTypeSize
             get_context_param()
@@ -1922,8 +1922,14 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprSetInsert
-    def override preVisitExprSetInsert(expr:smart_ptr<ExprSetInsert>) : void
-        unsupported(expr, "set_insert")
+    def override visitExprSetInsert(expr:smart_ptr<ExprSetInsert>) : ExpressionPtr
+        var tsrc = getE(expr.arguments[0])
+        var tidx = getE(expr.arguments[1])
+        assume subExprT = expr.arguments[0]._type
+        var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
+        var res = build_table_at(subExprT.firstType.baseType, tab_ptr, tidx, 0)
+        setE(expr, res)
+        return expr
 
 // ExprFind
     def override preVisitExprFind(expr:smart_ptr<ExprFind>) : void
