@@ -640,6 +640,19 @@ class LlvmJitVisitor : AstVisitor
             return LLVMGetUndef(LLVMInt32Type())
         return LLVMBuildCall(g_builder, tab_fun, params, "")
 
+    def build_table_find ( ttype:Type; tab:LLVMOpaqueValue?; key:LLVMOpaqueValue?; valueTypeSize:int ) : LLVMOpaqueValue?
+        var params = [[auto
+            tab;                                                        // table ptr
+            key;                                                        // key
+            LLVMConstInt(LLVMInt32Type(), uint64(valueTypeSize), 0);    // valueTypeSize
+            get_context_param()
+        ]]
+        var tab_fun = LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_FIND(ttype))
+        if tab_fun==null
+            error("table_at {ttype} function not found")
+            return LLVMGetUndef(LLVMInt32Type())
+        return LLVMBuildCall(g_builder, tab_fun, params, "")
+
     def build_array_index(var data,tidx:LLVMOpaqueValue?; elemType:TypeDeclPtr; name:string)
         var ptr_idx : LLVMOpaqueValue?
         if elemType.isVectorType && elemType.vectorDim==3
@@ -1932,12 +1945,48 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprFind
-    def override preVisitExprFind(expr:smart_ptr<ExprFind>) : void
-        unsupported(expr, "find")
+    def override visitExprFind(expr:smart_ptr<ExprFind>) : ExpressionPtr
+        var tsrc = getE(expr.arguments[0])
+        var tidx = getE(expr.arguments[1])
+        assume subExprT = expr.arguments[0]._type
+        var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
+        var at_tab = build_table_find(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+        var check_found = append_basic_block("check_found")
+        var check_not_found = append_basic_block("check_not_found")
+        var check_end = append_basic_block("check_end")
+        var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, at_tab, LLVMConstInt(LLVMInt32Type(), uint64(-1), 0), "")
+        LLVMBuildCondBr(g_builder, cond, check_found, check_not_found)
+        position_at_end(check_found)
+        var tab = LLVMBuildLoad(g_builder, tsrc, "tab")
+        var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
+        var ptr_idx = LLVMBuildGEP(g_builder, data, at_tab, "table_at")
+        LLVMBuildBr(g_builder, check_end)
+        position_at_end(check_not_found)
+        LLVMBuildBr(g_builder, check_end)
+        position_at_end(check_end)
+        var res = LLVMBuildPhi(g_builder, type_to_llvm_abi_type(expr._type), "find")
+        var phi_val = [[auto
+            ptr_idx;
+            LLVMConstPointerNull(LLVMPointerType(type_to_llvm_type(subExprT.secondType), 0u))
+        ]]
+        var phi_blk = [[auto
+            check_found;
+            check_not_found
+        ]]
+        LLVMAddIncoming(res, phi_val, phi_blk)
+        setE(expr, res)
+        return expr
 
 // ExprKeyExists
-    def override preVisitExprKeyExists(expr:smart_ptr<ExprKeyExists>) : void
-        unsupported(expr, "key_exists")
+    def override visitExprKeyExists(expr:smart_ptr<ExprKeyExists>) : ExpressionPtr
+        var tsrc = getE(expr.arguments[0])
+        var tidx = getE(expr.arguments[1])
+        assume subExprT = expr.arguments[0]._type
+        var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
+        var at_tab = build_table_find(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+        var res = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, at_tab, LLVMConstInt(LLVMInt32Type(), uint64(-1), 0), "")
+        setE(expr, res)
+        return expr
 
 // ExprAscend
     def override preVisitExprAscend(expr:smart_ptr<ExprAscend>) : void
@@ -2901,10 +2950,6 @@ class JIT_LLVM : AstSimulateMacro
 //  Expressions:
 //      * ExprIs
 //      * ExprTryCatch
-//   table extra access
-//      * ExprSetInsert
-//      * ExprFind
-//      * ExprKeyExists
 //   safe navigation
 //      * ExprNullCoalescing
 //      * ExprSafeAt
