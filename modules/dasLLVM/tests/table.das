@@ -24,6 +24,9 @@ def make_table_jit
 def test_table_jit ( var tab:table<int; string> )
     return length(tab)==3 && tab[1]=="1" && tab[2]=="2" && tab[3]=="3"
 
+[jit]
+def tab_erase ( var tab:table<int;string>; key:int )
+    __builtin_table_erase(tab,key)
 
 [test]
 def test_table ( t:T? )
@@ -35,3 +38,13 @@ def test_table ( t:T? )
         t |> success ( is_jit_function(@@test_table_jit) )
         var tab <- make_table()
         t |> success ( test_table_jit(tab) )
+    t |> run("erase") <| @ ( t : T? )
+        var tab <- {{
+            1 => "1";
+            2 => "2";
+            3 => "3"
+        }}
+        tab_erase(tab, 2)
+        t |> success ( key_exists(tab, 1) )
+        t |> success ( !key_exists(tab, 2) )
+        t |> success ( key_exists(tab, 3) )

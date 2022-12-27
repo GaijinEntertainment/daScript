@@ -121,6 +121,9 @@ enum public JIT_SEQUENCE
 def public FN_JIT_TABLE_AT(t:Type)
     return "`jit`table_at`{t}`"
 
+def public FN_JIT_TABLE_ERASE(t:Type)
+    return "`jit`table_erase`{t}`"
+
 [macro_function]
 def public init_jit
     return if is_in_completion() || is_compiling_macros()
@@ -211,8 +214,9 @@ def public init_jit
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_array_unlock, get_jit_array_unlock())
-    // int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
+    // table functions
     for t in get_workhorse_types()
+        // int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
         var jit_table_at = LLVMAddFunction(g_mod, FN_JIT_TABLE_AT(t),
             LLVMFunctionType(LLVMInt32Type(),   // int32_t result
                 [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // table ptr
@@ -221,6 +225,15 @@ def public init_jit
                 LLVMPointerType(LLVMVoidType(),0u)                  // context
                 ]]))
         LLVMAddGlobalMapping(g_engine, jit_table_at, get_jit_table_at(unsafe(reinterpret<int> t)))
+        // bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
+        var jit_table_erase = LLVMAddFunction(g_mod, FN_JIT_TABLE_ERASE(t),
+            LLVMFunctionType(LLVMInt1Type(),                        // bool result
+                [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // table ptr
+                base_type_to_llvm_type(t);                          // key
+                LLVMInt32Type();                                    // valueTypeSize
+                LLVMPointerType(LLVMVoidType(),0u)                  // context
+                ]]))
+        LLVMAddGlobalMapping(g_engine, jit_table_erase, get_jit_table_erase(unsafe(reinterpret<int> t)))
     // int jit_str_cmp ( char * a, char * b )
     var jit_str_cmp = LLVMAddFunction(g_mod, FN_JIT_STR_CMP,
         LLVMFunctionType(LLVMInt32Type(),

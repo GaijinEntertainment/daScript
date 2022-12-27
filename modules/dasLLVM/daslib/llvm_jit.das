@@ -1899,8 +1899,27 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprErase
-    def override preVisitExprErase(expr:smart_ptr<ExprErase>) : void
-        unsupported(expr, "erase")
+    def build_table_erase ( ttype:Type; tab:LLVMOpaqueValue?; key:LLVMOpaqueValue?; valueTypeSize:int ) : LLVMOpaqueValue?
+        var params = [[auto
+            tab;                                                        // table ptr
+            key;                                                        // key
+            LLVMConstInt(LLVMInt32Type(), uint64(valueTypeSize), 0);    // valueTypeSize
+            get_context_param()
+        ]]
+        var tab_fun = LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_ERASE(ttype))
+        if tab_fun==null
+            error("table_erase {ttype} function not found")
+            return LLVMGetUndef(LLVMInt32Type())
+        return LLVMBuildCall(g_builder, tab_fun, params, "")
+
+    def override visitExprErase(expr:smart_ptr<ExprErase>) : ExpressionPtr
+        var tsrc = getE(expr.arguments[0])
+        var tidx = getE(expr.arguments[1])
+        assume subExprT = expr.arguments[0]._type
+        var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
+        var res = build_table_erase(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+        setE(expr, res)
+        return expr
 
 // ExprSetInsert
     def override preVisitExprSetInsert(expr:smart_ptr<ExprSetInsert>) : void
@@ -2877,7 +2896,6 @@ class JIT_LLVM : AstSimulateMacro
 //      * ExprIs
 //      * ExprTryCatch
 //   table extra access
-//      * ExprErase
 //      * ExprSetInsert
 //      * ExprFind
 //      * ExprKeyExists
