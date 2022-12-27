@@ -14,13 +14,12 @@ class TemplateMacro : AstFunctionAnnotation
         if func.result==null
             errors := "stub function must have a result type"
             return false
-        var at = func.body.at
         var qblk <- qmacro_block <|
             panic("stub function called")
             unsafe
                 var dummy : $t(func.result)
                 return <- dummy
-        qblk |> force_at(at)
+        qblk |> force_at(func.body.at)
         func.body := qblk
         delete qblk
         return true

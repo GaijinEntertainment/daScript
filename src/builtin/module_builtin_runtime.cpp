@@ -1182,6 +1182,40 @@ namespace das
         return (void *) &builtin_array_unlock;
     }
 
+#define JIT_TABLE_FUNCTION(TAB_FUN) \
+    switch ( baseType ) { \
+        case Type::tBool:           return (void *) &TAB_FUN<bool>; \
+        case Type::tInt8:           return (void *) &TAB_FUN<int8_t>; \
+        case Type::tUInt8:          return (void *) &TAB_FUN<uint8_t>; \
+        case Type::tInt16:          return (void *) &TAB_FUN<int16_t>; \
+        case Type::tUInt16:         return (void *) &TAB_FUN<uint16_t>; \
+        case Type::tInt64:          return (void *) &TAB_FUN<int64_t>; \
+        case Type::tUInt64:         return (void *) &TAB_FUN<uint64_t>; \
+        case Type::tEnumeration:    return (void *) &TAB_FUN<int32_t>; \
+        case Type::tEnumeration8:   return (void *) &TAB_FUN<int8_t>; \
+        case Type::tEnumeration16:  return (void *) &TAB_FUN<int16_t>; \
+        case Type::tInt:            return (void *) &TAB_FUN<int32_t>; \
+        case Type::tInt2:           return (void *) &TAB_FUN<int2>; \
+        case Type::tInt3:           return (void *) &TAB_FUN<int3>; \
+        case Type::tInt4:           return (void *) &TAB_FUN<int4>; \
+        case Type::tUInt:           return (void *) &TAB_FUN<uint32_t>; \
+        case Type::tBitfield:       return (void *) &TAB_FUN<uint32_t>; \
+        case Type::tUInt2:          return (void *) &TAB_FUN<uint2>; \
+        case Type::tUInt3:          return (void *) &TAB_FUN<uint3>; \
+        case Type::tUInt4:          return (void *) &TAB_FUN<uint4>; \
+        case Type::tFloat:          return (void *) &TAB_FUN<float>; \
+        case Type::tFloat2:         return (void *) &TAB_FUN<float2>; \
+        case Type::tFloat3:         return (void *) &TAB_FUN<float3>; \
+        case Type::tFloat4:         return (void *) &TAB_FUN<float4>; \
+        case Type::tRange:          return (void *) &TAB_FUN<range>; \
+        case Type::tURange:         return (void *) &TAB_FUN<urange>; \
+        case Type::tString:         return (void *) &TAB_FUN<char *>; \
+        case Type::tDouble:         return (void *) &TAB_FUN<double>; \
+        case Type::tPointer:        return (void *) &TAB_FUN<void *>; \
+    } \
+    context->throw_error_at(at ? *at : LineInfo(), "unsupported key type %s", das_to_string(Type(baseType)).c_str() ); \
+    return nullptr;
+
     template <typename KeyType>
     int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context ) {
         TableHash<KeyType> thh(context,valueTypeSize);
@@ -1190,38 +1224,19 @@ namespace das
     }
 
     void * das_get_jit_table_at ( int32_t baseType, Context * context, LineInfoArg * at ) {
-        switch ( baseType ) {
-            case Type::tBool:           return (void *) &jit_table_at<bool>;
-            case Type::tInt8:           return (void *) &jit_table_at<int8_t>;
-            case Type::tUInt8:          return (void *) &jit_table_at<uint8_t>;
-            case Type::tInt16:          return (void *) &jit_table_at<int16_t>;
-            case Type::tUInt16:         return (void *) &jit_table_at<uint16_t>;
-            case Type::tInt64:          return (void *) &jit_table_at<int64_t>;
-            case Type::tUInt64:         return (void *) &jit_table_at<uint64_t>;
-            case Type::tEnumeration:    return (void *) &jit_table_at<int32_t>;
-            case Type::tEnumeration8:   return (void *) &jit_table_at<int8_t>;
-            case Type::tEnumeration16:  return (void *) &jit_table_at<int16_t>;
-            case Type::tInt:            return (void *) &jit_table_at<int32_t>;
-            case Type::tInt2:           return (void *) &jit_table_at<int2>;
-            case Type::tInt3:           return (void *) &jit_table_at<int3>;
-            case Type::tInt4:           return (void *) &jit_table_at<int4>;
-            case Type::tUInt:           return (void *) &jit_table_at<uint32_t>;
-            case Type::tBitfield:       return (void *) &jit_table_at<uint32_t>;
-            case Type::tUInt2:          return (void *) &jit_table_at<uint2>;
-            case Type::tUInt3:          return (void *) &jit_table_at<uint3>;
-            case Type::tUInt4:          return (void *) &jit_table_at<uint4>;
-            case Type::tFloat:          return (void *) &jit_table_at<float>;
-            case Type::tFloat2:         return (void *) &jit_table_at<float2>;
-            case Type::tFloat3:         return (void *) &jit_table_at<float3>;
-            case Type::tFloat4:         return (void *) &jit_table_at<float4>;
-            case Type::tRange:          return (void *) &jit_table_at<range>;
-            case Type::tURange:         return (void *) &jit_table_at<urange>;
-            case Type::tString:         return (void *) &jit_table_at<char *>;
-            case Type::tDouble:         return (void *) &jit_table_at<double>;
-            case Type::tPointer:        return (void *) &jit_table_at<void *>;
-        }
-        context->throw_error_at(at ? *at : LineInfo(), "jit_table_at: unsupported key type %s", das_to_string(Type(baseType)).c_str() );
-        return nullptr;
+        JIT_TABLE_FUNCTION(jit_table_at);
+    }
+
+    template <typename KeyType>
+    bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context ) {
+        if ( tab->isLocked() ) context->throw_error("can't erase from locked table");
+        TableHash<KeyType> thh(context,valueTypeSize);
+        auto hfn = hash_function(*context, key);
+        return thh.erase(*tab, key, hfn) != -1;
+    }
+
+    void * das_get_jit_table_erase ( int32_t baseType, Context * context, LineInfoArg * at ) {
+        JIT_TABLE_FUNCTION(jit_table_erase);
     }
 
     int32_t jit_str_cmp ( char * a, char * b ) {
@@ -1711,6 +1726,8 @@ namespace das
             SideEffects::none, "das_get_jit_array_unlock");
         addExtern<DAS_BIND_FUN(das_get_jit_table_at)>(*this, lib, "get_jit_table_at",
             SideEffects::none, "das_get_jit_table_at");
+        addExtern<DAS_BIND_FUN(das_get_jit_table_erase)>(*this, lib, "get_jit_table_erase",
+            SideEffects::none, "das_get_jit_table_erase");
         addExtern<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
             SideEffects::none, "das_get_jit_str_cmp");
         addExtern<DAS_BIND_FUN(das_get_jit_prologue)>(*this, lib, "get_jit_prologue",
