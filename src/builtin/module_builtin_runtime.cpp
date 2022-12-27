@@ -1239,6 +1239,17 @@ namespace das
         JIT_TABLE_FUNCTION(jit_table_erase);
     }
 
+    template <typename KeyType>
+    int32_t jit_table_find ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context ) {
+        TableHash<KeyType> thh(context,valueTypeSize);
+        auto hfn = hash_function(*context, key);
+        return thh.find(*tab, key, hfn);
+    }
+
+    void * das_get_jit_table_find ( int32_t baseType, Context * context, LineInfoArg * at ) {
+        JIT_TABLE_FUNCTION(jit_table_find);
+    }
+
     int32_t jit_str_cmp ( char * a, char * b ) {
         return strcmp(a ? a : "",b ? b : "");
     }
@@ -1728,6 +1739,8 @@ namespace das
             SideEffects::none, "das_get_jit_table_at");
         addExtern<DAS_BIND_FUN(das_get_jit_table_erase)>(*this, lib, "get_jit_table_erase",
             SideEffects::none, "das_get_jit_table_erase");
+        addExtern<DAS_BIND_FUN(das_get_jit_table_find)>(*this, lib, "get_jit_table_find",
+            SideEffects::none, "das_get_jit_table_find");
         addExtern<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
             SideEffects::none, "das_get_jit_str_cmp");
         addExtern<DAS_BIND_FUN(das_get_jit_prologue)>(*this, lib, "get_jit_prologue",
