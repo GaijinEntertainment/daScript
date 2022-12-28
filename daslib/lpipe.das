@@ -27,6 +27,27 @@ def lpipe_expr ( var fnCall:ExpressionPtr; var arg:ExpressionPtr ) : ExpressionP
             var pCallFunc = reinterpret<ExprLooksLikeCall?> pCall
             pCallFunc.arguments |> emplace(arg)
         return pCall
+    elif fnCall is ExprCopy
+        var cCopy <- clone_expression(fnCall)
+        (cCopy as ExprCopy).right := lpipe_expr((fnCall as ExprCopy).right, arg)
+        return cCopy
+    elif fnCall is ExprMove
+        var cCopy <- clone_expression(fnCall)
+        (cCopy as ExprMove).right := lpipe_expr((fnCall as ExprMove).right, arg)
+        return cCopy
+    elif fnCall is ExprClone
+        var cCopy <- clone_expression(fnCall)
+        (cCopy as ExprClone).right := lpipe_expr((fnCall as ExprClone).right, arg)
+        return cCopy
+    elif fnCall is ExprLet
+        var pLet = fnCall as ExprLet
+        if length(pLet.variables)!=1 || pLet.variables[0].init==null
+            unsafe
+                delete arg
+            return [[ExpressionPtr]]
+        var cLet <- clone_expression(fnCall)
+        (cLet as ExprLet).variables[0].init := lpipe_expr(pLet.variables[0].init, arg)
+        return cLet
     else
         unsafe
             delete arg
@@ -70,7 +91,7 @@ class LpipeMacro : AstCallMacro
             let pidx = eidx - 1
             var pipe <- lpipe_expr(blk.list[pidx], clone_expression(call.arguments[0]) )
             if pipe==null
-                macro_error(prog,call.at,"can only pipe to a function call")
+                macro_error(prog,call.at,"can only pipe to a function call, and not {blk.list[pidx].__rtti}")
                 return
             blk.list[pidx] <- pipe
             blk.list[eidx] := null
