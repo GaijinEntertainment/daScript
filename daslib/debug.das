@@ -32,7 +32,7 @@ let private
     BLOCKS_POOL = 4000ul
 
     MAX_STACK = 1000ul
-    MAX_VARIABLES = 100000ul
+    MAX_VARIABLES = 10_000_000ul
 
     print_flags_debug = (
             print_flags escapeString
@@ -131,7 +131,6 @@ def private bytes_hr(value : uint64)
 
 
 class DAWalker: DapiDataWalker
-    childrenMax = 500u
     varsStack: array<DAVariable?>
     [[do_not_delete]] frame: DAStackFrame?
     visited: array<tuple<ps: void?; hash: uint64>>
@@ -222,8 +221,6 @@ class DAWalker: DapiDataWalker
             v.indexedVariables = count
 
     def override beforeArrayElement(ps: void?; ti: TypeInfo; pe: void?; index: uint; last: bool): void
-        if index >= childrenMax
-            return
         self->startCont()
         let n = length(varsStack)
         if n > 0
@@ -261,8 +258,6 @@ class DAWalker: DapiDataWalker
             v.indexedVariables = pa.size
 
     def override beforeTableKey(pa: DapiTable; ti: TypeInfo; pk: void?; ki: TypeInfo; index: uint; last: bool): void
-        if index >= childrenMax
-            return
         self->startCont()
         let n = length(varsStack)
         if n > 0
@@ -272,16 +267,12 @@ class DAWalker: DapiDataWalker
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override beforeTableValue(pa: DapiTable; ti: TypeInfo; pv: void?; kv: TypeInfo; index: uint; last: bool): void
-        if index >= childrenMax
-            return
         let n = length(varsStack)
         if n > 0
             var v & = unsafe(varsStack[n - 1])
             v._type = describe(kv)
 
     def override afterTableValue(pa: DapiTable; ti: TypeInfo; pv: void?; kv: TypeInfo; index: uint; last: bool): void
-        if index >= childrenMax
-            return
         let n = length(varsStack)
         if n > 0
             var v & = unsafe(varsStack[n - 1])
