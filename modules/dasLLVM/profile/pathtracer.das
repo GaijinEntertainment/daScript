@@ -101,7 +101,9 @@ var RAND_SEED : int4
 [jit]
 def schlick(cosine,ri:float)
     var r0 = (1. - ri) / (1. + ri)
-    return lerp ( r0*r0, 1., pow(1. - cosine,5.))
+    var t = 1. - cosine
+    var t2 = t * t
+    return lerp ( r0*r0, 1., t2 * t2 * t)
 
 struct Sphere
     center : float3

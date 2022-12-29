@@ -606,7 +606,42 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprNullCoalescing
     def override preVisitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>): void
-        unsupported(expr, "null coalescing")
+        var blk = [[IteBlock
+            if_true  = LLVMAppendBasicBlock(ffunc,"nullc_null_at_line_{int(expr.at.line)}"),
+            if_false  = LLVMAppendBasicBlock(ffunc,"nullc_not_null_at_line_{int(expr.at.line)}"),
+            if_end   = LLVMAppendBasicBlock(ffunc,"nullc_end_at_line_{int(expr.at.line)}")
+        ]]
+        ite2blocks[get_expr_ptr(expr)] = blk
+        at_function_entry <|
+            var res = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(expr._type), "nullc")
+            LLVMSetAlignment(res, 16u)
+            setE(expr, res)
+
+    def override preVisitExprNullCoalescingDefault(expr:smart_ptr<ExprNullCoalescing>;defval:ExpressionPtr): void
+        var blk = ite2blocks[get_expr_ptr(expr)]                        // we start if_true block
+        var sE = getE(expr.subexpr)
+        var cond = LLVMBuildIsNull(g_builder, sE, "")
+        LLVMBuildCondBr(g_builder, cond, blk.if_true, blk.if_false)
+        LLVMPositionBuilderAtEnd(g_builder, blk.if_false)
+        var res = getE(expr)
+        if expr._type.isRef
+            LLVMBuildStore(g_builder, sE, res)
+        elif expr._type.isHandle
+            unsupported(expr, "null coalescing for handles")
+        else
+            LLVMBuildStore(g_builder, LLVMBuildLoad(g_builder, sE, ""), res)
+        LLVMBuildBr(g_builder, blk.if_end)
+        LLVMPositionBuilderAtEnd(g_builder, blk.if_true)
+
+    def override visitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>) : ExpressionPtr
+        var blk = ite2blocks[get_expr_ptr(expr)]                        // we start if_true block
+        var dE = getE(expr.defaultValue)
+        var res = getE(expr)
+        LLVMBuildStore(g_builder, dE, res)
+        LLVMBuildBr(g_builder, blk.if_end)
+        LLVMPositionBuilderAtEnd(g_builder, blk.if_end)
+        setE(expr, LLVMBuildLoad(g_builder, res, ""))
+        return expr
 
 // ExprAt
     def check_range ( tidx, maxIdx:LLVMOpaqueValue?; message:string )
