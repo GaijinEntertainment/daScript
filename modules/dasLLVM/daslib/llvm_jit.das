@@ -2970,7 +2970,6 @@ class JIT_LLVM : AstSimulateMacro
 //      * ExprIs
 //      * ExprTryCatch
 //   safe navigation
-//      * ExprNullCoalescing
 //      * ExprSafeAt
 //      * ExprSafeField
 //      * ExprSafeAsVariant
