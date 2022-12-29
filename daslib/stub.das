@@ -14,13 +14,19 @@ class TemplateMacro : AstFunctionAnnotation
         if func.result==null
             errors := "stub function must have a result type"
             return false
+        if func.result.baseType == Type tVoid
+            return true
+        var resType <- clone_type(func.result)
+        if !resType.flags.ref
+            resType.flags &= ~TypeDeclFlags constant
         var qblk <- qmacro_block <|
             panic("stub function called")
             unsafe
-                var dummy : $t(func.result)
+                var dummy : $t(resType)
                 return <- dummy
         qblk |> force_at(func.body.at)
         func.body := qblk
         delete qblk
+        delete resType
         return true
 
