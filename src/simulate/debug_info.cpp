@@ -434,8 +434,13 @@ namespace das
                 stream << "(";
                 for ( uint32_t ai=0; ai!=info->argCount; ++ ai ) {
                     if ( ai!=0 ) stream << "; ";
+                    if (!info->argTypes[ai]->isConst()) {
+                        stream << "var ";
+                    }
                     if ( info->argNames ) {
                         stream << info->argNames[ai] << ":";
+                    } else {
+                        stream << "arg" << ai << ":";
                     }
                     stream << debug_type(info->argTypes[ai]);
                 }
