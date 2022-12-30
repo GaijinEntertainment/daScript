@@ -365,8 +365,13 @@ namespace das
                 stream << "(";
                 for ( size_t ai=0; ai!=argTypes.size(); ++ ai ) {
                     if ( ai!=0 ) stream << ";";
+                    if (!argTypes[ai]->isConst()) {
+                        stream << "var ";
+                    }
                     if ( argNames.size()==argTypes.size() ) {
                         stream << argNames[ai] << ":";
+                    } else {
+                        stream << "arg" << ai << ":";
                     }
                     stream << argTypes[ai]->describe(extra);
                 }
