@@ -1128,13 +1128,21 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder,blk.if_true)
 
     def override preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr): void
-        LLVMBuildStore(g_builder, getE(expr.left), getE(expr))
+        if expr.left is ExprConstPtr
+            let null_ptr = LLVMConstPointerNull(type_to_llvm_abi_type(expr._type))
+            LLVMBuildStore(g_builder, null_ptr, getE(expr))
+        else
+            LLVMBuildStore(g_builder, getE(expr.left), getE(expr))
         var blk = ite2blocks[get_expr_ptr(expr)]
         LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
         LLVMPositionBuilderAtEnd(g_builder,blk.if_false)
 
     def override visitExprOp3(expr:smart_ptr<ExprOp3>) : ExpressionPtr
-        LLVMBuildStore(g_builder, getE(expr.right), getE(expr))
+        if expr.right is ExprConstPtr
+            let null_ptr = LLVMConstPointerNull(type_to_llvm_abi_type(expr._type))
+            LLVMBuildStore(g_builder, null_ptr, getE(expr))
+        else
+            LLVMBuildStore(g_builder, getE(expr.right), getE(expr))
         var blk = ite2blocks[get_expr_ptr(expr)]
         LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
         LLVMPositionBuilderAtEnd(g_builder,blk.if_end)
@@ -2515,7 +2523,7 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprConstPtr
     def override visitExprConstPtr(expr:smart_ptr<ExprConstPtr>) : ExpressionPtr
-        setE(expr, LLVMConstPointerNull(LLVMVoidType()))
+        setE(expr, LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u)))
         return expr
 
 // ExprConstEnumeration
