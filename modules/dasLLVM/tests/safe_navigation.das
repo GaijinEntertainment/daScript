@@ -11,7 +11,7 @@ def nullc_ref ( var a : Foo?; var b : Foo; c : int )
     (a ?? b).a = c
 
 struct Foo
-    a : int
+    a,b : int
 
 [test]
 def test_null_coalescing ( t:T? )
@@ -36,4 +36,31 @@ def test_null_coalescing ( t:T? )
         nullc_ref(pn,df,33)
         t |> equal(33, df.a)
 
+[jit]
+def bOrD ( f : Foo?; d:int )
+    return f?.b ?? d
+
+struct Bar
+    f : Foo?
+
+[jit]
+def bOrD2 ( b : Bar?; d: int )
+    return b?.f?.b ?? d
+
+[test]
+def test_safe_field ( t:T? )
+    t |> run("safe_field ptr to structure") <| @ ( t : T? )
+        t |> success(is_jit_function(@@bOrD))
+        var f = [[Foo a=1,b=2]]
+        var pF : Foo? = unsafe(addr(f))
+        var pN : Foo?
+        t |> equal ( 2, bOrD(pF, 3) )
+        t |> equal ( 4, bOrD(pN, 4) )
+    t |> run("safe_field ptr to structure field with ptr") <| @ ( t : T? )
+        t |> success(is_jit_function(@@bOrD2))
+        var f = [[Foo a=1,b=2]]
+        var bF = [[Bar f=unsafe(addr(f))]]
+        var bN = [[Bar]]
+        t |> equal ( 2, bOrD2(unsafe(addr(bF)), 3) )
+        t |> equal ( 4, bOrD2(unsafe(addr(bN)), 4) )
 

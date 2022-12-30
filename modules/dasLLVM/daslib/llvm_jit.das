@@ -18,6 +18,8 @@ require daslib/fio
 require daslib/lpipe
 require math
 
+//require daslib/debug
+
 [macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
@@ -2193,8 +2195,50 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprSafeField
-    def override preVisitExprSafeField(expr:smart_ptr<ExprSafeField>) : void
-        unsupported(expr, "safe field access is not supported yet")
+    def override visitExprSafeField(expr:smart_ptr<ExprSafeField>) : ExpressionPtr
+        // unsupported(expr, "safe field access is not supported yet")
+        var fieldOffset = -1
+        if expr.annotation==null
+            if expr.fieldIndex != - 1
+                if expr.value._type.firstType.isVariant
+                    fieldOffset = expr.value._type.firstType |> get_variant_field_offset(expr.fieldIndex)
+                else
+                    fieldOffset = expr.value._type.firstType |> get_tuple_field_offset(expr.fieldIndex)
+            else
+                fieldOffset = expr.field.offset
+            assert(fieldOffset>=0,"field offset is somehow not there")
+        if expr.skipQQ
+            if expr.annotation != null
+                unsupported(expr, "safe field for annotations pointer is not supported yet")
+                setE(expr, LLVMGetUndef(LLVMInt32Type()))
+            else
+                var val_ptr = getE(expr.value)
+                var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
+                var res_type = type_to_llvm_type(expr._type)
+                var res = build_select(cond, res_type) <|
+                    val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+                    var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(fieldOffset), 0), "")
+                    field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, LLVMPointerType(res_type,0u), ".{expr.name}")
+                    field_ptr = LLVMBuildLoad(g_builder, field_ptr, "")
+                    return field_ptr
+                lpipe <|
+                    return  LLVMConstPointerNull(res_type)
+                setE(expr, res)
+        else
+            if expr.annotation != null
+                unsupported(expr, "safe field for annotations is not supported yet")
+                setE(expr, LLVMGetUndef(LLVMInt32Type()))
+            else
+                // SimNode_SafeFieldDeref
+                var val_ptr = getE(expr.value)
+                val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+                var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(fieldOffset), 0), "")
+                var res_type = type_to_llvm_type(expr._type)
+                field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, res_type, ".{expr.name}")
+                var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
+                var res = LLVMBuildSelect(g_builder, cond, field_ptr, LLVMConstPointerNull(res_type), "")
+                setE(expr, res)
+        return expr
 
 // ExprSwizzle
     def override visitExprSwizzle(expr:smart_ptr<ExprSwizzle>) : ExpressionPtr
@@ -2971,5 +3015,4 @@ class JIT_LLVM : AstSimulateMacro
 //      * ExprTryCatch
 //   safe navigation
 //      * ExprSafeAt
-//      * ExprSafeField
 //      * ExprSafeAsVariant
