@@ -235,3 +235,12 @@ def describe ( typ:LLVMOpaqueValue? )
 
 def LLVMSetFunctionCallConv(ofunc:LLVMOpaqueValue?; conv:LLVMCallConv)
     LLVMSetFunctionCallConv(ofunc, uint(conv))
+
+def set_meta_dereferenceable ( instr:LLVMOpaqueValue?; bytes:int; nil:bool )
+    var values : LLVMOpaqueValue? [1]
+    values[0] = LLVMConstInt(LLVMInt64Type(), uint64(bytes), 0)
+    let msg = nil ? "dereferenceable_or_null" : "dereferenceable"
+    LLVMSetMetadata(
+        instr,
+        LLVMGetMDKindID(msg, uint(length(msg))),
+        LLVMMDNode(unsafe(addr(values[0])), 1u))
