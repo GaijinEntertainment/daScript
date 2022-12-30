@@ -28,6 +28,8 @@ struct private IteBlock
     [[do_not_delete]] if_true  : LLVMOpaqueBasicBlock?
     [[do_not_delete]] if_false : LLVMOpaqueBasicBlock?
     [[do_not_delete]] if_end   : LLVMOpaqueBasicBlock?
+    [[do_not_delete]] phi_true  : LLVMOpaqueBasicBlock?
+    [[do_not_delete]] phi_false : LLVMOpaqueBasicBlock?
     if_true_terminates  : bool
     if_false_terminates : bool
 
@@ -610,18 +612,16 @@ class LlvmJitVisitor : AstVisitor
 // ExprNullCoalescing
     def override preVisitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>): void
         var blk = [[IteBlock
-            if_true  = LLVMAppendBasicBlock(ffunc,"nullc_null_at_line_{int(expr.at.line)}"),
+            if_true   = LLVMAppendBasicBlock(ffunc,"nullc_null_at_line_{int(expr.at.line)}"),
             if_false  = LLVMAppendBasicBlock(ffunc,"nullc_not_null_at_line_{int(expr.at.line)}"),
-            if_end   = LLVMAppendBasicBlock(ffunc,"nullc_end_at_line_{int(expr.at.line)}")
+            if_end    = LLVMAppendBasicBlock(ffunc,"nullc_end_at_line_{int(expr.at.line)}"),
+            phi_true  = LLVMAppendBasicBlock(ffunc,"nullc_phi_true_at_line_{int(expr.at.line)}"),
+            phi_false = LLVMAppendBasicBlock(ffunc,"nullc_phi_false_at_line_{int(expr.at.line)}")
         ]]
         ite2blocks[get_expr_ptr(expr)] = blk
-        at_function_entry <|
-            var res = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(expr._type), "nullc")
-            LLVMSetAlignment(res, 16u)
-            setE(expr, res)
 
     def override preVisitExprNullCoalescingDefault(expr:smart_ptr<ExprNullCoalescing>;defval:ExpressionPtr): void
-        var blk = ite2blocks[get_expr_ptr(expr)]                        // we start if_true block
+        var blk = ite2blocks[get_expr_ptr(expr)]
         var sE = getE(expr.subexpr)
         var cond : LLVMOpaqueValue?
         if safeNavCond |> key_exists(get_expr_ptr(expr.subexpr))
@@ -630,24 +630,28 @@ class LlvmJitVisitor : AstVisitor
             cond = LLVMBuildIsNotNull(g_builder, sE, "")
         LLVMBuildCondBr(g_builder, cond, blk.if_false, blk.if_true)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_false)
-        var res = getE(expr)
         if expr._type.isRef
-            LLVMBuildStore(g_builder, sE, res)
+            pass
         elif expr._type.isHandle
             unsupported(expr, "null coalescing for handles")
         else
-            LLVMBuildStore(g_builder, LLVMBuildLoad(g_builder, sE, ""), res)
+            setE(expr.subexpr, LLVMBuildLoad(g_builder, sE, ""))
+        LLVMBuildBr(g_builder, blk.phi_true)
+        LLVMPositionBuilderAtEnd(g_builder, blk.phi_true)
         LLVMBuildBr(g_builder, blk.if_end)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_true)
 
     def override visitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>) : ExpressionPtr
-        var blk = ite2blocks[get_expr_ptr(expr)]                        // we start if_true block
+        var blk = ite2blocks[get_expr_ptr(expr)]
+        var sE = getE(expr.subexpr)
         var dE = getE(expr.defaultValue)
-        var res = getE(expr)
-        LLVMBuildStore(g_builder, dE, res)
+        LLVMBuildBr(g_builder, blk.phi_false)
+        LLVMPositionBuilderAtEnd(g_builder, blk.phi_false)
         LLVMBuildBr(g_builder, blk.if_end)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_end)
-        setE(expr, LLVMBuildLoad(g_builder, res, ""))
+        var phi = LLVMBuildPhi(g_builder, type_to_llvm_abi_type(expr._type), "null_c")
+        LLVMAddIncoming(phi, [[auto sE; dE]], [[auto blk.phi_true; blk.phi_false]])
+        setE(expr, phi)
         return expr
 
 // ExprAt
@@ -1106,10 +1110,6 @@ class LlvmJitVisitor : AstVisitor
 // ExprOp3
     def override preVisitExprOp3(expr:smart_ptr<ExprOp3>): void
         var res : LLVMOpaqueValue?
-        at_function_entry <|
-            res = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(expr._type), "select")
-            LLVMSetAlignment(res, 16u)
-        setE(expr, res)
         var before_if = LLVMAppendBasicBlock(ffunc,"op3_cond_at_{expr.at.line}")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder,before_if)
@@ -1117,6 +1117,8 @@ class LlvmJitVisitor : AstVisitor
             if_true  = LLVMAppendBasicBlock(ffunc,"op3_true_at_line_{int(expr.at.line)}"),
             if_false = LLVMAppendBasicBlock(ffunc,"op3_false_at_line_{int(expr.at.line)}"),
             if_end   = LLVMAppendBasicBlock(ffunc,"op3_end_at_line_{int(expr.at.line)}"),
+            phi_true = LLVMAppendBasicBlock(ffunc,"phi_true_at_line_{int(expr.at.line)}"),
+            phi_false= LLVMAppendBasicBlock(ffunc,"phi_false_at_line_{int(expr.at.line)}"),
             if_true_terminates = false,
             if_false_terminates = false
         ]]
@@ -1130,23 +1132,25 @@ class LlvmJitVisitor : AstVisitor
     def override preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr): void
         if expr.left is ExprConstPtr
             let null_ptr = LLVMConstPointerNull(type_to_llvm_abi_type(expr._type))
-            LLVMBuildStore(g_builder, null_ptr, getE(expr))
-        else
-            LLVMBuildStore(g_builder, getE(expr.left), getE(expr))
+            setE(expr.left, null_ptr)
         var blk = ite2blocks[get_expr_ptr(expr)]
+        LLVMBuildBr(g_builder, blk.phi_true)
+        LLVMPositionBuilderAtEnd(g_builder,blk.phi_true)
         LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
         LLVMPositionBuilderAtEnd(g_builder,blk.if_false)
 
     def override visitExprOp3(expr:smart_ptr<ExprOp3>) : ExpressionPtr
         if expr.right is ExprConstPtr
             let null_ptr = LLVMConstPointerNull(type_to_llvm_abi_type(expr._type))
-            LLVMBuildStore(g_builder, null_ptr, getE(expr))
-        else
-            LLVMBuildStore(g_builder, getE(expr.right), getE(expr))
+            setE(expr.right, null_ptr)
         var blk = ite2blocks[get_expr_ptr(expr)]
+        LLVMBuildBr(g_builder, blk.phi_false)
+        LLVMPositionBuilderAtEnd(g_builder,blk.phi_false)
         LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
         LLVMPositionBuilderAtEnd(g_builder,blk.if_end)
-        setE(expr, LLVMBuildLoad(g_builder, getE(expr), ""))
+        var phi = LLVMBuildPhi(g_builder, type_to_llvm_abi_type(expr._type), "cond")
+        LLVMAddIncoming(phi, [[auto getE(expr.left); getE(expr.right)]], [[auto blk.phi_true; blk.phi_false]])
+        setE(expr, phi)
         return expr
 
 // ExprCopy
@@ -2837,22 +2841,26 @@ class LlvmJitVisitor : AstVisitor
             return null
 
     def build_select ( cond:LLVMOpaqueValue?; typ:LLVMOpaqueType?; if_true,if_false:block<LLVMOpaqueValue?> )
-        var res : LLVMOpaqueValue?
-        at_function_entry <|
-            res = LLVMBuildAlloca(g_builder, typ, "select")
-            LLVMSetAlignment(res, 16u)
         var check_true = LLVMAppendBasicBlock(ffunc,"check_true")
         var check_false = LLVMAppendBasicBlock(ffunc,"check_false")
         var check_end = LLVMAppendBasicBlock(ffunc,"check_end")
+        var phi_true = LLVMAppendBasicBlock(ffunc, "phi_true")
+        var phi_false = LLVMAppendBasicBlock(ffunc, "phi_false")
         LLVMBuildCondBr(g_builder, cond, check_true, check_false)
         LLVMPositionBuilderAtEnd(g_builder, check_true)
-        LLVMBuildStore(g_builder, invoke(if_true), res)
+        var pt = invoke(if_true)
+        LLVMBuildBr(g_builder, phi_true)
+        LLVMPositionBuilderAtEnd(g_builder, phi_true)
         LLVMBuildBr(g_builder, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_false)
-        LLVMBuildStore(g_builder, invoke(if_false), res)
+        var pf = invoke(if_false)
+        LLVMBuildBr(g_builder, phi_false)
+        LLVMPositionBuilderAtEnd(g_builder, phi_false)
         LLVMBuildBr(g_builder, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_end)
-        return LLVMBuildLoad(g_builder, res, "")
+        var phi = LLVMBuildPhi(g_builder, typ, "select")
+        LLVMAddIncoming(phi, [[auto pt; pf]], [[auto phi_true; phi_false]])
+        return phi
 
     def build_exception ( message:string )
         var params = [[auto
@@ -3031,3 +3039,17 @@ class JIT_LLVM : AstSimulateMacro
 //   safe navigation
 //      * ExprSafeAt
 //      * ExprSafeAsVariant
+
+/* TODO: optimize. this generates 3rd comparison, C++ does not
+struct Foo
+    a, b : int
+[jit]
+def safe_field ( f : Foo? )
+    return f!=null ? unsafe(addr(f.b)) : null
+[jit]
+def null_c ( a:int const?; b:int )
+    return a!=null ? *a : b
+[jit]
+def bOrDManual ( f : Foo?; d:int )
+    return null_c(safe_field(f),d)
+*/
