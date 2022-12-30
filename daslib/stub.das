@@ -14,6 +14,9 @@ class TemplateMacro : AstFunctionAnnotation
         if func.result==null
             errors := "stub function must have a result type"
             return false
+        func.sideEffectFlags |= FunctionSideEffectFlags userScenario
+        for arg in func.arguments
+            arg.flags |= VariableFlags marked_used
         if func.result.baseType == Type tVoid
             return true
         var resType <- clone_type(func.result)
