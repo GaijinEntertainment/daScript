@@ -97,11 +97,17 @@ def LLVMAddIncoming(phi:LLVMOpaqueValue?; var phi_vals:array<LLVMOpaqueValue?>; 
     assert(length(phi_vals) == length(phi_blocks), "LLVMAddIncoming: phi_vals and phi_blocks must have the same length")
     LLVMAddIncoming(phi, unsafe(addr(phi_vals[0])), unsafe(addr(phi_blocks[0])), uint(length(phi_vals)))
 
-def LLVMBuildGEP ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string )
-    return LLVMBuildGEP(builder, ptr, unsafe(addr(index)), 1u, name)
+def LLVMBuildGEP ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string; inbounds:bool=true )
+    var gep = LLVMBuildGEP(builder, ptr, unsafe(addr(index)), 1u, name)
+    if inbounds
+        LLVMSetIsInBounds(gep, 1)
+    return gep
 
-def LLVMBuildGEP2 ( builder:LLVMOpaqueBuilder?; ty:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string )
-    return LLVMBuildGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)
+def LLVMBuildGEP2 ( builder:LLVMOpaqueBuilder?; ty:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string; inbounds:bool=true )
+    var gep = LLVMBuildGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)
+    if inbounds
+        LLVMSetIsInBounds(gep, 1)
+    return gep
 
 def LLVMFloat4Type
     return LLVMVectorType(LLVMFloatType(), 4u)

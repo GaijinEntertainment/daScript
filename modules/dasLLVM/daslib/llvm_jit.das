@@ -61,7 +61,6 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete]] prologue : LLVMOpaqueValue?
     [[do_not_delete]] labels : table<int;LLVMOpaqueBasicBlock?>
     [[do_not_delete]] sortedLabels : array<SLabel>
-    [[do_not_delete]] safeNavCond : table<Expression?; LLVMOpaqueValue?>
     g_builder : LLVMOpaqueBuilder?
     option_no_range_check : bool = false
     option_no_alias : bool = false
@@ -623,11 +622,7 @@ class LlvmJitVisitor : AstVisitor
     def override preVisitExprNullCoalescingDefault(expr:smart_ptr<ExprNullCoalescing>;defval:ExpressionPtr): void
         var blk = ite2blocks[get_expr_ptr(expr)]
         var sE = getE(expr.subexpr)
-        var cond : LLVMOpaqueValue?
-        if safeNavCond |> key_exists(get_expr_ptr(expr.subexpr))
-            cond = safeNavCond[get_expr_ptr(expr.subexpr)]
-        else
-            cond = LLVMBuildIsNotNull(g_builder, sE, "")
+        var cond = LLVMBuildIsNotNull(g_builder, sE, "")
         LLVMBuildCondBr(g_builder, cond, blk.if_false, blk.if_true)
         LLVMPositionBuilderAtEnd(g_builder, blk.if_false)
         if expr._type.isRef
@@ -2231,7 +2226,6 @@ class LlvmJitVisitor : AstVisitor
             else
                 var val_ptr = getE(expr.value)
                 var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
-                safeNavCond[get_expr_ptr(expr)] = cond
                 var res_type = type_to_llvm_type(expr._type)
                 var res = build_select(cond, res_type) <|
                     val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
@@ -2254,7 +2248,6 @@ class LlvmJitVisitor : AstVisitor
                 var res_type = type_to_llvm_type(expr._type)
                 field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, res_type, ".{expr.name}")
                 var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
-                safeNavCond[get_expr_ptr(expr)] = cond
                 var res = LLVMBuildSelect(g_builder, cond, field_ptr, LLVMConstPointerNull(res_type), "")
                 setE(expr, res)
         return expr
