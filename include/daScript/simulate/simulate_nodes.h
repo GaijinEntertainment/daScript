@@ -445,6 +445,7 @@ namespace das {
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             auto prv = value->evalPtr(context);
+            if ( prv==nullptr ) return nullptr;
             int32_t cv = *(int *)prv;
             return cv==variant ? (prv + offset) : nullptr;
         }
@@ -459,6 +460,7 @@ namespace das {
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             auto prv = (char **) value->evalPtr(context);
+            if ( prv==nullptr ) return nullptr;
             int32_t cv = *(int *)prv;
             return cv==variant ? *(prv + offset) : nullptr;
         }

@@ -4323,6 +4323,9 @@ namespace das {
                 return Visitor::visit(expr);
 
             }
+            if ( expr->value->type->isPointer() ) {
+                expr->value = Expression::autoDereference(expr->value);
+            }
             int index = valT->findArgumentIndex(expr->name);
             if ( index==-1 || index>=int(valT->argTypes.size()) ) {
                 error("can't get variant field " + expr->name, "", "",
