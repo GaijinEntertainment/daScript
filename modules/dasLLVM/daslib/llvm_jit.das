@@ -758,20 +758,19 @@ class LlvmJitVisitor : AstVisitor
         var tidx = getE(expr.index)
         assume subExprT = expr.subexpr._type
         if subExprT.dim.length != 0 || (subExprT.isPointer && subExprT.firstType.dim.length != 0)
-            var cond : LLVMOpaqueValue?
             var etype <- subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT); defer_delete(etype)
             let maxIndex = etype.dim[etype.dim.length-1]
             etype.dim |> pop()
-            var maxIdx = LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0)
-            var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntULT, tidx, maxIdx, "dim_range")
-            if subExprT.isPointer
-                var if_not_null = LLVMBuildIsNotNull(g_builder, tsrc, "")
-                cond = LLVMBuildAnd(g_builder, if_not_null, if_range, "dim_cond")
-            else
-                cond = if_range
             var resType = LLVMPointerType(type_to_llvm_type(etype),0u)
-            var res = build_select(cond, resType) <|
-                return build_array_index(tsrc, tidx, etype, "dim_at")
+            var if_not_null = subExprT.dim.length==0 ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
+            var res = build_select(if_not_null, resType) <|
+                var maxIdx = LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0)
+                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntULT, tidx, maxIdx, "dim_range")
+                var subRes = build_select(if_range, resType) <|
+                    return build_array_index(tsrc, tidx, etype, "dim_at")
+                lpipe <|
+                    return LLVMConstNull(resType)
+                return subRes
             lpipe <|
                 return LLVMConstNull(resType)
             setE(expr, res)
@@ -2382,8 +2381,31 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprSafeAsVariant
-    def override preVisitExprSafeAsVariant(expr:smart_ptr<ExprSafeAsVariant>) : void
-        unsupported(expr, "safe as variant")
+    def override visitExprSafeAsVariant(expr:smart_ptr<ExprSafeAsVariant>) : ExpressionPtr
+        assume valueT = expr.value._type
+        var vptr = getE(expr.value)
+        var field_index = find_argument_index(valueT.isPointer ? valueT.firstType : valueT, string(expr.name))
+        if field_index==-1
+            failed_E(expr, "variant field {expr.name} not found")
+            return expr
+        var if_not_null = valueT.isPointer ? LLVMBuildIsNotNull(g_builder, vptr, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
+        var resType = type_to_llvm_type(expr._type)
+        var res = build_select(if_not_null,resType) <|
+            var vint = LLVMBuildLoad2(g_builder, LLVMInt32Type(), vptr, "variant_index")
+            var fidx = LLVMConstInt(LLVMInt32Type(), uint64(field_index), 0)
+            var if_index = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, vint, fidx, "index_check")
+            var subRes = build_select(if_index,resType) <|
+                let field_offset = get_variant_field_offset(valueT.isPointer ? valueT.firstType : valueT,field_index)
+                var fptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+                fptr = LLVMBuildGEP(g_builder, fptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+                return LLVMBuildPointerCast(g_builder, fptr, resType, "variant_field_ptr")
+            lpipe <|
+                return LLVMConstNull(resType)
+            return subRes
+        lpipe <|
+            return LLVMConstNull(resType)
+        setE(expr,res)
+        return expr
 
 // ExprOp1
     def override visitExprOp1(expr:smart_ptr<ExprOp1>) : ExpressionPtr
@@ -3090,5 +3112,3 @@ class JIT_LLVM : AstSimulateMacro
 //  Expressions:
 //      * ExprIs
 //      * ExprTryCatch
-//   safe navigation
-//      * ExprSafeAsVariant

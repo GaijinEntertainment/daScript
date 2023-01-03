@@ -130,3 +130,35 @@ def test_safe_at ( t:T? )
         t |> equal(42, v2)
         t |> equal(42, v3)
         t |> equal(42, v4)
+
+variant IOrF
+    i : int
+    f : float
+
+[jit]
+def safe_as_i(a:IOrF; b:int)
+    return (a ?as i) ?? b
+
+[jit]
+def safe_as_pi(a:IOrF?; b:int)
+    return (a ?as i) ?? b
+
+[test]
+def test_safe_variant_as ( t:T? )
+    t |> run("safe variant as") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@safe_as_i) )
+        var i = [[IOrF i=1]]
+        var f = [[IOrF f=1.]]
+        t |> equal ( 1, safe_as_i(i,42) )
+        t |> equal ( 42, safe_as_i(f,42) )
+    t |> run("safe variant ptr as") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@safe_as_pi) )
+        var i = [[IOrF i=1]]
+        var f = [[IOrF f=1.]]
+        var pi = unsafe(addr(i))
+        var pf = unsafe(addr(f))
+        var p0 : IOrF?
+        t |> equal ( 1, safe_as_pi(pi,42) )
+        t |> equal ( 42, safe_as_pi(pf,42) )
+        t |> equal ( 42, safe_as_pi(p0,42) )
+
