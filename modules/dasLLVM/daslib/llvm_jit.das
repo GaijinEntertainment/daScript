@@ -2891,7 +2891,10 @@ class LlvmJitVisitor : AstVisitor
             panic("not in block or function")
             return null
 
-    def build_select ( cond:LLVMOpaqueValue?; typ:LLVMOpaqueType?; if_true,if_false:block<LLVMOpaqueValue?> )
+    def build_select ( cond:LLVMOpaqueValue?; typ:LLVMOpaqueType?; if_true,if_false:block<LLVMOpaqueValue?> ) : LLVMOpaqueValue?
+        if LLVMIsConstant(cond)!=0
+            var val = LLVMConstIntGetZExtValue(cond)
+            return val!=0ul ? invoke(if_true) : invoke(if_false)
         var check_true = LLVMAppendBasicBlock(ffunc,"check_true")
         var check_false = LLVMAppendBasicBlock(ffunc,"check_false")
         var check_end = LLVMAppendBasicBlock(ffunc,"check_end")
