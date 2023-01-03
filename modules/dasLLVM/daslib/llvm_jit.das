@@ -18,7 +18,7 @@ require daslib/fio
 require daslib/lpipe
 require math
 
-//require daslib/debug
+// require daslib/debug
 
 [macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
@@ -726,7 +726,7 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
-        elif subExprT.baseType == Type tArray
+        elif subExprT.isGoodArrayType
             var arr = LLVMBuildLoad(g_builder, tsrc, "arr")
             var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY SIZE), "array.size")
             check_range(tidx, size, "array index out of range")
@@ -737,8 +737,7 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
-            //  failed("array: unsupported visitExprAt {describe(tsrc)}[{describe(tidx)}] type {describe(subExprT)}")
-        elif subExprT.baseType == Type tTable
+        elif subExprT.isGoodTableType
             var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
             var at_tab = build_table_at(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
             var tab = LLVMBuildLoad(g_builder, tsrc, "tab")
@@ -754,8 +753,67 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprSafeAt
-    def override preVisitExprSafeAt(expr:smart_ptr<ExprSafeAt>): void
-        unsupported(expr, "safe at")
+    def override visitExprSafeAt(expr:smart_ptr<ExprSafeAt>) : ExpressionPtr
+        var tsrc = getE(expr.subexpr)
+        var tidx = getE(expr.index)
+        assume subExprT = expr.subexpr._type
+        if subExprT.dim.length != 0 || (subExprT.isPointer && subExprT.firstType.dim.length != 0)
+            var cond : LLVMOpaqueValue?
+            var etype <- subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT); defer_delete(etype)
+            let maxIndex = etype.dim[etype.dim.length-1]
+            etype.dim |> pop()
+            var maxIdx = LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0)
+            var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntULT, tidx, maxIdx, "dim_range")
+            if subExprT.isPointer
+                var if_not_null = LLVMBuildIsNotNull(g_builder, tsrc, "")
+                cond = LLVMBuildAnd(g_builder, if_not_null, if_range, "dim_cond")
+            else
+                cond = if_range
+            var resType = LLVMPointerType(type_to_llvm_type(etype),0u)
+            var res = build_select(cond, resType) <|
+                return build_array_index(tsrc, tidx, etype, "dim_at")
+            lpipe <|
+                return LLVMConstNull(resType)
+            setE(expr, res)
+        elif subExprT.isGoodArrayType || (subExprT.isPointer && subExprT.firstType.isGoodArrayType)
+            var if_not_null = !subExprT.isGoodArrayType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
+            var etype := subExprT.isPointer ? subExprT.firstType.firstType : subExprT.firstType; defer_delete(etype)
+            var resType = LLVMPointerType(type_to_llvm_type(etype),0u)
+            var res = build_select(if_not_null, resType) <|
+                var arr = LLVMBuildLoad(g_builder, tsrc, "arr")
+                var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY SIZE), "array.size")
+                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntULT, tidx, size, "array_range")
+                var subRes = build_select(if_range, resType) <|
+                    var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY DATA), "array.data")
+                    return build_array_index(data, tidx, etype, "array_at")
+                lpipe <|
+                    return LLVMConstNull(resType)
+                return subRes
+            lpipe <|
+                return LLVMConstNull(resType)
+            setE(expr, res)
+        elif subExprT.isGoodTableType || (subExprT.isPointer && subExprT.firstType.isGoodTableType)
+            var if_not_null = !subExprT.isGoodTableType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
+            var etype := subExprT.isPointer ? subExprT.firstType : subExprT; defer_delete(etype)
+            var resType = LLVMPointerType(type_to_llvm_type(etype.secondType),0u)
+            var res = build_select(if_not_null, resType) <|
+                var tab = LLVMBuildLoad(g_builder, tsrc, "tab")
+                var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
+                var at_tab = build_table_find(etype.firstType.baseType, tab_ptr, tidx, etype.secondType.sizeOf)
+                var if_found = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, at_tab, LLVMConstInt(LLVMInt32Type(), uint64(-1), 0), "table_found")
+                var subRes = build_select(if_found, resType) <|
+                    var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
+                    return LLVMBuildGEP(g_builder, data, at_tab, "table_at")
+                lpipe <|
+                    return LLVMConstNull(resType)
+                return subRes
+            lpipe <|
+                return LLVMConstNull(resType)
+            setE(expr, res)
+        else
+            setE(expr, LLVMConstNull(type_to_llvm_type(expr._type)))
+            failed("unsupported visitExprSafeAt type {describe(subExprT)}")
+        return expr
 
 // ExprIs
     def override preVisitExprIs(expr:smart_ptr<ExprIs>): void
@@ -3030,19 +3088,4 @@ class JIT_LLVM : AstSimulateMacro
 //      * ExprIs
 //      * ExprTryCatch
 //   safe navigation
-//      * ExprSafeAt
 //      * ExprSafeAsVariant
-
-/* TODO: optimize. this generates 3rd comparison, C++ does not
-struct Foo
-    a, b : int
-[jit]
-def safe_field ( f : Foo? )
-    return f!=null ? unsafe(addr(f.b)) : null
-[jit]
-def null_c ( a:int const?; b:int )
-    return a!=null ? *a : b
-[jit]
-def bOrDManual ( f : Foo?; d:int )
-    return null_c(safe_field(f),d)
-*/

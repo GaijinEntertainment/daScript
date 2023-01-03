@@ -3,8 +3,8 @@ require llvm/llvm_jit
 require testProfile
 
 [jit,sideeffects]
-def fibR_jit(n:int)
-    if (n < 2)
+def fibR_jit(n)
+    if n < 2
         return n
     return fibR_jit(n - 1) + fibR_jit(n - 2)
 
@@ -20,7 +20,7 @@ def fibI_jit(n:int)
 
 [test]
 def test_fibR_jit(t: T?)
-    t |> success ( is_jit_function(@@fibR_jit) )
+    t |> success ( is_jit_function(@@<(n:int):int>fibR_jit) )
     var f3_j = fibR_jit(31)
     t |> equal( f3_j, 1346269)
 

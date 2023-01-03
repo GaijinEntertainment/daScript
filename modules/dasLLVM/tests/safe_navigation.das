@@ -64,3 +64,70 @@ def test_safe_field ( t:T? )
         t |> equal ( 2, bOrD2(unsafe(addr(bF)), 3) )
         t |> equal ( 4, bOrD2(unsafe(addr(bN)), 4) )
 
+[jit]
+def jit_safe_at(a,b,c)
+    unsafe
+        return a?[b] ?? c
+
+[test]
+def test_safe_at ( t:T? )
+    t |> run("safe_at dim") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@<(a:int const[3];b,c:int):int>jit_safe_at) )
+        let i = [[auto 1;2;3]]
+        let v1 = jit_safe_at(i,0,42)
+        let v2 = jit_safe_at(i,3,42)
+        t |> equal(1, v1)
+        t |> equal(42, v2)
+    t |> run("safe_at ptr to dim") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@<(a:int const[3]?;b,c:int):int>jit_safe_at) )
+        let i = [[auto 1;2;3]]
+        let pi = unsafe(addr(i))
+        let p0 : int[3]?
+        let v1 = jit_safe_at(pi,0,42)
+        let v2 = jit_safe_at(p0,0,42)
+        let v3 = jit_safe_at(pi,3,42)
+        let v4 = jit_safe_at(p0,3,42)
+        t |> equal(1, v1)
+        t |> equal(42, v2)
+        t |> equal(42, v3)
+        t |> equal(42, v4)
+    t |> run("safe_at array") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@<(a:array<int>;b,c:int):int>jit_safe_at) )
+        let i <- [{auto 1;2;3}]
+        let v1 = jit_safe_at(i,0,42)
+        let v2 = jit_safe_at(i,3,42)
+        t |> equal(1, v1)
+        t |> equal(42, v2)
+    t |> run("safe_at ptr to array") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@<(a:array<int>?;b,c:int):int>jit_safe_at) )
+        let i <- [{auto 1;2;3}]
+        let pi = unsafe(addr(i))
+        let p0 : int[3]?
+        let v1 = jit_safe_at(pi,0,42)
+        let v2 = jit_safe_at(p0,0,42)
+        let v3 = jit_safe_at(pi,3,42)
+        let v4 = jit_safe_at(p0,3,42)
+        t |> equal(1, v1)
+        t |> equal(42, v2)
+        t |> equal(42, v3)
+        t |> equal(42, v4)
+    t |> run("safe_at table") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@<(a:table<int;int>;b,c:int):int>jit_safe_at) )
+        let i <- {{0=>1; 1=>2; 2=>3}}
+        let v1 = jit_safe_at(i,0,42)
+        let v2 = jit_safe_at(i,3,42)
+        t |> equal(1, v1)
+        t |> equal(42, v2)
+    t |> run("safe_at ptr to table") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@<(a:table<int;int>?;b,c:int):int>jit_safe_at) )
+        let i <- {{0=>1; 1=>2; 2=>3}}
+        let pi = unsafe(addr(i))
+        let p0 : int[3]?
+        let v1 = jit_safe_at(pi,0,42)
+        let v2 = jit_safe_at(p0,0,42)
+        let v3 = jit_safe_at(pi,3,42)
+        let v4 = jit_safe_at(p0,3,42)
+        t |> equal(1, v1)
+        t |> equal(42, v2)
+        t |> equal(42, v3)
+        t |> equal(42, v4)
