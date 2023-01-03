@@ -66,8 +66,7 @@ def test_safe_field ( t:T? )
 
 [jit]
 def jit_safe_at(a,b,c)
-    unsafe
-        return a?[b] ?? c
+    return a?[b] ?? c
 
 [test]
 def test_safe_at ( t:T? )
