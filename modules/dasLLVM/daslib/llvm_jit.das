@@ -11,6 +11,7 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/capture_block
 require daslib/collect_labels
+require daslib/collect_finally
 require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
@@ -54,6 +55,7 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete]] thisBlock : ExprBlock?
     [[do_not_delete]] subblocks : table<LLVMOpaqueBasicBlock?; LLVMOpaqueBasicBlock?>
     [[do_not_delete]] loop_stack : array<LoopBlock>
+    [[do_not_delete]] block_stack : array<ExprBlock?>
     [[do_not_delete]] jit_context : Context?
     [[do_not_delete]] function_entry : LLVMOpaqueBasicBlock?
     [[do_not_delete]] function_body : LLVMOpaqueBasicBlock?
@@ -61,7 +63,8 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete]] prologue : LLVMOpaqueValue?
     [[do_not_delete]] labels : table<int;LLVMOpaqueBasicBlock?>
     [[do_not_delete]] sortedLabels : array<SLabel>
-    g_builder : LLVMOpaqueBuilder?
+    [[do_not_delete]] finallyBlocks : table<ExprBlock?; LLVMOpaqueBasicBlock?>
+    [[do_not_delete]] g_builder : LLVMOpaqueBuilder?
     option_no_range_check : bool = false
     option_no_alias : bool = false
 
@@ -103,6 +106,11 @@ class LlvmJitVisitor : AstVisitor
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("alwaysinline"))
         if hot
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("hot"))
+
+    def process_finally ( expr:ExpressionPtr )
+        var blk <- collect_finally(expr)
+        for bl in blk
+            finallyBlocks[bl] = LLVMAppendBasicBlock(ffunc, "finally_block_at_{int(bl.at.line)}")
 
     def process_labels ( expr:ExpressionPtr )
         var lls <- collect_labels(expr)
@@ -214,7 +222,7 @@ class LlvmJitVisitor : AstVisitor
         else
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
 
-    def build_function_entry(hasMakeBlock:bool; totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
+    def build_function_entry(bodyId:uint64; hasMakeBlock:bool; totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
         // now write to regular function
         function_entry = LLVMAppendBasicBlock(ffunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder,function_entry)
@@ -245,7 +253,7 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildStore(g_builder, LLVMGetParam(ffunc,uint(ai)), tryV)
                 setV(a, tryV)
         // function body
-        function_body = LLVMAppendBasicBlock(ffunc, "body")
+        function_body = LLVMAppendBasicBlock(ffunc, "body_{bodyId}")
         LLVMPositionBuilderAtEnd(g_builder,function_body)
 
     def override preVisitFunction(var fun:FunctionPtr) : void
@@ -256,9 +264,10 @@ class LlvmJitVisitor : AstVisitor
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
         build_wrapper_funcion(fun.arguments, fun.result, isCMRES(fun), null)
-        build_function_entry(fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
+        build_function_entry(intptr(fun), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
         process_function_hints(fun.annotations)
         process_labels(fun.body)
+        process_finally(fun.body)
 
     def build_epilogue
         if prologue != null
@@ -272,9 +281,6 @@ class LlvmJitVisitor : AstVisitor
         return LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(g_builder))!=null
 
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
-        if !current_block_terminates()
-            build_epilogue()
-            LLVMBuildRetVoid(g_builder)
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
         LLVMBuildBr(g_builder, function_body)
         ffunc = null
@@ -282,11 +288,29 @@ class LlvmJitVisitor : AstVisitor
         return fun
 
 // ExprBlock
+    def add_default_terminator(blk:smart_ptr<ExprBlock>)
+        if thisBlock==null && thisFunc!=null && thisFunc.body!=get_ptr(blk)
+            return
+        if thisBlock!=null && thisBlock!=get_ptr(blk)
+            return
+        if !current_block_terminates()
+            build_epilogue()
+            LLVMBuildRetVoid(g_builder)
+
     def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>) : void
         if blk.blockFlags.inTheLoop
             blk.blockFlags |= ExprBlockFlags finallyDisabled
+        block_stack |> push(get_ptr(blk))
+
+    def override preVisitExprBlockFinal(blk:smart_ptr<ExprBlock>): void
+        add_default_terminator(blk)
+        if finallyBlocks |> key_exists(get_ptr(blk))
+            LLVMPositionBuilderAtEnd(g_builder, finallyBlocks[get_ptr(blk)])
 
     def override visitExprBlock(var blk:smart_ptr<ExprBlock>) : ExpressionPtr
+        if length(blk.finalList)==0
+            add_default_terminator(blk)
+        block_stack |> pop()
         if blk.blockFlags.inTheLoop
             blk.blockFlags ^= ExprBlockFlags finallyDisabled
         return blk
@@ -814,10 +838,6 @@ class LlvmJitVisitor : AstVisitor
             failed("unsupported visitExprSafeAt type {describe(subExprT)}")
         return expr
 
-// ExprIs
-    def override preVisitExprIs(expr:smart_ptr<ExprIs>): void
-        unsupported(expr, "is")
-
 // ExprOp2
     def isReadModifyWriteOp2 ( name:das_string )
         return (name=="+=" || name=="-=" || name=="*=" || name=="/=" || name=="%=" ||
@@ -1302,6 +1322,7 @@ class LlvmJitVisitor : AstVisitor
         if expr.body is ExprBlock
             let body = expr.body as ExprBlock
             if length(body.finalList) != 0
+                LLVMBuildBr(g_builder, finallyBlocks[get_ptr(body)])
                 visit_finally(body, adapter)
         return expr
 
@@ -1409,6 +1430,7 @@ class LlvmJitVisitor : AstVisitor
         if expr.body is ExprBlock
             let body = expr.body as ExprBlock
             if length(body.finalList) != 0
+                LLVMBuildBr(g_builder, finallyBlocks[get_ptr(body)])
                 visit_finally(body, adapter)
         return expr
 
@@ -2509,15 +2531,14 @@ class LlvmJitVisitor : AstVisitor
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
         build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres, captureType)
-        build_function_entry(thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
+        build_function_entry(intptr(expr), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
         process_function_hints(thisBlock.annotations)
         process_labels(expr)
+        process_finally(expr)
         return fnmna
 
     def post_make_block ( var blk:smart_ptr<ExprBlock> )
-        if !is_terminator_expression(unsafe(reinterpret<ExpressionPtr> thisBlock))
-            build_epilogue()
-            LLVMBuildRetVoid(g_builder)
+        add_default_terminator(blk)
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
         LLVMBuildBr(g_builder, function_body)
         thisBlock = null
@@ -3110,5 +3131,4 @@ class JIT_LLVM : AstSimulateMacro
 //      * handled types
 //      * block structure (finally + ???)
 //  Expressions:
-//      * ExprIs
 //      * ExprTryCatch
