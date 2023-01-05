@@ -64,6 +64,8 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete]] labels : table<int;LLVMOpaqueBasicBlock?>
     [[do_not_delete]] sortedLabels : array<SLabel>
     [[do_not_delete]] finallyBlocks : table<ExprBlock?; LLVMOpaqueBasicBlock?>
+    [[do_not_delete]] afterFinallyBlocks : array<LLVMOpaqueBasicBlock?>
+    [[do_not_delete]] callBlock : LLVMOpaqueValue?
     [[do_not_delete]] g_builder : LLVMOpaqueBuilder?
     option_no_range_check : bool = false
     option_no_alias : bool = false
@@ -111,6 +113,10 @@ class LlvmJitVisitor : AstVisitor
         var blk <- collect_finally(expr)
         for bl in blk
             finallyBlocks[bl] = LLVMAppendBasicBlock(ffunc, "finally_block_at_{int(bl.at.line)}")
+        if length(blk) > 0
+            at_function_entry <|
+                callBlock = LLVMBuildAlloca(g_builder, LLVMPointerType(LLVMInt8Type(),0u), "call_block")
+                LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), callBlock)
 
     def process_labels ( expr:ExpressionPtr )
         var lls <- collect_labels(expr)
@@ -294,8 +300,23 @@ class LlvmJitVisitor : AstVisitor
         if thisBlock!=null && thisBlock!=get_ptr(blk)
             return
         if !current_block_terminates()
+            call_all_finally_blocks(false)
             build_epilogue()
             LLVMBuildRetVoid(g_builder)
+
+    def call_all_finally_blocks(stopAtLoop:bool)
+        var len = length(block_stack)
+        for i in range(len)
+            var blk = block_stack[len-1-i]
+            if stopAtLoop && blk.blockFlags.inTheLoop
+                break
+            if length(blk.finalList) > 0
+                var after = LLVMAppendBasicBlock(ffunc, "call_finally_block_{int(blk.at.line)}")
+                var after_ptr = LLVMBlockAddress(LLVMGetBasicBlockParent(after),after)
+                LLVMBuildStore(g_builder, after_ptr, callBlock)
+                LLVMBuildBr(g_builder, finallyBlocks[get_ptr(blk)])
+                LLVMPositionBuilderAtEnd(g_builder, after)
+                afterFinallyBlocks |> push(after)
 
     def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>) : void
         if blk.blockFlags.inTheLoop
@@ -310,6 +331,14 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprBlock(var blk:smart_ptr<ExprBlock>) : ExpressionPtr
         if length(blk.finalList)==0
             add_default_terminator(blk)
+        elif length(afterFinallyBlocks)>0
+            var cc = LLVMBuildLoad(g_builder, callBlock, "")
+            var needCond = thisFunc.body!=get_ptr(blk) && thisBlock!=get_ptr(blk)
+            if needCond
+                var not_null = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, cc, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), "")
+            var indb = LLVMBuildIndirectBr(g_builder, cc, uint(length(afterFinallyBlocks)))
+            for bb in afterFinallyBlocks
+                LLVMAddDestination(indb, bb)
         block_stack |> pop()
         if blk.blockFlags.inTheLoop
             blk.blockFlags ^= ExprBlockFlags finallyDisabled
@@ -1859,7 +1888,7 @@ class LlvmJitVisitor : AstVisitor
                 let isL = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, labI, LLVMConstInt(LLVMInt32Type(), uint64(kv.index), 0), "")
                 LLVMBuildCondBr(g_builder, isL, kv.blk, nextLab)
                 LLVMPositionBuilderAtEnd(g_builder,nextLab)
-            build_exception("invalid label index")
+            build_exception("invalid label index at {describe(expr.at)}")
         else
             var lab = labels[expr.labelName]
             if lab==null
@@ -1896,7 +1925,7 @@ class LlvmJitVisitor : AstVisitor
         if length(expr.arguments) > 1
             message = string((expr.arguments[1] as ExprConstString).value)
         var params = [[auto
-            get_string_constant_ptr(g_builder,message);
+            get_string_constant_ptr(g_builder,message + " at {describe(expr.at)}");
             get_context_param()
         ]]
         var check_assert = LLVMAppendBasicBlock(ffunc,"assert")
@@ -2490,6 +2519,7 @@ class LlvmJitVisitor : AstVisitor
             pre_visit_expr_return(expr, isCMRES(thisFunc))
 
     def visit_expr_return(expr:smart_ptr<ExprReturn>; returnType:TypeDeclPtr; isCmres:bool)
+        call_all_finally_blocks(false)
         if !returnType.isVoid
             if isCmres
                 if !expr.returnFlags.returnCMRES
@@ -2510,11 +2540,13 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprBreak
     def override preVisitExprBreak(expr:smart_ptr<ExprBreak>) : void
+        call_all_finally_blocks(true)
         var lblk = loop_stack |> back()
         LLVMBuildBr(g_builder, lblk.loop_end)
 
 // ExprContinue
     def override preVisitExprContinue(expr:smart_ptr<ExprContinue>) : void
+        call_all_finally_blocks(true)
         var lblk = loop_stack |> back()
         LLVMBuildBr(g_builder, lblk.loop_start)
 
