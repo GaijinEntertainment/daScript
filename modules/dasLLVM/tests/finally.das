@@ -12,6 +12,8 @@ def test_finally ( t:T? )
         t |> success ( test_nested_if() )
         t |> success ( is_jit_function(@@test_nested_if_else) )
         t |> success ( test_nested_if_else() )
+        t |> success ( is_jit_function(@@test_if_double_break) )
+        t |> success ( test_if_double_break() )
     t |> run("test for finally") <| @ ( t : T? )
         t |> success ( is_jit_function(@@test_for_finally) )
         t |> success ( test_for_finally() )
@@ -26,9 +28,24 @@ def test_finally ( t:T? )
         t |> success ( test_block_finally() )
 
 [jit, sideeffects]
-def test_nested_if
+def test_if_double_break(max:int=10)
+    var count = 0
+    for x in range(max)
+        if x==1
+            continue
+        finally
+            count += 10
+        if x==2
+            continue
+        finally
+            count += 100
+        count ++
+    return count==118
+
+[jit, sideeffects]
+def test_nested_if(max:int=10)
     var t = 0
-    for x in range(10)
+    for x in range(max)
         if x == 5
             if x > 4
                 break
@@ -39,10 +56,10 @@ def test_nested_if
     return t==11
 
 [jit, sideeffects]
-def test_nested_if_else
+def test_nested_if_else(max:int=10)
     var t = 0
     var p = false
-    for x in range(10)
+    for x in range(max)
         if x == 5
             if x < 4
                 p = true
@@ -55,10 +72,10 @@ def test_nested_if_else
     return t==11 && p==false
 
 [jit, sideeffects]
-def test_if_finally
+def test_if_finally(max:int=10)
     var t : int[10]
     var count = 0
-    for x in range(10)
+    for x in range(max)
         t[x] = x+1
         if x==5
             break
@@ -68,10 +85,10 @@ def test_if_finally
     return count==1 && t[9]==13
 
 [jit, sideeffects]
-def test_for_finally
+def test_for_finally(max:int=10)
     var t : int[10]
     var count = 0
-    for x in range(10)
+    for x in range(max)
         let uno = one()
         t[x] = x+uno
         if x==5
@@ -91,11 +108,11 @@ def one
     return ONE
 
 [jit, sideeffects]
-def test_while_finally
+def test_while_finally(max:int=10)
     var t : int[10]
     var count = 0
     var x = 0
-    while x != 10
+    while x != max
         let uno = one()
         t[x] = x+uno
         if x==5
