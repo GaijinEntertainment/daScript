@@ -542,8 +542,6 @@ namespace das {
     void for_each_typeinfo_macro ( Module * mod, const TBlock<void,TypeInfoMacroPtr> & block, Context * context, LineInfoArg * at );
     void for_each_for_loop_macro ( Module * mod, const TBlock<void,ForLoopMacroPtr> & block, Context * context, LineInfoArg * at );
     Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at );
-    bool exprReturns ( const ExpressionPtr & expr );
-    bool exprReturnsOrBreaks ( const ExpressionPtr & expr );
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at );
     void * das_make_interop_node ( Context & ctx, ExprCallFunc * call, Context * context, LineInfoArg * at );
     void * das_sb_make_interop_node ( Context & ctx, ExprStringBuilder * call, Context * context, LineInfoArg * at );

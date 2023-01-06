@@ -736,13 +736,6 @@ namespace das {
         addExtern<DAS_BIND_FUN(find_unique_structure)>(*this, lib,  "find_unique_structure",
             SideEffects::accessExternal, "find_unique_structure")
                 ->args({"program","name","context","at"});
-        // helpers
-        addExtern<DAS_BIND_FUN(exprReturns)>(*this, lib,  "is_terminator_expression",
-            SideEffects::none, "exprReturns")
-                ->args({"expr"});
-        addExtern<DAS_BIND_FUN(exprReturnsOrBreaks)>(*this, lib,  "is_terminator_or_break_expression",
-            SideEffects::none, "exprReturnsOrBreaks")
-                ->args({"expr"});
         // used variables and functions
         addExtern<DAS_BIND_FUN(get_use_global_variables)>(*this, lib,  "get_use_global_variables",
             SideEffects::invoke, "get_use_global_variables")

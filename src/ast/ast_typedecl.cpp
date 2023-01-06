@@ -918,7 +918,14 @@ namespace das
                 if ( structType->skipLockCheck ) return false;
                 dep.insert(structType);
                 for ( auto fld : structType->fields ) {
-                    if ( fld.type->lockCheck(dep) ) {
+                    bool checkLocks = true;
+                    for ( auto & ann : fld.annotation ) {
+                        if ( ann.name=="skip_field_lock_check" ) {
+                            checkLocks = false;
+                            break;
+                        }
+                    }
+                    if ( checkLocks && fld.type->lockCheck(dep) ) {
                         return true;
                     }
                 }
