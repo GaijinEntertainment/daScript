@@ -64,7 +64,7 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete]] labels : table<int;LLVMOpaqueBasicBlock?>
     [[do_not_delete]] sortedLabels : array<SLabel>
     [[do_not_delete]] finallyBlocks : table<ExprBlock?; LLVMOpaqueBasicBlock?>
-    [[do_not_delete]] afterFinallyBlocks : array<LLVMOpaqueBasicBlock?>
+    [[do_not_delete,skip_field_lock_check]] afterFinallyBlocks : table<ExprBlock?;array<LLVMOpaqueBasicBlock?>>
     [[do_not_delete]] callBlock : LLVMOpaqueValue?
     [[do_not_delete]] g_builder : LLVMOpaqueBuilder?
     option_no_range_check : bool = false
@@ -316,7 +316,7 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildStore(g_builder, after_ptr, callBlock)
                 LLVMBuildBr(g_builder, finallyBlocks[get_ptr(blk)])
                 LLVMPositionBuilderAtEnd(g_builder, after)
-                afterFinallyBlocks |> push(after)
+                afterFinallyBlocks[get_ptr(blk)] |> push(after)
 
     def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>) : void
         if blk.blockFlags.inTheLoop
@@ -334,21 +334,23 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprBlock(var blk:smart_ptr<ExprBlock>) : ExpressionPtr
         if length(blk.finalList)==0
             add_default_terminator(blk)
-        elif length(afterFinallyBlocks)>0
-            var cc = LLVMBuildLoad(g_builder, callBlock, "")
-            var needCond = thisFunc.body!=get_ptr(blk) && thisBlock!=get_ptr(blk)
-            var do_jump, skip_jump : LLVMOpaqueBasicBlock?
-            if needCond
-                do_jump = LLVMAppendBasicBlock(ffunc, "do_jump_blk_line_{int(blk.at.line)}")
-                skip_jump = LLVMAppendBasicBlock(ffunc, "skip_jump_blk_line_{int(blk.at.line)}")
-                var not_null = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, cc, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), "")
-                LLVMBuildCondBr(g_builder, not_null, do_jump, skip_jump)
-                LLVMPositionBuilderAtEnd(g_builder, do_jump)
-            var indb = LLVMBuildIndirectBr(g_builder, cc, uint(length(afterFinallyBlocks)))
-            for bb in afterFinallyBlocks
-                LLVMAddDestination(indb, bb)
-            if skip_jump!=null
-                LLVMPositionBuilderAtEnd(g_builder, skip_jump)
+        else
+            afterFinallyBlocks  |> find_if_exists(get_ptr(blk)) <| $ ( pAfterFinallyBlocks)
+                if length(*pAfterFinallyBlocks)>0
+                    var cc = LLVMBuildLoad(g_builder, callBlock, "")
+                    var needCond = thisFunc.body!=get_ptr(blk) && thisBlock!=get_ptr(blk)
+                    var do_jump, skip_jump : LLVMOpaqueBasicBlock?
+                    if needCond
+                        do_jump = LLVMAppendBasicBlock(ffunc, "do_jump_blk_line_{int(blk.at.line)}")
+                        skip_jump = LLVMAppendBasicBlock(ffunc, "skip_jump_blk_line_{int(blk.at.line)}")
+                        var not_null = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, cc, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), "")
+                        LLVMBuildCondBr(g_builder, not_null, do_jump, skip_jump)
+                        LLVMPositionBuilderAtEnd(g_builder, do_jump)
+                    var indb = LLVMBuildIndirectBr(g_builder, cc, uint(length(*pAfterFinallyBlocks)))
+                    for bb in *pAfterFinallyBlocks
+                        LLVMAddDestination(indb, bb)
+                    if skip_jump!=null
+                        LLVMPositionBuilderAtEnd(g_builder, skip_jump)
         block_stack |> pop()
         if blk.blockFlags.inTheLoop
             blk.blockFlags ^= ExprBlockFlags finallyDisabled
