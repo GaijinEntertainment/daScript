@@ -32,8 +32,7 @@ struct private IteBlock
     [[do_not_delete]] if_end   : LLVMOpaqueBasicBlock?
     [[do_not_delete]] phi_true  : LLVMOpaqueBasicBlock?
     [[do_not_delete]] phi_false : LLVMOpaqueBasicBlock?
-    if_true_terminates  : bool
-    if_false_terminates : bool
+    if_true_terminates, if_false_terminates : bool
 
 struct private LoopBlock
     [[do_not_delete]] loop_start : LLVMOpaqueBasicBlock?
@@ -1230,9 +1229,7 @@ class LlvmJitVisitor : AstVisitor
             if_false = LLVMAppendBasicBlock(ffunc,"op3_false_at_line_{int(expr.at.line)}"),
             if_end   = LLVMAppendBasicBlock(ffunc,"op3_end_at_line_{int(expr.at.line)}"),
             phi_true = LLVMAppendBasicBlock(ffunc,"phi_true_at_line_{int(expr.at.line)}"),
-            phi_false= LLVMAppendBasicBlock(ffunc,"phi_false_at_line_{int(expr.at.line)}"),
-            if_true_terminates = false,
-            if_false_terminates = false
+            phi_false= LLVMAppendBasicBlock(ffunc,"phi_false_at_line_{int(expr.at.line)}")
         ]]
         ite2blocks[get_expr_ptr(expr)] = blk
 
@@ -1371,44 +1368,56 @@ class LlvmJitVisitor : AstVisitor
         unsupported(expr, "try-catch")
 
 // ExprIfThenElse
+    /*
+    if_cond_at:
+        cond
+        br cond, if_true, if_false
+    if_true:
+        true_expr
+        br if_end
+    if_false:
+        false_expr
+        br if_end
+    if_end:
+    */
     def override preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : void
         var before_if = LLVMAppendBasicBlock(ffunc,"if_cond_at_{int(expr.at.line)}")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder,before_if)
-        let itt = is_terminator_or_break_expression(expr.if_true)
-        let ift = expr.if_false != null ? is_terminator_or_break_expression(expr.if_false) : false
         var blk = [[IteBlock
             if_true  = LLVMAppendBasicBlock(ffunc,"if_true_at_line_{int(expr.at.line)}"),
             if_false = LLVMAppendBasicBlock(ffunc,"if_false_at_line_{int(expr.at.line)}"),
-            if_end   = (!itt || !ift) ? LLVMAppendBasicBlock(ffunc,"if_end_at_line_{int(expr.at.line)}") : null,
-            if_true_terminates = itt,
-            if_false_terminates = ift
+            if_end   = LLVMAppendBasicBlock(ffunc,"if_end_at_line_{int(expr.at.line)}")
         ]]
         ite2blocks[get_expr_ptr(expr)] = blk
 
     def override preVisitExprIfThenElseIfBlock(expr:smart_ptr<ExprIfThenElse>;ifBlock:ExpressionPtr) : void
-        var blk = ite2blocks[get_expr_ptr(expr)]                        // we start if_true block
+        var blk = ite2blocks[get_expr_ptr(expr)]
         LLVMBuildCondBr(g_builder, getE(expr.cond), blk.if_true, blk.if_false)
         LLVMPositionBuilderAtEnd(g_builder,blk.if_true)
 
-    def override preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr) : void
-        var blk = ite2blocks[get_expr_ptr(expr)]
-        if !blk.if_true_terminates
-            LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
+    def before_else(expr:smart_ptr<ExprIfThenElse>) : void
+        var blk & = unsafe(ite2blocks[get_expr_ptr(expr)])
+        if !current_block_terminates()
+            LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
+        else
+            blk.if_true_terminates = true
         LLVMPositionBuilderAtEnd(g_builder,blk.if_false)
 
+    def override preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr) : void
+        before_else(expr)
+
     def override visitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : ExpressionPtr
-        var blk = ite2blocks[get_expr_ptr(expr)]
+        var blk & = unsafe(ite2blocks[get_expr_ptr(expr)])
         if expr.if_false == null
-            if !current_block_terminates()
-                LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
-            LLVMPositionBuilderAtEnd(g_builder,blk.if_false)
-        if !blk.if_false_terminates
-            LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_false block we jump to if_end
-        if blk.if_end != null
-            if !current_block_terminates()
-                LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
-            LLVMPositionBuilderAtEnd(g_builder,blk.if_end)
+            before_else(expr)
+        if !current_block_terminates()
+            LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
+        else
+            blk.if_false_terminates = true
+        LLVMPositionBuilderAtEnd(g_builder,blk.if_end)
+        if blk.if_true_terminates && blk.if_false_terminates
+            LLVMBuildUnreachable(g_builder)
         return expr
 
 // ExprFor
