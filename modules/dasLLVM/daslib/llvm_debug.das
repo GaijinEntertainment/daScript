@@ -30,28 +30,35 @@ def isLLVMOpaqueValuePtr ( vinfo )
 def isLLVMOpaqueTypePtr ( vinfo )
     return isLLVMOpaquePtr(vinfo,"LLVMOpaqueType")
 
+def isLLVMOpaqueBlockPtr ( vinfo )
+    return isLLVMOpaquePtr(vinfo,"LLVMOpaqueBasicBlock")
+
+def describe_arg ( var ctxid:Context; vinfo; arg:void? ) : void
+    unsafe
+        let parg = reinterpret<void??> arg
+        if parg==null || *parg==null
+            report_to_debugger(ctxid, "llvm_debug", vinfo.name, null)
+            return
+        if isLLVMOpaqueValuePtr(vinfo)
+            let pexpression = reinterpret<LLVMOpaqueValue??> arg
+            report_to_debugger(ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
+        elif isLLVMOpaqueTypePtr(vinfo)
+            let pexpression = reinterpret<LLVMOpaqueType??> arg
+            report_to_debugger(ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
+        elif isLLVMOpaqueBlockPtr(vinfo)
+            let pexpression = reinterpret<LLVMOpaqueBasicBlock??> arg
+            report_to_debugger(ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
+
 class SampleStackWalker : DapiStackWalker
     ctxid : Context?
     def override onArgument ( info:FuncInfo; index:int; vinfo:VarInfo; arg:float4 ) : void
-        unsafe
-            if isLLVMOpaqueValuePtr(vinfo)
-                let pexpression = reinterpret<LLVMOpaqueValue??> addr(arg)
-                if *pexpression != null
-                    report_to_debugger(*ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
-            elif isLLVMOpaqueTypePtr(vinfo)
-                let pexpression = reinterpret<LLVMOpaqueType??> addr(arg)
-                if *pexpression != null
-                    report_to_debugger(*ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
+        if vinfo.flags.ref || vinfo.flags.refType
+            unsafe
+                describe_arg(*ctxid,vinfo,* reinterpret<void??>(addr(arg)))
+        else
+            describe_arg(*ctxid,vinfo,unsafe(addr(arg)))
     def override onVariable ( inf:FuncInfo; vinfo:LocalVariableInfo; arg:void?; inScope:bool ) : void
-        unsafe
-            if isLLVMOpaqueValuePtr(vinfo)
-                let pexpression = reinterpret<LLVMOpaqueValue??> addr(arg)
-                if *pexpression != null
-                    report_to_debugger(*ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
-            elif isLLVMOpaqueTypePtr(vinfo)
-                let pexpression = reinterpret<LLVMOpaqueType??> addr(arg)
-                if *pexpression != null
-                    report_to_debugger(*ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
+        describe_arg(*ctxid, vinfo, arg)
     def override onAfterCall ( pp:Prologue ) : bool
         return false    // only stack top
 

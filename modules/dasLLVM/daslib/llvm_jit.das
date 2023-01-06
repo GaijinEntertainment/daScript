@@ -20,6 +20,7 @@ require daslib/lpipe
 require math
 
 // require daslib/debug
+// require llvm/llvm_debug
 
 [macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
@@ -326,7 +327,10 @@ class LlvmJitVisitor : AstVisitor
     def override preVisitExprBlockFinal(blk:smart_ptr<ExprBlock>): void
         add_default_terminator(blk)
         if finallyBlocks |> key_exists(get_ptr(blk))
-            LLVMPositionBuilderAtEnd(g_builder, finallyBlocks[get_ptr(blk)])
+            var fblk = finallyBlocks[get_ptr(blk)]
+            if !current_block_terminates()
+                LLVMBuildBr(g_builder, fblk)
+            LLVMPositionBuilderAtEnd(g_builder, fblk)
 
     def override visitExprBlock(var blk:smart_ptr<ExprBlock>) : ExpressionPtr
         if length(blk.finalList)==0
@@ -334,11 +338,18 @@ class LlvmJitVisitor : AstVisitor
         elif length(afterFinallyBlocks)>0
             var cc = LLVMBuildLoad(g_builder, callBlock, "")
             var needCond = thisFunc.body!=get_ptr(blk) && thisBlock!=get_ptr(blk)
+            var do_jump, skip_jump : LLVMOpaqueBasicBlock?
             if needCond
+                do_jump = LLVMAppendBasicBlock(ffunc, "do_jump_blk_line_{int(blk.at.line)}")
+                skip_jump = LLVMAppendBasicBlock(ffunc, "skip_jump_blk_line_{int(blk.at.line)}")
                 var not_null = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, cc, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), "")
+                LLVMBuildCondBr(g_builder, not_null, do_jump, skip_jump)
+                LLVMPositionBuilderAtEnd(g_builder, do_jump)
             var indb = LLVMBuildIndirectBr(g_builder, cc, uint(length(afterFinallyBlocks)))
             for bb in afterFinallyBlocks
                 LLVMAddDestination(indb, bb)
+            if skip_jump!=null
+                LLVMPositionBuilderAtEnd(g_builder, skip_jump)
         block_stack |> pop()
         if blk.blockFlags.inTheLoop
             blk.blockFlags ^= ExprBlockFlags finallyDisabled
@@ -1389,12 +1400,14 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : ExpressionPtr
         var blk = ite2blocks[get_expr_ptr(expr)]
         if expr.if_false == null
-            if !blk.if_true_terminates
+            if !current_block_terminates()
                 LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_true block we jump to if_end
             LLVMPositionBuilderAtEnd(g_builder,blk.if_false)
         if !blk.if_false_terminates
             LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)   // after the end of if_false block we jump to if_end
         if blk.if_end != null
+            if !current_block_terminates()
+                LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
             LLVMPositionBuilderAtEnd(g_builder,blk.if_end)
         return expr
 
@@ -2541,12 +2554,16 @@ class LlvmJitVisitor : AstVisitor
 // ExprBreak
     def override preVisitExprBreak(expr:smart_ptr<ExprBreak>) : void
         call_all_finally_blocks(true)
+        if callBlock!=null
+            LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), callBlock)
         var lblk = loop_stack |> back()
         LLVMBuildBr(g_builder, lblk.loop_end)
 
 // ExprContinue
     def override preVisitExprContinue(expr:smart_ptr<ExprContinue>) : void
         call_all_finally_blocks(true)
+        if callBlock!=null
+            LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), callBlock)
         var lblk = loop_stack |> back()
         LLVMBuildBr(g_builder, lblk.loop_start)
 
@@ -3161,6 +3178,5 @@ class JIT_LLVM : AstSimulateMacro
 // TODO:
 //  Topics:
 //      * handled types
-//      * block structure (finally + ???)
 //  Expressions:
 //      * ExprTryCatch

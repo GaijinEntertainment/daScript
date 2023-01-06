@@ -8,6 +8,10 @@ def test_finally ( t:T? )
     t |> run("test if finally") <| @ ( t : T? )
         t |> success ( is_jit_function(@@test_if_finally) )
         t |> success ( test_if_finally() )
+        t |> success ( is_jit_function(@@test_nested_if) )
+        t |> success ( test_nested_if() )
+        t |> success ( is_jit_function(@@test_nested_if_else) )
+        t |> success ( test_nested_if_else() )
     t |> run("test for finally") <| @ ( t : T? )
         t |> success ( is_jit_function(@@test_for_finally) )
         t |> success ( test_for_finally() )
@@ -20,6 +24,35 @@ def test_finally ( t:T? )
     t |> run("test block finally") <| @ ( t : T? )
         t |> success ( is_jit_function(@@test_block_finally) )
         t |> success ( test_block_finally() )
+
+[jit, sideeffects]
+def test_nested_if
+    var t = 0
+    for x in range(10)
+        if x == 5
+            if x > 4
+                break
+            finally
+                t += 1
+        finally
+            t += 10
+    return t==11
+
+[jit, sideeffects]
+def test_nested_if_else
+    var t = 0
+    var p = false
+    for x in range(10)
+        if x == 5
+            if x < 4
+                p = true
+            else
+                break
+            finally
+                t += 1
+        finally
+            t += 10
+    return t==11 && p==false
 
 [jit, sideeffects]
 def test_if_finally

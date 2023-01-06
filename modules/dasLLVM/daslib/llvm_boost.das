@@ -228,16 +228,23 @@ def LLVMGetIntrinsicDeclaration ( mod:LLVMOpaqueModule?; id:uint; var argTypes:a
     return LLVMGetIntrinsicDeclaration(mod, id, unsafe(addr(argTypes[0])), uint64(length(argTypes)))
 
 def describe ( typ:LLVMOpaqueType? )
+    return "null" if typ==null
     var st = LLVMPrintTypeToString(typ)
     var stc = clone_string(st)
     LLVMDisposeMessage(st)
     return stc
 
 def describe ( typ:LLVMOpaqueValue? )
+    return "null" if typ==null
     var st = LLVMPrintValueToString(typ)
     var stc = clone_string(st)
     LLVMDisposeMessage(st)
     return stc
+
+def describe ( blk:LLVMOpaqueBasicBlock? )
+    return "null" if blk==null
+    var st := LLVMGetBasicBlockName(blk)
+    return st
 
 def LLVMSetFunctionCallConv(ofunc:LLVMOpaqueValue?; conv:LLVMCallConv)
     LLVMSetFunctionCallConv(ofunc, uint(conv))
