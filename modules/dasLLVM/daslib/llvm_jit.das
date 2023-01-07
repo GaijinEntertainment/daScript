@@ -69,6 +69,7 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete]] g_builder : LLVMOpaqueBuilder?
     option_no_range_check : bool = false
     option_no_alias : bool = false
+    option_no_capture : bool = false
 
     def LlvmJitVisitor ( ctx:Context? )
         jit_context = ctx
@@ -78,21 +79,26 @@ class LlvmJitVisitor : AstVisitor
         LLVMDisposeBuilder(g_builder)
 
 // Function
-    def build_noalias_list ( annotations:AnnotationList )
+    def build_noalias_list ( annotations:AnnotationList ) : tuple<noalias:table<string>;nocapture:table<string>>
         var noalias : table<string>
+        var nocapture : table<string>
         for ann in annotations
             if ann.annotation.name=="hint"
                 for arg in ann.arguments
                     if arg.name=="noalias"
                         if arg.basicType == Type tString
                             noalias |> insert(string(arg.sValue))
-        return <- noalias
+                    elif arg.name=="nocapture"
+                        if arg.basicType == Type tString
+                            nocapture |> insert(string(arg.sValue))
+        return <- [[auto noalias,nocapture]]
 
     def process_function_hints ( annotations:AnnotationList )
         var alwaysInline = false
         var hot = false
         option_no_range_check = false
         option_no_alias = false
+        option_no_capture = false
         for ann in annotations
             if ann.annotation.name=="hint"
                 for arg in ann.arguments
@@ -104,6 +110,8 @@ class LlvmJitVisitor : AstVisitor
                         option_no_range_check = true
                     elif arg.name=="unsafe_alias"
                         option_no_alias = true
+                    elif arg.name=="unsafe_capture"
+                        option_no_capture = true
         if alwaysInline
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("alwaysinline"))
         if hot
@@ -145,6 +153,7 @@ class LlvmJitVisitor : AstVisitor
         // setup parameter alignment
         var readonly_attr = LLVMGetEnumAttribute("readonly")
         var noalias_attr = LLVMGetEnumAttribute("noalias")
+        var nocapture_attr = LLVMGetEnumAttribute("nocapture")
         for a,ai in arguments,urange(100500)
             if a._type.isRef
                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.alignOf))
@@ -152,14 +161,19 @@ class LlvmJitVisitor : AstVisitor
                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.firstType.alignOf))
             if (a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant
                 LLVMAddAttributeToFunctionArgument(ffunc, ai, readonly_attr)
-            if option_no_alias || nat |> key_exists(string(a.name))
+            if option_no_alias || nat.noalias |> key_exists(string(a.name))
                 LLVMAddAttributeToFunctionArgument(ffunc, ai, noalias_attr)
+            if option_no_capture || nat.nocapture |> key_exists(string(a.name))
+                LLVMAddAttributeToFunctionArgument(ffunc, ai, nocapture_attr)
         // noalias of the capture target, context, result
         var nai = uint(length(arguments))
         if captureType!=null
+            LLVMAddAttributeToFunctionArgument(ffunc, nai, nocapture_attr)
             LLVMAddAttributeToFunctionArgument(ffunc, nai++, noalias_attr)  // capture target
+        LLVMAddAttributeToFunctionArgument(ffunc, nai, nocapture_attr)
         LLVMAddAttributeToFunctionArgument(ffunc, nai++, noalias_attr)      // context
         if isCmres
+            LLVMAddAttributeToFunctionArgument(ffunc, nai, nocapture_attr)
             LLVMAddAttributeToFunctionArgument(ffunc, nai++, noalias_attr)  // cmres
         // alignment of the context and the result
         LLVMSetParamAlignment(get_context_param(), 16u)

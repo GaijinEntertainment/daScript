@@ -4,15 +4,7 @@ require strings
 require fio
 //require brainfuck_mandelbrot
 
-[sideeffects]
-def read_char_from_input()
-	var s = ""
-	while length(s) <= 0
-		s = fstdin() |> fread()
-	unsafe
-		return uint8(character_uat(s, 0))
-
-[jit,unsafe_deref,hint(hot,unsafe_alias)]
+[jit,unsafe_deref,hint(hot,unsafe_alias,noalias=code,nocapture=code,noalias=tape,nocapture=tape)]
 def run(code: uint8?; lengthOfCode:int; var tape: uint8?; var codePos, tapePos: int&; skip: bool): bool
     unsafe
         if skip
