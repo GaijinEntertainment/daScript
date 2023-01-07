@@ -18,6 +18,8 @@ def isExpressionType ( _vinfo )
     if _vinfo.basicType != Type tPointer || _vinfo.firstType == null
         return false
     let vinfo = _vinfo.firstType
+    if vinfo.basicType != Type tHandle
+        return false
     if vinfo.annotation._module.name!="ast"
         return false
     if !string(vinfo.annotation.name) |> starts_with("Expr")
