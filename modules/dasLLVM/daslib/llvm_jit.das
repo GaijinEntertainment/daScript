@@ -2404,6 +2404,7 @@ class LlvmJitVisitor : AstVisitor
         if expr._type.flags.ref
             var val_ptr = LLVMBuildBitCast(g_builder, val, get_basetype_pointer(expr.value._type.vectorBaseType), "")
             val_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
+            val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, get_type_pointer(expr._type), "")
             setE(expr, val_ptr)
         else
             var isSequencial = true
