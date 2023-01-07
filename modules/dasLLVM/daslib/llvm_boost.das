@@ -257,3 +257,7 @@ def set_meta_dereferenceable ( instr:LLVMOpaqueValue?; bytes:int; nil:bool )
         instr,
         LLVMGetMDKindID(msg, uint(length(msg))),
         LLVMMDNode(unsafe(addr(values[0])), 1u))
+
+def LLVMAddAttributeToFunctionArgumentRange ( func:LLVMOpaqueValue?; rng:urange; attr:LLVMOpaqueAttributeRef? )
+    for t in rng
+        LLVMAddAttributeToFunctionArgument(func, t, attr)
