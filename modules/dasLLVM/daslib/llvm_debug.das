@@ -50,6 +50,7 @@ def describe_arg ( var ctxid:Context; vinfo; arg:void? ) : void
         elif isLLVMOpaqueBlockPtr(vinfo)
             let pexpression = reinterpret<LLVMOpaqueBasicBlock??> arg
             report_to_debugger(ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
+            report_to_debugger(ctxid, "llvm_debug", "{vinfo.name}.detail", describe(LLVMBasicBlockAsValue(*pexpression)))
 
 class SampleStackWalker : DapiStackWalker
     ctxid : Context?

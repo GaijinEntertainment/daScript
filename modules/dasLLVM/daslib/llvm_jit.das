@@ -19,8 +19,13 @@ require daslib/fio
 require daslib/lpipe
 require math
 
-// require daslib/debug
-// require llvm/llvm_debug
+// uncomment to enable debug
+/*
+options debugger
+require daslib/debug
+require daslib/ast_debug
+require llvm/llvm_debug
+*/
 
 [macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
