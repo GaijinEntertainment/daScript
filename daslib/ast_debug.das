@@ -8,6 +8,7 @@ module ast_debug shared private
 require debugapi
 require daslib/ast_boost
 require daslib/strings
+require daslib/debug_expression
 
 def report_to_debugger ( var ctx:Context; category,name:string; value:auto(TT) )
     let tinfo = typeinfo(rtti_typeinfo value)
@@ -67,6 +68,7 @@ def describe_arg ( var ctxid:Context; vinfo; arg:void? ) : void
             return
         if isExpressionType(vinfo)
             report_to_debugger(ctxid, "ast_debug", vinfo.name, describe(*reinterpret<ExpressionPtr?> arg))
+            report_to_debugger(ctxid, "ast_debug", vinfo.name+".detailed", debug_expression(*reinterpret<ExpressionPtr?> arg))
         elif isAstPtrType(vinfo,"TypeDecl")
             report_to_debugger(ctxid, "ast_debug", vinfo.name, describe(*reinterpret<TypeDeclPtr?> arg))
         elif isAstPtrType(vinfo,"Function")

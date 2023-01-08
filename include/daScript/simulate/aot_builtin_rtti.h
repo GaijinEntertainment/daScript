@@ -157,6 +157,8 @@ namespace das {
     struct BasicStructureAnnotation;
     void rtti_builtin_basic_struct_for_each_field(const BasicStructureAnnotation & ann,
         const TBlock<void, char *, char*, const TypeInfo, uint32_t> & block, Context * context, LineInfoArg * lineinfo);
+    void rtti_builtin_basic_struct_for_each_parent ( const BasicStructureAnnotation & ann,
+        const TBlock<void,Annotation *> & block, Context * context, LineInfoArg * at );
 
     LineInfo getCurrentLineInfo( LineInfoArg * lineInfo );
     void builtin_expected_errors ( ProgramPtr prog, const TBlock<void,CompilationError,int> & block, Context * context, LineInfoArg * lineInfo );

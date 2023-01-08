@@ -662,6 +662,7 @@ namespace das
     ,   worstDefault =      modifyArgumentAndExternal// use this as 'default' bind if you don't know what are side effects of your function, or if you don't undersand what are SideEffects
     ,   accessGlobal =      (1<<4)
     ,   invoke =            (1<<5)
+    ,   invokeAndAccessExternal = invoke | accessExternal
     ,   inferredSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invoke)
     };
 

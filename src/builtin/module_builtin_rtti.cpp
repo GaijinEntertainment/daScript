@@ -940,6 +940,13 @@ namespace das {
         });
     }
 
+    void rtti_builtin_basic_struct_for_each_parent ( const BasicStructureAnnotation & ann, const TBlock<void,Annotation *> & block, Context * context, LineInfoArg * at ) {
+        for ( auto & it : ann.parents ) {
+            vec4f args[1] = { cast<Annotation *>::from(it) };
+            context->invoke(block, args, nullptr, at);
+        }
+    }
+
     void rtti_builtin_basic_struct_for_each_field ( const BasicStructureAnnotation & ann,
         const TBlock<void,char *,char*,const TypeInfo,uint32_t> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
@@ -1356,7 +1363,10 @@ namespace das {
                 SideEffects::modifyExternal, "rtti_builtin_structure_for_each_annotation")
                     ->args({"struct","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_builtin_basic_struct_for_each_field)>(*this, lib, "basic_struct_for_each_field",
-                SideEffects::modifyExternal, "rtti_builtin_basic_struct_for_each_field")
+                SideEffects::invokeAndAccessExternal, "rtti_builtin_basic_struct_for_each_field")
+                    ->args({"annotation","block","context","line"});
+            addExtern<DAS_BIND_FUN(rtti_builtin_basic_struct_for_each_parent)>(*this, lib, "basic_struct_for_each_parent",
+                SideEffects::invokeAndAccessExternal, "rtti_builtin_basic_struct_for_each_parent")
                     ->args({"annotation","block","context","line"});
             addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_is_same_type",
                 SideEffects::modifyExternal, "isSameType")

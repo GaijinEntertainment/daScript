@@ -497,6 +497,13 @@ namespace das {
         (*daScriptEnvironment::bound->g_compilerLog) << text;
     }
 
+    Annotation * get_expression_annotation ( Expression * expr, Context * context, LineInfoArg * at ) {
+        if ( !expr ) return nullptr;
+        if ( !daScriptEnvironment::bound ) context->throw_error_at(at ? *at:LineInfo(), "expecting bound environment");
+        auto mod = Module::require("ast");
+        return mod->findAnnotation(expr->__rtti).get();
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -612,6 +619,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(get_mangled_name_b)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_b")
                 ->args({"variable","context","line"});
+        addExtern<DAS_BIND_FUN(get_expression_annotation)>(*this, lib,  "get_expression_annotation",
+            SideEffects::none, "get_expression_annotation")
+                ->args({"expr","context","line"});
         // type conversion functions
         addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
             SideEffects::none, "das_to_string")
