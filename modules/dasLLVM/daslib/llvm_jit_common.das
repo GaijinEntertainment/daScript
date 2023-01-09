@@ -10,6 +10,7 @@ require daslib/strings
 require daslib/defer
 require daslib/fio
 require daslib/enum_trait
+require jit
 
 let public LLVM_JIT_ENABLED = true
 

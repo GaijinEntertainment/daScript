@@ -18,6 +18,7 @@ require daslib/defer
 require daslib/fio
 require daslib/lpipe
 require math
+require jit public
 
 // uncomment to enable debug
 /*
@@ -3210,5 +3211,6 @@ class JIT_LLVM : AstSimulateMacro
 // TODO:
 //  Topics:
 //      * handled types
+//      * support for debugger
 //  Expressions:
 //      * ExprTryCatch
