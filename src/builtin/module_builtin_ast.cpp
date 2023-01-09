@@ -753,16 +753,6 @@ namespace das {
         addExtern<DAS_BIND_FUN(get_use_functions)>(*this, lib,  "get_use_functions",
             SideEffects::invoke, "get_use_functions")
                 ->args({"func","block","context","at"});
-        // jit
-        addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
-            SideEffects::none, "das_get_builtin_function_address")
-                ->args({"fn","context","at"});
-        addExtern<DAS_BIND_FUN(das_make_interop_node)>(*this, lib,  "make_interop_node",
-            SideEffects::none, "das_make_interop_node")
-                ->args({"ctx","call","context","at"});
-        addExtern<DAS_BIND_FUN(das_sb_make_interop_node)>(*this, lib,  "make_interop_node",
-            SideEffects::none, "das_sb_make_interop_node")
-                ->args({"ctx","builder","context","at"});
         // typeinfo
         addExtern<DAS_BIND_FUN(das_make_type_info_structure)>(*this, lib,  "make_type_info_structure",
             SideEffects::none, "das_make_type_info_structure")

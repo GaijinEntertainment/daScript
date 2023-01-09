@@ -376,6 +376,7 @@ src/builtin/module_builtin_ast_adapters.cpp
 src/builtin/module_builtin_ast.h
 src/builtin/module_builtin_uriparser.h
 src/builtin/module_builtin_uriparser.cpp
+src/builtin/module_jit.cpp
 src/builtin/ast_gen.inc
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_dasbind.cpp
@@ -541,6 +542,7 @@ include/daScript/simulate/aot_builtin_debugger.h
 include/daScript/simulate/aot_builtin_jobque.h
 include/daScript/simulate/aot_builtin_dasbind.h
 include/daScript/simulate/aot_builtin_uriparser.h
+include/daScript/simulate/aot_builtin_jit.h
 include/daScript/simulate/fs_file_info.h
 src/simulate/fs_file_info.cpp
 ${DAS_MODULES_RESOLVE_INC}

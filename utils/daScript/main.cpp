@@ -225,6 +225,9 @@ int das_aot_main ( int argc, char * argv[] ) {
     if (!Module::require("ast")) {
         NEED_MODULE(Module_Ast);
     }
+    if (!Module::require("jit")) {
+        NEED_MODULE(Module_Jit);
+    }
     if (!Module::require("debugapi")) {
         NEED_MODULE(Module_Debugger);
     }
@@ -446,6 +449,9 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     }
     if (!Module::require("ast")) {
         NEED_MODULE(Module_Ast);
+    }
+    if (!Module::require("jit")) {
+        NEED_MODULE(Module_Jit);
     }
     if (!Module::require("debugapi")) {
         NEED_MODULE(Module_Debugger);
