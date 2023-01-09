@@ -1,6 +1,7 @@
 require dastest/testing_boost
 
 require llvm/llvm_jit
+require jit
 
 var g_A = 0
 var g_B = 0.

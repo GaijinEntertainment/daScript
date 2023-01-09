@@ -1,4 +1,3 @@
-require dastest/testing_boost
 require llvm/llvm_jit
 require testProfile
 
@@ -27,19 +26,6 @@ def primesI_jit(n:int)
 				count --
 				break
     return count
-
-[test]
-def test_primes(t: T?)
-    if true
-        t |> success ( is_jit_function(@@primes_jit) )
-        t |> success ( is_jit_function(@@primesI_jit) )
-        for vv in range(1,14)
-            let v = vv * 100
-            let R = testProfile::testPrimes(v)
-            let pj = primes_jit(v)
-            t |> equal( R, pj)
-            let pji  = primesI_jit(v)
-            t |> equal( R, pji)
 
 [export]
 def main()

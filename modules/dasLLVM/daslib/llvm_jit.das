@@ -18,7 +18,7 @@ require daslib/defer
 require daslib/fio
 require daslib/lpipe
 require math
-require jit public
+require jit
 
 // uncomment to enable debug
 /*

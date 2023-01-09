@@ -1,6 +1,8 @@
 require daslib/safe_addr
 require daslib/math_bits
+
 require llvm/llvm_boost
+require jit
 
 [sideeffects]
 def add_two_ints ( a,b : int ) : int

@@ -2,6 +2,7 @@ require dastest/testing_boost
 
 require llvm/llvm_jit
 require llvm
+require jit
 
 [jit]
 def jit_test_abi_mad ( a,b,c )

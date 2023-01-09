@@ -1,7 +1,7 @@
 require dastest/testing_boost
 
 require llvm/llvm_jit
-require llvm
+require jit
 
 [jit]
 def test_for

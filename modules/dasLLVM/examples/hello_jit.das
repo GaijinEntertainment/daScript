@@ -1,4 +1,5 @@
 require llvm/llvm_jit
+require jit
 
 [jit]
 def add ( a, b : int )

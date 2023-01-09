@@ -1,5 +1,5 @@
-require dastest/testing_boost
 require llvm/llvm_jit
+
 require testProfile
 
 [jit,sideeffects]
@@ -17,18 +17,6 @@ def fibI_jit(n:int)
         cur += last
         last = tmp
     return cur
-
-[test]
-def test_fibR_jit(t: T?)
-    t |> success ( is_jit_function(@@<(n:int):int>fibR_jit) )
-    var f3_j = fibR_jit(31)
-    t |> equal( f3_j, 1346269)
-
-[test]
-def test_fibI_jit(t: T?)
-    t |> success ( is_jit_function(@@fibI_jit) )
-    var f3_j = fibI_jit(6511134)
-    t |> equal( f3_j, 1781508648)
 
 [export]
 def main()

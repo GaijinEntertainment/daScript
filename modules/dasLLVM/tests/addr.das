@@ -1,6 +1,7 @@
 require dastest/testing_boost
 
 require llvm/llvm_jit
+require jit
 
 def fnmad(a,b,c:int)
     return a*b+c

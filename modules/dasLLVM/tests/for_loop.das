@@ -1,5 +1,6 @@
 require dastest/testing_boost
 require llvm/llvm_jit
+require jit
 
 [jit]
 def range_for ( value:int )

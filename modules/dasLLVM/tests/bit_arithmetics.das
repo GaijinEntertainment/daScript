@@ -1,9 +1,10 @@
 require dastest/testing_boost
 
 require llvm/llvm_jit
+require jit
+
 require daslib/fuzzer
 require daslib/faker
-
 require daslib/constant_expression
 
 [jit]
