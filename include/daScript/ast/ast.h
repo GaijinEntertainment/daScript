@@ -1013,6 +1013,7 @@ namespace das
                 bool    isPublic : 1;
                 bool    isModule : 1;
                 bool    isSolidContext : 1;
+                bool    doNotAllowUnsafe : 1;
             };
             uint32_t        moduleFlags = 0;
         };

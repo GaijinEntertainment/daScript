@@ -147,7 +147,7 @@ namespace das {
             checkNoGlobalVariablesAtAll = program->options.getBoolOption("no_global_variables_at_all", program->policies.no_global_variables_at_all);
             checkUnusedArgument = program->options.getBoolOption("no_unused_function_arguments", program->policies.no_unused_function_arguments);
             checkUnusedBlockArgument = program->options.getBoolOption("no_unused_block_arguments", program->policies.no_unused_block_arguments);
-            checkUnsafe = program->policies.no_unsafe;
+            checkUnsafe = program->policies.no_unsafe || program->thisModule->doNotAllowUnsafe;
         }
     protected:
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
@@ -452,7 +452,7 @@ namespace das {
                     if ( fnMod == program->thisModule.get() ) {
                         anyUnsafe = true;
                         if ( checkUnsafe ) {
-                            program->error("implicit argument " + arg->name + " is is prohibited by the CodeOfPolicies",  "implicit is unsafe", "",
+                            program->error("implicit argument " + arg->name,  "implicit is unsafe and is prohibited by the CodeOfPolicies", "",
                                 fn->at, CompilationError::unsafe_function);
                         }
                     }

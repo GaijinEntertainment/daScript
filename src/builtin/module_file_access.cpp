@@ -37,6 +37,7 @@ namespace das {
                 DAS_ASSERTF(modGet!=nullptr, "can't find module_get function");
                 includeGet = context->findFunction("include_get");          // note, this one CAN be null
                 moduleAllowed = context->findFunction("module_allowed");    // note, this one CAN be null
+                moduleUnsafe = context->findFunction("module_allowed_unsafe");    // note, this one CAN be null
                 // get it ready
                 context->restart();
                 context->runInitScript();   // note: we assume sane init stack size here
@@ -62,6 +63,17 @@ namespace das {
         } else {
             DAS_FATAL_ERROR("failed to compile: %s\n%s", pak.c_str(), tout.str().c_str());
         }
+    }
+
+    bool ModuleFileAccess::canModuleBeUnsafe ( const string & mod, const string & fileName ) const {
+        if(failed() || !moduleUnsafe) return FileAccess::canModuleBeUnsafe(mod,fileName);
+        vec4f args[2];
+        args[0] = cast<const char *>::from(mod.c_str());
+        args[1] = cast<const char *>::from(fileName.c_str());
+        auto res = context->evalWithCatch(moduleUnsafe, args, nullptr);
+        auto exc = context->getException(); exc;
+        DAS_ASSERTF(!exc, "exception failed in `module_unsafe`: %s", exc);
+        return cast<bool>::to(res);
     }
 
     bool ModuleFileAccess::isModuleAllowed ( const string & mod, const string & fileName ) const {

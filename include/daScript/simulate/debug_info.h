@@ -141,6 +141,7 @@ namespace das
         FileInfoPtr letGoOfFileInfo ( const string & fileName );
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
         virtual bool isModuleAllowed ( const string &, const string & ) const { return true; };
+        virtual bool canModuleBeUnsafe ( const string &, const string & ) const { return true; };
         virtual bool addFsRoot ( const string & , const string & ) { return false; }
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
@@ -162,11 +163,13 @@ namespace das
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const override;
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const override;
         virtual bool isModuleAllowed ( const string &, const string & ) const override;
+        virtual bool canModuleBeUnsafe ( const string &, const string & ) const override;
     protected:
         Context *           context = nullptr;
         SimFunction *       modGet = nullptr;
         SimFunction *       includeGet = nullptr;
         SimFunction *       moduleAllowed = nullptr;
+        SimFunction *       moduleUnsafe = nullptr;
     };
     template <> struct isCloneable<ModuleFileAccess> : false_type {};
 
