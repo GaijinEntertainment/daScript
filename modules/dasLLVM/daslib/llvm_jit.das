@@ -9,9 +9,7 @@ require llvm/llvm_jit_intrin
 require llvm/llvm_jit_common
 require daslib/ast_boost
 require daslib/templates_boost
-require daslib/capture_block
-require daslib/collect_labels
-require daslib/collect_finally
+require daslib/macro_boost
 require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
