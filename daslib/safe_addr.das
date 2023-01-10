@@ -50,6 +50,7 @@ def public shared_addr ( tab:table<auto(KEY); auto(VAL)>; k:KEY )
 
 [tag_function(shared_addr_tag)]
 def public shared_addr ( val:auto(VALUE)& )
+    //! returns address of the given shared variable. it's safe because shared variables never go out of scope
     return unsafe(addr(val))
 
 [tag_function_macro(tag="shared_addr_tag")]

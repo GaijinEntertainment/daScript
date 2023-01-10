@@ -284,6 +284,8 @@
 
 .. |function-builtin-get_time_usec| replace:: returns time interval in usec, since the specified `reft` (usually from `ref_time_ticks`)
 
+.. |function-builtin-get_time_nsec| replace:: returns time interval in nsec, since the specified `reft` (usually from `ref_time_ticks`)
+
 .. |function-builtin-iter_range| replace:: returns range(`foo`)
 
 .. |function-builtin-swap| replace:: swaps two values `a` and 'b'
@@ -406,3 +408,6 @@
 
 .. |function-builtin-using| replace:: Creates temporary das_string.
 
+.. |function_annotation-builtin-hint| replace:: Hints the compiler to use specific optimization.
+
+.. |function-builtin-set_verify_context_locks| replace:: Enables or disables array or table lock runtime verification per context

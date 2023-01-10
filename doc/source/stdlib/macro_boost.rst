@@ -15,6 +15,23 @@ All functions and symbols are in "macro_boost" module, use require to get access
 
 
 
+.. _struct-macro_boost-CapturedVariable:
+
+.. das:attribute:: CapturedVariable
+
+
+
+CapturedVariable fields are
+
++----------+---------------------------------------------+
++variable  + :ref:`ast::Variable <handle-ast-Variable>` ?+
++----------+---------------------------------------------+
++expression+ :ref:`ast::ExprVar <handle-ast-ExprVar>` ?  +
++----------+---------------------------------------------+
+
+
+Stored captured variable together with the `ExprVar` which uses it
+
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
@@ -56,5 +73,57 @@ Implementation details
 
 
 Same as verify, only the check will produce macro error, followed by return [[ExpressionPtr]]
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_macro_boost_c__c_capture_block_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
+
+.. das:function:: capture_block(expr: ExpressionPtr)
+
+capture_block returns array< :ref:`macro_boost::CapturedVariable <struct-macro_boost-CapturedVariable>` >
+
++--------+--------------------------------------------+
++argument+argument type                               +
++========+============================================+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>` +
++--------+--------------------------------------------+
+
+
+Collect all captured variables in the expression.
+
+.. _function-_at_macro_boost_c__c_collect_finally_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
+
+.. das:function:: collect_finally(expr: ExpressionPtr)
+
+collect_finally returns array< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` ?>
+
++--------+--------------------------------------------+
++argument+argument type                               +
++========+============================================+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>` +
++--------+--------------------------------------------+
+
+
+Collect all finally blocks in the expression.
+Returns array of ExprBlock? with all the blocks which have `finally` section
+Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
+
+.. _function-_at_macro_boost_c__c_collect_labels_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
+
+.. das:function:: collect_labels(expr: ExpressionPtr)
+
+collect_labels returns array<int>
+
++--------+--------------------------------------------+
++argument+argument type                               +
++========+============================================+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>` +
++--------+--------------------------------------------+
+
+
+Collect all labels in the expression. Returns array of integer with label indices
+Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
 
 

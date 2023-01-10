@@ -148,7 +148,7 @@ Regular expression.
 Compilation and validation
 ++++++++++++++++++++++++++
 
-  *  :ref:`visit_top_down (node:regex::ReNode? -const;blk:block\<(n:regex::ReNode? -const):void\> const) : void <function-_at_regex_c__c_visit_top_down_1_ls_S_ls_ReNode_gr__gr_?_CN_ls_n_gr_0_ls_1_ls_S_ls_ReNode_gr__gr_?_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`visit_top_down (node:regex::ReNode? -const;blk:block\<(var n:regex::ReNode? -const):void\> const) : void <function-_at_regex_c__c_visit_top_down_1_ls_S_ls_ReNode_gr__gr_?_CN_ls_n_gr_0_ls_1_ls_S_ls_ReNode_gr__gr_?_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`is_valid (re:regex::Regex -const) : bool <function-_at_regex_c__c_is_valid_S_ls_Regex_gr_>` 
   *  :ref:`regex_compile (re:regex::Regex -const;expr:string const) : bool <function-_at_regex_c__c_regex_compile_S_ls_Regex_gr__Cs>` 
   *  :ref:`regex_compile (expr:string const) : regex::Regex <function-_at_regex_c__c_regex_compile_Cs>` 
@@ -158,7 +158,7 @@ Compilation and validation
 
 .. _function-_at_regex_c__c_visit_top_down_1_ls_S_ls_ReNode_gr__gr_?_CN_ls_n_gr_0_ls_1_ls_S_ls_ReNode_gr__gr_?_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: visit_top_down(node: regex::ReNode?; blk: block<(n:regex::ReNode? -const):void> const)
+.. das:function:: visit_top_down(node: regex::ReNode?; blk: block<(var n:regex::ReNode? -const):void> const)
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +

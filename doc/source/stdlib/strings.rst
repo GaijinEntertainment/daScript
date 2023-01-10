@@ -28,9 +28,9 @@ Handled structures
 Character set
 +++++++++++++
 
-  *  :ref:`is_char_in_set (Character:int const;Charset:uint const[8] implicit;Context:__context const;At:__lineInfo const) : bool <function-_at_strings_c__c_is_char_in_set_Ci_CI[8]u_C_c_C_l>`
-  *  :ref:`set_total (Charset:uint const[8] implicit) : uint <function-_at_strings_c__c_set_total_CI[8]u>`
-  *  :ref:`set_element (Character:int const;Charset:uint const[8] implicit) : int <function-_at_strings_c__c_set_element_Ci_CI[8]u>`
+  *  :ref:`is_char_in_set (Character:int const;Charset:uint const[8] implicit;Context:__context const;At:__lineInfo const) : bool <function-_at_strings_c__c_is_char_in_set_Ci_CI[8]u_C_c_C_l>` 
+  *  :ref:`set_total (Charset:uint const[8] implicit) : uint <function-_at_strings_c__c_set_total_CI[8]u>` 
+  *  :ref:`set_element (Character:int const;Charset:uint const[8] implicit) : int <function-_at_strings_c__c_set_element_Ci_CI[8]u>` 
 
 .. _function-_at_strings_c__c_is_char_in_set_Ci_CI[8]u_C_c_C_l:
 
@@ -85,10 +85,10 @@ set_element returns int
 Character groups
 ++++++++++++++++
 
-  *  :ref:`is_alpha (Character:int const) : bool <function-_at_strings_c__c_is_alpha_Ci>`
-  *  :ref:`is_new_line (Character:int const) : bool <function-_at_strings_c__c_is_new_line_Ci>`
-  *  :ref:`is_white_space (Character:int const) : bool <function-_at_strings_c__c_is_white_space_Ci>`
-  *  :ref:`is_number (Character:int const) : bool <function-_at_strings_c__c_is_number_Ci>`
+  *  :ref:`is_alpha (Character:int const) : bool <function-_at_strings_c__c_is_alpha_Ci>` 
+  *  :ref:`is_new_line (Character:int const) : bool <function-_at_strings_c__c_is_new_line_Ci>` 
+  *  :ref:`is_white_space (Character:int const) : bool <function-_at_strings_c__c_is_white_space_Ci>` 
+  *  :ref:`is_number (Character:int const) : bool <function-_at_strings_c__c_is_number_Ci>` 
 
 .. _function-_at_strings_c__c_is_alpha_Ci:
 
@@ -154,8 +154,8 @@ is_number returns bool
 Character by index
 ++++++++++++++++++
 
-  *  :ref:`character_at (str:string const implicit;idx:int const;context:__context const) : int <function-_at_strings_c__c_character_at_CIs_Ci_C_c>`
-  *  :ref:`character_uat (str:string const implicit;idx:int const) : int <function-_at_strings_c__c_character_uat_CIs_Ci>`
+  *  :ref:`character_at (str:string const implicit;idx:int const;context:__context const) : int <function-_at_strings_c__c_character_at_CIs_Ci_C_c>` 
+  *  :ref:`character_uat (str:string const implicit;idx:int const) : int <function-_at_strings_c__c_character_uat_CIs_Ci>` 
 
 .. _function-_at_strings_c__c_character_at_CIs_Ci_C_c:
 
@@ -180,7 +180,7 @@ character_at returns int
 
 character_uat returns int
 
-.. warning::
+.. warning:: 
   This is unsafe operation.
 
 +--------+---------------------+
@@ -198,14 +198,14 @@ character_uat returns int
 String properties
 +++++++++++++++++
 
-  *  :ref:`ends_with (str:string const implicit;cmp:string const implicit;context:__context const) : bool <function-_at_strings_c__c_ends_with_CIs_CIs_C_c>`
-  *  :ref:`ends_with (str:$::das_string const implicit;cmp:string const implicit;context:__context const) : bool <function-_at_strings_c__c_ends_with_CIH_ls__builtin__c__c_das_string_gr__CIs_C_c>`
-  *  :ref:`starts_with (str:string const implicit;cmp:string const implicit;context:__context const) : bool <function-_at_strings_c__c_starts_with_CIs_CIs_C_c>`
-  *  :ref:`starts_with (str:string const implicit;cmp:string const implicit;cmpLen:uint const;context:__context const) : bool <function-_at_strings_c__c_starts_with_CIs_CIs_Cu_C_c>`
-  *  :ref:`length (str:string const implicit;context:__context const) : int <function-_at_strings_c__c_length_CIs_C_c>`
-  *  :ref:`length (str:$::das_string const implicit) : int <function-_at_strings_c__c_length_CIH_ls__builtin__c__c_das_string_gr_>`
-  *  :ref:`empty (str:string const implicit) : bool <function-_at_strings_c__c_empty_CIs>`
-  *  :ref:`empty (str:$::das_string const implicit) : bool <function-_at_strings_c__c_empty_CIH_ls__builtin__c__c_das_string_gr_>`
+  *  :ref:`ends_with (str:string const implicit;cmp:string const implicit;context:__context const) : bool <function-_at_strings_c__c_ends_with_CIs_CIs_C_c>` 
+  *  :ref:`ends_with (str:$::das_string const implicit;cmp:string const implicit;context:__context const) : bool <function-_at_strings_c__c_ends_with_CIH_ls__builtin__c__c_das_string_gr__CIs_C_c>` 
+  *  :ref:`starts_with (str:string const implicit;cmp:string const implicit;context:__context const) : bool <function-_at_strings_c__c_starts_with_CIs_CIs_C_c>` 
+  *  :ref:`starts_with (str:string const implicit;cmp:string const implicit;cmpLen:uint const;context:__context const) : bool <function-_at_strings_c__c_starts_with_CIs_CIs_Cu_C_c>` 
+  *  :ref:`length (str:string const implicit;context:__context const) : int <function-_at_strings_c__c_length_CIs_C_c>` 
+  *  :ref:`length (str:$::das_string const implicit) : int <function-_at_strings_c__c_length_CIH_ls__builtin__c__c_das_string_gr_>` 
+  *  :ref:`empty (str:string const implicit) : bool <function-_at_strings_c__c_empty_CIs>` 
+  *  :ref:`empty (str:$::das_string const implicit) : bool <function-_at_strings_c__c_empty_CIH_ls__builtin__c__c_das_string_gr_>` 
 
 .. _function-_at_strings_c__c_ends_with_CIs_CIs_C_c:
 
@@ -341,27 +341,27 @@ empty returns bool
 String builder
 ++++++++++++++
 
-  *  :ref:`build_string (block:block\<(strings::StringBuilderWriter):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_strings_c__c_build_string_CI0_ls_H_ls_strings_c__c_StringBuilderWriter_gr__gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`write (writer:strings::StringBuilderWriter;anything:any const) : void <function-_at_strings_c__c_write_H_ls_strings_c__c_StringBuilderWriter_gr__C*>`
-  *  :ref:`write_char (writer:strings::StringBuilderWriter implicit;ch:int const) : void <function-_at_strings_c__c_write_char_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci>`
-  *  :ref:`write_chars (writer:strings::StringBuilderWriter implicit;ch:int const;count:int const) : void <function-_at_strings_c__c_write_chars_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci_Ci>`
-  *  :ref:`write_escape_string (writer:strings::StringBuilderWriter implicit;str:string const implicit) : void <function-_at_strings_c__c_write_escape_string_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs>`
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:int const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci>`
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:uint const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu>`
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:int64 const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci64>`
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:uint64 const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu64>`
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:float const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cf>`
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:double const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cd>`
-  *  :ref:`format (format:string const implicit;value:int const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Ci_C_c>`
-  *  :ref:`format (format:string const implicit;value:uint const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Cu_C_c>`
-  *  :ref:`format (format:string const implicit;value:int64 const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Ci64_C_c>`
-  *  :ref:`format (format:string const implicit;value:uint64 const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Cu64_C_c>`
-  *  :ref:`format (format:string const implicit;value:float const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Cf_C_c>`
-  *  :ref:`format (format:string const implicit;value:double const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Cd_C_c>`
+  *  :ref:`build_string (block:block\<(var arg0:strings::StringBuilderWriter):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_strings_c__c_build_string_CI0_ls_H_ls_strings_c__c_StringBuilderWriter_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`write (writer:strings::StringBuilderWriter;anything:any const) : void <function-_at_strings_c__c_write_H_ls_strings_c__c_StringBuilderWriter_gr__C*>` 
+  *  :ref:`write_char (writer:strings::StringBuilderWriter implicit;ch:int const) : void <function-_at_strings_c__c_write_char_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci>` 
+  *  :ref:`write_chars (writer:strings::StringBuilderWriter implicit;ch:int const;count:int const) : void <function-_at_strings_c__c_write_chars_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci_Ci>` 
+  *  :ref:`write_escape_string (writer:strings::StringBuilderWriter implicit;str:string const implicit) : void <function-_at_strings_c__c_write_escape_string_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:int const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:uint const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:int64 const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci64>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:uint64 const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu64>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:float const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cf>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:double const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cd>` 
+  *  :ref:`format (format:string const implicit;value:int const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Ci_C_c>` 
+  *  :ref:`format (format:string const implicit;value:uint const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Cu_C_c>` 
+  *  :ref:`format (format:string const implicit;value:int64 const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Ci64_C_c>` 
+  *  :ref:`format (format:string const implicit;value:uint64 const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Cu64_C_c>` 
+  *  :ref:`format (format:string const implicit;value:float const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Cf_C_c>` 
+  *  :ref:`format (format:string const implicit;value:double const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Cd_C_c>` 
 
 .. _function-_at_strings_c__c_build_string_CI0_ls_H_ls_strings_c__c_StringBuilderWriter_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: build_string(block: block<(strings::StringBuilderWriter):void> const implicit)
+.. das:function:: build_string(block: block<(var arg0:strings::StringBuilderWriter):void> const implicit)
 
 build_string returns string
 
@@ -644,8 +644,8 @@ format returns string
 das::string manipulation
 ++++++++++++++++++++++++
 
-  *  :ref:`append (str:$::das_string implicit;ch:int const) : void <function-_at_strings_c__c_append_IH_ls__builtin__c__c_das_string_gr__Ci>`
-  *  :ref:`resize (str:$::das_string implicit;new_length:int const) : void <function-_at_strings_c__c_resize_IH_ls__builtin__c__c_das_string_gr__Ci>`
+  *  :ref:`append (str:$::das_string implicit;ch:int const) : void <function-_at_strings_c__c_append_IH_ls__builtin__c__c_das_string_gr__Ci>` 
+  *  :ref:`resize (str:$::das_string implicit;new_length:int const) : void <function-_at_strings_c__c_resize_IH_ls__builtin__c__c_das_string_gr__Ci>` 
 
 .. _function-_at_strings_c__c_append_IH_ls__builtin__c__c_das_string_gr__Ci:
 
@@ -681,22 +681,22 @@ das::string manipulation
 String modifications
 ++++++++++++++++++++
 
-  *  :ref:`repeat (str:string const implicit;count:int const;context:__context const) : string <function-_at_strings_c__c_repeat_CIs_Ci_C_c>`
-  *  :ref:`strip (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_strip_CIs_C_c>`
-  *  :ref:`strip_right (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_strip_right_CIs_C_c>`
-  *  :ref:`strip_left (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_strip_left_CIs_C_c>`
-  *  :ref:`chop (str:string const implicit;start:int const;length:int const;context:__context const) : string <function-_at_strings_c__c_chop_CIs_Ci_Ci_C_c>`
-  *  :ref:`slice (str:string const implicit;start:int const;end:int const;context:__context const) : string <function-_at_strings_c__c_slice_CIs_Ci_Ci_C_c>`
-  *  :ref:`slice (str:string const implicit;start:int const;context:__context const) : string <function-_at_strings_c__c_slice_CIs_Ci_C_c>`
-  *  :ref:`reverse (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_reverse_CIs_C_c>`
-  *  :ref:`to_upper (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_to_upper_CIs_C_c>`
-  *  :ref:`to_lower (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_to_lower_CIs_C_c>`
-  *  :ref:`to_lower_in_place (str:string const implicit) : string <function-_at_strings_c__c_to_lower_in_place_CIs>`
-  *  :ref:`to_upper_in_place (str:string const implicit) : string <function-_at_strings_c__c_to_upper_in_place_CIs>`
-  *  :ref:`escape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_escape_CIs_C_c>`
-  *  :ref:`unescape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_unescape_CIs_C_c>`
-  *  :ref:`replace (str:string const implicit;toSearch:string const implicit;replace:string const implicit;context:__context const) : string <function-_at_strings_c__c_replace_CIs_CIs_CIs_C_c>`
-  *  :ref:`rtrim (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_rtrim_CIs_C_c>`
+  *  :ref:`repeat (str:string const implicit;count:int const;context:__context const) : string <function-_at_strings_c__c_repeat_CIs_Ci_C_c>` 
+  *  :ref:`strip (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_strip_CIs_C_c>` 
+  *  :ref:`strip_right (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_strip_right_CIs_C_c>` 
+  *  :ref:`strip_left (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_strip_left_CIs_C_c>` 
+  *  :ref:`chop (str:string const implicit;start:int const;length:int const;context:__context const) : string <function-_at_strings_c__c_chop_CIs_Ci_Ci_C_c>` 
+  *  :ref:`slice (str:string const implicit;start:int const;end:int const;context:__context const) : string <function-_at_strings_c__c_slice_CIs_Ci_Ci_C_c>` 
+  *  :ref:`slice (str:string const implicit;start:int const;context:__context const) : string <function-_at_strings_c__c_slice_CIs_Ci_C_c>` 
+  *  :ref:`reverse (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_reverse_CIs_C_c>` 
+  *  :ref:`to_upper (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_to_upper_CIs_C_c>` 
+  *  :ref:`to_lower (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_to_lower_CIs_C_c>` 
+  *  :ref:`to_lower_in_place (str:string const implicit) : string <function-_at_strings_c__c_to_lower_in_place_CIs>` 
+  *  :ref:`to_upper_in_place (str:string const implicit) : string <function-_at_strings_c__c_to_upper_in_place_CIs>` 
+  *  :ref:`escape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_escape_CIs_C_c>` 
+  *  :ref:`unescape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_unescape_CIs_C_c>` 
+  *  :ref:`replace (str:string const implicit;toSearch:string const implicit;replace:string const implicit;context:__context const) : string <function-_at_strings_c__c_replace_CIs_CIs_CIs_C_c>` 
+  *  :ref:`rtrim (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_rtrim_CIs_C_c>` 
 
 .. _function-_at_strings_c__c_repeat_CIs_Ci_C_c:
 
@@ -866,7 +866,7 @@ to_lower returns string
 
 to_lower_in_place returns string
 
-.. warning::
+.. warning:: 
   This is unsafe operation.
 
 +--------+---------------------+
@@ -884,7 +884,7 @@ to_lower_in_place returns string
 
 to_upper_in_place returns string
 
-.. warning::
+.. warning:: 
   This is unsafe operation.
 
 +--------+---------------------+
@@ -964,10 +964,10 @@ rtrim returns string
 Search substrings
 +++++++++++++++++
 
-  *  :ref:`find (str:string const implicit;substr:string const implicit;start:int const;context:__context const) : int <function-_at_strings_c__c_find_CIs_CIs_Ci_C_c>`
-  *  :ref:`find (str:string const implicit;substr:string const implicit) : int <function-_at_strings_c__c_find_CIs_CIs>`
-  *  :ref:`find (str:string const implicit;substr:int const;context:__context const) : int <function-_at_strings_c__c_find_CIs_Ci_C_c>`
-  *  :ref:`find (str:string const implicit;substr:int const;start:int const;context:__context const) : int <function-_at_strings_c__c_find_CIs_Ci_Ci_C_c>`
+  *  :ref:`find (str:string const implicit;substr:string const implicit;start:int const;context:__context const) : int <function-_at_strings_c__c_find_CIs_CIs_Ci_C_c>` 
+  *  :ref:`find (str:string const implicit;substr:string const implicit) : int <function-_at_strings_c__c_find_CIs_CIs>` 
+  *  :ref:`find (str:string const implicit;substr:int const;context:__context const) : int <function-_at_strings_c__c_find_CIs_Ci_C_c>` 
+  *  :ref:`find (str:string const implicit;substr:int const;start:int const;context:__context const) : int <function-_at_strings_c__c_find_CIs_Ci_Ci_C_c>` 
 
 .. _function-_at_strings_c__c_find_CIs_CIs_Ci_C_c:
 
@@ -1045,20 +1045,20 @@ find returns int
 String conversion routines
 ++++++++++++++++++++++++++
 
-  *  :ref:`string (bytes:array\<uint8\> const implicit;context:__context const) : string <function-_at_strings_c__c_string_CI1_ls_u8_gr_A_C_c>`
-  *  :ref:`to_char (char:int const;context:__context const) : string <function-_at_strings_c__c_to_char_Ci_C_c>`
-  *  :ref:`int (str:string const implicit;context:__context const) : int <function-_at_strings_c__c_int_CIs_C_c>`
-  *  :ref:`uint (str:string const implicit;context:__context const) : uint <function-_at_strings_c__c_uint_CIs_C_c>`
-  *  :ref:`int64 (str:string const implicit;context:__context const) : int64 <function-_at_strings_c__c_int64_CIs_C_c>`
-  *  :ref:`uint64 (str:string const implicit;context:__context const) : uint64 <function-_at_strings_c__c_uint64_CIs_C_c>`
-  *  :ref:`float (str:string const implicit;context:__context const) : float <function-_at_strings_c__c_float_CIs_C_c>`
-  *  :ref:`double (str:string const implicit;context:__context const) : double <function-_at_strings_c__c_double_CIs_C_c>`
-  *  :ref:`to_int (value:string const implicit;hex:bool const) : int <function-_at_strings_c__c_to_int_CIs_Cb>`
-  *  :ref:`to_uint (value:string const implicit;hex:bool const) : uint <function-_at_strings_c__c_to_uint_CIs_Cb>`
-  *  :ref:`to_int64 (value:string const implicit;hex:bool const) : int64 <function-_at_strings_c__c_to_int64_CIs_Cb>`
-  *  :ref:`to_uint64 (value:string const implicit;hex:bool const) : uint64 <function-_at_strings_c__c_to_uint64_CIs_Cb>`
-  *  :ref:`to_float (value:string const implicit) : float <function-_at_strings_c__c_to_float_CIs>`
-  *  :ref:`to_double (value:string const implicit) : double <function-_at_strings_c__c_to_double_CIs>`
+  *  :ref:`string (bytes:array\<uint8\> const implicit;context:__context const) : string <function-_at_strings_c__c_string_CI1_ls_u8_gr_A_C_c>` 
+  *  :ref:`to_char (char:int const;context:__context const) : string <function-_at_strings_c__c_to_char_Ci_C_c>` 
+  *  :ref:`int (str:string const implicit;context:__context const) : int <function-_at_strings_c__c_int_CIs_C_c>` 
+  *  :ref:`uint (str:string const implicit;context:__context const) : uint <function-_at_strings_c__c_uint_CIs_C_c>` 
+  *  :ref:`int64 (str:string const implicit;context:__context const) : int64 <function-_at_strings_c__c_int64_CIs_C_c>` 
+  *  :ref:`uint64 (str:string const implicit;context:__context const) : uint64 <function-_at_strings_c__c_uint64_CIs_C_c>` 
+  *  :ref:`float (str:string const implicit;context:__context const) : float <function-_at_strings_c__c_float_CIs_C_c>` 
+  *  :ref:`double (str:string const implicit;context:__context const) : double <function-_at_strings_c__c_double_CIs_C_c>` 
+  *  :ref:`to_int (value:string const implicit;hex:bool const) : int <function-_at_strings_c__c_to_int_CIs_Cb>` 
+  *  :ref:`to_uint (value:string const implicit;hex:bool const) : uint <function-_at_strings_c__c_to_uint_CIs_Cb>` 
+  *  :ref:`to_int64 (value:string const implicit;hex:bool const) : int64 <function-_at_strings_c__c_to_int64_CIs_Cb>` 
+  *  :ref:`to_uint64 (value:string const implicit;hex:bool const) : uint64 <function-_at_strings_c__c_to_uint64_CIs_Cb>` 
+  *  :ref:`to_float (value:string const implicit) : float <function-_at_strings_c__c_to_float_CIs>` 
+  *  :ref:`to_double (value:string const implicit) : double <function-_at_strings_c__c_to_double_CIs>` 
 
 .. _function-_at_strings_c__c_string_CI1_ls_u8_gr_A_C_c:
 
@@ -1282,12 +1282,12 @@ to_double returns double
 String as array
 +++++++++++++++
 
-  *  :ref:`peek_data (str:string const implicit;block:block\<(array\<uint8\> const#):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_strings_c__c_peek_data_CIs_CI0_ls_C_hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`modify_data (str:string const implicit;block:block\<(array\<uint8\>#):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_strings_c__c_modify_data_CIs_CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>`
+  *  :ref:`peek_data (str:string const implicit;block:block\<(arg0:array\<uint8\> const#):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_strings_c__c_peek_data_CIs_CI0_ls_C_hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`modify_data (str:string const implicit;block:block\<(var arg0:array\<uint8\>#):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_strings_c__c_modify_data_CIs_CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at_strings_c__c_peek_data_CIs_CI0_ls_C_hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: peek_data(str: string const implicit; block: block<(array<uint8> const#):void> const implicit)
+.. das:function:: peek_data(str: string const implicit; block: block<(arg0:array<uint8> const#):void> const implicit)
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -1302,7 +1302,7 @@ String as array
 
 .. _function-_at_strings_c__c_modify_data_CIs_CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: modify_data(str: string const implicit; block: block<(array<uint8>#):void> const implicit)
+.. das:function:: modify_data(str: string const implicit; block: block<(var arg0:array<uint8>#):void> const implicit)
 
 modify_data returns string
 
@@ -1321,14 +1321,14 @@ modify_data returns string
 Low level memory allocation
 +++++++++++++++++++++++++++
 
-  *  :ref:`delete_string (str:string& implicit;context:__context const) : void <function-_at_strings_c__c_delete_string_&Is_C_c>`
-  *  :ref:`reserve_string_buffer (str:string const implicit;length:int const;context:__context const) : string <function-_at_strings_c__c_reserve_string_buffer_CIs_Ci_C_c>`
+  *  :ref:`delete_string (str:string& implicit;context:__context const) : void <function-_at_strings_c__c_delete_string_&Is_C_c>` 
+  *  :ref:`reserve_string_buffer (str:string const implicit;length:int const;context:__context const) : string <function-_at_strings_c__c_reserve_string_buffer_CIs_Ci_C_c>` 
 
 .. _function-_at_strings_c__c_delete_string_&Is_C_c:
 
 .. das:function:: delete_string(str: string& implicit)
 
-.. warning::
+.. warning:: 
   This is unsafe operation.
 
 +--------+----------------+

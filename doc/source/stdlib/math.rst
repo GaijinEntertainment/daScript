@@ -72,6 +72,12 @@ all numerics (uint*, int*, float*, double)
   *  :ref:`max (x:int4 const;y:int4 const) : int4 <function-_at_math_c__c_max_Ci4_Ci4>` 
   *  :ref:`min (x:uint const;y:uint const) : uint <function-_at_math_c__c_min_Cu_Cu>` 
   *  :ref:`max (x:uint const;y:uint const) : uint <function-_at_math_c__c_max_Cu_Cu>` 
+  *  :ref:`min (x:uint2 const;y:uint2 const) : uint2 <function-_at_math_c__c_min_Cu2_Cu2>` 
+  *  :ref:`max (x:uint2 const;y:uint2 const) : uint2 <function-_at_math_c__c_max_Cu2_Cu2>` 
+  *  :ref:`min (x:uint3 const;y:uint3 const) : uint3 <function-_at_math_c__c_min_Cu3_Cu3>` 
+  *  :ref:`max (x:uint3 const;y:uint3 const) : uint3 <function-_at_math_c__c_max_Cu3_Cu3>` 
+  *  :ref:`min (x:uint4 const;y:uint4 const) : uint4 <function-_at_math_c__c_min_Cu4_Cu4>` 
+  *  :ref:`max (x:uint4 const;y:uint4 const) : uint4 <function-_at_math_c__c_max_Cu4_Cu4>` 
   *  :ref:`min (x:float const;y:float const) : float <function-_at_math_c__c_min_Cf_Cf>` 
   *  :ref:`max (x:float const;y:float const) : float <function-_at_math_c__c_max_Cf_Cf>` 
   *  :ref:`min (x:float2 const;y:float2 const) : float2 <function-_at_math_c__c_min_Cf2_Cf2>` 
@@ -252,6 +258,108 @@ max returns uint
 +x       +uint const   +
 +--------+-------------+
 +y       +uint const   +
++--------+-------------+
+
+
+|function-math-max|
+
+.. _function-_at_math_c__c_min_Cu2_Cu2:
+
+.. das:function:: min(x: uint2 const; y: uint2 const)
+
+min returns uint2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint2 const  +
++--------+-------------+
++y       +uint2 const  +
++--------+-------------+
+
+
+|function-math-min|
+
+.. _function-_at_math_c__c_max_Cu2_Cu2:
+
+.. das:function:: max(x: uint2 const; y: uint2 const)
+
+max returns uint2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint2 const  +
++--------+-------------+
++y       +uint2 const  +
++--------+-------------+
+
+
+|function-math-max|
+
+.. _function-_at_math_c__c_min_Cu3_Cu3:
+
+.. das:function:: min(x: uint3 const; y: uint3 const)
+
+min returns uint3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint3 const  +
++--------+-------------+
++y       +uint3 const  +
++--------+-------------+
+
+
+|function-math-min|
+
+.. _function-_at_math_c__c_max_Cu3_Cu3:
+
+.. das:function:: max(x: uint3 const; y: uint3 const)
+
+max returns uint3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint3 const  +
++--------+-------------+
++y       +uint3 const  +
++--------+-------------+
+
+
+|function-math-max|
+
+.. _function-_at_math_c__c_min_Cu4_Cu4:
+
+.. das:function:: min(x: uint4 const; y: uint4 const)
+
+min returns uint4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint4 const  +
++--------+-------------+
++y       +uint4 const  +
++--------+-------------+
+
+
+|function-math-min|
+
+.. _function-_at_math_c__c_max_Cu4_Cu4:
+
+.. das:function:: max(x: uint4 const; y: uint4 const)
+
+max returns uint4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint4 const  +
++--------+-------------+
++y       +uint4 const  +
 +--------+-------------+
 
 
@@ -577,6 +685,12 @@ float* and double
   *  :ref:`sign (x:int4 const) : int4 <function-_at_math_c__c_sign_Ci4>` 
   *  :ref:`abs (x:uint const) : uint <function-_at_math_c__c_abs_Cu>` 
   *  :ref:`sign (x:uint const) : uint <function-_at_math_c__c_sign_Cu>` 
+  *  :ref:`abs (x:uint2 const) : uint2 <function-_at_math_c__c_abs_Cu2>` 
+  *  :ref:`sign (x:uint2 const) : uint2 <function-_at_math_c__c_sign_Cu2>` 
+  *  :ref:`abs (x:uint3 const) : uint3 <function-_at_math_c__c_abs_Cu3>` 
+  *  :ref:`sign (x:uint3 const) : uint3 <function-_at_math_c__c_sign_Cu3>` 
+  *  :ref:`abs (x:uint4 const) : uint4 <function-_at_math_c__c_abs_Cu4>` 
+  *  :ref:`sign (x:uint4 const) : uint4 <function-_at_math_c__c_sign_Cu4>` 
   *  :ref:`abs (x:float const) : float <function-_at_math_c__c_abs_Cf>` 
   *  :ref:`sign (x:float const) : float <function-_at_math_c__c_sign_Cf>` 
   *  :ref:`abs (x:float2 const) : float2 <function-_at_math_c__c_abs_Cf2>` 
@@ -1798,6 +1912,96 @@ sign returns uint
 
 |function-math-sign|
 
+.. _function-_at_math_c__c_abs_Cu2:
+
+.. das:function:: abs(x: uint2 const)
+
+abs returns uint2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint2 const  +
++--------+-------------+
+
+
+|function-math-abs|
+
+.. _function-_at_math_c__c_sign_Cu2:
+
+.. das:function:: sign(x: uint2 const)
+
+sign returns uint2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint2 const  +
++--------+-------------+
+
+
+|function-math-sign|
+
+.. _function-_at_math_c__c_abs_Cu3:
+
+.. das:function:: abs(x: uint3 const)
+
+abs returns uint3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint3 const  +
++--------+-------------+
+
+
+|function-math-abs|
+
+.. _function-_at_math_c__c_sign_Cu3:
+
+.. das:function:: sign(x: uint3 const)
+
+sign returns uint3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint3 const  +
++--------+-------------+
+
+
+|function-math-sign|
+
+.. _function-_at_math_c__c_abs_Cu4:
+
+.. das:function:: abs(x: uint4 const)
+
+abs returns uint4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint4 const  +
++--------+-------------+
+
+
+|function-math-abs|
+
+.. _function-_at_math_c__c_sign_Cu4:
+
+.. das:function:: sign(x: uint4 const)
+
+sign returns uint4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +uint4 const  +
++--------+-------------+
+
+
+|function-math-sign|
+
 .. _function-_at_math_c__c_abs_Cf:
 
 .. das:function:: abs(x: float const)
@@ -2974,10 +3178,18 @@ float3 only
 +++++++++++
 
   *  :ref:`cross (x:float3 const;y:float3 const) : float3 <function-_at_math_c__c_cross_Cf3_Cf3>` 
+  *  :ref:`distance (x:float2 const;y:float2 const) : float <function-_at_math_c__c_distance_Cf2_Cf2>` 
+  *  :ref:`distance_sq (x:float2 const;y:float2 const) : float <function-_at_math_c__c_distance_sq_Cf2_Cf2>` 
+  *  :ref:`inv_distance (x:float2 const;y:float2 const) : float <function-_at_math_c__c_inv_distance_Cf2_Cf2>` 
+  *  :ref:`inv_distance_sq (x:float2 const;y:float2 const) : float <function-_at_math_c__c_inv_distance_sq_Cf2_Cf2>` 
   *  :ref:`distance (x:float3 const;y:float3 const) : float <function-_at_math_c__c_distance_Cf3_Cf3>` 
   *  :ref:`distance_sq (x:float3 const;y:float3 const) : float <function-_at_math_c__c_distance_sq_Cf3_Cf3>` 
   *  :ref:`inv_distance (x:float3 const;y:float3 const) : float <function-_at_math_c__c_inv_distance_Cf3_Cf3>` 
   *  :ref:`inv_distance_sq (x:float3 const;y:float3 const) : float <function-_at_math_c__c_inv_distance_sq_Cf3_Cf3>` 
+  *  :ref:`distance (x:float4 const;y:float4 const) : float <function-_at_math_c__c_distance_Cf4_Cf4>` 
+  *  :ref:`distance_sq (x:float4 const;y:float4 const) : float <function-_at_math_c__c_distance_sq_Cf4_Cf4>` 
+  *  :ref:`inv_distance (x:float4 const;y:float4 const) : float <function-_at_math_c__c_inv_distance_Cf4_Cf4>` 
+  *  :ref:`inv_distance_sq (x:float4 const;y:float4 const) : float <function-_at_math_c__c_inv_distance_sq_Cf4_Cf4>` 
   *  :ref:`reflect (v:float3 const;n:float3 const) : float3 <function-_at_math_c__c_reflect_Cf3_Cf3>` 
   *  :ref:`refract (v:float3 const;n:float3 const;nint:float const) : float3 <function-_at_math_c__c_refract_Cf3_Cf3_Cf>` 
 
@@ -2997,6 +3209,74 @@ cross returns float3
 
 
 |function-math-cross|
+
+.. _function-_at_math_c__c_distance_Cf2_Cf2:
+
+.. das:function:: distance(x: float2 const; y: float2 const)
+
+distance returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
++y       +float2 const +
++--------+-------------+
+
+
+|function-math-distance|
+
+.. _function-_at_math_c__c_distance_sq_Cf2_Cf2:
+
+.. das:function:: distance_sq(x: float2 const; y: float2 const)
+
+distance_sq returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
++y       +float2 const +
++--------+-------------+
+
+
+|function-math-distance_sq|
+
+.. _function-_at_math_c__c_inv_distance_Cf2_Cf2:
+
+.. das:function:: inv_distance(x: float2 const; y: float2 const)
+
+inv_distance returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
++y       +float2 const +
++--------+-------------+
+
+
+|function-math-inv_distance|
+
+.. _function-_at_math_c__c_inv_distance_sq_Cf2_Cf2:
+
+.. das:function:: inv_distance_sq(x: float2 const; y: float2 const)
+
+inv_distance_sq returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
++y       +float2 const +
++--------+-------------+
+
+
+|function-math-inv_distance_sq|
 
 .. _function-_at_math_c__c_distance_Cf3_Cf3:
 
@@ -3061,6 +3341,74 @@ inv_distance_sq returns float
 +x       +float3 const +
 +--------+-------------+
 +y       +float3 const +
++--------+-------------+
+
+
+|function-math-inv_distance_sq|
+
+.. _function-_at_math_c__c_distance_Cf4_Cf4:
+
+.. das:function:: distance(x: float4 const; y: float4 const)
+
+distance returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
++y       +float4 const +
++--------+-------------+
+
+
+|function-math-distance|
+
+.. _function-_at_math_c__c_distance_sq_Cf4_Cf4:
+
+.. das:function:: distance_sq(x: float4 const; y: float4 const)
+
+distance_sq returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
++y       +float4 const +
++--------+-------------+
+
+
+|function-math-distance_sq|
+
+.. _function-_at_math_c__c_inv_distance_Cf4_Cf4:
+
+.. das:function:: inv_distance(x: float4 const; y: float4 const)
+
+inv_distance returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
++y       +float4 const +
++--------+-------------+
+
+
+|function-math-inv_distance|
+
+.. _function-_at_math_c__c_inv_distance_sq_Cf4_Cf4:
+
+.. das:function:: inv_distance_sq(x: float4 const; y: float4 const)
+
+inv_distance_sq returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
++y       +float4 const +
 +--------+-------------+
 
 
@@ -3555,6 +3903,9 @@ lerp/mad/clamp
   *  :ref:`clamp (t:int3 const;a:int3 const;b:int3 const) : int3 <function-_at_math_c__c_clamp_Ci3_Ci3_Ci3>` 
   *  :ref:`clamp (t:int4 const;a:int4 const;b:int4 const) : int4 <function-_at_math_c__c_clamp_Ci4_Ci4_Ci4>` 
   *  :ref:`clamp (t:uint const;a:uint const;b:uint const) : uint <function-_at_math_c__c_clamp_Cu_Cu_Cu>` 
+  *  :ref:`clamp (t:uint2 const;a:uint2 const;b:uint2 const) : uint2 <function-_at_math_c__c_clamp_Cu2_Cu2_Cu2>` 
+  *  :ref:`clamp (t:uint3 const;a:uint3 const;b:uint3 const) : uint3 <function-_at_math_c__c_clamp_Cu3_Cu3_Cu3>` 
+  *  :ref:`clamp (t:uint4 const;a:uint4 const;b:uint4 const) : uint4 <function-_at_math_c__c_clamp_Cu4_Cu4_Cu4>` 
   *  :ref:`clamp (t:float const;a:float const;b:float const) : float <function-_at_math_c__c_clamp_Cf_Cf_Cf>` 
   *  :ref:`clamp (t:float2 const;a:float2 const;b:float2 const) : float2 <function-_at_math_c__c_clamp_Cf2_Cf2_Cf2>` 
   *  :ref:`clamp (t:float3 const;a:float3 const;b:float3 const) : float3 <function-_at_math_c__c_clamp_Cf3_Cf3_Cf3>` 
@@ -3862,6 +4213,63 @@ clamp returns uint
 +a       +uint const   +
 +--------+-------------+
 +b       +uint const   +
++--------+-------------+
+
+
+|function-math-clamp|
+
+.. _function-_at_math_c__c_clamp_Cu2_Cu2_Cu2:
+
+.. das:function:: clamp(t: uint2 const; a: uint2 const; b: uint2 const)
+
+clamp returns uint2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++t       +uint2 const  +
++--------+-------------+
++a       +uint2 const  +
++--------+-------------+
++b       +uint2 const  +
++--------+-------------+
+
+
+|function-math-clamp|
+
+.. _function-_at_math_c__c_clamp_Cu3_Cu3_Cu3:
+
+.. das:function:: clamp(t: uint3 const; a: uint3 const; b: uint3 const)
+
+clamp returns uint3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++t       +uint3 const  +
++--------+-------------+
++a       +uint3 const  +
++--------+-------------+
++b       +uint3 const  +
++--------+-------------+
+
+
+|function-math-clamp|
+
+.. _function-_at_math_c__c_clamp_Cu4_Cu4_Cu4:
+
+.. das:function:: clamp(t: uint4 const; a: uint4 const; b: uint4 const)
+
+clamp returns uint4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++t       +uint4 const  +
++--------+-------------+
++a       +uint4 const  +
++--------+-------------+
++b       +uint4 const  +
 +--------+-------------+
 
 

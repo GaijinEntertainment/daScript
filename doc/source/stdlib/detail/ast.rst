@@ -48,6 +48,10 @@
 
 .. |typedef-ast-ExprMakeBlockFlags| replace:: properties of the `ExprMakeBlock` object.
 
+.. |typedef-ast-CopyFlags| replace:: properties of the `ExprCopy` object.
+
+.. |typedef-ast-MoveFlags| replace:: properties of the `ExprMove` object.
+
 .. |typedef-ast-ExpressionPtr| replace:: Smart pointer to `Expression` object.
 
 .. |typedef-ast-StructurePtr| replace:: Smart pointer to `Structure` object.
@@ -251,6 +255,8 @@
 .. |method-ast-AstVisitor.preVisitAlias| replace:: before `TypeDecl`
 
 .. |method-ast-AstVisitor.visitAlias| replace:: after `TypeDecl`
+
+.. |method-ast-AstVisitor.canVisitWithAliasSubexpression| replace:: before the sub expression in the `ExprAssume`
 
 .. |method-ast-AstVisitor.canVisitMakeBlockBody| replace:: before the body of the `makeBlock` expression is visited. If true `body` will be visited
 
@@ -1336,3 +1342,11 @@
 .. |function-ast-get_use_functions| replace:: Provides invoked block with the list of all functions, used by a function.
 
 .. |function-ast-get_builtin_function_address| replace:: Returns pointer to a builtin function.
+
+.. |function-ast-make_type_info_structure| replace:: Returns new `TypeInfo` corresponding to the specific type.
+
+.. |function-ast-force_generated| replace:: Forces `generated` flag on subexrepssion.
+
+.. |function-ast-get_expression_annotation| replace:: Get 'Annotation' for the 'ast::Expression' and its inherited types.
+
+.. |function-ast-to_compilation_log| replace:: Writes to compilation log from macro during compilation.

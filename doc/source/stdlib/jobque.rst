@@ -318,14 +318,14 @@ Internal invocations
 Construction
 ++++++++++++
 
-  *  :ref:`with_channel (block:block\<(jobque::Channel?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_channel_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`with_channel (count:int const;block:block\<(jobque::Channel?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_channel_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`with_job_status (total:int const;block:block\<(jobque::JobStatus?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_job_status_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`with_channel (block:block\<(var arg0:jobque::Channel?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_channel_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`with_channel (count:int const;block:block\<(var arg0:jobque::Channel?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_channel_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`with_job_status (total:int const;block:block\<(var arg0:jobque::JobStatus?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_job_status_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`with_job_que (block:block\<void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_job_que_CI1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at_jobque_c__c_with_channel_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: with_channel(block: block<(jobque::Channel?):void> const implicit)
+.. das:function:: with_channel(block: block<(var arg0:jobque::Channel?):void> const implicit)
 
 +--------+------------------------------------------------------------------------------+
 +argument+argument type                                                                 +
@@ -338,7 +338,7 @@ Construction
 
 .. _function-_at_jobque_c__c_with_channel_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: with_channel(count: int const; block: block<(jobque::Channel?):void> const implicit)
+.. das:function:: with_channel(count: int const; block: block<(var arg0:jobque::Channel?):void> const implicit)
 
 +--------+------------------------------------------------------------------------------+
 +argument+argument type                                                                 +
@@ -353,7 +353,7 @@ Construction
 
 .. _function-_at_jobque_c__c_with_job_status_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_JobStatus_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: with_job_status(total: int const; block: block<(jobque::JobStatus?):void> const implicit)
+.. das:function:: with_job_status(total: int const; block: block<(var arg0:jobque::JobStatus?):void> const implicit)
 
 +--------+----------------------------------------------------------------------------------+
 +argument+argument type                                                                     +

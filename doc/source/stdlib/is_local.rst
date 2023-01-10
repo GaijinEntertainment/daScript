@@ -67,4 +67,23 @@ is_scope_expr returns bool const
 
 Returns true if the expression is a scoped expression, i.e. eventually points to a variable.
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_is_local_c__c_is_shared_expr_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
+
+.. das:function:: is_shared_expr(expr: ExpressionPtr)
+
+is_shared_expr returns bool const
+
++--------+--------------------------------------------+
++argument+argument type                               +
++========+============================================+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>` +
++--------+--------------------------------------------+
+
+
+Returns true if the expression is local to the current scope.
+
 

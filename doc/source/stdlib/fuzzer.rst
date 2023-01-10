@@ -26,6 +26,7 @@ Fuzzer tests
   *  :ref:`fuzz_debug (blk:block\<\> const) : void <function-_at_fuzzer_c__c_fuzz_debug_C_builtin_>` 
   *  :ref:`fuzz_debug (fuzz_count:int const;blk:block\<\> const) : void <function-_at_fuzzer_c__c_fuzz_debug_Ci_C_builtin_>` 
   *  :ref:`fuzz_numeric_and_vector_op1 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_numeric_and_vector_op1_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
+  *  :ref:`fuzz_numeric_and_vector_signed_op1 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_numeric_and_vector_signed_op1_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
   *  :ref:`fuzz_numeric_op1 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_numeric_op1_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
   *  :ref:`fuzz_numeric_and_storage_op1 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_numeric_and_storage_op1_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
   *  :ref:`fuzz_all_ints_op1 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_all_ints_op1_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
@@ -43,6 +44,8 @@ Fuzzer tests
   *  :ref:`fuzz_shift_op2 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_shift_op2_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
   *  :ref:`fuzz_rotate_op2 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_rotate_op2_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
   *  :ref:`fuzz_numeric_op3 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_numeric_op3_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
+  *  :ref:`fuzz_float_or_float_vec_op3 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_float_or_float_vec_op3_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
+  *  :ref:`fuzz_float_or_float_vec_mad_op3 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_float_or_float_vec_mad_op3_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
   *  :ref:`fuzz_numeric_op4 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_numeric_op4_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs>` 
 
 .. _function-_at_fuzzer_c__c_fuzz_C_builtin_:
@@ -110,6 +113,24 @@ this is here so that `fuzz` can be easily replaced with `fuzz_debug` for the pur
 .. _function-_at_fuzzer_c__c_fuzz_numeric_and_vector_op1_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs:
 
 .. das:function:: fuzz_numeric_and_vector_op1(t: testing::T? const; fake: Faker; funcname: string const)
+
++--------+---------------------------------------------+
++argument+argument type                                +
++========+=============================================+
++t       + :ref:`testing::T <struct-testing-T>` ? const+
++--------+---------------------------------------------+
++fake    + :ref:`faker::Faker <struct-faker-Faker>`    +
++--------+---------------------------------------------+
++funcname+string const                                 +
++--------+---------------------------------------------+
+
+
+fuzzes generic function that takes single numeric or vector argument.
+arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3, uint4, float2, float3, float4
+
+.. _function-_at_fuzzer_c__c_fuzz_numeric_and_vector_signed_op1_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs:
+
+.. das:function:: fuzz_numeric_and_vector_signed_op1(t: testing::T? const; fake: Faker; funcname: string const)
 
 +--------+---------------------------------------------+
 +argument+argument type                                +
@@ -430,6 +451,42 @@ arguments are: int, uint
 
 fuzzes generic function that takes three numeric or vector arguments.
 arguments are: int, uint, float, double
+
+.. _function-_at_fuzzer_c__c_fuzz_float_or_float_vec_op3_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs:
+
+.. das:function:: fuzz_float_or_float_vec_op3(t: testing::T? const; fake: Faker; funcname: string const)
+
++--------+---------------------------------------------+
++argument+argument type                                +
++========+=============================================+
++t       + :ref:`testing::T <struct-testing-T>` ? const+
++--------+---------------------------------------------+
++fake    + :ref:`faker::Faker <struct-faker-Faker>`    +
++--------+---------------------------------------------+
++funcname+string const                                 +
++--------+---------------------------------------------+
+
+
+fuzzes generic function that takes three numeric or vector arguments.
+arguments are: float2, float3, float4
+
+.. _function-_at_fuzzer_c__c_fuzz_float_or_float_vec_mad_op3_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs:
+
+.. das:function:: fuzz_float_or_float_vec_mad_op3(t: testing::T? const; fake: Faker; funcname: string const)
+
++--------+---------------------------------------------+
++argument+argument type                                +
++========+=============================================+
++t       + :ref:`testing::T <struct-testing-T>` ? const+
++--------+---------------------------------------------+
++fake    + :ref:`faker::Faker <struct-faker-Faker>`    +
++--------+---------------------------------------------+
++funcname+string const                                 +
++--------+---------------------------------------------+
+
+
+fuzzes generic function that takes three numeric or vector arguments.
+arguments are: float2, float3, float4. second argument is float.
 
 .. _function-_at_fuzzer_c__c_fuzz_numeric_op4_C1_ls_S_ls_T_gr__gr_?_S_ls_Faker_gr__Cs:
 

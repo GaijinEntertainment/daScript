@@ -123,7 +123,7 @@ File manipulation
   *  :ref:`fflush (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fflush_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C_c_C_l>` 
   *  :ref:`fprint (file:fio::FILE const? const implicit;text:string const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fprint_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CIs_C_c_C_l>` 
   *  :ref:`fread (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : string <function-_at_fio_c__c_fread_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C_c_C_l>` 
-  *  :ref:`fmap (file:fio::FILE const? const implicit;block:block\<(array\<uint8\>#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fmap_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`fmap (file:fio::FILE const? const implicit;block:block\<(var arg0:array\<uint8\>#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fmap_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`fgets (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : string <function-_at_fio_c__c_fgets_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_C_c_C_l>` 
   *  :ref:`fwrite (file:fio::FILE const? const implicit;text:string const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fwrite_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CIs_C_c_C_l>` 
   *  :ref:`feof (file:fio::FILE const? const implicit) : bool <function-_at_fio_c__c_feof_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?>` 
@@ -237,7 +237,7 @@ fread returns string
 
 .. _function-_at_fio_c__c_fmap_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: fmap(file: fio::FILE const? const implicit; block: block<(array<uint8>#):void> const implicit)
+.. das:function:: fmap(file: fio::FILE const? const implicit; block: block<(var arg0:array<uint8>#):void> const implicit)
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -678,7 +678,7 @@ OS specific routines
 
   *  :ref:`sleep (msec:uint const) : void <function-_at_fio_c__c_sleep_Cu>` 
   *  :ref:`exit (exitCode:int const) : void <function-_at_fio_c__c_exit_Ci>` 
-  *  :ref:`popen (command:string const implicit;scope:block\<(fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int <function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`popen (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int <function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at_fio_c__c_sleep_Cu:
 
@@ -711,7 +711,7 @@ OS specific routines
 
 .. _function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: popen(command: string const implicit; scope: block<(fio::FILE const? const):void> const implicit)
+.. das:function:: popen(command: string const implicit; scope: block<(arg0:fio::FILE const? const):void> const implicit)
 
 popen returns int
 

@@ -144,9 +144,9 @@ Initialization and finalization
 +++++++++++++++++++++++++++++++
 
   *  :ref:`Uri () : uriparser::Uri <function-_at_uriparser_c__c_Uri>` 
-  *  :ref:`using (arg0:block\<(uriparser::Uri# explicit):void\> const implicit) : void <function-_at_uriparser_c__c_using_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`using (arg0:block\<(var arg0:uriparser::Uri# explicit):void\> const implicit) : void <function-_at_uriparser_c__c_using_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_>` 
   *  :ref:`Uri (arg0:string const implicit) : uriparser::Uri <function-_at_uriparser_c__c_Uri_CIs>` 
-  *  :ref:`using (arg0:string const implicit;arg1:block\<(uriparser::Uri# explicit):void\> const implicit) : void <function-_at_uriparser_c__c_using_CIs_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`using (arg0:string const implicit;arg1:block\<(var arg0:uriparser::Uri# explicit):void\> const implicit) : void <function-_at_uriparser_c__c_using_CIs_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_>` 
   *  :ref:`finalize (uri:uriparser::Uri implicit) : void <function-_at_uriparser_c__c_finalize_IH_ls_uriparser_c__c_Uri_gr_>` 
   *  :ref:`clone (dest:uriparser::Uri implicit;src:uriparser::Uri const implicit) : void <function-_at_uriparser_c__c_clone_IH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_>` 
 
@@ -160,7 +160,7 @@ Uri returns  :ref:`uriparser::Uri <handle-uriparser-Uri>`
 
 .. _function-_at_uriparser_c__c_using_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: using(arg0: block<(uriparser::Uri# explicit):void> const implicit)
+.. das:function:: using(arg0: block<(var arg0:uriparser::Uri# explicit):void> const implicit)
 
 +--------+----------------------------------------------------------------------------+
 +argument+argument type                                                               +
@@ -188,7 +188,7 @@ Uri returns  :ref:`uriparser::Uri <handle-uriparser-Uri>`
 
 .. _function-_at_uriparser_c__c_using_CIs_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: using(arg0: string const implicit; arg1: block<(uriparser::Uri# explicit):void> const implicit)
+.. das:function:: using(arg0: string const implicit; arg1: block<(var arg0:uriparser::Uri# explicit):void> const implicit)
 
 +--------+----------------------------------------------------------------------------+
 +argument+argument type                                                               +
@@ -280,7 +280,7 @@ Uri manipulations
   *  :ref:`normalize (uri:uriparser::Uri implicit) : bool <function-_at_uriparser_c__c_normalize_IH_ls_uriparser_c__c_Uri_gr_>` 
   *  :ref:`string (uri:uriparser::Uri const implicit;context:__context const) : string <function-_at_uriparser_c__c_string_CIH_ls_uriparser_c__c_Uri_gr__C_c>` 
   *  :ref:`string (range:uriparser::UriTextRangeA const implicit;context:__context const) : string <function-_at_uriparser_c__c_string_CIH_ls_uriparser_c__c_UriTextRangeA_gr__C_c>` 
-  *  :ref:`uri_for_each_query_kv (uri:uriparser::Uri const implicit;block:block\<(string#;string#):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_uriparser_c__c_uri_for_each_query_kv_CIH_ls_uriparser_c__c_Uri_gr__CI0_ls__hh_s;_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`uri_for_each_query_kv (uri:uriparser::Uri const implicit;block:block\<(var arg0:string#;var arg1:string#):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_uriparser_c__c_uri_for_each_query_kv_CIH_ls_uriparser_c__c_Uri_gr__CI0_ls__hh_s;_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`normalize_uri (uriStr:string const implicit;context:__context const) : string <function-_at_uriparser_c__c_normalize_uri_CIs_C_c>` 
 
 .. _function-_at_uriparser_c__c_strip_uri_CIH_ls_uriparser_c__c_Uri_gr__Cb_Cb:
@@ -383,7 +383,7 @@ string returns string
 
 .. _function-_at_uriparser_c__c_uri_for_each_query_kv_CIH_ls_uriparser_c__c_Uri_gr__CI0_ls__hh_s;_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: uri_for_each_query_kv(uri: Uri const implicit; block: block<(string#;string#):void> const implicit)
+.. das:function:: uri_for_each_query_kv(uri: Uri const implicit; block: block<(var arg0:string#;var arg1:string#):void> const implicit)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +

@@ -199,3 +199,7 @@
 .. |function-rtti-lock_mutex| replace:: Makes recursive critical section of the given recursive_mutex object.
 
 .. |function-rtti-get_function_address| replace:: Return function pointer `SimFunction *` given mangled name hash.
+
+.. |function-rtti-basic_struct_for_each_parent| replace:: Iterates through each parent type of the `BasicStructureAnnotation` object.
+
+

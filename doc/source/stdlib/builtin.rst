@@ -143,24 +143,6 @@ Constants
 
 |variable-builtin-VEC_SEP|
 
-.. _global-builtin-SIZE_OF_PROLOGUE:
-
-.. das:attribute:: SIZE_OF_PROLOGUE = 0x20
-
-|variable-builtin-SIZE_OF_PROLOGUE|
-
-.. _global-builtin-CONTEXT_OFFSET_OF_EVAL_TOP:
-
-.. das:attribute:: CONTEXT_OFFSET_OF_EVAL_TOP = 0x90
-
-|variable-builtin-CONTEXT_OFFSET_OF_EVAL_TOP|
-
-.. _global-builtin-CONTEXT_OFFSET_OF_GLOBALS:
-
-.. das:attribute:: CONTEXT_OFFSET_OF_GLOBALS = 0x40
-
-|variable-builtin-CONTEXT_OFFSET_OF_GLOBALS|
-
 .. _global-builtin-print_flags_debugger:
 
 .. das:attribute:: print_flags_debugger = bitfield(0x1f)
@@ -194,6 +176,12 @@ Function annotations
 .. das:attribute:: macro_function
 
 |function_annotation-builtin-macro_function|
+
+.. _handle-builtin-hint:
+
+.. das:attribute:: hint
+
+|function_annotation-builtin-hint|
 
 .. _handle-builtin-jit:
 
@@ -478,10 +466,10 @@ Containers
   *  :ref:`find (Tab:table\<auto(keyT);void\> const;at:keyT const implicit) : void const? <function-_at__builtin__c__c_find_C1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L>` 
   *  :ref:`find (Tab:table\<auto(keyT);auto(valT)\> const#;at:keyT const implicit) : valT const?# <function-_at__builtin__c__c_find_C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L>` 
   *  :ref:`find (Tab:table\<auto(keyT);void\> const#;at:keyT const implicit) : void const?# <function-_at__builtin__c__c_find_C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L>` 
-  *  :ref:`find_for_edit (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const implicit;blk:block\<(p:valT? -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_Y_ls_valT_gr_L_gr_?_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_for_edit (Tab:table\<auto(keyT);void\> -const;at:keyT const implicit;blk:block\<(p:void? -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_v_gr_?_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_for_edit_if_exists (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const implicit;blk:block\<(p:valT? -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_if_exists_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_Y_ls_valT_gr_L_gr_?_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_for_edit_if_exists (Tab:table\<auto(keyT);void\> -const;at:keyT const implicit;blk:block\<(p:void? -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_if_exists_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_v_gr_?_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`find_for_edit (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const implicit;blk:block\<(var p:valT? -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_Y_ls_valT_gr_L_gr_?_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`find_for_edit (Tab:table\<auto(keyT);void\> -const;at:keyT const implicit;blk:block\<(var p:void? -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_v_gr_?_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`find_for_edit_if_exists (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const implicit;blk:block\<(var p:valT? -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_if_exists_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_Y_ls_valT_gr_L_gr_?_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`find_for_edit_if_exists (Tab:table\<auto(keyT);void\> -const;at:keyT const implicit;blk:block\<(var p:void? -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_if_exists_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_v_gr_?_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`find_for_edit (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const implicit) : valT? <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L>` 
   *  :ref:`find_for_edit (Tab:table\<auto(keyT);void\> -const;at:keyT const implicit) : void? <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L>` 
   *  :ref:`erase (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const implicit) : bool <function-_at__builtin__c__c_erase_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L>` 
@@ -501,8 +489,8 @@ Containers
   *  :ref:`each (str:string const) : iterator\<int\> <function-_at__builtin__c__c_each_Cs>` 
   *  :ref:`each (a:auto(TT) const[-1]) : iterator\<TT&\> <function-_at__builtin__c__c_each_C[-1]Y_ls_TT_gr_.>` 
   *  :ref:`each (a:array\<auto(TT)\> const) : iterator\<TT&\> <function-_at__builtin__c__c_each_C1_ls_Y_ls_TT_gr_._gr_A>` 
-  *  :ref:`each (lam:lambda\<(arg:auto(argT) -const):bool\> const) : iterator\<argT -&\> <function-_at__builtin__c__c_each_CN_ls_arg_gr_0_ls_Y_ls_argT_gr_._gr_1_ls_b_gr__at_>` 
-  *  :ref:`each_ref (lam:lambda\<(arg:auto(argT)? -const):bool\> const) : iterator\<argT&\> <function-_at__builtin__c__c_each_ref_CN_ls_arg_gr_0_ls_1_ls_Y_ls_argT_gr_._gr_?_gr_1_ls_b_gr__at_>` 
+  *  :ref:`each (lam:lambda\<(var arg:auto(argT) -const):bool\> const) : iterator\<argT -&\> <function-_at__builtin__c__c_each_CN_ls_arg_gr_0_ls_Y_ls_argT_gr_._gr_1_ls_b_gr__at_>` 
+  *  :ref:`each_ref (lam:lambda\<(var arg:auto(argT)? -const):bool\> const) : iterator\<argT&\> <function-_at__builtin__c__c_each_ref_CN_ls_arg_gr_0_ls_1_ls_Y_ls_argT_gr_._gr_?_gr_1_ls_b_gr__at_>` 
   *  :ref:`each_enum (tt:auto(TT) const) : iterator\<TT -const -&\> <function-_at__builtin__c__c_each_enum_CY_ls_TT_gr_.>` 
   *  :ref:`nothing (it:iterator\<auto(TT)\> -const) : iterator\<TT\> <function-_at__builtin__c__c_nothing_1_ls_Y_ls_TT_gr_._gr_G>` 
   *  :ref:`to_array (it:iterator\<auto(TT)\> const) : array\<TT -const -&\> <function-_at__builtin__c__c_to_array_C1_ls_Y_ls_TT_gr_._gr_G>` 
@@ -517,7 +505,7 @@ Containers
   *  :ref:`sort (a:array\<auto(TT)\> implicit -const) : auto <function-_at__builtin__c__c_sort_I1_ls_Y_ls_TT_gr_._gr_A>` 
   *  :ref:`sort (a:auto(TT)[-1] implicit -const;cmp:block\<(x:TT const;y:TT const):bool\> const) : auto <function-_at__builtin__c__c_sort_I[-1]Y_ls_TT_gr_._CN_ls_x;y_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
   *  :ref:`sort (a:array\<auto(TT)\> implicit -const;cmp:block\<(x:TT const;y:TT const):bool\> const) : auto <function-_at__builtin__c__c_sort_I1_ls_Y_ls_TT_gr_._gr_A_CN_ls_x;y_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
-  *  :ref:`lock (a:array\<auto(TT)\> =const -const;blk:block\<(x:array\<TT\># implicit -const):auto\> const) : auto <function-_at__builtin__c__c_lock__eq_1_ls_Y_ls_TT_gr_._gr_A_CN_ls_x_gr_0_ls__hh_I1_ls_Y_ls_TT_gr_L_gr_A_gr_1_ls_._gr__builtin_>` 
+  *  :ref:`lock (a:array\<auto(TT)\> =const -const;blk:block\<(var x:array\<TT\># implicit -const):auto\> const) : auto <function-_at__builtin__c__c_lock__eq_1_ls_Y_ls_TT_gr_._gr_A_CN_ls_x_gr_0_ls__hh_I1_ls_Y_ls_TT_gr_L_gr_A_gr_1_ls_._gr__builtin_>` 
   *  :ref:`lock (a:array\<auto(TT)\> const =const;blk:block\<(x:array\<TT\> const# implicit):auto\> const) : auto <function-_at__builtin__c__c_lock_C_eq_1_ls_Y_ls_TT_gr_._gr_A_CN_ls_x_gr_0_ls_C_hh_I1_ls_Y_ls_TT_gr_L_gr_A_gr_1_ls_._gr__builtin_>` 
   *  :ref:`find_index (arr:array\<auto(TT)\> const implicit;key:TT const) : auto <function-_at__builtin__c__c_find_index_CI1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L>` 
   *  :ref:`find_index (arr:auto(TT) const[-1] implicit;key:TT const) : auto <function-_at__builtin__c__c_find_index_CI[-1]Y_ls_TT_gr_._CY_ls_TT_gr_L>` 
@@ -1156,7 +1144,7 @@ find returns void const?#
 
 .. _function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_Y_ls_valT_gr_L_gr_?_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: find_for_edit(Tab: table<auto(keyT);auto(valT)>; at: keyT const implicit; blk: block<(p:valT? -const):void> const)
+.. das:function:: find_for_edit(Tab: table<auto(keyT);auto(valT)>; at: keyT const implicit; blk: block<(var p:valT? -const):void> const)
 
 find_for_edit returns auto
 
@@ -1175,7 +1163,7 @@ find_for_edit returns auto
 
 .. _function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_v_gr_?_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: find_for_edit(Tab: table<auto(keyT);void>; at: keyT const implicit; blk: block<(p:void? -const):void> const)
+.. das:function:: find_for_edit(Tab: table<auto(keyT);void>; at: keyT const implicit; blk: block<(var p:void? -const):void> const)
 
 find_for_edit returns auto
 
@@ -1194,7 +1182,7 @@ find_for_edit returns auto
 
 .. _function-_at__builtin__c__c_find_for_edit_if_exists_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_Y_ls_valT_gr_L_gr_?_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: find_for_edit_if_exists(Tab: table<auto(keyT);auto(valT)>; at: keyT const implicit; blk: block<(p:valT? -const):void> const)
+.. das:function:: find_for_edit_if_exists(Tab: table<auto(keyT);auto(valT)>; at: keyT const implicit; blk: block<(var p:valT? -const):void> const)
 
 find_for_edit_if_exists returns auto
 
@@ -1213,7 +1201,7 @@ find_for_edit_if_exists returns auto
 
 .. _function-_at__builtin__c__c_find_for_edit_if_exists_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CIY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_1_ls_v_gr_?_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: find_for_edit_if_exists(Tab: table<auto(keyT);void>; at: keyT const implicit; blk: block<(p:void? -const):void> const)
+.. das:function:: find_for_edit_if_exists(Tab: table<auto(keyT);void>; at: keyT const implicit; blk: block<(var p:void? -const):void> const)
 
 find_for_edit_if_exists returns auto
 
@@ -1539,7 +1527,7 @@ each returns iterator<TT&>
 
 .. _function-_at__builtin__c__c_each_CN_ls_arg_gr_0_ls_Y_ls_argT_gr_._gr_1_ls_b_gr__at_:
 
-.. das:function:: each(lam: lambda<(arg:auto(argT) -const):bool> const)
+.. das:function:: each(lam: lambda<(var arg:auto(argT) -const):bool> const)
 
 each returns iterator<argT>
 
@@ -1554,7 +1542,7 @@ each returns iterator<argT>
 
 .. _function-_at__builtin__c__c_each_ref_CN_ls_arg_gr_0_ls_1_ls_Y_ls_argT_gr_._gr_?_gr_1_ls_b_gr__at_:
 
-.. das:function:: each_ref(lam: lambda<(arg:auto(argT)? -const):bool> const)
+.. das:function:: each_ref(lam: lambda<(var arg:auto(argT)? -const):bool> const)
 
 each_ref returns iterator<argT&>
 
@@ -1783,7 +1771,7 @@ sort returns auto
 
 .. _function-_at__builtin__c__c_lock__eq_1_ls_Y_ls_TT_gr_._gr_A_CN_ls_x_gr_0_ls__hh_I1_ls_Y_ls_TT_gr_L_gr_A_gr_1_ls_._gr__builtin_:
 
-.. das:function:: lock(a: array<auto(TT)> =const; blk: block<(x:array<TT># implicit -const):auto> const)
+.. das:function:: lock(a: array<auto(TT)> =const; blk: block<(var x:array<TT># implicit -const):auto> const)
 
 lock returns auto
 
@@ -2038,11 +2026,11 @@ clear returns auto
 das::string manipulation
 ++++++++++++++++++++++++
 
-  *  :ref:`peek (src:$::das_string const implicit;block:block\<(string const#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at__builtin__c__c_peek_CIH_ls__builtin__c__c_das_string_gr__CI0_ls_C_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`peek (src:$::das_string const implicit;block:block\<(arg0:string const#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at__builtin__c__c_peek_CIH_ls__builtin__c__c_das_string_gr__CI0_ls_C_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at__builtin__c__c_peek_CIH_ls__builtin__c__c_das_string_gr__CI0_ls_C_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: peek(src: das_string const implicit; block: block<(string const#):void> const implicit)
+.. das:function:: peek(src: das_string const implicit; block: block<(arg0:string const#):void> const implicit)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -2573,9 +2561,9 @@ Memory manipulation
   *  :ref:`memcmp (left:void? const implicit;right:void? const implicit;size:int const) : int <function-_at__builtin__c__c_memcmp_CI?_CI?_Ci>` 
   *  :ref:`intptr (p:void? const) : uint64 <function-_at__builtin__c__c_intptr_C1_ls_v_gr_?>` 
   *  :ref:`intptr (p:smart_ptr\<auto\> const) : uint64 <function-_at__builtin__c__c_intptr_C1_ls_._gr_?M>` 
-  *  :ref:`lock_data (a:array\<auto(TT)\> =const -const;blk:block\<(p:TT?# implicit -const;s:int const):auto\> const) : auto <function-_at__builtin__c__c_lock_data__eq_1_ls_Y_ls_TT_gr_._gr_A_CN_ls_p;s_gr_0_ls__hh_I1_ls_Y_ls_TT_gr_L_gr_?;Ci_gr_1_ls_._gr__builtin_>` 
+  *  :ref:`lock_data (a:array\<auto(TT)\> =const -const;blk:block\<(var p:TT?# implicit -const;s:int const):auto\> const) : auto <function-_at__builtin__c__c_lock_data__eq_1_ls_Y_ls_TT_gr_._gr_A_CN_ls_p;s_gr_0_ls__hh_I1_ls_Y_ls_TT_gr_L_gr_?;Ci_gr_1_ls_._gr__builtin_>` 
   *  :ref:`lock_data (a:array\<auto(TT)\> const =const;blk:block\<(p:TT const? const# implicit;s:int const):auto\> const) : auto <function-_at__builtin__c__c_lock_data_C_eq_1_ls_Y_ls_TT_gr_._gr_A_CN_ls_p;s_gr_0_ls_C_hh_I1_ls_CY_ls_TT_gr_L_gr_?;Ci_gr_1_ls_._gr__builtin_>` 
-  *  :ref:`map_to_array (data:void? const;len:int const;blk:block\<(arg:array\<auto(TT)\># -const):auto\> const) : auto <function-_at__builtin__c__c_map_to_array_C1_ls_v_gr_?_Ci_CN_ls_arg_gr_0_ls__hh_1_ls_Y_ls_TT_gr_._gr_A_gr_1_ls_._gr__builtin_>` 
+  *  :ref:`map_to_array (data:void? const;len:int const;blk:block\<(var arg:array\<auto(TT)\># -const):auto\> const) : auto <function-_at__builtin__c__c_map_to_array_C1_ls_v_gr_?_Ci_CN_ls_arg_gr_0_ls__hh_1_ls_Y_ls_TT_gr_._gr_A_gr_1_ls_._gr__builtin_>` 
   *  :ref:`map_to_ro_array (data:void? const;len:int const;blk:block\<(arg:array\<auto(TT)\> const#):auto\> const) : auto <function-_at__builtin__c__c_map_to_ro_array_C1_ls_v_gr_?_Ci_CN_ls_arg_gr_0_ls_C_hh_1_ls_Y_ls_TT_gr_._gr_A_gr_1_ls_._gr__builtin_>` 
 
 .. _function-_at__builtin__c__c_variant_index_CIV:
@@ -2700,7 +2688,7 @@ intptr returns uint64
 
 .. _function-_at__builtin__c__c_lock_data__eq_1_ls_Y_ls_TT_gr_._gr_A_CN_ls_p;s_gr_0_ls__hh_I1_ls_Y_ls_TT_gr_L_gr_?;Ci_gr_1_ls_._gr__builtin_:
 
-.. das:function:: lock_data(a: array<auto(TT)> =const; blk: block<(p:TT?# implicit -const;s:int const):auto> const)
+.. das:function:: lock_data(a: array<auto(TT)> =const; blk: block<(var p:TT?# implicit -const;s:int const):auto> const)
 
 lock_data returns auto
 
@@ -2734,7 +2722,7 @@ lock_data returns auto
 
 .. _function-_at__builtin__c__c_map_to_array_C1_ls_v_gr_?_Ci_CN_ls_arg_gr_0_ls__hh_1_ls_Y_ls_TT_gr_._gr_A_gr_1_ls_._gr__builtin_:
 
-.. das:function:: map_to_array(data: void? const; len: int const; blk: block<(arg:array<auto(TT)># -const):auto> const)
+.. das:function:: map_to_array(data: void? const; len: int const; blk: block<(var arg:array<auto(TT)># -const):auto> const)
 
 map_to_array returns auto
 
@@ -2838,6 +2826,7 @@ Time and date
   *  :ref:`get_clock () : $::clock <function-_at__builtin__c__c_get_clock>` 
   *  :ref:`ref_time_ticks () : int64 <function-_at__builtin__c__c_ref_time_ticks>` 
   *  :ref:`get_time_usec (arg0:int64 const) : int <function-_at__builtin__c__c_get_time_usec_Ci64>` 
+  *  :ref:`get_time_nsec (arg0:int64 const) : int64 <function-_at__builtin__c__c_get_time_nsec_Ci64>` 
 
 .. _function-_at__builtin__c__c_get_clock:
 
@@ -2869,6 +2858,21 @@ get_time_usec returns int
 
 
 |function-builtin-get_time_usec|
+
+.. _function-_at__builtin__c__c_get_time_nsec_Ci64:
+
+.. das:function:: get_time_nsec(arg0: int64 const)
+
+get_time_nsec returns int64
+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +int64 const  +
++--------+-------------+
+
+
+|function-builtin-get_time_nsec|
 
 +++++++++++++
 Lock checking
@@ -3169,6 +3173,49 @@ class_rtti_size returns int
 
 |function-builtin-class_rtti_size|
 
++++++++++++++++++
+Lock verification
++++++++++++++++++
+
+  *  :ref:`set_verify_context_locks (slc:bool const;context:__context const) : bool <function-_at__builtin__c__c_set_verify_context_locks_Cb_C_c>` 
+
+.. _function-_at__builtin__c__c_set_verify_context_locks_Cb_C_c:
+
+.. das:function:: set_verify_context_locks(slc: bool const)
+
+set_verify_context_locks returns bool
+
+.. warning:: 
+  This is unsafe operation.
+
++--------+-------------+
++argument+argument type+
++========+=============+
++slc     +bool const   +
++--------+-------------+
+
+
+|function-builtin-set_verify_context_locks|
+
++++++++++++++++++++++++++++++++
+Initialization and finalization
++++++++++++++++++++++++++++++++
+
+  *  :ref:`using (arg0:block\<(var arg0:$::das_string# explicit):void\> const implicit) : void <function-_at__builtin__c__c_using_CI0_ls__hh_XH_ls__builtin__c__c_das_string_gr__gr_1_ls_v_gr__builtin_>` 
+
+.. _function-_at__builtin__c__c_using_CI0_ls__hh_XH_ls__builtin__c__c_das_string_gr__gr_1_ls_v_gr__builtin_:
+
+.. das:function:: using(arg0: block<(var arg0:das_string# explicit):void> const implicit)
+
++--------+--------------------------------------------------------------------------------------+
++argument+argument type                                                                         +
++========+======================================================================================+
++arg0    +block<( :ref:`builtin::das_string <handle-builtin-das_string>` #):void> const implicit+
++--------+--------------------------------------------------------------------------------------+
+
+
+|function-builtin-using|
+
 ++++++++++
 Algorithms
 ++++++++++
@@ -3207,22 +3254,5 @@ swap returns auto
 
 
 |function-builtin-swap|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at__builtin__c__c_using_CI0_ls__hh_XH_ls__builtin__c__c_das_string_gr__gr_1_ls_v_gr__builtin_:
-
-.. das:function:: using(arg0: block<(das_string# explicit):void> const implicit)
-
-+--------+--------------------------------------------------------------------------------------+
-+argument+argument type                                                                         +
-+========+======================================================================================+
-+arg0    +block<( :ref:`builtin::das_string <handle-builtin-das_string>` #):void> const implicit+
-+--------+--------------------------------------------------------------------------------------+
-
-
-|function-builtin-using|
 
 

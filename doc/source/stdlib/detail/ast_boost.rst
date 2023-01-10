@@ -1,3 +1,5 @@
+.. |typedef-ast_boost-AnnotationDeclarationPtr| replace:: Alias for smart_ptr<AnnotationDeclaration>
+
 .. |class-ast_boost-MacroMacro| replace:: This macro implements [macro] function annotation.
     This adds macro initialization function, which will only be called during macro compilation.
 
@@ -184,3 +186,4 @@
 
 .. |function-ast_boost-visit_finally| replace:: Calls visitor on the `finally` section of the block.
 
+.. |function-ast_boost-debug_expression| replace:: Gives hierarchical lisp-like textual representation of `expression` with all its subexpressions.

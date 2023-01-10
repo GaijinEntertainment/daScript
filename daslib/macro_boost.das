@@ -44,11 +44,13 @@ class CaptureBlock : AstVisitor
         scope |> insert(get_ptr(arg))
 
 struct public CapturedVariable
+    //! Stored captured variable together with the `ExprVar` which uses it
     variable : Variable?
     expression : ExprVar?
 
 [macro_function]
 def public capture_block(expr:ExpressionPtr) : array<CapturedVariable>
+    //! Collect all captured variables in the expression.
     var astVisitor = new CaptureBlock()
     var adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
@@ -69,6 +71,9 @@ class ColletFinally : AstVisitor
 
 [macro_function]
 def public collect_finally(expr:ExpressionPtr)
+    //! Collect all finally blocks in the expression.
+    //! Returns array of ExprBlock? with all the blocks which have `finally` section
+    //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
     var astVisitor = new ColletFinally()
     var adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
@@ -88,6 +93,8 @@ class ColletLabels : AstVisitor
 
 [macro_function]
 def public collect_labels(expr:ExpressionPtr)
+    //! Collect all labels in the expression. Returns array of integer with label indices
+    //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
     var astVisitor = new ColletLabels()
     var adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)

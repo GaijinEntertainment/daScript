@@ -98,13 +98,15 @@ to_table_move|empty|subarray|insert|move_to_ref)$%%);
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%);
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%);
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments)$%%);
-        group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock)$%%);
+        group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock|get_time_nsec)$%%);
         group_by_regex("Lock checking", mod, %regex~(lock_count|set_verify_array_locks|set_verify_table_locks)$%%);
         group_by_regex("Lock checking internals", mod, %regex~(_move_with_lockcheck|_return_with_lockcheck|_at_with_lockcheck)$%%);
         group_by_regex("Bit operations", mod, %regex~(popcnt|clz|ctz)$%%);
         group_by_regex("Intervals", mod, %regex~(interval)$%%);
         group_by_regex("RTTI", mod, %regex~(class_rtti_size)$%%);
         hide_group(group_by_regex("Jit",mod,%regex~(invoke_code|.*jit.*)$%%));
+        group_by_regex("Lock verification", mod, %regex~(set_verify_context_locks)$%%);
+        group_by_regex("Initialization and finalization", mod, %regex~(using|clone|finalize)$%%);
         group_by_regex("Algorithms", mod, %regex~(swap|iter_range)$%%)
     }]
     document("Built-in runtime",mod,"{root}/builtin.rst","{root}/detail/builtin.rst",groups)
@@ -158,7 +160,7 @@ def document_module_rtti(root:string)
         group_by_regex("Annotation access", mod, %regex~(get_annotation_argument_value|add_annotation_argument)$%%);
         group_by_regex("Compilation and simulation", mod, %regex~(compile|compile_file|for_each_expected_error|for_each_require_declaration|simulate)$%%);
         group_by_regex("File access", mod, %regex~(make_file_access|set_file_source|add_file_access_root)$%%);
-        group_by_regex("Structure access", mod, %regex~(rtti_builtin_structure_for_each_annotation|basic_struct_for_each_field|structure_for_each_annotation)$%%);
+        group_by_regex("Structure access", mod, %regex~(rtti_builtin_structure_for_each_annotation|basic_struct_for_each_field|structure_for_each_annotation|basic_struct_for_each_parent)$%%);
         group_by_regex("Data walking and printing", mod, %regex~(sprint_data|describe|get_mangled_name)$%%);
         group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash|get_function_address)$%%);
         group_by_regex("Context and mutex locking", mod, %regex~(lock_this_context|lock_context|lock_mutex)$%%)
@@ -170,6 +172,7 @@ def document_module_ast(root:string)
     var groups <- [{DocGroup
         group_by_regex("Call generation", mod, %regex~(make_call)$%%);
         group_by_regex("Visitor pattern", mod, %regex~visit.*%%);
+        group_by_regex("Expression generation", mod, %regex~(force_generated|get_expression_annotation|make_type_info_structure)%%);
         group_by_regex("Adapter generation", mod, %regex~make_.*%%);
         group_by_regex("Adapter application", mod, %regex~(add_.*_(annotation|macro)|add_new_comment_reader|add_comment_reader)%%);
         group_by_regex("Adding objects to objects", mod, %regex~add_.*%%);
@@ -185,8 +188,9 @@ def document_module_ast(root:string)
         group_by_regex("Evaluations", mod, %regex~(eval_single_expression)%%);
         group_by_regex("Error reporting", mod, %regex~(macro_error)%%);
         group_by_regex("Location and context", mod, %regex~(force_at|collect_dependencies|get_ast_context)%%);
-        hide_group(group_by_regex("Jit support",mod,%regex~(make_interop_node|get_builtin_function_address)%%));
+        // hide_group(group_by_regex("Jit support",mod,%regex~(make_interop_node|get_builtin_function_address)%%));
         group_by_regex("Use queries", mod, %regex~(get_use_global_variables|get_use_functions)%%);
+        group_by_regex("Log", mod, %regex~(to_compilation_log)%%);
         group_by_regex("Removal", mod, %regex~(remove.*)%%);
         hide_group(group_by_regex("Internal ast infrastructure", mod, %regex~(builtin_ast_.*)%%))
     }]
@@ -196,7 +200,7 @@ def document_module_ast_boost(root:string)
     var mod = find_module("ast_boost")
     var groups <- [{DocGroup
         group_by_regex("Containers", mod, %regex~(emplace_new)%%);
-        group_by_regex("Textual descriptions of the objects", mod, %regex~describe.*%%);
+        group_by_regex("Textual descriptions of the objects", mod, %regex~(describe.*|debug_expression)%%);
         group_by_regex("Queries", mod, %regex~(is.*|find.*|get.*)%%);
         group_by_regex("Annotations", mod, %regex~(append.*|add.*)%%);
         group_by_regex("Expression generation", mod, %regex~(override_method|panic_expr_as|make_static_assert_false|convert_to_expression)%%);
@@ -397,7 +401,7 @@ def document_module_is_local(root:string)
 def document_module_safe_addr(root:string)
     var mod = find_module("safe_addr")
     var groups <- [{DocGroup
-        group_by_regex("Safe temporary address", mod, %regex~(safe_addr)$%%);
+        group_by_regex("Safe temporary address", mod, %regex~(safe_addr|shared_addr)$%%);
         group_by_regex("Temporary pointers", mod, %regex~(temp_ptr)$%%)
     }]
     document("safe_addr macro",mod,"{root}/safe_addr.rst","{root}/detail/safe_addr.rst",groups)

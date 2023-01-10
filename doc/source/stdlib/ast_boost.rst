@@ -14,6 +14,16 @@ All functions and symbols are in "ast_boost" module, use require to get access t
     require daslib/ast_boost
 
 
+++++++++++++
+Type aliases
+++++++++++++
+
+.. _alias-AnnotationDeclarationPtr:
+
+.. das:attribute:: AnnotationDeclarationPtr = smart_ptr<rtti::AnnotationDeclaration>
+
+|typedef-ast_boost-AnnotationDeclarationPtr|
+
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
@@ -683,6 +693,7 @@ Textual descriptions of the objects
   *  :ref:`describe (list:rtti::AnnotationList const) : string const <function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationList_gr_>` 
   *  :ref:`describe (vvar:smart_ptr\<ast::Variable\> const) : string <function-_at_ast_boost_c__c_describe_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M>` 
   *  :ref:`describe_function_short (func:smart_ptr\<ast::Function\> const) : string const <function-_at_ast_boost_c__c_describe_function_short_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M>` 
+  *  :ref:`debug_expression (expr:smart_ptr\<ast::Expression\> const) : string <function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
   *  :ref:`describe_bitfield (bf:auto const;merger:string const) : auto <function-_at_ast_boost_c__c_describe_bitfield_C._Cs>` 
 
 .. _function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationArgumentList_gr_:
@@ -759,6 +770,21 @@ describe_function_short returns string const
 
 
 |function-ast_boost-describe_function_short|
+
+.. _function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
+
+.. das:function:: debug_expression(expr: ExpressionPtr)
+
+debug_expression returns string
+
++--------+--------------------------------------------+
++argument+argument type                               +
++========+============================================+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>` +
++--------+--------------------------------------------+
+
+
+|function-ast_boost-debug_expression|
 
 .. _function-_at_ast_boost_c__c_describe_bitfield_C._Cs:
 
@@ -1060,6 +1086,10 @@ Annotations
 +++++++++++
 
   *  :ref:`append_annotation (mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : smart_ptr\<rtti::AnnotationDeclaration\> <function-_at_ast_boost_c__c_append_annotation_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
+  *  :ref:`append_annotation (mod_name:string const;ann_name:string const) : smart_ptr\<rtti::AnnotationDeclaration\> <function-_at_ast_boost_c__c_append_annotation_Cs_Cs>` 
+  *  :ref:`append_annotation (func:smart_ptr\<ast::Function\> -const;mod_name:string const;ann_name:string const) : void <function-_at_ast_boost_c__c_append_annotation_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M_Cs_Cs>` 
+  *  :ref:`append_annotation (blk:smart_ptr\<ast::ExprBlock\> -const;mod_name:string const;ann_name:string const) : void <function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_Cs_Cs>` 
+  *  :ref:`append_annotation (st:smart_ptr\<ast::Structure\> -const;mod_name:string const;ann_name:string const) : void <function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_Cs_Cs>` 
   *  :ref:`append_annotation (func:smart_ptr\<ast::Function\> -const;mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : void <function-_at_ast_boost_c__c_append_annotation_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
   *  :ref:`append_annotation (blk:smart_ptr\<ast::ExprBlock\> -const;mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : void <function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
   *  :ref:`append_annotation (st:smart_ptr\<ast::Structure\> -const;mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : void <function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
@@ -1084,6 +1114,74 @@ append_annotation returns smart_ptr< :ref:`rtti::AnnotationDeclaration <handle-r
 +--------+--------------------------------------------------------------------------------+
 +args    +array<tuple<argname:string;argvalue: :ref:`RttiValue <alias-RttiValue>` >> const+
 +--------+--------------------------------------------------------------------------------+
+
+
+|function-ast_boost-append_annotation|
+
+.. _function-_at_ast_boost_c__c_append_annotation_Cs_Cs:
+
+.. das:function:: append_annotation(mod_name: string const; ann_name: string const)
+
+append_annotation returns smart_ptr< :ref:`rtti::AnnotationDeclaration <handle-rtti-AnnotationDeclaration>` >
+
++--------+-------------+
++argument+argument type+
++========+=============+
++mod_name+string const +
++--------+-------------+
++ann_name+string const +
++--------+-------------+
+
+
+|function-ast_boost-append_annotation|
+
+.. _function-_at_ast_boost_c__c_append_annotation_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M_Cs_Cs:
+
+.. das:function:: append_annotation(func: FunctionPtr; mod_name: string const; ann_name: string const)
+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++func    + :ref:`FunctionPtr <alias-FunctionPtr>` +
++--------+----------------------------------------+
++mod_name+string const                            +
++--------+----------------------------------------+
++ann_name+string const                            +
++--------+----------------------------------------+
+
+
+|function-ast_boost-append_annotation|
+
+.. _function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_Cs_Cs:
+
+.. das:function:: append_annotation(blk: smart_ptr<ast::ExprBlock>; mod_name: string const; ann_name: string const)
+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++blk     +smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` >+
++--------+---------------------------------------------------------+
++mod_name+string const                                             +
++--------+---------------------------------------------------------+
++ann_name+string const                                             +
++--------+---------------------------------------------------------+
+
+
+|function-ast_boost-append_annotation|
+
+.. _function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_Cs_Cs:
+
+.. das:function:: append_annotation(st: smart_ptr<ast::Structure>; mod_name: string const; ann_name: string const)
+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++st      +smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` >+
++--------+---------------------------------------------------------+
++mod_name+string const                                             +
++--------+---------------------------------------------------------+
++ann_name+string const                                             +
++--------+---------------------------------------------------------+
 
 
 |function-ast_boost-append_annotation|
@@ -1420,14 +1518,14 @@ function_to_type returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 Setup
 +++++
 
-  *  :ref:`setup_call_list (name:string const;at:rtti::LineInfo const;subblock:block\<(fn:smart_ptr\<ast::Function\> -const):void\> const) : ast::ExprBlock? <function-_at_ast_boost_c__c_setup_call_list_Cs_CH_ls_rtti_c__c_LineInfo_gr__CN_ls_fn_gr_0_ls_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`setup_call_list (name:string const;at:rtti::LineInfo const;subblock:block\<(var fn:smart_ptr\<ast::Function\> -const):void\> const) : ast::ExprBlock? <function-_at_ast_boost_c__c_setup_call_list_Cs_CH_ls_rtti_c__c_LineInfo_gr__CN_ls_fn_gr_0_ls_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`setup_call_list (name:string const;at:rtti::LineInfo const;isInit:bool const;isPrivate:bool const;isLateInit:bool const) : ast::ExprBlock? <function-_at_ast_boost_c__c_setup_call_list_Cs_CH_ls_rtti_c__c_LineInfo_gr__Cb_Cb_Cb>` 
   *  :ref:`setup_macro (name:string const;at:rtti::LineInfo const) : ast::ExprBlock? <function-_at_ast_boost_c__c_setup_macro_Cs_CH_ls_rtti_c__c_LineInfo_gr_>` 
   *  :ref:`setup_tag_annotation (name:string const;tag:string const;classPtr:auto const) : auto <function-_at_ast_boost_c__c_setup_tag_annotation_Cs_Cs_C.>` 
 
 .. _function-_at_ast_boost_c__c_setup_call_list_Cs_CH_ls_rtti_c__c_LineInfo_gr__CN_ls_fn_gr_0_ls_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: setup_call_list(name: string const; at: LineInfo const; subblock: block<(fn:smart_ptr<ast::Function> -const):void> const)
+.. das:function:: setup_call_list(name: string const; at: LineInfo const; subblock: block<(var fn:smart_ptr<ast::Function> -const):void> const)
 
 setup_call_list returns  :ref:`ast::ExprBlock <handle-ast-ExprBlock>` ?
 

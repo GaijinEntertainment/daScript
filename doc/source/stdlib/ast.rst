@@ -625,6 +625,36 @@ Type aliases
 
 |typedef-ast-ExprMakeBlockFlags|
 
+.. _alias-CopyFlags:
+
+.. das:attribute:: CopyFlags is a bitfield
+
++------------------+---+-----+
++field             +bit+value+
++==================+===+=====+
++allowCopyTemp     +0  +1    +
++------------------+---+-----+
++takeOverRightStack+1  +2    +
++------------------+---+-----+
+
+
+|typedef-ast-CopyFlags|
+
+.. _alias-MoveFlags:
+
+.. das:attribute:: MoveFlags is a bitfield
+
++------------------+---+-----+
++field             +bit+value+
++==================+===+=====+
++skipLockCheck     +0  +1    +
++------------------+---+-----+
++takeOverRightStack+1  +2    +
++------------------+---+-----+
+
+
+|typedef-ast-MoveFlags|
+
 .. _alias-ExpressionPtr:
 
 .. das:attribute:: ExpressionPtr = smart_ptr<ast::Expression>
@@ -1780,27 +1810,27 @@ ExprOp3 fields are
 
 ExprCopy fields are
 
-+------------------+-----------------------------------------------------------+
-+takeOverRightStack+bool                                                       +
-+------------------+-----------------------------------------------------------+
-+right             +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+------------------+-----------------------------------------------------------+
-+at                + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
-+------------------+-----------------------------------------------------------+
-+op                + :ref:`builtin::das_string <handle-builtin-das_string>`    +
-+------------------+-----------------------------------------------------------+
-+printFlags        + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
-+------------------+-----------------------------------------------------------+
-+genFlags          + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
-+------------------+-----------------------------------------------------------+
-+_type             +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
-+------------------+-----------------------------------------------------------+
-+flags             + :ref:`ExprFlags <alias-ExprFlags>`                        +
-+------------------+-----------------------------------------------------------+
-+__rtti            +string const                                               +
-+------------------+-----------------------------------------------------------+
-+left              +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
-+------------------+-----------------------------------------------------------+
++----------+-----------------------------------------------------------+
++right     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
++----------+-----------------------------------------------------------+
++copy_flags+ :ref:`CopyFlags <alias-CopyFlags>`                        +
++----------+-----------------------------------------------------------+
++op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
++----------+-----------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`                  +
++----------+-----------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++----------+-----------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
++----------+-----------------------------------------------------------+
++left      +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
 
 
 |structure_annotation-ast-ExprCopy|
@@ -1817,6 +1847,8 @@ ExprMove fields are
 +at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
 +----------+-----------------------------------------------------------+
 +op        + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++----------+-----------------------------------------------------------+
++move_flags+ :ref:`MoveFlags <alias-MoveFlags>`                        +
 +----------+-----------------------------------------------------------+
 +printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
 +----------+-----------------------------------------------------------+
@@ -6012,7 +6044,7 @@ visitFunctionArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitFunctionArgumentInit|
 
-.. das:function:: AstVisitor.preVisitFunctionBody(self: AstVisitor; fun: FunctionPtr)
+.. das:function:: AstVisitor.preVisitFunctionBody(self: AstVisitor; fun: FunctionPtr; expr: ExpressionPtr)
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6020,12 +6052,16 @@ visitFunctionArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 +self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
 +--------+------------------------------------------------+
 +fun     + :ref:`FunctionPtr <alias-FunctionPtr>`         +
++--------+------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
 +--------+------------------------------------------------+
 
 
 |method-ast-AstVisitor.preVisitFunctionBody|
 
-.. das:function:: AstVisitor.visitFunctionBody(self: AstVisitor; fun: FunctionPtr)
+.. das:function:: AstVisitor.visitFunctionBody(self: AstVisitor; fun: FunctionPtr; expr: ExpressionPtr)
+
+visitFunctionBody returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6033,6 +6069,8 @@ visitFunctionArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 +self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>` +
 +--------+------------------------------------------------+
 +fun     + :ref:`FunctionPtr <alias-FunctionPtr>`         +
++--------+------------------------------------------------+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`     +
 +--------+------------------------------------------------+
 
 
@@ -7182,6 +7220,21 @@ visitExprClone returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 
 |method-ast-AstVisitor.preVisitExprCloneRight|
+
+.. das:function:: AstVisitor.canVisitWithAliasSubexpression(self: AstVisitor; expr: smart_ptr<ast::ExprAssume> const)
+
+canVisitWithAliasSubexpression returns bool
+
++--------+-----------------------------------------------------------------+
++argument+argument type                                                    +
++========+=================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                  +
++--------+-----------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprAssume <handle-ast-ExprAssume>` > const+
++--------+-----------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.canVisitWithAliasSubexpression|
 
 .. das:function:: AstVisitor.preVisitExprAssume(self: AstVisitor; expr: smart_ptr<ast::ExprAssume> const)
 
@@ -9936,6 +9989,61 @@ visit returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
 
 |function-ast-visit_finally|
 
++++++++++++++++++++++
+Expression generation
++++++++++++++++++++++
+
+  *  :ref:`force_generated (expression:smart_ptr\<ast::Expression\> const& implicit;value:bool const) : void <function-_at_ast_c__c_force_generated_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_Cb>` 
+  *  :ref:`get_expression_annotation (expr:ast::Expression? const implicit;context:__context const;line:__lineInfo const) : rtti::Annotation? <function-_at_ast_c__c_get_expression_annotation_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?_C_c_C_l>` 
+  *  :ref:`make_type_info_structure (ctx:rtti::Context implicit;type:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const;at:__lineInfo const) : rtti::TypeInfo? <function-_at_ast_c__c_make_type_info_structure_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_C_c_C_l>` 
+
+.. _function-_at_ast_c__c_force_generated_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_Cb:
+
+.. das:function:: force_generated(expression: smart_ptr<ast::Expression> const& implicit; value: bool const)
+
++----------+---------------------------------------------------------------------------+
++argument  +argument type                                                              +
++==========+===========================================================================+
++expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
++----------+---------------------------------------------------------------------------+
++value     +bool const                                                                 +
++----------+---------------------------------------------------------------------------+
+
+
+|function-ast-force_generated|
+
+.. _function-_at_ast_c__c_get_expression_annotation_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?_C_c_C_l:
+
+.. das:function:: get_expression_annotation(expr: ast::Expression? const implicit)
+
+get_expression_annotation returns  :ref:`rtti::Annotation <handle-rtti-Annotation>` ?
+
++--------+----------------------------------------------------------------+
++argument+argument type                                                   +
++========+================================================================+
++expr    + :ref:`ast::Expression <handle-ast-Expression>` ? const implicit+
++--------+----------------------------------------------------------------+
+
+
+|function-ast-get_expression_annotation|
+
+.. _function-_at_ast_c__c_make_type_info_structure_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_C_c_C_l:
+
+.. das:function:: make_type_info_structure(ctx: Context implicit; type: smart_ptr<ast::TypeDecl> const implicit)
+
+make_type_info_structure returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++ctx     + :ref:`rtti::Context <handle-rtti-Context>`  implicit                 +
++--------+----------------------------------------------------------------------+
++type    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
+
+
+|function-ast-make_type_info_structure|
+
 ++++++++++++++++++
 Adapter generation
 ++++++++++++++++++
@@ -9955,8 +10063,6 @@ Adapter generation
   *  :ref:`make_capture_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::CaptureMacro\> <function-_at_ast_c__c_make_capture_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>` 
   *  :ref:`make_simulate_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::SimulateMacro\> <function-_at_ast_c__c_make_simulate_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>` 
   *  :ref:`make_clone_structure (structure:ast::Structure? const implicit) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_make_clone_structure_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?>` 
-  *  :ref:`make_interop_node (ctx:rtti::Context implicit;call:ast::ExprCallFunc? const implicit;context:__context const;at:__lineInfo const) : void? <function-_at_ast_c__c_make_interop_node_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_ExprCallFunc_gr__gr_?_C_c_C_l>` 
-  *  :ref:`make_interop_node (ctx:rtti::Context implicit;builder:ast::ExprStringBuilder? const implicit;context:__context const;at:__lineInfo const) : void? <function-_at_ast_c__c_make_interop_node_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_ExprStringBuilder_gr__gr_?_C_c_C_l>` 
   *  :ref:`make_function_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_function_annotation_Cs_C.>` 
   *  :ref:`make_block_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_block_annotation_Cs_C.>` 
   *  :ref:`make_structure_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::StructureAnnotation\> <function-_at_ast_c__c_make_structure_annotation_Cs_C.>` 
@@ -10248,40 +10354,6 @@ make_clone_structure returns smart_ptr< :ref:`ast::Function <handle-ast-Function
 
 
 |function-ast-make_clone_structure|
-
-.. _function-_at_ast_c__c_make_interop_node_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_ExprCallFunc_gr__gr_?_C_c_C_l:
-
-.. das:function:: make_interop_node(ctx: Context implicit; call: ast::ExprCallFunc? const implicit)
-
-make_interop_node returns void?
-
-+--------+--------------------------------------------------------------------+
-+argument+argument type                                                       +
-+========+====================================================================+
-+ctx     + :ref:`rtti::Context <handle-rtti-Context>`  implicit               +
-+--------+--------------------------------------------------------------------+
-+call    + :ref:`ast::ExprCallFunc <handle-ast-ExprCallFunc>` ? const implicit+
-+--------+--------------------------------------------------------------------+
-
-
-|function-ast-make_interop_node|
-
-.. _function-_at_ast_c__c_make_interop_node_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_ExprStringBuilder_gr__gr_?_C_c_C_l:
-
-.. das:function:: make_interop_node(ctx: Context implicit; builder: ast::ExprStringBuilder? const implicit)
-
-make_interop_node returns void?
-
-+--------+------------------------------------------------------------------------------+
-+argument+argument type                                                                 +
-+========+==============================================================================+
-+ctx     + :ref:`rtti::Context <handle-rtti-Context>`  implicit                         +
-+--------+------------------------------------------------------------------------------+
-+builder + :ref:`ast::ExprStringBuilder <handle-ast-ExprStringBuilder>` ? const implicit+
-+--------+------------------------------------------------------------------------------+
-
-
-|function-ast-make_interop_node|
 
 .. _function-_at_ast_c__c_make_function_annotation_Cs_C.:
 
@@ -11716,26 +11788,26 @@ find_compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 Iterating
 +++++++++
 
-  *  :ref:`for_each_module (program:rtti::Program? const implicit;block:block\<(rtti::Module?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_function (module:rtti::Module? const implicit;name:string const implicit;block:block\<(smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_generic (module:rtti::Module? const implicit;name:string const implicit;block:block\<(smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`any_table_foreach (table:void? const implicit;keyStride:int const;valueStride:int const;block:block\<(void?;void?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_any_table_foreach_CI?_Ci_Ci_CI0_ls_?;?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`any_array_foreach (array:void? const implicit;stride:int const;block:block\<(void?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_any_array_foreach_CI?_Ci_CI0_ls_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_typedef (module:rtti::Module? const implicit;block:block\<(string#;smart_ptr\<ast::TypeDecl\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_typedef_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_enumeration (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::Enumeration\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_structure (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::Structure\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Structure_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_generic (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_global (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::Variable\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_call_macro (module:rtti::Module? const implicit;block:block\<(string#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_reader_macro (module:rtti::Module? const implicit;block:block\<(string#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_variant_macro (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::VariantMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_for_loop_macro (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::ForLoopMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_typeinfo_macro (module:rtti::Module? const implicit;block:block\<(smart_ptr\<ast::TypeInfoMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`for_each_field (annotation:rtti::BasicStructureAnnotation const implicit;block:block\<(string;string;smart_ptr\<ast::TypeDecl\>;uint):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W;u_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_module (program:rtti::Program? const implicit;block:block\<(var arg0:rtti::Module?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_function (module:rtti::Module? const implicit;name:string const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_generic (module:rtti::Module? const implicit;name:string const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`any_table_foreach (table:void? const implicit;keyStride:int const;valueStride:int const;block:block\<(var arg0:void?;var arg1:void?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_any_table_foreach_CI?_Ci_Ci_CI0_ls_?;?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`any_array_foreach (array:void? const implicit;stride:int const;block:block\<(var arg0:void?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_any_array_foreach_CI?_Ci_CI0_ls_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_typedef (module:rtti::Module? const implicit;block:block\<(var arg0:string#;var arg1:smart_ptr\<ast::TypeDecl\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_typedef_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_enumeration (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Enumeration\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_structure (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Structure\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Structure_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_generic (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_global (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Variable\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_call_macro (module:rtti::Module? const implicit;block:block\<(var arg0:string#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_reader_macro (module:rtti::Module? const implicit;block:block\<(var arg0:string#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_variant_macro (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::VariantMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_for_loop_macro (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::ForLoopMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_typeinfo_macro (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::TypeInfoMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_field (annotation:rtti::BasicStructureAnnotation const implicit;block:block\<(var arg0:string;var arg1:string;var arg2:smart_ptr\<ast::TypeDecl\>;var arg3:uint):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W;u_gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at_ast_c__c_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_module(program: rtti::Program? const implicit; block: block<(rtti::Module?):void> const implicit)
+.. das:function:: for_each_module(program: rtti::Program? const implicit; block: block<(var arg0:rtti::Module?):void> const implicit)
 
 +--------+------------------------------------------------------------------------+
 +argument+argument type                                                           +
@@ -11750,7 +11822,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_function(module: rtti::Module? const implicit; name: string const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
+.. das:function:: for_each_function(module: rtti::Module? const implicit; name: string const implicit; block: block<(var arg0:smart_ptr<ast::Function>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -11767,7 +11839,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_generic(module: rtti::Module? const implicit; name: string const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
+.. das:function:: for_each_generic(module: rtti::Module? const implicit; name: string const implicit; block: block<(var arg0:smart_ptr<ast::Function>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -11784,7 +11856,7 @@ Iterating
 
 .. _function-_at_ast_c__c_any_table_foreach_CI?_Ci_Ci_CI0_ls_?;?_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: any_table_foreach(table: void? const implicit; keyStride: int const; valueStride: int const; block: block<(void?;void?):void> const implicit)
+.. das:function:: any_table_foreach(table: void? const implicit; keyStride: int const; valueStride: int const; block: block<(var arg0:void?;var arg1:void?):void> const implicit)
 
 +-----------+----------------------------------------+
 +argument   +argument type                           +
@@ -11803,7 +11875,7 @@ Iterating
 
 .. _function-_at_ast_c__c_any_array_foreach_CI?_Ci_CI0_ls_?_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: any_array_foreach(array: void? const implicit; stride: int const; block: block<(void?):void> const implicit)
+.. das:function:: any_array_foreach(array: void? const implicit; stride: int const; block: block<(var arg0:void?):void> const implicit)
 
 +--------+----------------------------------+
 +argument+argument type                     +
@@ -11820,7 +11892,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_typedef_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_typedef(module: rtti::Module? const implicit; block: block<(string#;smart_ptr<ast::TypeDecl>):void> const implicit)
+.. das:function:: for_each_typedef(module: rtti::Module? const implicit; block: block<(var arg0:string#;var arg1:smart_ptr<ast::TypeDecl>):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------------+
 +argument+argument type                                                                               +
@@ -11835,7 +11907,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_enumeration(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Enumeration>):void> const implicit)
+.. das:function:: for_each_enumeration(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::Enumeration>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------------+
 +argument+argument type                                                                             +
@@ -11850,7 +11922,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Structure_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_structure(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Structure>):void> const implicit)
+.. das:function:: for_each_structure(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::Structure>):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------+
 +argument+argument type                                                                         +
@@ -11865,7 +11937,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_generic(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
+.. das:function:: for_each_generic(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::Function>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -11880,7 +11952,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_global(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::Variable>):void> const implicit)
+.. das:function:: for_each_global(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::Variable>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -11895,7 +11967,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_call_macro(module: rtti::Module? const implicit; block: block<(string#):void> const implicit)
+.. das:function:: for_each_call_macro(module: rtti::Module? const implicit; block: block<(var arg0:string#):void> const implicit)
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -11910,7 +11982,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_reader_macro(module: rtti::Module? const implicit; block: block<(string#):void> const implicit)
+.. das:function:: for_each_reader_macro(module: rtti::Module? const implicit; block: block<(var arg0:string#):void> const implicit)
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -11925,7 +11997,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_variant_macro(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::VariantMacro>):void> const implicit)
+.. das:function:: for_each_variant_macro(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::VariantMacro>):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------------+
 +argument+argument type                                                                               +
@@ -11940,7 +12012,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_for_loop_macro(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::ForLoopMacro>):void> const implicit)
+.. das:function:: for_each_for_loop_macro(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::ForLoopMacro>):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------------+
 +argument+argument type                                                                               +
@@ -11955,7 +12027,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_typeinfo_macro(module: rtti::Module? const implicit; block: block<(smart_ptr<ast::TypeInfoMacro>):void> const implicit)
+.. das:function:: for_each_typeinfo_macro(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::TypeInfoMacro>):void> const implicit)
 
 +--------+----------------------------------------------------------------------------------------------+
 +argument+argument type                                                                                 +
@@ -11970,7 +12042,7 @@ Iterating
 
 .. _function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W;u_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_field(annotation: BasicStructureAnnotation const implicit; block: block<(string;string;smart_ptr<ast::TypeDecl>;uint):void> const implicit)
+.. das:function:: for_each_field(annotation: BasicStructureAnnotation const implicit; block: block<(var arg0:string;var arg1:string;var arg2:smart_ptr<ast::TypeDecl>;var arg3:uint):void> const implicit)
 
 +----------+-------------------------------------------------------------------------------------------------------+
 +argument  +argument type                                                                                          +
@@ -12240,8 +12312,6 @@ Properties
   *  :ref:`is_visible_directly (from_module:rtti::Module? const implicit;which_module:rtti::Module? const implicit) : bool <function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?>` 
   *  :ref:`is_expr_like_call (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
   *  :ref:`is_expr_const (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
-  *  :ref:`is_terminator_expression (expr:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_terminator_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
-  *  :ref:`is_terminator_or_break_expression (expr:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_terminator_or_break_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
 
 .. _function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb:
 
@@ -12348,36 +12418,6 @@ is_expr_const returns bool
 
 
 |function-ast-is_expr_const|
-
-.. _function-_at_ast_c__c_is_terminator_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
-
-.. das:function:: is_terminator_expression(expr: smart_ptr<ast::Expression> const& implicit)
-
-is_terminator_expression returns bool
-
-+--------+---------------------------------------------------------------------------+
-+argument+argument type                                                              +
-+========+===========================================================================+
-+expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
-+--------+---------------------------------------------------------------------------+
-
-
-|function-ast-is_terminator_expression|
-
-.. _function-_at_ast_c__c_is_terminator_or_break_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
-
-.. das:function:: is_terminator_or_break_expression(expr: smart_ptr<ast::Expression> const& implicit)
-
-is_terminator_or_break_expression returns bool
-
-+--------+---------------------------------------------------------------------------+
-+argument+argument type                                                              +
-+========+===========================================================================+
-+expr    +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
-+--------+---------------------------------------------------------------------------+
-
-
-|function-ast-is_terminator_or_break_expression|
 
 ++++++++++++++++++
 Pointer conversion
@@ -12486,8 +12526,8 @@ Location and context
 ++++++++++++++++++++
 
   *  :ref:`force_at (expression:smart_ptr\<ast::Expression\> const& implicit;at:rtti::LineInfo const implicit) : void <function-_at_ast_c__c_force_at_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CIH_ls_rtti_c__c_LineInfo_gr_>` 
-  *  :ref:`collect_dependencies (function:smart_ptr\<ast::Function\> const implicit;block:block\<(array\<ast::Function?\>;array\<ast::Variable?\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_collect_dependencies_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W_CI0_ls_1_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?_gr_A;1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`get_ast_context (program:smart_ptr\<rtti::Program\> const implicit;expression:smart_ptr\<ast::Expression\> const implicit;block:block\<(bool;ast::AstContext):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_get_ast_context_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI0_ls_b;H_ls_ast_c__c_AstContext_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`collect_dependencies (function:smart_ptr\<ast::Function\> const implicit;block:block\<(var arg0:array\<ast::Function?\>;var arg1:array\<ast::Variable?\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_collect_dependencies_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W_CI0_ls_1_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?_gr_A;1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`get_ast_context (program:smart_ptr\<rtti::Program\> const implicit;expression:smart_ptr\<ast::Expression\> const implicit;block:block\<(var arg0:bool;var arg1:ast::AstContext):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_get_ast_context_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI0_ls_b;H_ls_ast_c__c_AstContext_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at_ast_c__c_force_at_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CIH_ls_rtti_c__c_LineInfo_gr_:
 
@@ -12506,7 +12546,7 @@ Location and context
 
 .. _function-_at_ast_c__c_collect_dependencies_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W_CI0_ls_1_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?_gr_A;1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: collect_dependencies(function: smart_ptr<ast::Function> const implicit; block: block<(array<ast::Function?>;array<ast::Variable?>):void> const implicit)
+.. das:function:: collect_dependencies(function: smart_ptr<ast::Function> const implicit; block: block<(var arg0:array<ast::Function?>;var arg1:array<ast::Variable?>):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------------------------------------------------------+
 +argument+argument type                                                                                                                         +
@@ -12521,7 +12561,7 @@ Location and context
 
 .. _function-_at_ast_c__c_get_ast_context_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI0_ls_b;H_ls_ast_c__c_AstContext_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: get_ast_context(program: smart_ptr<rtti::Program> const implicit; expression: smart_ptr<ast::Expression> const implicit; block: block<(bool;ast::AstContext):void> const implicit)
+.. das:function:: get_ast_context(program: smart_ptr<rtti::Program> const implicit; expression: smart_ptr<ast::Expression> const implicit; block: block<(var arg0:bool;var arg1:ast::AstContext):void> const implicit)
 
 +----------+----------------------------------------------------------------------------------+
 +argument  +argument type                                                                     +
@@ -12540,12 +12580,12 @@ Location and context
 Use queries
 +++++++++++
 
-  *  :ref:`get_use_global_variables (func:smart_ptr\<ast::Function\> const implicit;block:block\<(smart_ptr\<ast::Variable\>):void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_get_use_global_variables_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`get_use_functions (func:smart_ptr\<ast::Function\> const implicit;block:block\<(smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_get_use_functions_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`get_use_global_variables (func:smart_ptr\<ast::Function\> const implicit;block:block\<(var arg0:smart_ptr\<ast::Variable\>):void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_get_use_global_variables_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`get_use_functions (func:smart_ptr\<ast::Function\> const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_get_use_functions_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
 .. _function-_at_ast_c__c_get_use_global_variables_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: get_use_global_variables(func: smart_ptr<ast::Function> const implicit; block: block<(smart_ptr<ast::Variable>):void> const implicit)
+.. das:function:: get_use_global_variables(func: smart_ptr<ast::Function> const implicit; block: block<(var arg0:smart_ptr<ast::Variable>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -12560,7 +12600,7 @@ Use queries
 
 .. _function-_at_ast_c__c_get_use_functions_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: get_use_functions(func: smart_ptr<ast::Function> const implicit; block: block<(smart_ptr<ast::Function>):void> const implicit)
+.. das:function:: get_use_functions(func: smart_ptr<ast::Function> const implicit; block: block<(var arg0:smart_ptr<ast::Function>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -12572,6 +12612,25 @@ Use queries
 
 
 |function-ast-get_use_functions|
+
++++
+Log
++++
+
+  *  :ref:`to_compilation_log (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_to_compilation_log_CIs_C_c_C_l>` 
+
+.. _function-_at_ast_c__c_to_compilation_log_CIs_C_c_C_l:
+
+.. das:function:: to_compilation_log(text: string const implicit)
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++text    +string const implicit+
++--------+---------------------+
+
+
+|function-ast-to_compilation_log|
 
 +++++++
 Removal

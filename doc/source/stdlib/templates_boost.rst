@@ -106,7 +106,7 @@ Template rules
   *  :ref:`renameVariable (self:templates_boost::Template -const;name:string const;newName:string const) : void <function-_at_templates_boost_c__c_renameVariable_S_ls_Template_gr__Cs_Cs>` 
   *  :ref:`renameVariable (self:templates_boost::Template -const;name:string const;newName:$::das_string const) : void <function-_at_templates_boost_c__c_renameVariable_S_ls_Template_gr__Cs_CH_ls__builtin__c__c_das_string_gr_>` 
   *  :ref:`replaceType (self:templates_boost::Template -const;name:string const;newName:string const) : void <function-_at_templates_boost_c__c_replaceType_S_ls_Template_gr__Cs_Cs>` 
-  *  :ref:`replaceAnnotationArgument (self:templates_boost::Template -const;name:string const;cb:lambda\<(ann:rtti::AnnotationDeclaration -const):void\> -const) : void <function-_at_templates_boost_c__c_replaceAnnotationArgument_S_ls_Template_gr__Cs_N_ls_ann_gr_0_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_1_ls_v_gr__at_>` 
+  *  :ref:`replaceAnnotationArgument (self:templates_boost::Template -const;name:string const;cb:lambda\<(var ann:rtti::AnnotationDeclaration -const):void\> -const) : void <function-_at_templates_boost_c__c_replaceAnnotationArgument_S_ls_Template_gr__Cs_N_ls_ann_gr_0_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_1_ls_v_gr__at_>` 
   *  :ref:`replaceBlockArgument (self:templates_boost::Template -const;name:string const;newName:string const) : void <function-_at_templates_boost_c__c_replaceBlockArgument_S_ls_Template_gr__Cs_Cs>` 
 
 .. _function-_at_templates_boost_c__c_kaboomVarField_S_ls_Template_gr__Cs_Cs_Cs:
@@ -199,7 +199,7 @@ Adds a rule to the template to replace a type alias with another type alias, spe
 
 .. _function-_at_templates_boost_c__c_replaceAnnotationArgument_S_ls_Template_gr__Cs_N_ls_ann_gr_0_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_1_ls_v_gr__at_:
 
-.. das:function:: replaceAnnotationArgument(self: Template; name: string const; cb: lambda<(ann:rtti::AnnotationDeclaration -const):void>)
+.. das:function:: replaceAnnotationArgument(self: Template; name: string const; cb: lambda<(var ann:rtti::AnnotationDeclaration -const):void>)
 
 +--------+-------------------------------------------------------------------------------------------+
 +argument+argument type                                                                              +
@@ -236,8 +236,8 @@ Template application
 ++++++++++++++++++++
 
   *  :ref:`apply_template (rules:templates_boost::Template -const;at:rtti::LineInfo const;expr:smart_ptr\<ast::Expression\> -const;forceAt:bool const) : smart_ptr\<ast::Expression\> <function-_at_templates_boost_c__c_apply_template_S_ls_Template_gr__CH_ls_rtti_c__c_LineInfo_gr__1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_Cb>` 
-  *  :ref:`apply_template (at:rtti::LineInfo const;expr:smart_ptr\<ast::Expression\>& -const;blk:block\<(rules:templates_boost::Template -const):void\> const) : smart_ptr\<ast::Expression\> <function-_at_templates_boost_c__c_apply_template_CH_ls_rtti_c__c_LineInfo_gr__&1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`apply_template (expr:smart_ptr\<ast::Expression\>& -const;blk:block\<(rules:templates_boost::Template -const):void\> const) : smart_ptr\<ast::Expression\> <function-_at_templates_boost_c__c_apply_template_&1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`apply_template (at:rtti::LineInfo const;expr:smart_ptr\<ast::Expression\>& -const;blk:block\<(var rules:templates_boost::Template -const):void\> const) : smart_ptr\<ast::Expression\> <function-_at_templates_boost_c__c_apply_template_CH_ls_rtti_c__c_LineInfo_gr__&1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`apply_template (expr:smart_ptr\<ast::Expression\>& -const;blk:block\<(var rules:templates_boost::Template -const):void\> const) : smart_ptr\<ast::Expression\> <function-_at_templates_boost_c__c_apply_template_&1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_>` 
 
 .. _function-_at_templates_boost_c__c_apply_template_S_ls_Template_gr__CH_ls_rtti_c__c_LineInfo_gr__1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_Cb:
 
@@ -262,7 +262,7 @@ Applies the template to the given expression. If `forceAt` is set, the resulting
 
 .. _function-_at_templates_boost_c__c_apply_template_CH_ls_rtti_c__c_LineInfo_gr__&1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: apply_template(at: LineInfo const; expr: smart_ptr<ast::Expression>&; blk: block<(rules:templates_boost::Template -const):void> const)
+.. das:function:: apply_template(at: LineInfo const; expr: smart_ptr<ast::Expression>&; blk: block<(var rules:templates_boost::Template -const):void> const)
 
 apply_template returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -281,7 +281,7 @@ Applies the template to the given expression. If `forceAt` is set, the resulting
 
 .. _function-_at_templates_boost_c__c_apply_template_&1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: apply_template(expr: smart_ptr<ast::Expression>&; blk: block<(rules:templates_boost::Template -const):void> const)
+.. das:function:: apply_template(expr: smart_ptr<ast::Expression>&; blk: block<(var rules:templates_boost::Template -const):void> const)
 
 apply_template returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -360,7 +360,7 @@ Global variable helpers
 +++++++++++++++++++++++
 
   *  :ref:`add_global_var (mod:rtti::Module? const;vname:string const;vat:rtti::LineInfo const;value:smart_ptr\<ast::Expression\> -const) : bool <function-_at_templates_boost_c__c_add_global_var_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_CH_ls_rtti_c__c_LineInfo_gr__Y_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
-  *  :ref:`add_global_var (mod:rtti::Module? const;vname:string const;typ:smart_ptr\<ast::TypeDecl\> -const;vat:rtti::LineInfo const;priv:bool const;blk:block\<(v:smart_ptr\<ast::Variable\> -const):void\> const) : bool <function-_at_templates_boost_c__c_add_global_var_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_CH_ls_rtti_c__c_LineInfo_gr__Cb_CN_ls_v_gr_0_ls_Y_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`add_global_var (mod:rtti::Module? const;vname:string const;typ:smart_ptr\<ast::TypeDecl\> -const;vat:rtti::LineInfo const;priv:bool const;blk:block\<(var v:smart_ptr\<ast::Variable\> -const):void\> const) : bool <function-_at_templates_boost_c__c_add_global_var_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_CH_ls_rtti_c__c_LineInfo_gr__Cb_CN_ls_v_gr_0_ls_Y_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`add_global_var (mod:rtti::Module? const;vname:string const;typ:smart_ptr\<ast::TypeDecl\> -const;vat:rtti::LineInfo const;priv:bool const) : bool <function-_at_templates_boost_c__c_add_global_var_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_CH_ls_rtti_c__c_LineInfo_gr__Cb>` 
   *  :ref:`add_global_let (mod:rtti::Module? const;vname:string const;vat:rtti::LineInfo const;value:smart_ptr\<ast::Expression\> -const) : bool <function-_at_templates_boost_c__c_add_global_let_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_CH_ls_rtti_c__c_LineInfo_gr__Y_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
   *  :ref:`add_global_private_var (mod:rtti::Module? const;vname:string const;vat:rtti::LineInfo const;value:smart_ptr\<ast::Expression\> -const) : bool <function-_at_templates_boost_c__c_add_global_private_var_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_CH_ls_rtti_c__c_LineInfo_gr__Y_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
@@ -391,7 +391,7 @@ Global variables type is would be inferred from the initial value.
 
 .. _function-_at_templates_boost_c__c_add_global_var_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_CH_ls_rtti_c__c_LineInfo_gr__Cb_CN_ls_v_gr_0_ls_Y_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: add_global_var(mod: rtti::Module? const; vname: string const; typ: TypeDeclPtr; vat: LineInfo const; priv: bool const; blk: block<(v:smart_ptr<ast::Variable> -const):void> const)
+.. das:function:: add_global_var(mod: rtti::Module? const; vname: string const; typ: TypeDeclPtr; vat: LineInfo const; priv: bool const; blk: block<(var v:smart_ptr<ast::Variable> -const):void> const)
 
 add_global_var returns bool
 
@@ -753,7 +753,7 @@ Implementation details for the reification. This adds any array to the rules.
 
 .. _function-_at_templates_boost_c__c_apply_qmacro_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: apply_qmacro(expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)
+.. das:function:: apply_qmacro(expr: smart_ptr<ast::Expression>; blk: block<(var rules:templates_boost::Template -const):void> const)
 
 apply_qmacro returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -770,7 +770,7 @@ Implementation details for the expression reificaiton. This is a generat express
 
 .. _function-_at_templates_boost_c__c_apply_qblock_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: apply_qblock(expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)
+.. das:function:: apply_qblock(expr: smart_ptr<ast::Expression>; blk: block<(var rules:templates_boost::Template -const):void> const)
 
 apply_qblock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -787,7 +787,7 @@ Implementation details for the expression reificaiton. This is a block reificati
 
 .. _function-_at_templates_boost_c__c_apply_qblock_to_array_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: apply_qblock_to_array(expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)
+.. das:function:: apply_qblock_to_array(expr: smart_ptr<ast::Expression>; blk: block<(var rules:templates_boost::Template -const):void> const)
 
 apply_qblock_to_array returns array< :ref:`ExpressionPtr <alias-ExpressionPtr>` >
 
@@ -804,7 +804,7 @@ Implementation details for the expression reificaiton. This is a block reificati
 
 .. _function-_at_templates_boost_c__c_apply_qblock_expr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: apply_qblock_expr(expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)
+.. das:function:: apply_qblock_expr(expr: smart_ptr<ast::Expression>; blk: block<(var rules:templates_boost::Template -const):void> const)
 
 apply_qblock_expr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -821,7 +821,7 @@ Implementation details for the expression reificaiton. This is a frist line of t
 
 .. _function-_at_templates_boost_c__c_apply_qtype_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: apply_qtype(expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)
+.. das:function:: apply_qtype(expr: smart_ptr<ast::Expression>; blk: block<(var rules:templates_boost::Template -const):void> const)
 
 apply_qtype returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
@@ -885,7 +885,7 @@ Unifies emplace and emplace_new for the array<VariablePtr>
 
 .. _function-_at_templates_boost_c__c_apply_qmacro_function_Cs_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: apply_qmacro_function(fname: string const; expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)
+.. das:function:: apply_qmacro_function(fname: string const; expr: smart_ptr<ast::Expression>; blk: block<(var rules:templates_boost::Template -const):void> const)
 
 apply_qmacro_function returns  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
@@ -904,7 +904,7 @@ Implementation details for reification. This is a function generation reificatio
 
 .. _function-_at_templates_boost_c__c_apply_qmacro_method_Cs_CY_ls_StructurePtr_gr_1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: apply_qmacro_method(fname: string const; parent: StructurePtr; expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)
+.. das:function:: apply_qmacro_method(fname: string const; parent: StructurePtr; expr: smart_ptr<ast::Expression>; blk: block<(var rules:templates_boost::Template -const):void> const)
 
 apply_qmacro_method returns  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
@@ -925,7 +925,7 @@ Implementation details for reification. This is a class method function generati
 
 .. _function-_at_templates_boost_c__c_apply_qmacro_variable_Cs_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CN_ls_rules_gr_0_ls_S_ls_Template_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: apply_qmacro_variable(vname: string const; expr: smart_ptr<ast::Expression>; blk: block<(rules:templates_boost::Template -const):void> const)
+.. das:function:: apply_qmacro_variable(vname: string const; expr: smart_ptr<ast::Expression>; blk: block<(var rules:templates_boost::Template -const):void> const)
 
 apply_qmacro_variable returns  :ref:`VariablePtr <alias-VariablePtr>` 
 

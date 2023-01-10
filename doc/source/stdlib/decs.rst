@@ -36,7 +36,7 @@ Hash value of the individual type
 
 .. _alias-DeferEval:
 
-.. das:attribute:: DeferEval = lambda<(act:DeferAction -const):void>
+.. das:attribute:: DeferEval = lambda<(var act:DeferAction -const):void>
 
 Lambda which holds deferred action. Typically creation of destruction of an entity.
 
@@ -1011,13 +1011,13 @@ Finishes all deferred actions.
 Deferred actions
 ++++++++++++++++
 
-  *  :ref:`update_entity (entityid:decs::EntityId const implicit;blk:lambda\<(eid:decs::EntityId const;cmp:array\<decs::ComponentValue\> -const):void\> -const) : void <function-_at_decs_c__c_update_entity_CIS_ls_EntityId_gr__N_ls_eid;cmp_gr_0_ls_CS_ls_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_>` 
-  *  :ref:`create_entity (blk:lambda\<(eid:decs::EntityId const;cmp:array\<decs::ComponentValue\> -const):void\> -const) : decs::EntityId <function-_at_decs_c__c_create_entity_N_ls_eid;cmp_gr_0_ls_CS_ls_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_>` 
+  *  :ref:`update_entity (entityid:decs::EntityId const implicit;blk:lambda\<(eid:decs::EntityId const;var cmp:array\<decs::ComponentValue\> -const):void\> -const) : void <function-_at_decs_c__c_update_entity_CIS_ls_EntityId_gr__N_ls_eid;cmp_gr_0_ls_CS_ls_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_>` 
+  *  :ref:`create_entity (blk:lambda\<(eid:decs::EntityId const;var cmp:array\<decs::ComponentValue\> -const):void\> -const) : decs::EntityId <function-_at_decs_c__c_create_entity_N_ls_eid;cmp_gr_0_ls_CS_ls_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_>` 
   *  :ref:`delete_entity (entityid:decs::EntityId const implicit) : void <function-_at_decs_c__c_delete_entity_CIS_ls_EntityId_gr_>` 
 
 .. _function-_at_decs_c__c_update_entity_CIS_ls_EntityId_gr__N_ls_eid;cmp_gr_0_ls_CS_ls_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_:
 
-.. das:function:: update_entity(entityid: EntityId const implicit; blk: lambda<(eid:decs::EntityId const;cmp:array<decs::ComponentValue> -const):void>)
+.. das:function:: update_entity(entityid: EntityId const implicit; blk: lambda<(eid:decs::EntityId const;var cmp:array<decs::ComponentValue> -const):void>)
 
 +--------+----------------------------------------------------------------------------------------------------------------------+
 +argument+argument type                                                                                                         +
@@ -1032,7 +1032,7 @@ Creates deferred action to update entity specified by id.
 
 .. _function-_at_decs_c__c_create_entity_N_ls_eid;cmp_gr_0_ls_CS_ls_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_:
 
-.. das:function:: create_entity(blk: lambda<(eid:decs::EntityId const;cmp:array<decs::ComponentValue> -const):void>)
+.. das:function:: create_entity(blk: lambda<(eid:decs::EntityId const;var cmp:array<decs::ComponentValue> -const):void>)
 
 create_entity returns  :ref:`decs::EntityId <struct-decs-EntityId>` 
 
