@@ -2853,15 +2853,16 @@ namespace das
     }
 
     void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
-        context.tabGMnLookup.clear();
+        context.tabGMnLookup = new das_hash_map<uint64_t,uint32_t> ();
+        context.tabGMnLookup->clear();
         for ( int i=0; i!=context.totalVariables; ++i ) {
             auto mnh = context.globalVariables[i].mangledNameHash;
-            context.tabGMnLookup[mnh] = context.globalVariables[i].offset;
+            (*context.tabGMnLookup)[mnh] = context.globalVariables[i].offset;
         }
         if ( options.getBoolOption("log_gmn_hash",false) ) {
             logs
                 << "totalGlobals: " << context.totalVariables << "\n"
-                << "tabGMnLookup:" << context.tabGMnLookup.size() << "\n";
+                << "tabGMnLookup:" << context.tabGMnLookup->size() << "\n";
         }
         for ( int i=0; i!=context.totalVariables; ++i ) {
             auto & gvar = context.globalVariables[i];
@@ -2875,26 +2876,28 @@ namespace das
     }
 
     void Program::buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs ) {
-        context.tabMnLookup.clear();
+        context.tabMnLookup = new das_hash_map<uint64_t,SimFunction *>();
+        context.tabMnLookup->clear();
         for ( const auto & fn : lookupFunctions ) {
             auto mnh = fn->getMangledNameHash();
-            context.tabMnLookup[mnh] = context.functions + fn->index;
+            (*context.tabMnLookup)[mnh] = context.functions + fn->index;
         }
         if ( options.getBoolOption("log_mn_hash",false) ) {
             logs
                 << "totalFunctions: " << context.totalFunctions << "\n"
-                << "tabMnLookup:" << context.tabMnLookup.size() << "\n";
+                << "tabMnLookup:" << context.tabMnLookup->size() << "\n";
         }
     }
 
     void Program::buildADLookup ( Context & context, TextWriter & logs ) {
+        context.tabAdLookup = new das_hash_map<uint64_t,uint64_t>();
         for (auto & pm : library.modules ) {
             for(auto s2d : pm->annotationData ) {
-                context.tabAdLookup[s2d.first] = s2d.second;
+                (*context.tabAdLookup)[s2d.first] = s2d.second;
             }
         }
         if ( options.getBoolOption("log_ad_hash",false) ) {
-            logs<< "tabAdLookup:" << context.tabAdLookup.size() << "\n";
+            logs<< "tabAdLookup:" << context.tabAdLookup->size() << "\n";
         }
     }
 

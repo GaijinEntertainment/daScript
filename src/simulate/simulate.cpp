@@ -999,9 +999,9 @@ namespace das
         if ( code ) {
             tw << "\tcode: " << code->bytesAllocated() << " of " << code->totalAlignedMemoryAllocated()
                 << ", depth = " << code->depth() << "\n";
-            tw << "\t\ttableMN[" << tabMnLookup.size() << "]\n";
-            tw << "\t\ttableGMN[" << tabGMnLookup.size() << "]\n";
-            tw << "\t\ttableAd[" << tabAdLookup.size() << "]\n";
+            tw << "\t\ttableMN[" << tabMnLookup->size() << "]\n";
+            tw << "\t\ttableGMN[" << tabGMnLookup->size() << "]\n";
+            tw << "\t\ttableAd[" << tabAdLookup->size() << "]\n";
             int aotf = 0;
             for ( int i=0; i!=totalFunctions; ++i ) {
                 if ( functions[i].aotFunction ) aotf++;
@@ -1083,6 +1083,7 @@ namespace das
         totalFunctions = ctx.totalFunctions;
 
         // mangled name table
+        tabOwner = false;
         tabMnLookup = ctx.tabMnLookup;
         tabGMnLookup = ctx.tabGMnLookup;
         tabAdLookup = ctx.tabAdLookup;
@@ -1147,6 +1148,7 @@ namespace das
         initFunctions = ctx.initFunctions;
         totalInitFunctions = ctx.totalInitFunctions;
         // mangled name table
+        tabOwner = false;
         tabMnLookup = ctx.tabMnLookup;
         tabGMnLookup = ctx.tabGMnLookup;
         tabAdLookup = ctx.tabAdLookup;
@@ -1184,6 +1186,11 @@ namespace das
         }
         if ( shared && sharedOwner ) {
             das_aligned_free16(shared);
+        }
+        if ( tabOwner ) {
+            delete tabMnLookup;
+            delete tabGMnLookup;
+            delete tabAdLookup;
         }
     }
 
@@ -1230,7 +1237,7 @@ namespace das
             globalVariables = newVariables;
         }
         // relocate mangle-name lookup
-        for ( auto & kv : tabMnLookup ) {
+        for ( auto & kv : *tabMnLookup ) {
             auto fn = kv.second;
             if ( fn!=nullptr ) {
                 if ( fn>=oldFunctions && fn<(oldFunctions+totalFunctions) ) {
@@ -1364,7 +1371,7 @@ namespace das
 
     vector<SimFunction *> Context::findFunctions ( const char * fnname ) const {
         vector<SimFunction *> res;
-        for ( auto & kv : tabMnLookup ) {
+        for ( auto & kv : *tabMnLookup ) {
             auto fn = kv.second;
             if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
                 res.push_back(fn);
@@ -1374,7 +1381,7 @@ namespace das
     }
 
     SimFunction * Context::findFunction ( const char * fnname ) const {
-        for ( auto & kv : tabMnLookup ) {
+        for ( auto & kv : *tabMnLookup ) {
             auto fn = kv.second;
             if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
                 return fn;
@@ -1386,7 +1393,7 @@ namespace das
     SimFunction * Context::findFunction ( const char * fnname, bool & isUnique ) const {
         int candidates = 0;
         SimFunction * found = nullptr;
-        for ( auto & kv : tabMnLookup ) {
+        for ( auto & kv : *tabMnLookup ) {
             auto fn = kv.second;
             if ( fn!=nullptr && strcmp(fn->name, fnname)==0 ) {
                 found = fn;

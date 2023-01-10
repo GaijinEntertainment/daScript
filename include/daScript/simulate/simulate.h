@@ -357,19 +357,19 @@ namespace das
         }
 
         __forceinline uint32_t globalOffsetByMangledName ( uint64_t mnh ) const {
-            auto it = tabGMnLookup.find(mnh);
-            DAS_ASSERT(it!=tabGMnLookup.end());
+            auto it = tabGMnLookup->find(mnh);
+            DAS_ASSERT(it!=tabGMnLookup->end());
             return it->second;
         }
         __forceinline uint64_t adBySid ( uint64_t sid ) const {
-            auto it = tabAdLookup.find(sid);
-            DAS_ASSERT(it!=tabAdLookup.end());
+            auto it = tabAdLookup->find(sid);
+            DAS_ASSERT(it!=tabAdLookup->end());
             return it->second;
         }
         __forceinline SimFunction * fnByMangledName ( uint64_t mnh ) {
             if ( mnh==0 ) return nullptr;
-            auto it = tabMnLookup.find(mnh);
-            return it!=tabMnLookup.end() ? it->second : nullptr;
+            auto it = tabMnLookup->find(mnh);
+            return it!=tabMnLookup->end() ? it->second : nullptr;
         }
 
         SimFunction * findFunction ( const char * name ) const;
@@ -700,9 +700,11 @@ namespace das
         int             hwBpIndex = -1;
         const LineInfo * singleStepAt = nullptr;
     public:
-        das_hash_map<uint64_t,SimFunction *> tabMnLookup;
-        das_hash_map<uint64_t,uint32_t> tabGMnLookup;
-        das_hash_map<uint64_t,uint64_t> tabAdLookup;
+        das_hash_map<uint64_t,SimFunction *> * tabMnLookup = nullptr;
+        das_hash_map<uint64_t,uint32_t> * tabGMnLookup = nullptr;
+        das_hash_map<uint64_t,uint64_t> * tabAdLookup = nullptr;
+    protected:
+        bool tabOwner = true;
     public:
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;
