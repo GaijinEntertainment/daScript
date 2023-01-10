@@ -2821,4 +2821,14 @@ namespace das
         MangledNameParser parser;
         return parser.parseTypeFromMangledName(ch, library, thisModule);
     }
+
+    bool hasImplicit ( const TypeDeclPtr & type ) {
+        if ( type->implicit ) return true;
+        if ( type->firstType && hasImplicit(type->firstType) ) return true;
+        if ( type->secondType && hasImplicit(type->secondType) ) return true;
+        for ( auto & argT : type->argTypes ) {
+            if ( hasImplicit(argT) ) return true;
+        }
+        return false;
+    }
 }

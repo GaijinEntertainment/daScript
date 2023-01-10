@@ -445,6 +445,14 @@ namespace das {
                         fn->at, CompilationError::not_all_paths_return_value);
                 }
             }
+            if ( checkUnsafe ) {
+                for ( auto arg : fn->arguments ) {
+                    if ( hasImplicit(arg->type) ) {
+                        program->error("implicit argument " + arg->name + " is is prohibited by the CodeOfPolicies",  "implicit is unsafe", "",
+                            fn->at, CompilationError::unsafe);
+                    }
+                }
+            }
             for ( auto & ann : fn->annotations ) {
                 if ( ann->annotation->rtti_isFunctionAnnotation() ) {
                     auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
