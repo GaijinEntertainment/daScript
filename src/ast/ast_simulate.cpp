@@ -2853,7 +2853,7 @@ namespace das
     }
 
     void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
-        context.tabGMnLookup = new das_hash_map<uint64_t,uint32_t> ();
+        context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
         context.tabGMnLookup->clear();
         for ( int i=0; i!=context.totalVariables; ++i ) {
             auto mnh = context.globalVariables[i].mangledNameHash;
@@ -2876,7 +2876,7 @@ namespace das
     }
 
     void Program::buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs ) {
-        context.tabMnLookup = new das_hash_map<uint64_t,SimFunction *>();
+        context.tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();
         context.tabMnLookup->clear();
         for ( const auto & fn : lookupFunctions ) {
             auto mnh = fn->getMangledNameHash();
@@ -2890,7 +2890,7 @@ namespace das
     }
 
     void Program::buildADLookup ( Context & context, TextWriter & logs ) {
-        context.tabAdLookup = new das_hash_map<uint64_t,uint64_t>();
+        context.tabAdLookup = make_shared<das_hash_map<uint64_t,uint64_t>>();
         for (auto & pm : library.modules ) {
             for(auto s2d : pm->annotationData ) {
                 (*context.tabAdLookup)[s2d.first] = s2d.second;

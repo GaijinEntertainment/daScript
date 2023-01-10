@@ -1083,7 +1083,6 @@ namespace das
         totalFunctions = ctx.totalFunctions;
 
         // mangled name table
-        tabOwner = false;
         tabMnLookup = ctx.tabMnLookup;
         tabGMnLookup = ctx.tabGMnLookup;
         tabAdLookup = ctx.tabAdLookup;
@@ -1148,7 +1147,6 @@ namespace das
         initFunctions = ctx.initFunctions;
         totalInitFunctions = ctx.totalInitFunctions;
         // mangled name table
-        tabOwner = false;
         tabMnLookup = ctx.tabMnLookup;
         tabGMnLookup = ctx.tabGMnLookup;
         tabAdLookup = ctx.tabAdLookup;
@@ -1186,11 +1184,6 @@ namespace das
         }
         if ( shared && sharedOwner ) {
             das_aligned_free16(shared);
-        }
-        if ( tabOwner ) {
-            delete tabMnLookup;
-            delete tabGMnLookup;
-            delete tabAdLookup;
         }
     }
 

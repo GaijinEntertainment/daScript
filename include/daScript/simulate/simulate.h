@@ -700,11 +700,9 @@ namespace das
         int             hwBpIndex = -1;
         const LineInfo * singleStepAt = nullptr;
     public:
-        das_hash_map<uint64_t,SimFunction *> * tabMnLookup = nullptr;
-        das_hash_map<uint64_t,uint32_t> * tabGMnLookup = nullptr;
-        das_hash_map<uint64_t,uint64_t> * tabAdLookup = nullptr;
-    protected:
-        bool tabOwner = true;
+        shared_ptr<das_hash_map<uint64_t,SimFunction *>> tabMnLookup;
+        shared_ptr<das_hash_map<uint64_t,uint32_t>> tabGMnLookup;
+        shared_ptr<das_hash_map<uint64_t,uint64_t>> tabAdLookup;
     public:
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;
