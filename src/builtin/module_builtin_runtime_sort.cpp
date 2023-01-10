@@ -137,9 +137,13 @@ namespace das
                 arrType->dim.clear();
                 auto newCall = static_pointer_cast<ExprCall>(call->clone());
                 auto stride = arrType->getSizeOf();
-                newCall->arguments.insert(newCall->arguments.begin()+1,make_smart<ExprConstInt>(call->at, stride));
+                auto strideArg = make_smart<ExprConstInt>(call->at, stride);
+                strideArg->generated = true;
+                newCall->arguments.insert(newCall->arguments.begin()+1,strideArg);
                 auto length = arg->type->dim.back();
-                newCall->arguments.insert(newCall->arguments.begin()+2,make_smart<ExprConstInt>(call->at, length));
+                auto lengthArg = make_smart<ExprConstInt>(call->at, length);
+                lengthArg->generated = true;
+                newCall->arguments.insert(newCall->arguments.begin()+2,lengthArg);
                 if ( arrType->isNumericComparable() || arrType->isVectorType() || arrType->isString() ) {
                     newCall->name = "__builtin_sort_cblock_dim";
                 }  else {
@@ -154,8 +158,12 @@ namespace das
                 const auto & arrType = arg->type->firstType;
                 auto newCall = static_pointer_cast<ExprCall>(call->clone());
                 auto stride = arrType->getSizeOf();
-                newCall->arguments.insert(newCall->arguments.begin()+1,make_smart<ExprConstInt>(call->at, stride));
-                newCall->arguments.insert(newCall->arguments.begin()+2,make_smart<ExprConstInt>(call->at, 0));
+                auto strideArg = make_smart<ExprConstInt>(call->at, stride);
+                strideArg->generated = true;
+                newCall->arguments.insert(newCall->arguments.begin()+1,strideArg);
+                auto lengthArg = make_smart<ExprConstInt>(call->at, 0);
+                lengthArg->generated = true;
+                newCall->arguments.insert(newCall->arguments.begin()+2,lengthArg);
                 if ( arrType->isNumericComparable() || arrType->isVectorType() || arrType->isString() ) {
                     newCall->name = "__builtin_sort_cblock_array";
                 }  else {
