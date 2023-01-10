@@ -6,7 +6,7 @@ module refactor shared private
 
 require daslib/ast_boost
 require daslib/templates_boost
-require daslib/capture_block
+require daslib/macro_boost
 require daslib/json_boost
 require daslib/defer
 require strings

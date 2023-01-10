@@ -8,7 +8,6 @@ module ast_debug shared private
 require debugapi
 require daslib/ast_boost
 require daslib/strings
-require daslib/debug_expression
 
 def report_to_debugger ( var ctx:Context; category,name:string; value:auto(TT) )
     let tinfo = typeinfo(rtti_typeinfo value)
