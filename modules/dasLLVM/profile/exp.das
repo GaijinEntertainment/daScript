@@ -22,7 +22,7 @@ def expLoopU(n)
 [jit,sideeffects]
 def expLoopUV(n)
     var sumV = float4(0.)
-    for i in range( n/4)
+    for i in range(n/4)
 		sumV += exp(rcp_est(float4(i*16)+float4(1,2,3,4)))
     return sumV.x + sumV.y + sumV.z + sumV.w
 

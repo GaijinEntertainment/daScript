@@ -185,6 +185,10 @@ class LlvmJitVisitor : AstVisitor
         if LLVM_DEBUG_INFO
             LLVMSetCurrentDebugLocation2(g_builder, null)
 
+// Expression
+    def override preVisitExpression(expr:ExpressionPtr) : void
+        set_builder_location(expr.at)
+
 // Function
     def build_noalias_list ( annotations:AnnotationList ) : tuple<noalias:table<string>;nocapture:table<string>>
         var noalias : table<string>
@@ -200,7 +204,7 @@ class LlvmJitVisitor : AstVisitor
                             nocapture |> insert(string(arg.sValue))
         return <- [[auto noalias,nocapture]]
 
-    def process_function_hints ( annotations:AnnotationList )
+    def process_function_hints ( annotations:AnnotationList; var arguments:dasvector`smart_ptr`Variable )
         var alwaysInline = false
         var hot = false
         option_no_range_check = false
@@ -219,6 +223,10 @@ class LlvmJitVisitor : AstVisitor
                         option_no_alias = true
                     elif arg.name=="unsafe_capture"
                         option_no_capture = true
+                    elif arg.name=="align16" && arg.basicType == Type tString
+                        for a,ai in arguments,urange(100500)
+                            if a.name==arg.sValue
+                                LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), 16u)
         if alwaysInline
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("alwaysinline"))
         if hot
@@ -392,7 +400,7 @@ class LlvmJitVisitor : AstVisitor
         // build wrapper function
         build_wrapper_funcion(fun.arguments, fun.result, isCMRES(fun), null, fun.at)
         build_function_entry(intptr(fun), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
-        process_function_hints(fun.annotations)
+        process_function_hints(fun.annotations, fun.arguments)
         process_labels(fun.body)
         process_finally(fun.body)
         debug_before_function(fun)
@@ -441,9 +449,6 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildBr(g_builder, finallyBlocks[get_ptr(blk)])
                 LLVMPositionBuilderAtEnd(g_builder, after)
                 afterFinallyBlocks[get_ptr(blk)] |> push(after)
-
-    def override preVisitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr): void
-        set_builder_location(expr.at)
 
     def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>) : void
         if blk.blockFlags.inTheLoop
@@ -1479,8 +1484,6 @@ class LlvmJitVisitor : AstVisitor
         var lblk = loop_stack |> back()
         LLVMBuildCondBr(g_builder, getE(expr.cond), lblk.loop_body, lblk.loop_end)
         LLVMPositionBuilderAtEnd(g_builder,lblk.loop_body)
-        if expr.body != null
-            set_builder_location(expr.body.at)
 
     def override visitExprWhile(expr:smart_ptr<ExprWhile>) : ExpressionPtr
         var lblk = loop_stack |> back()
@@ -1512,7 +1515,6 @@ class LlvmJitVisitor : AstVisitor
     if_end:
     */
     def override preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : void
-        set_builder_location(expr.at)
         var before_if = LLVMAppendBasicBlock(ffunc,"if_cond_at_{int(expr.at.line)}")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder,before_if)
@@ -1524,7 +1526,6 @@ class LlvmJitVisitor : AstVisitor
         ite2blocks[get_expr_ptr(expr)] = blk
 
     def override preVisitExprIfThenElseIfBlock(expr:smart_ptr<ExprIfThenElse>;ifBlock:ExpressionPtr) : void
-        set_builder_location(expr.if_true.at)
         var blk = ite2blocks[get_expr_ptr(expr)]
         LLVMBuildCondBr(g_builder, getE(expr.cond), blk.if_true, blk.if_false)
         LLVMPositionBuilderAtEnd(g_builder,blk.if_true)
@@ -1538,7 +1539,6 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder,blk.if_false)
 
     def override preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr) : void
-        set_builder_location(expr.if_false.at)
         before_else(expr)
 
     def override visitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : ExpressionPtr
@@ -1595,7 +1595,6 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_ITERATOR_CLOSE), params, "")
 
     def override preVisitExprFor(expr:smart_ptr<ExprFor>) : void
-        set_builder_location(expr.at)
         var lblk = [[LoopBlock
             loop_start = LLVMAppendBasicBlock(ffunc, "for_body"),
             loop_body = LLVMAppendBasicBlock(ffunc, "for_body"),
@@ -1739,8 +1738,6 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
         LLVMBuildBr(g_builder, lblk.loop_body)
         LLVMPositionBuilderAtEnd(g_builder,lblk.loop_body)
-        if expr.body != null
-            set_builder_location(expr.body.at)
 
 // ExprMakeVariant
     def override preVisitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>) : void
@@ -2729,7 +2726,7 @@ class LlvmJitVisitor : AstVisitor
         // build wrapper function
         build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
         build_function_entry(intptr(expr), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
-        process_function_hints(thisBlock.annotations)
+        process_function_hints(thisBlock.annotations, thisBlock.arguments)
         process_labels(expr)
         process_finally(expr)
         return fnmna
