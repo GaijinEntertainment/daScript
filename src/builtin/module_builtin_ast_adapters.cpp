@@ -111,9 +111,9 @@ namespace das {
 
 #define IMPL_BIND_EXPR(WHAT) \
     void VisitorAdapter::preVisit ( WHAT * expr ) \
-        { IMPL_PREVISIT(WHAT); } \
+        { Visitor::preVisit(expr); IMPL_PREVISIT(WHAT); } \
     ExpressionPtr VisitorAdapter::visit ( WHAT * expr ) \
-        { IMPL_VISIT(WHAT); }
+        { auto that = ([&]() -> ExpressionPtr {IMPL_VISIT(WHAT);})(); Visitor::visit(expr); return that; }
 
     VisitorAdapter::VisitorAdapter ( char * pClass, const StructInfo * info, Context * ctx ) {
         context = ctx;
