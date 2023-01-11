@@ -17,6 +17,7 @@ require daslib/fio
 require daslib/lpipe
 require math
 require jit
+require fio
 
 // uncomment to enable debug
 /*
@@ -71,16 +72,118 @@ class LlvmJitVisitor : AstVisitor
     [[do_not_delete,skip_field_lock_check]] afterFinallyBlocks : table<ExprBlock?;array<LLVMOpaqueBasicBlock?>>
     [[do_not_delete]] callBlock : LLVMOpaqueValue?
     [[do_not_delete]] g_builder : LLVMOpaqueBuilder?
+    [[do_not_delete]] g_di_builder : LLVMOpaqueDIBuilder?
+    [[do_not_delete]] di_file_location : table<string;LLVMOpaqueMetadata?>
+    [[do_not_deelte]] di_function : LLVMOpaqueMetadata?
+    [[do_not_deelte]] di_cu : LLVMOpaqueMetadata?
     option_no_range_check : bool = false
     option_no_alias : bool = false
     option_no_capture : bool = false
+    own_di : bool = false
 
-    def LlvmJitVisitor ( ctx:Context? )
+    def LlvmJitVisitor ( at:LineInfo; ctx:Context?; need_di:bool; dib:LLVMOpaqueDIBuilder?; dicu:LLVMOpaqueMetadata? )
         jit_context = ctx
         g_builder = LLVMCreateBuilder()
+        g_di_builder = dib
+        di_cu = dicu
+        if LLVM_DEBUG_INFO && need_di
+            own_di = true
+            g_di_builder = LLVMCreateDIBuilder(g_mod)
+            let producer = "daScript LLVM JIT"
+            let runtime_version = 3u
+            di_cu = LLVMDIBuilderCreateCompileUnit(
+                g_di_builder,
+                LLVMDWARFSourceLanguage C,
+                get_debug_file_location(at),
+                producer,
+                uint64(length(producer)),
+                LLVM_ENABLE_OPT_PASS ? 1 : 0, // isOptimized,
+                "", // const char *Flags,
+                0ul, // size_t FlagsLen,
+                runtime_version, // unsigned RuntimeVer,
+                "", // const char *SplitName,
+                0ul, // size_t SplitNameLen,
+                LLVMDWARFEmissionKind LLVMDWARFEmissionFull, // LLVMDWARFEmissionKind Kind,
+                0u, // unsigned DWOId,
+                0, // LLVMBool SplitDebugInlining,
+                0, // LLVMBool DebugInfoForProfiling,
+                "", // const char *SysRoot,
+                0ul, // size_t SysRootLen,
+                "", // const char *SDK,
+                0ul // size_t SDKLen
+                )
 
     def finalize
+        if LLVM_DEBUG_INFO
+            if own_di && g_di_builder!=null
+                LLVMDIBuilderFinalize(g_di_builder)
+                LLVMDisposeDIBuilder(g_di_builder)
         LLVMDisposeBuilder(g_builder)
+
+// Debug info
+    def debug_before_function ( fun:FunctionPtr )
+        if LLVM_DEBUG_INFO
+            clear_builder_location()
+            let unit = get_debug_file_location(fun.at)
+            let funName = get_mangled_name(fun)
+            var ty = LLVMDIBuilderCreateSubroutineType(     // TODO: generate correct function type
+                g_di_builder,
+                unit,
+                null, // LLVMMetadataRef *ParameterTypes,
+                0u, // unsigned NumParameterTypes,
+                LLVMDIFlags LLVMDIFlagZero
+            )
+            let implName = "{funName} implementation"
+            di_function = LLVMDIBuilderCreateFunction(
+                    g_di_builder,
+                    unit,
+                    implName,
+                    uint64(length(implName)),
+                    "", // LinkageName
+                    0ul,// LinkageNameLen
+                    unit,
+                    fun.at.line,
+                    ty,
+                    0, // IsLocalToUnit
+                    1, // IsDefinition
+                    0u, // ScopeLine
+                    LLVMDIFlags LLVMDIFlagZero, // Flags
+                    LLVM_ENABLE_OPT_PASS ? 1 : 0
+            )
+            LLVMSetSubprogram(ffunc, di_function)
+
+    def debug_after_function
+        clear_builder_location()
+
+    def get_debug_file_location ( at:LineInfo ) : LLVMOpaqueMetadata?
+        if LLVM_DEBUG_INFO
+            let filename = at.fileInfo!=null ? string(at.fileInfo.name) : ""
+            return get_debug_file_location_by_name(filename)
+        else
+            return null
+
+    def get_debug_file_location_by_name ( filename:string ) : LLVMOpaqueMetadata?
+        var meta & = unsafe(di_file_location[filename])
+        if meta==null
+            let dir = dir_name(filename)
+            meta = LLVMDIBuilderCreateFile(g_di_builder, filename, uint64(length(filename)), dir, uint64(length(dir)))   // todo: boost
+        return meta
+
+    def get_debug_location ( at:LineInfo ) : LLVMOpaqueMetadata?
+        if LLVM_DEBUG_INFO
+            let file_meta = get_debug_file_location(at)
+            return LLVMDIBuilderCreateDebugLocation(LLVMGetGlobalContext(), at.line, at.column, di_function, null)
+        else
+            return null
+
+    def set_builder_location ( at:LineInfo )
+        if LLVM_DEBUG_INFO
+            if di_function != null
+                LLVMSetCurrentDebugLocation2(g_builder, get_debug_location(at))
+
+    def clear_builder_location
+        if LLVM_DEBUG_INFO
+            LLVMSetCurrentDebugLocation2(g_builder, null)
 
 // Function
     def build_noalias_list ( annotations:AnnotationList ) : tuple<noalias:table<string>;nocapture:table<string>>
@@ -212,7 +315,7 @@ class LlvmJitVisitor : AstVisitor
         build_llvm_function_pair(fnmna, isCMRES(fun), fun.arguments, fun.result, null, fun.annotations)
         thisFunc = null
 
-    def build_wrapper_funcion(var arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; isCmres:bool; captureType:LLVMOpaqueType? )
+    def build_wrapper_funcion(arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; isCmres:bool; captureType:LLVMOpaqueType?; at:LineInfo )
         var wentry = LLVMAppendBasicBlock(wfunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, wentry)
         var wargs : array<LLVMOpaqueValue?>
@@ -287,11 +390,13 @@ class LlvmJitVisitor : AstVisitor
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
-        build_wrapper_funcion(fun.arguments, fun.result, isCMRES(fun), null)
+        build_wrapper_funcion(fun.arguments, fun.result, isCMRES(fun), null, fun.at)
         build_function_entry(intptr(fun), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
         process_function_hints(fun.annotations)
         process_labels(fun.body)
         process_finally(fun.body)
+        debug_before_function(fun)
+        set_builder_location(fun.at)
 
     def build_epilogue
         if prologue != null
@@ -307,6 +412,7 @@ class LlvmJitVisitor : AstVisitor
     def override visitFunction(fun:FunctionPtr) : FunctionPtr
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
         LLVMBuildBr(g_builder, function_body)
+        debug_after_function()
         ffunc = null
         thisFunc = null
         return fun
@@ -335,6 +441,9 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildBr(g_builder, finallyBlocks[get_ptr(blk)])
                 LLVMPositionBuilderAtEnd(g_builder, after)
                 afterFinallyBlocks[get_ptr(blk)] |> push(after)
+
+    def override preVisitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr): void
+        set_builder_location(expr.at)
 
     def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>) : void
         if blk.blockFlags.inTheLoop
@@ -1370,6 +1479,8 @@ class LlvmJitVisitor : AstVisitor
         var lblk = loop_stack |> back()
         LLVMBuildCondBr(g_builder, getE(expr.cond), lblk.loop_body, lblk.loop_end)
         LLVMPositionBuilderAtEnd(g_builder,lblk.loop_body)
+        if expr.body != null
+            set_builder_location(expr.body.at)
 
     def override visitExprWhile(expr:smart_ptr<ExprWhile>) : ExpressionPtr
         var lblk = loop_stack |> back()
@@ -1401,6 +1512,7 @@ class LlvmJitVisitor : AstVisitor
     if_end:
     */
     def override preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : void
+        set_builder_location(expr.at)
         var before_if = LLVMAppendBasicBlock(ffunc,"if_cond_at_{int(expr.at.line)}")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder,before_if)
@@ -1412,6 +1524,7 @@ class LlvmJitVisitor : AstVisitor
         ite2blocks[get_expr_ptr(expr)] = blk
 
     def override preVisitExprIfThenElseIfBlock(expr:smart_ptr<ExprIfThenElse>;ifBlock:ExpressionPtr) : void
+        set_builder_location(expr.if_true.at)
         var blk = ite2blocks[get_expr_ptr(expr)]
         LLVMBuildCondBr(g_builder, getE(expr.cond), blk.if_true, blk.if_false)
         LLVMPositionBuilderAtEnd(g_builder,blk.if_true)
@@ -1425,6 +1538,7 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder,blk.if_false)
 
     def override preVisitExprIfThenElseElseBlock(expr:smart_ptr<ExprIfThenElse>;elseBlock:ExpressionPtr) : void
+        set_builder_location(expr.if_false.at)
         before_else(expr)
 
     def override visitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : ExpressionPtr
@@ -1481,6 +1595,7 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_ITERATOR_CLOSE), params, "")
 
     def override preVisitExprFor(expr:smart_ptr<ExprFor>) : void
+        set_builder_location(expr.at)
         var lblk = [[LoopBlock
             loop_start = LLVMAppendBasicBlock(ffunc, "for_body"),
             loop_body = LLVMAppendBasicBlock(ffunc, "for_body"),
@@ -1624,6 +1739,8 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
         LLVMBuildBr(g_builder, lblk.loop_body)
         LLVMPositionBuilderAtEnd(g_builder,lblk.loop_body)
+        if expr.body != null
+            set_builder_location(expr.body.at)
 
 // ExprMakeVariant
     def override preVisitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>) : void
@@ -2610,7 +2727,7 @@ class LlvmJitVisitor : AstVisitor
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
-        build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres, captureType)
+        build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
         build_function_entry(intptr(expr), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
         process_function_hints(thisBlock.annotations)
         process_labels(expr)
@@ -2625,7 +2742,7 @@ class LlvmJitVisitor : AstVisitor
         thisFunc = null
 
     def make_block_funcion(expr:smart_ptr<ExprMakeBlock>; capture:array<CapturedVariable>; first_field_index:int; captureType:LLVMOpaqueType? ) : tuple<func:LLVMOpaqueValue?;impl:LLVMOpaqueValue?>
-        var astVisitor = new LlvmJitVisitor(jit_context)
+        var astVisitor = new LlvmJitVisitor(expr.at, jit_context, false, g_di_builder, di_cu)
         var fmna : string
         unsafe
             astVisitor.adapter <- make_visitor(*astVisitor)
@@ -3130,7 +3247,7 @@ class LlvmJitVisitor : AstVisitor
 [macro_function]
 def private generate_llvm ( ctx:Context?; fn : FunctionPtr )
     return if is_in_completion() || is_compiling_macros()
-    var astVisitor = new LlvmJitVisitor(ctx)
+    var astVisitor = new LlvmJitVisitor(fn.at, ctx, true, null, null)
     unsafe
         astVisitor.adapter <- make_visitor(*astVisitor)
     visit(fn, astVisitor.adapter)
@@ -3138,8 +3255,6 @@ def private generate_llvm ( ctx:Context?; fn : FunctionPtr )
         let errors = g_errors |> join("\n")
         delete g_errors
         to_log(LOG_ERROR,"LLVM JIT FAILED:\n{errors}\n")
-        g_failed = true
-    if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
         g_failed = true
     astVisitor.adapter := null
     unsafe
@@ -3182,13 +3297,15 @@ class JIT_LLVM : AstSimulateMacro
         if !empty(funcs)
             let totalTime = ref_time_ticks()
             init_jit()
-            var fake_visitor = new LlvmJitVisitor(ctx)
+            var fake_visitor = new LlvmJitVisitor(funcs[0].at, ctx, false, null, null)
             for fun in funcs
                 fake_visitor->add_llvm_functions(fun)
             unsafe
                 delete fake_visitor
             for fun in funcs
                 generate_llvm(ctx, fun)
+            if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
+                g_failed = true
             optimize_llvm_module()
             for fun in funcs
                 var mangled_name = get_mangled_name(fun)
@@ -3210,5 +3327,9 @@ class JIT_LLVM : AstSimulateMacro
 //  Topics:
 //      * handled types
 //      * support for debugger
+//      * support for debug info
+//          - types for the functions
+//          - variables
+//          - lexical scopes?
 //  Expressions:
 //      * ExprTryCatch

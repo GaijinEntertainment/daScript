@@ -14,10 +14,11 @@ require jit
 
 let public LLVM_JIT_ENABLED = true
 
-let public LLVM_JIT_LOG = true
-
 let public LLVM_DEBUG_RESULT = false
 let public LLVM_DEBUG_EVERYTHING = false
+
+let public LLVM_JIT_LOG = false || LLVM_DEBUG_EVERYTHING
+let public LLVM_DEBUG_INFO = false || LLVM_DEBUG_EVERYTHING
 
 let public LLVM_JIT_ALWAYS_SOLID = true
 let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = true
@@ -133,6 +134,8 @@ def public FN_JIT_TABLE_FIND(t:Type)
 def public init_jit
     return if is_in_completion() || is_compiling_macros()
     return if g_mod != null    // prevent double init
+    if LLVM_DEBUG_INFO
+        set_context_diagnostics_to_log(LLVMGetGlobalContext())
     g_failed = false
     g_mod = LLVMModuleCreateWithName("llvm_jit_module")
     LLVMLinkInMCJIT()

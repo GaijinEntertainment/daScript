@@ -10,7 +10,6 @@
 
 namespace das {
 
-
 LLVMDisasmContextRef das_LLVMCreateDisasm (const char *TripleName, void *DisInfo, int TagType) {
     return LLVMCreateDisasm(TripleName,DisInfo,TagType,nullptr,nullptr);
 }
@@ -39,6 +38,24 @@ Func test_abi_func ( Func a, Context * ctx ) {
     return a;
 }
 
+void diagnosticHandler(LLVMDiagnosticInfoRef DI, void *) {
+    int ll = LogLevel::info;
+    switch (LLVMGetDiagInfoSeverity(DI)) {
+    case LLVMDSError:   ll = LogLevel::error; break;
+    case LLVMDSWarning: ll = LogLevel::warning; break;
+    case LLVMDSRemark:  ll = LogLevel::info; break;
+    case LLVMDSNote:    ll = LogLevel::debug; break;
+    }
+    auto msg = LLVMGetDiagInfoDescription(DI);
+    string text = string(msg) + "\n";
+    toLog(ll, text.c_str());
+    LLVMDisposeMessage(msg);
+}
+
+void set_context_diagnostics_to_log ( LLVMContextRef ctx ) {
+    LLVMContextSetDiagnosticHandler(ctx, diagnosticHandler, nullptr);
+}
+
 void Module_dasLLVM::initMain() {
 	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeCore >(*this,lib,"LLVMInitializeCore",SideEffects::worstDefault,"LLVMInitializeCore")
 		->args({"R"});
@@ -54,6 +71,8 @@ void Module_dasLLVM::initMain() {
 		->args({"a","b","c"});
 	addExtern<DAS_BIND_FUN(test_abi_func) >(*this,lib,"test_abi_func",SideEffects::worstDefault,"test_abi_func")
 		->args({"fn","context"});
+    addExtern<DAS_BIND_FUN(set_context_diagnostics_to_log) >(*this,lib,"set_context_diagnostics_to_log",SideEffects::worstDefault,"set_context_diagnostics_to_log")
+		->args({"llvm_context"});
 }
 
 ModuleAotType Module_dasLLVM::aotRequire ( TextWriter & tw ) const {
