@@ -2,6 +2,7 @@ require llvm/llvm_jit
 
 require math
 require testProfile
+require daslib/unroll
 //ported from https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbody-gcc-2.html
 
 let
@@ -49,17 +50,18 @@ def offset_momentum(var bodies:body[5])
 
 [jit,hint(alwaysinline,hot,noalias=bodies,unsafe_range_check)]
 def advance(var bodies:body[5])
-    var i = 0
-    for b in bodies
-        ++i
-        for j in range(i, nbodies)
-            var b2:body& = unsafe(bodies[j])
-            let dx = b.x - b2.x
-            let inv_distance = inv_length(dx)
-            let mag = inv_distance * inv_distance * inv_distance
-            b.v -= dx * (b2.mass*mag)
-            b2.v += dx * (b.mass*mag)
-        b.x += b.v
+    unroll <|
+        for i in range(nbodies)
+            var b = bodies[i]
+            for j in range(i+1, nbodies)
+                var b2:body& = unsafe(bodies[j])
+                let dx = b.x - b2.x
+                let inv_distance = inv_length(dx)
+                let mag = inv_distance * inv_distance * inv_distance
+                b.v -= dx * (b2.mass*mag)
+                b2.v += dx * (b.mass*mag)
+            b.x += b.v
+            bodies[i] = b
 
 [jit]
 def energy(var bodies:body[5])
@@ -89,11 +91,11 @@ def nbodies(n:int)
 [export]
 def main
     offset_momentum(g_bodies)
-    // print("\ninitial energy {energy()}\n")
+    // print("\ninitial energy {energy(g_bodies)}\n")
     energy(g_bodies)
     profile(10, "n-bodies jit")  <|
         nbodies(500000)
-    // print("\nresult energy {energy()}\n")
+    // print("\nresult energy {energy(g_bodies)}\n")
     energy(g_bodies)
     testNBodiesInit()
     profile(10, "n-bodies, C++")  <|
