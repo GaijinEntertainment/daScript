@@ -368,7 +368,7 @@ namespace das {
         }
 
         // infer alias type
-        TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr ) const {
+        TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr, OptionsMap * options = nullptr ) const {
             if ( decl->baseType==Type::autoinfer ) {    // until alias is fully resolved, can't infer
                 return nullptr;
             }
@@ -405,44 +405,44 @@ namespace das {
             auto resT = make_smart<TypeDecl>(*decl);
             if ( decl->baseType==Type::tPointer ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr,aliases);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
                     if ( !resT->firstType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tIterator ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr,aliases);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
                     if ( !resT->firstType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tArray ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr,aliases);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
                     if ( !resT->firstType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tTable ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr,aliases);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
                     if ( !resT->firstType ) return nullptr;
                 }
                 if ( decl->secondType ) {
-                    resT->secondType = inferAlias(decl->secondType,fptr,aliases);
+                    resT->secondType = inferAlias(decl->secondType,fptr,aliases,options);
                     if ( !resT->secondType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda || decl->baseType==Type::tBlock  ) {
                 for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
                     auto & declAT = decl->argTypes[iA];
-                    if ( auto infAT = inferAlias(declAT,fptr,aliases) ) {
+                    if ( auto infAT = inferAlias(declAT,fptr,aliases,options) ) {
                         resT->argTypes[iA] = infAT;
                     } else {
                         return nullptr;
                     }
                 }
                 if ( !resT->firstType ) return nullptr;
-                resT->firstType = inferAlias(decl->firstType,fptr,aliases);
+                resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
                 if ( !resT->firstType ) return nullptr;
-            } else if ( decl->baseType==Type::tVariant || decl->baseType==Type::tTuple ) {
+            } else if ( decl->baseType==Type::tVariant || decl->baseType==Type::tTuple || decl->baseType==Type::option ) {
                 for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
                     auto & declAT = decl->argTypes[iA];
-                    if ( auto infAT = inferAlias(declAT,fptr,aliases) ) {
+                    if ( auto infAT = inferAlias(declAT,fptr,aliases,options) ) {
                         resT->argTypes[iA] = infAT;
                     } else {
                         return nullptr;
@@ -503,7 +503,7 @@ namespace das {
                 }
             } else if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda
                 || decl->baseType==Type::tBlock || decl->baseType==Type::tVariant ||
-                    decl->baseType==Type::tTuple ) {
+                    decl->baseType==Type::tTuple|| decl->baseType==Type::option ) {
                 for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
                     auto & declAT = decl->argTypes[iA];
                     resT->argTypes[iA] = inferPartialAliases(declAT,fptr,aliases);
@@ -688,7 +688,7 @@ namespace das {
             return result;
         }
 
-        bool isMatchingArgument(const FunctionPtr & pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock, AliasMap * aliases = nullptr ) const {
+        bool isMatchingArgument(const FunctionPtr & pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock, AliasMap * aliases = nullptr, OptionsMap * options = nullptr ) const {
             if (!passType) {
                 return false;
             }
@@ -709,12 +709,12 @@ namespace das {
                 }
                 // match auto argument
                 if (argType->isAuto()) {
-                    return TypeDecl::inferGenericType(argType, passType, aliases) != nullptr;
+                    return TypeDecl::inferGenericType(argType, passType, true, options) != nullptr;
                 }
             }
             // match inferable block
             if (inferBlock && passType->isAuto() && (passType->isGoodBlockType() || passType->isGoodLambdaType() || passType->isGoodFunctionType())) {
-                return TypeDecl::inferGenericType(passType, argType) != nullptr;
+                return TypeDecl::inferGenericType(passType, argType, options) != nullptr;
             }
             // compare types which don't need inference
             auto tempMatters = argType->implicit ? TemporaryMatters::no : TemporaryMatters::yes;
@@ -752,11 +752,12 @@ namespace das {
                             argType = inferPartialAliases(argType, pFn, &aliases);
                         }
                         auto passType = types[ai];
-                        if (!isMatchingArgument(pFn,argType,passType,inferAuto,inferBlock,&aliases)) {
+                        OptionsMap options;
+                        if (!isMatchingArgument(pFn,argType,passType,inferAuto,inferBlock,&aliases,&options)) {
                             anyFailed = true;
                             continue;
                         }
-                        TypeDecl::updateAliasMap(argType, passType, aliases);
+                        TypeDecl::updateAliasMap(argType, passType, aliases, options);
                     }
                     if ( !anyFailed ) {
                         break;
@@ -6225,6 +6226,40 @@ namespace das {
 
         // -1 - less specialized, +1 - more specialized, 0 - we don't know
         int moreSpecialized ( const TypeDeclPtr & t1, const TypeDeclPtr & t2, TypeDeclPtr & passType  ) {
+        // 0. deal with options
+            bool opt1 = t1->baseType==Type::option;
+            bool opt2 = t2->baseType==Type::option;
+            if ( opt1 || opt2 ) {
+                int numS[3] = {0, 0, 0};
+                if ( opt1 && opt2 ) {
+                    for ( auto & arg1 : t1->argTypes ) {
+                        for ( auto & arg2 : t2->argTypes ) {
+                            auto res = moreSpecialized(arg1,arg2,passType);
+                            numS[res+1] ++;
+                        }
+                    }
+                } else if ( opt1 ) {
+                    for ( auto & arg1 : t1->argTypes ) {
+                        auto res = moreSpecialized(arg1,t2,passType);
+                        numS[res+1] ++;
+                    }
+                } else if ( opt2 ) {
+                    for ( auto & arg2 : t2->argTypes ) {
+                        auto res = moreSpecialized(t1,arg2,passType);
+                        numS[res+1] ++;
+                    }
+                } else {
+                    DAS_VERIFY(0);
+                }
+                int total = (numS[0]?1:0) + (numS[1]?1:0) + (numS[2]?1:0);
+                if ( total==1 ) {
+                    if ( numS[0] ) return -1;
+                    else if ( numS[1] ) return 0;
+                    else return 1;
+                } else {
+                    return 0;
+                }
+            }
         // 1. non auto is more specialized than auto
             bool a1 = t1->isAutoOrAlias();
             bool a2 = t2->isAutoOrAlias();
@@ -6263,8 +6298,14 @@ namespace das {
                 return 0;
             }
     // at this point base type is not auto for both, so lets compare the subtypes
-            DAS_ASSERT(t1->baseType==passType->baseType && "how did it match otherwise?");
-            DAS_ASSERT(t2->baseType==passType->baseType && "how did it match otherwise?");
+        // if either does not match the base type, we arrive here through wrong option
+        if ( t1->baseType!=passType->baseType || t2->baseType!=passType->baseType) {
+            return 0;
+        }
+        //    DAS_ASSERT(t1->baseType==passType->baseType && "how did it match otherwise?");
+        //    DAS_ASSERT(t2->baseType==passType->baseType && "how did it match otherwise?");
+
+
         // if its an array or a pointer, we compare specialization of subtype
             if ( t1->baseType==Type::tPointer || t1->baseType==Type::tArray || t1->baseType==Type::tIterator ) {
                 return moreSpecialized(t1->firstType, t2->firstType, passType->firstType);
@@ -6479,7 +6520,7 @@ namespace das {
                         if ( arg->rtti_isMakeBlock() ) { // "it's always MakeBlock. unless its function and @@funcName
                             auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                             auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                            auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type);
+                            auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true);
                             DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
                             TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
                             block->returnType = make_smart<TypeDecl>(*retT->firstType);
@@ -6557,11 +6598,12 @@ namespace das {
                                     argType = inferPartialAliases(argType, clone, &aliases);
                                 }
                                 auto passType = types[ai];
-                                if (!isMatchingArgument(clone, argType, passType, true, true, &aliases)) {
+                                OptionsMap options;
+                                if (!isMatchingArgument(clone, argType, passType, true, true, &aliases, &options)) {
                                     anyFailed = true;
                                     continue;
                                 }
-                                TypeDecl::updateAliasMap(argType, passType, aliases);
+                                TypeDecl::updateAliasMap(argType, passType, aliases, options);
                             }
                             if (!anyFailed) break;
                             if (totalAliases == aliases.size()) {
@@ -6577,7 +6619,7 @@ namespace das {
                             }
                             if (argT->isAuto()) {
                                 auto & passT = types[sz];
-                                auto resT = TypeDecl::inferGenericType(argT, passT, &aliases);
+                                auto resT = TypeDecl::inferGenericType(argT, passT, true);
                                 DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
                                 resT->ref = false;                          // by default no ref
                                 resT->implicit = argT->implicit;            // copy implicit on the arguments
@@ -7003,7 +7045,7 @@ namespace das {
                         passT->dim.clear();
                         if ( rec ) passT->dim.push_back(rec);
                         if ( arg->type->isAuto() ) {
-                            auto nargT = TypeDecl::inferGenericType(passT, arg->type, nullptr);
+                            auto nargT = TypeDecl::inferGenericType(passT, arg->type);
                             if ( nargT ) {
                                 TypeDecl::applyAutoContracts(nargT, arg->type);
                                 arg->type = nargT;

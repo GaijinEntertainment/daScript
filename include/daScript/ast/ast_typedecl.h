@@ -24,6 +24,7 @@ namespace das {
     typedef smart_ptr<Expression> ExpressionPtr;
 
     typedef das_map<string,TypeDeclPtr> AliasMap;
+    typedef das_map<TypeDecl *,int> OptionsMap;
 
     class Visitor;
 
@@ -176,10 +177,10 @@ namespace das {
         static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( const vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
-        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, AliasMap * aliases = nullptr );
-        static TypeDeclPtr inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT, AliasMap * aliases = nullptr );
+        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel = false, OptionsMap * options = nullptr );
+        static TypeDeclPtr inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT );
         static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
-        static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases );
+        static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases, OptionsMap & options );
         Type getRangeBaseType() const;
         TypeDecl * findAlias ( const string & name, bool allowAuto = false );
         int findArgumentIndex(const string & name) const;

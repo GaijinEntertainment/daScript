@@ -13,6 +13,7 @@ namespace das
     Enum<Type> g_typeTable = {
         {   Type::autoinfer,    "auto"  },
         {   Type::alias,        "alias"  },
+        {   Type::option,       "option"  },
         {   Type::anyArgument,  "any"  },
         {   Type::tVoid,        "void"  },
         {   Type::tBool,        "bool"  },

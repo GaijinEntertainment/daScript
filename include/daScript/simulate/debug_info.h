@@ -11,6 +11,7 @@ namespace das
         none,
         autoinfer,
         alias,
+        option,
         fakeContext,
         fakeLineInfo,
         anyArgument,
