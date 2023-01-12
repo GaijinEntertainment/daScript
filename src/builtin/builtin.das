@@ -303,7 +303,7 @@ def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):bool
 def insert(var Tab:table<auto(keyT);void>;at:keyT implicit)
     __builtin_table_set_insert(Tab,at)
 
-def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):bool
+def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT | keyT#):bool
     return __builtin_table_key_exists(Tab,at)
 
 def binary_save(obj; subexpr:block<(data:array<uint8>):void>)
@@ -315,7 +315,7 @@ def binary_load(var obj; data:array<uint8>)
     _builtin_binary_load(obj,data)
 
 [skip_lock_check]
-def clone_to_move(clone_src:auto(TT) implicit) : TT -const -#
+def clone_to_move(clone_src:auto(TT) | auto(TT)#) : TT -const -#
     unsafe
         var clone_dest : TT - #
         clone_dest := clone_src
@@ -338,23 +338,23 @@ def clone(var a:array<auto(TT)>;b:array<TT>#)
     for aV,bV in a,b
         aV := bV
 
-def clone(var a:table<auto(KT);void>;b:table<KT;void> implicit)
+def clone(var a:table<auto(KT);void>;b:table<KT;void> | table<KT;void>#)
     clear(a)
     for k in keys(b)
         __builtin_table_set_insert(a,k)
 
-def clone(var a:table<string;void>;b:table<string;void> implicit)
+def clone(var a:table<string;void>;b:table<string;void> | table<string;void>#)
     clear(a)
     for k in keys(b)
         let kk := k
         __builtin_table_set_insert(a,kk)
 
-def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT> implicit)
+def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT> | table<KT;VT>#)
     clear(a)
     for k,v in keys(b),values(b)
         a[k] := v
 
-def clone(var a:table<string;auto(VT)>;b:table<string;VT> implicit)
+def clone(var a:table<string;auto(VT)>;b:table<string;VT> | table<string;VT>#)
     clear(a)
     for k,v in keys(b),values(b)
         let kk := k
