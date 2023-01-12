@@ -122,7 +122,7 @@ namespace das
             return;
         } else if ( decl->baseType==Type::option ) {
             auto it = options.find(decl.get());
-            DAS_ASSERT(it!=options.end());
+            DAS_VERIFYF(it!=options.end(),"internal error, option not found for the optional type");
             return updateAliasMap(decl->argTypes[it->second], pass, aliases, options);
         } else if ( decl->baseType==Type::autoinfer ) {
             if ( !decl->alias.empty() && aliases.find(decl->alias)==aliases.end() ) {
@@ -567,7 +567,7 @@ namespace das
             return secondType ? secondType->findAlias(name,allowAuto) : nullptr;
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction
                    || baseType==Type::tLambda || baseType==Type::tTuple
-                   || baseType==Type::tVariant ) {
+                   || baseType==Type::tVariant || baseType==Type::option ) {
             for ( auto & arg : argTypes ) {
                 if ( auto att = arg->findAlias(name,allowAuto) ) {
                     return att;
@@ -687,7 +687,7 @@ namespace das
             return false;
         } else if (baseType == Type::tStructure && structType) {
             return structType->canMove();
-        } else if (baseType == Type::tTuple || baseType == Type::tVariant) {
+        } else if (baseType == Type::tTuple || baseType == Type::tVariant || baseType == Type::option ) {
             for (const auto & arg : argTypes) {
                 if (!arg->canMove()) return false;
             }
@@ -702,7 +702,7 @@ namespace das
             return annotation->canClone();
         } else if (baseType == Type::tStructure && structType) {
             return structType->canClone();
-        } else if (baseType == Type::tTuple || baseType == Type::tVariant) {
+        } else if (baseType == Type::tTuple || baseType == Type::tVariant  || baseType == Type::option) {
             for (const auto & arg : argTypes) {
                 if (!arg->canClone()) return false;
             }
@@ -725,7 +725,7 @@ namespace das
             return false;
         } else if (baseType == Type::tStructure && structType) {
             return structType->canCopy(tempMatters);
-        } else if (baseType == Type::tTuple || baseType == Type::tVariant) {
+        } else if (baseType == Type::tTuple || baseType == Type::tVariant || baseType == Type::option) {
             for (const auto & arg : argTypes) {
                 if (!arg->canCopy(tempMatters)) return false;
             }
@@ -749,7 +749,7 @@ namespace das
                 return structType->isNoHeapType();
             if ( baseType==Type::tHandle )
                 return annotation->isPod();
-            if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
                 for ( auto & arg : argTypes ) {
                     if ( !arg->isNoHeapType() ) {
                         return false;
@@ -770,7 +770,7 @@ namespace das
             return annotation->isPod();
         if ( baseType==Type::tPointer )
             return !smartPtr;
-        if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( auto & arg : argTypes ) {
                 if ( !arg->isPod() ) {
                     return false;
@@ -790,7 +790,7 @@ namespace das
             return annotation->isRawPod();
         if ( baseType==Type::tPointer )
             return false;
-        if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( auto & arg : argTypes ) {
                 if ( !arg->isRawPod() ) {
                     return false;
@@ -814,7 +814,7 @@ namespace das
                 dep.insert(structType);
                 return structType->canBePlacedInContainer(dep);
             }
-        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & arg : argTypes ) {
                 if ( !arg->canBePlacedInContainer(dep) ) {
                     return false;
@@ -844,7 +844,7 @@ namespace das
                 dep.insert(structType);
                 return structType->hasNonTrivialCtor(dep);
             }
-        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & arg : argTypes ) {
                 if ( arg->hasNonTrivialCtor(dep) ) {
                     return true;
@@ -871,7 +871,7 @@ namespace das
                 dep.insert(structType);
                 return structType->hasNonTrivialDtor(dep);
             }
-        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & arg : argTypes ) {
                 if ( arg->hasNonTrivialDtor(dep) ) {
                     return true;
@@ -898,7 +898,7 @@ namespace das
                 dep.insert(structType);
                 return structType->hasNonTrivialCopy(dep);
             }
-        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & arg : argTypes ) {
                 if ( arg->hasNonTrivialCopy(dep) ) {
                     return true;
@@ -923,7 +923,7 @@ namespace das
                 dep.insert(structType);
                 return structType->hasClasses(dep);
             }
-        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & arg : argTypes ) {
                 if ( arg->hasClasses(dep) ) {
                     return true;
@@ -961,7 +961,7 @@ namespace das
                     }
                 }
             }
-        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & arg : argTypes ) {
                 if ( arg->lockCheck(dep) ) {
                     return true;
@@ -990,7 +990,7 @@ namespace das
                     gcf |= fld.type->gcFlags(dep,depA);
                 }
             }
-        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & arg : argTypes ) {
                 gcf |= arg->gcFlags(dep,depA);
             }
@@ -1031,7 +1031,7 @@ namespace das
             } else {
                 return true;
             }
-        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & arg : argTypes ) {
                 if ( !arg->isLocal(dep) ) {
                     return false;
@@ -1188,7 +1188,7 @@ namespace das
         }
         if ( baseType==Type::tBlock || baseType==Type::tFunction ||
             baseType==Type::tLambda || baseType==Type::tTuple ||
-            baseType==Type::tVariant ) {
+            baseType==Type::tVariant || baseType==Type::option ) {
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
                     TemporaryMatters::yes,AllowSubstitute::no,true) ) {
                 return false;
@@ -1507,7 +1507,7 @@ namespace das
                 secondType->collectAliasList(aliases);
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
                    baseType==Type::tLambda || baseType==Type::tTuple ||
-                   baseType==Type::tVariant ) {
+                   baseType==Type::tVariant  || baseType == Type::option ) {
             if ( firstType )
                 firstType->collectAliasList(aliases);
             for ( auto & arg : argTypes )
@@ -1536,7 +1536,7 @@ namespace das
             return any;
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
                    baseType==Type::tLambda || baseType==Type::tTuple ||
-                   baseType==Type::tVariant ) {
+                   baseType==Type::tVariant || baseType == Type::option ) {
             bool any = false;
             if ( firstType )
                 any |= firstType->isAotAlias();
@@ -2001,8 +2001,7 @@ namespace das
                 return true;
             }
         } else if ( /* baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda || */
-                   baseType==Type::tTuple ||
-                   baseType==Type::tVariant ) {
+                   baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             if ( firstType && firstType->isTemp(true, true, dep) ) {
                 return true;
             }
@@ -2064,7 +2063,7 @@ namespace das
             } else {
                 return true;
             }
-        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
             for ( const auto & argT : argTypes ) {
                 if ( !argT->isShareable(dep) ) {
                     return false;
@@ -2398,7 +2397,7 @@ namespace das
                     if ( isCircularType(fd.type, all) ) return true;
                 }
             }
-        }  else if ( type->baseType==Type::tTuple || type->baseType==Type::tVariant ) {
+        }  else if ( type->baseType==Type::tTuple || type->baseType==Type::tVariant || type->baseType == Type::option ) {
             for ( auto & arg : type->argTypes ) {
                 if ( isCircularType(arg, all) ) return true;
             }
