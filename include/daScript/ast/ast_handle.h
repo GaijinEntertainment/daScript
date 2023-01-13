@@ -485,6 +485,13 @@ namespace das
         }
     };
 
+    template <typename T>
+    void generatedWithImplicitFirstArg(T extFunc)
+    {
+        extFunc->generated = true;
+        extFunc->arguments[0]->type->implicit = true;
+    }
+
     template <typename TT, bool byValue = has_cast<typename TT::value_type>::value >
     struct registerVectorFunctions;
 
@@ -493,21 +500,25 @@ namespace das
     struct registerVectorFunctions<TT,false> {
         static void init ( Module * mod, const ModuleLibrary & lib, bool canCopy, bool canMove ) {
             if ( canMove ) {
-                addExtern<DAS_BIND_FUN((das_vector_emplace<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
-                    SideEffects::modifyArgument, "das_vector_emplace")->generated = true;
-                addExtern<DAS_BIND_FUN((das_vector_emplace_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
-                    SideEffects::modifyArgument, "das_vector_emplace_back")->generated = true;
+                auto emplaceFunc = addExtern<DAS_BIND_FUN((das_vector_emplace<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
+                    SideEffects::modifyArgument, "das_vector_emplace");
+                generatedWithImplicitFirstArg(emplaceFunc);
+                auto emplaceBackFunc = addExtern<DAS_BIND_FUN((das_vector_emplace_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
+                    SideEffects::modifyArgument, "das_vector_emplace_back");
+                generatedWithImplicitFirstArg(emplaceBackFunc);
             }
             if ( canCopy ) {
-                addExtern<DAS_BIND_FUN((das_vector_push<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
-                    SideEffects::modifyArgument, "das_vector_push")->generated = true;
-                addExtern<DAS_BIND_FUN((das_vector_push_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
-                    SideEffects::modifyArgument, "das_vector_push_back")->generated = true;
+                auto pushFunc = addExtern<DAS_BIND_FUN((das_vector_push<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
+                    SideEffects::modifyArgument, "das_vector_push");
+                generatedWithImplicitFirstArg(pushFunc);
+                auto pushBackFunc = addExtern<DAS_BIND_FUN((das_vector_push_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
+                    SideEffects::modifyArgument, "das_vector_push_back");
+                generatedWithImplicitFirstArg(pushBackFunc);
             }
             if ( std::is_default_constructible<typename TT::value_type>::value ) {
-                addExtern<DAS_BIND_FUN((das_vector_push_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
+                addExtern<DAS_BIND_FUN((das_vector_push_empty<TT>)),SimNode_ExtFuncCall>(*mod, lib, "push_empty",
                     SideEffects::modifyArgument, "das_vector_push_empty")->generated = true;
-                addExtern<DAS_BIND_FUN((das_vector_push_back_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
+                addExtern<DAS_BIND_FUN((das_vector_push_back_empty<TT>)),SimNode_ExtFuncCall>(*mod, lib, "push_empty",
                     SideEffects::modifyArgument, "das_vector_push_back_empty")->generated = true;
             }
             addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
