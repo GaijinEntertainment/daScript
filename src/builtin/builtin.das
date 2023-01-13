@@ -321,7 +321,7 @@ def clone_to_move(clone_src:auto(TT) | auto(TT)#) : TT -const -#
         clone_dest := clone_src
         return <- clone_dest
 
-def clone_dim(var a;b:auto implicit)
+def clone_dim(var a;b:auto#|auto)
     static_if typeinfo(is_dim a) && typeinfo(is_dim b) && typeinfo(dim a)==typeinfo(dim b)
         for aV,bV in a,b
             aV := bV
@@ -361,25 +361,25 @@ def clone(var a:table<string;auto(VT)>;b:table<string;VT> | table<string;VT>#)
         a[kk] := v
 
 [unsafe_outside_of_for]
-def keys(a:table<auto(keyT);auto(valT)> implicit) : iterator<keyT & const>
+def keys(a:table<auto(keyT);auto(valT)>#|table<auto(keyT);auto(valT)>) : iterator<keyT & const>
     var it : iterator<keyT & const>
     __builtin_table_keys(it,a,typeinfo(sizeof type<keyT>))
     return <- it
 
-def values(a:table<auto(keyT);void> =const implicit)
+def values(a:table<auto(keyT);void> =const#|table<auto(keyT);void> =const)
     concept_assert(false,"can't iterate over values of a table<...;void>")
 
-def values(var a:table<auto(keyT);void> =const implicit)
+def values(var a:table<auto(keyT);void> =const#|table<auto(keyT);void> =const)
     concept_assert(false,"can't iterate over values of a table<...;void>")
 
 [unsafe_outside_of_for]
-def values(a:table<auto(keyT);auto(valT)> =const implicit) : iterator<valT & const>
+def values(a:table<auto(keyT);auto(valT)> =const#|table<auto(keyT);auto(valT)> =const) : iterator<valT & const>
     var it : iterator<valT & const>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
 
 [unsafe_outside_of_for]
-def values(var a:table<auto(keyT);auto(valT)> =const implicit) : iterator<valT &>
+def values(var a:table<auto(keyT);auto(valT)> =const#|table<auto(keyT);auto(valT)> =const) : iterator<valT &>
     var it : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
