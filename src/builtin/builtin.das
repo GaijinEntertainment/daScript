@@ -181,12 +181,12 @@ def push_clone(var Arr:array<auto(numT)[]>; varr:numT[])
     else
         concept_assert(false,"can't push value, which can't be cloned")
 
-def push_clone ( var A : auto(CT) -# -const; b : auto(TT)# | auto(TT) )
+def push_clone ( var A : auto(CT) -const; b : auto(TT)# | auto(TT) )
     static_if !typeinfo(can_clone type<TT-#>)
         concept_assert(false,"can't push_clone type which can't be cloned")
     static_elif !typeinfo(can_be_placed_in_container type<TT-#>)
         concept_assert(false,"can't push_clone type which can't be placed in a container")
-    static_elif !typeinfo(builtin_function_exists @@ <(var a:CT -# -const;var b:TT -# -const):void> _::emplace)
+    static_elif !typeinfo(builtin_function_exists @@ <(var a:CT -const;var b:TT -# -const):void> _::emplace)
         concept_assert(false,"can't push_clone, missing emplace({typeinfo(typename type<CT -# -const>)},{typeinfo(typename type<TT -# -const>)})")
     else
         unsafe
