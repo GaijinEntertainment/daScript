@@ -537,6 +537,7 @@ TDim<int32_t,10> testCMRES ( Context * __context__ )
 
 void testFooArray(const TBlock<void,FooArray> & blk, Context * context, LineInfoArg * at) {
     FooArray arr;
+    arr.reserve(16);
     for (int32_t x = 0; x != 10; ++x) {
         TestObjectFoo p;
         p.fooData = x;

@@ -326,6 +326,24 @@ namespace das
             }
             SimNode * value;
         };
+        struct SimNode_VectorCapacity : SimNode {
+            using TT = OT;
+            DAS_INT_NODE;
+            SimNode_VectorCapacity ( const LineInfo & at, SimNode * rv )
+                : SimNode(at), value(rv) {}
+            __forceinline int32_t compute ( Context & context ) {
+                DAS_PROFILE_NODE
+                auto pValue = (VectorType *) value->evalPtr(context);
+                return int32_t(pValue->capacity());
+            }
+            virtual SimNode * visit ( SimVisitor & vis ) override {
+                V_BEGIN();
+                V_OP_TT(StdVectorCapacity);
+                V_SUB(value);
+                V_END();
+            }
+            SimNode * value;
+        };
         struct SimNode_AtStdVector : SimNode_At {
             using TT = OT;
             DAS_PTR_NODE;
@@ -398,12 +416,14 @@ namespace das
         virtual bool canCopy() const override { return false; }
         virtual bool isLocal() const override { return false; }
         virtual TypeDeclPtr makeFieldType ( const string & na, bool ) const override {
-            if ( na=="length" ) return make_smart<TypeDecl>(Type::tInt);
+            if ( na=="length" | na=="capacity" ) return make_smart<TypeDecl>(Type::tInt);
             return nullptr;
         }
         virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) override {
             if ( fieldName=="length" ) {
                 ss << ".size()";
+            } else if ( fieldName=="capacity" ) {
+                ss << ".capacity()";
             } else {
                 ss << "." << fieldName << " /*undefined */";
             }
@@ -411,6 +431,8 @@ namespace das
         virtual void aotVisitGetFieldPtr ( TextWriter & ss, const string & fieldName ) override {
             if ( fieldName=="length" ) {
                 ss << "->size()";
+            } else if ( fieldName=="capacity" ) {
+                ss << "->capacity()";
             } else {
                 ss << "." << fieldName << " /*undefined */";
             }
@@ -452,6 +474,7 @@ namespace das
         virtual SimNode * simulateGetField ( const string & na, Context & context,
                                             const LineInfo & at, const ExpressionPtr & value ) const override {
             if ( na=="length" ) return context.code->makeNode<SimNode_VectorLength>(at,value->simulate(context));
+            if ( na == "capacity" ) return context.code->makeNode<SimNode_VectorCapacity>(at,value->simulate(context));
             return nullptr;
         }
         virtual void walk ( DataWalker & walker, void * vec ) override {
