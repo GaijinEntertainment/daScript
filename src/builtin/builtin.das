@@ -145,7 +145,7 @@ def emplace(var Arr:array<auto(numT)[]>;var value:numT[])
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
-def push_clone(var Arr:array<auto(numT)>;value:numT#|numT;at:int)
+def push_clone(var Arr:array<auto(numT)>;value:numT|#;at:int)
     static_if typeinfo(can_clone value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
@@ -153,7 +153,7 @@ def push_clone(var Arr:array<auto(numT)>;value:numT#|numT;at:int)
     else
         concept_assert(false,"can't push-clone value, which can't be cloned")
 
-def push_clone(var Arr:array<auto(numT)>;value:numT#|numT)
+def push_clone(var Arr:array<auto(numT)>;value:numT|#)
     static_if typeinfo(can_clone value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
@@ -181,7 +181,7 @@ def push_clone(var Arr:array<auto(numT)[]>; varr:numT[])
     else
         concept_assert(false,"can't push value, which can't be cloned")
 
-def push_clone ( var A : auto(CT) -# -const; b : auto(TT)# | auto(TT) )
+def push_clone ( var A : auto(CT) -# -const; b : auto(TT)|# )
     static_if !typeinfo(can_clone type<TT-#>)
         concept_assert(false,"can't push_clone type which can't be cloned")
     static_elif !typeinfo(can_be_placed_in_container type<TT-#>)
@@ -226,16 +226,16 @@ def empty(a:array<auto>) : bool
 
 // table
 
-def find(Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT;blk:block<(p:valT?):void>)
+def find(Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
 
-def find(Tab:table<auto(keyT);void>;at:keyT#|keyT;blk:block<(p:void?):void>)
+def find(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void>)
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
-def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT;blk:block<(p:valT?):void>)
+def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
@@ -245,65 +245,65 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT;blk:block<(p:v
     else
         return false
 
-def find_if_exists(Tab:table<auto(keyT);void>;at:keyT#|keyT;blk:block<(p:void?):void>)
+def find_if_exists(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void>)
     concept_assert(false,"find_if_exists(table<keyT;void>,...) is not supported")
 
-def find(Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT):valT const?
+def find(Tab:table<auto(keyT);auto(valT)>;at:keyT|#):valT const?
     unsafe
         return reinterpret<valT const?>(__builtin_table_find(Tab,at))
 
-def find(Tab:table<auto(keyT);void>;at:keyT#|keyT):void const?
+def find(Tab:table<auto(keyT);void>;at:keyT|#):void const?
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
-def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT#|keyT):valT const?#
+def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT|#):valT const?#
     unsafe
         return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
 
-def find(Tab:table<auto(keyT);void>#;at:keyT#|keyT):void const?#
+def find(Tab:table<auto(keyT);void>#;at:keyT|#):void const?#
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT;blk:block<(var p:valT?):void>)
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(var p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
 
-def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT#|keyT;blk:block<(var p:void?):void>)
+def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 
-def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT;blk:block<(var p:valT?):void>)
+def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(var p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
         invoke(blk,val)
         __builtin_table_unlock(Tab)
 
-def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT#|keyT;blk:block<(var p:void?):void>)
+def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit_if_exists(table<keyT;void>,...) is not supported")
 
 [unsafe_operation]
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT):valT?
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):valT?
     return __builtin_table_find(Tab,at)
 
 [unsafe_operation]
-def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT#|keyT):void?
+def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#):void?
     concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 
-def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT#|keyT ) : valT &
+def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT|# ) : valT &
     static_if typeinfo(need_lock_check type<valT>)
         _builtin_verify_locks(Tab)
     unsafe
         return Tab[at]
 
-def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT):bool
+def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):bool
     if typeinfo(need_lock_check type<valT>)
         _builtin_verify_locks(Tab)
     return __builtin_table_erase(Tab,at)
 
-def insert(var Tab:table<auto(keyT);void>;at:keyT#|keyT)
+def insert(var Tab:table<auto(keyT);void>;at:keyT|#)
     __builtin_table_set_insert(Tab,at)
 
-def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT):bool
+def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT|#):bool
     return __builtin_table_key_exists(Tab,at)
 
 def binary_save(obj; subexpr:block<(data:array<uint8>):void>)
@@ -315,13 +315,13 @@ def binary_load(var obj; data:array<uint8>)
     _builtin_binary_load(obj,data)
 
 [skip_lock_check]
-def clone_to_move(clone_src:auto(TT) | auto(TT)#) : TT -const -#
+def clone_to_move(clone_src:auto(TT)|#) : TT -const -#
     unsafe
         var clone_dest : TT - #
         clone_dest := clone_src
         return <- clone_dest
 
-def clone_dim(var a;b:auto#|auto)
+def clone_dim(var a;b:auto|#)
     static_if typeinfo(is_dim a) && typeinfo(is_dim b) && typeinfo(dim a)==typeinfo(dim b)
         for aV,bV in a,b
             aV := bV
@@ -338,48 +338,48 @@ def clone(var a:array<auto(TT)>;b:array<TT>#)
     for aV,bV in a,b
         aV := bV
 
-def clone(var a:table<auto(KT);void>;b:table<KT;void> | table<KT;void>#)
+def clone(var a:table<auto(KT);void>;b:table<KT;void>|#)
     clear(a)
     for k in keys(b)
         __builtin_table_set_insert(a,k)
 
-def clone(var a:table<string;void>;b:table<string;void> | table<string;void>#)
+def clone(var a:table<string;void>;b:table<string;void>|#)
     clear(a)
     for k in keys(b)
         let kk := k
         __builtin_table_set_insert(a,kk)
 
-def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT> | table<KT;VT>#)
+def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>|#)
     clear(a)
     for k,v in keys(b),values(b)
         a[k] := v
 
-def clone(var a:table<string;auto(VT)>;b:table<string;VT> | table<string;VT>#)
+def clone(var a:table<string;auto(VT)>;b:table<string;VT>|#)
     clear(a)
     for k,v in keys(b),values(b)
         let kk := k
         a[kk] := v
 
 [unsafe_outside_of_for]
-def keys(a:table<auto(keyT);auto(valT)>#|table<auto(keyT);auto(valT)>) : iterator<keyT & const>
+def keys(a:table<auto(keyT);auto(valT)>|#) : iterator<keyT & const>
     var it : iterator<keyT & const>
     __builtin_table_keys(it,a,typeinfo(sizeof type<keyT>))
     return <- it
 
-def values(a:table<auto(keyT);void> =const#|table<auto(keyT);void> =const)
+def values(a:table<auto(keyT);void> =const|#)
     concept_assert(false,"can't iterate over values of a table<...;void>")
 
-def values(var a:table<auto(keyT);void> =const#|table<auto(keyT);void> =const)
+def values(var a:table<auto(keyT);void> =const|#)
     concept_assert(false,"can't iterate over values of a table<...;void>")
 
 [unsafe_outside_of_for]
-def values(a:table<auto(keyT);auto(valT)> =const#|table<auto(keyT);auto(valT)> =const) : iterator<valT & const>
+def values(a:table<auto(keyT);auto(valT)> =const|#) : iterator<valT & const>
     var it : iterator<valT & const>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
 
 [unsafe_outside_of_for]
-def values(var a:table<auto(keyT);auto(valT)> =const#|table<auto(keyT);auto(valT)> =const) : iterator<valT &>
+def values(var a:table<auto(keyT);auto(valT)> =const|#) : iterator<valT &>
     var it : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
@@ -573,7 +573,7 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT
         concept_assert(false,"this array can't be copied or moved")
     return <- tab
 
-def sort ( var a : auto(TT)[]# | auto(TT)[] )
+def sort ( var a : auto(TT)[]|# )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
             __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
@@ -591,7 +591,7 @@ def sort ( var a : auto(TT)[]# | auto(TT)[] )
                 __builtin_sort_dim_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
 
-def sort ( var a : array<auto(TT)># | array<auto(TT)> )
+def sort ( var a : array<auto(TT)>|# )
     static_if typeinfo(is_numeric_comparable type<TT>)
         __builtin_array_lock(a)
         unsafe
@@ -614,7 +614,7 @@ def sort ( var a : array<auto(TT)># | array<auto(TT)> )
                     return x < y
 
 [builtin_array_sort]
-def sort ( var a : auto(TT)[]# | auto(TT)[]; cmp : block<(x,y:TT):bool> )
+def sort ( var a : auto(TT)[]|#; cmp : block<(x,y:TT):bool> )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
             __builtin_sort_cblock_dim ( a, typeinfo(sizeof a[0]), length(a), cmp )
@@ -632,7 +632,7 @@ def sort ( var a : auto(TT)[]# | auto(TT)[]; cmp : block<(x,y:TT):bool> )
                 __builtin_sort_dim_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a), cmp )
 
 [builtin_array_sort]
-def sort ( var a : array<auto(TT)># | array<auto(TT)>; cmp : block<(x,y:TT):bool> )
+def sort ( var a : array<auto(TT)>|#; cmp : block<(x,y:TT):bool> )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
             __builtin_sort_cblock_array ( a, typeinfo(sizeof a[0]), length(a), cmp )
@@ -684,13 +684,13 @@ def lock_data ( a : array<auto(TT)> = const; blk : block<(p:TT const?#;s:int)> )
         unsafe
             invoke(blk, reinterpret<TT const?#> null, 0)
 
-def find_index ( arr : array<auto(TT)>#|array<auto(TT)>; key : TT )
+def find_index ( arr : array<auto(TT)>|#; key : TT )
     for i in range(length(arr))
         if arr[i]==key
             return i
     return -1
 
-def find_index ( arr : auto(TT)[]#|auto(TT)[]; key : TT )
+def find_index ( arr : auto(TT)[]|#; key : TT )
     for i in range(length(arr))
         if arr[i]==key
             return i
@@ -702,13 +702,13 @@ def find_index ( arr : iterator<auto(TT)>; key : TT - & )
             return i
     return -1
 
-def find_index_if ( arr : array<auto(TT)>#|array<auto(TT)>; blk : block<(key:TT):bool> )
+def find_index_if ( arr : array<auto(TT)>|#; blk : block<(key:TT):bool> )
     for i in range(length(arr))
         if invoke(blk,arr[i])
             return i
     return -1
 
-def find_index_if ( arr : auto(TT)[]#|auto(TT)[]; blk : block<(key:TT):bool> )
+def find_index_if ( arr : auto(TT)[]|#; blk : block<(key:TT):bool> )
     for i in range(length(arr))
         if invoke(blk,arr[i])
             return i

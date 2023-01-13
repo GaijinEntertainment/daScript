@@ -2458,6 +2458,19 @@ type_declaration
             $$->argTypes.push_back($rest);
         }
     }
+    |   type_declaration[list] '|' '#'[rest] {
+        if ( $list->baseType==Type::option ) {
+            $$ = $list;
+            $$->argTypes.push_back(make_smart<TypeDecl>(*$list->argTypes.back()));
+            $list->argTypes.back()->temporary ^= true;
+        } else {
+            $$ = new TypeDecl(Type::option);
+            $$->at = tokRangeAt(scanner,@list,@rest);
+            $$->argTypes.push_back($list);
+            $$->argTypes.push_back(make_smart<TypeDecl>(*$list));
+            $$->argTypes.back()->temporary ^= true;
+        }
+    }
     ;
 
 variant_alias_declaration

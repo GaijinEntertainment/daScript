@@ -169,13 +169,26 @@ namespace das
         // for option type, we go through all the options in order. first matching is good
         if ( autoT->baseType==Type::option ) {
             for ( size_t i = 0; i!=autoT->argTypes.size(); ++i ) {
-                auto & subT = autoT->argTypes[i];
-                applyAutoContracts(subT, autoT);
-                if ( auto resT = inferGenericType(subT,initT,topLevel,options) ) {
+                // we copy type qualifiers for each option
+                auto & TT = autoT->argTypes[i];
+                TT->ref = TT->ref | autoT->ref;
+                TT->constant = TT->constant | autoT->constant;
+                TT->temporary = TT->temporary | autoT->temporary;
+                TT->removeConstant = TT->removeConstant | autoT->removeConstant;
+                TT->removeDim = TT->removeDim | autoT->removeDim;
+                TT->removeRef = TT->removeRef | autoT->removeRef;
+                TT->explicitConst = TT->explicitConst | autoT->explicitConst;
+                TT->implicit = TT->implicit | autoT->implicit;
+                // now we infer type
+                if ( auto resT = inferGenericType(TT,initT,topLevel,options) ) {
                     if ( options!=nullptr ) (*options)[autoT.get()] = int(i);
                     return resT;
                 }
             }
+            return nullptr;
+        }
+        // explicit const mast match
+        if ( autoT->explicitConst && (autoT->constant != initT->constant) ) {
             return nullptr;
         }
         // can't infer from the type, which is already 'auto'
