@@ -649,38 +649,40 @@ def sort ( var a : array<auto(TT)># | array<auto(TT)>; cmp : block<(x,y:TT):bool
             else
                 __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a), cmp )
 
-def lock ( var a : array<auto(TT)> = const; blk : block<(var x : array<TT># | array<TT>)> )
+def lock ( var a : array<auto(TT)> = const; blk : block<(var x : array<TT>#)> )
     __builtin_array_lock(a)
     unsafe
-        invoke(blk, reinterpret< block<(var x : array<TT># )> > blk )
+        invoke(blk, reinterpret<array<auto(TT)> -const #> a)
     __builtin_array_unlock(a)
 
-def lock ( a : array<auto(TT)> = const; blk : block<(x : array<TT># | array<TT>)> )
+def lock ( a : array<auto(TT)> = const; blk : block<(x : array<TT>#)> )
     __builtin_array_lock(a)
     unsafe
-        invoke(blk, reinterpret< block<(x : array<TT># )> > blk )
+        invoke(blk, reinterpret<array<auto(TT)> const #> a)
     __builtin_array_unlock(a)
 
-def lock_data ( var a : array<auto(TT)> = const; blk : block<(var p:TT?# implicit;s:int)> )
+def lock_data ( var a : array<auto(TT)> = const; blk : block<(var p:TT?#;s:int)> )
     let len = length(a)
     if len != 0
         __builtin_array_lock(a)
         unsafe
-            invoke(blk, addr(a[0]), len)
+            invoke(blk, reinterpret<TT?#> addr(a[0]), len)
         __builtin_array_unlock(a)
     else
         var nullT : TT?
-        invoke(blk, nullT, 0)
+        unsafe
+            invoke(blk, reinterpret<TT?#> nullT, 0)
 
-def lock_data ( a : array<auto(TT)> = const; blk : block<(p:TT const?# implicit;s:int)> )
+def lock_data ( a : array<auto(TT)> = const; blk : block<(p:TT const?#;s:int)> )
     let len = length(a)
     if len != 0
         __builtin_array_lock(a)
         unsafe
-            invoke(blk, addr(a[0]), len)
+            invoke(blk, reinterpret<TT const?#> addr(a[0]), len)
         __builtin_array_unlock(a)
     else
-        invoke(blk, null, 0)
+        unsafe
+            invoke(blk, reinterpret<TT const?#> null, 0)
 
 def find_index ( arr : array<auto(TT)>#|array<auto(TT)>; key : TT )
     for i in range(length(arr))
