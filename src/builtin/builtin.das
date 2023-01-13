@@ -443,6 +443,10 @@ def next ( it:iterator<auto(TT)>; var value : TT& ) : bool
 def length ( vec )
     return vec . . length
 
+[expect_any_vector(vec)]
+def capacity ( vec )
+    return vec . . capacity
+
 [generic]
 def each ( rng : range ) : iterator<int>
     var it : iterator<int>
