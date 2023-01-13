@@ -411,7 +411,7 @@ def finalize(var a:table<auto(TK);auto(TV)>)
 def lock ( Tab : table<auto(keyT);auto(valT)>; blk : block<(t : table<keyT;valT>#):void >  )
     __builtin_table_lock(Tab)
     unsafe
-        invoke(blk,reinterpret<table<auto(keyT);auto(valT)> const implicit>(Tab))
+        invoke(blk,reinterpret<table<auto(keyT);auto(valT)> const>(Tab))
     __builtin_table_unlock(Tab)
 
 def lock ( Tab : table<auto(keyT);auto(valT)>#; blk : block<(t : table<keyT;valT>#):void >  )
@@ -573,7 +573,7 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT
         concept_assert(false,"this array can't be copied or moved")
     return <- tab
 
-def sort ( var a : auto(TT)[] implicit )
+def sort ( var a : auto(TT)[]# | auto(TT)[] )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
             __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
@@ -591,7 +591,7 @@ def sort ( var a : auto(TT)[] implicit )
                 __builtin_sort_dim_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a) ) <| $ ( x, y  : TT ) : bool
                     return x < y
 
-def sort ( var a : array<auto(TT)> implicit )
+def sort ( var a : array<auto(TT)># | array<auto(TT)> )
     static_if typeinfo(is_numeric_comparable type<TT>)
         __builtin_array_lock(a)
         unsafe
@@ -614,7 +614,7 @@ def sort ( var a : array<auto(TT)> implicit )
                     return x < y
 
 [builtin_array_sort]
-def sort ( var a : auto(TT)[] implicit; cmp : block<(x,y:TT):bool> )
+def sort ( var a : auto(TT)[]# | auto(TT)[]; cmp : block<(x,y:TT):bool> )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
             __builtin_sort_cblock_dim ( a, typeinfo(sizeof a[0]), length(a), cmp )
@@ -632,7 +632,7 @@ def sort ( var a : auto(TT)[] implicit; cmp : block<(x,y:TT):bool> )
                 __builtin_sort_dim_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a), cmp )
 
 [builtin_array_sort]
-def sort ( var a : array<auto(TT)> implicit; cmp : block<(x,y:TT):bool> )
+def sort ( var a : array<auto(TT)># | array<auto(TT)>; cmp : block<(x,y:TT):bool> )
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
             __builtin_sort_cblock_array ( a, typeinfo(sizeof a[0]), length(a), cmp )
@@ -649,14 +649,16 @@ def sort ( var a : array<auto(TT)> implicit; cmp : block<(x,y:TT):bool> )
             else
                 __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a), cmp )
 
-def lock ( var a : array<auto(TT)> = const; blk : block<(var x : array<TT># implicit)> )
+def lock ( var a : array<auto(TT)> = const; blk : block<(var x : array<TT># | array<TT>)> )
     __builtin_array_lock(a)
-    invoke(blk, a)
+    unsafe
+        invoke(blk, reinterpret< block<(var x : array<TT># )> > blk )
     __builtin_array_unlock(a)
 
-def lock ( a : array<auto(TT)> = const; blk : block<(x : array<TT># implicit)> )
+def lock ( a : array<auto(TT)> = const; blk : block<(x : array<TT># | array<TT>)> )
     __builtin_array_lock(a)
-    invoke(blk, a)
+    unsafe
+        invoke(blk, reinterpret< block<(x : array<TT># )> > blk )
     __builtin_array_unlock(a)
 
 def lock_data ( var a : array<auto(TT)> = const; blk : block<(var p:TT?# implicit;s:int)> )
@@ -680,13 +682,13 @@ def lock_data ( a : array<auto(TT)> = const; blk : block<(p:TT const?# implicit;
     else
         invoke(blk, null, 0)
 
-def find_index ( arr : array<auto(TT)> implicit; key : TT )
+def find_index ( arr : array<auto(TT)>#|array<auto(TT)>; key : TT )
     for i in range(length(arr))
         if arr[i]==key
             return i
     return -1
 
-def find_index ( arr : auto(TT)[] implicit; key : TT )
+def find_index ( arr : auto(TT)[]#|auto(TT)[]; key : TT )
     for i in range(length(arr))
         if arr[i]==key
             return i
@@ -698,13 +700,13 @@ def find_index ( arr : iterator<auto(TT)>; key : TT - & )
             return i
     return -1
 
-def find_index_if ( arr : array<auto(TT)> implicit; blk : block<(key:TT):bool> )
+def find_index_if ( arr : array<auto(TT)>#|array<auto(TT)>; blk : block<(key:TT):bool> )
     for i in range(length(arr))
         if invoke(blk,arr[i])
             return i
     return -1
 
-def find_index_if ( arr : auto(TT)[] implicit; blk : block<(key:TT):bool> )
+def find_index_if ( arr : auto(TT)[]#|auto(TT)[]; blk : block<(key:TT):bool> )
     for i in range(length(arr))
         if invoke(blk,arr[i])
             return i
