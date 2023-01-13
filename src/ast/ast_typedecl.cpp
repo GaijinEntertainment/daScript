@@ -208,7 +208,7 @@ namespace das
                     cm = ConstMatters::no;
                 }
             }
-            if ( autoT->isSameType(*initT, rm,cm, TemporaryMatters::yes) ) {
+            if ( autoT->isSameType(*initT, rm,cm, TemporaryMatters::yes, AllowSubstitute::yes ) ) {
                 return make_smart<TypeDecl>(*autoT);
             } else {
                 return nullptr;
@@ -1658,7 +1658,7 @@ namespace das
             return any;
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
                    baseType==Type::tLambda || baseType==Type::tTuple ||
-                   baseType==Type::tVariant || baseType==Type::option ) {
+                   baseType==Type::tVariant ) {
             bool any = false;
             if ( firstType )
                 any |= firstType->isAuto();
@@ -1668,6 +1668,47 @@ namespace das
         }
         return false;
     }
+
+    bool TypeDecl::isAutoWithoutOptions(bool & hasOptions) const {
+        // auto is auto.... or auto....?
+        // also dim[] is aito
+        for ( auto di : dim ) {
+            if ( di==TypeDecl::dimAuto ) {
+                return true;
+            }
+        }
+        if ( baseType==Type::autoinfer ) {
+            return true;
+        } else if ( baseType==Type::tPointer ) {
+            if ( firstType )
+                return firstType->isAutoWithoutOptions(hasOptions);
+        } else if ( baseType==Type::tIterator ) {
+            if ( firstType )
+                return firstType->isAutoWithoutOptions(hasOptions);
+        } else if ( baseType==Type::tArray ) {
+            if ( firstType )
+                return firstType->isAutoWithoutOptions(hasOptions);
+        } else if ( baseType==Type::tTable ) {
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAutoWithoutOptions(hasOptions);
+            if ( secondType )
+                any |= secondType->isAutoWithoutOptions(hasOptions);
+            return any;
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
+                   baseType==Type::tLambda || baseType==Type::tTuple ||
+                   baseType==Type::tVariant || baseType==Type::option ) {
+            if ( baseType==Type::option ) hasOptions = true;
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAutoWithoutOptions(hasOptions);
+            for ( auto & arg : argTypes )
+                any |= arg->isAutoWithoutOptions(hasOptions);
+            return any;
+        }
+        return false;
+    }
+
 
     bool TypeDecl::isAutoOrAlias() const {
         // auto is auto.... or auto....?
@@ -1701,7 +1742,7 @@ namespace das
             return any;
         } else if (baseType == Type::tBlock || baseType == Type::tFunction ||
             baseType == Type::tLambda || baseType == Type::tTuple ||
-            baseType == Type::tVariant || baseType == Type::option ) {
+            baseType == Type::tVariant ) {
             bool any = false;
             if (firstType)
                 any |= firstType->isAutoOrAlias();

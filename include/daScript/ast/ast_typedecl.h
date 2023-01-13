@@ -148,6 +148,7 @@ namespace das {
         bool isAutoArrayResolved() const;
         bool isAuto() const;
         bool isAutoOrAlias() const;
+        bool isAutoWithoutOptions(bool & appendHasOptions) const;
         bool isAotAlias () const;
         bool isAlias() const;
         bool isAliasOrExpr() const;

@@ -226,16 +226,16 @@ def empty(a:array<auto>) : bool
 
 // table
 
-def find(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(p:valT?):void>)
+def find(Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT;blk:block<(p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
 
-def find(Tab:table<auto(keyT);void>;at:keyT implicit;blk:block<(p:void?):void>)
+def find(Tab:table<auto(keyT);void>;at:keyT#|keyT;blk:block<(p:void?):void>)
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
-def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(p:valT?):void>)
+def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT;blk:block<(p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
@@ -245,65 +245,65 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(
     else
         return false
 
-def find_if_exists(Tab:table<auto(keyT);void>;at:keyT implicit;blk:block<(p:void?):void>)
+def find_if_exists(Tab:table<auto(keyT);void>;at:keyT#|keyT;blk:block<(p:void?):void>)
     concept_assert(false,"find_if_exists(table<keyT;void>,...) is not supported")
 
-def find(Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):valT const?
+def find(Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT):valT const?
     unsafe
         return reinterpret<valT const?>(__builtin_table_find(Tab,at))
 
-def find(Tab:table<auto(keyT);void>;at:keyT implicit):void const?
+def find(Tab:table<auto(keyT);void>;at:keyT#|keyT):void const?
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
-def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT implicit):valT const?#
+def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT#|keyT):valT const?#
     unsafe
         return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
 
-def find(Tab:table<auto(keyT);void>#;at:keyT implicit):void const?#
+def find(Tab:table<auto(keyT);void>#;at:keyT#|keyT):void const?#
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(var p:valT?):void>)
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT;blk:block<(var p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     invoke(blk,val)
     __builtin_table_unlock(Tab)
 
-def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT implicit;blk:block<(var p:void?):void>)
+def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT#|keyT;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 
-def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit;blk:block<(var p:valT?):void>)
+def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT;blk:block<(var p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
         invoke(blk,val)
         __builtin_table_unlock(Tab)
 
-def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT implicit;blk:block<(var p:void?):void>)
+def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT#|keyT;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit_if_exists(table<keyT;void>,...) is not supported")
 
 [unsafe_operation]
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):valT?
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT):valT?
     return __builtin_table_find(Tab,at)
 
 [unsafe_operation]
-def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT implicit):void?
+def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT#|keyT):void?
     concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 
-def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT implicit ) : valT &
+def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT#|keyT ) : valT &
     static_if typeinfo(need_lock_check type<valT>)
         _builtin_verify_locks(Tab)
     unsafe
         return Tab[at]
 
-def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT implicit):bool
+def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT):bool
     if typeinfo(need_lock_check type<valT>)
         _builtin_verify_locks(Tab)
     return __builtin_table_erase(Tab,at)
 
-def insert(var Tab:table<auto(keyT);void>;at:keyT implicit)
+def insert(var Tab:table<auto(keyT);void>;at:keyT#|keyT)
     __builtin_table_set_insert(Tab,at)
 
-def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT | keyT#):bool
+def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT#|keyT):bool
     return __builtin_table_key_exists(Tab,at)
 
 def binary_save(obj; subexpr:block<(data:array<uint8>):void>)

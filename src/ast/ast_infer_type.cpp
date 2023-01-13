@@ -6617,7 +6617,9 @@ namespace das {
                             if (argT->isAlias()) {
                                 argT = inferPartialAliases(argT, clone, &aliases);
                             }
-                            if (argT->isAuto()) {
+                            bool appendHasOptions = false;
+                            bool isAutoWto = argT->isAutoWithoutOptions(appendHasOptions);
+                            if ( isAutoWto || appendHasOptions) {
                                 auto & passT = types[sz];
                                 auto resT = TypeDecl::inferGenericType(argT, passT, true);
                                 DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
@@ -6628,7 +6630,7 @@ namespace das {
                                 if (resT->isRefType()) {   // we don't pass boxed type by reference ever
                                     resT->ref = false;
                                 }
-                                resT->isExplicit = true; // this is generic for this type, and this type only
+                                resT->isExplicit = isAutoWto; // this is generic for this type, and this type only
                                 argT = resT;
                             }
                         }
