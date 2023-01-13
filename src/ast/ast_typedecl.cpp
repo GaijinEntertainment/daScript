@@ -169,7 +169,9 @@ namespace das
         // for option type, we go through all the options in order. first matching is good
         if ( autoT->baseType==Type::option ) {
             for ( size_t i = 0; i!=autoT->argTypes.size(); ++i ) {
-                if ( auto resT = inferGenericType(autoT->argTypes[i],initT,topLevel,options) ) {
+                auto & subT = autoT->argTypes[i];
+                applyAutoContracts(subT, autoT);
+                if ( auto resT = inferGenericType(subT,initT,topLevel,options) ) {
                     if ( options!=nullptr ) (*options)[autoT.get()] = int(i);
                     return resT;
                 }

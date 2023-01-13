@@ -1767,24 +1767,12 @@ function_argument_declaration
     :   optional_field_annotation[ann] variable_declaration[decl]          {
             $$ = $decl;
             $$ = $decl;
-            if ( $decl->pTypeDecl->baseType==Type::option ) {
-                for ( auto & argT : $decl->pTypeDecl->argTypes ) {
-                    argT->constant = true;
-                }
-            } else {
-                $decl->pTypeDecl->constant = true;
-            }
+            $decl->pTypeDecl->constant = true;
             $decl->annotation = $ann;
         }
     |   optional_field_annotation[ann] DAS_VAR variable_declaration[decl]  {
             $$ = $decl;
-            if ( $decl->pTypeDecl->baseType==Type::option ) {
-                for ( auto & argT : $decl->pTypeDecl->argTypes ) {
-                    argT->removeConstant = true;
-                }
-            } else {
-                $decl->pTypeDecl->removeConstant = true;
-            }
+            $decl->pTypeDecl->removeConstant = true;
             $decl->annotation = $ann;
         }
     |   MTAG_A '(' expr[subexpr] ')' {
