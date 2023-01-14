@@ -1095,7 +1095,7 @@ Iteration
   *  :ref:`for_each_archetype (hash:uint64 const;erq:function\<decs::EcsRequest\> -const;blk:block\<(arch:decs::Archetype const):void\> const) : void <function-_at_decs_c__c_for_each_archetype_CY_ls_ComponentHash_gr_u64_1_ls_S_ls_EcsRequest_gr__gr__at__at__CN_ls_arch_gr_0_ls_CS_ls_Archetype_gr__gr_1_ls_v_gr__builtin_>` 
   *  :ref:`for_each_archetype_find (hash:uint64 const;erq:function\<decs::EcsRequest\> -const;blk:block\<(arch:decs::Archetype const):bool\> const) : bool const <function-_at_decs_c__c_for_each_archetype_find_CY_ls_ComponentHash_gr_u64_1_ls_S_ls_EcsRequest_gr__gr__at__at__CN_ls_arch_gr_0_ls_CS_ls_Archetype_gr__gr_1_ls_b_gr__builtin_>` 
   *  :ref:`decs_array (atype:auto(TT) const;src:array\<uint8\> const;capacity:int const) : auto <function-_at_decs_c__c_decs_array_CY_ls_TT_gr_._C1_ls_u8_gr_A_Ci>` 
-  *  :ref:`get_ro (arch:decs::Archetype const;name:string const;value:auto(TT) const[-1]) : array\<TT[-2] -const -& -#\> const <function-_at_decs_c__c_get_ro_CS_ls_Archetype_gr__Cs_C[-1]Y_ls_TT_gr_._%_ls_IsDimMacro_c_expect_dim(value_eq_true)_gr_>` 
+  *  :ref:`get_ro (arch:decs::Archetype const;name:string const;value:auto(TT) const[]) : array\<TT[-2] -const -& -#\> const <function-_at_decs_c__c_get_ro_CS_ls_Archetype_gr__Cs_C[-1]Y_ls_TT_gr_._%_ls_IsDimMacro_c_expect_dim(value_eq_true)_gr_>` 
   *  :ref:`get_ro (arch:decs::Archetype const;name:string const;value:auto(TT) const) : array\<TT -const -& -#\> const <function-_at_decs_c__c_get_ro_CS_ls_Archetype_gr__Cs_CY_ls_TT_gr_._%_ls_IsNotDimMacro_c_expect_not_dim(value_eq_true)_gr_>` 
   *  :ref:`get_default_ro (arch:decs::Archetype const;name:string const;value:auto(TT) const) : iterator\<TT const&\> <function-_at_decs_c__c_get_default_ro_CS_ls_Archetype_gr__Cs_CY_ls_TT_gr_.>` 
   *  :ref:`get_optional (arch:decs::Archetype const;name:string const;value:auto(TT)? const) : iterator\<TT -const -& -#?\> <function-_at_decs_c__c_get_optional_CS_ls_Archetype_gr__Cs_C1_ls_Y_ls_TT_gr_._gr_?>` 
@@ -1198,7 +1198,7 @@ Low level function returns temporary array of component given specific type of c
 
 .. _function-_at_decs_c__c_get_ro_CS_ls_Archetype_gr__Cs_C[-1]Y_ls_TT_gr_._%_ls_IsDimMacro_c_expect_dim(value_eq_true)_gr_:
 
-.. das:function:: get_ro(arch: Archetype const; name: string const; value: auto(TT) const[-1])
+.. das:function:: get_ro(arch: Archetype const; name: string const; value: auto(TT) const[])
 
 get_ro returns array<TT[-2]> const
 

@@ -491,7 +491,11 @@ namespace das
             stream << " const";
         }
         for ( auto d : dim ) {
-            stream << "[" << d << "]";
+            if ( d==-1 ) {
+                stream << "[]";
+            } else {
+                stream << "[" << d << "]";
+            }
         }
         if ( ref ) {
             stream << "&";
@@ -506,7 +510,7 @@ namespace das
             stream << " explicit";
         }
         if ( explicitConst ) {
-            stream << " =const";
+            stream << " ==const";
         }
         if (contracts == DescribeContracts::yes) {
             if (removeConstant || removeRef || removeDim || removeTemporary) {

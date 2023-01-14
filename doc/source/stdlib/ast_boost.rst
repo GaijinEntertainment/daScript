@@ -1343,10 +1343,10 @@ Expression generation
   *  :ref:`override_method (str:smart_ptr\<ast::Structure\> -const;name:string const;funcName:string const) : bool <function-_at_ast_boost_c__c_override_method_Y_ls_StructurePtr_gr_1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_Cs_Cs>` 
   *  :ref:`panic_expr_as () : void? <function-_at_ast_boost_c__c_panic_expr_as>` 
   *  :ref:`make_static_assert_false (text:string const;at:rtti::LineInfo const) : smart_ptr\<ast::ExprStaticAssert\> <function-_at_ast_boost_c__c_make_static_assert_false_Cs_CH_ls_rtti_c__c_LineInfo_gr_>` 
-  *  :ref:`convert_to_expression (value:auto& =const -const;at:rtti::LineInfo const) : auto <function-_at_ast_boost_c__c_convert_to_expression_&_eq_._CH_ls_rtti_c__c_LineInfo_gr_>` 
-  *  :ref:`convert_to_expression (value:auto const =const;at:rtti::LineInfo const) : auto <function-_at_ast_boost_c__c_convert_to_expression_C_eq_._CH_ls_rtti_c__c_LineInfo_gr_>` 
-  *  :ref:`convert_to_expression (value:auto =const -const) : auto <function-_at_ast_boost_c__c_convert_to_expression__eq_.>` 
-  *  :ref:`convert_to_expression (value:auto const =const) : auto <function-_at_ast_boost_c__c_convert_to_expression_C_eq_.>` 
+  *  :ref:`convert_to_expression (value:auto& ==const -const;at:rtti::LineInfo const) : auto <function-_at_ast_boost_c__c_convert_to_expression_&_eq_._CH_ls_rtti_c__c_LineInfo_gr_>` 
+  *  :ref:`convert_to_expression (value:auto const ==const;at:rtti::LineInfo const) : auto <function-_at_ast_boost_c__c_convert_to_expression_C_eq_._CH_ls_rtti_c__c_LineInfo_gr_>` 
+  *  :ref:`convert_to_expression (value:auto ==const -const) : auto <function-_at_ast_boost_c__c_convert_to_expression__eq_.>` 
+  *  :ref:`convert_to_expression (value:auto const ==const) : auto <function-_at_ast_boost_c__c_convert_to_expression_C_eq_.>` 
 
 .. _function-_at_ast_boost_c__c_override_method_Y_ls_StructurePtr_gr_1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_Cs_Cs:
 
@@ -1394,7 +1394,7 @@ make_static_assert_false returns smart_ptr< :ref:`ast::ExprStaticAssert <handle-
 
 .. _function-_at_ast_boost_c__c_convert_to_expression_&_eq_._CH_ls_rtti_c__c_LineInfo_gr_:
 
-.. das:function:: convert_to_expression(value: auto& =const; at: LineInfo const)
+.. das:function:: convert_to_expression(value: auto& ==const; at: LineInfo const)
 
 convert_to_expression returns auto
 
@@ -1411,7 +1411,7 @@ convert_to_expression returns auto
 
 .. _function-_at_ast_boost_c__c_convert_to_expression_C_eq_._CH_ls_rtti_c__c_LineInfo_gr_:
 
-.. das:function:: convert_to_expression(value: auto const =const; at: LineInfo const)
+.. das:function:: convert_to_expression(value: auto const ==const; at: LineInfo const)
 
 convert_to_expression returns auto
 
@@ -1428,7 +1428,7 @@ convert_to_expression returns auto
 
 .. _function-_at_ast_boost_c__c_convert_to_expression__eq_.:
 
-.. das:function:: convert_to_expression(value: auto =const)
+.. das:function:: convert_to_expression(value: auto ==const)
 
 convert_to_expression returns auto
 
@@ -1443,7 +1443,7 @@ convert_to_expression returns auto
 
 .. _function-_at_ast_boost_c__c_convert_to_expression_C_eq_.:
 
-.. das:function:: convert_to_expression(value: auto const =const)
+.. das:function:: convert_to_expression(value: auto const ==const)
 
 convert_to_expression returns auto
 
