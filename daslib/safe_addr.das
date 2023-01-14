@@ -11,13 +11,13 @@ require daslib/ast_boost
 require daslib/is_local
 
 [tag_function(safe_addr_tag)]
-def public safe_addr(var x : auto(T)& = const) : T-& ? #
+def public safe_addr(var x : auto(T)& ==const) : T-& ? #
     //! returns temporary pointer to the given expression
     unsafe
         return reinterpret<T-&?#>(addr(x))
 
 [tag_function(safe_addr_tag)]
-def public safe_addr(x : auto(T)& = const) : T-& ? const #
+def public safe_addr(x : auto(T)& ==const) : T-& ? const #
     unsafe
         return reinterpret<T-&? const #>(addr(x))
 
@@ -31,13 +31,13 @@ class SafeAddrMacro : AstFunctionAnnotation
         return [[ExpressionPtr]]
 
 // [tag_function(temp_addr_tag)]
-def public temp_ptr(x : auto(T)? implicit = const) : T ? const #
+def public temp_ptr(x : auto(T)? implicit ==const) : T ? const #
     //! returns temporary pointer from a given pointer
     unsafe
         return reinterpret<T? const #>(x)
 
 // [tag_function(temp_addr_tag)]
-def public temp_ptr(var x : auto(T)? implicit = const) : T ?#
+def public temp_ptr(var x : auto(T)? implicit ==const) : T ?#
     unsafe
         return reinterpret<T?#>(x)
 
@@ -68,13 +68,13 @@ class SharedAddrMacro : AstFunctionAnnotation
 // this breaks safety. i.e. a:array<FOO>; temp_addr(a[0]); resize(a,100500)
 
 [tag_function(temp_addr_tag)]
-def public temp_addr(var x : auto(T)& = const) : T-& ? #
+def public temp_addr(var x : auto(T)& ==const) : T-& ? #
     //! returns temporary pointer to the given expression
     unsafe
         return reinterpret<T-&?#>(addr(x))
 
 [tag_function(temp_addr_tag)]
-def public temp_addr(x : auto(T)& = const) : T-& ? const #
+def public temp_addr(x : auto(T)& ==const) : T-& ? const #
     unsafe
         return reinterpret<T-&? const #>(addr(x))
 

@@ -39,13 +39,13 @@ def _move_with_lockcheck ( var a:auto(valA)&; var b:auto(valB)& )
     else
         a <- b
 
-def _return_with_lockcheck ( var a:auto(valT)& =const ) : valT&
+def _return_with_lockcheck ( var a:auto(valT)& ==const ) : valT&
     static_if typeinfo(need_lock_check type<valT>)
         _builtin_verify_locks(a)
     unsafe
         return a
 
-def _return_with_lockcheck ( a:auto(valT)& =const ) : valT&
+def _return_with_lockcheck ( a:auto(valT)& ==const ) : valT&
     static_if typeinfo(need_lock_check type<valT>)
         _builtin_verify_locks(a)
     unsafe
@@ -194,14 +194,14 @@ def push_clone ( var A : auto(CT) -const; b : auto(TT) | # )
             var cb : TT -# -const := b
             _::emplace(A, cb)
 
-def back ( var a : array<auto(TT)> -const =const ) : TT &
+def back ( var a : array<auto(TT)> -const ==const ) : TT &
     let l = length(a)
     if l==0
         panic("back empty array")
     unsafe
         return a[l-1]
 
-def back ( a : array<auto(TT)> const =const ) : TT const &
+def back ( a : array<auto(TT)> const ==const ) : TT const &
     let l = length(a)
     if l==0
         panic("back empty array")
@@ -367,20 +367,20 @@ def keys(a:table<auto(keyT);auto(valT)>|#) : iterator<keyT & const>
     __builtin_table_keys(it,a,typeinfo(sizeof type<keyT>))
     return <- it
 
-def values(a:table<auto(keyT);void> =const|#)
+def values(a:table<auto(keyT);void> ==const|#)
     concept_assert(false,"can't iterate over values of a table<...;void>")
 
-def values(var a:table<auto(keyT);void> =const|#)
+def values(var a:table<auto(keyT);void> ==const|#)
     concept_assert(false,"can't iterate over values of a table<...;void>")
 
 [unsafe_outside_of_for]
-def values(a:table<auto(keyT);auto(valT)> =const|#) : iterator<valT & const>
+def values(a:table<auto(keyT);auto(valT)> ==const|#) : iterator<valT & const>
     var it : iterator<valT & const>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
 
 [unsafe_outside_of_for]
-def values(var a:table<auto(keyT);auto(valT)> =const|#) : iterator<valT &>
+def values(var a:table<auto(keyT);auto(valT)> ==const|#) : iterator<valT &>
     var it : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
@@ -654,19 +654,19 @@ def sort ( var a : array<auto(TT)>|#; cmp : block<(x,y:TT):bool> )
             else
                 __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a), cmp )
 
-def lock ( var a : array<auto(TT)> = const; blk : block<(var x : array<TT>#)> )
+def lock ( var a : array<auto(TT)> ==const; blk : block<(var x : array<TT>#)> )
     __builtin_array_lock(a)
     unsafe
         invoke(blk, reinterpret<array<auto(TT)> -const #> a)
     __builtin_array_unlock(a)
 
-def lock ( a : array<auto(TT)> = const; blk : block<(x : array<TT>#)> )
+def lock ( a : array<auto(TT)> ==const; blk : block<(x : array<TT>#)> )
     __builtin_array_lock(a)
     unsafe
         invoke(blk, reinterpret<array<auto(TT)> const #> a)
     __builtin_array_unlock(a)
 
-def lock_data ( var a : array<auto(TT)> = const; blk : block<(var p:TT?#;s:int)> )
+def lock_data ( var a : array<auto(TT)> ==const; blk : block<(var p:TT?#;s:int)> )
     let len = length(a)
     if len != 0
         __builtin_array_lock(a)
@@ -678,7 +678,7 @@ def lock_data ( var a : array<auto(TT)> = const; blk : block<(var p:TT?#;s:int)>
         unsafe
             invoke(blk, reinterpret<TT?#> nullT, 0)
 
-def lock_data ( a : array<auto(TT)> = const; blk : block<(p:TT const?#;s:int)> )
+def lock_data ( a : array<auto(TT)> ==const; blk : block<(p:TT const?#;s:int)> )
     let len = length(a)
     if len != 0
         __builtin_array_lock(a)

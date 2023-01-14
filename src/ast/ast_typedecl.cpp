@@ -283,6 +283,8 @@ namespace das
         TT->removeConstant = false;
         TT->removeTemporary = false;
         TT->removeDim = false;
+        TT->implicit |= autoT->implicit;
+        TT->explicitConst |= autoT->explicitConst;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
             TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
