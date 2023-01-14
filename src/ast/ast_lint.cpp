@@ -445,15 +445,17 @@ namespace das {
                         fn->at, CompilationError::not_all_paths_return_value);
                 }
             }
-            for ( auto arg : fn->arguments ) {
-                if ( hasImplicit(arg->type) ) {
-                    auto origin = fn->getOrigin();
-                    auto fnMod = origin ? origin->module : fn->module;
-                    if ( fnMod == program->thisModule.get() ) {
-                        anyUnsafe = true;
-                        if ( checkUnsafe ) {
-                            program->error("implicit argument " + arg->name,  "implicit is unsafe and is prohibited by the CodeOfPolicies", "",
-                                fn->at, CompilationError::unsafe_function);
+            if ( !fn->safeImplicit ) {
+                for ( auto arg : fn->arguments ) {
+                    if ( hasImplicit(arg->type) ) {
+                        auto origin = fn->getOrigin();
+                        auto fnMod = origin ? origin->module : fn->module;
+                        if ( fnMod == program->thisModule.get() ) {
+                            anyUnsafe = true;
+                            if ( checkUnsafe ) {
+                                program->error("implicit argument " + arg->name,  "implicit is unsafe and is prohibited by the CodeOfPolicies", "",
+                                    fn->at, CompilationError::unsafe_function);
+                            }
                         }
                     }
                 }

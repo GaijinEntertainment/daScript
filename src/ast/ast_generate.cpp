@@ -332,6 +332,7 @@ namespace das {
         auto fn = make_smart<Function>();
         fn->name = "clone";
         fn->generated = true;
+        fn->safeImplicit = true;
         fn->privateFunction = true;
         fn->at = fn->atDecl = str->at;
         fn->result = make_smart<TypeDecl>();
@@ -1299,6 +1300,7 @@ namespace das {
         DAS_ASSERT(tupleType->isTuple() && "can only clone tuple");
         auto fn = make_smart<Function>();
         fn->generated = true;
+        fn->safeImplicit = true;
         fn->privateFunction = true;
         fn->name = "clone";
         fn->at = fn->atDecl = at;
@@ -1382,6 +1384,7 @@ namespace das {
         DAS_ASSERT(variantType->isVariant() && "can only clone variant");
         auto fn = make_smart<Function>();
         fn->generated = true;
+        fn->safeImplicit = true;
         fn->privateFunction = true;
         fn->name = "clone";
         fn->at = fn->atDecl = at;
@@ -1505,6 +1508,7 @@ namespace das {
         DAS_ASSERT(left->firstType && left->firstType->annotation && "can only clone smart handled types");
         auto fn = make_smart<Function>();
         fn->generated = true;
+        fn->safeImplicit = true;
         fn->privateFunction = true;
         fn->name = "clone";
         fn->at = fn->atDecl = at;
