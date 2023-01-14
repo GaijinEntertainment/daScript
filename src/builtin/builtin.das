@@ -240,6 +240,9 @@ def empty(a:array<auto>|#) : bool
 
 // table
 
+def empty(a:table<auto;auto>|#) : bool
+    return length(a)==0
+
 def find(Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(p:valT?):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
@@ -309,7 +312,7 @@ def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT|# ) : val
     unsafe
         return Tab[at]
 
-def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):bool
+def erase(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT|#):bool
     if typeinfo(need_lock_check type<valT>)
         _builtin_verify_locks(Tab)
     return __builtin_table_erase(Tab,at)
@@ -347,23 +350,23 @@ def clone(var a:array<auto(TT)>|#;b:array<TT>|#)
     for aV,bV in a,b
         aV := bV
 
-def clone(var a:table<auto(KT);void>;b:table<KT;void>|#)
+def clone(var a:table<auto(KT);void>|#;b:table<KT;void>|#)
     clear(a)
     for k in keys(b)
         __builtin_table_set_insert(a,k)
 
-def clone(var a:table<string;void>;b:table<string;void>|#)
+def clone(var a:table<string;void>|#;b:table<string;void>|#)
     clear(a)
     for k in keys(b)
         let kk := k
         __builtin_table_set_insert(a,kk)
 
-def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>|#)
+def clone(var a:table<auto(KT);auto(VT)>|#;b:table<KT;VT>|#)
     clear(a)
     for k,v in keys(b),values(b)
         a[k] := v
 
-def clone(var a:table<string;auto(VT)>;b:table<string;VT>|#)
+def clone(var a:table<string;auto(VT)>|#;b:table<string;VT>|#)
     clear(a)
     for k,v in keys(b),values(b)
         let kk := k
@@ -485,6 +488,13 @@ def each ( a : array<auto(TT)> ) : iterator<TT&>
     var it : iterator<TT&>
     _builtin_make_good_array_iterator(it, a, typeinfo(sizeof a[0]))
     return <- it
+
+[unsafe_outside_of_for]
+def each ( a : array<auto(TT)># ) : iterator<TT#&>
+    var it : iterator<TT#&>
+    _builtin_make_good_array_iterator(it, a, typeinfo(sizeof a[0]))
+    unsafe
+        return <- it
 
 def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT -&>
     concept_assert(typeinfo(is_ref type<argT>),"lamda-to-iterator argument has to be reference; expecting value& or reference type")

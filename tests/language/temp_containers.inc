@@ -9,6 +9,9 @@ def test_temp_containers ( t : T? )
         var a : array<Foo>#
         var et : Foo# := [[Foo a=2]]
         array_ops(t, a, [[Foo a=1]], et)
+    t |> run("temporary table operations") <| @ ( t : T? )
+        var a : table<int; Foo>#
+        table_ops ( t, a, [[Foo a=1]], [[Foo a=2]])
 
 def array_ops ( t : T?; var a:array<Foo>#; var e:Foo; var et:Foo# )
     reserve(a,10)
@@ -46,7 +49,6 @@ def array_ops ( t : T?; var a:array<Foo>#; var e:Foo; var et:Foo# )
     erase(a, 0, 1)
     t |> equal(0, length(a))
     a := b
-    /*
     for v in each(a)
         v.a = 2
     for v in each(a)
@@ -54,4 +56,38 @@ def array_ops ( t : T?; var a:array<Foo>#; var e:Foo; var et:Foo# )
     t |> equal(2, a[0].a)
     t |> equal(2, a[1].a)
     t |> equal(2, length(a) )
-    */
+
+
+def table_ops ( t : T?; var a:table<int;Foo>#; var e:Foo; var et:Foo# implicit )
+    for i in range(10)
+        a[i] = [[Foo a=i]]
+    t |> equal(10, length(a))
+    clear(a)
+    t |> equal(0, length(a))
+    t |> success(empty(a))
+    a[0] = e
+    a[1] = e
+    t |> equal(1, a[0].a)
+    t |> equal(1, a[1].a)
+    t |> equal(2, length(a) )
+    clear(a)
+    a[0] = e
+    a[1] = e
+    var b := a
+    a := b
+    t |> equal(1, b[0].a)
+    t |> equal(1, b[1].a)
+    t |> equal(2, length(b) )
+    erase(a, 0)
+    erase(a, 1)
+    t |> equal(0, length(a))
+    a := b
+    t |> equal(1, a[0].a)
+    t |> equal(1, a[1].a)
+    t |> equal(2, length(a) )
+    for k in keys(a)
+        t |> equal(1, a[k].a)
+    for k in keys(a)
+        t |> success ( k==0 || k==1 )
+    for v in values(a)
+        t |> equal(1, v.a)
