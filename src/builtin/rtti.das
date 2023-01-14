@@ -85,8 +85,11 @@ def arg_names(info:VarInfo)
 
 def public class_info ( cl ) : StructInfo const?
     static_if typeinfo(is_pointer cl)
-        static_if typeinfo(is_class cl)
-            return reinterpret<StructInfo const?>((reinterpret<TypeInfo const?>(cl.__rtti)).structType)
+        if cl == null
+            return null
+        static_if typeinfo(is_class *cl)
+            unsafe
+                return reinterpret<StructInfo const?>((reinterpret<TypeInfo const?>((*cl).__rtti)).structType)
         else
             concept_assert(false,"not a pointer to a class")
             return null
