@@ -243,14 +243,57 @@ def empty(a:array<auto>|#) : bool
 def empty(a:table<auto;auto>|#) : bool
     return length(a)==0
 
-def find(Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(p:valT?):void>)
+def find(Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#;blk:block<(p:valT?#):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
-    invoke(blk,val)
+    unsafe
+        invoke(blk,reinterpret<valT?#> val)
+    __builtin_table_unlock(Tab)
+
+def find(Tab:table<auto(keyT);auto(valT)>|#;at:string#;blk:block<(p:valT?#):void>)
+    __builtin_table_lock(Tab)
+    let at_nt := at
+    var val = __builtin_table_find(Tab,at_nt)
+    unsafe
+        invoke(blk,reinterpret<valT?#> val)
     __builtin_table_unlock(Tab)
 
 def find(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void>)
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
+
+// semi-unsafe find for use with ?? operator
+
+[unsafe_operation]
+def find(Tab:table<auto(keyT);auto(valT)|#>;at:string#):valT const?
+    let at_nt := at
+    unsafe
+        return reinterpret<valT const?>(__builtin_table_find(Tab,at_nt))
+
+[unsafe_operation]
+def find(Tab:table<auto(keyT);auto(valT)|#>;at:keyT|#):valT const?
+    unsafe
+        return reinterpret<valT const?>(__builtin_table_find(Tab,at))
+
+[unsafe_operation]
+def find(Tab:table<auto(keyT);void>;at:keyT|#):void const?
+    concept_assert(false,"find(table<keyT;void>,...) is not supported")
+
+[unsafe_operation]
+def find(Tab:table<auto(keyT);auto(valT)>#;at:string#):valT const?#
+    let at_nt := at
+    unsafe
+        return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
+
+[unsafe_operation]
+def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT|#):valT const?#
+    unsafe
+        return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
+
+[unsafe_operation]
+def find(Tab:table<auto(keyT);void>#;at:keyT|#):void const?#
+    concept_assert(false,"find(table<keyT;void>,...) is not supported")
+
+// find if exists
 
 def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
@@ -265,19 +308,7 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(p:valT?
 def find_if_exists(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void>)
     concept_assert(false,"find_if_exists(table<keyT;void>,...) is not supported")
 
-def find(Tab:table<auto(keyT);auto(valT)>;at:keyT|#):valT const?
-    unsafe
-        return reinterpret<valT const?>(__builtin_table_find(Tab,at))
-
-def find(Tab:table<auto(keyT);void>;at:keyT|#):void const?
-    concept_assert(false,"find(table<keyT;void>,...) is not supported")
-
-def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT|#):valT const?#
-    unsafe
-        return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
-
-def find(Tab:table<auto(keyT);void>#;at:keyT|#):void const?#
-    concept_assert(false,"find(table<keyT;void>,...) is not supported")
+// find for edit
 
 def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(var p:valT?):void>)
     __builtin_table_lock(Tab)

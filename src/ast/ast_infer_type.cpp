@@ -2063,6 +2063,16 @@ namespace das {
                     propagateAlwaysSafe(saf->value);
                 }
             }
+            // ptr2ref
+            else if ( expr->rtti_isPtr2Ref() ) {
+                auto p2r = static_pointer_cast<ExprPtr2Ref>(expr);
+                propagateAlwaysSafe(p2r->subexpr);
+            }
+            // call
+            else if  ( expr->rtti_isCall() ) {
+                reportAstChanged();
+                expr->alwaysSafe = true;
+            }
         }
         virtual ExpressionPtr visit ( ExprNullCoalescing * expr ) override {
             if ( !expr->subexpr->type      || expr->subexpr->type->isAliasOrExpr()      ) return Visitor::visit(expr);  // failed to infer
