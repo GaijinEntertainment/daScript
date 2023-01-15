@@ -310,14 +310,38 @@ def find_if_exists(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void
 
 // find for edit
 
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(var p:valT?):void>)
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:string#;blk:block<(var p:valT?#):void>)
+    __builtin_table_lock(Tab)
+    let at_nt := at
+    var val = __builtin_table_find(Tab,at_nt)
+    unsafe
+        invoke(blk,reinterpret<valT?#> val)
+    __builtin_table_unlock(Tab)
+
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT|#;blk:block<(var p:valT?#):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
-    invoke(blk,val)
+    unsafe
+        invoke(blk,reinterpret<valT?#> val)
     __builtin_table_unlock(Tab)
 
 def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
+
+[unsafe_operation]
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:string#):valT?
+    let at_nt := at
+    return __builtin_table_find(Tab,at_nt)
+
+[unsafe_operation]
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT|#):valT?
+    return __builtin_table_find(Tab,at)
+
+[unsafe_operation]
+def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#):void?
+    concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
+
+// find for edit if exists
 
 def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(var p:valT?):void>)
     var val = __builtin_table_find(Tab,at)
@@ -328,14 +352,6 @@ def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:b
 
 def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit_if_exists(table<keyT;void>,...) is not supported")
-
-[unsafe_operation]
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):valT?
-    return __builtin_table_find(Tab,at)
-
-[unsafe_operation]
-def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#):void?
-    concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 
 def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT|# ) : valT &
     static_if typeinfo(need_lock_check type<valT>)

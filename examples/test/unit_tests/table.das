@@ -11,11 +11,11 @@ def test_find
     var tab <- {{ "one"=>1; "two"=>2 }}
     find(tab,"one") <| $(num)
         assert(deref(num)==1)
-    find_for_edit(tab,"one") <| $(var num:int?)
+    find_for_edit(tab,"one") <| $(var num)
         assert(deref(num)==1)
         deref(num) = 3
     assert(find(tab,"one") ?? 100500 == 3)
-    find_for_edit(tab,"one") <| $(var num:int?)     // this one will optimize into find_for_edit_if_exists
+    find_for_edit(tab,"one") <| $(var num)     // this one will optimize into find_for_edit_if_exists
         if num!=null
             assert(deref(num)==3)
             deref(num) = 4
