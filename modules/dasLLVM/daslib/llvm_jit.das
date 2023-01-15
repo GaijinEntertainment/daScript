@@ -674,6 +674,15 @@ class LlvmJitVisitor : AstVisitor
             if FUNC_PTR==null
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
+            if expr.func.sideEffectFlags == bitfield(0)
+                LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("readonly"))
+                LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("nounwind"))     // TODO: better no-unwind?
+                LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("willreturn"))
+            if !expr.func.sideEffectFlags.modifyExternal
+                var nocapture_attr = LLVMGetEnumAttribute("nocapture")
+                for arg,ai in expr.func.arguments,urange(100500)
+                    if arg._type.isRef
+                        LLVMAddAttributeToFunctionArgument(ofunc, ai, nocapture_attr)
         return ofunc
 
     def register_interop_function ( expr:smart_ptr<ExprCallFunc> ) : LLVMOpaqueValue?
@@ -687,6 +696,14 @@ class LlvmJitVisitor : AstVisitor
             if FUNC_PTR==null
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
+            if expr.func.sideEffectFlags == bitfield(0)
+                LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("readonly"))
+                LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("nounwind"))     // TODO: better no-unwind?
+                LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("willreturn"))
+            if !expr.func.sideEffectFlags.modifyExternal
+                var nocapture_attr = LLVMGetEnumAttribute("nocapture")
+                for ai in urange(3)
+                    LLVMAddAttributeToFunctionArgument(ofunc, ai, nocapture_attr)
         return ofunc
 
     def build_call_params ( expr:smart_ptr<ExprCallFunc>; extern_func : Function? = null )

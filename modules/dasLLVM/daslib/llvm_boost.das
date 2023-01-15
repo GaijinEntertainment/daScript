@@ -72,6 +72,10 @@ def LLVMGetEnumAttribute(attr_name:string) : LLVMOpaqueAttributeRef?
 def LLVMAddAttributeToFunction(ffunc:LLVMOpaqueValue?; attr:LLVMOpaqueAttributeRef?)
     LLVMAddAttributeAtIndex(ffunc, ~0u, attr)
 
+def LLVMAddAttributesToFunction(ffunc:LLVMOpaqueValue?; attr:LLVMOpaqueAttributeRef? [])
+    for a in attr
+        LLVMAddAttributeAtIndex(ffunc, ~0u, a)
+
 def LLVMAddAttributeToFunctionResult(ffunc:LLVMOpaqueValue?; attr:LLVMOpaqueAttributeRef?)
     LLVMAddAttributeAtIndex(ffunc, 0u, attr)
 
