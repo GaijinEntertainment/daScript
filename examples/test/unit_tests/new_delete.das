@@ -45,7 +45,7 @@ def test_delete_struct
 
 def test_delete_struct_array
     let w0 = heap_bytes_allocated()
-    var a = new SomethingSmall[10]
+    var a = new <SomethingSmall[10]>
     let w1 = heap_bytes_allocated()
     unsafe
         delete a
@@ -62,7 +62,7 @@ def test_delete_handle
     assert(a==null)
 
 def test_delete_handle_array
-    var a  = new TestObjectFoo[10]
+    var a  = new <TestObjectFoo[10]>
     unsafe
         delete a
     for pA in a
@@ -71,7 +71,7 @@ def test_delete_handle_array
 [sideeffects]
 def da_inscope(x)
     var b = new SomethingSmall
-    var a = new SomethingSmall[10]
+    var a = new <SomethingSmall[10]>
     b.a = x
     for pA in a
         pA.a = x
