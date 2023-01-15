@@ -420,10 +420,10 @@ Grammar
   308            | expr "<<<=" expr
   309            | expr ">>>=" expr
 
-  310 expr_assign_pipe: expr '=' "@ <|" expr
-  311                 | expr '=' "@@ <|" expr
-  312                 | expr "<-" "@ <|" expr
-  313                 | expr "<-" "@@ <|" expr
+  310 expr_assign_pipe: expr '=' "@ <|" expr_block
+  311                 | expr '=' "@@ <|" expr_block
+  312                 | expr "<-" "@ <|" expr_block
+  313                 | expr "<-" "@@ <|" expr_block
 
   314 expr_named_call: name_in_namespace '(' '[' make_struct_fields ']' ')'
 
@@ -1393,7 +1393,7 @@ Nonterminals, with rules where they appear
         on right: 284 386 387
     expr_block <pExpression> (288)
         on left: 283 284
-        on right: 219 220 221 411 647
+        on right: 219 220 221 310 311 312 313 411 647
     expr_numeric_const <pExpression> (289)
         on left: 285 286 287 288 289 290
         on right: 333
@@ -2245,21 +2245,6 @@ State 51
 
     "::"      [reduce using rule 222 (name_in_namespace)]
     $default  reduce using rule 222 (name_in_namespace)
-
-    shift/reduce conflict on token "::":
-      222 name_in_namespace: "name" .
-      223 name_in_namespace: "name" . "::" "name"
-      First example: "typeinfo" "name" . "::" "name" expr ')'
-      Shift derivation
-        expr_type_info
-        `-> "typeinfo" name_in_namespace        expr ')'
-                       `-> "name" . "::" "name"
-      Second example: "name" . "::" "name" ')'
-      Reduce derivation
-        expr_type_info
-        `-> name_in_namespace "::" "name" expr       ')'
-            `-> "name" .                  `-> %empty
-
 
 
 State 52
@@ -3146,27 +3131,6 @@ State 148
     '('       [reduce using rule 561 (auto_type_declaration)]
     $default  reduce using rule 561 (auto_type_declaration)
 
-    shift/reduce conflict on token '(':
-      561 auto_type_declaration: "auto" .
-      562 auto_type_declaration: "auto" . '(' "name" ')'
-      Example: "[[" "auto" . '(' "name" ')' ']' ']'
-      Shift derivation
-        make_decl
-        `-> make_struct_decl
-            `-> "[[" type_declaration_no_options     optional_block ']' ']'
-                     `-> auto_type_declaration       `-> %empty
-                         `-> "auto" . '(' "name" ')'
-      Reduce derivation
-        make_decl
-        `-> make_dim_decl
-            `-> "[[" type_declaration_no_options make_dim                                  ']' ']'
-                     `-> auto_type_declaration   `-> make_tuple
-                         `-> "auto" .                `-> expr
-                                                         `-> '(' expr                  ')'
-                                                                 `-> name_in_namespace
-                                                                     `-> "name"
-
-
 
 State 149
 
@@ -3445,53 +3409,6 @@ State 182
 
     '['       [reduce using rule 628 (type_declaration)]
     $default  reduce using rule 628 (type_declaration)
-
-    shift/reduce conflict on token '[':
-      628 type_declaration: type_declaration_no_options .
-      575 type_declaration_no_options: type_declaration_no_options . '[' expr ']'
-      First example: program "name" $@33 '=' type_declaration_no_options . '[' expr ']' single_alias structure_declaration $end
-      Shift derivation
-        $accept
-        `-> program                                                                                                                       $end
-            `-> program                                                                                             structure_declaration
-                `-> program alias_declaration
-                            `-> single_alias                                                           single_alias
-                                `-> "name" $@33 '=' type_declaration
-                                                    `-> type_declaration_no_options
-                                                        `-> type_declaration_no_options . '[' expr ']'
-      Second example: program "typedef" "name" $@33 '=' type_declaration_no_options . '[' annotation_list ']' class_or_struct optional_public_or_private_structure $@34 structure_name $@35 '{' struct_variable_declaration_list '}' $end
-      Reduce derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                    $end
-            `-> program                                                                         structure_declaration
-                `-> program alias_declaration                                                   `-> optional_annotation_list    class_or_struct optional_public_or_private_structure $@34 structure_name $@35 '{' struct_variable_declaration_list '}'
-                            `-> "typedef" single_alias                                              `-> '[' annotation_list ']'
-                                          `-> "name" $@33 '=' type_declaration
-                                                              `-> type_declaration_no_options .
-
-    shift/reduce conflict on token '[':
-      628 type_declaration: type_declaration_no_options .
-      576 type_declaration_no_options: type_declaration_no_options . '[' ']'
-      First example: program "name" $@33 '=' type_declaration_no_options . '[' ']' single_alias structure_declaration $end
-      Shift derivation
-        $accept
-        `-> program                                                                                                                  $end
-            `-> program                                                                                        structure_declaration
-                `-> program alias_declaration
-                            `-> single_alias                                                      single_alias
-                                `-> "name" $@33 '=' type_declaration
-                                                    `-> type_declaration_no_options
-                                                        `-> type_declaration_no_options . '[' ']'
-      Second example: program "typedef" "name" $@33 '=' type_declaration_no_options . '[' annotation_list ']' class_or_struct optional_public_or_private_structure $@34 structure_name $@35 '{' struct_variable_declaration_list '}' $end
-      Reduce derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                    $end
-            `-> program                                                                         structure_declaration
-                `-> program alias_declaration                                                   `-> optional_annotation_list    class_or_struct optional_public_or_private_structure $@34 structure_name $@35 '{' struct_variable_declaration_list '}'
-                            `-> "typedef" single_alias                                              `-> '[' annotation_list ']'
-                                          `-> "name" $@33 '=' type_declaration
-                                                              `-> type_declaration_no_options .
-
 
 
 State 183
@@ -6763,124 +6680,6 @@ State 391
     '('       [reduce using rule 332 (expr)]
     $default  reduce using rule 332 (expr)
 
-    shift/reduce conflict on token '(':
-      332 expr: name_in_namespace .
-      314 expr_named_call: name_in_namespace . '(' '[' make_struct_fields ']' ')'
-      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' '[' make_struct_fields ']' ')' expression_any '}' $end
-      Shift derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                                  $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                                                           '}'
-                                                                                                                                           `-> expressions                                                                                        expression_any
-                                                                                                                                               `-> expressions expr_assign_pipe
-                                                                                                                                                               `-> expr '=' "@ <|" expr
-                                                                                                                                                                                   `-> expr_named_call
-                                                                                                                                                                                       `-> name_in_namespace . '(' '[' make_struct_fields ']' ')'
-      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' expr ')' '=' "@ <|" expr '}' $end
-      Reduce derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                         $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                                                  '}'
-                                                                                                                                           `-> expressions                                                     expression_any
-                                                                                                                                               `-> expressions expression_any                                  `-> expr_assign_pipe
-                                                                                                                                                               `-> expr_assign_pipe                                `-> expr             '=' "@ <|" expr
-                                                                                                                                                                   `-> expr '=' "@ <|" expr                            `-> '(' expr ')'
-                                                                                                                                                                                       `-> name_in_namespace .
-
-    shift/reduce conflict on token '(':
-      332 expr: name_in_namespace .
-      379 expr: name_in_namespace . '(' ')'
-      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' ')' expression_any '}' $end
-      Shift derivation
-        $accept
-        `-> program                                                                                                                                                                                                                   $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                            '}'
-                                                                                                                                           `-> expressions                                                         expression_any
-                                                                                                                                               `-> expressions expr_assign_pipe
-                                                                                                                                                               `-> expr '=' "@ <|" expr
-                                                                                                                                                                                   `-> name_in_namespace . '(' ')'
-      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' expr ')' '=' "@ <|" expr '}' $end
-      Reduce derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                         $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                                                  '}'
-                                                                                                                                           `-> expressions                                                     expression_any
-                                                                                                                                               `-> expressions expression_any                                  `-> expr_assign_pipe
-                                                                                                                                                               `-> expr_assign_pipe                                `-> expr             '=' "@ <|" expr
-                                                                                                                                                                   `-> expr '=' "@ <|" expr                            `-> '(' expr ')'
-                                                                                                                                                                                       `-> name_in_namespace .
-
-    shift/reduce conflict on token '(':
-      332 expr: name_in_namespace .
-      380 expr: name_in_namespace . '(' expr_list ')'
-      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' expr_list ')' expression_any '}' $end
-      Shift derivation
-        $accept
-        `-> program                                                                                                                                                                                                                             $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                                      '}'
-                                                                                                                                           `-> expressions                                                                   expression_any
-                                                                                                                                               `-> expressions expr_assign_pipe
-                                                                                                                                                               `-> expr '=' "@ <|" expr
-                                                                                                                                                                                   `-> name_in_namespace . '(' expr_list ')'
-      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' expr ')' '=' "@ <|" expr '}' $end
-      Reduce derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                         $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                                                  '}'
-                                                                                                                                           `-> expressions                                                     expression_any
-                                                                                                                                               `-> expressions expression_any                                  `-> expr_assign_pipe
-                                                                                                                                                               `-> expr_assign_pipe                                `-> expr             '=' "@ <|" expr
-                                                                                                                                                                   `-> expr '=' "@ <|" expr                            `-> '(' expr ')'
-                                                                                                                                                                                       `-> name_in_namespace .
-
-    shift/reduce conflict on token "name":
-      332 expr: name_in_namespace .
-      414 expr: name_in_namespace . "name"
-      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . "name" expression_any '}' $end
-      Shift derivation
-        $accept
-        `-> program                                                                                                                                                                                                                  $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                           '}'
-                                                                                                                                           `-> expressions                                                        expression_any
-                                                                                                                                               `-> expressions expr_assign_pipe
-                                                                                                                                                               `-> expr '=' "@ <|" expr
-                                                                                                                                                                                   `-> name_in_namespace . "name"
-      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . "name" '=' "@ <|" expr '}' $end
-      Reduce derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                              $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                                                       '}'
-                                                                                                                                           `-> expressions                                                     expression_any
-                                                                                                                                               `-> expressions expression_any                                  `-> expr_assign_pipe
-                                                                                                                                                               `-> expr_assign_pipe                                `-> expr                  '=' "@ <|" expr
-                                                                                                                                                                   `-> expr '=' "@ <|" expr                            `-> name_in_namespace
-                                                                                                                                                                                       `-> name_in_namespace .             `-> "name"
-
-
 
 State 392
 
@@ -8085,69 +7884,6 @@ State 468
 
     '('       [reduce using rule 231 (expr_new)]
     $default  reduce using rule 231 (expr_new)
-
-    shift/reduce conflict on token '(':
-      231 expr_new: "new" new_type_declaration .
-      232 expr_new: "new" new_type_declaration . '(' ')'
-      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" "new" new_type_declaration . '(' ')' expression_any '}' $end
-      Shift derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                                         '}'
-                                                                                                                                           `-> expressions                                                                      expression_any
-                                                                                                                                               `-> expressions expr_assign_pipe
-                                                                                                                                                               `-> expr '=' "@ <|" expr
-                                                                                                                                                                                   `-> expr_new
-                                                                                                                                                                                       `-> "new" new_type_declaration . '(' ')'
-      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" "new" new_type_declaration . '(' expr ')' '=' "@ <|" expr '}' $end
-      Reduce derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                                      $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                                                               '}'
-                                                                                                                                           `-> expressions                                                                  expression_any
-                                                                                                                                               `-> expressions expression_any                                               `-> expr_assign_pipe
-                                                                                                                                                               `-> expr_assign_pipe                                             `-> expr             '=' "@ <|" expr
-                                                                                                                                                                   `-> expr '=' "@ <|" expr                                         `-> '(' expr ')'
-                                                                                                                                                                                       `-> expr_new
-                                                                                                                                                                                           `-> "new" new_type_declaration .
-
-    shift/reduce conflict on token '(':
-      231 expr_new: "new" new_type_declaration .
-      233 expr_new: "new" new_type_declaration . '(' expr_list ')'
-      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" "new" new_type_declaration . '(' expr_list ')' expression_any '}' $end
-      Shift derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                          $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                                                   '}'
-                                                                                                                                           `-> expressions                                                                                expression_any
-                                                                                                                                               `-> expressions expr_assign_pipe
-                                                                                                                                                               `-> expr '=' "@ <|" expr
-                                                                                                                                                                                   `-> expr_new
-                                                                                                                                                                                       `-> "new" new_type_declaration . '(' expr_list ')'
-      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" "new" new_type_declaration . '(' expr ')' '=' "@ <|" expr '}' $end
-      Reduce derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                                      $end
-            `-> program global_function_declaration
-                        `-> optional_annotation_list "def" function_declaration
-                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
-                                                                                                                                   `-> '{' expressions                                                                                                               '}'
-                                                                                                                                           `-> expressions                                                                  expression_any
-                                                                                                                                               `-> expressions expression_any                                               `-> expr_assign_pipe
-                                                                                                                                                               `-> expr_assign_pipe                                             `-> expr             '=' "@ <|" expr
-                                                                                                                                                                   `-> expr '=' "@ <|" expr                                         `-> '(' expr ')'
-                                                                                                                                                                                       `-> expr_new
-                                                                                                                                                                                           `-> "new" new_type_declaration .
-
 
 
 State 469
@@ -14569,10 +14305,10 @@ State 603
   307            | expr . ">>=" expr
   308            | expr . "<<<=" expr
   309            | expr . ">>>=" expr
-  310 expr_assign_pipe: expr . '=' "@ <|" expr
-  311                 | expr . '=' "@@ <|" expr
-  312                 | expr . "<-" "@ <|" expr
-  313                 | expr . "<-" "@@ <|" expr
+  310 expr_assign_pipe: expr . '=' "@ <|" expr_block
+  311                 | expr . '=' "@@ <|" expr_block
+  312                 | expr . "<-" "@ <|" expr_block
+  313                 | expr . "<-" "@@ <|" expr_block
   315 expr_method_call: expr . "->" "name" '(' ')'
   316                 | expr . "->" "name" '(' expr_list ')'
   326 expr_field: expr . '.' "name"
@@ -17616,59 +17352,6 @@ State 674
     STRING_CHARACTER      [reduce using rule 26 (string_builder_body)]
     STRING_CHARACTER_ESC  [reduce using rule 26 (string_builder_body)]
     $default              reduce using rule 26 (string_builder_body)
-
-    shift/reduce conflict on token STRING_CHARACTER:
-       26 string_builder_body: string_builder_body character_sequence .
-       22 character_sequence: character_sequence . STRING_CHARACTER
-      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "start of the string" string_builder_body character_sequence . STRING_CHARACTER "end of the string" ';' '}' $end
-      Shift derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                            $end
-            `-> program enum_declaration
-                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                        '}'
-                                                                                                          `-> enum_list "name" '=' expr                                                                                                                ';'
-                                                                                                                                   `-> string_builder
-                                                                                                                                       `-> "start of the string" string_builder_body                                               "end of the string"
-                                                                                                                                                                 `-> string_builder_body character_sequence
-                                                                                                                                                                                         `-> character_sequence . STRING_CHARACTER
-      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "start of the string" string_builder_body character_sequence . STRING_CHARACTER "end of the string" ';' '}' $end
-      Reduce derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                                $end
-            `-> program enum_declaration
-                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                            '}'
-                                                                                                          `-> enum_list "name" '=' expr                                                                                                                    ';'
-                                                                                                                                   `-> string_builder
-                                                                                                                                       `-> "start of the string" string_builder_body                                                   "end of the string"
-                                                                                                                                                                 `-> string_builder_body                          character_sequence
-                                                                                                                                                                     `-> string_builder_body character_sequence . `-> STRING_CHARACTER
-
-    shift/reduce conflict on token STRING_CHARACTER_ESC:
-       26 string_builder_body: string_builder_body character_sequence .
-       23 character_sequence: character_sequence . STRING_CHARACTER_ESC
-      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "start of the string" string_builder_body character_sequence . STRING_CHARACTER_ESC "end of the string" ';' '}' $end
-      Shift derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                                $end
-            `-> program enum_declaration
-                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                            '}'
-                                                                                                          `-> enum_list "name" '=' expr                                                                                                                    ';'
-                                                                                                                                   `-> string_builder
-                                                                                                                                       `-> "start of the string" string_builder_body                                                   "end of the string"
-                                                                                                                                                                 `-> string_builder_body character_sequence
-                                                                                                                                                                                         `-> character_sequence . STRING_CHARACTER_ESC
-      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "start of the string" string_builder_body character_sequence . STRING_CHARACTER_ESC "end of the string" ';' '}' $end
-      Reduce derivation
-        $accept
-        `-> program                                                                                                                                                                                                                                                    $end
-            `-> program enum_declaration
-                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                                '}'
-                                                                                                          `-> enum_list "name" '=' expr                                                                                                                        ';'
-                                                                                                                                   `-> string_builder
-                                                                                                                                       `-> "start of the string" string_builder_body                                                       "end of the string"
-                                                                                                                                                                 `-> string_builder_body                          character_sequence
-                                                                                                                                                                     `-> string_builder_body character_sequence . `-> STRING_CHARACTER_ESC
-
 
 
 State 675
@@ -23255,8 +22938,8 @@ State 792
 State 793
 
   293 expr_assign: expr "<-" . expr
-  312 expr_assign_pipe: expr "<-" . "@ <|" expr
-  313                 | expr "<-" . "@@ <|" expr
+  312 expr_assign_pipe: expr "<-" . "@ <|" expr_block
+  313                 | expr "<-" . "@@ <|" expr_block
 
     "true"                            shift, and go to state 347
     "false"                           shift, and go to state 348
@@ -23945,8 +23628,8 @@ State 799
 State 800
 
   292 expr_assign: expr '=' . expr
-  310 expr_assign_pipe: expr '=' . "@ <|" expr
-  311                 | expr '=' . "@@ <|" expr
+  310 expr_assign_pipe: expr '=' . "@ <|" expr_block
+  311                 | expr '=' . "@@ <|" expr_block
 
     "true"                            shift, and go to state 347
     "false"                           shift, and go to state 348
@@ -29344,198 +29027,28 @@ State 943
 
 State 944
 
-  312 expr_assign_pipe: expr "<-" "@ <|" . expr
+  312 expr_assign_pipe: expr "<-" "@ <|" . expr_block
 
-    "true"                            shift, and go to state 347
-    "false"                           shift, and go to state 348
-    "new"                             shift, and go to state 349
-    "typeinfo"                        shift, and go to state 350
-    "type"                            shift, and go to state 351
-    "null"                            shift, and go to state 352
-    "deref"                           shift, and go to state 353
-    "cast"                            shift, and go to state 354
-    "upcast"                          shift, and go to state 355
-    "addr"                            shift, and go to state 356
-    "reinterpret"                     shift, and go to state 357
-    "unsafe"                          shift, and go to state 358
-    "bool"                            shift, and go to state 145
-    "void"                            shift, and go to state 146
-    "string"                          shift, and go to state 147
-    "int"                             shift, and go to state 149
-    "int2"                            shift, and go to state 150
-    "int3"                            shift, and go to state 151
-    "int4"                            shift, and go to state 152
-    "uint"                            shift, and go to state 153
-    "bitfield"                        shift, and go to state 359
-    "uint2"                           shift, and go to state 155
-    "uint3"                           shift, and go to state 156
-    "uint4"                           shift, and go to state 157
-    "float"                           shift, and go to state 158
-    "float2"                          shift, and go to state 159
-    "float3"                          shift, and go to state 160
-    "float4"                          shift, and go to state 161
-    "range"                           shift, and go to state 162
-    "urange"                          shift, and go to state 163
-    "int64"                           shift, and go to state 165
-    "uint64"                          shift, and go to state 166
-    "double"                          shift, and go to state 167
-    "int8"                            shift, and go to state 170
-    "uint8"                           shift, and go to state 171
-    "int16"                           shift, and go to state 172
-    "uint16"                          shift, and go to state 173
-    "generator"                       shift, and go to state 360
-    "++"                              shift, and go to state 361
-    "--"                              shift, and go to state 362
-    "::"                              shift, and go to state 50
-    "$$"                              shift, and go to state 363
-    "$i"                              shift, and go to state 364
-    "$v"                              shift, and go to state 365
-    "$b"                              shift, and go to state 366
-    "$a"                              shift, and go to state 367
-    "$c"                              shift, and go to state 368
-    "[["                              shift, and go to state 369
-    "[{"                              shift, and go to state 370
-    "{{"                              shift, and go to state 371
-    "integer constant"                shift, and go to state 372
-    "long integer constant"           shift, and go to state 373
-    "unsigned integer constant"       shift, and go to state 374
-    "unsigned long integer constant"  shift, and go to state 375
-    "floating point constant"         shift, and go to state 376
-    "double constant"                 shift, and go to state 377
-    "name"                            shift, and go to state 51
-    "start of the string"             shift, and go to state 378
-    '-'                               shift, and go to state 379
-    '+'                               shift, and go to state 380
-    '*'                               shift, and go to state 381
-    '%'                               shift, and go to state 382
-    '~'                               shift, and go to state 383
-    '!'                               shift, and go to state 384
-    '('                               shift, and go to state 385
-    '$'                               shift, and go to state 386
-    '@'                               shift, and go to state 387
-    '{'                               shift, and go to state 313
+    '$'  shift, and go to state 386
+    '@'  shift, and go to state 767
+    '{'  shift, and go to state 313
 
-    string_builder          go to state 388
-    expr_reader             go to state 389
-    expression_block        go to state 390
-    name_in_namespace       go to state 391
-    expr_new                go to state 392
-    expr_cast               go to state 393
-    expr_type_decl          go to state 394
-    expr_type_info          go to state 395
-    block_or_lambda         go to state 396
-    expr_block              go to state 397
-    expr_numeric_const      go to state 398
-    expr_named_call         go to state 399
-    expr_method_call        go to state 400
-    func_addr_expr          go to state 401
-    expr_field              go to state 402
-    expr                    go to state 1039
-    expr_mtag               go to state 404
-    basic_type_declaration  go to state 405
-    make_decl               go to state 406
-    make_struct_decl        go to state 407
-    make_dim_decl           go to state 408
-    make_table_decl         go to state 409
-    array_comprehension     go to state 410
+    expression_block  go to state 390
+    block_or_lambda   go to state 396
+    expr_block        go to state 1039
 
 
 State 945
 
-  313 expr_assign_pipe: expr "<-" "@@ <|" . expr
+  313 expr_assign_pipe: expr "<-" "@@ <|" . expr_block
 
-    "true"                            shift, and go to state 347
-    "false"                           shift, and go to state 348
-    "new"                             shift, and go to state 349
-    "typeinfo"                        shift, and go to state 350
-    "type"                            shift, and go to state 351
-    "null"                            shift, and go to state 352
-    "deref"                           shift, and go to state 353
-    "cast"                            shift, and go to state 354
-    "upcast"                          shift, and go to state 355
-    "addr"                            shift, and go to state 356
-    "reinterpret"                     shift, and go to state 357
-    "unsafe"                          shift, and go to state 358
-    "bool"                            shift, and go to state 145
-    "void"                            shift, and go to state 146
-    "string"                          shift, and go to state 147
-    "int"                             shift, and go to state 149
-    "int2"                            shift, and go to state 150
-    "int3"                            shift, and go to state 151
-    "int4"                            shift, and go to state 152
-    "uint"                            shift, and go to state 153
-    "bitfield"                        shift, and go to state 359
-    "uint2"                           shift, and go to state 155
-    "uint3"                           shift, and go to state 156
-    "uint4"                           shift, and go to state 157
-    "float"                           shift, and go to state 158
-    "float2"                          shift, and go to state 159
-    "float3"                          shift, and go to state 160
-    "float4"                          shift, and go to state 161
-    "range"                           shift, and go to state 162
-    "urange"                          shift, and go to state 163
-    "int64"                           shift, and go to state 165
-    "uint64"                          shift, and go to state 166
-    "double"                          shift, and go to state 167
-    "int8"                            shift, and go to state 170
-    "uint8"                           shift, and go to state 171
-    "int16"                           shift, and go to state 172
-    "uint16"                          shift, and go to state 173
-    "generator"                       shift, and go to state 360
-    "++"                              shift, and go to state 361
-    "--"                              shift, and go to state 362
-    "::"                              shift, and go to state 50
-    "$$"                              shift, and go to state 363
-    "$i"                              shift, and go to state 364
-    "$v"                              shift, and go to state 365
-    "$b"                              shift, and go to state 366
-    "$a"                              shift, and go to state 367
-    "$c"                              shift, and go to state 368
-    "[["                              shift, and go to state 369
-    "[{"                              shift, and go to state 370
-    "{{"                              shift, and go to state 371
-    "integer constant"                shift, and go to state 372
-    "long integer constant"           shift, and go to state 373
-    "unsigned integer constant"       shift, and go to state 374
-    "unsigned long integer constant"  shift, and go to state 375
-    "floating point constant"         shift, and go to state 376
-    "double constant"                 shift, and go to state 377
-    "name"                            shift, and go to state 51
-    "start of the string"             shift, and go to state 378
-    '-'                               shift, and go to state 379
-    '+'                               shift, and go to state 380
-    '*'                               shift, and go to state 381
-    '%'                               shift, and go to state 382
-    '~'                               shift, and go to state 383
-    '!'                               shift, and go to state 384
-    '('                               shift, and go to state 385
-    '$'                               shift, and go to state 386
-    '@'                               shift, and go to state 387
-    '{'                               shift, and go to state 313
+    '$'  shift, and go to state 386
+    '@'  shift, and go to state 767
+    '{'  shift, and go to state 313
 
-    string_builder          go to state 388
-    expr_reader             go to state 389
-    expression_block        go to state 390
-    name_in_namespace       go to state 391
-    expr_new                go to state 392
-    expr_cast               go to state 393
-    expr_type_decl          go to state 394
-    expr_type_info          go to state 395
-    block_or_lambda         go to state 396
-    expr_block              go to state 397
-    expr_numeric_const      go to state 398
-    expr_named_call         go to state 399
-    expr_method_call        go to state 400
-    func_addr_expr          go to state 401
-    expr_field              go to state 402
-    expr                    go to state 1040
-    expr_mtag               go to state 404
-    basic_type_declaration  go to state 405
-    make_decl               go to state 406
-    make_struct_decl        go to state 407
-    make_dim_decl           go to state 408
-    make_table_decl         go to state 409
-    array_comprehension     go to state 410
+    expression_block  go to state 390
+    block_or_lambda   go to state 396
+    expr_block        go to state 1040
 
 
 State 946
@@ -30226,198 +29739,28 @@ State 952
 
 State 953
 
-  310 expr_assign_pipe: expr '=' "@ <|" . expr
+  310 expr_assign_pipe: expr '=' "@ <|" . expr_block
 
-    "true"                            shift, and go to state 347
-    "false"                           shift, and go to state 348
-    "new"                             shift, and go to state 349
-    "typeinfo"                        shift, and go to state 350
-    "type"                            shift, and go to state 351
-    "null"                            shift, and go to state 352
-    "deref"                           shift, and go to state 353
-    "cast"                            shift, and go to state 354
-    "upcast"                          shift, and go to state 355
-    "addr"                            shift, and go to state 356
-    "reinterpret"                     shift, and go to state 357
-    "unsafe"                          shift, and go to state 358
-    "bool"                            shift, and go to state 145
-    "void"                            shift, and go to state 146
-    "string"                          shift, and go to state 147
-    "int"                             shift, and go to state 149
-    "int2"                            shift, and go to state 150
-    "int3"                            shift, and go to state 151
-    "int4"                            shift, and go to state 152
-    "uint"                            shift, and go to state 153
-    "bitfield"                        shift, and go to state 359
-    "uint2"                           shift, and go to state 155
-    "uint3"                           shift, and go to state 156
-    "uint4"                           shift, and go to state 157
-    "float"                           shift, and go to state 158
-    "float2"                          shift, and go to state 159
-    "float3"                          shift, and go to state 160
-    "float4"                          shift, and go to state 161
-    "range"                           shift, and go to state 162
-    "urange"                          shift, and go to state 163
-    "int64"                           shift, and go to state 165
-    "uint64"                          shift, and go to state 166
-    "double"                          shift, and go to state 167
-    "int8"                            shift, and go to state 170
-    "uint8"                           shift, and go to state 171
-    "int16"                           shift, and go to state 172
-    "uint16"                          shift, and go to state 173
-    "generator"                       shift, and go to state 360
-    "++"                              shift, and go to state 361
-    "--"                              shift, and go to state 362
-    "::"                              shift, and go to state 50
-    "$$"                              shift, and go to state 363
-    "$i"                              shift, and go to state 364
-    "$v"                              shift, and go to state 365
-    "$b"                              shift, and go to state 366
-    "$a"                              shift, and go to state 367
-    "$c"                              shift, and go to state 368
-    "[["                              shift, and go to state 369
-    "[{"                              shift, and go to state 370
-    "{{"                              shift, and go to state 371
-    "integer constant"                shift, and go to state 372
-    "long integer constant"           shift, and go to state 373
-    "unsigned integer constant"       shift, and go to state 374
-    "unsigned long integer constant"  shift, and go to state 375
-    "floating point constant"         shift, and go to state 376
-    "double constant"                 shift, and go to state 377
-    "name"                            shift, and go to state 51
-    "start of the string"             shift, and go to state 378
-    '-'                               shift, and go to state 379
-    '+'                               shift, and go to state 380
-    '*'                               shift, and go to state 381
-    '%'                               shift, and go to state 382
-    '~'                               shift, and go to state 383
-    '!'                               shift, and go to state 384
-    '('                               shift, and go to state 385
-    '$'                               shift, and go to state 386
-    '@'                               shift, and go to state 387
-    '{'                               shift, and go to state 313
+    '$'  shift, and go to state 386
+    '@'  shift, and go to state 767
+    '{'  shift, and go to state 313
 
-    string_builder          go to state 388
-    expr_reader             go to state 389
-    expression_block        go to state 390
-    name_in_namespace       go to state 391
-    expr_new                go to state 392
-    expr_cast               go to state 393
-    expr_type_decl          go to state 394
-    expr_type_info          go to state 395
-    block_or_lambda         go to state 396
-    expr_block              go to state 397
-    expr_numeric_const      go to state 398
-    expr_named_call         go to state 399
-    expr_method_call        go to state 400
-    func_addr_expr          go to state 401
-    expr_field              go to state 402
-    expr                    go to state 1041
-    expr_mtag               go to state 404
-    basic_type_declaration  go to state 405
-    make_decl               go to state 406
-    make_struct_decl        go to state 407
-    make_dim_decl           go to state 408
-    make_table_decl         go to state 409
-    array_comprehension     go to state 410
+    expression_block  go to state 390
+    block_or_lambda   go to state 396
+    expr_block        go to state 1041
 
 
 State 954
 
-  311 expr_assign_pipe: expr '=' "@@ <|" . expr
+  311 expr_assign_pipe: expr '=' "@@ <|" . expr_block
 
-    "true"                            shift, and go to state 347
-    "false"                           shift, and go to state 348
-    "new"                             shift, and go to state 349
-    "typeinfo"                        shift, and go to state 350
-    "type"                            shift, and go to state 351
-    "null"                            shift, and go to state 352
-    "deref"                           shift, and go to state 353
-    "cast"                            shift, and go to state 354
-    "upcast"                          shift, and go to state 355
-    "addr"                            shift, and go to state 356
-    "reinterpret"                     shift, and go to state 357
-    "unsafe"                          shift, and go to state 358
-    "bool"                            shift, and go to state 145
-    "void"                            shift, and go to state 146
-    "string"                          shift, and go to state 147
-    "int"                             shift, and go to state 149
-    "int2"                            shift, and go to state 150
-    "int3"                            shift, and go to state 151
-    "int4"                            shift, and go to state 152
-    "uint"                            shift, and go to state 153
-    "bitfield"                        shift, and go to state 359
-    "uint2"                           shift, and go to state 155
-    "uint3"                           shift, and go to state 156
-    "uint4"                           shift, and go to state 157
-    "float"                           shift, and go to state 158
-    "float2"                          shift, and go to state 159
-    "float3"                          shift, and go to state 160
-    "float4"                          shift, and go to state 161
-    "range"                           shift, and go to state 162
-    "urange"                          shift, and go to state 163
-    "int64"                           shift, and go to state 165
-    "uint64"                          shift, and go to state 166
-    "double"                          shift, and go to state 167
-    "int8"                            shift, and go to state 170
-    "uint8"                           shift, and go to state 171
-    "int16"                           shift, and go to state 172
-    "uint16"                          shift, and go to state 173
-    "generator"                       shift, and go to state 360
-    "++"                              shift, and go to state 361
-    "--"                              shift, and go to state 362
-    "::"                              shift, and go to state 50
-    "$$"                              shift, and go to state 363
-    "$i"                              shift, and go to state 364
-    "$v"                              shift, and go to state 365
-    "$b"                              shift, and go to state 366
-    "$a"                              shift, and go to state 367
-    "$c"                              shift, and go to state 368
-    "[["                              shift, and go to state 369
-    "[{"                              shift, and go to state 370
-    "{{"                              shift, and go to state 371
-    "integer constant"                shift, and go to state 372
-    "long integer constant"           shift, and go to state 373
-    "unsigned integer constant"       shift, and go to state 374
-    "unsigned long integer constant"  shift, and go to state 375
-    "floating point constant"         shift, and go to state 376
-    "double constant"                 shift, and go to state 377
-    "name"                            shift, and go to state 51
-    "start of the string"             shift, and go to state 378
-    '-'                               shift, and go to state 379
-    '+'                               shift, and go to state 380
-    '*'                               shift, and go to state 381
-    '%'                               shift, and go to state 382
-    '~'                               shift, and go to state 383
-    '!'                               shift, and go to state 384
-    '('                               shift, and go to state 385
-    '$'                               shift, and go to state 386
-    '@'                               shift, and go to state 387
-    '{'                               shift, and go to state 313
+    '$'  shift, and go to state 386
+    '@'  shift, and go to state 767
+    '{'  shift, and go to state 313
 
-    string_builder          go to state 388
-    expr_reader             go to state 389
-    expression_block        go to state 390
-    name_in_namespace       go to state 391
-    expr_new                go to state 392
-    expr_cast               go to state 393
-    expr_type_decl          go to state 394
-    expr_type_info          go to state 395
-    block_or_lambda         go to state 396
-    expr_block              go to state 397
-    expr_numeric_const      go to state 398
-    expr_named_call         go to state 399
-    expr_method_call        go to state 400
-    func_addr_expr          go to state 401
-    expr_field              go to state 402
-    expr                    go to state 1042
-    expr_mtag               go to state 404
-    basic_type_declaration  go to state 405
-    make_decl               go to state 406
-    make_struct_decl        go to state 407
-    make_dim_decl           go to state 408
-    make_table_decl         go to state 409
-    array_comprehension     go to state 410
+    expression_block  go to state 390
+    block_or_lambda   go to state 396
+    expr_block        go to state 1042
 
 
 State 955
@@ -33377,368 +32720,28 @@ State 1038
 
 State 1039
 
-  312 expr_assign_pipe: expr "<-" "@ <|" expr .
-  315 expr_method_call: expr . "->" "name" '(' ')'
-  316                 | expr . "->" "name" '(' expr_list ')'
-  326 expr_field: expr . '.' "name"
-  327           | expr . '.' '.' "name"
-  330           | expr . '.' $@20 error $@21
-  345 expr: expr . "<<" expr
-  346     | expr . ">>" expr
-  347     | expr . "<<<" expr
-  348     | expr . ">>>" expr
-  349     | expr . '+' expr
-  350     | expr . '-' expr
-  351     | expr . '*' expr
-  352     | expr . '/' expr
-  353     | expr . '%' expr
-  354     | expr . '<' expr
-  355     | expr . '>' expr
-  356     | expr . "==" expr
-  357     | expr . "!=" expr
-  358     | expr . "<=" expr
-  359     | expr . ">=" expr
-  360     | expr . '&' expr
-  361     | expr . '|' expr
-  362     | expr . '^' expr
-  363     | expr . "&&" expr
-  364     | expr . "||" expr
-  365     | expr . "^^" expr
-  366     | expr . ".." expr
-  369     | expr . "++"
-  370     | expr . "--"
-  372     | expr . '[' expr ']'
-  373     | expr . '.' '[' expr ']'
-  374     | expr . "?[" expr ']'
-  375     | expr . '.' "?[" expr ']'
-  376     | expr . "?." "name"
-  377     | expr . '.' "?." "name"
-  388     | expr . "??" expr
-  389     | expr . '?' expr ':' expr
-  392     | expr . "is" "type" '<' $@22 type_declaration_no_options '>' $@23
-  393     | expr . "is" basic_type_declaration
-  394     | expr . "is" "name"
-  395     | expr . "as" "name"
-  398     | expr . "as" "type" '<' $@24 type_declaration '>' $@25
-  399     | expr . "as" basic_type_declaration
-  400     | expr . '?' "as" "name"
-  403     | expr . '?' "as" "type" '<' $@26 type_declaration '>' $@27
-  404     | expr . '?' "as" basic_type_declaration
-  412     | expr . "<|" expr
-  413     | expr . "|>" expr
-  423 expr_mtag: expr . '.' "$f" '(' expr ')'
-  424          | expr . "?." "$f" '(' expr ')'
-  425          | expr . '.' '.' "$f" '(' expr ')'
-  426          | expr . '.' "?." "$f" '(' expr ')'
-  427          | expr . "as" "$f" '(' expr ')'
-  428          | expr . '?' "as" "$f" '(' expr ')'
-  429          | expr . "is" "$f" '(' expr ')'
-
-    "is"   shift, and go to state 507
-    "as"   shift, and go to state 508
-    "<<"   shift, and go to state 509
-    ">>"   shift, and go to state 510
-    "<="   shift, and go to state 513
-    ">="   shift, and go to state 514
-    "=="   shift, and go to state 515
-    "!="   shift, and go to state 516
-    "->"   shift, and go to state 517
-    "??"   shift, and go to state 518
-    "?."   shift, and go to state 519
-    "?["   shift, and go to state 520
-    "<|"   shift, and go to state 521
-    "|>"   shift, and go to state 522
-    "<<<"  shift, and go to state 523
-    ">>>"  shift, and go to state 524
-    "&&"   shift, and go to state 525
-    "||"   shift, and go to state 526
-    "^^"   shift, and go to state 527
-    ".."   shift, and go to state 528
-    '?'    shift, and go to state 529
-    '|'    shift, and go to state 530
-    '^'    shift, and go to state 531
-    '&'    shift, and go to state 532
-    '<'    shift, and go to state 533
-    '>'    shift, and go to state 534
-    '/'    shift, and go to state 538
-    '.'    shift, and go to state 540
-    '['    shift, and go to state 541
+  312 expr_assign_pipe: expr "<-" "@ <|" expr_block .
 
     $default  reduce using rule 312 (expr_assign_pipe)
 
 
 State 1040
 
-  313 expr_assign_pipe: expr "<-" "@@ <|" expr .
-  315 expr_method_call: expr . "->" "name" '(' ')'
-  316                 | expr . "->" "name" '(' expr_list ')'
-  326 expr_field: expr . '.' "name"
-  327           | expr . '.' '.' "name"
-  330           | expr . '.' $@20 error $@21
-  345 expr: expr . "<<" expr
-  346     | expr . ">>" expr
-  347     | expr . "<<<" expr
-  348     | expr . ">>>" expr
-  349     | expr . '+' expr
-  350     | expr . '-' expr
-  351     | expr . '*' expr
-  352     | expr . '/' expr
-  353     | expr . '%' expr
-  354     | expr . '<' expr
-  355     | expr . '>' expr
-  356     | expr . "==" expr
-  357     | expr . "!=" expr
-  358     | expr . "<=" expr
-  359     | expr . ">=" expr
-  360     | expr . '&' expr
-  361     | expr . '|' expr
-  362     | expr . '^' expr
-  363     | expr . "&&" expr
-  364     | expr . "||" expr
-  365     | expr . "^^" expr
-  366     | expr . ".." expr
-  369     | expr . "++"
-  370     | expr . "--"
-  372     | expr . '[' expr ']'
-  373     | expr . '.' '[' expr ']'
-  374     | expr . "?[" expr ']'
-  375     | expr . '.' "?[" expr ']'
-  376     | expr . "?." "name"
-  377     | expr . '.' "?." "name"
-  388     | expr . "??" expr
-  389     | expr . '?' expr ':' expr
-  392     | expr . "is" "type" '<' $@22 type_declaration_no_options '>' $@23
-  393     | expr . "is" basic_type_declaration
-  394     | expr . "is" "name"
-  395     | expr . "as" "name"
-  398     | expr . "as" "type" '<' $@24 type_declaration '>' $@25
-  399     | expr . "as" basic_type_declaration
-  400     | expr . '?' "as" "name"
-  403     | expr . '?' "as" "type" '<' $@26 type_declaration '>' $@27
-  404     | expr . '?' "as" basic_type_declaration
-  412     | expr . "<|" expr
-  413     | expr . "|>" expr
-  423 expr_mtag: expr . '.' "$f" '(' expr ')'
-  424          | expr . "?." "$f" '(' expr ')'
-  425          | expr . '.' '.' "$f" '(' expr ')'
-  426          | expr . '.' "?." "$f" '(' expr ')'
-  427          | expr . "as" "$f" '(' expr ')'
-  428          | expr . '?' "as" "$f" '(' expr ')'
-  429          | expr . "is" "$f" '(' expr ')'
-
-    "is"   shift, and go to state 507
-    "as"   shift, and go to state 508
-    "<<"   shift, and go to state 509
-    ">>"   shift, and go to state 510
-    "<="   shift, and go to state 513
-    ">="   shift, and go to state 514
-    "=="   shift, and go to state 515
-    "!="   shift, and go to state 516
-    "->"   shift, and go to state 517
-    "??"   shift, and go to state 518
-    "?."   shift, and go to state 519
-    "?["   shift, and go to state 520
-    "<|"   shift, and go to state 521
-    "|>"   shift, and go to state 522
-    "<<<"  shift, and go to state 523
-    ">>>"  shift, and go to state 524
-    "&&"   shift, and go to state 525
-    "||"   shift, and go to state 526
-    "^^"   shift, and go to state 527
-    ".."   shift, and go to state 528
-    '?'    shift, and go to state 529
-    '|'    shift, and go to state 530
-    '^'    shift, and go to state 531
-    '&'    shift, and go to state 532
-    '<'    shift, and go to state 533
-    '>'    shift, and go to state 534
-    '/'    shift, and go to state 538
-    '.'    shift, and go to state 540
-    '['    shift, and go to state 541
+  313 expr_assign_pipe: expr "<-" "@@ <|" expr_block .
 
     $default  reduce using rule 313 (expr_assign_pipe)
 
 
 State 1041
 
-  310 expr_assign_pipe: expr '=' "@ <|" expr .
-  315 expr_method_call: expr . "->" "name" '(' ')'
-  316                 | expr . "->" "name" '(' expr_list ')'
-  326 expr_field: expr . '.' "name"
-  327           | expr . '.' '.' "name"
-  330           | expr . '.' $@20 error $@21
-  345 expr: expr . "<<" expr
-  346     | expr . ">>" expr
-  347     | expr . "<<<" expr
-  348     | expr . ">>>" expr
-  349     | expr . '+' expr
-  350     | expr . '-' expr
-  351     | expr . '*' expr
-  352     | expr . '/' expr
-  353     | expr . '%' expr
-  354     | expr . '<' expr
-  355     | expr . '>' expr
-  356     | expr . "==" expr
-  357     | expr . "!=" expr
-  358     | expr . "<=" expr
-  359     | expr . ">=" expr
-  360     | expr . '&' expr
-  361     | expr . '|' expr
-  362     | expr . '^' expr
-  363     | expr . "&&" expr
-  364     | expr . "||" expr
-  365     | expr . "^^" expr
-  366     | expr . ".." expr
-  369     | expr . "++"
-  370     | expr . "--"
-  372     | expr . '[' expr ']'
-  373     | expr . '.' '[' expr ']'
-  374     | expr . "?[" expr ']'
-  375     | expr . '.' "?[" expr ']'
-  376     | expr . "?." "name"
-  377     | expr . '.' "?." "name"
-  388     | expr . "??" expr
-  389     | expr . '?' expr ':' expr
-  392     | expr . "is" "type" '<' $@22 type_declaration_no_options '>' $@23
-  393     | expr . "is" basic_type_declaration
-  394     | expr . "is" "name"
-  395     | expr . "as" "name"
-  398     | expr . "as" "type" '<' $@24 type_declaration '>' $@25
-  399     | expr . "as" basic_type_declaration
-  400     | expr . '?' "as" "name"
-  403     | expr . '?' "as" "type" '<' $@26 type_declaration '>' $@27
-  404     | expr . '?' "as" basic_type_declaration
-  412     | expr . "<|" expr
-  413     | expr . "|>" expr
-  423 expr_mtag: expr . '.' "$f" '(' expr ')'
-  424          | expr . "?." "$f" '(' expr ')'
-  425          | expr . '.' '.' "$f" '(' expr ')'
-  426          | expr . '.' "?." "$f" '(' expr ')'
-  427          | expr . "as" "$f" '(' expr ')'
-  428          | expr . '?' "as" "$f" '(' expr ')'
-  429          | expr . "is" "$f" '(' expr ')'
-
-    "is"   shift, and go to state 507
-    "as"   shift, and go to state 508
-    "<<"   shift, and go to state 509
-    ">>"   shift, and go to state 510
-    "<="   shift, and go to state 513
-    ">="   shift, and go to state 514
-    "=="   shift, and go to state 515
-    "!="   shift, and go to state 516
-    "->"   shift, and go to state 517
-    "??"   shift, and go to state 518
-    "?."   shift, and go to state 519
-    "?["   shift, and go to state 520
-    "<|"   shift, and go to state 521
-    "|>"   shift, and go to state 522
-    "<<<"  shift, and go to state 523
-    ">>>"  shift, and go to state 524
-    "&&"   shift, and go to state 525
-    "||"   shift, and go to state 526
-    "^^"   shift, and go to state 527
-    ".."   shift, and go to state 528
-    '?'    shift, and go to state 529
-    '|'    shift, and go to state 530
-    '^'    shift, and go to state 531
-    '&'    shift, and go to state 532
-    '<'    shift, and go to state 533
-    '>'    shift, and go to state 534
-    '/'    shift, and go to state 538
-    '.'    shift, and go to state 540
-    '['    shift, and go to state 541
+  310 expr_assign_pipe: expr '=' "@ <|" expr_block .
 
     $default  reduce using rule 310 (expr_assign_pipe)
 
 
 State 1042
 
-  311 expr_assign_pipe: expr '=' "@@ <|" expr .
-  315 expr_method_call: expr . "->" "name" '(' ')'
-  316                 | expr . "->" "name" '(' expr_list ')'
-  326 expr_field: expr . '.' "name"
-  327           | expr . '.' '.' "name"
-  330           | expr . '.' $@20 error $@21
-  345 expr: expr . "<<" expr
-  346     | expr . ">>" expr
-  347     | expr . "<<<" expr
-  348     | expr . ">>>" expr
-  349     | expr . '+' expr
-  350     | expr . '-' expr
-  351     | expr . '*' expr
-  352     | expr . '/' expr
-  353     | expr . '%' expr
-  354     | expr . '<' expr
-  355     | expr . '>' expr
-  356     | expr . "==" expr
-  357     | expr . "!=" expr
-  358     | expr . "<=" expr
-  359     | expr . ">=" expr
-  360     | expr . '&' expr
-  361     | expr . '|' expr
-  362     | expr . '^' expr
-  363     | expr . "&&" expr
-  364     | expr . "||" expr
-  365     | expr . "^^" expr
-  366     | expr . ".." expr
-  369     | expr . "++"
-  370     | expr . "--"
-  372     | expr . '[' expr ']'
-  373     | expr . '.' '[' expr ']'
-  374     | expr . "?[" expr ']'
-  375     | expr . '.' "?[" expr ']'
-  376     | expr . "?." "name"
-  377     | expr . '.' "?." "name"
-  388     | expr . "??" expr
-  389     | expr . '?' expr ':' expr
-  392     | expr . "is" "type" '<' $@22 type_declaration_no_options '>' $@23
-  393     | expr . "is" basic_type_declaration
-  394     | expr . "is" "name"
-  395     | expr . "as" "name"
-  398     | expr . "as" "type" '<' $@24 type_declaration '>' $@25
-  399     | expr . "as" basic_type_declaration
-  400     | expr . '?' "as" "name"
-  403     | expr . '?' "as" "type" '<' $@26 type_declaration '>' $@27
-  404     | expr . '?' "as" basic_type_declaration
-  412     | expr . "<|" expr
-  413     | expr . "|>" expr
-  423 expr_mtag: expr . '.' "$f" '(' expr ')'
-  424          | expr . "?." "$f" '(' expr ')'
-  425          | expr . '.' '.' "$f" '(' expr ')'
-  426          | expr . '.' "?." "$f" '(' expr ')'
-  427          | expr . "as" "$f" '(' expr ')'
-  428          | expr . '?' "as" "$f" '(' expr ')'
-  429          | expr . "is" "$f" '(' expr ')'
-
-    "is"   shift, and go to state 507
-    "as"   shift, and go to state 508
-    "<<"   shift, and go to state 509
-    ">>"   shift, and go to state 510
-    "<="   shift, and go to state 513
-    ">="   shift, and go to state 514
-    "=="   shift, and go to state 515
-    "!="   shift, and go to state 516
-    "->"   shift, and go to state 517
-    "??"   shift, and go to state 518
-    "?."   shift, and go to state 519
-    "?["   shift, and go to state 520
-    "<|"   shift, and go to state 521
-    "|>"   shift, and go to state 522
-    "<<<"  shift, and go to state 523
-    ">>>"  shift, and go to state 524
-    "&&"   shift, and go to state 525
-    "||"   shift, and go to state 526
-    "^^"   shift, and go to state 527
-    ".."   shift, and go to state 528
-    '?'    shift, and go to state 529
-    '|'    shift, and go to state 530
-    '^'    shift, and go to state 531
-    '&'    shift, and go to state 532
-    '<'    shift, and go to state 533
-    '>'    shift, and go to state 534
-    '/'    shift, and go to state 538
-    '.'    shift, and go to state 540
-    '['    shift, and go to state 541
+  311 expr_assign_pipe: expr '=' "@@ <|" expr_block .
 
     $default  reduce using rule 311 (expr_assign_pipe)
 
